@@ -69,7 +69,6 @@ import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
-import { HostStrain } from './host-strain'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
 import { InsecureCard } from './insecure-card'
@@ -339,7 +338,6 @@ function HostSection({
               onToggle={() => toggleGroup(key)}
               handleRef={handleRef}
             />
-            {!away && <HostStrain hostId={hostId} />}
             {!away && <AddProjectButton hostId={hostId} />}
           </div>
           {open && (

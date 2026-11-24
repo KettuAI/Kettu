@@ -7460,105 +7460,6 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   margin-top: 10px;
 }
 
-/* A host running low (features/settings/host-load.tsx): a small tag after its name in the sidebar,
-   New session's host menu and Settings, yellow while it warns and red once it gets in the way. */
-.kettu-strain-tag {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 6px;
-  background: var(--settings-warn-bg);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-  color: var(--settings-warn-ink);
-}
-.kettu-strain-tag[data-level='critical'] {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger);
-}
-.kettu-strain-tag :is(svg, .hgi) {
-  width: 11px;
-  height: 11px;
-}
-.kettu-host-head > .kettu-host-strain {
-  display: inline-flex;
-  flex: none;
-  margin-right: 6px;
-  border-radius: 6px;
-}
-.kettu-host-strain:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-}
-.ui-as-app[data-collapsed] .kettu-host-strain {
-  display: none;
-}
-/* The tag's hover card: CPU, memory and disk as bars, then what a click opens. */
-.kettu-strain-card {
-  padding: 12px 13px;
-  font-size: 12.5px;
-}
-.kettu-strain-card__title {
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-.kettu-strain-card__line {
-  display: grid;
-  grid-template-columns: 58px 1fr auto;
-  align-items: center;
-  column-gap: 8px;
-  height: 22px;
-  color: var(--text-tertiary);
-}
-.kettu-strain-card__line > b {
-  min-width: 44px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--text-primary);
-}
-.kettu-strain-card__line[data-tone='warn'] > b {
-  color: var(--warning);
-}
-.kettu-strain-card__line[data-tone='bad'] > b {
-  color: var(--danger);
-}
-.kettu-strain-card__bar {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--bg-subtle);
-}
-.kettu-strain-card__bar > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--text-tertiary);
-}
-.kettu-strain-card__line[data-tone='cpu'] .kettu-strain-card__bar > span {
-  background: var(--usage-blue);
-}
-.kettu-strain-card__line[data-tone='memory'] .kettu-strain-card__bar > span {
-  background: var(--agent-violet);
-}
-.kettu-strain-card__line[data-tone='warn'] .kettu-strain-card__bar > span {
-  background: var(--limit-warn);
-}
-.kettu-strain-card__line[data-tone='bad'] .kettu-strain-card__bar > span {
-  background: var(--limit-bad);
-}
-.kettu-strain-card__foot {
-  margin-top: 6px;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-}
-
 /* Settings › Computers: CPU and memory at a row's end, lined up as the agents' plan usage. */
 :is(.kettu-settings, .kettu-sd) .k-load-cols {
   display: inline-flex;
@@ -7581,7 +7482,7 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   min-width: 34px;
   color: var(--strong);
 }
-/* A host's name and its tags, which go to a line of their own before the name is cut. */
+/* A host's name and its badge, which goes to a line of its own before the name is cut. */
 :is(.kettu-settings, .kettu-sd) .k-host-title {
   display: flex;
   flex-wrap: wrap;
@@ -7597,7 +7498,7 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   padding-right: 22px;
 }
 
-/* A host's page: the Load group's four tiles, then what uses the computer. */
+/* A computer's page: the Load group's four tiles, and its battery beside Live. */
 :is(.kettu-settings, .kettu-sd) .k-load-live {
   display: inline-flex;
   align-items: center;
@@ -7610,12 +7511,6 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   height: 6px;
   border-radius: 50%;
   background: var(--success);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-notices > .k-notice:first-child {
-  margin-top: 24px;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-notices > .k-notice + .k-notice {
-  margin-top: 8px;
 }
 :is(.kettu-settings, .kettu-sd) .k-load-tiles {
   display: grid;
@@ -7696,14 +7591,8 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   border-radius: inherit;
   background: var(--k-bar, var(--muted));
 }
-:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='cpu'] {
-  --k-bar: var(--usage-blue);
-}
 :is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='memory'] {
   --k-bar: var(--agent-violet);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='battery'] {
-  --k-bar: var(--usage-green);
 }
 :is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='warn'] {
   --k-bar: var(--limit-warn);
@@ -7736,112 +7625,87 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
 :is(.kettu-settings, .kettu-sd) .k-group > .k-load-wait:nth-child(2) {
   margin-top: 24px;
 }
-:is(.kettu-settings, .kettu-sd) .k-load-use__head {
-  display: flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 16px;
-  font-size: 12px;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__head + .k-load-use__row,
-:is(.kettu-settings, .kettu-sd) .k-load-use__row + .k-load-use__row,
-:is(.kettu-settings, .kettu-sd) .k-load-use__row + .k-load-use__head {
-  box-shadow: inset 0 0.5px 0 var(--line);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__cols,
-:is(.kettu-settings, .kettu-sd) .k-load-use__nums {
-  display: grid;
-  flex: none;
-  grid-template-columns: 96px 72px;
-  margin-left: auto;
-  text-align: right;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 52px;
-  padding: 7px 16px;
-  font: inherit;
-  text-align: left;
-  color: inherit;
-}
-:is(.kettu-settings, .kettu-sd) button.k-load-use__row {
-  border-radius: 9px;
-  transition: background-color 140ms ease;
-}
-:is(.kettu-settings, .kettu-sd) button.k-load-use__row:hover {
-  background: var(--hover);
-}
-:is(.kettu-settings, .kettu-sd) button.k-load-use__row:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__lead {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-brand {
-  border-radius: 5px;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-letter {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--chip);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__text {
-  display: grid;
-  min-width: 0;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__text > :is(b, small) {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__text > b {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
-  color: var(--strong);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__text > b.k-load-use__quiet {
-  font-weight: 400;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__text > small {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__nums {
-  align-items: center;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-:is(.kettu-settings, .kettu-sd) .k-load-use__cpu {
+:is(.kettu-settings, .kettu-sd) .k-load-head {
   display: inline-flex;
   align-items: center;
+  gap: 14px;
+}
+/* Network: received and sent side by side, a step smaller than the other tiles' figure. */
+:is(.kettu-settings, .kettu-sd) .k-load-pair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  font-size: 18px;
+}
+
+/* The battery while a computer runs on it, after CPU and memory in Settings › Computers and New
+   session's host menu, and beside Live on a computer's page; yellow at 20% or less, red at 10%. */
+.k-load-battery {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-battery {
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-battery-slot {
+  display: inline-flex;
   justify-content: flex-end;
-  gap: 8px;
+  width: 44px;
+  margin-left: -6px;
 }
-:is(.kettu-settings, .kettu-sd) .k-load-use__cpu > b {
-  min-width: 34px;
-  font-weight: 500;
-  color: var(--strong);
+.k-load-battery--head {
+  gap: 5px;
+  font-size: 12.5px;
 }
-:is(.kettu-settings, .kettu-sd) .k-load-use__cpu > .k-load-bar {
-  width: 36px;
-  margin-top: 0;
+.k-load-battery[data-level='warn'] {
+  color: var(--settings-warn-ink);
+}
+.k-load-battery[data-level='bad'] {
+  color: var(--danger);
+}
+.k-load-battery :is(svg, .hgi) {
+  width: 13px;
+  height: 13px;
+}
+.k-load-battery--head :is(svg, .hgi) {
+  width: 14px;
+  height: 14px;
+}
+
+/* New session's host menu: a host's CPU and memory at the end of its row while the menu is open. */
+.k-load-menu {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding-right: 4px;
+  font-size: 12px;
+  color: var(--foreground);
+}
+.k-load-menu__label {
+  margin: 0 4px 0 10px;
+  color: var(--muted-foreground);
+}
+.k-load-menu__label:first-child {
+  margin-left: 0;
+}
+.k-load-menu__value {
+  min-width: 4ch;
+  text-align: right;
+}
+.k-load-menu__value[data-level='warn'] {
+  color: var(--settings-warn-ink);
+}
+.k-load-menu__value[data-level='bad'] {
+  color: var(--danger);
+}
+.k-load-menu > .k-load-battery-slot {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 44px;
+  margin-left: 6px;
 }

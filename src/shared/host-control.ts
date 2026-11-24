@@ -29,7 +29,7 @@ import type {
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
-import type { TerminalHostAnswer, TerminalHostCall } from './terminal-agent'
+import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
 import type { RelayStatus } from './remote/relay-host'
 import type {
   DirectSettings,
@@ -178,7 +178,7 @@ export type MainToHost =
   // The answer to a host:device-call, from the device host.
   | { type: 'device-result'; callId: number; answer: DeviceCallAnswer }
   // The answer to a host:terminal-call, from the terminal host.
-  | { type: 'terminal-result'; callId: number; answer: TerminalHostAnswer }
+  | { type: 'terminal-result'; callId: number; answer: TerminalCallAnswer }
   // The host's Kettu account while it is signed in with Kettu's services on, which lists the
   // Marketplace tools: right after host:init at every start, and whenever it changes.
   | { type: 'host:market-account'; account: MarketAccount | null }
@@ -404,7 +404,7 @@ export type HostToMain =
   // The turn of a session whose agent used a device ended: its devices are nobody's now.
   | { type: 'host:device-turn-ended'; sessionId: string }
   // An agent's terminal tool call for the terminal host; answered by terminal-result.
-  | { type: 'host:terminal-call'; callId: number; call: TerminalHostCall }
+  | { type: 'host:terminal-call'; callId: number; call: TerminalCall }
   // The turn of a session whose agent used a terminal ended: its terminals are nobody's now.
   | { type: 'host:terminal-turn-ended'; sessionId: string }
   // A Marketplace API call, which main or the daemon makes with the account's access token;
@@ -447,7 +447,7 @@ export type MainToTerminalHost =
   | { type: 'terminal-host:auth-commands'; commands: string[] }
   | { type: 'terminal-host:busy-request'; requestId: number }
   // An agent's terminal tool call; answered by terminal-host:answer.
-  | { type: 'terminal-host:call'; callId: number; call: TerminalHostCall }
+  | { type: 'terminal-host:call'; callId: number; call: TerminalCall }
   // The turn of a session whose agent used a terminal ended; null: every turn of the host.
   | { type: 'terminal-host:turn-ended'; sessionId: string | null }
   | { type: 'terminal-host:shutdown' }
@@ -455,7 +455,7 @@ export type MainToTerminalHost =
 export type TerminalHostToMain =
   | { type: 'terminal-host:ready' }
   | { type: 'terminal-host:busy'; requestId: number; terminals: BusyTerminal[] }
-  | { type: 'terminal-host:answer'; callId: number; answer: TerminalHostAnswer }
+  | { type: 'terminal-host:answer'; callId: number; answer: TerminalCallAnswer }
   | { type: 'terminal-host:handed-back'; sessionId: string; durationMs: number }
   | { type: 'terminal-host:stopped' }
 

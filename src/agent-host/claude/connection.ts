@@ -494,13 +494,6 @@ export class ClaudeConnection implements AgentConnection {
     return this.done
   }
 
-  processOf(sessionId: string): number | null {
-    const child = this.sessions.get(sessionId)?.process
-    return child && child.exitCode === null && child.signalCode === null
-      ? (child.pid ?? null)
-      : null
-  }
-
   get ownInstructions(): boolean {
     return true
   }
