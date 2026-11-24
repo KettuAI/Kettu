@@ -4,10 +4,12 @@ import { Trans, useTranslation } from 'react-i18next'
 import type { HostStatus, HostsStatus } from '@shared/remote/hosts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useNow } from '@renderer/lib/use-now'
+import { useLiveLoad, useLoadWatch } from '@renderer/stores/host-load'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { openSettings, openSettingsItem } from '@renderer/stores/view'
 import { AddHostDialog } from './host-add'
 import { connectionText, platformName, routeText } from './host-text'
+import { HostStrainTag, LoadColumns } from './host-load'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { deviceShape } from './remote-text'
 import { Pill, SetButton, Spin } from './controls'
@@ -70,15 +72,34 @@ export function HostState({
   )
 }
 
+/**
+ * A host's state at the end of its row: CPU and memory while it is online and reports them,
+ * read every 2 s while the list shows, else whether it is online.
+ */
+function HostEnd({ host }: { host: HostStatus }) {
+  const online = host.connection.state === 'online'
+  useLoadWatch(host.id, false, online)
+  const live = useLiveLoad(host.id)
+  return online && live ? <LoadColumns load={live.load} /> : <HostState host={host} />
+}
+
 /** This computer, first in the list; nothing to open. */
 export function SelfRow({ self }: { self: HostsStatus['self'] }) {
   const { t } = useTranslation('settings')
   const laptop = deviceShape({ kind: 'desktop', model: self.model }) === 'laptop'
+  useLoadWatch(null, false)
+  const live = useLiveLoad(null)
   return (
     <div className="ui-sg-row">
       <Thing
         mark={<Icon icon={laptop ? LaptopIcon : ComputerIcon} size={20} />}
-        name={<span className="k-name">{self.name || t('hosts.self.label')}</span>}
+        name={
+          <span className="k-host-title">
+            <span className="k-name">{self.name || t('hosts.self.label')}</span>
+            <Pill>{t('hosts.self.badge')}</Pill>
+            <HostStrainTag hostId={null} />
+          </span>
+        }
       >
         <ItemLine>
           {[
@@ -88,9 +109,11 @@ export function SelfRow({ self }: { self: HostsStatus['self'] }) {
           ].join(' · ')}
         </ItemLine>
       </Thing>
-      <span className="ui-sg-control">
-        <Pill>{t('hosts.self.badge')}</Pill>
-      </span>
+      {live && (
+        <span className="ui-sg-control k-load-self">
+          <LoadColumns load={live.load} />
+        </span>
+      )}
     </div>
   )
 }
@@ -104,8 +127,13 @@ export function HostRow({ host }: { host: HostStatus }) {
       label={host.name}
       onOpen={() => openSettingsItem('hosts', host.id)}
       tile={<DeviceTile icon={<HostIcon platform={host.platform} />} />}
-      name={<span className="k-name">{host.name}</span>}
-      right={<HostState host={host} />}
+      name={
+        <span className="k-host-title">
+          <span className="k-name">{host.name}</span>
+          {host.connection.state === 'online' && <HostStrainTag hostId={host.id} />}
+        </span>
+      }
+      right={<HostEnd host={host} />}
     >
       <ItemLine>{routeText(t, host)}</ItemLine>
     </ItemRow>

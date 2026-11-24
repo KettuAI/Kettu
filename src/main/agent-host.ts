@@ -1,5 +1,5 @@
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
-import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
+import type { TerminalHostAnswer, TerminalHostCall } from '@shared/terminal-agent'
 import { isAbsolute, join } from 'node:path'
 import { app, MessageChannelMain, shell, type MessagePortMain, type WebContents } from 'electron'
 import {
@@ -96,6 +96,8 @@ export interface AgentHostDeps {
   onMarketOAuth?(serverId: unknown, state: unknown): void
   /** The Kettu account the Marketplace tools publish with, which follows init at each start. */
   marketAccount(): MarketAccount | null
+  /** On Windows, whether the computer runs on battery, which follows init at each start. */
+  onBattery?(): boolean | null
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
@@ -133,7 +135,7 @@ export interface AgentHostDeps {
   /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
   /** Runs an agent's terminal call on the terminal host. */
-  terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
+  terminal?: (call: TerminalHostCall) => Promise<TerminalHostAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** The last running turn that used a page of main's ended. */
@@ -392,10 +394,14 @@ export class AgentHost {
         computer: computerHostOptions(),
         userAgent: updaterUserAgent(app.getVersion(), process.platform, process.arch),
       }),
-      startMessages: () => [
-        { type: 'host:market-keys', ...deps.marketKeys() },
-        { type: 'host:market-account', account: deps.marketAccount() },
-      ],
+      startMessages: () => {
+        const onBattery = deps.onBattery?.() ?? null
+        return [
+          { type: 'host:market-keys', ...deps.marketKeys() },
+          { type: 'host:market-account', account: deps.marketAccount() },
+          ...(onBattery === null ? [] : [{ type: 'host:battery' as const, onBattery }]),
+        ]
+      },
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -478,6 +484,11 @@ export class AgentHost {
   /** The computer slept or woke, for the routines' schedule timer. */
   power(state: 'suspend' | 'resume'): void {
     this.host.post({ type: 'host:power', state })
+  }
+
+  /** The computer moved to or from battery, which the host reads itself except on Windows. */
+  battery(onBattery: boolean): void {
+    this.host.post({ type: 'host:battery', onBattery })
   }
 
   /** The log level and detailed records; a host started later takes both from its environment. */
@@ -820,7 +831,7 @@ export class AgentHost {
         void (
           run
             ? run(call)
-            : Promise.resolve<TerminalCallAnswer>({
+            : Promise.resolve<TerminalHostAnswer>({
                 error: { code: 'unavailable', message: 'This build has no terminal host.' },
               })
         ).then((answer) => this.host.post({ type: 'terminal-result', callId, answer }))

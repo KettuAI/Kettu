@@ -63,6 +63,12 @@ export const IMAGE_REFS_FEATURE = 'image-refs'
  */
 export const TOOL_DIGESTS_FEATURE = 'tool-digests'
 
+/**
+ * The welcome's feature of a host that reads its load: `host.load.watch`, `host.load.unwatch` and
+ * `host.status`. An older host has none of them.
+ */
+export const LOAD_FEATURE = 'load'
+
 /** The most features a hello names that the host reads. */
 const MAX_FEATURES = 16
 

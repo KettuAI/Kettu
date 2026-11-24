@@ -15,8 +15,10 @@ import {
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
+import { useLiveLoad, useLoadWatch } from '@renderer/stores/host-load'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, DangerButton, SetButton, SetInput, Spin } from './controls'
+import { HostStrainTag, LoadColumns } from './host-load'
 import { webHostLine } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
@@ -34,16 +36,24 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
 /** The host this page connects to: what it runs, where it is reached, and whether it is now. */
 export function WebHostRow({ host }: { host: WebHost }) {
   const { t } = useTranslation('settings')
+  const online = host.connection.state === 'online'
+  useLoadWatch(null, false, online)
+  const live = useLiveLoad(null)
   return (
     <div className="ui-sg-row">
       <Thing
         mark={<DeviceTile icon={<HostIcon platform={host.platform ?? ''} />} />}
-        name={<span className="k-name">{host.name}</span>}
+        name={
+          <span className="k-host-title">
+            <span className="k-name">{host.name}</span>
+            {online && <HostStrainTag hostId={null} />}
+          </span>
+        }
       >
         <ItemLine>{webHostLine(t, host)}</ItemLine>
       </Thing>
       <span className="ui-sg-control">
-        <HostState host={host} />
+        {online && live ? <LoadColumns load={live.load} /> : <HostState host={host} />}
       </span>
     </div>
   )
