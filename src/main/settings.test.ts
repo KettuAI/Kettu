@@ -406,6 +406,54 @@ describe("a plugin's items in a patch", () => {
   })
 })
 
+describe('removing what a plugin brought', () => {
+  const skill = {
+    id: 'plugin:p0123456789ab:review',
+    name: 'review',
+    description: 'Reviews a change.',
+    source: 'plugin' as const,
+    origin: 'review-kit',
+    version: '1.0.0',
+    agents: 'all' as const,
+    on: true,
+  }
+  const other = {
+    ...skill,
+    id: 'github:owner/repo',
+    name: 'other',
+    source: 'github' as const,
+    origin: 'https://github.com/owner/repo',
+  }
+  const base = mergeSettings(
+    DEFAULT_SETTINGS,
+    {
+      marketplace: { skills: [skill, other] as never },
+    },
+    { plugins: true },
+  )
+
+  it('refuses a remove, or a list without it, from anyone but the plugin service', () => {
+    const remove = validateSettingsPatch({ marketplace: { skillsEdit: { remove: [skill.id] } } })
+    expect(() => mergeSettings(base, remove)).toThrow(/review/)
+    const whole = validateSettingsPatch({ marketplace: { skills: [other] } })
+    expect(() => mergeSettings(base, whole)).toThrow(/review/)
+  })
+
+  it('lets the plugin service remove it', () => {
+    const remove = validateSettingsPatch({ marketplace: { skillsEdit: { remove: [skill.id] } } })
+    const next = mergeSettings(base, remove, { plugins: true })
+    expect(next.marketplace.skills.map((item) => item.id)).toEqual([other.id])
+  })
+
+  it('still lets anyone turn it off and remove other skills', () => {
+    const off = validateSettingsPatch({
+      marketplace: { skillsEdit: { put: [{ ...skill, on: false }], remove: [other.id] } },
+    })
+    const next = mergeSettings(base, off)
+    expect(next.marketplace.skills).toEqual([{ ...skill, on: false }])
+  })
+})
+
 describe('items from the Kettu Marketplace in a patch', () => {
   const skill = {
     id: 'kettu:abcdefgh23',

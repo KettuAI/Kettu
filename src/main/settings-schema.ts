@@ -1125,14 +1125,29 @@ export function effectiveDirect(settings: SettingsFile, signedIn: boolean): Dire
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
-/** A kept list with an edit applied; throws when it would then repeat a name or run past `max`. */
+/** The first item a plugin brought that `next` no longer has, which only the plugin may remove. */
+function droppedPluginItem<T extends { id: string; name: string }>(
+  list: readonly T[],
+  next: readonly T[],
+): T | undefined {
+  const kept = new Set(next.map((item) => item.id))
+  return list.find((item) => pluginItem(item.id) !== null && !kept.has(item.id))
+}
+
+/**
+ * A kept list with an edit applied; throws when it would then repeat a name or run past `max`,
+ * or, unless it is the plugin service's own, drop an item a plugin brought.
+ */
 function editedList<T extends { id: string; name: string }>(
   list: readonly T[],
   edit: ListEdit<T>,
   max: number,
   kind: 'server' | 'skill',
+  own: boolean,
 ): T[] {
   const next = applyListEdit(list, edit)
+  const dropped = own ? undefined : droppedPluginItem(list, next)
+  if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
   if (next.length > max) {
     throw new SettingsError(
       kind === 'server'
@@ -1157,9 +1172,15 @@ function editedList<T extends { id: string; name: string }>(
 /**
  * Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. Run in the
  * background and direct connections stay on while remote access is. Throws a `SettingsError`
- * when an edit of the servers or skills would leave two with one name.
+ * when an edit of the servers or skills would leave two with one name, or drop an item a plugin
+ * brought, which only the plugin service's own patch (`plugins`) may do.
  */
-export function mergeSettings(current: SettingsFile, patch: SettingsPatch): SettingsFile {
+export function mergeSettings(
+  current: SettingsFile,
+  patch: SettingsPatch,
+  options: { plugins?: boolean } = {},
+): SettingsFile {
+  const own = options.plugins === true
   const next = structuredClone(current)
   for (const section of FIELD_SECTIONS) {
     const changes = patch[section]
@@ -1167,9 +1188,17 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
-  if (patch.marketplace?.mcp) next.marketplace.mcp = structuredClone(patch.marketplace.mcp)
+  if (patch.marketplace?.mcp) {
+    const whole = structuredClone(patch.marketplace.mcp)
+    const dropped = own ? undefined : droppedPluginItem(next.marketplace.mcp, whole)
+    if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
+    next.marketplace.mcp = whole
+  }
   if (patch.marketplace?.skills) {
-    next.marketplace.skills = structuredClone(patch.marketplace.skills)
+    const whole = structuredClone(patch.marketplace.skills)
+    const dropped = own ? undefined : droppedPluginItem(next.marketplace.skills, whole)
+    if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
+    next.marketplace.skills = whole
   }
   if (patch.marketplace?.mcpEdit) {
     next.marketplace.mcp = editedList(
@@ -1177,6 +1206,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
       structuredClone(patch.marketplace.mcpEdit),
       MAX_MARKET_SERVERS,
       'server',
+      own,
     )
   }
   if (patch.marketplace?.skillsEdit) {
@@ -1185,6 +1215,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
       structuredClone(patch.marketplace.skillsEdit),
       MAX_MARKET_SKILLS,
       'skill',
+      own,
     )
   }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
