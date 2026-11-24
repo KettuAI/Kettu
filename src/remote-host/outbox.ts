@@ -87,6 +87,9 @@ export class Outbox {
   private paceTimer: ReturnType<typeof setTimeout> | null = null
   private overflowAt: number
   private readonly drains = new Set<() => void>()
+  private readonly flushes = new Set<() => void>()
+  /** Without acknowledgements, the latest message given to the channel. */
+  private sending: Promise<void> = Promise.resolve()
   private closed = false
 
   constructor(private readonly options: OutboxOptions) {
@@ -117,6 +120,7 @@ export class Outbox {
   detach(): void {
     this.connection = null
     this.stopPace()
+    this.flushed()
   }
 
   /** Sends a message after every one before it; rejects when it cannot go, as when too long. */
@@ -125,7 +129,9 @@ export class Outbox {
     if (!this.options.acks) {
       const connection = this.connection
       if (!connection) return Promise.reject(new Error('The device is not connected'))
-      return connection.channel.send(message)
+      const sent = connection.channel.send(message)
+      this.sending = sent.catch(() => {})
+      return sent
     }
     let size: number
     if (message.kind === 'bytes') {
@@ -166,6 +172,7 @@ export class Outbox {
     }
     this.unacked = this.unacked.slice(done)
     if (freed) this.wake()
+    if (this.unacked.length === 0 && this.queued.length === 0) this.flushed()
     return true
   }
 
@@ -190,6 +197,23 @@ export class Outbox {
     return new Promise((resolve) => this.drains.add(resolve))
   }
 
+  /**
+   * Settles once everything pushed so far has reached the device: acknowledged by a device that
+   * acknowledges, otherwise sent and drained from the transport. Settles at once without a
+   * connection, or once the connection is gone, since nothing more can arrive on it.
+   */
+  flush(): Promise<void> {
+    const connection = this.connection
+    if (this.closed || !connection) return Promise.resolve()
+    if (!this.options.acks) {
+      return this.sending.then(() =>
+        this.connection === connection ? connection.transport.drained() : undefined,
+      )
+    }
+    if (this.unacked.length === 0 && this.queued.length === 0) return Promise.resolve()
+    return new Promise((resolve) => this.flushes.add(resolve))
+  }
+
   /** The session ended: nothing more is sent, and what waited goes. */
   close(): void {
     this.closed = true
@@ -199,6 +223,7 @@ export class Outbox {
     this.queuedOther = 0
     this.streamBytes = 0
     this.wake()
+    this.flushed()
   }
 
   private enqueue(entry: Entry): void {
@@ -295,6 +320,12 @@ export class Outbox {
   private stopPace(): void {
     if (this.paceTimer) clearTimeout(this.paceTimer)
     this.paceTimer = null
+  }
+
+  private flushed(): void {
+    const flushes = [...this.flushes]
+    this.flushes.clear()
+    for (const resolve of flushes) resolve()
   }
 
   private wake(): void {
