@@ -100,7 +100,6 @@
     "openInPane": "在 Git 窗格里打开"
   },
   "pane": {
-    "title": "Git",
     "more": "更多",
     "copyBranch": "复制分支名",
     "openRepository": "在 GitHub 上打开仓库",

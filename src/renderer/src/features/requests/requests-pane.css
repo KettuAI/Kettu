@@ -1,23 +1,13 @@
 /* ---------- panes: Requests ---------- */
 .kr-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  padding-left: 6px;
-  font-size: 12.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-.kr-head b {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-.kr-head > span {
-  min-width: 0;
+  flex: none;
+  margin: 0;
+  padding: 10px 16px 2px;
   overflow: hidden;
+  font-size: 12px;
+  color: var(--text-tertiary);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kr-body {

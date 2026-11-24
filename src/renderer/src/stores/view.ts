@@ -110,9 +110,9 @@ export const PINNED_GROUP = 'pinned'
 export const THIS_COMPUTER = 'this-computer'
 
 /**
- * What the side panel shows; one pane at a time. An artifact's pane opens from the thread.
- * Terminals, browser pages and devices share one row of tabs, and `surfaces` is that row's pane
- * while none of them is open yet.
+ * What the side panel shows: the kind of its row's selected tab, or `surfaces`, the side panel's
+ * list, while no tab is selected. A session has several terminals, browser pages and devices, and
+ * one of each other kind.
  */
 export type SidePane =
   | 'terminal'
@@ -124,6 +124,25 @@ export type SidePane =
   | 'computer'
   | 'requests'
   | 'artifact'
+  | 'board'
+  | 'sideChat'
+
+/** The kinds a session has one tab of. */
+export type SingleTab = Exclude<SidePane, 'terminal' | 'browser' | 'devices' | 'surfaces'>
+
+const SINGLE_TABS: readonly SidePane[] = [
+  'files',
+  'git',
+  'board',
+  'sideChat',
+  'requests',
+  'computer',
+  'artifact',
+]
+
+export function isSingleTab(pane: SidePane | null | undefined): pane is SingleTab {
+  return !!pane && SINGLE_TABS.includes(pane)
+}
 
 // No session id takes this form, so New session's panel in a project has a key of its own.
 const NEW_SESSION_PANEL = 'new-session:'
@@ -189,19 +208,21 @@ interface ViewStore {
    */
   renamingIn: { scope: string; row: string } | null
   /**
-   * The open side pane per panel, a session's by its id or New session's by `newSessionPanel`;
+   * What each open side panel shows, a session's by its id or New session's by `newSessionPanel`;
    * none when the panel is closed.
    */
   sidePane: Record<string, SidePane>
-  /** The artifact each panel's artifact pane shows. */
+  /** What each closed panel showed last, which its button opens again. */
+  sideLast: Record<string, SidePane>
+  /** Per panel, the one-per-session tabs its row holds, in the order they opened. */
+  sideTabs: Record<string, SingleTab[]>
+  /** Per panel, the keys of its row's tabs as last shown: as they opened, then as dragged. */
+  sideOrder: Record<string, string[]>
+  /** The artifact each panel's artifact tab shows. */
   sideArtifact: Record<string, string>
   /** A canvas page asked to be shown in a panel's artifact pane, until it is. Not persisted. */
   sideArtifactPage: Record<string, ArtifactPageRequest>
   sidePaneMaximized: boolean
-  /** The sessions whose board is open at the right of their thread. */
-  boardOpen: Record<string, true>
-  /** The sessions whose side chat is open there instead; a session shows one of the two. */
-  sideChatOpen: Record<string, true>
   /** How the Artifacts page groups and sorts, for the whole app. */
   artifactsView: { arrange: ArtifactArrange }
 }
@@ -217,8 +238,10 @@ interface Persisted {
   showFinishedSubagents?: boolean
   /** Per panel; the per-project `sidePane` of earlier versions is not read. */
   sidePanes?: Record<string, SidePane>
-  boardOpen?: Record<string, true>
-  sideChatOpen?: Record<string, true>
+  sideLast?: Record<string, SidePane>
+  sideTabs?: Record<string, SingleTab[]>
+  sideOrder?: Record<string, string[]>
+  sideArtifact?: Record<string, string>
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
   /** Under a new name since the page went flat: every run saved the old grouping as it was. */
@@ -255,14 +278,37 @@ export const useViewStore = create<ViewStore>()(() => ({
   allRowsShown: {},
   showFinishedSubagents: saved.showFinishedSubagents === true,
   renamingIn: null,
-  sidePane: saved.sidePanes ?? {},
-  sideArtifact: {},
+  ...savedPanels(saved),
   sideArtifactPage: {},
   sidePaneMaximized: false,
-  boardOpen: saved.boardOpen ?? {},
-  sideChatOpen: saved.sideChatOpen ?? {},
   artifactsView: { arrange: savedArrange(saved.artifactsDisplay) },
 }))
+
+/**
+ * The side panels as saved. A save from before every pane was a tab has no row, so the pane it
+ * showed becomes its row's tab; an artifact tab without its artifact is dropped.
+ */
+function savedPanels(
+  from: Partial<Persisted>,
+): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sideTabs' | 'sideOrder' | 'sideArtifact'> {
+  const sideArtifact = from.sideArtifact ?? {}
+  const held = (panel: string, pane: SidePane) => pane !== 'artifact' || !!sideArtifact[panel]
+  const panes = (given: Record<string, SidePane> | undefined) =>
+    Object.fromEntries(Object.entries(given ?? {}).filter(([panel, pane]) => held(panel, pane)))
+  const sidePane = panes(from.sidePanes)
+  const sideLast = panes(from.sideLast)
+  const sideTabs: Record<string, SingleTab[]> = {}
+  for (const [panel, tabs] of Object.entries(from.sideTabs ?? {})) {
+    const kept = tabs.filter((tab) => isSingleTab(tab) && held(panel, tab))
+    if (kept.length > 0) sideTabs[panel] = kept
+  }
+  for (const [panel, pane] of [...Object.entries(sideLast), ...Object.entries(sidePane)]) {
+    if (isSingleTab(pane) && !sideTabs[panel]?.includes(pane)) {
+      sideTabs[panel] = [...(sideTabs[panel] ?? []), pane]
+    }
+  }
+  return { sidePane, sideLast, sideTabs, sideOrder: from.sideOrder ?? {}, sideArtifact }
+}
 
 /** The arrangement saved, or the one an earlier run's grouping and sort come closest to. */
 function savedArrange(saved: Persisted['artifactsDisplay']): ArtifactArrange {
@@ -271,6 +317,10 @@ function savedArrange(saved: Persisted['artifactsDisplay']): ArtifactArrange {
   }
   if (saved?.group === 'project-session') return 'project'
   return saved?.sort === 'name' ? 'name' : 'recent'
+}
+
+function remembered<T>(panels: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(panels).slice(-REMEMBERED_PANELS))
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -286,17 +336,11 @@ useViewStore.subscribe((state) => {
       hostOrder: state.hostOrder,
       expandedParents: state.expandedParents,
       showFinishedSubagents: state.showFinishedSubagents,
-      // An artifact's pane is not remembered: it opens from the thread, for the work at hand;
-      // nor the Computer pane, which shows only while the session uses the computer.
-      sidePanes: Object.fromEntries(
-        Object.entries(state.sidePane)
-          .filter(([, pane]) => pane !== 'artifact' && pane !== 'computer')
-          .slice(-REMEMBERED_PANELS),
-      ),
-      boardOpen: Object.fromEntries(Object.entries(state.boardOpen).slice(-REMEMBERED_PANELS)),
-      sideChatOpen: Object.fromEntries(
-        Object.entries(state.sideChatOpen).slice(-REMEMBERED_PANELS),
-      ),
+      sidePanes: remembered(state.sidePane),
+      sideLast: remembered(state.sideLast),
+      sideTabs: remembered(state.sideTabs),
+      sideOrder: remembered(state.sideOrder),
+      sideArtifact: remembered(state.sideArtifact),
       layout: saveLayout(state.layout),
       artifactsDisplay: state.artifactsView,
     }
@@ -567,15 +611,24 @@ function handPanel(
   s: ViewStore,
   from: string,
   to: string,
-): Pick<ViewStore, 'sidePane' | 'sideArtifact'> {
-  const sideArtifact = { ...s.sideArtifact }
-  const artifact = sideArtifact[from]
-  delete sideArtifact[from]
-  if (artifact) sideArtifact[to] = artifact
+): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sideTabs' | 'sideOrder' | 'sideArtifact'> {
   return {
-    sidePane: withPane(withPane(s.sidePane, from, null), to, s.sidePane[from] ?? null),
-    sideArtifact,
+    sidePane: handed(s.sidePane, from, to),
+    sideLast: handed(s.sideLast, from, to),
+    sideTabs: handed(s.sideTabs, from, to),
+    sideOrder: handed(s.sideOrder, from, to),
+    sideArtifact: handed(s.sideArtifact, from, to),
   }
+}
+
+/** The panels with what `from` had under `to`; the last changed comes last. */
+function handed<T>(panels: Record<string, T>, from: string, to: string): Record<string, T> {
+  const next = { ...panels }
+  const value = next[from]
+  delete next[from]
+  delete next[to]
+  if (value !== undefined) next[to] = value
+  return next
 }
 
 export function openOverview(): void {
@@ -943,43 +996,84 @@ function withPane(
   return next
 }
 
-/** Shows the pane in a session's side panel, or closes the panel when that pane is shown. */
+/** The panel's one-per-session tabs with `tab` among them. */
+function withTab(
+  tabs: Record<string, SingleTab[]>,
+  panel: string,
+  pane: SidePane,
+): Record<string, SingleTab[]> {
+  if (!isSingleTab(pane) || tabs[panel]?.includes(pane)) return tabs
+  return { ...tabs, [panel]: [...(tabs[panel] ?? []), pane] }
+}
+
+/** The state with the panel closed, remembering what it showed for its button. */
+function closedPanel(
+  s: ViewStore,
+  panel: string,
+): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sidePaneMaximized'> {
+  const shown = s.sidePane[panel]
+  return {
+    sidePane: withPane(s.sidePane, panel, null),
+    sideLast: shown ? withPane(s.sideLast, panel, shown) : s.sideLast,
+    sidePaneMaximized: false,
+  }
+}
+
+/**
+ * Shows a kind in a session's side panel, a one-per-session kind joining the row as its tab, or
+ * closes the panel when it already shows that kind. The row and its tabs stay when it closes.
+ */
 export function toggleSidePane(panel: string, pane: SidePane, open?: boolean): void {
   useViewStore.setState((s) => {
     const shown = s.sidePane[panel] === pane
     if ((open ?? !shown) === shown) return s
-    return { sidePane: withPane(s.sidePane, panel, shown ? null : pane), sidePaneMaximized: false }
+    if (shown) return closedPanel(s, panel)
+    return {
+      sidePane: withPane(s.sidePane, panel, pane),
+      sideTabs: withTab(s.sideTabs, panel, pane),
+      // Changing tabs keeps a maximized panel as it is; opening it starts beside the thread.
+      sidePaneMaximized: s.sidePane[panel] ? s.sidePaneMaximized : false,
+    }
   })
 }
 
-/** Opens or closes a session's board, which sits at the right of its thread. */
-export function toggleBoard(sessionId: string, open?: boolean): void {
-  toggleRail('boardOpen', 'sideChatOpen', sessionId, open)
+/** Folds a session's side panel away; its button opens it again on what it showed. */
+export function closeSidePanel(panel: string): void {
+  useViewStore.setState((s) => (s.sidePane[panel] ? closedPanel(s, panel) : s))
 }
 
-/** Opens or closes a session's side chat, in the place of its board. */
-export function toggleSideChat(sessionId: string, open?: boolean): void {
-  toggleRail('sideChatOpen', 'boardOpen', sessionId, open)
-}
-
-/** The column at the right of a session's thread shows one of the two; opening one closes the other. */
-function toggleRail(
-  key: 'boardOpen' | 'sideChatOpen',
-  other: 'boardOpen' | 'sideChatOpen',
-  sessionId: string,
-  open?: boolean,
-): void {
+/** Adds a one-per-session tab to a panel's row without showing it. */
+export function addSideTab(panel: string, tab: SingleTab): void {
   useViewStore.setState((s) => {
-    const shown = !!s[key][sessionId]
-    if ((open ?? !shown) === shown) return s
-    const next = { ...s[key] }
-    if (shown) delete next[sessionId]
-    else next[sessionId] = true
-    if (shown || !s[other][sessionId]) return { [key]: next }
-    const rest = { ...s[other] }
-    delete rest[sessionId]
-    return { [key]: next, [other]: rest }
+    const sideTabs = withTab(s.sideTabs, panel, tab)
+    return sideTabs === s.sideTabs ? s : { sideTabs }
   })
+}
+
+/** Takes a one-per-session tab off a panel's row; what it showed stays as it is. */
+export function removeSideTab(panel: string, tab: SingleTab): void {
+  useViewStore.setState((s) => {
+    const tabs = s.sideTabs[panel]
+    if (!tabs?.includes(tab)) return s
+    const sideTabs = { ...s.sideTabs }
+    const kept = tabs.filter((other) => other !== tab)
+    if (kept.length > 0) sideTabs[panel] = kept
+    else delete sideTabs[panel]
+    if (tab !== 'artifact') return { sideTabs }
+    const sideArtifact = { ...s.sideArtifact }
+    delete sideArtifact[panel]
+    return { sideTabs, sideArtifact }
+  })
+}
+
+/** Selects a session's board tab, or closes the panel when it shows the board. */
+export function toggleBoard(sessionId: string, open?: boolean): void {
+  toggleSidePane(sessionId, 'board', open)
+}
+
+/** Selects a session's side chat tab, or closes the panel when it shows the side chat. */
+export function toggleSideChat(sessionId: string, open?: boolean): void {
+  toggleSidePane(sessionId, 'sideChat', open)
 }
 
 /** Shows the pane in the side panel in view, when the pane in focus works in `projectPath`. */
@@ -1002,15 +1096,20 @@ export interface ArtifactPageRequest {
 
 let pageRequests = 0
 
-/** Shows the artifact beside a session's thread, or closes the pane when it already shows it. */
+/**
+ * Shows the artifact in the artifact tab of a session's side panel, or closes the panel when it
+ * already shows it.
+ */
 export function toggleArtifactPane(panel: string, id: string, open?: boolean): void {
   useViewStore.setState((s) => {
     const shown = s.sidePane[panel] === 'artifact' && s.sideArtifact[panel] === id
     if ((open ?? !shown) === shown) return s
+    if (shown) return closedPanel(s, panel)
     return {
-      sidePane: withPane(s.sidePane, panel, shown ? null : 'artifact'),
-      sideArtifact: shown ? s.sideArtifact : { ...s.sideArtifact, [panel]: id },
-      sidePaneMaximized: false,
+      sidePane: withPane(s.sidePane, panel, 'artifact'),
+      sideTabs: withTab(s.sideTabs, panel, 'artifact'),
+      sideArtifact: { ...s.sideArtifact, [panel]: id },
+      sidePaneMaximized: s.sidePane[panel] ? s.sidePaneMaximized : false,
     }
   })
 }

@@ -6,6 +6,7 @@ import {
   Folder01Icon,
   FolderAddIcon,
   MinusSignSquareIcon,
+  MoreHorizontalIcon,
   Search01Icon,
   SidebarLeftIcon,
 } from '@hugeicons/core-free-icons'
@@ -14,6 +15,13 @@ import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import type { ChangeStatus } from '@shared/git'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import {
   ResizableHandle,
   ResizablePanel,
@@ -25,14 +33,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { LineCounts } from '@renderer/features/git/rows'
 import { MENTION_LIMIT } from '@renderer/features/session/composer/mentions'
 import {
+  PaneBody,
+  PaneContext,
   PaneEmpty,
-  PaneHead,
   PaneIcon,
-  PaneSheet,
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
-import { PaneSwitch } from '@renderer/features/shell/pane-switch'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
@@ -73,19 +80,19 @@ interface FilesPanelProps {
   projectPath: string
   /** The side panel it shows in; the open files are the project's, whichever panel shows them. */
   panel: string
-  maximized: boolean
 }
 
 /**
- * The side panel's Files pane: the changes or the project's files, beside the open files. Its head
- * switches between Changes and All files, or holds the filter while one is typed.
+ * What the Files tab shows in the side panel: the changes or the project's files, beside the open
+ * files. Its context bar switches between Changes and All files, or holds the filter while one
+ * is typed.
  */
 export default function FilesPanel(props: FilesPanelProps) {
   // Each side panel has its own column, so another session's pane starts from its own.
   return <FilesPane key={`${props.panel}\0${props.projectPath}`} {...props} />
 }
 
-function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
+function FilesPane({ projectPath, panel }: FilesPanelProps) {
   const { t } = useTranslation(['files', 'common'])
   const columnKey = `${panel}\0${projectPath}`
   const tabs = useFilesStore((s) => s.open[projectPath] ?? null)
@@ -215,9 +222,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
   )
 
   return (
-    <PaneSheet
-      pane="files"
-      maximized={maximized}
+    <PaneBody
       data-files-panel={projectPath}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
@@ -227,10 +232,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
         }
       }}
     >
-      <PaneHead
-        panel={panel}
-        pane="files"
-        maximized={maximized}
+      <PaneContext
         tools={
           <>
             {listed && (mode === 'all' || bare) && (
@@ -251,32 +253,54 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
                 )}
               </>
             )}
-            {!bare && (
-              <PanelButton
-                label={t('panel.findFile')}
-                shortcut={formatShortcut('Mod+P')}
-                pressed={searching}
-                onClick={() => (searching ? stopSearching() : setSearching(true))}
-              >
-                <PaneIcon icon={Search01Icon} />
-              </PanelButton>
-            )}
-            {local && (
-              <PanelButton
-                label={t('panel.openInEditor')}
-                onClick={() =>
-                  void openInEditor(projectPath).catch((failure: unknown) =>
-                    toast(errorMessage(failure)),
-                  )
-                }
-              >
-                <PaneIcon icon={CodeIcon} />
-              </PanelButton>
+            {(!bare || local) && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <DropdownMenuTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label={t('panel.more')}
+                            className="kp-tool app-region-no-drag"
+                          />
+                        }
+                      />
+                    }
+                  >
+                    <PaneIcon icon={MoreHorizontalIcon} />
+                  </TooltipTrigger>
+                  <TooltipContent>{t('panel.more')}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end" className="w-56">
+                  {!bare && (
+                    <DropdownMenuItem
+                      onClick={() => (searching ? stopSearching() : setSearching(true))}
+                    >
+                      <PaneIcon icon={Search01Icon} size={16} />
+                      {t('panel.findFile')}
+                      <DropdownMenuShortcut>{formatShortcut('Mod+P')}</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                  )}
+                  {local && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void openInEditor(projectPath).catch((failure: unknown) =>
+                          toast(errorMessage(failure)),
+                        )
+                      }
+                    >
+                      <PaneIcon icon={CodeIcon} size={16} />
+                      {t('panel.openInEditor')}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </>
         }
       >
-        <PaneSwitch panel={panel} projectPath={projectPath} pane="files" />
         {!bare && (
           <PanelButton
             label={(phone ? phoneList : treeShown) ? t('panel.hideTree') : t('panel.showTree')}
@@ -309,7 +333,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
           <SegmentedControl
             aria-label={t('panel.show')}
             variant="tray"
-            size="md"
+            size="sm"
             value={mode}
             onChange={setMode}
             options={[
@@ -322,9 +346,11 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
             ]}
           />
         ) : (
-          <span className="kp-head__title">{t('panel.title')}</span>
+          <span className="kp-ctx__place">
+            <b>{t('panel.title')}</b>
+          </span>
         )}
-      </PaneHead>
+      </PaneContext>
       <div className="kp-body">
         {bare ? (
           <PaneEmpty
@@ -364,7 +390,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
         )}
       </div>
       <UnsavedPrompt projectPath={projectPath} />
-    </PaneSheet>
+    </PaneBody>
   )
 }
 

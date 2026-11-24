@@ -495,12 +495,6 @@
   padding-right: 40px;
 }
 
-/* ---------- In a session's side panel ---------- */
-
-.kp-pane.avs-pane {
-  padding: 0;
-}
-
 /* ---------- The whole artifact's states ---------- */
 
 /* The pill's mark in place of its dot: a deletion's icon. */

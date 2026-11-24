@@ -1,5 +1,4 @@
 {
-  "title": "Requests",
   "summary_one": "{{count}} request · read from {{source}}",
   "summary_other": "{{count}} requests · read from {{source}}",
   "summaryLive_one": "{{count}} request · live",

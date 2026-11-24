@@ -14,7 +14,8 @@
     "close": "关闭面板",
     "title": "文件",
     "hideTree": "隐藏文件列表",
-    "showTree": "显示文件列表"
+    "showTree": "显示文件列表",
+    "more": "更多"
   },
   "browser": {
     "empty": "此项目中没有文件。",

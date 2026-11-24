@@ -37,8 +37,7 @@
     "stopTitle": "Stop {{title}}",
     "copy": "Copy",
     "copied": "Copied",
-    "openTitle": "Open {{title}}",
-    "close": "Close"
+    "openTitle": "Open {{title}}"
   },
   "detail": {
     "command": "Command",
