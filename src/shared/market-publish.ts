@@ -3,7 +3,8 @@
 // the drafts a host keeps of what was not published.
 
 /** What a listing is: a skill, a workflow, a plugin of one harness, or an MCP server. */
-export type PublishKind = 'skill' | 'workflow' | 'plugin' | 'mcp-server'
+// `plugin` is a harness's own plugin; `agent-plugin` a Kettu plugin, in the Agent Plugins format.
+export type PublishKind = 'skill' | 'workflow' | 'plugin' | 'mcp-server' | 'agent-plugin'
 export type PublishHarness = 'claude-code' | 'codex'
 /** `unlisted`: taken out by its publisher; people who have it keep it and its updates. */
 export type ListingVisibility = 'public' | 'private' | 'unlisted'

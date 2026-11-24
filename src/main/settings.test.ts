@@ -361,6 +361,51 @@ describe('when idle sessions let their agent go', () => {
   })
 })
 
+describe("a plugin's items in a patch", () => {
+  const skill = {
+    id: 'plugin:p0123456789ab:review',
+    name: 'review',
+    description: 'Reviews a change.',
+    source: 'plugin',
+    origin: 'review-kit',
+    version: '1.0.0',
+    agents: 'all',
+    on: true,
+  }
+  const server = {
+    id: 'plugin:p0123456789ab:tracker',
+    name: 'tracker',
+    title: 'tracker',
+    source: 'plugin',
+    version: null,
+    spec: { type: 'stdio', command: '/data/plugins/bin/server', args: [], env: [] },
+    agents: 'all',
+    on: true,
+  }
+
+  it('keeps a skill and a server by the plugin that brought them', () => {
+    expect(validateSettingsPatch({ marketplace: { skillsEdit: { put: [skill] } } })).toEqual({
+      marketplace: { skillsEdit: { put: [skill] } },
+    })
+    expect(validateSettingsPatch({ marketplace: { mcpEdit: { put: [server] } } })).toEqual({
+      marketplace: { mcpEdit: { put: [server] } },
+    })
+  })
+
+  it('refuses an id that names no plugin, and an origin that is no plugin name', () => {
+    for (const id of ['plugin:review', 'plugin:p01:review', 'plugin:p0123456789ab:../x', 'x']) {
+      expect(() => validateSettingsPatch({ marketplace: { skills: [{ ...skill, id }] } })).toThrow()
+      expect(() => validateSettingsPatch({ marketplace: { mcp: [{ ...server, id }] } })).toThrow()
+    }
+    expect(() =>
+      validateSettingsPatch({ marketplace: { skills: [{ ...skill, origin: '/etc/passwd' }] } }),
+    ).toThrow()
+    expect(() =>
+      validateSettingsPatch({ marketplace: { skills: [{ ...skill, source: 'kettu' }] } }),
+    ).toThrow()
+  })
+})
+
 describe('items from the Kettu Marketplace in a patch', () => {
   const skill = {
     id: 'kettu:abcdefgh23',

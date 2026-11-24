@@ -196,6 +196,7 @@ const WORKFLOW_COLOR: Record<WireWorkflowEntry['source'], string> = {
   agent: 'var(--tile-cyan)',
   user: 'var(--tile-violet)',
   community: 'var(--tile-teal)',
+  plugin: 'var(--tile-teal)',
 }
 
 const HARNESS_COLOR: Record<PluginHarness, string> = {

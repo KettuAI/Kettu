@@ -76,7 +76,9 @@ export interface MarketServer {
   id: string // the registry's name, such as io.github.github/github-mcp-server, or manual:<uuid>
   name: string // what agents call it: lowercase letters, digits, - and _, unique among Kettu's
   title: string
-  source: 'registry' | 'manual' | 'kettu' // kettu: the Kettu Marketplace, by id kettu:<listing>
+  // kettu: the Kettu Marketplace, by id kettu:<listing>; plugin: a plugin's, by id
+  // plugin:<plugin>:<name>, removed with it
+  source: 'registry' | 'manual' | 'kettu' | 'plugin'
   version: string | null // the registry's or the listing's version; null when added by hand
   spec: McpSpec
   agents: 'all' | AgentId[] // the agents that get it; 'all' takes in agents added later
@@ -180,11 +182,14 @@ function uniqueName(base: string, kept: readonly MarketServer[]): string {
 
 /** A skill Kettu keeps, stored in the host settings' `marketplace.skills`; its files live on the host. */
 export interface MarketSkill {
-  id: string // <owner>/<repo>:<name> from the catalog, github:<owner>/<repo>/<path>, local:<uuid> or kettu:<listing>
+  // <owner>/<repo>:<name> from the catalog, github:<owner>/<repo>/<path>, local:<uuid>,
+  // kettu:<listing>, or plugin:<plugin>:<name> for a plugin's, removed with it
+  id: string
   name: string // the skill's own name, from its SKILL.md
   description: string
-  source: 'catalog' | 'github' | 'local' | 'kettu'
-  origin: string // the repository URL, the folder it was copied from, or @<publisher>/<slug>
+  source: 'catalog' | 'github' | 'local' | 'kettu' | 'plugin'
+  // The repository URL, the folder it was copied from, @<publisher>/<slug>, or the plugin's name
+  origin: string
   version: string | null // the commit or the listing's version it was copied at; null for a folder
   agents: 'all' | AgentId[]
   on: boolean

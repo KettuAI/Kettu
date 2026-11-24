@@ -252,6 +252,50 @@ describe('createValidators', () => {
     expect(posix['market.ownPlugins'](undefined)).toEqual({})
   })
 
+  it('checks where a plugin comes from, and what names an installed or inspected one', () => {
+    const inspect = (source: unknown) => posix['plugins.inspect']({ source })
+    expect(inspect({ kind: 'local', path: '/home/me/plugin' })).toEqual({
+      source: { kind: 'local', path: '/home/me/plugin' },
+    })
+    expect(inspect({ kind: 'github', url: 'https://github.com/a/b/tree/main/x' })).toEqual({
+      source: { kind: 'github', url: 'https://github.com/a/b/tree/main/x' },
+    })
+    expect(inspect({ kind: 'kettu', id: 'abcdefgh23', extra: 1 })).toEqual({
+      source: { kind: 'kettu', id: 'abcdefgh23' },
+    })
+    rejects(() => inspect({ kind: 'local', path: 'relative/plugin' }))
+    rejects(() => inspect({ kind: 'github', url: 'https://example.com/a/b' }))
+    rejects(() => inspect({ kind: 'kettu', id: '../x' }))
+    rejects(() => inspect({ kind: 'catalog', id: 'a/b:c' }))
+    rejects(() => inspect('https://github.com/a/b'))
+    const token = '00000000-0000-4000-8000-000000000000'
+    expect(posix['plugins.install']({ token })).toEqual({ token })
+    rejects(() => posix['plugins.install']({ token: '../x' }))
+    rejects(() => posix['plugins.discard']({}))
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.setEnabled']({ pluginId, enabled: false })).toEqual({
+      pluginId,
+      enabled: false,
+    })
+    rejects(() => posix['plugins.setEnabled']({ pluginId }))
+    for (const method of [
+      'plugins.uninstall',
+      'plugins.reload',
+      'plugins.applyUpdate',
+      'plugins.declineUpdate',
+      'plugins.rollBack',
+    ] as const) {
+      expect(posix[method]({ pluginId })).toEqual({ pluginId })
+      rejects(() => posix[method]({ pluginId: '../p0123456789ab' }))
+      rejects(() => posix[method]({}))
+    }
+    expect(posix['plugins.checkUpdates'](undefined)).toEqual({})
+    expect(posix['plugins.checkUpdates']({ pluginId })).toEqual({ pluginId })
+    rejects(() => posix['plugins.checkUpdates']({ pluginId: 'x' }))
+    expect(posix['plugins.resources']({ kind: 'roles' })).toEqual({ kind: 'roles' })
+    rejects(() => posix['plugins.resources']({ kind: 'scripts' }))
+  })
+
   it('checks where a skill to add comes from', () => {
     expect(posix['market.skills'](undefined)).toEqual({})
     const add = (source: unknown) => posix['market.addSkill']({ source })

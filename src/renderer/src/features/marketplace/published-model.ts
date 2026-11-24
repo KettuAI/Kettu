@@ -36,7 +36,7 @@ export const VISIBILITY_ICON: Record<ListingVisibility, IconSvgElement> = {
 }
 
 export function kindOf(kind: PublishKind): ItemKind {
-  return kind === 'mcp-server' ? 'mcp' : kind
+  return kind === 'mcp-server' ? 'mcp' : kind === 'agent-plugin' ? 'plugin' : kind
 }
 
 /** A listing's tile, as the Community section draws it; a draft of a new one goes by its slug. */

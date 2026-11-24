@@ -1433,6 +1433,7 @@
       "skill": "Skill",
       "plugin": "插件",
       "mcp-server": "MCP 服务器",
+      "agent-plugin": "插件",
       "workflow": "工作流"
     },
     "visibility": {

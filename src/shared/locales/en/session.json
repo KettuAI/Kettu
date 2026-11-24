@@ -1488,6 +1488,7 @@
       "skill": "Skill",
       "plugin": "Plugin",
       "mcp-server": "MCP server",
+      "agent-plugin": "Plugin",
       "workflow": "Workflow"
     },
     "visibility": {

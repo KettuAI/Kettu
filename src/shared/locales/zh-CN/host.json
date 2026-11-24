@@ -1323,6 +1323,50 @@
     "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。",
     "notListing": "这不是 Kettu 市场里的条目"
   },
+  "plugins": {
+    "invalid": "这个插件装不了：{{reason}}",
+    "noManifest": "它的顶层没有 plugin.json。",
+    "notJson": "它的 plugin.json 不是 Kettu 能读的 JSON 对象。",
+    "schema": "它的 plugin.json 用的插件格式版本 Kettu 读不了（{{schema}}）。",
+    "field": "它的 plugin.json 里 {{field}} 不合规。",
+    "format": "它是按 Kettu 插件内容的第 {{version}} 版写的，这个 Kettu 只读第 {{reads}} 版。更新 Kettu 后再装。",
+    "kettuVersion": "它需要 Kettu {{range}}，现在是 Kettu {{version}}。",
+    "api": "它的脚本要插件 API 的第 {{version}} 版，这个 Kettu 没有。",
+    "permission": "它要一项 Kettu 不认识的权限：{{permission}}。",
+    "noScript": "它的脚本 {{path}} 不在包里。",
+    "unsafePath": "它写了一个包外面的路径：{{path}}。",
+    "link": "{{path}} 是一个链接，插件里不能有链接。",
+    "tooLarge": "它超过了 {{files}} 个文件或 {{mb}} MB。",
+    "noPlugin": "{{url}} 里没有 plugin.json",
+    "noPlan": "这次检查的结果已经不在了，请重新检查这个插件。",
+    "notFound": "没有安装这个插件。",
+    "notDevelopment": "只有从文件夹添加的插件能重新加载。",
+    "noUpdate": "这个插件没有等着的更新。",
+    "noPrevious": "这个插件没有可以退回的上一个版本。",
+    "updateChanged": "这个更新要的比上次显示的更多了，请重新看一下它多要了什么。",
+    "fromPlugin": "它是插件 {{plugin}} 带来的，跟着插件一起移除。",
+    "warn": {
+      "unknownField": "plugin.json 里有插件格式没有定义的字段 {{field}}，已忽略。",
+      "extensions": "plugin.json 的 extensions 不是对象，已忽略。",
+      "kettuField": "sh.kettu 这一项里有这个 Kettu 不认识的字段 {{field}}，已忽略。",
+      "item": "没有带上 {{path}}：{{reason}}",
+      "server": "没有带上 MCP 服务器 {{name}}：{{reason}}",
+      "cwd": "MCP 服务器 {{name}} 要在 {{cwd}} 里启动，智能体会在会话的文件夹里启动它。",
+      "hooks": "这个插件的 hooks 在 Kettu 里不运行。"
+    },
+    "reason": {
+      "entry": "它不符合插件格式",
+      "schema": "它用的插件格式版本和 plugin.json 不一样",
+      "name": "它的名字 Kettu 不接受：只能用字母、数字、点、连字符和下划线",
+      "duplicate": "另一项也叫 {{name}}",
+      "noFile": "它没有 {{file}}",
+      "type": "它只能是 {{types}} 之一",
+      "tooLarge": "它太大了",
+      "command": "它的命令只能是一个程序的名字，或包里以 ./ 开头的路径",
+      "url": "它的网址只能是 https 地址，或这台电脑上的 http 地址",
+      "unknownFolder": "Kettu 不认识这个文件夹"
+    }
+  },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",
     "notZip": "它不是 zip 压缩包。",
@@ -1489,7 +1533,8 @@
     "noMcp": "Kettu 里没有安装 MCP 服务器“{{name}}”",
     "noSkill": "Kettu 里没有安装技能“{{name}}”",
     "unreadable": "无法读取：{{reason}}",
-    "fileGone": "文件已经不在了"
+    "fileGone": "文件已经不在了",
+    "pluginOff": "它的插件 {{plugin}} 关着"
   },
   "apiKey": {
     "oneWord": "API key 必须是不含空格的一整段文字",

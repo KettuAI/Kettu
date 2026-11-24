@@ -86,6 +86,7 @@ const KIND = {
   workflow: 'workflow',
   plugin: 'plugin',
   'mcp-server': 'mcp',
+  'agent-plugin': 'plugin',
 } as const satisfies Record<PublishKind, ItemKind>
 
 // The agents that do a workflow's steps.

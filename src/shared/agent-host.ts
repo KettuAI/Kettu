@@ -58,6 +58,7 @@ import type {
   CommunityListing,
   CommunityWorkflow,
 } from './market-community'
+import type { InstalledKettuPlugin, PluginPlan, PluginResource, PluginSource } from './plugins'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
 import type {
@@ -1321,6 +1322,39 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // Kettu's plugins: packages in the Agent Plugins format, installed on the host. See plugins.
+  'plugins.list': { params: void; result: { plugins: InstalledKettuPlugin[] } }
+  // Reads a package from its source and says what it holds and would run. Nothing is installed
+  // and nothing of it runs; the answer's token names the package for plugins.install.
+  'plugins.inspect': { params: { source: PluginSource }; result: PluginPlan }
+  // Installs the package an inspection showed, once the user confirmed it: its skills and MCP
+  // servers go into settings.marketplace marked with the plugin, its workflows into the library.
+  'plugins.install': { params: { token: string }; result: InstalledKettuPlugin }
+  'plugins.discard': { params: { token: string }; result: void }
+  // Removes the plugin with every item it brought.
+  'plugins.uninstall': { params: { pluginId: string }; result: void }
+  'plugins.setEnabled': {
+    params: { pluginId: string; enabled: boolean }
+    result: InstalledKettuPlugin
+  }
+  // Copies a development plugin's folder again, in place of the copy installed.
+  'plugins.reload': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // Looks for newer versions, of one plugin or all: a newer one is installed and the one before
+  // kept, but one that adds a script or asks for more permissions waits as the plugin's `held`.
+  'plugins.checkUpdates': {
+    params: { pluginId?: string }
+    result: { plugins: InstalledKettuPlugin[] }
+  }
+  // The user's answer to an update that waits: install it, or stay on the version in place.
+  'plugins.applyUpdate': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  'plugins.declineUpdate': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // Goes back to the version before the last update.
+  'plugins.rollBack': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // The commands, roles, themes or templates of the plugins that are on, with each one's file.
+  'plugins.resources': {
+    params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
+    result: { items: PluginResource[] }
+  }
   // Workflows: the user's library. See workflow; an older host also sends the ones it shipped with.
   'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
@@ -2235,6 +2269,18 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'plugins.list',
+  'plugins.inspect',
+  'plugins.install',
+  'plugins.discard',
+  'plugins.uninstall',
+  'plugins.setEnabled',
+  'plugins.reload',
+  'plugins.checkUpdates',
+  'plugins.applyUpdate',
+  'plugins.declineUpdate',
+  'plugins.rollBack',
+  'plugins.resources',
   'workflows.list',
   'workflows.read',
   'workflows.add',
@@ -2406,6 +2452,7 @@ export type HostEvent =
   | { type: 'market.publishedChanged' }
   // To the windows showing a session: its agent's open_settings, Settings at a row.
   | { type: 'settings.open'; section: SettingsSection; item: string | null; row: string }
+  | { type: 'plugins.changed' } // an installed plugin changed; a page showing them reads again
   | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
   | {
