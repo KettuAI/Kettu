@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { PlugSocketIcon } from '@hugeicons/core-free-icons'
+import { PuzzleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { pluginTitle } from '@renderer/features/marketplace/plugin-model'
 import {
@@ -33,7 +33,7 @@ export function usePluginsSection(): SectionDef {
     id: 'plugins' as const,
     title: t('sections.plugins'),
     description: t('pages.plugins'),
-    icon: PlugSocketIcon,
+    icon: PuzzleIcon,
     itemPage: (item: string) => <PluginPage id={item} />,
   }
   if (plugins === null) {
