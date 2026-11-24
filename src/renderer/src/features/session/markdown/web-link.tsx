@@ -245,7 +245,7 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
   const label = children ?? url
   const reference = useMemo<GitHubReference | null>(() => githubReferenceFromLink(url), [url])
   // A link a plugin knows, which is plain until the plugin's card for it has come.
-  const pluginLink = usePluginLink(url, link)
+  const { link: pluginLink, failure: pluginFailure } = usePluginLink(url, link)
   const primary = defaultDestination(url, thread, context)
   const browserName = browser.name ?? t('link.yourBrowser')
 
@@ -363,6 +363,14 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
                 {primary === 'session'
                   ? t('link.opensInSession', { url })
                   : t('link.opensIn', { url, browser: browserName })}
+                {pluginFailure && (
+                  <span className="mt-0.5 line-clamp-3 opacity-70">
+                    {t('link.pluginFailed', {
+                      plugin: pluginFailure.plugin,
+                      message: pluginFailure.message,
+                    })}
+                  </span>
+                )}
               </span>
             </TooltipContent>
           </Tooltip>

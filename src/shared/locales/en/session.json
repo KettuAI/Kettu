@@ -1019,7 +1019,8 @@
     "alwaysSiteSession": "Always open {{site}} links in the session browser",
     "alwaysHost": "Always open this site in {{browser}}",
     "alwaysHostSession": "Always open this site in the session browser",
-    "openFailed": "Couldn’t open the link: {{error}}"
+    "openFailed": "Couldn’t open the link: {{error}}",
+    "pluginFailed": "{{plugin}} couldn’t show this link: {{message}}"
   },
   "alert": {
     "note": "Note",

@@ -94,7 +94,8 @@ A plugin that declares views needs a script. Opening a view wakes the script, wh
 components, in the desktop app and in the web client, so a script only gives data and never
 draws; an answer that does not fit, a script that throws or one that is not done in 30 seconds
 shows as an error in that view and nothing else. A script that throws is shown its own message,
-as plain text cut at 300 characters, so a thrown `Error` should say what the user can do.
+as plain text cut at 300 characters, so a thrown `Error` should say what the user can do. A request
+that fails before it reaches the script says so, and not that plugins are not running.
 
 | Kind      | Data                                                                                      |
 | --------- | ----------------------------------------------------------------------------------------- |
@@ -102,6 +103,10 @@ as plain text cut at 300 characters, so a thrown `Error` should say what the use
 | `detail`  | a title, fields and a Markdown `body`                                                     |
 | `form`    | switch, choice and text `fields` and a `submit` action                                    |
 | `actions` | a line of text, whose line breaks are kept, and the buttons that run the script's actions |
+
+Line breaks are kept in the text of an `actions` view, a row's `subtitle` (up to three lines), a
+`detail` view's `subtitle` and the `value` of its fields; a `detail` view's `body` is Markdown and
+follows Markdown's own rules.
 
 Every kind may also carry a `scope` for its context bar and `actions` as buttons at its foot. An
 action runs the script, or with `open` goes to another view of the plugin; a `destructive` one is
@@ -145,6 +150,8 @@ may name only hosts the plugin holds a `network:` permission for, so a plugin he
 only on hosts it may connect to. A link of a reply that a pattern names is drawn as a reference
 once the script has answered `link.card` with a title, a label, badges and fields; until then and
 when it does not, the link stays as it was. Neither answer needs a permission beyond those above.
+A script that throws is shown its own message as plain text cut at 300 characters, under `@` for a
+source and on hover for a link that stays plain.
 
 ## Notification channels
 

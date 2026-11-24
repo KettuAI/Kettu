@@ -103,7 +103,7 @@ export function usePluginMentions(hostId: string | null, query: string | null): 
             query: typed,
             items: [],
             truncated: false,
-            error: { code: 'unavailable', detail: errorMessage(error) },
+            error: { code: 'request_failed', detail: errorMessage(error) },
           }),
         )
         .then((answer) => {
