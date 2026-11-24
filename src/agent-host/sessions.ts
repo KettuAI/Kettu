@@ -3,6 +3,7 @@
 
 import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
 import type { PublishVisibility } from '@shared/market-publish'
+import type { PermissionRelay } from '@shared/plugin-channels'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -10874,6 +10875,7 @@ export class SessionManager {
     answer:
       { optionId: string; note?: string } | { answers: QuestionAnswer[] } | { values: FormValues },
     device?: FromDevice,
+    relayed?: PermissionRelay,
   ): void {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
@@ -10926,6 +10928,7 @@ export class SessionManager {
         ...(named ? { name: option.name } : {}),
         ...(note ? { note } : {}),
         ...(device ? { device } : {}),
+        ...(relayed ? { relayed: { plugin: relayed.plugin, from: relayed.from } } : {}),
       }
       given = note ? { optionId, note } : { optionId }
     }
@@ -10937,6 +10940,29 @@ export class SessionManager {
     pending.answer(given)
     if (pending.outsideTurn) this.afterAnswer(live)
     this.touch(live.id)
+  }
+
+  /**
+   * Answers a request on the user's behalf from a plugin's channel, by the path of their click but
+   * only with allow once or deny of a plain permission request: never a question, a plan, a form
+   * or anything that lasts.
+   */
+  relayPermission(
+    sessionId: string,
+    requestId: string,
+    optionId: string,
+    relay: PermissionRelay,
+  ): void {
+    this.recordOf(sessionId)
+    const pending = this.live.get(sessionId)?.permissions.get(requestId)
+    if (pending) {
+      const option = pending.options.find((o) => o.id === optionId)
+      const plain = !pending.questions && !pending.plan && !pending.elicitation
+      if (!plain || (option?.kind !== 'allow_once' && option?.kind !== 'reject_once')) {
+        throw new HostError('restricted', t('session.waiting.permission.notRelayable'))
+      }
+    }
+    this.respond(sessionId, requestId, { optionId }, undefined, relay)
   }
 
   /**

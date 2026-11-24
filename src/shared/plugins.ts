@@ -4,6 +4,7 @@
 
 import type { McpSpec } from './marketplace'
 import type { PluginLinkDecl, PluginMentionDecl } from './plugin-refs'
+import type { PluginChannelDecl, PluginNoticeKind } from './plugin-channels'
 import type { PluginActionDecl, PluginViewDecl } from './plugin-views'
 
 export const PLUGIN_NAMESPACE = 'sh.kettu'
@@ -397,6 +398,8 @@ export interface PluginContents {
   mentions: PluginMentionDecl[]
   /** The kinds of link in replies the plugin draws as references. */
   links: PluginLinkDecl[]
+  /** The notification channels it declares; absent from a host older than them. */
+  channels?: PluginChannelDecl[]
   /** Portable hooks in the package, which never run in Kettu. */
   hooks: boolean
   /** What was reported and left out: unknown manifest fields, items that do not read. */
@@ -453,6 +456,8 @@ export interface InstalledKettuPlugin {
   values?: Record<string, PluginSettingValue>
   /** The secrets that are set, by key, never their values; absent from older hosts. */
   secretsSet?: string[]
+  /** The notice kinds the user sends to each declared channel, by its id; absent from older hosts. */
+  channelKinds?: Record<string, PluginNoticeKind[]>
   /**
    * What its script is doing: `active` while loaded, `idle` until something wakes it, `disabled`
    * after crashing too often; null without a script or while the plugin is off. Absent from older

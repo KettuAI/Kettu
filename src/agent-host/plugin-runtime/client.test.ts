@@ -9,6 +9,7 @@ import {
 } from '@shared/plugin-host'
 import { PLUGIN_HOOK_EVENTS, PLUGIN_PERMISSIONS } from '@shared/plugins'
 import { PLUGIN_REF_EVENTS } from '@shared/plugin-refs'
+import { PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
 import { PLUGIN_VIEW_EVENTS } from '@shared/plugin-views'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
@@ -320,6 +321,7 @@ function apiDeps() {
       secret: vi.fn(() => null),
       storage: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), keys: vi.fn() },
     },
+    channels: { answer: vi.fn() },
     transport,
   }
   return { deps, sessions, transport }
@@ -601,6 +603,7 @@ describe('the sample plugin and the published types', () => {
         ...PLUGIN_EVENTS,
         ...PLUGIN_VIEW_EVENTS,
         ...PLUGIN_REF_EVENTS,
+        PLUGIN_CHANNEL_EVENT,
         ...Object.keys(PLUGIN_HOOK_EVENTS),
       ].sort(),
     )

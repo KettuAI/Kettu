@@ -132,7 +132,8 @@
       },
       "permission": {
         "gone": "This request is no longer waiting for an answer",
-        "answered": "This request was already answered"
+        "answered": "This request was already answered",
+        "notRelayable": "This request can only be answered in Kettu"
       }
     }
   },
@@ -1351,6 +1352,7 @@
     "viewsNeedScript": "its view {{view}} has no script to give it data, so the package needs one.",
     "actionsNeedScript": "its action {{action}} has no script to run it, so the package needs one.",
     "linkHost": "its link pattern {{pattern}} is on {{host}}, which the plugin has no network permission for.",
+    "channelsNeedScript": "its channel {{channel}} has no script to tell its notices to, so the package needs one.",
     "unsafePath": "it names a path outside the package, {{path}}.",
     "link": "{{path}} is a link, and a plugin may hold none.",
     "tooLarge": "it holds more than {{files}} files or {{mb}} MB.",
@@ -1361,6 +1363,14 @@
     "noUpdate": "No update is waiting for this plugin.",
     "noPrevious": "There’s no earlier version of this plugin to go back to.",
     "noSetting": "This plugin has no setting {{key}} to set.",
+    "channelTitle": {
+      "permission": "A request needs your answer",
+      "turnEnded": "A turn ended",
+      "error": "A session failed",
+      "routines": "A Routine needs a look",
+      "planLimits": "A plan limit changed"
+    },
+    "noChannel": "This plugin has no channel {{channel}}.",
     "noSecret": "This plugin has no secret {{key}}.",
     "secretNotKept": "Kettu could not keep the secret. Try again.",
     "updateChanged": "The update asks for more than it did when it was shown. Look at what it adds again.",
@@ -1379,6 +1389,7 @@
       "mentionsPermission": "The mention sources are left out: they need the permission prompt.attach, which the plugin doesn’t ask for.",
       "refField": "{{id}} has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "refIcon": "{{id}} names an icon this Kettu doesn’t have. It’s left out.",
+      "channelField": "The channel {{channel}} has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "item": "{{path}} was left out: {{reason}}",
       "server": "The MCP server {{name}} was left out: {{reason}}",
       "cwd": "The MCP server {{name}} asks to start in {{cwd}}. Agents start it in the session’s folder instead.",

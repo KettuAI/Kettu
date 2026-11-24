@@ -279,6 +279,21 @@ export function PermissionEntry({
     }
     const key = ANSWER_KEY[result.kind]
     const note = t(`permission.card.note.${key}`, { agent: agentName })
+    const { relayed } = result
+    if (relayed) {
+      const allow = result.kind === 'allow_once'
+      const way = relayed.from
+        ? allow
+          ? 'relayedAllowFrom'
+          : 'relayedDenyFrom'
+        : allow
+          ? 'relayedAllow'
+          : 'relayedDeny'
+      return {
+        headline: t(`permission.answer.${key}`),
+        note: t(`permission.answer.${way}`, { plugin: relayed.plugin, from: relayed.from }),
+      }
+    }
     return {
       headline: t(`permission.answer.${key}`),
       note: result.device

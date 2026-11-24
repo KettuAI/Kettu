@@ -106,6 +106,12 @@ import {
   type PluginSource,
 } from '@shared/plugins'
 import {
+  PLUGIN_CHANNEL_ID,
+  PLUGIN_NOTICE_KINDS,
+  isPluginNoticeKind,
+  type PluginNoticeKind,
+} from '@shared/plugin-channels'
+import {
   PLUGIN_ACTION_ID,
   PLUGIN_VIEW_ID,
   PLUGIN_VIEW_LIMITS,
@@ -1254,6 +1260,22 @@ function pluginSettingKey(o: Fields): string {
   return key
 }
 
+function pluginChannelKinds(params: unknown): HostParams<'plugins.setChannelKinds'> {
+  const o = fields(params)
+  const channel = string(o, 'channel', 64)
+  if (!PLUGIN_CHANNEL_ID.test(channel)) throw invalidParams('channel is not a channel id')
+  const { kinds } = o
+  if (!Array.isArray(kinds) || kinds.length > PLUGIN_NOTICE_KINDS.length) {
+    throw invalidParams('kinds must be a list of notice kinds')
+  }
+  for (const kind of kinds as unknown[]) {
+    if (!isPluginNoticeKind(kind)) {
+      throw invalidParams(`kinds takes only ${PLUGIN_NOTICE_KINDS.join(', ')}`)
+    }
+  }
+  return { ...installedPlugin(params), channel, kinds: kinds as PluginNoticeKind[] }
+}
+
 function pluginToken(params: unknown): { token: string } {
   const token = string(fields(params), 'token', ID_CHARS)
   if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
@@ -2172,6 +2194,7 @@ export function createValidators(platform: Platform): Validators {
       if (value === '') throw invalidParams(t('validate.empty', { key: 'value' }))
       return { ...installedPlugin(params), key: pluginSettingKey(o), value }
     },
+    'plugins.setChannelKinds': pluginChannelKinds,
     'plugins.reload': installedPlugin,
     'plugins.checkUpdates': (params) =>
       params === undefined || params === null || fields(params).pluginId === undefined

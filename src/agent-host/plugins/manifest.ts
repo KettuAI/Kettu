@@ -38,6 +38,11 @@ import {
   type PluginLinkDecl,
   type PluginMentionDecl,
 } from '@shared/plugin-refs'
+import {
+  PLUGIN_CHANNEL_ID,
+  PLUGIN_CHANNEL_LIMITS,
+  type PluginChannelDecl,
+} from '@shared/plugin-channels'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 
@@ -74,6 +79,7 @@ const KETTU_FIELDS = new Set([
   'events',
   'mentions',
   'links',
+  'channels',
 ])
 const MAX_TEXT = 2_000
 const MAX_LIST = 64
@@ -83,6 +89,7 @@ const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon', 'pane
 const ACTION_FIELDS = new Set(['id', 'title', 'description', 'icon'])
 const MENTION_FIELDS = new Set(['id', 'title', 'icon'])
 const LINK_FIELDS = new Set(['id', 'patterns', 'icon'])
+const CHANNEL_FIELDS = new Set(['id', 'title', 'description'])
 
 /** Kettu's entry of the manifest, at format 1. */
 export interface KettuEntry {
@@ -105,6 +112,8 @@ export interface KettuEntry {
   permissions: string[]
   /** The Kettu events that wake the script; each is one `PLUGIN_HOOK_EVENTS` names. */
   events: string[]
+  /** The notification channels it declares; its script is told the notices the user sends to one. */
+  channels: PluginChannelDecl[]
 }
 
 export interface PluginManifest {
@@ -403,6 +412,43 @@ export function parseLinks(
   })
 }
 
+/** The notification channels a manifest declares; a field a later Kettu may add is passed over. */
+export function parseChannels(
+  value: unknown,
+  where: string,
+  warnings: string[],
+): PluginChannelDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_CHANNEL_LIMITS.channels) {
+    throw badField(where)
+  }
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginChannelDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id } = raw
+    if (typeof id !== 'string' || !PLUGIN_CHANNEL_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    for (const key of Object.keys(raw)) {
+      if (!CHANNEL_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.channelField', { channel: id, field: key.slice(0, 100) }))
+      }
+    }
+    const title = shortTexts(raw.title, `${at}.title`, PLUGIN_CHANNEL_LIMITS.title)
+    if (Object.values(title).every((text) => text.trim() === '')) throw badField(`${at}.title`)
+    const decl: PluginChannelDecl = { id, title }
+    const description = shortTexts(
+      raw.description,
+      `${at}.description`,
+      PLUGIN_CHANNEL_LIMITS.description,
+    )
+    if (Object.keys(description).length > 0) decl.description = description
+    return decl
+  })
+}
+
 const TOOL_ARGUMENT_TYPES = ['string', 'number', 'integer', 'boolean'] as const
 
 function toolArgument(raw: unknown, at: string): PluginToolArgument {
@@ -610,6 +656,10 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
   if ((mentionList.length > 0 || linkList.length > 0) && script === null) {
     throw badField(`${where}.script`)
   }
+  const channels = parseChannels(raw.channels, `${where}.channels`, warnings)
+  if (channels.length > 0 && script === null) {
+    throw refusal(t('plugins.channelsNeedScript', { channel: channels[0]!.id }))
+  }
   const entry: KettuEntry = {
     kettu: range,
     titles: texts(raw.title, `${where}.title`),
@@ -624,6 +674,7 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     api,
     permissions,
     events,
+    channels,
   }
   return entry
 }

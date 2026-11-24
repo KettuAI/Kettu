@@ -5,6 +5,7 @@
 import type { Locale } from '@shared/locale'
 import { PLUGIN_API_VERSIONS } from '@shared/plugins'
 import type { PluginApiCall } from './call'
+import { relayCall, type PluginChannels } from './channels'
 import { httpsTransport, networkFetch, type HttpTransport } from './network'
 import { ownCalls, type PluginOwnDeps } from './own-api'
 import { sessionCalls, type PluginSessionsDeps } from './sessions-api'
@@ -20,6 +21,8 @@ export interface PluginApiDeps {
   colorMode(): ColorMode | null
   sessions: PluginSessionsDeps
   own: PluginOwnDeps
+  /** Where a relayed answer goes. */
+  channels: Pick<PluginChannels, 'answer'>
   transport?: HttpTransport
 }
 
@@ -30,6 +33,7 @@ export function createPluginApi(deps: PluginApiDeps): Readonly<Record<string, Pl
     'app.colorMode': { permission: null, run: () => deps.colorMode() },
     'network.fetch': networkFetch(deps.transport ?? httpsTransport),
     ...ownCalls(deps.own),
+    'requests.answer': relayCall(deps.channels),
     ...sessionCalls(deps.sessions),
   })
 }

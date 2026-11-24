@@ -406,6 +406,8 @@
       "workflowNote": "每个工作流都要你批准后才能开始需求",
       "settings": "它自己的设置",
       "views_other": "{{count}} 个视图",
+      "channels_other": "{{count}} 个通知渠道",
+      "channelsNote": "只收到你选的通知，默认一个都不发",
       "viewsNote": "由插件声明，Kettu 暂时不会绘制",
       "connects": "连接到哪里",
       "server": "MCP 服务器 {{name}}",

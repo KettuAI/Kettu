@@ -195,7 +195,11 @@
       "allowedByRoutine": "由定时任务允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要",
-      "onDevice": "{{answer}} · {{device}}"
+      "onDevice": "{{answer}} · {{device}}",
+      "relayedAllow": "你已允许一次，由 {{plugin}} 转达",
+      "relayedAllowFrom": "你已允许一次（来自 {{from}}），由 {{plugin}} 转达",
+      "relayedDeny": "你已拒绝，由 {{plugin}} 转达",
+      "relayedDenyFrom": "你已拒绝（来自 {{from}}），由 {{plugin}} 转达"
     },
     "answeredOn": "已在 {{device}} 上回答过。",
     "answeredInWindow": "已在另一个窗口中回答过。",

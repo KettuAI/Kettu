@@ -58,6 +58,7 @@ import type {
   PublishKind,
   PublishVisibility,
 } from './market-publish'
+import type { PluginNoticeKind } from './plugin-channels'
 import type { ConvertFrom, PluginConverted } from './plugin-convert'
 import type {
   BundlePlan,
@@ -1402,6 +1403,12 @@ export interface HostContract {
     params: { pluginId: string; key: string; value: string | null }
     result: InstalledKettuPlugin
   }
+  // Picks which kinds of notice go to one of the plugin's declared channels, in place of what it
+  // had; none turns the channel off.
+  'plugins.setChannelKinds': {
+    params: { pluginId: string; channel: string; kinds: PluginNoticeKind[] }
+    result: InstalledKettuPlugin
+  }
   // Copies a development plugin's folder again, in place of the copy installed.
   'plugins.reload': { params: { pluginId: string }; result: InstalledKettuPlugin }
   // Looks for newer versions, of one plugin or all: a newer one is installed and the one before
@@ -2388,6 +2395,7 @@ export const HOST_METHODS = [
   'plugins.setEnabled',
   'plugins.setSetting',
   'plugins.setSecret',
+  'plugins.setChannelKinds',
   'plugins.reload',
   'plugins.checkUpdates',
   'plugins.applyUpdate',

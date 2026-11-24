@@ -988,13 +988,16 @@ export interface ToolEntry {
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
   permissionResult:
-    // by: answered within a scope; device: answered on a paired device; name: a question's answer;
+    // by: answered within a scope; device: answered on a paired device; relayed: answered through
+    // a plugin's channel; name: a question's answer;
     // questions: what each question of an ask got, in the agent's order
     | {
         optionId: string
         kind: PermissionKind
         by?: 'routine' | 'task'
         device?: FromDevice
+        // A plugin relayed the answer, which the user gave where `from` says
+        relayed?: { plugin: string; from: string | null }
         name?: string
         questions?: AnsweredQuestion[]
         // The note sent with the answer, such as what to change in a plan

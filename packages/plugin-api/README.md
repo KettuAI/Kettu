@@ -21,7 +21,7 @@ permission fails with an error that names it.
 | `sessions.content`                  | high    | `sessions.read`                                                                              |
 | `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                            |
 | `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                 |
-| `requests.answer`                   | high    | declared now, calls follow                                                                   |
+| `requests.answer`                   | high    | `requests.answer`, to relay an answer to a permission request a channel told the plugin of   |
 | `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources    |
 
 ## Tools, settings and storage
@@ -118,6 +118,25 @@ may name only hosts the plugin holds a `network:` permission for, so a plugin he
 only on hosts it may connect to. A link of a reply that a pattern names is drawn as a reference
 once the script has answered `link.card` with a title, a label, badges and fields; until then and
 when it does not, the link stays as it was. Neither answer needs a permission beyond those above.
+
+## Notification channels
+
+A plugin with a script may declare channels under `extensions["sh.kettu"].channels`: an `id`, a
+`title` and an optional `description`. On the plugin's page in Settings the user picks which kinds
+of Kettu's notices go to each channel, none by default. A notice reaches the script as the
+`channel.notice` event, with its channel, kind and title. Its text, which can be a command an agent
+asks to run, comes only with `sessions.content`. Delivery waits in the plugin's queue and is held
+to the time limit of a call, so a slow channel never delays Kettu's own notice.
+
+```json
+"channels": [{ "id": "chat", "title": { "en": "Team chat", "zh-CN": "团队聊天" } }]
+```
+
+A plugin with `requests.answer` is also told the `request` id of a permission request that waits,
+and may answer it once with `kettu.call('requests.answer', { request, decision, from })`. The
+decision is `allow_once` or `deny`, never always allow, and the call fails for a request that no
+longer waits or that no notice told the plugin of. Questions and plans are never answered this way.
+The thread shows the answer as given from `from` and relayed by the plugin.
 
 ## Versions
 

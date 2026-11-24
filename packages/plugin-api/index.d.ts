@@ -118,6 +118,41 @@ export interface KettuCalls {
     args: [options: { id: string; text: string }]
     result: { id: string; delivered: 'sent' | 'queued' | 'steered' | 'interrupted' }
   }
+  /**
+   * Needs `requests.answer`: relays the answer the user gave elsewhere to a permission request that
+   * a `channel.notice` told this plugin of, as the answer the user gave in Kettu would. `decision`
+   * is `allow_once` or `deny`; an answer is never relayed as always allowing, and nothing but a
+   * plain permission request can be answered, never a question or a plan. It fails for a request
+   * no notice of this plugin's channels told it of, one that no longer waits, and when the user no
+   * longer sends permission requests to a channel of this plugin. `from` says where the user gave
+   * the answer, at most 60 characters; the thread shows it with the plugin's name.
+   */
+  'requests.answer': {
+    args: [options: { request: string; decision: 'allow_once' | 'deny'; from?: string }]
+    result: { request: string; decision: 'allow_once' | 'deny' }
+  }
+}
+
+export type NoticeKind = 'permission' | 'turnEnded' | 'error' | 'routines' | 'planLimits'
+
+/** A notice of Kettu's that the user sent to one of this plugin's channels. */
+export interface ChannelNotice {
+  /** The id the manifest declares the channel by. */
+  channel: string
+  kind: NoticeKind
+  /** At most 200 characters. */
+  title: string
+  /**
+   * At most 500 characters. A notice of a session says what its conversation holds, such as the
+   * command an agent asks to run, so its text comes only with `sessions.content`; a plan limit and
+   * a paused routine always have it.
+   */
+  text?: string
+  /**
+   * For a plain permission request, with `requests.answer`: what `requests.answer` names it by.
+   * A request that is a question, a plan or a command of several steps has none.
+   */
+  request?: { id: string }
 }
 
 export type ViewIcon =
@@ -493,6 +528,13 @@ export interface KettuEvents {
   'task.stepStarted': TaskStepInfo
   /** Needs `sessions.summary`: a step ended, with its outcome followed or sent back by the user. */
   'task.stepEnded': TaskStepInfo
+  /**
+   * One of Kettu's notices that the user sent to a channel the manifest declares under `channels`,
+   * which wakes the script for it. Kettu's own notice has gone before it is told, and a listener
+   * that is not done within 2 s is stopped, so a channel never delays anything. No notice is sent
+   * to a channel until the user picks its kinds on the plugin's page in Settings.
+   */
+  'channel.notice': ChannelNotice
   /**
    * A hook that needs no permission: a view the manifest declares under `views` was opened or
    * refreshed. The first listener that returns data answers, in the shape the view's kind takes;
