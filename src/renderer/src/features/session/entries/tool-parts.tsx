@@ -100,7 +100,8 @@ export function ContentBlock({
               ? content.ref.label
               : content.ref.kind === 'terminal' ||
                   content.ref.kind === 'page' ||
-                  content.ref.kind === 'device'
+                  content.ref.kind === 'device' ||
+                  content.ref.kind === 'plugin'
                 ? content.ref.name
                 : content.ref.attachment.name}
         </div>

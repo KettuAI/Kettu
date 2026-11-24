@@ -38,9 +38,9 @@ export interface ViewCheck {
   views: ReadonlySet<string>
 }
 
-type Raw = Record<string, unknown>
+export type Raw = Record<string, unknown>
 
-function bad(path: string, what: string): never {
+export function bad(path: string, what: string): never {
   throw new ViewDataError(`${path} ${what}`)
 }
 
@@ -52,19 +52,19 @@ function at(path: string, key: string): string {
   return path === '' ? key : `${path}.${key}`
 }
 
-function record(value: unknown, path: string): Raw {
+export function record(value: unknown, path: string): Raw {
   if (!isRecord(value)) return bad(path, 'must be an object')
   return value
 }
 
-function array(value: unknown, path: string, max: number): unknown[] {
+export function array(value: unknown, path: string, max: number): unknown[] {
   if (!Array.isArray(value)) return bad(path, 'must be a list')
   if (value.length > max) return bad(path, `has more than ${max} items`)
   return value
 }
 
 /** A text that may be left out, cut at `max`. */
-function optionalText(o: Raw, key: string, path: string, max: number): string | undefined {
+export function optionalText(o: Raw, key: string, path: string, max: number): string | undefined {
   const value = o[key]
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'string') return bad(at(path, key), 'must be text')
@@ -72,7 +72,7 @@ function optionalText(o: Raw, key: string, path: string, max: number): string | 
 }
 
 /** A text that must be there and show something, cut at `max`. */
-function requiredText(o: Raw, key: string, path: string, max: number): string {
+export function requiredText(o: Raw, key: string, path: string, max: number): string {
   const value = optionalText(o, key, path, max)
   if (value === undefined || value.trim() === '') return bad(at(path, key), 'must be text')
   return value
@@ -86,11 +86,11 @@ function optionalFlag(o: Raw, key: string, path: string): boolean | undefined {
 }
 
 /** An icon of the fixed set; one that is not in it is left out, since it only decorates. */
-function icon(o: Raw): { icon?: PluginViewRow['icon'] } {
+export function icon(o: Raw): { icon?: PluginViewRow['icon'] } {
   return isPluginViewIcon(o.icon) ? { icon: o.icon } : {}
 }
 
-function set<T extends object>(out: T, key: string, value: unknown): void {
+export function set<T extends object>(out: T, key: string, value: unknown): void {
   if (value !== undefined) (out as Record<string, unknown>)[key] = value
 }
 
@@ -158,7 +158,7 @@ function parseActions(
   return actions
 }
 
-function parseBadges(value: unknown, path: string): PluginViewBadge[] | undefined {
+export function parseBadges(value: unknown, path: string): PluginViewBadge[] | undefined {
   if (value === undefined || value === null) return undefined
   return array(value, path, LIMITS.badges).map((item, i) => {
     const o = record(item, `${path}[${i}]`)

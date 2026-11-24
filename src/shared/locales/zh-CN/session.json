@@ -480,7 +480,18 @@
     "attached": "{{plugin}} 添加了内容",
     "attachedItems": "{{plugin}} 添加了：{{items}}",
     "showAttached": "查看添加的内容",
-    "hideAttached": "收起添加的内容"
+    "hideAttached": "收起添加的内容",
+    "attachedFailed": "无法添加 {{items}}：{{why}}",
+    "attachedWhy": {
+      "not_found": "它已不再提供",
+      "disabled": "插件因多次崩溃已被关闭",
+      "crashed": "插件因占用时间或内存过多被停止",
+      "timeout": "插件响应超时",
+      "unavailable": "插件当时没有运行",
+      "failed": "插件没能给出内容",
+      "invalid": "插件返回了 Kettu 无法使用的内容",
+      "too_large": "这条消息里插件添加的内容已经达到上限"
+    }
   },
   "pluginDenial": {
     "text": "<b>{{plugin}}</b> 拒绝了 <b>{{request}}</b>：{{reason}}"

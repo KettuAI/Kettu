@@ -190,6 +190,7 @@ import { pathKey } from './paths'
 import { PluginHostClient } from './plugin-runtime/client'
 import { PluginHooks } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
+import { PluginRefs } from './plugin-runtime/refs'
 import { PluginViews } from './plugin-runtime/views'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
 import { PluginStorage } from './plugin-runtime/storage'
@@ -650,6 +651,13 @@ export class AgentHost {
     client: this.pluginHost,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
+  /** What a plugin's mention sources and links ask of its script, and what it answers. */
+  private readonly pluginRefs = new PluginRefs({
+    client: this.pluginHost,
+    source: (pluginId) => this.plugins.refSources().find((s) => s.pluginId === pluginId) ?? null,
+    locale: () => this.settings.locale,
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
   /** The window's color mode, from main; null under the daemon, which has no window. */
   private colorMode: ColorMode | null = null
   private readonly pluginScripts = new InstalledScripts(this.pluginHost, (pluginId, error) =>
@@ -658,6 +666,7 @@ export class AgentHost {
   /** Kettu's own events as the plugins that name them hear of them. */
   private readonly pluginHooks = new PluginHooks({
     client: this.pluginHost,
+    refs: this.pluginRefs,
     title: (pluginId) => this.plugins.titleOf(pluginId),
     log: (level, message) => writeLog(level, 'plugins', message),
   })
@@ -3888,6 +3897,10 @@ export class AgentHost {
       'plugins.viewAction': ({ pluginId, viewId, params, ...input }) =>
         this.pluginViews.act(pluginId, viewId, params ?? {}, input),
       'plugins.actionRun': ({ pluginId, actionId }) => this.pluginViews.run(pluginId, actionId),
+      'plugins.refs': () => ({ plugins: this.plugins.refSources() }),
+      'plugins.mentionSearch': ({ pluginId, source, query }) =>
+        this.pluginRefs.search(pluginId, source, query),
+      'plugins.linkCard': ({ pluginId, link, url }) => this.pluginRefs.card(pluginId, link, url),
       'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
       'commands.list': async () => ({ commands: await this.commands.list() }),
       'roles.list': async () => ({ roles: await this.roles.list() }),

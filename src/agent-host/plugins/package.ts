@@ -293,6 +293,8 @@ export function readPackage(files: readonly PackageFile[], appVersion: string): 
     tools: kettu?.tools ?? [],
     views: kettu?.views ?? [],
     actions: kettu?.actions ?? [],
+    mentions: kettu?.mentions ?? [],
+    links: kettu?.links ?? [],
     hooks,
     warnings,
   }

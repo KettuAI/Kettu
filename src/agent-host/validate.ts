@@ -112,6 +112,7 @@ import {
   type PluginFormValues,
   type PluginViewParams,
 } from '@shared/plugin-views'
+import { PLUGIN_REF_ID, PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
 import {
   parseFormValues,
   parseParams as parseViewParams,
@@ -973,6 +974,21 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
       const name = string(o, 'name', TERMINAL_NAME_CHARS)
       return { ref: { kind: 'device', deviceId, name }, bytes: deviceId.length + name.length }
     }
+    case 'plugin': {
+      const pluginId = string(o, 'pluginId', ID_CHARS)
+      const source = string(o, 'source', ID_CHARS)
+      if (!PLUGIN_ID.test(pluginId) || !PLUGIN_REF_ID.test(source)) {
+        throw invalidParams(`${at}: pluginId and source must name a mention source`)
+      }
+      const item = string(o, 'item', PLUGIN_REF_LIMITS.itemId)
+      const word = string(o, 'word', PLUGIN_REF_LIMITS.itemWord)
+      if (/\s/.test(word)) throw invalidParams(`${at}: word must not hold white space`)
+      const name = string(o, 'name', PLUGIN_REF_LIMITS.itemTitle)
+      return {
+        ref: { kind: 'plugin', pluginId, source, item, word, name },
+        bytes: item.length + word.length + name.length,
+      }
+    }
     case 'attachment': {
       // Only the id counts: the host takes everything else from its own record.
       const id = string(fields(o.attachment), 'id', ID_CHARS)
@@ -980,7 +996,7 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
     }
     default:
       throw invalidParams(
-        `${at}: a prompt can carry images, links, terminals, tabs, devices and attachments only`,
+        `${at}: a prompt can carry images, links, terminals, tabs, devices, plugin items and attachments only`,
       )
   }
 }
@@ -1030,6 +1046,7 @@ export function promptContent(value: unknown): UserContent[] {
   const out: UserContent[] = []
   let bytes = 0
   let attachments = 0
+  let mentions = 0
   let substance = false
   value.forEach((item: unknown, index) => {
     const at = `content[${index}]`
@@ -1044,6 +1061,9 @@ export function promptContent(value: unknown): UserContent[] {
       bytes += size
       if (ref.kind === 'attachment' && ++attachments > ATTACHMENT_LIMIT) {
         throw invalidParams(t('validate.promptAttachments', { max: ATTACHMENT_LIMIT }))
+      }
+      if (ref.kind === 'plugin' && ++mentions > PLUGIN_REF_LIMITS.perMessage) {
+        throw invalidParams(t('validate.promptMentions', { max: PLUGIN_REF_LIMITS.perMessage }))
       }
       substance = true
       out.push({ type: 'ref', ref })
@@ -1197,6 +1217,12 @@ function viewParams(params: unknown): PluginViewParams {
     if (error instanceof ViewDataError) throw invalidParams(error.message)
     throw error
   }
+}
+
+function refId(o: Fields, key: string): string {
+  const value = string(o, key, 64)
+  if (!PLUGIN_REF_ID.test(value)) throw invalidParams(`${key} is not an id`)
+  return value
 }
 
 function pluginViewAction(params: unknown): HostParams<'plugins.viewAction'> {
@@ -2157,6 +2183,23 @@ export function createValidators(platform: Platform): Validators {
     'plugins.viewData': (params) => ({ ...pluginView(params), params: viewParams(params) }),
     'plugins.viewAction': pluginViewAction,
     'plugins.actionRun': pluginActionRun,
+    'plugins.refs': none,
+    'plugins.mentionSearch': (params) => {
+      const o = fields(params)
+      const query = o.query
+      if (typeof query !== 'string' || query.length > PLUGIN_REF_LIMITS.query) {
+        throw invalidParams(`query must be text of at most ${PLUGIN_REF_LIMITS.query} characters`)
+      }
+      return { ...installedPlugin(params), source: refId(o, 'source'), query }
+    },
+    'plugins.linkCard': (params) => {
+      const o = fields(params)
+      return {
+        ...installedPlugin(params),
+        link: refId(o, 'link'),
+        url: string(o, 'url', URL_CHARS),
+      }
+    },
     'plugins.resources': (params) => {
       const { kind } = fields(params)
       if (kind !== 'commands' && kind !== 'roles' && kind !== 'themes' && kind !== 'templates') {

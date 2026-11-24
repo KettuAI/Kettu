@@ -491,7 +491,18 @@
     "attached": "Added by {{plugin}}",
     "attachedItems": "Added by {{plugin}}: {{items}}",
     "showAttached": "Show what was added",
-    "hideAttached": "Hide what was added"
+    "hideAttached": "Hide what was added",
+    "attachedFailed": "Couldn’t add {{items}}: {{why}}",
+    "attachedWhy": {
+      "not_found": "it is no longer offered",
+      "disabled": "the plugin was turned off after it crashed too often",
+      "crashed": "the plugin was stopped for using too much time or memory",
+      "timeout": "the plugin took too long to answer",
+      "unavailable": "plugins weren’t running",
+      "failed": "the plugin couldn’t give it",
+      "invalid": "the plugin sent something Kettu can’t use",
+      "too_large": "the message already holds as much as plugins may add"
+    }
   },
   "pluginDenial": {
     "text": "<b>{{plugin}}</b> denied <b>{{request}}</b>: {{reason}}"

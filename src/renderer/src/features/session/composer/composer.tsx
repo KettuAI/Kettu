@@ -51,7 +51,7 @@ import { CommentList } from './comment-list'
 import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
-import { mentionResolver, surfaceRefs } from './chips'
+import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { mentionSurfacesOf } from './mention-surfaces'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
@@ -357,6 +357,11 @@ export function Composer({
           ref,
         }),
       ),
+      // An item of a plugin the text mentions goes with it, and its content is read as it is sent.
+      ...pluginRefs(prompt, mentionResolver([], null, NO_SURFACES, taken.mentions)).map((ref) => ({
+        type: 'ref' as const,
+        ref: { kind: 'plugin' as const, ...ref },
+      })),
     ]
     const commentIds = comments.map((c) => c.id)
     return { taken, sent, content, commentIds, summary }

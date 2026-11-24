@@ -471,7 +471,11 @@ export interface PluginAttached {
   pluginId: string
   /** The plugin's title. */
   plugin: string
-  items: { title?: string; text: string }[]
+  /**
+   * `failed` says why a mentioned item could not be added (`text` is then empty): the plugin did
+   * not answer in time, was unavailable, or answered with what was not content.
+   */
+  items: { title?: string; text: string; failed?: string }[]
 }
 
 /**
@@ -1142,6 +1146,9 @@ export type ContentRef =
   | { kind: 'terminal'; terminalId: string; name: string }
   | { kind: 'page'; tabId: string; name: string }
   | { kind: 'device'; deviceId: string; name: string }
+  // An item a plugin's mention source offered that the user chose: the plugin adds its content to
+  // the message when it is sent. `word` is what the text names it by after the `@`.
+  | { kind: 'plugin'; pluginId: string; source: string; item: string; word: string; name: string }
   | { kind: 'unsupported'; label: string }
 
 export interface Attachment {
@@ -1493,6 +1500,14 @@ function isContentRef(value: unknown): value is ContentRef {
       return typeof value.tabId === 'string' && typeof value.name === 'string'
     case 'device':
       return typeof value.deviceId === 'string' && typeof value.name === 'string'
+    case 'plugin':
+      return (
+        typeof value.pluginId === 'string' &&
+        typeof value.source === 'string' &&
+        typeof value.item === 'string' &&
+        typeof value.word === 'string' &&
+        typeof value.name === 'string'
+      )
     case 'attachment':
       return isAttachment(value.attachment)
     case 'unsupported':
@@ -1840,7 +1855,8 @@ function isPluginAttached(value: unknown): value is PluginAttached {
       (item): item is PluginAttached['items'][number] =>
         isRecord(item) &&
         typeof item.text === 'string' &&
-        (item.title === undefined || typeof item.title === 'string'),
+        (item.title === undefined || typeof item.title === 'string') &&
+        (item.failed === undefined || typeof item.failed === 'string'),
     )
   )
 }

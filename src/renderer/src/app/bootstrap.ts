@@ -65,6 +65,7 @@ import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { pluginSurfacesChanged } from '@renderer/stores/plugin-surfaces'
 import { loadKettuRoles } from '@renderer/stores/kettu-roles'
+import { loadPluginRefs } from '@renderer/stores/plugin-refs'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
@@ -205,6 +206,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     void loadKettuCommands(hostId)
     void loadKettuRoles(hostId)
     pluginSurfacesChanged(hostId)
+    void loadPluginRefs(hostId)
   }
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)

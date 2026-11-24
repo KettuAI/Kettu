@@ -22,7 +22,7 @@ permission fails with an error that names it.
 | `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                            |
 | `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                 |
 | `requests.answer`                   | high    | declared now, calls follow                                                                   |
-| `prompt.attach`, `requests.check`   | caution | the events `session.beforeSend` and `session.permissionRequested`                            |
+| `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources    |
 
 ## Tools, settings and storage
 
@@ -99,6 +99,25 @@ view. A plugin that declares actions needs a script.
 "views": [{ "id": "issues", "kind": "list", "title": "Issues", "icon": "list", "pane": true }],
 "actions": [{ "id": "show-issues", "title": "Show my issues", "icon": "list" }]
 ```
+
+## Mentions and links
+
+A manifest may declare sources for the composer's `@` menu under `extensions["sh.kettu"].mentions`,
+each with an `id`, a `title` by language and optionally an `icon`, and needs `prompt.attach` and a
+script. Typing an `@` wakes the script, which answers `mention.search` with up to 20 items; the
+menu shows them in a group of the plugin's own beside the project's files, and never waits for
+them. A chosen item is written as `@word` and drawn as a chip. When the message is sent the script
+answers `mention.content` with the text the agent reads, which the thread shows under the message
+as the plugin's attachment; one that does not answer in time is said to the agent as left out, and
+a message holds up to 10 items and 48,000 characters of them.
+
+Under `links` a manifest declares kinds of link, each with an `id`, `patterns` and optionally an
+`icon`. A pattern is `https://host/path` where a segment is a literal, `*` for any one segment,
+`{name}` for one the script is told, and a last `**` for the rest; a host is a name or `*.name`. It
+may name only hosts the plugin holds a `network:` permission for, so a plugin hears of addresses
+only on hosts it may connect to. A link of a reply that a pattern names is drawn as a reference
+once the script has answered `link.card` with a title, a label, badges and fields; until then and
+when it does not, the link stays as it was. Neither answer needs a permission beyond those above.
 
 ## Versions
 

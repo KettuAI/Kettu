@@ -66,6 +66,7 @@ import type {
   CommunityListing,
   CommunityWorkflow,
 } from './market-community'
+import type { PluginLinkResult, PluginMentionResult, PluginRefSource } from './plugin-refs'
 import type {
   PluginViewActionInput,
   PluginViewActionResult,
@@ -1431,6 +1432,19 @@ export interface HostContract {
     params: { pluginId: string; actionId: string }
     result: PluginViewActionResult
   }
+  // What the plugins that are on declare for the composer's `@` menu and for links in replies.
+  'plugins.refs': { params: void; result: { plugins: PluginRefSource[] } }
+  // The items a plugin's mention source offers for what was typed after the `@`. A script that
+  // fails, hangs or answers badly gives `ok: false` with why, never an error.
+  'plugins.mentionSearch': {
+    params: { pluginId: string; source: string; query: string }
+    result: PluginMentionResult
+  }
+  // The card a plugin gives for a link in a reply, when it names the address.
+  'plugins.linkCard': {
+    params: { pluginId: string; link: string; url: string }
+    result: PluginLinkResult
+  }
   // The commands, roles, themes or templates of the plugins that are on, with each one's file.
   'plugins.resources': {
     params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
@@ -2382,6 +2396,9 @@ export const HOST_METHODS = [
   'plugins.viewData',
   'plugins.viewAction',
   'plugins.actionRun',
+  'plugins.refs',
+  'plugins.mentionSearch',
+  'plugins.linkCard',
   'plugins.resources',
   'commands.list',
   'roles.list',

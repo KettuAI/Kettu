@@ -218,7 +218,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
                 index={i}
                 carried={ref}
               />
-            ) : (
+            ) : ref.kind === 'plugin' ? null : (
               <RefChip key={i} contentRef={ref} />
             ),
           )}

@@ -75,7 +75,8 @@ import {
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
-import { mentionResolver, NO_SURFACES, surfaceRefs } from './composer/chips'
+import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './composer/chips'
+import { draftMentions } from './composer/plugin-mentions'
 import { mentionSurfacesOf } from './composer/mention-surfaces'
 import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from './composer/drafts'
 import { useAddMenu } from './composer/add-menu'
@@ -507,6 +508,10 @@ function DraftComposer({
           type: 'ref' as const,
           ref,
         })),
+        ...pluginRefs(
+          text,
+          mentionResolver([], null, NO_SURFACES, draftMentions(NEW_SESSION_DRAFT)),
+        ).map((ref) => ({ type: 'ref' as const, ref: { kind: 'plugin' as const, ...ref } })),
       ]
       // A worktree chosen before the project's status is read is still a worktree.
       const worktree =

@@ -51,12 +51,12 @@ const NO_RUN = 'No listener of action.run answered; the plugin’s log says why 
 
 type Asked = { ok: true; answers: unknown[] } | { ok: false; error: PluginViewError }
 
-function cut(text: string): string {
+export function cut(text: string): string {
   return text.slice(0, PLUGIN_VIEW_LIMITS.error)
 }
 
 /** What a failed request to a plugin means for the view that asked. */
-function failure(error: unknown): PluginViewError {
+export function failure(error: unknown): PluginViewError {
   if (error instanceof PluginRequestError) {
     switch (error.code) {
       case 'invalid':

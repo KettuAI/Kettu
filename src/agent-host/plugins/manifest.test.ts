@@ -376,3 +376,131 @@ describe('the sh.kettu entry', () => {
     expect(() => read(text)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
   })
 })
+
+describe('mention sources and kinds of link', () => {
+  const base = { script: './m.js', api: 1 }
+  const source = { id: 'issues', title: { en: 'Issues', 'zh-CN': '问题' }, icon: 'bug' }
+  const link = { id: 'issue', patterns: ['https://tracker.example.com/issues/{key}'], icon: 'bug' }
+  const withLink = (patterns: unknown[]) =>
+    kettu({
+      ...base,
+      permissions: ['network:tracker.example.com'],
+      links: [{ id: 'issue', patterns }],
+    })
+
+  it('reads a source and a kind of link, with the permissions they rest on', () => {
+    const parsed = read(
+      kettu({
+        ...base,
+        permissions: ['prompt.attach', 'network:tracker.example.com'],
+        mentions: [source],
+        links: [link],
+      }),
+    )
+    expect(parsed.warnings).toEqual([])
+    expect(parsed.kettu?.mentions).toEqual([
+      { id: 'issues', title: { en: 'Issues', 'zh-CN': '问题' }, icon: 'bug' },
+    ])
+    expect(parsed.kettu?.links).toEqual([
+      { id: 'issue', patterns: ['https://tracker.example.com/issues/{key}'], icon: 'bug' },
+    ])
+  })
+
+  it('leaves the sources out, with a warning, when the entry cannot attach to a message', () => {
+    const parsed = read(kettu({ ...base, mentions: [source] }))
+    expect(parsed.kettu?.mentions).toEqual([])
+    expect(parsed.warnings).toHaveLength(1)
+  })
+
+  it('passes over a field and an icon a later Kettu may add, with a warning', () => {
+    const parsed = read(
+      kettu({
+        ...base,
+        permissions: ['prompt.attach', 'network:tracker.example.com'],
+        mentions: [{ id: 'a', title: 'A', icon: 'unicorn', group: 'x' }],
+        links: [{ ...link, badge: 'new' }],
+      }),
+    )
+    expect(parsed.kettu?.mentions).toEqual([{ id: 'a', title: { en: 'A' } }])
+    expect(parsed.kettu?.links).toHaveLength(1)
+    expect(parsed.warnings).toHaveLength(3)
+  })
+
+  it('takes a pattern on a host a wildcard permission covers, and not one it does not', () => {
+    const wide = kettu({
+      ...base,
+      permissions: ['network:*.example.com'],
+      links: [{ id: 'issue', patterns: ['https://*.example.com/issues/{key}'] }],
+    })
+    expect(read(wide).kettu?.links).toHaveLength(1)
+    const narrow = kettu({
+      ...base,
+      permissions: ['network:tracker.example.com'],
+      links: [{ id: 'issue', patterns: ['https://*.example.com/issues/{key}'] }],
+    })
+    expect(() => read(narrow)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
+  })
+
+  it.each([
+    [
+      'sources that are not a list',
+      kettu({ ...base, permissions: ['prompt.attach'], mentions: 1 }),
+    ],
+    [
+      'a source whose id is not an id',
+      kettu({
+        ...base,
+        permissions: ['prompt.attach'],
+        mentions: [{ id: 'A b', title: 'A' }],
+      }),
+    ],
+    [
+      'a source without a title',
+      kettu({ ...base, permissions: ['prompt.attach'], mentions: [{ id: 'a' }] }),
+    ],
+    [
+      'two sources with one id',
+      kettu({
+        ...base,
+        permissions: ['prompt.attach'],
+        mentions: [1, 2].map(() => ({ id: 'a', title: 'A' })),
+      }),
+    ],
+    [
+      'more sources than a plugin may declare',
+      kettu({
+        ...base,
+        permissions: ['prompt.attach'],
+        mentions: Array.from({ length: 9 }, (_, i) => ({ id: `s${i}`, title: 'A' })),
+      }),
+    ],
+    [
+      'sources without a script to answer them',
+      kettu({ permissions: ['prompt.attach'], mentions: [{ id: 'a', title: 'A' }] }),
+    ],
+    [
+      'links without a script to answer them',
+      kettu({ permissions: ['network:tracker.example.com'], links: [link] }),
+    ],
+    ['a kind of link without patterns', withLink([])],
+    ['a pattern that is not text', withLink([1])],
+    ['a pattern on a host with no network permission', withLink(['https://other.example.org/a'])],
+    ['a pattern that is not https', withLink(['http://tracker.example.com/issues/{key}'])],
+    ['a pattern with a query', withLink(['https://tracker.example.com/issues?a=1'])],
+    ['a pattern with a fragment', withLink(['https://tracker.example.com/issues#top'])],
+    ['a pattern with a port', withLink(['https://tracker.example.com:8443/issues'])],
+    ['a pattern with a login', withLink(['https://me@tracker.example.com/issues'])],
+    ['a pattern with an empty segment', withLink(['https://tracker.example.com/a//b'])],
+    ['a pattern with a dot segment', withLink(['https://tracker.example.com/a/../b'])],
+    ['a pattern with a rest that is not last', withLink(['https://tracker.example.com/**/b'])],
+    ['a pattern with a capture twice', withLink(['https://tracker.example.com/{a}/{a}'])],
+    ['a pattern with a badly named capture', withLink(['https://tracker.example.com/{1a}'])],
+    ['a pattern longer than allowed', withLink([`https://tracker.example.com/${'a'.repeat(200)}`])],
+    [
+      'a pattern with more segments than allowed',
+      withLink([`https://tracker.example.com/${Array(13).fill('a').join('/')}`]),
+    ],
+  ])('refuses %s', (_, text) => {
+    expect(() => read(text)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
+  })
+})

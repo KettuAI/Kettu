@@ -25,6 +25,7 @@ import {
   type PluginSource,
   type PluginTool,
 } from '@shared/plugins'
+import { linkTrigger, mentionTrigger, type PluginRefSource } from '@shared/plugin-refs'
 import {
   actionTrigger,
   viewTrigger,
@@ -263,6 +264,30 @@ export class PluginsService {
   }
 
   /**
+   * What the plugins that are on and have a script declare for the composer's `@` menu and for
+   * links in replies, in the order the plugins were installed. A plugin that declares neither is
+   * left out.
+   */
+  refSources(): PluginRefSource[] {
+    return Object.values(this.data?.plugins ?? {})
+      .filter(
+        (record) =>
+          record.enabled &&
+          record.contents.script !== null &&
+          (record.contents.mentions.length > 0 || record.contents.links.length > 0),
+      )
+      .sort((a, b) => a.installedAt - b.installedAt || a.id.localeCompare(b.id))
+      .map((record) => ({
+        pluginId: record.id,
+        name: record.contents.name,
+        title: record.contents.title,
+        icon: record.contents.icon,
+        mentions: record.contents.mentions,
+        links: record.contents.links,
+      }))
+  }
+
+  /**
    * The scripts of the plugins that are on, each with its file on the host and the permissions
    * of the version in place. An update that waits for the user is not in place, so a script
    * never has what only that update asks for. A script is woken by the events its manifest
@@ -278,6 +303,8 @@ export class PluginsService {
               activation: [
                 ...record.contents.events,
                 ...record.contents.views.map((view) => viewTrigger(view.id)),
+                ...record.contents.mentions.map((source) => mentionTrigger(source.id)),
+                ...record.contents.links.map((link) => linkTrigger(link.id)),
                 ...(record.contents.permissions.includes('tools')
                   ? record.contents.tools.map((tool) => toolTrigger(tool.name))
                   : []),

@@ -3,6 +3,7 @@ import { File01Icon, Link01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
+import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { basename, bytes } from '@renderer/lib/format'
@@ -63,7 +64,9 @@ export function UserContentView({
   const command = ran ? (/^\/(\S+)/.exec(text)?.[1] ?? null) : null
   // A terminal, tab or device shows as the chip its mention in the text is.
   const refs = content.flatMap((c) =>
-    c.type === 'ref' && !isSurfaceMention(MENTIONED[c.ref.kind] ?? '') ? [c.ref] : [],
+    c.type === 'ref' && c.ref.kind !== 'plugin' && !isSurfaceMention(MENTIONED[c.ref.kind] ?? '')
+      ? [c.ref]
+      : [],
   )
   return (
     <div className="flex flex-col gap-2">
@@ -157,6 +160,12 @@ function surfacesOf(entry: ThreadEntry | undefined): MentionSurfaces {
   return { terminal, page, device }
 }
 
+/** The items of plugins a sent prompt mentioned, which its words after `@` name. */
+function pluginsOf(entry: ThreadEntry | undefined): PluginMentionRef[] {
+  if (entry?.kind !== 'user') return []
+  return entry.content.flatMap((c) => (c.type === 'ref' && c.ref.kind === 'plugin' ? [c.ref] : []))
+}
+
 /**
  * Resolves a sent prompt's mentions against what it carried, then the project's files. A terminal,
  * tab or device that has gone since reads as missing.
@@ -164,6 +173,7 @@ function surfacesOf(entry: ThreadEntry | undefined): MentionSurfaces {
 function useSentResolver(
   attachments: readonly Attachment[],
   surfaces: MentionSurfaces,
+  plugins: readonly PluginMentionRef[],
   text: string,
 ) {
   const projectPath = useContext(ProjectPathContext)
@@ -195,6 +205,7 @@ function useSentResolver(
       attachments.map((a) => ({ key: a.id, name: a.name, kind: a.type, thumb: a.thumb })),
       files ? projectOf(files.paths, files.known) : null,
       surfaces,
+      plugins,
     )
     const live = new Set([terminals, pages, devices].flatMap((ids) => ids.split('\n')))
     return (token: string) => {
@@ -203,7 +214,7 @@ function useSentResolver(
         ? { ...target, missing: true }
         : target
     }
-  }, [attachments, surfaces, files, terminals, pages, devices])
+  }, [attachments, surfaces, plugins, files, terminals, pages, devices])
 }
 
 /** Opens a sent attachment as its tile does: an image in the viewer, a file or folder itself. */
@@ -252,7 +263,8 @@ function ChipText({
   const entry = useSentEntry(sessionId, entryId)
   const attachments = useMemo(() => attachmentsOf(entry), [entry])
   const surfaces = useMemo(() => surfacesOf(entry), [entry])
-  const resolve = useSentResolver(attachments, surfaces, text)
+  const plugins = useMemo(() => pluginsOf(entry), [entry])
+  const resolve = useSentResolver(attachments, surfaces, plugins, text)
   const commands = useThreadsStore((s) =>
     sessionId ? s.replicas[sessionId]?.state?.session.commands : undefined,
   )
@@ -359,7 +371,7 @@ function ChipText({
 export function RefChip({
   contentRef,
 }: {
-  contentRef: Exclude<ContentRef, { kind: 'image' | 'audio' | 'video' }>
+  contentRef: Exclude<ContentRef, { kind: 'image' | 'audio' | 'video' | 'plugin' }>
 }) {
   const link = contentRef.kind === 'link'
   const label =
@@ -418,7 +430,7 @@ export function SentAttachments({
   // A file or folder the text names is its chip there; images stay above as thumbnails.
   const entry = useSentEntry(sessionId, entryId)
   const text = entry?.kind === 'user' ? textOf(entry.content) : ''
-  const resolve = useSentResolver(attachments, NO_SURFACES, text)
+  const resolve = useSentResolver(attachments, NO_SURFACES, [], text)
   const named = useMemo(() => mentioned(text, resolve), [text, resolve])
   const shown = attachments.filter((a) => a.type === 'image' || !named.has(a.id))
   const open = (attachment: Attachment, from: HTMLElement) => {

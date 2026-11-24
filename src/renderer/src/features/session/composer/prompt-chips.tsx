@@ -25,6 +25,7 @@ import { removeAttachment } from './attachments'
 import { ChipView } from './chip-view'
 import { isSurfaceMention, mentionResolver, type Chip } from './chips'
 import { useMentionSurfaces } from './mention-surfaces'
+import { useDraftMentions } from './plugin-mentions'
 import type { ComposerEditorHandle } from './editor'
 import type { ChipHooks } from './editor-chips'
 import { useLinkOpener } from './link-opener'
@@ -97,9 +98,10 @@ export function usePromptChips({
   const project = files ? projectOf(files.paths, files.known) : null
   const panel = sessionId ?? (projectPath ? newSessionPanel(projectPath) : null)
   const surfaces = useMentionSurfaces(panel)
+  const plugins = useDraftMentions(draft)
   const resolve = useMemo(
-    () => mentionResolver(attachments, project, surfaces),
-    [attachments, project, surfaces],
+    () => mentionResolver(attachments, project, surfaces, plugins),
+    [attachments, project, surfaces, plugins],
   )
   const names = useMemo(() => commands.map((c) => c.name), [commands])
 
@@ -108,7 +110,13 @@ export function usePromptChips({
   const hoverTimer = useRef<number | undefined>(undefined)
   const onHover = (chip: Chip | null, element: HTMLElement | null) => {
     window.clearTimeout(hoverTimer.current)
-    if (!chip || !element || chip.kind === 'command' || isSurfaceMention(chip.kind)) {
+    if (
+      !chip ||
+      !element ||
+      chip.kind === 'command' ||
+      chip.kind === 'plugin' ||
+      isSurfaceMention(chip.kind)
+    ) {
       setHover(null)
       return
     }

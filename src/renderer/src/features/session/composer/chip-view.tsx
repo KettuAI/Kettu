@@ -7,6 +7,7 @@ import {
   File01Icon,
   Folder01Icon,
   GlobalIcon,
+  PlugSocketIcon,
 } from '@hugeicons/core-free-icons'
 import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
 import { SiteIconImage } from '@renderer/components/site-icon-image'
@@ -119,6 +120,19 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
     )
   }
   if (chip.kind === 'link') return <LinkBody chip={chip} />
+  if (chip.kind === 'plugin') {
+    return (
+      <>
+        <Glyph icon={PlugSocketIcon} className="size-3.25 shrink-0 text-tertiary" />
+        <span className="min-w-0 truncate">
+          <span className="font-medium">{chip.label}</span>
+          {chip.name && chip.name !== chip.label && (
+            <span className="ml-1.5 text-tertiary">{chip.name}</span>
+          )}
+        </span>
+      </>
+    )
+  }
   return (
     <>
       {missing ? (
