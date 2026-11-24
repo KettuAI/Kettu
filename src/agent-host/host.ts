@@ -207,6 +207,7 @@ import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { claudeModelRequests } from './model-requests/claude'
 import { clineModelRequests } from './model-requests/cline'
+import { antigravityModelRequests } from './model-requests/antigravity'
 import { codexModelRequests } from './model-requests/codex'
 import { opencodeModelRequests } from './model-requests/opencode'
 import { byHarness } from './model-requests/reader'
@@ -1453,6 +1454,10 @@ export class AgentHost {
               await this.env.ready()
               return this.env.agentEnv('cline')
             },
+          }),
+          antigravity: antigravityModelRequests({
+            home: options.homeDir ?? os.homedir(),
+            fallback: acpModelRequests(this.acpMessages),
           }),
         },
         acpModelRequests(this.acpMessages),

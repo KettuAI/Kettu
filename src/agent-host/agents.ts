@@ -5725,7 +5725,9 @@ export class AgentManager {
         reports: this.hasLimits(slot.id) && !consoleSignIn,
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,
-        ...(this.driver(slot).reads?.contextEstimates ? { contextEstimates: true } : {}),
+        ...(this.driver(slot).reads?.contextEstimates || slot.def.contextEstimates
+          ? { contextEstimates: true }
+          : {}),
         account:
           slot.def.id === 'opencode' ||
           (slot.def.reportsAccount ?? false) ||
