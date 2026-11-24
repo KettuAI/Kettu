@@ -10993,6 +10993,24 @@ export class SessionManager {
   }
 
   /**
+   * Archives a session for the session that started it, which is done with it, so the reports of
+   * its turns still waiting in that session's queue go too. A session that archives itself, or one
+   * the user archives, still reports: its starter may be waiting for that.
+   */
+  async archiveStarted(sessionId: string, byAgent: string): Promise<void> {
+    const starterId = this.recordOf(sessionId).startedBy
+    await this.archiveByAgent(sessionId, byAgent)
+    const starter = starterId ? this.live.get(starterId) : undefined
+    if (!starter) return
+    const { queue } = starter.thread.session
+    const rest = queue.filter((item) => !item.from?.ended || item.from.sessionId !== sessionId)
+    if (rest.length === queue.length) return
+    this.update(starter, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
+    this.persist(starter)
+    this.touch(starter.id)
+  }
+
+  /**
    * What an archive at the end of this turn would stop, named as the notice lists it: the
    * session's background work and anything its sub-sessions run. Null when nothing.
    */
