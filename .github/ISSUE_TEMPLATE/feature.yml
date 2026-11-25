@@ -14,3 +14,17 @@ body:
       description: One request per issue. Screenshots help. · 一个 issue 只提一件事，附截图更好。
     validations:
       required: true
+  # issue-platform.yml finds this answer by its label's "Which app" start and labels each option
+  # by its English start.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Which app is it for? · 用在哪个应用
+      multiple: true
+      options:
+        - Desktop app · 桌面应用
+        - Web client · 网页客户端
+        - iPhone / iPad app · iPhone / iPad 应用
+        - Android app · Android 应用
+        - Daemon or Docker · 守护进程或 Docker
+        - All apps · 所有端
