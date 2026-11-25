@@ -23,9 +23,9 @@ export const useOverlayStore = create<OverlayStore>()((set) => ({
   },
 }))
 
-/** Whether any menu, popover, dialog or tooltip is open. */
-export function useOverlayOpen(): boolean {
-  return useOverlayStore((s) => Object.keys(s.open).length > 0)
+/** The open menus, popovers, dialogs and tooltips by id; a new object whenever one opens or closes. */
+export function useOpenOverlays(): Readonly<Record<string, true>> {
+  return useOverlayStore((s) => s.open)
 }
 
 /** An overlay's content carries this, so the pane can tell whether one covers it. */
