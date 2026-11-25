@@ -184,6 +184,9 @@ const QUIET = new Set([
 const OPTED_OUT = ['turn/moderationMetadata']
 
 const NOT_FOUND = /no rollout found|thread not loaded|thread not found|unknown thread/i
+// Another process on the same Codex home holds the thread's writer lock: the Codex app, a CLI or
+// an editor that has it loaded, which app-server keeps for a minute after its last client leaves.
+const HELD_ELSEWHERE = /already has an active writer/i
 
 function totals(usage: TokenUsageBreakdown): TokenTotals {
   return {
@@ -510,7 +513,8 @@ export class CodexConnection implements AgentConnection {
     if (error instanceof RpcError) {
       // A thread with no rollout, which a thread never prompted is, counts as one Codex lacks.
       const code = NOT_FOUND.test(error.message) ? RESOURCE_NOT_FOUND : error.code
-      return new AgentRequestError('agent_error', error.message, code, error.data)
+      const message = HELD_ELSEWHERE.test(error.message) ? t('codex.heldElsewhere') : error.message
+      return new AgentRequestError('agent_error', message, code, error.data)
     }
     return new AgentRequestError('agent_error', (error as Error)?.message ?? String(error))
   }

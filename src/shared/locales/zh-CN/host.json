@@ -714,6 +714,7 @@
     "signInNeeded": "请在终端里运行 `codex login` 登录 Codex",
     "turnFailed": "这一轮失败了",
     "noForkPoint": "Codex 在它的历史里找不到这条回复",
+    "heldElsewhere": "这个会话还开在另一个 Codex 程序里，比如 Codex 应用、终端或编辑器。在那边关掉它，过一分钟再试。",
     "option": {
       "mode": "模式",
       "modeDescription": "这个会话的授权和沙箱预设",

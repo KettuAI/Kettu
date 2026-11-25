@@ -718,6 +718,7 @@
     "signInNeeded": "Sign in to Codex with `codex login` in a terminal",
     "turnFailed": "The turn failed",
     "noForkPoint": "Codex can't find this reply in its history",
+    "heldElsewhere": "This session is still open in another Codex program, such as the Codex app, a terminal or an editor. Close it there and try again in a minute.",
     "option": {
       "mode": "Mode",
       "modeDescription": "Approval and sandboxing preset for the session",
