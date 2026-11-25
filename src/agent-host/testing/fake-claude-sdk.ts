@@ -2,6 +2,7 @@
 // messages a test scripts for the prompts it gets and records every call made to it.
 
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
 import { PassThrough } from 'node:stream'
 import type {
   AccountInfo,
@@ -52,16 +53,28 @@ export class FakeQuery implements Query {
   private readonly queue: SdkMessage[] = []
   private waiting: ((result: IteratorResult<SdkMessage>) => void) | null = null
   readonly process: unknown
+  /** The flag settings Claude Code reads from the `settings` file as it starts. */
+  readonly flagSettings: Record<string, unknown> | undefined
 
   constructor(
     readonly sdk: FakeClaudeSdk,
     readonly options: QueryOptions,
     prompt: AsyncIterable<UserInput>,
   ) {
-    // The SDK starts its Claude Code process as the query starts.
+    const { settings } = options
+    this.flagSettings =
+      settings === undefined
+        ? undefined
+        : (JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>)
+    // The SDK starts its Claude Code process as the query starts, with the settings option on its
+    // command line.
     this.process = options.spawnClaudeCodeProcess({
       command: options.pathToClaudeCodeExecutable,
-      args: ['--output-format', 'stream-json'],
+      args: [
+        '--output-format',
+        'stream-json',
+        ...(settings === undefined ? [] : ['--settings', settings]),
+      ],
       cwd: options.cwd,
       env: options.env,
       signal: new AbortController().signal,
