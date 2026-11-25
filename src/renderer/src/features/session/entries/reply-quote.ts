@@ -1,9 +1,10 @@
 // A comment on a passage goes as the passage in a Markdown blockquote with the comment after it.
 
-const QUOTE_LIMIT = 2000
+/** How much of a passage a quote keeps; longer ones end in an ellipsis. */
+export const QUOTE_LIMIT = 2000
 
 /** A passage as a blockquote; a line of its own that starts with `>` stays text in the quote. */
-function quoteBlock(passage: string): string {
+export function quoteBlock(passage: string): string {
   let quoted = passage
     .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
