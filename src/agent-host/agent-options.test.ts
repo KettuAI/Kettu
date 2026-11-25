@@ -60,6 +60,48 @@ describe('the models an agent keeps for its model menu', () => {
     )
   })
 
+  it('sets the pins as one ordered list, replacing the ones before, and clears them', () => {
+    const { options, saved } = store()
+    options.pin('claude-code', 'haiku', true)
+    options.setPinned('claude-code', ['sonnet', 'opus', 'claude-fable-5-2'])
+    expect(options.get('claude-code')?.pinned).toEqual(['sonnet', 'opus', 'claude-fable-5-2'])
+    expect(saved.at(-1)?.agents['claude-code']?.pinned).toEqual([
+      'sonnet',
+      'opus',
+      'claude-fable-5-2',
+    ])
+    options.setPinned('claude-code', ['claude-fable-5-2', 'sonnet', 'opus'])
+    expect(options.get('claude-code')?.pinned).toEqual(['claude-fable-5-2', 'sonnet', 'opus'])
+    options.setPinned('claude-code', [])
+    expect(options.get('claude-code')).not.toHaveProperty('pinned')
+  })
+
+  it('refuses more pins than the menu takes, and pins for an agent it has not seen', () => {
+    const { options } = store()
+    expect(() =>
+      options.setPinned('claude-code', ['opus', 'sonnet', 'haiku', 'claude-fable-5-2', 'x']),
+    ).toThrow(expect.objectContaining({ code: 'conflict' }))
+    expect(options.get('claude-code')).not.toHaveProperty('pinned')
+    expect(() => options.setPinned('codex', ['gpt-6.2-sol'])).toThrow(
+      expect.objectContaining({ code: 'not_found' }),
+    )
+  })
+
+  it('keeps the pins in their order across a reload and a fresh list of models', async () => {
+    const { options, saved } = store()
+    options.setPinned('claude-code', ['haiku', 'opus'])
+    options.opened('claude-code', [modelOption('sonnet')])
+    options.started('claude-code', [modelOption('default')], '/repo')
+    const file = {
+      load: async () => saved.at(-1)!,
+      save: () => {},
+      flush: async () => {},
+    } as unknown as JsonFile<AgentOptionsFile>
+    const reloaded = new AgentOptionsStore({ file, changed: () => {} })
+    await reloaded.load()
+    expect(reloaded.get('claude-code')?.pinned).toEqual(['haiku', 'opus'])
+  })
+
   it('puts the model a session is used on first, once, keeping eight', () => {
     const { options } = store()
     for (const model of ['sonnet', 'haiku', 'opus', 'sonnet']) {

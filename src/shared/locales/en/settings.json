@@ -786,6 +786,14 @@
     "setBy": "Set by {{env}}",
     "showIn": "Show in {{name}}",
     "noConfig": "No configuration files to show.",
+    "favorites": {
+      "name": "Favorite models",
+      "description": "The models you choose lead the model menu’s first page in this order; the rest are under More models.",
+      "keywords": "favorite models model menu first page more models order reorder pin customize automatic",
+      "reset": "Reset to automatic",
+      "full": "Up to {{count}} favorite models. Turn one off to choose another.",
+      "move": "Move {{name}}"
+    },
     "startMode": {
       "name": "Mode for new sessions",
       "description": "The permission mode a new session starts in, whatever a project’s own settings say. Sessions an agent starts never get Full access.",

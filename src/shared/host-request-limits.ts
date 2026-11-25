@@ -51,6 +51,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'agents.listSessions': AGENT_MS,
   'agents.options': HOST_MS,
   'agents.pinModel': HOST_MS,
+  'agents.setPinnedModels': HOST_MS,
   'agents.lightAgents': HOST_MS,
   'agents.draftReport': AGENT_MS,
   'mcp.status': AGENT_MS,

@@ -1,7 +1,12 @@
 // Hand-written guards for every request on the agent host port. A validator returns a fresh
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
-import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
+import {
+  MAX_PINNED_MODELS,
+  type AgentInstallMethod,
+  type HostMethod,
+  type HostParams,
+} from '@shared/agent-host'
 import { MAX_TERMINAL_COMMAND, replyCommandProblem } from '@shared/terminal-agent'
 import { COMMENT_CHARS, THREAD_ID, type CommentAnchor } from '@shared/artifact-comments'
 import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
@@ -357,6 +362,20 @@ function gitPath(o: Fields, key: string): string {
 
 // The pull requests and issues one window shows, at most as many as a request should carry.
 const WATCHED_REFERENCES = 100
+
+// An agent's pinned models, each a value its model option takes, in their order.
+function modelValues(o: Fields, key: string): string[] {
+  const value = o[key]
+  if (!Array.isArray(value) || value.length > MAX_PINNED_MODELS) {
+    throw invalidParams(`${key} must be an array of at most ${MAX_PINNED_MODELS} models`)
+  }
+  const models = value.map((model: unknown, index) => {
+    const at = `${key}[${index}]`
+    return string({ [at]: model }, at, TEXT_CHARS)
+  })
+  if (new Set(models).size !== models.length) throw invalidParams(`${key} names a model twice`)
+  return models
+}
 
 // The files of one commit or discard, at most as many as a request should carry.
 const GIT_PATHS = 1_000
@@ -1565,6 +1584,10 @@ export function createValidators(platform: Platform): Validators {
         model: string(o, 'model', TEXT_CHARS),
         pinned: flag(o, 'pinned'),
       }
+    },
+    'agents.setPinnedModels': (params) => {
+      const o = fields(params)
+      return { agentId: agentId(o), models: modelValues(o, 'models') }
     },
     'agents.lightAgents': none,
     'agents.draftReport': (params) => {

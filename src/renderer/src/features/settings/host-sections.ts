@@ -2,6 +2,7 @@ import { useSettingsHostStore } from '@renderer/stores/host-scope'
 import {
   openSettings,
   openSettingsItem,
+  openSettingsRow,
   useViewStore,
   type SettingsSection,
 } from '@renderer/stores/view'
@@ -53,3 +54,18 @@ export function openHostSettingsItem(
   useSettingsHostStore.setState({ hostId })
   openSettingsItem(section, item)
 }
+
+/** Opens one of the host's sections, or an item's page there, at a row, which flashes. */
+export function openHostSettingsRow(
+  hostId: string | null,
+  section: SettingsSection,
+  item: string | null,
+  row: string,
+): void {
+  if (!useViewStore.getState().settings.open) picked = true
+  useSettingsHostStore.setState({ hostId })
+  openSettingsRow(section, item, row)
+}
+
+/** The row of an agent's page that holds its favorite models. */
+export const FAVORITE_MODELS_ROW = 'favorite-models'

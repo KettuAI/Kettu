@@ -203,8 +203,9 @@ function markOlder(reads: ModelRead[]): void {
   }
 }
 
-/** What the host keeps of an agent's models: the ones pinned and the ones last used. */
+/** What the host keeps of an agent's models: the user's favorites and the ones last used. */
 export interface KeptModels {
+  /** The favorites, which the host keeps as pins, in the user's order. */
   pinned?: readonly string[]
   recent?: readonly string[]
 }
@@ -227,10 +228,10 @@ export interface ModelLists {
 }
 
 /**
- * The model menus' lists, by one rule for every agent. The main list takes, up to four, the models
- * the user pinned, then from one provider its current generation (the newest of each family) or
- * from several the agent's recently used models, then the agent's current models in its order.
- * Pinned models lead in the order pinned; the rest go known families largest first.
+ * The model menus' lists, by one rule for every agent. With favorites the agent still offers, the
+ * main list is those alone, in the user's order. Without, it takes up to four: from one provider
+ * its current generation (the newest of each family) or from several the agent's recently used
+ * models, then the agent's current models in its order, known families largest first.
  */
 export function modelLists(
   choices: Choices,
@@ -245,26 +246,22 @@ export function modelLists(
   const take = (read: ModelRead | undefined) => {
     if (read && picked.length < MAIN_MODELS && !picked.includes(read)) picked.push(read)
   }
-  const pinned = (kept.pinned ?? []).flatMap((v) => byValue.get(v) ?? [])
-  pinned.forEach(take)
-  const currentModels = all.filter((r) => !r.older)
+  const favorites = (kept.pinned ?? []).flatMap((v) => byValue.get(v) ?? [])
+  favorites.forEach(take)
   const self = (read: ModelRead) => read
-  if (several) for (const value of kept.recent ?? []) take(byValue.get(value))
-  else
-    sortByFamily(
-      currentModels.filter((r) => !r.isDefault),
-      self,
-    ).forEach(take)
-  currentModels.forEach(take)
-  // An agent that marks every model older still gets a main list.
-  if (picked.length === 0) all.forEach(take)
-  const main = [
-    ...pinned.filter((r) => picked.includes(r)),
-    ...sortByFamily(
-      picked.filter((r) => !pinned.includes(r)),
-      self,
-    ),
-  ]
+  if (picked.length === 0) {
+    const currentModels = all.filter((r) => !r.older)
+    if (several) for (const value of kept.recent ?? []) take(byValue.get(value))
+    else
+      sortByFamily(
+        currentModels.filter((r) => !r.isDefault),
+        self,
+      ).forEach(take)
+    currentModels.forEach(take)
+    // An agent that marks every model older still gets a main list.
+    if (picked.length === 0) all.forEach(take)
+  }
+  const main = favorites.length > 0 ? picked : sortByFamily(picked, self)
   const chosenValue = shownValue(choices, current)
   const chosen = all.find((r) => r.value === chosenValue) ?? null
   const shownAs = choices.find((c) => c.shownAs && isDefaultChoice(c))?.shownAs ?? null

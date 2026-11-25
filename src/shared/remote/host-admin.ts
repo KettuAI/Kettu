@@ -205,6 +205,11 @@ export interface HostInfo extends AppInfo {
    */
   partThumbnails?: boolean
   /**
+   * Setting an agent's pinned models in order, with `agents.setPinnedModels`; absent from hosts
+   * before it.
+   */
+  pinnedModels?: boolean
+  /**
    * What the host's agent host keeps of its artifacts beyond the versions, as its requests and
    * fields name them; absent from hosts before any of them.
    */

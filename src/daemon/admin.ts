@@ -168,6 +168,7 @@ export async function startDaemonAdmin({
       ownRelay: true,
       thumbnails: false,
       partThumbnails: false,
+      pinnedModels: true,
       artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => void hosts.restart(which),

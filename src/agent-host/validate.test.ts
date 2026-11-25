@@ -677,6 +677,26 @@ describe('createValidators', () => {
     rejects(() => pin({ agentId: 'unknown-agent', model: 'opus', pinned: false }))
   })
 
+  it('takes an agent’s pins only as a list of up to four model values, each once', () => {
+    const set = posix['agents.setPinnedModels']
+    expect(set({ agentId: 'opencode', models: ['deepseek/deepseek-v4-pro', 'opus'] })).toEqual({
+      agentId: 'opencode',
+      models: ['deepseek/deepseek-v4-pro', 'opus'],
+    })
+    expect(set({ agentId: 'claude-code', models: [] })).toEqual({
+      agentId: 'claude-code',
+      models: [],
+    })
+    rejects(() => set({ agentId: 'opencode', models: ['a', 'b', 'c', 'd', 'e'] }))
+    rejects(() => set({ agentId: 'opencode', models: ['opus', 'opus'] }))
+    rejects(() => set({ agentId: 'opencode', models: ['opus', ''] }))
+    rejects(() => set({ agentId: 'opencode', models: ['x'.repeat(4097)] }))
+    rejects(() => set({ agentId: 'opencode', models: [7] }))
+    rejects(() => set({ agentId: 'opencode', models: 'opus' }))
+    rejects(() => set({ agentId: 'opencode' }))
+    rejects(() => set({ agentId: 'unknown-agent', models: ['opus'] }))
+  })
+
   it('takes a reset credit to spend only with a credit id and a UUID v4 request id', () => {
     const spend = posix['agents.spendReset']
     const requestId = '0b0e7a52-6d0c-4a6e-9a3b-0d6f6f0c2a11'

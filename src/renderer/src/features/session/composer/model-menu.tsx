@@ -16,8 +16,10 @@ import {
 } from '@renderer/components/affect/model-picker'
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { FAVORITE_MODELS_ROW, openHostSettingsRow } from '@renderer/features/settings/host-sections'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { formatShortcut } from '@renderer/lib/platform'
+import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { EffortDial } from './effort-dial'
 import { dialStops, type SelectOption } from './levels'
@@ -55,11 +57,13 @@ export function ModelMenuLoading() {
 
 /**
  * The model, its effort and the agent's switches on affectUI's Model Picker as it comes: the main
- * models with their bars, the rest in a More models card beside it, the switches as its switch
- * rows, and effort on a dial or as segments, as Appearance sets.
+ * models, the agent's favorites when it has any, with their bars, the rest in a More models card
+ * beside it, the switches as its switch rows, and effort on a dial or as segments, as Appearance
+ * sets.
  */
 export function ModelMenu({
   agentId,
+  hostId,
   harness,
   config,
   running = false,
@@ -72,6 +76,8 @@ export function ModelMenu({
   canSwitchAgent = true,
 }: {
   agentId: AgentId
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   /** The harness a switch that follows the agent's setting follows, such as Claude Code. */
   harness: string
   config: readonly ConfigOption[]
@@ -99,7 +105,11 @@ export function ModelMenu({
   const switchLine = useSwitchLine(harness)
   const effortControl = useSettingsStore((s) => s.settings.appearance.effortControl)
   const choices = model?.choices
-  const lists = useMemo(() => modelLists(choices ?? [], modelValue), [choices, modelValue])
+  const favorites = useAgentOptionsStore((s) => optionsOn(s, hostId)[agentId]?.pinned)
+  const lists = useMemo(
+    () => modelLists(choices ?? [], modelValue, { pinned: favorites }),
+    [choices, modelValue, favorites],
+  )
 
   const [innerOpen, setInnerOpen] = useState(false)
   const isOpen = open ?? innerOpen
@@ -134,7 +144,8 @@ export function ModelMenu({
       ...(rating ?? {}),
     }
   }
-  // Four rows at most: a chosen model the main list leaves out takes its last row, which moves to More.
+  // Four rows at most: a chosen model the main list leaves out takes a row after it, or its last
+  // row when it has four, which moves to More.
   const shown = lists.extra ? [...lists.main.slice(0, MAIN_MODELS - 1), lists.extra] : lists.main
   const models = shown.map(row)
   const left = lists.all.filter((read) => !shown.includes(read))
@@ -206,7 +217,23 @@ export function ModelMenu({
           const read = byValue.get(m.id)
           return read ? matchesModel(read, query) : m.name.toLowerCase().includes(query)
         }}
-        moreNote={source ? t('controls.modelsFrom', { source }) : undefined}
+        moreNote={
+          <span className="kettu-model-picker__note">
+            {source && (
+              <span className="min-w-0 truncate">{t('controls.modelsFrom', { source })}</span>
+            )}
+            <button
+              type="button"
+              className="kettu-model-picker__customize"
+              onClick={() => {
+                changeOpen(false)
+                openHostSettingsRow(hostId, 'agents', agentId, FAVORITE_MODELS_ROW)
+              }}
+            >
+              {t('controls.customizeModels')}
+            </button>
+          </span>
+        }
         value={lists.chosen?.value}
         onChange={pickModel}
         efforts={efforts}

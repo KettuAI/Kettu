@@ -22,6 +22,8 @@ export interface GroupDef {
   label: string
   /** Shown after the label, as Agents counts its installed agents. */
   count?: number
+  /** A line under the label saying what the group is for, as affectUI's section heads have. */
+  description?: ReactNode
   /** Small actions at the label's end, such as Send a test notification. */
   actions?: ReactNode
   /** Rows that draw on the page itself rather than on a card, as the theme tiles do. */
