@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentOptions, AgentStatus, KettuRole, RunningWork } from '@shared/agent-host'
+import { DEFAULT_STARTED_LIMITS, type StartedSessionLimits } from '@shared/started-sessions'
 import type { ConfigOption } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
 import {
@@ -227,6 +228,8 @@ function starting(
     mode?: ToolMode
     roles?: KettuRole[]
     others?: { id: string; name: string }[]
+    started?: ToolSession[]
+    limits?: StartedSessionLimits
   } = {},
 ) {
   const sessions = [
@@ -256,7 +259,9 @@ function starting(
   )
   const deps = {
     info: (id: string) => sessions.find((item) => item.id === id) ?? null,
-    started: () => [],
+    started: () => opts.started ?? [],
+    limits: () => opts.limits ?? DEFAULT_STARTED_LIMITS,
+    now: () => NOW,
     agents: () => [status, ...others],
     roles: async () => opts.roles ?? [],
     role: async (ref: string) => (opts.roles ?? []).find((role) => role.ref === ref) ?? null,
@@ -275,6 +280,52 @@ function starting(
   } as unknown as SessionToolsDeps
   return { tools: new SessionTools(deps), start, readOptions }
 }
+
+// Noon, so the sessions of the test's day are all on one local day.
+const NOW = new Date(2026, 10, 25, 12).getTime()
+
+describe('start_session limits', () => {
+  const working = (count: number) =>
+    Array.from({ length: count }, (_, i) => session(`w${i}`, 'starter'))
+  const today = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      ...session(`d${i}`, 'starter'),
+      status: 'ready' as const,
+      createdAt: NOW - 60_000,
+    }))
+  const limits = (change: Partial<StartedSessionLimits>) => ({
+    ...DEFAULT_STARTED_LIMITS,
+    ...change,
+  })
+
+  it('stops at the number working at once the settings set, naming it', async () => {
+    const held = starting({ started: working(5), limits: limits({ working: 5 }) })
+    const out = await held.tools.call(caller, 'start_session', { prompt: 'x' })
+    expect(out.isError).toBe(true)
+    expect(text(out)).toContain('You have 5 sessions working, the most at once.')
+    expect(held.start).not.toHaveBeenCalled()
+
+    const raised = starting({ started: working(5), limits: limits({ working: 6 }) })
+    const ok = await raised.tools.call(caller, 'start_session', { prompt: 'x' })
+    expect(ok.isError).toBeUndefined()
+    expect(raised.start).toHaveBeenCalled()
+  })
+
+  it('stops at the number a day the settings set, until midnight', async () => {
+    const held = starting({ started: today(20), limits: limits({ daily: 20 }) })
+    const out = await held.tools.call(caller, 'start_session', { prompt: 'x' })
+    expect(out.isError).toBe(true)
+    expect(text(out)).toContain('You started 20 sessions today, the most in a local day.')
+    expect(text(out)).toContain('after midnight')
+    expect(held.start).not.toHaveBeenCalled()
+
+    const lowered = starting({ started: today(2), limits: limits({ daily: 2 }) })
+    expect((await lowered.tools.call(caller, 'start_session', { prompt: 'x' })).isError).toBe(true)
+    const raised = starting({ started: today(20), limits: limits({ daily: 21 }) })
+    const ok = await raised.tools.call(caller, 'start_session', { prompt: 'x' })
+    expect(ok.isError).toBeUndefined()
+  })
+})
 
 describe('start_session model and effort', () => {
   it('starts with the carried values when neither is named', async () => {

@@ -1213,6 +1213,7 @@ export class AgentHost {
         send: (sessionId, text, from, now) =>
           this.sessions.sendFromTool(sessionId, text, from, now),
         started: (callerId) => this.sessions.startedBy(callerId),
+        limits: () => this.settings.startedSessions,
         name: (sessionId) => this.sessions.toolName(sessionId),
         agentName: (sessionId) => this.sessions.agentName(sessionId),
         agentLabel: (agentId) => this.agents.name(agentId),

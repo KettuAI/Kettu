@@ -81,3 +81,32 @@ it('still reports a turn whose session archives itself when it ends', async () =
   await allow(window, callerId)
   await window.untilEntry(callerId, isReport)
 })
+
+it('pauses reports at the limit the settings set, and says so once', async () => {
+  const host = await startTestHost({ startedSessions: { working: 3, daily: 10, reports: 1 } })
+  hosts.push(host)
+  const window = host.connect()
+  const { id: callerId } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(callerId)
+  await window.untilStatus(callerId, 'ready')
+
+  await host.host.sessions.startFromTool(callerId, { prompt: 'One.', options: {}, report: true })
+  await window.untilEntry(callerId, isReport)
+  await window.untilEntry(callerId, (entry) => entry.kind === 'turn_end')
+  await window.untilStatus(callerId, 'ready')
+
+  await host.host.sessions.startFromTool(callerId, { prompt: 'Two.', options: {}, report: true })
+  await window.untilEntry(
+    callerId,
+    (entry) => entry.kind === 'notice' && entry.cause === 'reports_paused',
+  )
+  const notices = window
+    .entries(callerId)
+    .filter((entry) => entry.kind === 'notice' && entry.cause === 'reports_paused')
+  expect(notices).toHaveLength(1)
+  expect(window.entries(callerId).filter(isReport)).toHaveLength(1)
+  expect(window.thread(callerId).session.queue).toEqual([])
+})

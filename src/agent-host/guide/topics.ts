@@ -5,7 +5,7 @@ import { ARTIFACT_ENTRY, ARTIFACT_RESERVED, VERSION_FILES } from '@shared/artifa
 import { CANVAS_FILE } from '@shared/canvas-doc'
 import { TERMINAL_QUIET_MS, TERMINAL_WAIT_MS } from '@shared/terminal-agent'
 import { DEFAULT_SEND_BACK_LIMIT, MAX_WORKFLOW_STEPS, WORKFLOW_FILE_BYTES } from '@shared/workflow'
-import { DAILY_LIMIT, REPORT_LIMIT, WORKING_LIMIT } from '../session-tools'
+import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
 
 export const GUIDE_TOPICS = [
   'artifacts',
@@ -192,8 +192,8 @@ After you took a session over from another agent, \`read_session_history\` also 
 ## Limits
 
 - Only a session the user started can start sessions: one level, no more.
-- At most ${WORKING_LIMIT} of the sessions you started work at once, and you start at most ${DAILY_LIMIT} in a local day.
-- After ${REPORT_LIMIT} reports since the user last wrote in your session, further reports no longer reach you.
+- By default, at most ${DEFAULT_STARTED_LIMITS.working} of the sessions you started work at once, and you start at most ${DEFAULT_STARTED_LIMITS.daily} in a local day; the user can change both in Settings, and \`start_session\` says which limit you reached and when it clears.
+- By default, after ${DEFAULT_STARTED_LIMITS.reports} reports since the user last wrote in your session, further reports no longer reach you.
 
 ## Tidying up
 
@@ -455,7 +455,7 @@ The settings tools find the rows of Kettu's Settings page, take the user to one,
 
 1. Say what you will change, from what to what, before you change it.
 2. \`change_settings\` with the rows and their new values as find_settings lists them: true or false for a switch, a choice's value, a whole number or a text. One call changes all of its rows or none, in one card.
-3. In Full access the rows change at once, and the thread shows a line the user can undo. In any other mode the user answers a card in this session, which waits up to 10 minutes. The rows that widen what agents, devices or the network may do always ask, in Full access too: remote access, the relay, direct connections and their port, being found by the account's devices, devices' use of the terminal, computer use, agents typing passwords, an agent's start mode, turning an agent or Kettu's MCP server off for it, Kettu's cloud services, the proxy and the download source.
+3. In Full access the rows change at once, and the thread shows a line the user can undo. In any other mode the user answers a card in this session, which waits up to 10 minutes. The rows that widen what agents, devices or the network may do always ask, in Full access too: remote access, the relay, direct connections and their port, being found by the account's devices, devices' use of the terminal, computer use, agents typing passwords, an agent's start mode, turning an agent or Kettu's MCP server off for it, raising the limits on the sessions agents start, Kettu's cloud services, the proxy and the download source.
 4. The call returns within a minute. When it says the user has not answered yet, call it again with the same changes: it shows no second card and returns what became of this one.
 5. When the user chooses Don't change or does not answer, nothing changed: do not change those rows again unless they ask.
 

@@ -10,6 +10,7 @@ import type { SettingFacts, SettingsSnapshot } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { SettingsPatch } from '@shared/settings'
 import {
+  asksAlways,
   CATALOG,
   changeable,
   coerce,
@@ -520,6 +521,12 @@ export class SettingsTools {
   ): { may: 'yes' | 'asks' | 'no'; how: string } {
     const { entry } = row
     if (changeable(entry) && !lockedNow(row.id, file)) {
+      if (entry.access === 'raise') {
+        return {
+          may: 'yes',
+          how: 'you may change it when the user asks; raising it always asks the user in a card, in Full access too, and lowering it asks in a card unless this session is in Full access',
+        }
+      }
       return entry.access === 'ask'
         ? {
             may: 'asks',
@@ -721,7 +728,7 @@ export class SettingsTools {
         continue
       }
       const warning =
-        row.entry.access === 'ask' && row.entry.warning
+        asksAlways(row.entry, from, coerced.value) && row.entry.warning
           ? this.deps.words(row.entry.warning)
           : undefined
       items.push({
@@ -753,7 +760,7 @@ export class SettingsTools {
       )
     }
     const already = unchanged.length > 0 ? ` ${unchanged.join(', ')} already had that value.` : ''
-    const askAlways = items.some(({ row }) => row.entry.access === 'ask')
+    const askAlways = items.some(({ row, from, to }) => asksAlways(row.entry, from, to))
     if (this.deps.fullAccess(caller.sessionId) && !askAlways) {
       try {
         await this.applyItems(items, snapshot)

@@ -315,6 +315,8 @@ export interface TestHostOptions {
   threadWorker?: HostOptions['threadWorker']
   /** Runs the plugin host in the test's own process, for the host to load plugins' scripts in. */
   pluginHost?: boolean
+  /** The limits on the sessions agents start, the defaults unless given. */
+  startedSessions?: HostSettings['startedSessions']
 }
 
 export interface TestHost {
@@ -376,6 +378,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       startModes: DEFAULT_SETTINGS.startModes,
       idleSessions: DEFAULT_SETTINGS.idleSessions,
       workflow: DEFAULT_SETTINGS.workflow,
+      startedSessions: options.startedSessions ?? DEFAULT_SETTINGS.startedSessions,
       usage: { fromComputer: false },
       sessionTitles: true,
       promptSuggestions: true,

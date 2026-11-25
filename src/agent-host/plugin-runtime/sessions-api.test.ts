@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
 import type { AgentId } from '@shared/thread'
 import type { RenderedTurn } from '../carried-context'
-import { DAILY_LIMIT, WORKING_LIMIT, type ToolSession } from '../session-tools'
+import type { ToolSession } from '../session-tools'
 import { sessionCalls, type PluginSessionsDeps } from './sessions-api'
 
 const CONTEXT = { pluginId: 'p0123456789ab', permissions: [] }
@@ -186,7 +187,7 @@ describe('sessions.start', () => {
   it('stops at the limits an agent has, counted for the plugin alone', async () => {
     const busy = api({
       startedBy: vi.fn(() =>
-        Array.from({ length: WORKING_LIMIT }, (_, index) =>
+        Array.from({ length: DEFAULT_STARTED_LIMITS.working }, (_, index) =>
           started(`w${index}`, { status: 'running' }),
         ),
       ),
@@ -194,7 +195,7 @@ describe('sessions.start', () => {
     await expect(busy.run('sessions.start', { prompt: 'x' })).rejects.toThrow('sessions working')
     const tired = api({
       startedBy: vi.fn(() =>
-        Array.from({ length: DAILY_LIMIT }, (_, index) => started(`d${index}`)),
+        Array.from({ length: DEFAULT_STARTED_LIMITS.daily }, (_, index) => started(`d${index}`)),
       ),
     })
     await expect(tired.run('sessions.start', { prompt: 'x' })).rejects.toThrow('in a local day')
