@@ -39,6 +39,7 @@ import {
   ReferenceText,
 } from '@renderer/features/git/gh-reference'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
+import { useNoHover } from '@renderer/hooks/use-no-hover'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -55,6 +56,7 @@ import {
   defaultDestination,
   isBareLink,
   isLocalLink,
+  linkHost,
   markdownLink,
   planLinkOpen,
   planLinkOpenIn,
@@ -63,7 +65,7 @@ import {
 } from '../link-open'
 import { openLinkIn, rememberDestination } from '../open-link'
 import { PluginReferenceCard, PluginReferenceText } from './plugin-link'
-import { usePluginLink } from './use-plugin-link'
+import { usePluginLink, type PluginLink, type PluginLinkFailure } from './use-plugin-link'
 
 /** What the "Open link?" dialog is given; `link-confirm.tsx` draws it. */
 export interface LinkConfirmProps {
@@ -196,6 +198,66 @@ function LinkText({ url, children }: { url: string; children: ReactNode }) {
       {tile}
       {WORD_JOINER}
       {children}
+    </>
+  )
+}
+
+/** An ordinary link's site and whole address, and why a plugin that knows it could not read it. */
+function AddressPreview({ url, failure }: { url: string; failure: PluginLinkFailure | null }) {
+  const { t } = useTranslation('session')
+  const host = linkHost(url)
+  return (
+    <div inert dir="ltr" className="flex max-w-[340px] flex-col gap-1 px-2 pt-1.5 pb-1">
+      {host && (
+        <div className="text-menu font-medium text-primary [overflow-wrap:anywhere]">
+          <SiteTile url={url} />
+          {host.prefix && <span className="font-normal text-secondary">{host.prefix}</span>}
+          {host.domain}
+          {host.port && <span className="font-normal text-secondary">{host.port}</span>}
+        </div>
+      )}
+      <div className="text-small text-tertiary [overflow-wrap:anywhere]">{url}</div>
+      {failure && (
+        <div className="line-clamp-3 text-xs text-tertiary">
+          {t('link.pluginFailed', { plugin: failure.plugin, message: failure.message })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Where nothing can hover, as on a phone, a link's menu leads with what hovering it shows
+ * elsewhere. Only to read: it is inert, so the menu's focus and keys stay on its items.
+ */
+function MenuPreview({
+  url,
+  reference,
+  pluginLink,
+  pluginFailure,
+}: {
+  url: string
+  reference: GitHubReference | null
+  pluginLink: PluginLink | null
+  pluginFailure: PluginLinkFailure | null
+}) {
+  const noHover = useNoHover()
+  if (!noHover) return null
+  const card = reference ? (
+    <ReferenceCard reference={reference} />
+  ) : pluginLink ? (
+    <PluginReferenceCard link={pluginLink} url={url} />
+  ) : null
+  return (
+    <>
+      {card ? (
+        <div inert className={cn(REFERENCE_CARD_CLASS, 'max-w-full px-2 pt-2 pb-1.75')}>
+          {card}
+        </div>
+      ) : (
+        <AddressPreview url={url} failure={pluginFailure} />
+      )}
+      <ContextMenuSeparator />
     </>
   )
 }
@@ -375,7 +437,16 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
             </TooltipContent>
           </Tooltip>
         )}
-        <ContextMenuContent className="min-w-60" onKeyDownCapture={onMenuKey}>
+        <ContextMenuContent
+          className="min-w-60 max-w-[calc(100vw-16px)]"
+          onKeyDownCapture={onMenuKey}
+        >
+          <MenuPreview
+            url={url}
+            reference={reference}
+            pluginLink={pluginLink}
+            pluginFailure={pluginFailure}
+          />
           <ContextMenuItem onClick={() => openTo('browser')}>
             <BrowserIcon browser={browser} className="size-3.75" />
             {t('link.openIn', { browser: browserName })}
