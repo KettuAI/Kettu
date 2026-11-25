@@ -74,6 +74,11 @@ export interface SessionTarget {
    * `now`, a running turn takes it as it takes a steered message instead of after it ends.
    */
   send(text: string, options?: { approval?: true; now?: true }): void
+  /**
+   * Puts messages the agent took back unsent from a queue of its own, as on a stop, at the front
+   * of the session's queue, paused, as a stopped turn leaves it.
+   */
+  requeue?(texts: readonly string[]): void
   /** The permission mode the settings start the agent's new sessions in, or null for none. */
   startMode(): string | null
   /**

@@ -93,6 +93,7 @@ const CHANGELOG_CHARS = 20_000
 /** A file larger than this is not read to show what a `write` replaced. */
 const BEFORE_BYTES = 1024 * 1024
 const RESOURCE_NOT_FOUND = -32002
+const MAX_TIMER_MS = 2 ** 31 - 1
 const SIGN_IN_METHOD = 'pi_terminal_login'
 /** The first pi with `clear_queue`, without which a queued message cannot be taken back. */
 const STEERING_SINCE = '0.84.4'
@@ -150,8 +151,6 @@ interface Session {
   busy: boolean
   /** Messages in pi's queue, which a settled run leaves there. */
   queued: number
-  /** Messages a stop took out of pi's queue, which go with the next prompt. */
-  undelivered: string[]
   /** Dialogs waiting for the user, by pi's id for the request. */
   dialogs: Map<string, AbortController>
   /** What the files of `write` calls held, by call. */
@@ -186,6 +185,22 @@ function fileOf(uri: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Calls `fire` once a dialog's timeout of `ms` is up, and returns what stops it; null for no
+ * timeout, which is also what a time that is not a positive finite number means. A timer holds at
+ * most `MAX_TIMER_MS` and fires at once past it, so a longer time is waited out in steps.
+ */
+export function dialogTimeout(ms: number | undefined, fire: () => void): (() => void) | null {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return null
+  let timer: ReturnType<typeof setTimeout>
+  const wait = (left: number): void => {
+    const step = Math.min(left, MAX_TIMER_MS)
+    timer = setTimeout(() => (left > step ? wait(left - step) : fire()), step)
+  }
+  wait(ms)
+  return () => clearTimeout(timer)
 }
 
 /** `[@name](uri)`, the form a replay reads back as an attachment. */
@@ -389,7 +404,6 @@ export class PiConnection implements AgentConnection {
       cancelling: false,
       busy: false,
       queued: 0,
-      undelivered: [],
       dialogs: new Map(),
       befores: new Map(),
       events: Promise.resolve(),
@@ -472,7 +486,6 @@ export class PiConnection implements AgentConnection {
     const file = await this.fileOf(sessionId, cwd)
     const session = this.blank(cwd, options)
     session.id = sessionId
-    session.undelivered = existing?.undelivered ?? []
     await this.open(session, { kind: 'resume', file })
     return session
   }
@@ -859,8 +872,6 @@ export class PiConnection implements AgentConnection {
     images: readonly PiImage[],
   ): Promise<PromptResult> {
     session.cancelling = false
-    const message = [...session.undelivered, text].join('\n\n')
-    session.undelivered = []
     const done = new Promise<PromptResult>((resolve, reject) => {
       this.newTurn(session, false, resolve, reject)
     })
@@ -868,7 +879,7 @@ export class PiConnection implements AgentConnection {
     try {
       const answer = await proc.rpc.request<{ disposition?: PiDisposition } | undefined>({
         type: 'prompt',
-        message,
+        message: text,
         ...(images.length > 0 ? { images } : {}),
       })
       await session.events
@@ -957,8 +968,8 @@ export class PiConnection implements AgentConnection {
         const left = await proc.rpc
           .request<{ steering?: string[]; followUp?: string[] }>({ type: 'clear_queue' })
           .catch(() => null)
-        session.undelivered.push(...(left?.steering ?? []), ...(left?.followUp ?? []))
         session.queued = 0
+        this.requeue(session, [...(left?.steering ?? []), ...(left?.followUp ?? [])])
       }
       await proc.rpc.request({ type: 'abort' }, ABORT_TIMEOUT_MS)
     } catch (error) {
@@ -1154,16 +1165,27 @@ export class PiConnection implements AgentConnection {
       .catch(() => null)
     const texts = [...(left?.steering ?? []), ...(left?.followUp ?? [])]
     if (texts.length === 0 || session.turn || session.proc !== proc || session.cancelling) {
-      session.undelivered.push(...texts)
+      this.requeue(session, texts)
       return
     }
     try {
       // Pi's `agent_start` opens the turn, as for any run it starts by itself.
       await proc.rpc.request({ type: 'prompt', message: texts.join('\n\n') })
     } catch (error) {
-      session.undelivered.push(...texts)
+      this.requeue(session, texts)
       this.hooks.log('warn', `Pi did not take a queued message: ${(error as Error).message}`)
     }
+  }
+
+  /**
+   * Hands messages taken out of pi's queue unsent back to the session's own queue, paused, where
+   * the user sees them and sends, edits or drops them.
+   */
+  private requeue(session: Session, texts: readonly string[]): void {
+    if (texts.length === 0) return
+    const target = this.targets.get(session.id)
+    if (target?.requeue) target.requeue(texts)
+    else this.hooks.log('warn', `Pi's ${texts.length} unsent messages had no queue to go back to`)
   }
 
   private result(turn: Turn, reason: StopReason): PromptResult {
@@ -1260,10 +1282,9 @@ export class PiConnection implements AgentConnection {
     const abort = new AbortController()
     session.dialogs.set(request.id, abort)
     // Pi answers a dialog with a timeout by itself once the time is up, and the card goes with it.
-    const timer =
-      typeof request.timeout === 'number' && request.timeout > 0
-        ? setTimeout(() => abort.abort(new Error('The dialog timed out')), request.timeout)
-        : null
+    const stopTimer = dialogTimeout(request.timeout, () =>
+      abort.abort(new Error('The dialog timed out')),
+    )
     let answer: PermissionAnswer = 'cancelled'
     let withdrawn = false
     try {
@@ -1280,7 +1301,7 @@ export class PiConnection implements AgentConnection {
     } catch {
       withdrawn = true
     } finally {
-      if (timer) clearTimeout(timer)
+      stopTimer?.()
       session.dialogs.delete(request.id)
     }
     // A dialog withdrawn with its run has no one left to answer.

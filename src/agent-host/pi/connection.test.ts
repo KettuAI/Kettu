@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   applyPatches,
   threadEntries,
@@ -26,7 +26,7 @@ import {
 } from '../connection'
 import type { HostedSpawnOptions } from '../driver'
 import { newTurnScope, type MapperEffect } from '../session-updates'
-import { PiConnection, promptMessage, turnError } from './connection'
+import { dialogTimeout, PiConnection, promptMessage, turnError } from './connection'
 import stored from './fixtures/entries.json'
 import old from './fixtures/old-081.json'
 import failed from './fixtures/provider-error.json'
@@ -189,6 +189,8 @@ interface Watched {
   entries(): ThreadEntry[]
   effects: MapperEffect[]
   asked: PermissionRequest[]
+  /** Each list of messages handed back to the session's queue, in order. */
+  requeued: string[][]
 }
 
 /** A session's target that keeps the thread, and answers what is asked with `answer`. */
@@ -202,6 +204,7 @@ function watch(
   const scope = newTurnScope()
   const effects: MapperEffect[] = []
   const asked: PermissionRequest[] = []
+  const requeued: string[][] = []
   let n = 0
   const target: SessionTarget = {
     context: () => ({
@@ -223,9 +226,17 @@ function watch(
       return answer(request, signal)
     },
     send: () => {},
+    requeue: (texts) => requeued.push([...texts]),
     startMode: () => null,
   }
-  return { target, thread: () => thread, entries: () => threadEntries(thread), effects, asked }
+  return {
+    target,
+    thread: () => thread,
+    entries: () => threadEntries(thread),
+    effects,
+    asked,
+    requeued,
+  }
 }
 
 const dirs: string[] = []
@@ -591,10 +602,11 @@ describe('a turn', () => {
 })
 
 describe('stopping and steering', () => {
-  it('empties the queue before the stop, and sends what it held with the next prompt', async () => {
+  it("empties the queue before the stop, and hands what it held back to the session's queue", async () => {
     const { connection, spawned, cwd } = await connect()
     const { sessionId } = await connection.newSession(cwd)
-    connection.register(sessionId, watch().target)
+    const seen = watch()
+    connection.register(sessionId, seen.target)
     const pi = spawned[0]!
     pi.runs.push([{ type: 'agent_start' }])
     const turn = connection.prompt(sessionId, text('Run sleep 30'))
@@ -604,9 +616,11 @@ describe('stopping and steering', () => {
     await expect(turn).resolves.toMatchObject({ stopReason: 'cancelled' })
     const order = pi.commands.map((command) => command.type)
     expect(order.indexOf('clear_queue')).toBeLessThan(order.indexOf('abort'))
+    expect(seen.requeued).toEqual([['never mind']])
+    // The next prompt goes alone: nothing the user no longer sees rides along with it.
     pi.runs.push([{ type: 'agent_start' }, { type: 'agent_settled', aborted: false }])
     await connection.prompt(sessionId, text('What did I say?'))
-    expect(pi.sent('prompt')[1]).toMatchObject({ message: 'never mind\n\nWhat did I say?' })
+    expect(pi.sent('prompt')[1]).toMatchObject({ message: 'What did I say?' })
   })
 
   it('takes no message into a session without a running turn', async () => {
@@ -886,6 +900,28 @@ describe("an extension's dialogs", () => {
     expect(waiting.pi.sent('extension_ui_response')).toEqual([
       { type: 'extension_ui_response', id: 'ui-1', cancelled: true },
     ])
+  })
+
+  it('takes a timeout that is not finite as none, and waits out one longer than a timer holds', () => {
+    vi.useFakeTimers()
+    try {
+      let fired = 0
+      expect(dialogTimeout(Infinity, () => fired++)).toBeNull()
+      expect(dialogTimeout(Number.NaN, () => fired++)).toBeNull()
+      const long = 2 ** 31 + 5_000
+      dialogTimeout(long, () => fired++)
+      vi.advanceTimersByTime(long - 1)
+      expect(fired).toBe(0)
+      vi.advanceTimersByTime(1)
+      expect(fired).toBe(1)
+      const stop = dialogTimeout(long, () => fired++)
+      vi.advanceTimersByTime(2 ** 31)
+      stop?.()
+      vi.advanceTimersByTime(long)
+      expect(fired).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
