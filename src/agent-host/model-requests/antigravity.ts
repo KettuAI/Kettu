@@ -413,10 +413,11 @@ export function antigravityModelRequests(deps: {
     string,
     { size: number; mtimeMs: number; summary: ModelRequestsOverview }
   >()
-  const home = () => deps.home ?? os.homedir()
+  // An added agent's session was started in its own folder, which agy takes for its home.
+  const home = (target: RequestsTarget) => target.configDir ?? deps.home ?? os.homedir()
 
   const fileOf = async (target: RequestsTarget): Promise<string | null> => {
-    const file = agyTranscriptFile(target.acpSessionId, home())
+    const file = agyTranscriptFile(target.acpSessionId, home(target))
     if (!file) return null
     return (await stat(file).catch(() => null))?.isFile() ? file : null
   }
@@ -458,7 +459,7 @@ export function antigravityModelRequests(deps: {
       const { size } = await stat(file)
       if (!full) return readRanges(fileSource(file, size), raw, false)
       const result = await readRanges(fileSource(file, size), raw, true)
-      const fullFile = agyFullTranscriptFile(target.acpSessionId, home())
+      const fullFile = agyFullTranscriptFile(target.acpSessionId, home(target))
       const hydrated = await hydrateFullRecords(result.records, fullFile)
       return foldAll(hydrated, true)
     },

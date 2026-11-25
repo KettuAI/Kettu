@@ -42,6 +42,11 @@ export interface DriverContext {
   spec?: LaunchSpec
   /** The agent's environment, as its process gets it. */
   env?: Env
+  /**
+   * The agent's own folder, for a harness that takes it with a flag of its launch: its commands
+   * without the flag read it as their home folder, and Kettu reads the harness's files there.
+   */
+  home?: string
 }
 
 export interface StoredConfig {

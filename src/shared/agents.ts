@@ -104,12 +104,16 @@ export const HARNESS_IDS: readonly HarnessId[] = [
   'fake-agent',
 ]
 
-/** The harnesses that carry agents besides their default one: a variable moves their folder. */
+/**
+ * The harnesses that carry agents besides their default one: a variable moves their folder, or
+ * for Google Antigravity a flag of its launch.
+ */
 export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = [
   'claude-code',
   'codex',
   'deepseek',
   'codebuddy',
+  'antigravity',
 ]
 
 /**

@@ -43,7 +43,11 @@ describe('AgentFiles', () => {
   let mine: string
   let theirs: string
   let project: string
-  let sessions: Record<string, { agentId: AgentId; agentSessionId: string }>
+  let own: string
+  let sessions: Record<
+    string,
+    { agentId: AgentId; agentSessionId: string; configDir: string | null }
+  >
 
   const files = () =>
     new FilesService({
@@ -80,10 +84,17 @@ describe('AgentFiles', () => {
     await writeFile(path.join(theirs, 'plan.md'), '# Their plan\n')
     await writeFile(path.join(project, 'README.md'), '# Project\n')
     await writeFile(path.join(home, 'secret.txt'), 'secret\n')
+    own = path.join(home, 'agents', 'antigravity~work')
+    await mkdir(path.join(own, '.gemini', 'antigravity-cli', 'brain', 'agy-1'), { recursive: true })
+    await writeFile(
+      path.join(own, '.gemini', 'antigravity-cli', 'brain', 'agy-1', 'plan.md'),
+      '# Work plan\n',
+    )
     sessions = {
-      s1: { agentId: 'antigravity', agentSessionId: 'agy-1' },
-      s2: { agentId: 'antigravity', agentSessionId: 'agy-2' },
-      cc: { agentId: 'claude-code', agentSessionId: 'agy-1' },
+      s1: { agentId: 'antigravity', agentSessionId: 'agy-1', configDir: null },
+      s2: { agentId: 'antigravity', agentSessionId: 'agy-2', configDir: null },
+      cc: { agentId: 'claude-code', agentSessionId: 'agy-1', configDir: null },
+      work: { agentId: 'antigravity~work', agentSessionId: 'agy-1', configDir: own },
     }
   })
 
@@ -106,6 +117,18 @@ describe('AgentFiles', () => {
     })
     const nested = path.join(mine, 'notes', 'walkthrough.md')
     expect(await service().read('s1', nested)).toMatchObject({ kind: 'text', path: nested })
+  })
+
+  it("reads an added agent's session in that agent's own folder, never the default one", async () => {
+    const folder = path.join(own, '.gemini', 'antigravity-cli', 'brain', 'agy-1')
+    expect(service().folder('work')).toBe(folder)
+    expect(await service().read('work', path.join(folder, 'plan.md'))).toMatchObject({
+      kind: 'text',
+      text: '# Work plan\n',
+    })
+    // The same agy session id under the user's own home belongs to the default agent.
+    expect(await code(service().read('work', path.join(mine, 'plan.md')))).toBe('forbidden')
+    expect(await code(service().read('s1', path.join(folder, 'plan.md')))).toBe('forbidden')
   })
 
   it("refuses another session's folder", async () => {
