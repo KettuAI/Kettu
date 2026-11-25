@@ -8,6 +8,7 @@ import type { Platform } from '@shared/platform'
 import { runProgram, type ProgramOptions, type ProgramRun } from '../adapter-install'
 import { getEnv, type Env } from '../find-command'
 import { t } from '../i18n'
+import { proxyFetch } from '../proxy-fetch'
 import {
   failedUsage,
   hasUsageEndpoint,
@@ -50,7 +51,7 @@ export interface OpenCodeClientOptions {
   env: Env
   platform: Platform
   runProgram?(options: ProgramOptions): Promise<ProgramRun>
-  /** Injected by tests; the host uses the platform's fetch. */
+  /** Injected by tests; the host's goes through the proxy `env` names. */
   fetch?: typeof globalThis.fetch
   now?(): number
   /** Where the CLI runs; the user's home directory by default. */
@@ -188,7 +189,7 @@ export class OpenCodeClient {
 
   constructor(private readonly options: OpenCodeClientOptions) {
     this.run = options.runProgram ?? runProgram
-    this.fetchImpl = options.fetch ?? globalThis.fetch
+    this.fetchImpl = options.fetch ?? proxyFetch(() => options.env, options.platform)
     this.now = options.now ?? Date.now
     this.cwd = options.cwd ?? os.homedir()
   }

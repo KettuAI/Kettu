@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises'
 import type { Platform } from '@shared/platform'
 import { getEnv, type Env } from '../find-command'
 import { t } from '../i18n'
+import { proxyFetch } from '../proxy-fetch'
 import { versionAtLeast } from '../versions'
 import { readBody, type VendorUsage } from './common'
 
@@ -15,6 +16,7 @@ export interface SignInPlace {
   home: string
   platform: Platform
   now: number
+  /** Through the proxy `env` names by default. */
   fetch?: typeof globalThis.fetch
   /** Runs the harness so it renews its own token; Kettu never refreshes one itself. */
   renew?: () => Promise<void>
@@ -102,7 +104,8 @@ export async function askVendor(request: VendorRequest, place: SignInPlace): Pro
   const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? TIMEOUT_MS)
   let response: Response
   try {
-    response = await (place.fetch ?? globalThis.fetch)(url.href, {
+    const fetcher = place.fetch ?? proxyFetch(() => place.env, place.platform)
+    response = await fetcher(url.href, {
       method: request.method ?? 'GET',
       headers: { accept: 'application/json', ...request.headers },
       ...(request.body !== undefined ? { body: request.body } : {}),

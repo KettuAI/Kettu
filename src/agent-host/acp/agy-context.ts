@@ -16,6 +16,7 @@ import { runProgram, type ProgramOptions, type ProgramRun } from '../adapter-ins
 import type { McpServer } from '../connection'
 import type { Env } from '../find-command'
 import { frontmatter } from '../marketplace/frontmatter'
+import { proxyFetch } from '../proxy-fetch'
 
 const UTF8_BYTES_PER_TOKEN = 4
 const SKILLS_TIMEOUT_MS = 15_000
@@ -361,7 +362,7 @@ export class AgyContextEstimator {
     for (const server of configServers) {
       if (!merged.has(server.name)) merged.set(server.name, server)
     }
-    const fetchFn = this.deps.fetch ?? globalThis.fetch
+    const fetchFn = this.deps.fetch ?? proxyFetch(() => this.deps.env ?? {}, this.deps.platform)
     const estimates = await Promise.all(
       [...merged.values()].map(async (server): Promise<ContextDefinitionEstimate> => {
         if (server.type !== 'http') return { name: server.name, tokens: null }
