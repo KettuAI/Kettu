@@ -368,6 +368,11 @@ export class DshConnection implements AgentConnection {
     return false
   }
 
+  /** dsh 0.2.2-rc.5 runs MCP tools without asking in every mode, read-only included. */
+  get allowsKettuTools(): boolean {
+    return true
+  }
+
   // A session that is only opened starts no process, so dsh never hears of it.
   get unpromptedSessions(): boolean {
     return true

@@ -571,6 +571,11 @@ export interface AgentConnection {
    * `hiddenSessions` is.
    */
   readonly unpromptedSessions: boolean
+  /**
+   * Whether the tools Kettu's server lists in `autoAllow` run without asking the user, as the
+   * agent is told at start. False or missing where the agent asks for them as for any tool.
+   */
+  readonly allowsKettuTools?: boolean
   /** Removes such a session and drops its late updates; failures go to `log` while it is open. */
   removeHidden(sessionId: string, log: (message: string) => void): Promise<void>
 

@@ -1092,6 +1092,7 @@ export class AgentHost {
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
       plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
+      suggest: { note: (sessionId, message) => this.sessions.noteSuggestion(sessionId, message) },
       report: { add: (sessionId, draft) => this.sessions.reportDrafted(sessionId, draft) },
       memory: {
         service: this.memory,
@@ -1336,11 +1337,17 @@ export class AgentHost {
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
       mcp: {
-        servers: (sessionId, record, connection) => {
+        servers: (sessionId, record, connection, suggests) => {
           const gateway = this.agents.toolGateway(record.agentId)
           return this.agents.mcpServersByName(record.agentId)
-            ? this.artifactService.folderServers(connection, record.projectPath, sessionId, gateway)
-            : this.artifactService.servers(sessionId, record.projectPath, gateway)
+            ? this.artifactService.folderServers(
+                connection,
+                record.projectPath,
+                sessionId,
+                gateway,
+                suggests,
+              )
+            : this.artifactService.servers(sessionId, record.projectPath, gateway, suggests)
         },
         library: (sessionId, record, connection, transports, taken) =>
           libraryServers(
@@ -1373,10 +1380,11 @@ export class AgentHost {
           this.computer?.forget(sessionId)
           this.browserSites.delete(sessionId)
         },
-        guide: (agentId) =>
+        guide: (agentId, suggests) =>
           this.artifactService.guidePrompt(
             this.marketSkills.loadsSkills(agentId),
             this.agents.toolGateway(agentId),
+            suggests,
           ),
         turnEnded: (sessionId) => {
           this.artifacts.stopUsing(sessionId)

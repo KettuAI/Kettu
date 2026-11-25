@@ -18,6 +18,7 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   'read_artifact',
   'list_artifacts',
   'set_plan',
+  'suggest_next_message',
   'start_session',
   'send_message',
   'list_agents',

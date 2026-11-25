@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketTools } from '../marketplace/publish-tools'
 import type { PluginTools } from '../plugin-runtime/tools'
+import { SUGGEST_PROMPT, SUGGEST_TOOL } from '../next-message'
 import { PLAN_PROMPT } from '../plan-tool'
 import { CORE_TOOLS, declared, GATEWAY_TOOL } from '../tool-gateway'
 import { ArtifactService, type AgentProcess, type ArtifactServiceDeps } from './service'
@@ -39,6 +40,8 @@ describe('the servers a session attaches with', () => {
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
       'set_plan',
+      // It only keeps a line for the composer of the calling session.
+      'suggest_next_message',
       'read_artifact',
       'list_artifacts',
       'list_artifact_versions',
@@ -162,15 +165,16 @@ describe('the servers a session attaches with', () => {
 
 /**
  * What the service answers a request of an agent's, as a session's token reaches it; `gateway` for
- * an agent given the short list.
+ * an agent given the short list, `suggests` for one that suggests the next message by the tool.
  */
 async function answer<T>(
   service: ArtifactService,
   method: string,
   params: unknown,
   gateway = false,
+  suggests = false,
 ): Promise<{ result?: T; error?: { message: string } }> {
-  const [server] = service.servers('s1', '/repo', gateway)
+  const [server] = service.servers('s1', '/repo', gateway, suggests)
   if (!server || server.type !== 'http') throw new Error('No server')
   const response = await fetch(server.url, {
     method: 'POST',
@@ -195,6 +199,7 @@ async function viaGateway(service: ArtifactService, args: unknown): Promise<Call
     'tools/call',
     { name: GATEWAY_TOOL, arguments: args },
     true,
+    true,
   )
   if (!body.result) throw new Error(body.error?.message ?? 'No result')
   return body.result
@@ -209,11 +214,15 @@ const INITIALIZE = {
   clientInfo: { name: 'test', version: '1' },
 }
 
-/** A service with memory, the Marketplace, computer use and workflow suggestions on. */
+/**
+ * A service with memory, the Marketplace, computer use, workflow suggestions and next-message
+ * suggestions on.
+ */
 async function everythingOn(): Promise<ArtifactService> {
   const deps = {
     log: () => {},
     plan: {},
+    suggest: { note: () => true },
     sessions: {},
     memory: { service: { enabled: true } },
     market: { on: true },
@@ -267,6 +276,54 @@ describe('what an agent reads before it searches its tools', () => {
   })
 })
 
+// Only an agent that cannot fork its session suggests by the tool, so no other is asked to call it.
+describe('the next-message tool', () => {
+  async function suggesting(note: (sessionId: string, message: string) => boolean) {
+    const deps = { log: () => {}, plan: {}, suggest: { note }, sessions: {} }
+    const service = new ArtifactService(deps as unknown as ArtifactServiceDeps)
+    services.push(service)
+    await service.start()
+    return service
+  }
+
+  it('is listed and asked for only in a session that suggests by it', async () => {
+    const service = await suggesting(() => true)
+    for (const suggests of [false, true]) {
+      const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, false, suggests)
+      expect(result!.tools.some((tool) => tool.name === SUGGEST_TOOL)).toBe(suggests)
+      const [server] = service.servers('s1', '/repo', false, suggests)
+      const prompt = server?.type === 'http' ? (server.prompt ?? '') : ''
+      expect(prompt.includes(SUGGEST_PROMPT)).toBe(suggests)
+      expect(service.guidePrompt(false, false, suggests).includes(SUGGEST_PROMPT)).toBe(suggests)
+    }
+  })
+
+  it('keeps one line for the calling session and refuses anything else', async () => {
+    const noted: [string, string][] = []
+    const service = await suggesting((sessionId, message) => {
+      noted.push([sessionId, message])
+      return true
+    })
+    const call = async (args: unknown) => {
+      const params = { name: SUGGEST_TOOL, arguments: args }
+      return (await answer<CallToolResult>(service, 'tools/call', params, false, true)).result!
+    }
+    expect((await call({ message: '  Run the tests too ' })).isError).toBeFalsy()
+    expect(noted).toEqual([['s1', 'Run the tests too']])
+    for (const args of [
+      {},
+      { message: '' },
+      { message: 'one\ntwo' },
+      { message: 'x'.repeat(301) },
+      { message: 'ok', extra: true },
+      { message: 42 },
+    ]) {
+      expect((await call(args)).isError).toBe(true)
+    }
+    expect(noted).toHaveLength(1)
+  })
+})
+
 describe('the Marketplace tools', () => {
   // Publishing needs the host's Kettu account, so agents see the tools only while it is in use.
   it('are listed only while the host is signed in with Kettu’s services on', () => {
@@ -297,13 +354,13 @@ describe('the Marketplace tools', () => {
 
 // agy drops the largest MCP tools past a budget of its own and cannot call a dropped one over ACP.
 describe('an agent that drops tools past a budget of its own', () => {
-  it('is listed the core tools and the gateway, within 16000 bytes, the gateway the smallest', async () => {
+  it('is listed the core tools and the gateway, within 16500 bytes, the gateway the smallest', async () => {
     const service = await everythingOn()
-    const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, true)
+    const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, true, true)
     const tools = result!.tools
     expect(tools.map((tool) => tool.name).sort()).toEqual([...CORE_TOOLS, GATEWAY_TOOL].sort())
     const size = (tool: Tool) => JSON.stringify(declared(tool)).length
-    expect(tools.reduce((sum, tool) => sum + size(tool), 0)).toBeLessThanOrEqual(16000)
+    expect(tools.reduce((sum, tool) => sum + size(tool), 0)).toBeLessThanOrEqual(16500)
     const gateway = tools.find((tool) => tool.name === GATEWAY_TOOL)!
     for (const tool of tools) {
       if (tool !== gateway) expect(size(gateway)).toBeLessThan(size(tool))
@@ -312,8 +369,8 @@ describe('an agent that drops tools past a budget of its own', () => {
 
   it("leaves every other agent's list as it is", async () => {
     const service = await everythingOn()
-    const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
-    const names = tools.map((tool) => tool.name)
+    const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, false, true)
+    const names = result!.tools.map((tool) => tool.name)
     expect(names).not.toContain(GATEWAY_TOOL)
     expect(names).toEqual(service.toolSummaries().map((tool) => tool.name))
   })

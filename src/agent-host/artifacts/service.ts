@@ -87,6 +87,14 @@ import {
   type PlanToolsDeps,
 } from '../plan-tool'
 import {
+  isSuggestToolName,
+  SUGGEST_PROMPT,
+  SUGGEST_TOOL,
+  SUGGEST_TOOLS,
+  SuggestTools,
+  type SuggestToolsDeps,
+} from '../next-message'
+import {
   isWorkflowToolName,
   WORKFLOW_TOOL_NAMES,
   WORKFLOW_TOOLS,
@@ -159,6 +167,7 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [MARKET_TOOLS, 'marketplace'],
       [SESSION_TOOLS, 'sessions'],
       [PLAN_TOOLS, 'sessions'],
+      [SUGGEST_TOOLS, 'sessions'],
       [TOOLS, 'artifacts'],
       [DATA_TOOLS, 'artifacts'],
       [BROWSER_TOOLS, 'browser'],
@@ -239,6 +248,11 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   plan: PlanToolsDeps
   /** Where the problem report tool adds its drafts. */
   report: ReportToolsDeps
+  /**
+   * Where the next-message tool keeps a turn's suggestion, which only the sessions that suggest by
+   * it are listed; without it none is.
+   */
+  suggest?: SuggestToolsDeps
   /** Kettu's memory behind the memory tools, listed only while it is on; without it none. */
   memory?: MemoryToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
@@ -277,6 +291,8 @@ interface SessionGrant {
   own: boolean
   /** Lists the core tools and the gateway to the rest, for an agent that drops tools. */
   gateway: boolean
+  /** Lists the next-message tool, for an agent that suggests by it. */
+  suggests: boolean
 }
 
 /** A token for one agent process and folder, whose calls name their session in `_meta`. */
@@ -288,6 +304,7 @@ interface FolderGrant {
   sessions: Set<string>
   own: boolean
   gateway: boolean
+  suggests: boolean
 }
 
 type Grant = SessionGrant | FolderGrant
@@ -308,6 +325,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       // Kettu 内置安全只读及自带内部确认卡的工具：在所有模式下自动放行，不重复弹出 Agent 权限卡。
       autoAllow: [
         PLAN_TOOL,
+        SUGGEST_TOOL,
         ...ARTIFACT_READ_TOOLS,
         ...DATA_READ_TOOLS,
         ...TERMINAL_READ_TOOLS,
@@ -374,6 +392,7 @@ export class ArtifactService {
   private readonly sessionTools: SessionTools
   private readonly planTools: PlanTools
   private readonly reportTools: ReportTools
+  private readonly suggestTools: SuggestTools | null
   private readonly memoryTools: MemoryTools | null
   private readonly browserTools: BrowserTools
   private readonly deviceTools: DeviceTools | null
@@ -392,6 +411,7 @@ export class ArtifactService {
     this.sessionTools = new SessionTools(deps.sessions)
     this.planTools = new PlanTools(deps.plan)
     this.reportTools = new ReportTools(deps.report)
+    this.suggestTools = deps.suggest ? new SuggestTools(deps.suggest) : null
     this.memoryTools = deps.memory ? new MemoryTools(deps.memory) : null
     this.workflowTools = deps.workflow ? new WorkflowTools(deps.workflow) : null
     this.skillTools = deps.skills ? new SkillTools(deps.skills) : null
@@ -526,15 +546,17 @@ export class ArtifactService {
    * The paragraph that goes into an agent's own instructions, or ahead of its first prompt: where
    * Kettu's tools are, and the skills or the guide's topics that say when to use them.
    */
-  guidePrompt(skills: boolean, gateway = false): string {
+  guidePrompt(skills: boolean, gateway = false, suggests = false): string {
     const text = guidePrompt(this.guideFlags, skills, gateway)
     // Another ACP agent reads the plan's rules in set_plan's description, which this one may drop.
-    return gateway ? `${text}\n\n${PLAN_PROMPT}` : text
+    const plan = gateway ? `${text}\n\n${PLAN_PROMPT}` : text
+    return suggests && this.suggestTools ? `${plan}\n\n${SUGGEST_PROMPT}` : plan
   }
 
   /** The prompt an agent that reads the servers' prompts puts into its instructions. */
-  private prompt(gateway: boolean): string {
-    return `${guidePrompt(this.guideFlags, true, gateway)}\n\n${PLAN_PROMPT}`
+  private prompt(gateway: boolean, suggests: boolean): string {
+    const text = `${guidePrompt(this.guideFlags, true, gateway)}\n\n${PLAN_PROMPT}`
+    return suggests && this.suggestTools ? `${text}\n\n${SUGGEST_PROMPT}` : text
   }
 
   /** What `tools/list` answers now: for an agent that drops tools, the core and the gateway. */
@@ -554,6 +576,8 @@ export class ArtifactService {
       guideTool(this.guideFlags),
       ...(skills ? SKILL_TOOLS : []),
       ...(this.terminalTools?.listed(this.serviceTools) ?? this.serviceTools),
+      // Without a session, as for the Marketplace's page, while some agent may get it.
+      ...(this.suggestTools && (grant ? grant.suggests : true) ? SUGGEST_TOOLS : []),
       ...(this.memoryOn ? MEMORY_TOOLS : []),
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),
@@ -578,14 +602,16 @@ export class ArtifactService {
    * What an attach of the session passes in `mcpServers`: the service with the session's token,
    * made at its first attach and kept while it stays in memory, since Codex ignores new servers
    * when it resumes a session it still holds open. Empty while the service is not running.
-   * `gateway` lists only the core tools and the gateway to the rest, for an agent that drops tools.
+   * `gateway` lists only the core tools and the gateway to the rest, for an agent that drops tools;
+   * `suggests` the next-message tool, for an agent that suggests by it.
    */
-  servers(sessionId: string, project: string, gateway = false): McpServer[] {
+  servers(sessionId: string, project: string, gateway = false, suggests = false): McpServer[] {
     const url = this.url
     if (!url) return []
     const grant = this.sessionGrant(sessionId, project, true)
     grant.gateway = gateway
-    return entry(url, grant.token, this.prompt(gateway))
+    grant.suggests = suggests
+    return entry(url, grant.token, this.prompt(gateway, suggests))
   }
 
   /**
@@ -610,7 +636,7 @@ export class ArtifactService {
     let grant = held === undefined ? undefined : this.grants.get(held)
     if (!grant || !('sessionId' in grant) || grant.project !== project) {
       this.revoke(sessionId)
-      grant = { token: newToken(), sessionId, project, own, gateway: false }
+      grant = { token: newToken(), sessionId, project, own, gateway: false, suggests: false }
       this.sessions.set(sessionId, this.add(grant))
     }
     if (own) grant.own = true
@@ -627,12 +653,14 @@ export class ArtifactService {
     folder: string,
     sessionId: string,
     gateway = false,
+    suggests = false,
   ): McpServer[] {
     const url = this.url
     if (!url) return []
     const grant = this.folderGrant(process, folder, sessionId, true)
     grant.gateway = gateway
-    return entry(url, grant.token, this.prompt(gateway))
+    grant.suggests = suggests
+    return entry(url, grant.token, this.prompt(gateway, suggests))
   }
 
   private folderGrant(
@@ -658,6 +686,7 @@ export class ArtifactService {
         sessions: new Set(),
         own,
         gateway: false,
+        suggests: false,
       }
       key = this.add(grant)
       byFolder.set(folder, key)
@@ -933,6 +962,9 @@ export class ArtifactService {
           `${PLAN_TOOL} failed: ${(error as Error).message}`,
         )
       }
+    }
+    if (this.suggestTools && isSuggestToolName(name)) {
+      return this.suggestTools.call(caller, name, input)
     }
     if (isReportToolName(name)) {
       try {

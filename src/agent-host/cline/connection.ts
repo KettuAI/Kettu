@@ -238,6 +238,11 @@ export class ClineConnection implements AgentConnection {
     return false
   }
 
+  /** Cline's host session runs the tools a server lists in `autoAllow` without asking. */
+  get allowsKettuTools(): boolean {
+    return true
+  }
+
   /** A session costs Cline nothing until its first prompt, so one opened only to be read leaves no trace. */
   get unpromptedSessions(): boolean {
     return true
