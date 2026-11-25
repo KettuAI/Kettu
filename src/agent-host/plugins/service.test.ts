@@ -531,6 +531,34 @@ describe('updating a plugin', () => {
     ])
   })
 
+  it('turns on with the plugin what an update added while it was off', async () => {
+    const { h, id } = await installed()
+    h.settings.servers = h.settings.servers.map((server) =>
+      server.name === 'local' ? { ...server, on: false } : server,
+    )
+    await h.plugins.setEnabled(id, false)
+    const files = packageFiles({
+      'skills/audit/SKILL.md': '---\nname: audit\ndescription: Audits.\n---\nAudit.\n',
+    })
+    const mcp = JSON.parse(files['mcp.json']!) as { mcpServers: Record<string, unknown> }
+    mcp.mcpServers['extra'] = { type: 'streamable-http', url: 'https://extra.example.com/mcp' }
+    next(h, '1.1.0', { ...files, 'mcp.json': JSON.stringify(mcp) })
+    expect((await h.plugins.checkUpdates())[0]).toMatchObject({ revision: '1.1.0', held: null })
+    const on = () => [
+      ...h.settings.skills.map(({ name, on }) => [name, on]),
+      ...h.settings.servers.map(({ name, on }) => [name, on]),
+    ]
+    expect(on().every(([, on]) => on === false)).toBe(true)
+    await h.plugins.setEnabled(id, true)
+    expect(Object.fromEntries(on())).toEqual({
+      review: true,
+      audit: true,
+      tracker: true,
+      local: false,
+      extra: true,
+    })
+  })
+
   it('holds an update that asks for more permissions, with what it adds', async () => {
     const h = await host()
     h.market.files = packageFiles(main, { ...script, permissions: ['tools'] })
