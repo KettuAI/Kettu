@@ -243,6 +243,7 @@
     "agents": {
       "title": "Agents for {{name}}",
       "description": "Their new sessions get the server; sessions already open keep what they started with.",
+      "descriptionSkill": "Their new sessions get the skill; sessions already open keep what they started with.",
       "save": "Save"
     },
     "uninstall": {
