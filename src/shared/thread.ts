@@ -33,7 +33,15 @@ import type {
 } from './market-publish'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { PluginConversion } from './plugin-convert'
-import type { RoutineRef } from './routines'
+import {
+  isPermissionScope,
+  isSchedule,
+  isTimeLimit,
+  type PermissionScope,
+  type RoutineRef,
+  type Schedule,
+  type TimeLimitMinutes,
+} from './routines'
 import type { CatalogSection, SettingScalar } from './settings-catalog'
 import type { TaskDeliverable, Workflow } from './workflow'
 
@@ -475,6 +483,7 @@ export type ThreadEntry =
   | MemoryWriteEntry // Kettu's own record of an agent's write to Kettu's memory, and its answer
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
+  | RoutineChangeEntry // Kettu's own record of an agent's change to a Routine, and its answer
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
 
@@ -952,6 +961,59 @@ export interface SettingsChangeEntry {
   /** When an unanswered card counts as declined, in the host's milliseconds; null when not asked. */
   expiresAt: number | null
   outcome: SettingsChangeOutcome | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** What an agent asks to do to a Routine through Kettu's Routine tools. */
+export type RoutineAction = 'create' | 'update' | 'delete' | 'run'
+
+/** A Routine's settings as its card shows them, with the model and effort by their names. */
+export interface RoutineCardFields {
+  name: string
+  prompt: string
+  schedule: Schedule
+  /** Null for the Routine's own folder. */
+  projectPath: string | null
+  agentId: AgentId
+  /** The model's and effort's names in the agent's menus; null for the agent's own. */
+  model: string | null
+  effort: string | null
+  scope: PermissionScope
+  timeLimitMinutes: TimeLimitMinutes
+  enabled: boolean
+}
+
+/**
+ * What became of a Routine card: done, with the Routine it made or acted on; not done because the
+ * user declined, nobody answered in time or the turn ended first; or refused when it was applied.
+ */
+export type RoutineChangeOutcome =
+  | { kind: 'done'; routineId: string }
+  | { kind: 'declined' | 'expired' | 'ended' }
+  | { kind: 'failed'; message: string }
+
+/**
+ * An agent's creation, change, deletion or run of a Routine: a card while it waits for the user
+ * (`outcome` null), then the line it leaves. Every one asks, in Full access too.
+ */
+export interface RoutineChangeEntry {
+  kind: 'routine_change'
+  id: string
+  action: RoutineAction
+  /** The Routine it acts on; null for a new one. */
+  routineId: string | null
+  /** The Routine as it is to be: made, changed, deleted or run. */
+  routine: RoutineCardFields
+  /** For a change, the Routine as it was, so the card lists only what differs; else null. */
+  before: RoutineCardFields | null
+  /** For a deletion, the run sessions deleted with it; else null. */
+  sessions: number | null
+  /** When an unanswered card counts as declined, in the host's milliseconds. */
+  expiresAt: number
+  outcome: RoutineChangeOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -1845,6 +1907,20 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.outcome === 'timeout') &&
         (value.after === null || typeof value.after === 'string')
       )
+    case 'routine_change':
+      return (
+        (value.action === 'create' ||
+          value.action === 'update' ||
+          value.action === 'delete' ||
+          value.action === 'run') &&
+        (value.routineId === null || typeof value.routineId === 'string') &&
+        isRoutineCardFields(value.routine) &&
+        (value.before === null || isRoutineCardFields(value.before)) &&
+        (value.sessions === null || typeof value.sessions === 'number') &&
+        typeof value.expiresAt === 'number' &&
+        (value.outcome === null || isRoutineChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
     case 'plugin_denial':
       return (
         typeof value.pluginId === 'string' &&
@@ -1865,6 +1941,38 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.publishAsked === undefined || typeof value.publishAsked === 'number') &&
         (value.after === null || typeof value.after === 'string')
       )
+    default:
+      return false
+  }
+}
+
+function isRoutineCardFields(value: unknown): value is RoutineCardFields {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    typeof value.prompt === 'string' &&
+    isSchedule(value.schedule) &&
+    (value.projectPath === null || typeof value.projectPath === 'string') &&
+    isAgentId(value.agentId) &&
+    (value.model === null || typeof value.model === 'string') &&
+    (value.effort === null || typeof value.effort === 'string') &&
+    isPermissionScope(value.scope) &&
+    isTimeLimit(value.timeLimitMinutes) &&
+    typeof value.enabled === 'boolean'
+  )
+}
+
+function isRoutineChangeOutcome(value: unknown): value is RoutineChangeOutcome {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'done':
+      return typeof value.routineId === 'string'
+    case 'declined':
+    case 'expired':
+    case 'ended':
+      return true
+    case 'failed':
+      return typeof value.message === 'string'
     default:
       return false
   }

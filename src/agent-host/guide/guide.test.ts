@@ -42,6 +42,7 @@ describe("Kettu's own skills", () => {
       'kettu-computer-use',
       'kettu-marketplace',
       'kettu-settings',
+      'kettu-routines',
     ])
     expect(names(NONE)).toEqual([
       'kettu-artifacts',
@@ -51,6 +52,7 @@ describe("Kettu's own skills", () => {
       'kettu-devices',
       'kettu-terminals',
       'kettu-settings',
+      'kettu-routines',
     ])
   })
 
@@ -93,6 +95,7 @@ describe('read_kettu_guide', () => {
       'computer',
       'marketplace',
       'settings',
+      'routines',
     ])
     expect(guideTopics(NONE)).not.toContain('computer')
     expect(guideTopics(NONE)).not.toContain('marketplace')

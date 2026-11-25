@@ -91,6 +91,12 @@ describe('the servers a session attaches with', () => {
       'find_settings',
       'open_settings',
       'change_settings',
+      // Every change of a Routine asks the user in Kettu's own card, in every mode.
+      'list_routines',
+      'create_routine',
+      'update_routine',
+      'delete_routine',
+      'run_routine',
       'read_kettu_guide',
       // They only read the skills the user turned on for the session's agent.
       'list_skills',

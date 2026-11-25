@@ -18,6 +18,7 @@ import { DeviceAccessEntry } from './device-access-entry'
 import { SurfaceAccessEntry } from './surface-access-entry'
 import { MarketPublishEntry } from './market-publish-entry'
 import { PluginDenialEntry } from './plugin-denial-entry'
+import { RoutineChangeEntry } from './routine-change-entry'
 import { SettingsChangeEntry } from './settings-change-entry'
 import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
@@ -99,6 +100,8 @@ export const Entry = memo(function Entry({
       return <MarketPublishEntry {...props} agentName={agentName} />
     case 'settings_change':
       return <SettingsChangeEntry {...props} agentName={agentName} />
+    case 'routine_change':
+      return <RoutineChangeEntry {...props} agentName={agentName} />
     case 'control_ask':
       return <ControlAskEntry {...props} agentName={agentName} />
     case 'control_note':

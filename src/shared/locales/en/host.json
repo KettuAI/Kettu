@@ -107,6 +107,10 @@
         "noChange": "This settings change is no longer on record",
         "noUndo": "This change cannot be undone"
       },
+      "routine": {
+        "gone": "This Routine card is no longer waiting for an answer",
+        "answered": "This Routine card was already answered"
+      },
       "step": {
         "gone": "This step is no longer waiting for an answer",
         "answered": "This step was already answered"
@@ -246,7 +250,11 @@
     "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
     "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace",
     "settingsChange_one": "Wants to change {{count}} setting",
-    "settingsChange_other": "Wants to change {{count}} settings"
+    "settingsChange_other": "Wants to change {{count}} settings",
+    "routineCreate": "Wants to create the Routine {{name}}",
+    "routineUpdate": "Wants to change the Routine {{name}}",
+    "routineDelete": "Wants to delete the Routine {{name}}",
+    "routineRun": "Wants to run the Routine {{name}} now"
   },
   "routines": {
     "busy": "This routine already has a run working",

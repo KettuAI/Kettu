@@ -1367,6 +1367,76 @@
   margin-top: 2px;
 }
 
+/* A Routine on the settings card's sunk block: each setting's name at the left and its value at
+   the right, then the prompt's first three lines, and a note on what goes with it. */
+.ks-routine-rows > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ks-routine-rows__label {
+  flex: none;
+  color: var(--thread-faint);
+}
+.ks-routine-rows .ks-routine-rows__value {
+  flex: 1;
+  justify-content: flex-end;
+  max-width: none;
+  text-align: right;
+}
+.ks-routine-rows__block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 12px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.ks-routine-rows__prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ks-routine-rows__prompt-text {
+  color: var(--thread-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ks-routine-rows__old,
+.ks-routine-rows__old .ks-routine-rows__prompt-text {
+  color: var(--thread-faint);
+  text-decoration-color: currentColor;
+}
+.ks-routine-rows__prompt-text[data-clamped] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.ks-routine-rows__more {
+  font-size: 12px;
+  color: var(--thread-quiet);
+}
+.ks-routine-rows__more:hover {
+  color: var(--thread-prose);
+}
+.ks-routine-rows__note {
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--thread-quiet);
+}
+/* Delete is the danger action, as the app's destructive buttons draw it. */
+.ui-prc.ui-prc.ks-routine-card--danger {
+  --ui-prc-primary: var(--shell-danger);
+  --ui-prc-on-primary: var(--on-fill);
+}
+.ui-prc.ui-prc.ks-routine-card--danger .ui-prc__btn--primary:hover {
+  background: var(--shell-danger-hover);
+}
+
 /* What came of a settings change, as the turn's end reads: one muted line, Undo at its end. */
 .ks-settings-line {
   display: flex;

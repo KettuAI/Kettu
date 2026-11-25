@@ -6,6 +6,7 @@ import { CANVAS_FILE } from '@shared/canvas-doc'
 import { TERMINAL_QUIET_MS, TERMINAL_WAIT_MS } from '@shared/terminal-agent'
 import { DEFAULT_SEND_BACK_LIMIT, MAX_WORKFLOW_STEPS, WORKFLOW_FILE_BYTES } from '@shared/workflow'
 import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
+import { WORKING_RUNS } from '@shared/routines'
 
 export const GUIDE_TOPICS = [
   'artifacts',
@@ -20,6 +21,7 @@ export const GUIDE_TOPICS = [
   'computer',
   'marketplace',
   'settings',
+  'routines',
 ] as const
 export type GuideTopic = (typeof GUIDE_TOPICS)[number]
 
@@ -463,6 +465,42 @@ The settings tools find the rows of Kettu's Settings page, take the user to one,
 
 Secrets (API keys, tokens, the Cloudflare token) read only as set or not set. Program paths and configuration folders are picked only in a system dialog. Actions are the user's: signing in or out, adding or removing an agent, installing or uninstalling a harness, deleting archived sessions, clearing browsing data, unpublishing, adding a host, pairing a device, restarting in debug mode. For those, open the row with open_settings and let the user do it. Lists give only their count; sessions, artifacts and memory have their own tools.`
 
+const routines = () => `# Kettu's Routines
+
+A Routine is a prompt Kettu sends to an agent on a schedule, each run a new session of its own that starts with no memory of this one, within the permissions the Routine sets. The Routine tools manage the Routines of the computer this session runs on. Use them only when the user asks for something to run regularly or later, such as a daily check or a follow-up in two days; never set one up on your own initiative.
+
+## Looking first
+
+\`list_routines\` lists every Routine with its id, name, schedule and next run, whether it is on, its agent and model, project, permissions, time limit and latest run. It never asks. Look before you create one: when a Routine already does the job, change it instead of making a second.
+
+## Creating one
+
+1. Say what you will set up before you call the tool: the prompt, the schedule in words, the project, the agent and the permissions.
+2. \`create_routine\` with:
+   - \`prompt\`: everything a run needs, written for an agent that has not seen this conversation, with the paths, commands and what to report.
+   - \`schedule\`, in this computer's local time: \`{"kind":"once","at":"YYYY-MM-DDTHH:mm"}\` for a single run, which turns the Routine off once done; \`{"kind":"weekly","days":[1,2,3,4,5],"time":"09:00"}\`, 0 being Sunday; \`{"kind":"every","minutes":120}\`, 5 to 720 minutes, counted from now; or \`{"kind":"cron","expression":"0 9 * * 1"}\`, five fields, its runs at least 5 minutes apart. Check the date and time with the user's words and the computer's clock; a time already passed fails.
+   - \`agent\`: only Claude Code and Codex agents run Routines, since Kettu can hold only theirs to a Routine's permissions. Without it, your own agent, when it is one of them. \`model\` and \`effort\` take the ids list_agents gives; without them, the ones the user last chose for that agent.
+   - \`project\`: the folder of one of Kettu's projects; without it, this session's project; null for the Routine's own empty folder.
+   - \`scope\`: read (read and search the project), edit (also change files inside it) or commands (also run commands), and \`web\` for fetching pages and searching the web. Without them, read only and no web. Pick the narrowest that does the job: a run asks the user for anything beyond it and waits.
+   - \`timeLimitMinutes\`: 15, 30, 60, 120 or 240; 60 without it.
+3. An invalid schedule, an agent that cannot run Routines or is not on this computer, or a folder that is not a project fails at once with the reason, and nothing is done.
+
+## Changing, deleting and running
+
+Each takes the Routine's id from list_routines as \`routine\`.
+
+- \`update_routine\` with only what changes; \`enabled\` turns it on or off. A schedule replaces the whole schedule.
+- \`delete_routine\` deletes the Routine and the sessions of its runs; the card says how many.
+- \`run_routine\` starts a run now, as Run now does; it fails while the Routine already has a run going. At most ${WORKING_RUNS} runs work at once, so one may wait for a free slot.
+
+## The card
+
+Every create, change, delete and run waits for the user's answer in a card in this session, in every mode, Full access too, since a Routine later runs on its own and spends the user's plan. Nothing happens until they approve. The call returns within a minute: when it says the user has not answered yet, call it again with the same arguments, which shows no second card and creates no second Routine, and returns what became of this one. When the user declines or does not answer within 10 minutes, nothing happened: do not ask again unless they do. The card has only approve and decline; to change what you proposed, the user edits the Routine on its page afterwards, or tells you and you call again.
+
+## What a Routine is not
+
+A Routine is not a wake-up of this session: its runs start fresh, without this conversation. To come back to this same session later, use your own scheduling if you have one. A Routine's own run can call these tools too; its card makes the run wait for the user like any request beyond its permissions.`
+
 /** A skill Kettu ships: its name, the topic of the guide it is, and its texts. */
 export interface SkillSpec {
   name: string
@@ -561,5 +599,13 @@ export const SKILL_SPECS: readonly SkillSpec[] = [
       "Find a Kettu setting the user asks about and take them to it, or change Kettu's settings " +
       'when the user asks you to.',
     body: settings,
+  },
+  {
+    name: 'kettu-routines',
+    topic: 'routines',
+    description: () =>
+      'Set up, change, run or remove a Kettu Routine, a prompt that runs on a schedule, when the ' +
+      'user asks for something to run regularly or later.',
+    body: routines,
   },
 ]

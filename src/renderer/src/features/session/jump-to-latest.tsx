@@ -33,6 +33,7 @@ const AFTER_END = new Set([
   'memory',
   'market_publish',
   'settings_change',
+  'routine_change',
   'task_delivery',
   'plugin_denial',
   'session_started',

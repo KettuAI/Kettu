@@ -1168,7 +1168,7 @@ function isDone(routine: Routine, last: RoutineRun | null): boolean {
 }
 
 /** The user's name, or the prompt's first line cut to 60 characters. */
-function routineName(name: string, prompt: string): string {
+export function routineName(name: string, prompt: string): string {
   const trimmed = name.trim()
   if (trimmed !== '') return Array.from(trimmed).slice(0, ROUTINE_NAME_CHARS).join('')
   const line =

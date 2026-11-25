@@ -177,6 +177,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'routines.update': HOST_MS,
   'routines.delete': HOST_MS,
   'routines.runNow': AGENT_MS,
+  // Do it applies the change before it answers.
+  'routines.answerChange': AGENT_MS,
   'routines.cancelRun': AGENT_MS,
   'routines.runs': HOST_MS,
   'routines.markSeen': HOST_MS,
