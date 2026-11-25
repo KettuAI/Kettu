@@ -31,6 +31,7 @@ import { usePromptChips } from './prompt-chips'
 import { ResizeGrip } from './resize-grip'
 import { commandSourceName } from './command-source'
 import { orderSlashMatches, placeCommand, slashAt } from './slash'
+import { slashKeys } from './slash-list'
 import { addDraftMention } from './plugin-mentions'
 import { useMentionList, type MentionList } from './use-mention-list'
 import {
@@ -127,6 +128,7 @@ export function PromptBox({
   }, [slashTyped, hostId])
   if (slashDismissed !== null && slash?.start !== slashDismissed) setSlashDismissed(null)
   const slashMatches = slash === null ? [] : orderSlashMatches(commands, slash.query)
+  const commandKeys = useMemo(() => slashKeys(commands), [commands])
   const slashOpen = slash !== null && slashMatches.length > 0 && slash.start !== slashDismissed
   // Only a `/` that starts the text, so a path typed later in a sentence opens nothing.
   const slashNote =
@@ -446,7 +448,7 @@ export function PromptBox({
                     />
                   ) : (
                     <SlashItem
-                      key={item.name}
+                      key={commandKeys.get(item)!}
                       id={optionId(index)}
                       command={item}
                       agentId={agentId}
