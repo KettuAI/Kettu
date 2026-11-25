@@ -9,7 +9,7 @@ import type {
 import type { PageErrorMessage, SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
-import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { BrowserBounds, BrowserOriginDecision, BrowserState, PageSizeName } from './browser'
 import type { ControlAgent, ControlOutcome } from './control'
 import type { DebugStatus } from './debug'
 import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
@@ -513,6 +513,8 @@ export interface IpcInvokeContract {
   'browser:reload': { args: [sessionId: string]; result: void }
   'browser:stop': { args: [sessionId: string]; result: void }
   'browser:open-external': { args: [sessionId: string]; result: void }
+  // The size the selected tab's page keeps, picked in the pane; held back while the agent has it.
+  'browser:page-size': { args: [sessionId: string, size: PageSizeName]; result: void }
   // The page as it looks now, for the pane to show while an overlay would cover the view.
   'browser:freeze': { args: [sessionId: string]; result: string | null }
   'browser:capture': { args: [sessionId: string]; result: Uint8Array | null }
@@ -1061,6 +1063,8 @@ export interface KettuApi {
     stop(sessionId: string): Promise<void>
     /** Opens the page's current address in the system browser. */
     openExternal(sessionId: string): Promise<void>
+    /** The size the selected tab's page keeps; desktop lets one no agent used fill the pane. */
+    setPageSize(sessionId: string, size: PageSizeName): Promise<void>
     /** A still of the page for the pane to show, after which main hides the view. */
     freeze(sessionId: string): Promise<string | null>
     thaw(sessionId: string): Promise<void>

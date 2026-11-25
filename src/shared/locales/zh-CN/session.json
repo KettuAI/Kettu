@@ -112,6 +112,7 @@
     "browser_evaluate": "在网页中运行脚本",
     "browser_ask_user": "请你帮忙",
     "browser_tabs": "浏览器标签页",
+    "browser_resize": "调整网页尺寸",
     "device_list": "列出设备",
     "device_open": "打开设备",
     "device_close": "关闭设备",

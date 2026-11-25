@@ -122,6 +122,7 @@
     "browser_evaluate": "Run script on page",
     "browser_ask_user": "Ask for your help",
     "browser_tabs": "Browser tabs",
+    "browser_resize": "Resize page",
     "device_list": "List devices",
     "device_open": "Open device",
     "device_close": "Close device",

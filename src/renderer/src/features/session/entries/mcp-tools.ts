@@ -68,6 +68,7 @@ const TARGETS = {
   browser_evaluate: [],
   browser_ask_user: ['reason'],
   browser_tabs: [],
+  browser_resize: ['size'],
   device_list: [],
   device_open: [],
   device_close: [],

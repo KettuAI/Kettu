@@ -335,6 +335,7 @@ const api: KettuApi = {
     reload: (id) => invoke('browser:reload', id),
     stop: (id) => invoke('browser:stop', id),
     openExternal: (id) => invoke('browser:open-external', id),
+    setPageSize: (id, size) => invoke('browser:page-size', id, size),
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
     capture: (id) => invoke('browser:capture', id),

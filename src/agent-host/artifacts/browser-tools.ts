@@ -1,4 +1,4 @@
-// The sixteen browser tools of the `kettu` MCP server: what agents are told, the schemas, the
+// The seventeen browser tools of the `kettu` MCP server: what agents are told, the schemas, the
 // checks, and the forwarding to main, which drives the calling session's page.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
@@ -11,8 +11,13 @@ import type {
 import {
   BROWSER_TAB_ACTIONS,
   BROWSER_TOOL_NAMES,
+  MAX_PAGE_SIDE,
   MAX_SESSION_TABS,
+  MIN_PAGE_SIDE,
   ORIGIN_WAIT_MS,
+  PAGE_SIZE_NAMES,
+  PAGE_SIZES,
+  pageSizeOf,
 } from '@shared/browser'
 import {
   CONTROL_STEPS,
@@ -120,6 +125,10 @@ function output(properties: Record<string, Schema>): Tool['outputSchema'] {
 
 const READ_ONLY = { readOnlyHint: true } as const
 
+function sizeText(name: keyof typeof PAGE_SIZES): string {
+  return `${PAGE_SIZES[name].width} × ${PAGE_SIZES[name].height}`
+}
+
 /**
  * The tools that only read a page, which run without the agent's own permission prompt: they read
  * the agent's own tabs, and on a tab the user opened Kettu asks them in its own card instead.
@@ -145,6 +154,7 @@ export const BROWSER_AUTO_MODE_TOOLS: readonly BrowserToolName[] = [
   'browser_evaluate',
   'browser_ask_user',
   'browser_tabs',
+  'browser_resize',
 ]
 
 const TAB = object(
@@ -471,6 +481,39 @@ export const BROWSER_TOOLS: Tool[] = [
     outputSchema: output({ tabs: { type: 'array', items: TAB } }),
     annotations: { openWorldHint: false },
   },
+  {
+    name: 'browser_resize',
+    title: 'Resize page',
+    description:
+      `Sets the size your page lays out at: desktop ${sizeText('desktop')}, the one it starts ` +
+      `with, tablet ${sizeText('tablet')} or phone ${sizeText('phone')}, or a width and height ` +
+      'of your own. Tablet and phone lay it out as a touch device with a mobile user agent. The ' +
+      'size stays with the tab, whatever room the user’s panel has. Returns the page with a ' +
+      'snapshot.',
+    inputSchema: object({
+      size: { type: 'string', enum: [...PAGE_SIZE_NAMES] },
+      width: {
+        type: 'integer',
+        minimum: MIN_PAGE_SIDE,
+        maximum: MAX_PAGE_SIDE,
+        description: 'In CSS pixels, with height, in place of size.',
+      },
+      height: {
+        type: 'integer',
+        minimum: MIN_PAGE_SIDE,
+        maximum: MAX_PAGE_SIDE,
+        description: 'In CSS pixels, with width, in place of size.',
+      },
+    }),
+    outputSchema: output({
+      size: { type: 'string', enum: [...PAGE_SIZE_NAMES, 'custom'] },
+      width: { type: 'integer' },
+      height: { type: 'integer' },
+      mobile: { type: 'boolean', description: 'It lays out as a touch device.' },
+      ...PAGE,
+    }),
+    annotations: { openWorldHint: false },
+  },
 ]
 
 const NAMES = new Set<string>(BROWSER_TOOL_NAMES)
@@ -524,6 +567,7 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     browser_evaluate: ['function', 'ref'],
     browser_ask_user: ['step', 'reason'],
     browser_tabs: ['action', 'index'],
+    browser_resize: ['size', 'width', 'height'],
   }
   for (const key of Object.keys(o)) {
     if (!allowed[name].includes(key)) throw invalid(`Unknown argument ${key}.`)
@@ -677,6 +721,17 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
         args.index = o.index
       } else if (o.action === 'select') {
         throw invalid('index is needed to select a tab.')
+      }
+      break
+    }
+    case 'browser_resize': {
+      const size = pageSizeOf(o)
+      if ('error' in size) throw invalid(size.error)
+      if (size.name === 'custom') {
+        args.width = size.width
+        args.height = size.height
+      } else {
+        args.size = size.name
       }
       break
     }

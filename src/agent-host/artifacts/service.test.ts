@@ -114,6 +114,7 @@ describe('the servers a session attaches with', () => {
       'browser_evaluate',
       'browser_ask_user',
       'browser_tabs',
+      'browser_resize',
       'device_open',
       'device_close',
       'device_tap',

@@ -73,6 +73,7 @@ export class BrowserTools {
         return result
       },
       tabs: (sessionId, args) => this.tabs(sessionId, args),
+      resize: (tabId, size) => deps.views.resizeAgentTab(tabId, size),
       controls: this.controls,
       pointScale: (tabId) => deps.views.pointScale(tabId),
       steady: (tabId, capture) => deps.views.steady(tabId, capture),
