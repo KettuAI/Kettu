@@ -420,4 +420,111 @@ describe("the web client's link moving between relay regions", () => {
       expect(states).toEqual(['connecting', 'connected'])
     },
   )
+
+  it(
+    'compares once for pings that keep coming back slow, and at once when woken',
+    { timeout: 30_000 },
+    async () => {
+      const hostDir = tempDir()
+      const hostKey = await generateKeyPair()
+      const browserKey = await generateKeyPair()
+      const devices = await DeviceStore.load(hostDir, log)
+      await devices.add({
+        publicKey: Buffer.from(browserKey.publicKey).toString('base64'),
+        name: 'Browser',
+        kind: 'web',
+        platform: 'darwin',
+        model: '',
+      })
+      const server = new RemoteServer({
+        staticKey: hostKey,
+        devices,
+        activity: await ActivityLog.load(hostDir, log),
+        pairing: new PairingCodes({
+          hostKey: hostKey.publicKey,
+          addresses: () => [],
+          send: () => {},
+        }),
+        host: { name: 'Studio', platform: 'darwin', version: '0.0.0-test' },
+        uploads: path.join(hostDir, 'uploads'),
+        openAgentPort: async () => memoryPorts()[0],
+        changed: () => {},
+        log,
+      })
+      cleanups.push(() => server.stop('stopping'))
+
+      // Once jittering, every other message the host hears comes 150 ms late, in order, so the
+      // route's median stays low and each of those pings is far slower than it.
+      const jitter = { on: false, heard: 0, slow: 0 }
+      const jittery = (transport: Transport): Transport => ({
+        ...transport,
+        onMessage: (listener) => {
+          let queue = Promise.resolve()
+          return transport.onMessage((message) => {
+            const wait = jitter.on && ++jitter.heard % 2 === 0 ? 150 : 0
+            if (wait > 0) jitter.slow++
+            queue = queue
+              .then(() => new Promise<void>((done) => setTimeout(done, wait)))
+              .then(() => listener(message))
+          })
+        },
+      })
+      // Connecting and every comparison try the other route, which is down.
+      const tries = { other: 0 }
+      const link = new HostLink({
+        dial: async () => {
+          const [deviceEnd, hostEnd] = memoryTransports()
+          server.accept(jittery(hostEnd), 'relay')
+          return deviceEnd
+        },
+        routes: () => [
+          {
+            key: 'relay here',
+            relay: true,
+            dial: async () => {
+              const [deviceEnd, hostEnd] = memoryTransports()
+              server.accept(jittery(hostEnd), 'relay')
+              return deviceEnd
+            },
+          },
+          {
+            key: 'relay there',
+            relay: true,
+            dial: async () => {
+              tries.other++
+              throw new Error('The region is down')
+            },
+          },
+        ],
+        hostKey: hostKey.publicKey,
+        key: browserKey,
+        hello: hello({ kind: 'web', version: '1.0.0', platform: 'Chrome' }),
+        keepalive: { quietMs: 20, answerMs: 300 },
+      })
+      cleanups.push(() => link.stop())
+      link.start()
+      await expect.poll(() => link.state.kind, { timeout: 15_000 }).toBe('connected')
+      const dialed = tries.other
+      const compared = (): number => tries.other - dialed
+      // A few quick pings first, so the route has a median to be slower than.
+      await new Promise((done) => setTimeout(done, 1_200))
+
+      // However many come back slow, the routes are compared once within the gap.
+      jitter.on = true
+      await expect.poll(() => jitter.slow, { timeout: 15_000 }).toBeGreaterThanOrEqual(5)
+      await new Promise((done) => setTimeout(done, 300))
+      expect(compared()).toBe(1)
+
+      // Coming to the front compares at once, however soon after the last comparison.
+      link.wake()
+      await expect.poll(compared, { timeout: 5_000 }).toBe(2)
+      expect(link.state.kind).toBe('connected')
+
+      // So does the route failing: it drains, and with nowhere to move the link leaves it.
+      let left = false
+      link.drained('relay here', () => (left = true))
+      await expect.poll(compared, { timeout: 5_000 }).toBe(3)
+      await expect.poll(() => left, { timeout: 5_000 }).toBe(true)
+    },
+  )
 })

@@ -21,6 +21,12 @@ export const MOVE_RATIO = 0.7
 /** A ping on the current path over this many times its median makes the device compare again. */
 export const SLOW_RATIO = 2
 
+/**
+ * The least time from one comparison to the next that a slow ping asks for: about twelve idle
+ * pings, so the next comparison goes by a median of fresh samples.
+ */
+export const SLOW_COMPARE_GAP_MS = 2 * 60_000
+
 /** How long a candidate path has to finish its handshake. */
 export const PROBE_TIMEOUT_MS = 4_000
 
@@ -78,6 +84,47 @@ export class PathTimes {
     const kept = (this.failures.get(key) ?? []).filter((at) => at >= since)
     this.failures.set(key, kept)
     return kept
+  }
+}
+
+/**
+ * When a device compares its paths: once at the soonest time asked, however often it is asked
+ * meanwhile. Each comparison opens a handshake on every other path, so where round trips jitter a
+ * slow ping waits until SLOW_COMPARE_GAP_MS after the last comparison; nothing else is held back.
+ */
+export class CompareTimer {
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private at = 0
+  private last: number | null = null
+
+  constructor(private readonly compare: () => void) {}
+
+  /** Compares after `delay` ms, or sooner when already asked to. */
+  soon(delay: number): void {
+    const at = Date.now() + delay
+    if (this.timer && this.at <= at) return
+    if (this.timer) clearTimeout(this.timer)
+    this.at = at
+    this.timer = setTimeout(() => {
+      this.timer = null
+      this.compare()
+    }, delay)
+  }
+
+  /** A ping came back far slower than before. */
+  slow(): void {
+    const last = this.last
+    this.soon(last === null ? 0 : Math.max(0, last + SLOW_COMPARE_GAP_MS - Date.now()))
+  }
+
+  /** A comparison opens its handshakes now, whatever asked for it. */
+  started(): void {
+    this.last = Date.now()
+  }
+
+  stop(): void {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
   }
 }
 
