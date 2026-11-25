@@ -299,11 +299,14 @@ export function createGitService(
   // Tools
 
   function getTools(): Promise<GitTools> {
-    toolsPromise ??= probeTools(exec, homedir()).then((tools) => {
-      currentTools = tools
+    if (toolsPromise) return toolsPromise
+    const probe = probeTools(exec, homedir()).then((tools) => {
+      // A probe outdated by a new environment while it ran keeps out of the newer one's way.
+      if (toolsPromise === probe) currentTools = tools
       return tools
     })
-    return toolsPromise
+    toolsPromise = probe
+    return probe
   }
 
   function setTools(tools: GitTools): void {
@@ -1178,7 +1181,15 @@ export function createGitService(
     },
 
     setEnvironment(next) {
+      const changed = !sameJson(env, next)
       env = next
+      // Tools probed in the previous environment, as before the login shell's was read, may have
+      // missed git or gh; later calls wait for the new probe, which clients get as on Reload.
+      if (changed && toolsPromise !== null && !disposed) {
+        const reload = api.reloadTools()
+        toolsPromise = reload
+        background(reload)
+      }
     },
 
     setBackgroundFetch(enabled) {
