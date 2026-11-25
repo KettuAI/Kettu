@@ -11724,6 +11724,7 @@ export class SessionManager {
             severity: 'info',
             title: t('notice.reportsPaused.title'),
             description: t('notice.reportsPaused.description', { count: REPORT_LIMIT }),
+            cause: 'reports_paused',
             after: agentEntryBefore(live.thread),
           },
         },
