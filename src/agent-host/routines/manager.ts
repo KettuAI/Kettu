@@ -248,17 +248,20 @@ export class RoutinesManager {
 
   async update(routineId: string, changes: RoutineChanges): Promise<RoutineView> {
     if (!this.loaded) await this.load()
-    const routine = this.routineOf(routineId)
+    this.presentOf(routineId)
+    const projectPath =
+      changes.projectPath === undefined || changes.projectPath === null
+        ? changes.projectPath
+        : await this.deps.resolveProject(changes.projectPath)
+    // Read again after the wait, so a routine deleted meanwhile is not saved back.
+    const routine = this.presentOf(routineId)
     const next: Routine = { ...routine }
     if (changes.name !== undefined) {
       next.name = routineName(changes.name, changes.prompt ?? routine.prompt)
     }
     if (changes.prompt !== undefined) next.prompt = changes.prompt
     if (changes.agentId !== undefined) next.agentId = changes.agentId
-    if (changes.projectPath !== undefined) {
-      next.projectPath =
-        changes.projectPath === null ? null : await this.deps.resolveProject(changes.projectPath)
-    }
+    if (projectPath !== undefined) next.projectPath = projectPath
     if (changes.options !== undefined) next.options = changes.options
     if (changes.trigger !== undefined) next.trigger = changes.trigger
     if (changes.scope !== undefined) next.scope = changes.scope
@@ -274,6 +277,8 @@ export class RoutinesManager {
     // Fewer kept sessions take effect at once, as the confirmation before it said.
     if (next.keptRunSessions < routine.keptRunSessions) await this.trim(next)
     const view = await this.viewOf(next)
+    // Deleted while it was counted: its removal is sent, and the view would bring it back.
+    this.presentOf(routineId)
     this.lastViews.set(routineId, JSON.stringify(view))
     this.deps.events.changed(view)
     this.scheduler.refresh()
@@ -1040,20 +1045,30 @@ export class RoutinesManager {
   }
 
   private async publish(routineId: string): Promise<void> {
-    const routine = this.routines.get(routineId)
-    if (!routine) return
+    if (!this.routines.has(routineId) || this.deleting.has(routineId)) return
     try {
       // The view counts what the database holds, so its writes come first.
       if (this.writes.size > 0) await Promise.allSettled([...this.writes])
-      const view = await this.viewOf(routine)
-      const json = JSON.stringify(view)
-      if (this.lastViews.get(routineId) === json) return
-      this.lastViews.set(routineId, json)
-      this.deps.events.changed(view)
+      for (;;) {
+        // Read after every wait: a routine deleted meanwhile has had its removal sent, and one
+        // changed meanwhile is counted again.
+        const routine = this.routines.get(routineId)
+        if (!routine || this.deleting.has(routineId)) return
+        const view = await this.viewOf(routine)
+        if (this.routines.get(routineId) !== routine || this.deleting.has(routineId)) continue
+        const json = JSON.stringify(view)
+        if (this.lastViews.get(routineId) === json) return
+        this.lastViews.set(routineId, json)
+        this.deps.events.changed(view)
+        return
+      }
     } catch (error) {
       // The thread store may be closing, as at quit; a view that cannot be counted is not sent.
       if (!this.stopped) {
-        this.deps.log('warn', `Could not update the view of ${routine.name}: ${messageOf(error)}`)
+        this.deps.log(
+          'warn',
+          `Could not update the view of ${this.nameOf(routineId)}: ${messageOf(error)}`,
+        )
       }
     }
   }
@@ -1062,6 +1077,12 @@ export class RoutinesManager {
     const routine = this.routines.get(routineId)
     if (!routine) throw new HostError('not_found', t('routines.notFound'))
     return routine
+  }
+
+  /** The routine, unless it is gone or being deleted. */
+  private presentOf(routineId: string): Routine {
+    if (this.deleting.has(routineId)) throw new HostError('not_found', t('routines.notFound'))
+    return this.routineOf(routineId)
   }
 
   private nameOf(routineId: string): string {
