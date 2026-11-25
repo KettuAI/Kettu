@@ -22,35 +22,38 @@ import { LocalAudio } from './local-audio'
 import { LocalImage } from './local-image'
 import { LocalVideo } from './local-video'
 import { MediaGrid } from './media-grid'
-import { useMediaFile, type Shown } from './use-media-file'
+import { useMediaFile, useTextMedia, type MediaOrigin, type Shown } from './use-media-file'
 
 /**
  * A media file a reply names by its path, from the media scheme: an image in its frame, a clip
  * behind its poster, a sound with Chromium's player, or a file card for one that shows no
- * preview. It asks for its grant once it nears the view. `image` marks a Markdown image, which
- * the blocks of its message then leave out; without it, a file that cannot be shown renders
- * nothing. Give it `key={path}`, so a different path starts over.
+ * preview. It asks for its grant once it nears the view, unless its block passes the answer it
+ * has as `known`. A Markdown image is one the blocks of its message then leave out; any other
+ * file that cannot be shown renders nothing. Give it `key={path}`, so a different path starts
+ * over.
  */
 export function LocalMedia({
   path,
+  origin,
+  known,
   alt = '',
-  image = false,
   imageHeight,
 }: {
   path: string
+  origin: MediaOrigin
+  known?: Shown
   alt?: string
-  image?: boolean
   /** The tallest an image shows, when not as in a reply. */
   imageHeight?: number
 }) {
   const near = useRef<HTMLSpanElement>(null)
-  const media = useMediaFile(path, image, near)
+  const media = useMediaFile(path, origin, near, known)
   const { shown, name } = media
   const nominated = mediaKindOfName(name) ?? 'image'
 
   if (!media.enabled || shown.kind === 'text') {
     // Under a block the reference stays the chip or link it was in the sentence.
-    return image ? <span title={path}>{alt || name}</span> : null
+    return origin === 'image' ? <span title={path}>{alt || name}</span> : null
   }
   if (shown.kind === 'asking') {
     return (
@@ -115,16 +118,23 @@ export function LocalMedia({
 }
 
 /**
- * The media files a block shows under it, in its order: two or more pictures as one grid, every
- * other file in its own row.
+ * The media files a block's text names, shown under it in its order once the block is `near` the
+ * view and the host has answered for them: two or more pictures as one grid, every other file in
+ * its own row. A path the host does not find stays as written, so nothing stands in for it while
+ * the host is asked.
  */
-export function MediaRows({ paths }: { paths: readonly string[] }) {
-  return mediaRows(paths).map((row) =>
+export function MediaRows({ paths, near }: { paths: readonly string[]; near: boolean }) {
+  const answers = useTextMedia(paths, near)
+  const shown = paths.filter((path) => {
+    const kind = answers.get(path)?.kind
+    return kind !== undefined && kind !== 'text'
+  })
+  return mediaRows(shown).map((row) =>
     row.kind === 'grid' ? (
       // A block has one grid, which keeps its tiles as pictures join it.
-      <MediaGrid key="grid" paths={row.paths} />
+      <MediaGrid key="grid" paths={row.paths} known={answers} />
     ) : (
-      <LocalMedia key={row.path} path={row.path} />
+      <LocalMedia key={row.path} path={row.path} origin="text" known={answers.get(row.path)} />
     ),
   )
 }

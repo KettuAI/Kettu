@@ -8,21 +8,24 @@ import { FrameRing } from './frame'
 import { gridTiles } from './layout'
 import { NamedMediaContext } from './named'
 import { imageSurface } from './surface'
-import { useMediaFile } from './use-media-file'
+import { useMediaFile, type Shown } from './use-media-file'
 
 const TILE = 'relative h-24 min-w-0 overflow-hidden rounded-tile'
 
 /**
  * Two or more pictures one block names, as a row of three tiles; past three, the last tile counts
  * the rest. The viewer still steps through all of them. `images` marks them as Markdown images,
- * which the blocks of their message then leave out.
+ * which the blocks of their message then leave out; otherwise the block's text names them, and
+ * `known` holds the answers it has for them.
  */
 export function MediaGrid({
   paths,
   images = false,
+  known,
 }: {
   paths: readonly string[]
   images?: boolean
+  known?: ReadonlyMap<string, Shown>
 }) {
   // The pictures that stay text, which leave the grid to the others.
   const [text, setText] = useState<ReadonlySet<string>>(new Set())
@@ -45,6 +48,7 @@ export function MediaGrid({
           key={path}
           path={path}
           image={images}
+          known={known?.get(path)}
           more={i === tiles.length - 1 ? more : 0}
           onText={stays}
         />
@@ -57,18 +61,20 @@ export function MediaGrid({
 function LocalTile({
   path,
   image,
+  known,
   more,
   onText,
 }: {
   path: string
   image: boolean
+  known: Shown | undefined
   more: number
   /** The picture stays the text it was in the sentence, so it takes no tile. */
   onText: (path: string) => void
 }) {
   const { t } = useTranslation('session')
   const near = useRef<HTMLSpanElement>(null)
-  const media = useMediaFile(path, image, near)
+  const media = useMediaFile(path, image ? 'image' : 'text', near, known)
   const { shown, name } = media
   const [loaded, setLoaded] = useState(false)
   const text = shown.kind === 'text' && !image
