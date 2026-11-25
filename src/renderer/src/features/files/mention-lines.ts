@@ -1,5 +1,6 @@
 // Mentions lines picked in the Files pane's diff in the composer of the session the pane serves,
-// as typing `@name#L4-5` would, with the file attached as a chosen mention attaches it.
+// as typing `@name#L4-5` would, with the file attached as a chosen mention attaches it; and
+// quotes a passage selected in an open file there.
 
 import { EditorView } from '@codemirror/view'
 import type { SelectedLineRange } from '@pierre/diffs'
@@ -46,6 +47,28 @@ function typeMention(view: EditorView, text: string): void {
     scrollIntoView: true,
   })
   view.focus()
+}
+
+/**
+ * Puts `quote` in the composer of the session `sessionId` as a block of its own at the caret, with
+ * the caret on a line after it, which an empty line keeps out of a Markdown quote; null once it is
+ * there.
+ */
+export function quoteInComposer(sessionId: string, quote: string): MentionMiss | null {
+  const view = composerOf(sessionId)
+  if (!view) return 'no-composer'
+  const { from, to } = view.state.selection.main
+  const before = view.state.sliceDoc(0, from)
+  const gap = !before.trim() || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
+  const insert = `${gap}${quote}\n\n`
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+    userEvent: 'input',
+    scrollIntoView: true,
+  })
+  view.focus()
+  return null
 }
 
 /**

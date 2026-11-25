@@ -3,11 +3,13 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import {
   BrowserIcon,
@@ -88,7 +90,8 @@ import { ChangeBadge } from './change-badge'
 import { PreviewFileContext } from './file-refs'
 import { PathCopy, PreviewEditToggle } from './file-header'
 import { isHtmlFile, previewHtml, useHtmlPreview } from './html-preview'
-import { mentionPaths } from './mention-lines'
+import { fileQuote, selectedPassage, type FilePassage } from './file-quote'
+import { mentionPaths, quoteInComposer } from './mention-lines'
 import { copyPaths } from './operations'
 import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
@@ -142,14 +145,29 @@ export function FilePreview({
   const local = isLocal(projectPath)
   const sessionId = panelSession(panel)
   const page = useHtmlPreview(sessionId, projectPath) && !file.agent && isHtmlFile(file.path)
+  const root = useRef<HTMLDivElement>(null)
+  const selected = useSelectedLines(root, projectPath, file, source)
+  // With a passage selected, only that passage goes, not the whole file.
   const mention = (): void => {
     if (!sessionId) return
-    const missed = mentionPaths(sessionId, projectPath, [{ path: file.path, folder: false }])
+    const passage = passageIn(root.current, projectPath, file, source)
+    const missed = passage
+      ? quoteInComposer(sessionId, fileQuote(file.path, passage))
+      : mentionPaths(sessionId, projectPath, [{ path: file.path, folder: false }])
     if (missed === 'no-composer') toast(t('tree.noComposer'))
     else if (missed === 'full') toast(t('composer:attachments.limit'))
   }
+  const referenceLabel =
+    selected === null
+      ? t('preview.reference')
+      : selected === 'text'
+        ? t('preview.quoteSelection')
+        : selected[0] === selected[1]
+          ? t('preview.quoteLine', { line: selected[0] })
+          : t('preview.quoteLines', { start: selected[0], end: selected[1] })
   return (
     <div
+      ref={root}
       data-file-preview=""
       className="flex min-h-0 flex-1 flex-col"
       // Anywhere in the pane, so it still saves after a click on one of the bars' buttons.
@@ -209,7 +227,7 @@ export function FilePreview({
               </PanelButton>
             )}
             {sessionId && !file.agent && (
-              <PanelButton label={t('preview.reference')} onClick={mention}>
+              <PanelButton label={referenceLabel} onClick={mention}>
                 <PaneIcon icon={MessageAdd01Icon} />
               </PanelButton>
             )}
@@ -276,6 +294,71 @@ export function FilePreview({
 }
 
 const isMarkdown = (path: string) => /\.(md|markdown|mdx)$/i.test(path)
+
+/**
+ * The passage selected in the file as it shows: in the editor, by its main selection, or in the
+ * rendered Markdown inside `root`. Null without one, or for a selection of the whole file.
+ */
+function passageIn(
+  root: HTMLElement | null,
+  projectPath: string,
+  file: OpenFile,
+  source: boolean,
+): FilePassage | null {
+  if (file.content?.kind !== 'text') return null
+  if (!rendered(file, source)) {
+    const state = getBuffer(projectPath, file.path)?.state
+    if (!state) return null
+    const { from, to } = state.selection.main
+    return selectedPassage(state.doc, from, to)
+  }
+  const selection = window.getSelection()
+  const body = root?.querySelector('.kp-doc__body')
+  if (!body || !selection || selection.isCollapsed || selection.rangeCount === 0) return null
+  if (!body.contains(selection.getRangeAt(0).commonAncestorContainer)) return null
+  const text = selection.toString().trim()
+  return text ? { lines: null, text } : null
+}
+
+/**
+ * The lines the file's selection covers, or `text` for a selection in rendered Markdown, kept
+ * current as it changes, so the reference button says what it quotes.
+ */
+function useSelectedLines(
+  root: RefObject<HTMLElement | null>,
+  projectPath: string,
+  file: OpenFile,
+  source: boolean,
+): [number, number] | 'text' | null {
+  const [key, setKey] = useState<string | null>(null)
+  const read = useEffectEvent(() => {
+    const passage = passageIn(root.current, projectPath, file, source)
+    setKey(passage ? (passage.lines?.join('-') ?? 'text') : null)
+  })
+  useEffect(() => {
+    const box = root.current
+    let frame = 0
+    // A frame later, once the editor has taken the change. An editor shown again restores its
+    // selection unfocused, with no selection event, so pointing or focusing in the pane reads it.
+    const changed = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(read)
+    }
+    changed()
+    document.addEventListener('selectionchange', changed)
+    box?.addEventListener('pointerover', changed)
+    box?.addEventListener('focusin', changed)
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener('selectionchange', changed)
+      box?.removeEventListener('pointerover', changed)
+      box?.removeEventListener('focusin', changed)
+    }
+  }, [root, projectPath, file, source])
+  if (key === null || key === 'text') return key
+  const [start = 0, end = start] = key.split('-').map(Number)
+  return [start, end]
+}
 
 /** Markdown shows rendered unless the source was chosen or a reference asks for a line. */
 const rendered = (file: OpenFile, source: boolean) =>
