@@ -788,6 +788,8 @@ export class PluginsService {
     await mkdir(data, { recursive: true })
     const settings = await this.deps.settings()
     const { contents } = pkg
+    // What a version added while the plugin is off comes on with the plugin, as a new item would.
+    const added: string[] = []
     const skills: MarketSkill[] = []
     for (const skill of contents.skills) {
       const itemId = pluginItemId(id, skill.name)
@@ -797,6 +799,7 @@ export class PluginsService {
         .map((file) => ({ ...file, path: file.path.slice(prefix.length) }))
       await this.deps.keepSkill(itemId, skill.name, files)
       const kept = settings.skills.find((item) => item.id === itemId)
+      if (!kept) added.push(itemId)
       skills.push({
         id: itemId,
         name: skill.name,
@@ -813,6 +816,7 @@ export class PluginsService {
     for (const portable of pkg.servers) {
       const itemId = pluginItemId(id, portable.name)
       const kept = settings.servers.find((item) => item.id === itemId)
+      if (!kept) added.push(itemId)
       servers.push({
         id: itemId,
         name: kept?.name ?? serverName(portable.name, [...others, ...servers]),
@@ -858,9 +862,12 @@ export class PluginsService {
         delete record.channelKinds[channel]
       }
     }
-    record.wasOn = record.wasOn.filter((itemId) =>
-      [...record.kept.skills, ...record.kept.servers].includes(itemId),
-    )
+    record.wasOn = [
+      ...record.wasOn.filter((itemId) =>
+        [...record.kept.skills, ...record.kept.servers].includes(itemId),
+      ),
+      ...(record.enabled ? [] : added),
+    ]
   }
 
   /** Why the package cannot go in as it is: a skill of it has the name of another Kettu keeps. */
