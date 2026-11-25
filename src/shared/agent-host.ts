@@ -1888,6 +1888,10 @@ export interface HostContract {
   // The ids of these the host still holds, for the drafts that name them; each is kept from now.
   'attachments.held': { params: { ids: string[] }; result: string[] }
   'files.list': { params: { projectPath: string }; result: FileList }
+  // Keeps the connection told, with `files.changed`, when the project's folder changes on disk,
+  // until `files.unwatch`.
+  'files.watch': { params: { projectPath: string }; result: void }
+  'files.unwatch': { params: { projectPath: string }; result: void }
   // A folder's direct children, for an ignored folder that `files.list` leaves unread.
   'files.listFolder': { params: { projectPath: string; path: string }; result: FolderList }
   // `asText` reads a media file as any other file, as an SVG's source.
@@ -2497,6 +2501,8 @@ export const HOST_METHODS = [
   'attachments.remove',
   'attachments.held',
   'files.list',
+  'files.watch',
+  'files.unwatch',
   'files.listFolder',
   'files.read',
   'files.search',
@@ -2603,6 +2609,8 @@ export type HostEvent =
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
   | { type: 'git.reference'; url: string; found: IssueLookup } // to the ports watching `url`
   | { type: 'git.tools'; tools: GitTools }
+  // To the ports watching the project's files, by the path each named it: list and read them again.
+  | { type: 'files.changed'; projectPath: string }
   | { type: 'star.changed'; state: GitHubStarState }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again

@@ -2553,6 +2553,8 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'files.list': project,
+    'files.watch': project,
+    'files.unwatch': project,
     'files.listFolder': (params) => {
       const o = fields(params)
       return {
