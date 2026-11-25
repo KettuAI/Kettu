@@ -157,6 +157,56 @@ describe('AcpMessages', () => {
     })
   })
 
+  it("sums goose's model calls from its own notifications, each message once", () => {
+    const store = new AcpMessages()
+    const call = (messageId: string, usage: object) => ({
+      jsonrpc: '2.0',
+      method: '_goose/unstable/session/update',
+      params: { sessionId: 's1', update: { sessionUpdate: 'message_usage', messageId, usage } },
+    })
+    const first = {
+      inputTokens: 12000,
+      outputTokens: 300,
+      totalTokens: 12300,
+      cacheReadTokens: 10000,
+    }
+    store.add('goose', 'out', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'session/prompt',
+      params: { sessionId: 's1', prompt: [{ type: 'text', text: 'Go' }] },
+    })
+    store.add('goose', 'in', call('m1', first))
+    store.add(
+      'goose',
+      'in',
+      call('m2', {
+        inputTokens: 12800,
+        outputTokens: 150,
+        totalTokens: 12950,
+        cacheReadTokens: 12000,
+      }),
+    )
+    store.add('goose', 'in', call('m1', first))
+    store.add('goose', 'in', {
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        stopReason: 'end_turn',
+        usage: { inputTokens: 12800, outputTokens: 150, totalTokens: 12950 },
+      },
+    })
+    const [turn] = acpTurns(store.of('goose', 's1'))
+    expect(turn!.requests[0]!.tokens).toEqual({
+      input: 2800,
+      cacheRead: 22000,
+      cacheWrite: null,
+      cacheWrite1h: null,
+      output: 450,
+      reasoning: null,
+    })
+  })
+
   it('drops the oldest messages and the least recent sessions past their bounds', () => {
     const store = new AcpMessages()
     for (let i = 0; i < SESSION_MESSAGES + 5; i++) {

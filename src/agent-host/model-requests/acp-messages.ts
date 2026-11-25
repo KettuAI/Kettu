@@ -13,7 +13,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import type { AgentId } from '@shared/thread'
-import { cachedInInput } from '../acp/mapper'
+import { cachedInInput, GOOSE_SESSION_UPDATE, gooseCallUsage } from '../acp/mapper'
 import { t } from '../i18n'
 import { arr, emptyTokens, num, obj, preview, str, summarizeActions } from './claude-transcript'
 import { foldAll, type ModelRequestsReader } from './reader'
@@ -208,6 +208,9 @@ export function acpTurns(messages: readonly StoredMessage[]): RequestTurn[] {
     let failed: string | null = null
     // The tokens of each model call, for an agent that reports them on a chunk of its own.
     let chunked: RequestTokens | null = null
+    // goose's model calls, from its own notifications, each message once.
+    let called: RequestTokens | null = null
+    const calledIds = new Set<string>()
     for (const message of received) {
       let m: Rec
       try {
@@ -231,6 +234,11 @@ export function acpTurns(messages: readonly StoredMessage[]): RequestTurn[] {
       }
       const usage = kind === 'agent_message_chunk' ? obj(obj(update?._meta)?.usage) : null
       if (usage) chunked = addTokens(chunked, acpTokens(usage))
+      const call = message.method === GOOSE_SESSION_UPDATE ? gooseCallUsage(m.params) : null
+      if (call && (call.messageId === null || !calledIds.has(call.messageId))) {
+        if (call.messageId !== null) calledIds.add(call.messageId)
+        called = addTokens(called, acpTokens({ ...call.usage }))
+      }
       if (message === end) {
         result = obj(m.result)
         failed = str(obj(m.error)?.message)
@@ -249,7 +257,8 @@ export function acpTurns(messages: readonly StoredMessage[]): RequestTurn[] {
       params: [],
       requestId: null,
       stop,
-      tokens: obj(result?.usage) ? acpTokens(obj(result?.usage)) : (chunked ?? emptyTokens()),
+      tokens:
+        called ?? (obj(result?.usage) ? acpTokens(obj(result?.usage)) : (chunked ?? emptyTokens())),
       actions,
       sent: grouped(sent),
       received: grouped(received),

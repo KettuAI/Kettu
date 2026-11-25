@@ -747,6 +747,37 @@ export function chunkTokens(update: acp.SessionUpdate): TokenTotals | null {
   })
 }
 
+/** goose's own session notification, sent beside `session/update` to a client that asks for it. */
+export const GOOSE_SESSION_UPDATE = '_goose/unstable/session/update'
+
+/**
+ * One model call of a goose turn, from the `message_usage` update of goose's own session
+ * notification, in ACP's usage fields; goose's prompt response reports only the latest call. Its
+ * input holds the call's cache reads and writes, and its total is input plus output.
+ */
+export function gooseCallUsage(
+  params: unknown,
+): { messageId: string | null; usage: acp.Usage } | null {
+  const update = (params as { update?: unknown } | null | undefined)?.update
+  if (typeof update !== 'object' || update === null) return null
+  const { sessionUpdate, messageId, usage } = update as Record<string, unknown>
+  if (sessionUpdate !== 'message_usage' || typeof usage !== 'object' || usage === null) return null
+  const fields = usage as Record<string, unknown>
+  const inputTokens = count(fields.inputTokens)
+  const outputTokens = count(fields.outputTokens)
+  if (inputTokens === null || outputTokens === null) return null
+  return {
+    messageId: typeof messageId === 'string' ? messageId : null,
+    usage: {
+      totalTokens: count(fields.totalTokens) ?? inputTokens + outputTokens,
+      inputTokens,
+      outputTokens,
+      cachedReadTokens: count(fields.cacheReadTokens),
+      cachedWriteTokens: count(fields.cacheWriteTokens),
+    },
+  }
+}
+
 type CompactionStatus = Extract<ThreadEntry, { kind: 'compaction' }>['status']
 
 const NOTICE_SEVERITIES: ReadonlySet<string> = new Set(['info', 'warning', 'error'])
