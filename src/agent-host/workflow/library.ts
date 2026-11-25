@@ -199,7 +199,7 @@ export interface WorkflowLibraryDeps {
   fetch?: typeof fetch
   now?: () => number
   changed?(): void
-  /** Whether a plugin is on; a workflow of one that is off cannot start a task. */
+  /** Whether a plugin is on; a workflow of one that is off is not listed and cannot start a task. */
   pluginOn?(pluginId: string): boolean
 }
 
@@ -293,9 +293,12 @@ export class WorkflowLibrary {
 
   // Reading.
 
+  /** The library but the workflows of plugins that are off, which come back when they are on. */
   async list(): Promise<WorkflowEntry[]> {
     const library = await this.readLibrary()
-    return library.map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user'))
+    return library
+      .filter((read) => !this.pluginOff(read.id))
+      .map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user'))
   }
 
   async read(workflowId: string): Promise<{ entry: WorkflowEntry; text: string | null }> {
@@ -632,7 +635,7 @@ export class WorkflowLibrary {
     }
     if (read.workflow) problems.push(...toolProblems(read.workflow, this.deps.knownTools()))
     const from = record?.origin
-    if (from?.kind === 'plugin' && this.deps.pluginOn?.(from.pluginId) === false) {
+    if (from?.kind === 'plugin' && this.pluginOff(read.id)) {
       problems.push(fileProblem('', 'workflowFile.pluginOff', { plugin: from.plugin }))
     }
     const approval: WorkflowEntry['approval'] =
@@ -650,6 +653,11 @@ export class WorkflowLibrary {
       addedAt: record?.addedAt ?? null,
       pins: this.livePins(read.id, read.workflow),
     }
+  }
+
+  private pluginOff(workflowId: string): boolean {
+    const from = this.data.entries[workflowId]?.origin
+    return from?.kind === 'plugin' && this.deps.pluginOn?.(from.pluginId) === false
   }
 
   /** The workflow's pins of steps it still has: a step a new version removed loses its pin. */

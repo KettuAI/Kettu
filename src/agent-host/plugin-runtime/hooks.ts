@@ -7,6 +7,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import { PLUGIN_BEFORE_SEND_DEADLINE_MS } from '@shared/plugin-host'
 import { PLUGIN_REF_LIMITS, type PluginMentionRef } from '@shared/plugin-refs'
 import { PLUGIN_HOOK_EVENTS, type PluginHookEvent } from '@shared/plugins'
+import { PLUGIN_VIEW_LIMITS } from '@shared/plugin-views'
 import type { PermissionOption, ToolEntry, ToolKind } from '@shared/thread'
 import type { PluginRefs } from './refs'
 import { sessionInfo } from './sessions-api'
@@ -30,6 +31,8 @@ export interface PluginAttachment {
   text: string
   /** Why a mentioned item could not be added, when it could not; `text` is then empty. */
   failed?: string
+  /** What the plugin itself said of that failure, when it said something. */
+  detail?: string
 }
 
 export interface PluginDenial {
@@ -204,7 +207,11 @@ export class PluginHooks {
         pluginId: ref.pluginId,
         plugin: this.deps.title(ref.pluginId) ?? ref.pluginId,
       }
-      if (!answer.ok) return { ...base, title: ref.name, text: '', failed: answer.error.code }
+      if (!answer.ok) {
+        const { code } = answer.error
+        const detail = answer.error.detail?.trim().slice(0, PLUGIN_VIEW_LIMITS.error)
+        return { ...base, title: ref.name, text: '', failed: code, ...(detail ? { detail } : {}) }
+      }
       const text = answer.content.text.slice(0, room)
       if (text === '') return { ...base, title: ref.name, text: '', failed: 'too_large' }
       room -= text.length

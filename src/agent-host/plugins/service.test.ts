@@ -388,7 +388,8 @@ describe('installing a plugin', () => {
     expect(h.settings.skills.every((skill) => !skill.on)).toBe(true)
     expect(h.settings.servers.every((server) => !server.on)).toBe(true)
     expect(await h.plugins.resources('roles')).toEqual([])
-    expect(usableWorkflow((await h.library.list())[0]!)).toBe(false)
+    expect(await h.library.list()).toEqual([])
+    await expect(h.library.resolve(workflow!.id)).rejects.toThrowError('turned off')
     await h.plugins.setEnabled(plugin.id, true)
     expect(h.settings.skills.every((skill) => skill.on)).toBe(true)
     expect(h.settings.servers.map((server) => [server.name, server.on])).toEqual([

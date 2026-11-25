@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PLUGIN_VIEW_LIMITS } from '@shared/plugin-views'
 import type { PluginAttached } from '@shared/thread'
+
+/** The plugin's own word on a failure, on one line and cut short, as it is untrusted text. */
+function pluginSaid(detail: string | undefined): string | null {
+  const line = detail?.replace(/\s+/g, ' ').trim().slice(0, PLUGIN_VIEW_LIMITS.error)
+  return line ? line : null
+}
 
 /**
  * Under a message a plugin attached to: which plugin and what it added, which opens from the line.
@@ -37,18 +44,23 @@ export function AttachedNote({ attached }: { attached: PluginAttached }) {
           {added.map((item) => item.text).join('\n\n')}
         </div>
       )}
-      {missed.map((item, i) => (
-        <span key={i} className="ks-user__note flex items-center gap-1">
-          <span className="truncate">
-            {t('userEntry.attachedFailed', {
-              items: item.title ?? attached.plugin,
-              why: t(`userEntry.attachedWhy.${item.failed}`, {
-                defaultValue: t('userEntry.attachedWhy.failed'),
-              }),
-            })}
+      {missed.map((item, i) => {
+        const failed = t('userEntry.attachedFailed', {
+          items: item.title ?? attached.plugin,
+          why:
+            pluginSaid(item.detail) ??
+            t(`userEntry.attachedWhy.${item.failed}`, {
+              defaultValue: t('userEntry.attachedWhy.failed'),
+            }),
+        })
+        return (
+          <span key={i} className="ks-user__note flex items-center gap-1">
+            <span className="truncate" title={failed}>
+              {failed}
+            </span>
           </span>
-        </span>
-      ))}
+        )
+      })}
     </>
   )
 }
