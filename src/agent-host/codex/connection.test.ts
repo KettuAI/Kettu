@@ -333,6 +333,7 @@ describe('sessions', () => {
         projects: { '/project': { trust_level: 'trusted' } },
         features: { default_mode_request_user_input: true },
         suppress_unstable_features_warning: true,
+        thread_unload_delay_secs: 0,
         mcp_servers: {
           kettu: {
             url: 'http://127.0.0.1:9/mcp',
@@ -463,6 +464,36 @@ describe('sessions', () => {
         },
       })
     }
+  })
+
+  it('has every thread unloaded once Kettu lets go of it, which frees its writer lock', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    await connection.resumeSession('thread-7', '/project', {})
+    await connection.forkSession(opened.sessionId, '/project', {})
+    for (const method of ['thread/start', 'thread/resume', 'thread/fork']) {
+      expect(server.sent(method)[0]).toMatchObject({ config: { thread_unload_delay_secs: 0 } })
+    }
+  })
+
+  it('opens a thread it just let go of again once app-server has closed it', async () => {
+    const { server, connection } = await connect()
+    let refused = false
+    server.on('thread/resume', (params) => {
+      const threadId = params.threadId as string
+      if (refused) return threadResponse(threadId)
+      refused = true
+      setTimeout(() => server.notify('thread/closed', { threadId }), 0)
+      // Codex 0.172.0's answer while it still unloads the thread.
+      throw new FakeRpcError(
+        -32600,
+        `thread ${threadId} is closing; retry thread/resume after the thread is closed`,
+      )
+    })
+    await connection.closeSession('thread-7')
+    const setup = await connection.resumeSession('thread-7', '/project')
+    expect(setup.config.find((o) => o.id === 'model')).toBeDefined()
+    expect(server.sent('thread/resume')).toHaveLength(2)
   })
 
   it('sets the Marketplace’s skill folders on app-server before a thread starts, once while unchanged', async () => {
