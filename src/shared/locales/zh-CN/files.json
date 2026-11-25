@@ -133,7 +133,10 @@
     "previous": "上一处改动",
     "next": "下一处改动",
     "position": "{{current}} / {{total}}",
-    "openFile": "打开文件"
+    "openFile": "打开文件",
+    "style": "差异显示方式",
+    "unified": "统一",
+    "split": "并排"
   },
   "changes": {
     "emptyTitle": "没有未提交的更改",

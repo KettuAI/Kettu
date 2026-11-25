@@ -134,7 +134,10 @@
     "previous": "Previous change",
     "next": "Next change",
     "position": "{{current}} / {{total}}",
-    "openFile": "Open file"
+    "openFile": "Open file",
+    "style": "Diff view",
+    "unified": "Unified",
+    "split": "Side by side"
   },
   "changes": {
     "emptyTitle": "No uncommitted changes",
