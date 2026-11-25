@@ -39,7 +39,7 @@ import { isMac } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { useOpenOverlays } from '@renderer/stores/overlays'
+import { useOpenOverlays, useOverlayStore } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { panelSession } from '@renderer/stores/view'
 import { AddressField } from './address-field'
@@ -62,6 +62,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   )
   const agent = useControlAgent(agentId, hostId)
   const overlays = useOpenOverlays()
+  const showsPage = !!state && !!(state.url || state.page)
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   // The frame the page fills.
   const page = useRef<HTMLDivElement>(null)
@@ -125,26 +126,14 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     })
   }, [sessionId, zoom])
 
-  // A notice, the address row or the origin card moves the page's frame without resizing it.
-  useLayoutEffect(report)
-
-  useLayoutEffect(() => {
-    const element = page.current
-    if (!element) return
-    const observer = new ResizeObserver(report)
-    observer.observe(element)
-    window.addEventListener('resize', report)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', report)
-    }
-  }, [report])
-
   // An overlay that covers the page takes a still in its place: a web view is a native layer the
-  // renderer cannot draw over. The check runs whenever any overlay opens or closes, since one that
-  // covers the page can open while another is already open, and again when the pane maximizes or
-  // restores under a toast that stays up.
-  useEffect(() => {
+  // renderer cannot draw over. Whether one covers it depends on where the overlays and the page's
+  // frame are, so the check runs whenever an overlay opens or closes, since one that covers the
+  // page can open while another is already open, and whenever the frame moves or resizes, since a
+  // side panel opening or a pane maximizing brings the page under an overlay that stays up.
+  const coverCheck = useRef(0)
+  const checkCover = useCallback(() => {
+    cancelAnimationFrame(coverCheck.current)
     if (!sessionId) return
     const thaw = () => {
       if (!useBrowserStore.getState().stills[sessionId]) return
@@ -152,11 +141,11 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         useBrowserStore.getState().setStill(sessionId, null)
       })
     }
-    if (Object.keys(overlays).length === 0) {
+    if (Object.keys(useOverlayStore.getState().open).length === 0) {
       thaw()
       return
     }
-    const frame = requestAnimationFrame(() => {
+    coverCheck.current = requestAnimationFrame(() => {
       const area = page.current
       if (!area || !covers(area)) {
         thaw()
@@ -179,8 +168,33 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         })
         .catch(() => {})
     })
-    return () => cancelAnimationFrame(frame)
-  }, [overlays, sessionId, maximized])
+  }, [sessionId])
+
+  const frameChanged = useCallback(() => {
+    report()
+    checkCover()
+  }, [report, checkCover])
+
+  // A notice, the address row or the origin card moves the page's frame without resizing it.
+  useLayoutEffect(frameChanged)
+
+  // The frame is another element once the pane has a page.
+  useLayoutEffect(() => {
+    const element = page.current
+    if (!element) return
+    const observer = new ResizeObserver(frameChanged)
+    observer.observe(element)
+    window.addEventListener('resize', frameChanged)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', frameChanged)
+    }
+  }, [frameChanged, showsPage])
+
+  useEffect(() => {
+    checkCover()
+    return () => cancelAnimationFrame(coverCheck.current)
+  }, [checkCover, overlays, maximized])
 
   // Leaving the pane or its session drops a still that is no longer in front of anything.
   useEffect(() => {
