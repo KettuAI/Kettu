@@ -552,12 +552,18 @@ export function mapConfig(
   return mapped
 }
 
+/** Each name once, the first sent: agy sends a skill once for each folder it found it in. */
 function mapCommands(commands: readonly acp.AvailableCommand[]): SlashCommand[] {
-  return commands.map((command) => ({
-    name: command.name,
-    description: command.description,
-    ...(command.input?.hint ? { inputHint: command.input.hint } : {}),
-  }))
+  const listed = new Map<string, SlashCommand>()
+  for (const command of commands) {
+    if (listed.has(command.name)) continue
+    listed.set(command.name, {
+      name: command.name,
+      description: command.description,
+      ...(command.input?.hint ? { inputHint: command.input.hint } : {}),
+    })
+  }
+  return [...listed.values()]
 }
 
 function parseTime(value: string | null | undefined, fallback: number): number {

@@ -779,11 +779,14 @@ export class OpenCodeConnection implements AgentConnection {
     }
   }
 
+  /** OpenCode's commands, each name once and the first listed, then Kettu's `compact`. */
   private commands(offer: Offer): SlashCommand[] {
-    const listed = offer.commands
-      .filter((command) => command.name !== COMPACT)
-      .map((command) => ({ name: command.name, description: command.description ?? '' }))
-    return [...listed, { name: COMPACT, description: t('opencode.command.compact') }]
+    const listed = new Map<string, SlashCommand>()
+    for (const command of offer.commands) {
+      if (command.name === COMPACT || listed.has(command.name)) continue
+      listed.set(command.name, { name: command.name, description: command.description ?? '' })
+    }
+    return [...listed.values(), { name: COMPACT, description: t('opencode.command.compact') }]
   }
 
   // Sessions.

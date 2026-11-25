@@ -208,6 +208,24 @@ describe('options', () => {
       'build',
     ])
   })
+
+  it('lists each command name once, the first OpenCode sent', async () => {
+    const setup = await connect()
+    setup.server.on('GET', /^\/api\/command\?/, () => ({
+      data: [
+        { name: 'review', description: 'Review' },
+        { name: 'ship', description: 'Ship' },
+        { name: 'review', description: 'Review, from a plugin' },
+        { name: 'compact', description: 'Compact' },
+      ],
+    }))
+    const { thread } = await session(setup)
+    expect(thread.state.session.commands).toEqual([
+      { name: 'review', description: 'Review' },
+      { name: 'ship', description: 'Ship' },
+      { name: 'compact', description: expect.any(String) },
+    ])
+  })
 })
 
 describe('what Kettu adds to a session', () => {

@@ -907,6 +907,27 @@ describe('session-level updates', () => {
     ])
   })
 
+  it('lists each command name once, the first the agent sent', () => {
+    // agy 1.5.17 sends a skill once for each folder it found it in.
+    const { thread } = run([
+      {
+        sessionUpdate: 'available_commands_update',
+        availableCommands: [
+          { name: 'send-lark-progress', description: 'Progress' },
+          { name: 'send-lark-review', description: 'Review', input: { hint: '<pr>' } },
+          { name: 'send-lark-progress', description: 'Progress, from a plugin' },
+          { name: 'send-lark-review', description: 'Review, from a plugin' },
+          { name: 'send-lark-synchronous', description: 'Synchronous' },
+        ],
+      },
+    ])
+    expect(thread.session.commands).toEqual([
+      { name: 'send-lark-progress', description: 'Progress' },
+      { name: 'send-lark-review', description: 'Review', inputHint: '<pr>' },
+      { name: 'send-lark-synchronous', description: 'Synchronous' },
+    ])
+  })
+
   it('updates a real mode option and reports a mode update without one', () => {
     const withMode = run([{ sessionUpdate: 'current_mode_update', currentModeId: 'code' }], {
       session: {
