@@ -276,7 +276,9 @@ it('goes back in an OpenCode session with its files, puts them back, and commits
   await send('one')
   await send('two')
   // The button shows for OpenCode, and its confirmation says the files go back too.
-  const [status] = (await window.request('agents.list')).filter((agent) => agent.id === 'opencode')
+  const [status] = (await window.request('agents.list', undefined)).filter(
+    (agent) => agent.id === 'opencode',
+  )
   expect(status?.capabilities).toMatchObject({ rewind: true, rewindFiles: true })
   const two = entryOf(window, id, 'two')
   expect(two).toMatchObject({ agentRef: 'msg_u2' })
