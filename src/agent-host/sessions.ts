@@ -7346,9 +7346,14 @@ export class SessionManager {
     let breakdown: ContextBreakdown | null
     if (connection.readContext) {
       try {
-        breakdown = await connection.readContext(record.acpSessionId, workDir(record), {})
+        // A query opened to read gets what an attach hands the agent, so that what Kettu adds,
+        // its MCP servers above all, counts as the next turn sends it.
+        const options = await this.attachOptions(sessionId, record, runtime)
+        breakdown = await connection.readContext(record.acpSessionId, workDir(record), options)
       } catch (error) {
         throw agentError(error)
+      } finally {
+        if (!this.live.has(sessionId)) this.deps.mcp?.detached(sessionId)
       }
     } else {
       const agent = this.deps.agents.name(record.agentId)

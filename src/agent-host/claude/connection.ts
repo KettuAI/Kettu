@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
 import { canonicalClaudeModel } from '@shared/agents'
 import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@shared/thread'
@@ -145,6 +146,9 @@ const EXIT_WAIT_MS = 5_000
 /** The most of a task's output the board reads, which is the tail Claude Code itself answers. */
 const TASK_OUTPUT_LIMIT = 8 * 1024
 const AUTH_STATUS_MS = 10_000
+/** How long a context read waits for a query it just opened to connect its MCP servers. */
+const MCP_CONNECT_MS = 10_000
+const MCP_POLL_MS = 100
 /** JSON-RPC's code for a session the agent does not have, which the host reads. */
 const RESOURCE_NOT_FOUND = -32002
 const INVALID_PARAMS = -32602
@@ -261,6 +265,8 @@ interface Session {
   stale: boolean
   /** The servers the folder declares itself that the query was started without. */
   held: string[]
+  /** Settles once the servers holding keys, added after the query started, tried to connect. */
+  adding: Promise<void> | null
   /** The hooks the folder declares itself, which the query runs only when `hooksHeld` is false. */
   hooks: FolderHooks | null
   /** The query was started with every hook off, the folder's not being allowed. */
@@ -982,6 +988,7 @@ export class ClaudeConnection implements AgentConnection {
       terminal: new Set(),
       stale: false,
       held: [],
+      adding: null,
       hooks: settings.hooks,
       hooksHeld: false,
       titleText: '',
@@ -1134,7 +1141,9 @@ export class ClaudeConnection implements AgentConnection {
       query.close()
       throw this.closedError()
     }
-    if (servers.some((server) => server.secret)) this.addSecretServers(session, query, servers)
+    if (servers.some((server) => server.secret)) {
+      session.adding = this.addSecretServers(session, query, servers)
+    }
     this.reportAccount(init.account)
     session.models = init.models ?? []
     const model =
@@ -1166,13 +1175,17 @@ export class ClaudeConnection implements AgentConnection {
 
   /**
    * Hands the query all its servers, those holding keys among them, in place of the ones its
-   * options started it with. Not awaited: the answer comes once every server has tried to connect,
-   * and a server that cannot only leaves the session without its tools.
+   * options started it with. Not awaited by a turn: the answer comes once every server has tried to
+   * connect, and a server that cannot only leaves the session without its tools. Never rejects.
    */
-  private addSecretServers(session: Session, query: Query, servers: readonly McpServer[]): void {
+  private addSecretServers(
+    session: Session,
+    query: Query,
+    servers: readonly McpServer[],
+  ): Promise<void> {
     const names = servers.map((server) => server.name)
     this.context.hooks.traffic('out', { method: 'setMcpServers', sessionId: session.id, names })
-    query.setMcpServers(claudeServers(servers)).then(
+    return query.setMcpServers(claudeServers(servers)).then(
       (result) => {
         for (const [name, error] of Object.entries(result.errors)) {
           this.context.hooks.log('warn', `MCP server ${name} did not connect: ${error}`)
@@ -2405,6 +2418,7 @@ export class ClaudeConnection implements AgentConnection {
       : await this.temporary(cwd, { ...options, hidden: 'context' }, sessionId)
     const query = (live ?? temporary)!.query!
     try {
+      if (temporary) await this.serversConnected(temporary, query)
       return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now(), {
         cwd,
         home: os.homedir(),
@@ -2412,6 +2426,34 @@ export class ClaudeConnection implements AgentConnection {
     } finally {
       if (temporary) await this.closeSession(temporary.id)
     }
+  }
+
+  /**
+   * Waits, up to a bound, for a query just opened to connect its MCP servers: Claude Code connects
+   * them after it starts, and its context breakdown leaves out the tools of those still connecting.
+   */
+  private async serversConnected(session: Session, query: Query): Promise<void> {
+    const deadline = Date.now() + MCP_CONNECT_MS
+    if (session.adding) {
+      await Promise.race([session.adding, sleep(MCP_CONNECT_MS, undefined, { ref: false })])
+    }
+    while (Date.now() < deadline) {
+      try {
+        const servers = await query.mcpServerStatus()
+        if (!servers.some((server) => server.status === 'pending')) return
+      } catch (error) {
+        this.context.hooks.log(
+          'warn',
+          `Claude Code's MCP servers could not be read: ${errorText(error)}`,
+        )
+        return
+      }
+      await sleep(MCP_POLL_MS)
+    }
+    this.context.hooks.log(
+      'warn',
+      `Claude Code's MCP servers were still connecting after ${MCP_CONNECT_MS} ms; the context leaves their tools out`,
+    )
   }
 
   /** A query opened only to read from, which keeps no history: of `from`, when it is given. */
