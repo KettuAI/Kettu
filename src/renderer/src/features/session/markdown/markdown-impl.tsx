@@ -33,7 +33,13 @@ import {
 import { githubIssueUrl } from '@shared/git'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { AgentFileLink, FileLink } from '@renderer/features/files/file-link'
-import { ProjectPathContext, useAgentFileRef, useFileRef } from '@renderer/features/files/file-refs'
+import {
+  PreviewFileContext,
+  ProjectPathContext,
+  useAgentFileRef,
+  useFileRef,
+} from '@renderer/features/files/file-refs'
+import { PreviewImage } from '@renderer/features/files/preview-image'
 import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
@@ -132,13 +138,18 @@ export function Link(props: ComponentProps<'a'> & ExtraProps) {
 }
 
 /**
- * An image: a local file from the media scheme, a remote one as a link to it, since the CSP
- * loads nothing remote, or a `data:` or `blob:` picture as it comes. Anything else, such as
- * `//host/x.png`, would resolve against the page, so it stays text.
+ * An image: a local file from the media scheme, in the Files pane's preview a project file found
+ * from the previewed file's folder, a remote one as a link to it, since the CSP loads nothing
+ * remote, or a `data:` or `blob:` picture as it comes. Anything else, such as `//host/x.png`,
+ * would resolve against the page, so it stays text.
  */
 function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
+  const preview = useContext(PreviewFileContext)
   const src = typeof props.src === 'string' ? props.src : ''
   const local = localImageTarget(src)
+  if (local !== null && preview) {
+    return <PreviewImage key={local} file={preview} written={local} alt={props.alt ?? ''} />
+  }
   if (local !== null) return <LocalMedia key={local} path={local} alt={props.alt ?? ''} image />
   const remote = /^https?:/i.test(src) ? URL.parse(src) : null
   if (remote) {

@@ -95,6 +95,54 @@ export function parseFileRef(text: string, projectPath: string, link = false): P
   return { path: value, line: line && line > 0 ? line : null, absolute }
 }
 
+/** A project file the Files pane shows rendered, whose Markdown images load from the project. */
+export interface PreviewFile {
+  projectPath: string
+  /** Relative to the project's root, with `/`. */
+  path: string
+}
+
+export const PreviewFileContext = createContext<PreviewFile | null>(null)
+
+/**
+ * The project file an image of the Markdown file `file` names, relative to the project's root with
+ * `/`: a path relative to the Markdown file's folder, with `/` or `\` between segments, or an
+ * absolute path or a `file:` URI inside the project. Null for anything else, such as a path that
+ * climbs above the project's root; the host checks where the file really is.
+ */
+export function previewImagePath(written: string, file: PreviewFile): string | null {
+  let value = written.trim()
+  if (FILE_URI.test(value)) {
+    const path = fileUriPath(value)
+    if (path === null) return null
+    value = path
+  } else {
+    if (SCHEME.test(value) && !DRIVE.test(value)) return null
+    try {
+      value = decodeURI(value)
+    } catch {
+      // A lone `%` is part of the name.
+    }
+    if (ROOTED_DRIVE.test(value)) value = value.slice(1)
+  }
+  if (/^~[\\/]/.test(value)) return null
+  let segments: string[]
+  if (value.startsWith('/') || value.startsWith('\\') || DRIVE.test(value)) {
+    const inside = insideRoot(value, file.projectPath)
+    if (inside === null) return null
+    segments = inside.split(/[\\/]/)
+  } else {
+    segments = [...file.path.split('/').slice(0, -1), ...value.split(/[\\/]/)]
+  }
+  const resolved: string[] = []
+  for (const segment of segments) {
+    if (segment === '' || segment === '.') continue
+    if (segment !== '..') resolved.push(segment)
+    else if (resolved.pop() === undefined) return null
+  }
+  return resolved.length > 0 ? resolved.join('/') : null
+}
+
 /**
  * The reference when it names one of the shown project's files, else null. `link`: the text is a
  * link's target, whose full path inside the project names a file even when the project's list
