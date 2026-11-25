@@ -242,6 +242,7 @@
     "agents": {
       "title": "{{name}} 用于哪些智能体",
       "description": "这些智能体的新会话会用上这个服务器；已打开的会话保持原样。",
+      "descriptionSkill": "这些智能体的新会话会用上这个技能；已打开的会话保持原样。",
       "save": "保存"
     },
     "uninstall": {

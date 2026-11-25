@@ -264,7 +264,7 @@ function AgentsForm({
       }}
     >
       <SettingsDialogHeader title={t('dialogs.agents.title', { name })}>
-        {t('dialogs.agents.description')}
+        {t(forSkills ? 'dialogs.agents.descriptionSkill' : 'dialogs.agents.description')}
       </SettingsDialogHeader>
       <SettingsDialogBody>
         <AgentPicker
