@@ -9,6 +9,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { AgentId } from '@shared/agents'
 import type { CommunityListing } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
 import { serverName, type MarketServer, type MarketSkill } from '@shared/marketplace'
@@ -16,6 +17,7 @@ import {
   checkSetting,
   effectiveSetting,
   pluginItemId,
+  pluginStatusText,
   pluginToolName,
   toolTrigger,
   type InstalledKettuPlugin,
@@ -147,6 +149,8 @@ export interface InstalledTool extends PluginTool {
   pluginName: string
   /** The plugin's title, for what is shown. */
   plugin: string
+  /** The agents the user gives the plugin's tools to. */
+  agents: 'all' | AgentId[]
 }
 
 /** A source's package as fetched: nothing of it is written or has run. */
@@ -374,8 +378,35 @@ export class PluginsService {
           pluginId: record.id,
           pluginName: record.contents.name,
           plugin: record.contents.title,
+          agents: record.toolAgents === 'all' ? 'all' : [...record.toolAgents],
         })),
       )
+  }
+
+  /** Picks the agents the plugin's tools go to, in place of what it had. */
+  setToolAgents(id: string, agents: 'all' | readonly AgentId[]): Promise<InstalledKettuPlugin> {
+    return this.queued(async () => {
+      const record = await this.record(id)
+      const next = agents === 'all' ? 'all' : [...new Set(agents)]
+      if (JSON.stringify(next) !== JSON.stringify(record.toolAgents)) {
+        record.toolAgents = next
+        this.save()
+      }
+      return this.installed(record)
+    })
+  }
+
+  /**
+   * The line a plugin's script sets about itself, or null to clear it; Kettu's own judgment of the
+   * plugin's state never reads it. Throws for a text that is not one line of plain text.
+   */
+  setStatus(id: string, value: unknown): void {
+    const status = pluginStatusText(value)
+    const record = this.data?.plugins[id]
+    if (!record) throw new Error('The plugin is not installed')
+    if (record.status === status) return
+    record.status = status
+    this.save()
   }
 
   /**
@@ -745,6 +776,8 @@ export class PluginsService {
       updateError: null,
       values: {},
       channelKinds: {},
+      status: null,
+      toolAgents: 'all',
     }
     const was = before ? { dir: before.dir, contents: before.contents } : null
     try {
@@ -992,6 +1025,8 @@ export class PluginsService {
         record.enabled && record.contents.script
           ? (this.deps.scriptState?.(record.id) ?? 'idle')
           : null,
+      status: record.status,
+      toolAgents: record.toolAgents === 'all' ? 'all' : [...record.toolAgents],
       secretsSet: (this.deps.secretsSet?.(record.id) ?? []).filter((key) =>
         record.contents.settings.some((item) => item.key === key && item.type === 'secret'),
       ),

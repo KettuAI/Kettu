@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { ConversationHit, SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
+import { settingRow } from '@renderer/features/marketplace/plugin-model'
 import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
 import { scheduleWords } from '@renderer/features/routines/model'
 import { projectNameHints } from '@renderer/features/session/project-names'
@@ -48,7 +49,6 @@ const SECTIONS: readonly SettingsSection[] = [
   'sharing',
   'terminal',
   'remote',
-  'plugins',
   'advanced',
   'about',
 ]
@@ -83,6 +83,7 @@ export function useSearchEntries(): SearchEntry[] {
   const actions = useActionEntries()
   const pluginActions = usePluginActionEntries()
   const sections = useSectionEntries()
+  const pluginSettings = usePluginSettingEntries()
   return useMemo(
     () => [
       ...sessions,
@@ -92,8 +93,9 @@ export function useSearchEntries(): SearchEntry[] {
       ...actions,
       ...pluginActions,
       ...sections,
+      ...pluginSettings,
     ],
-    [sessions, artifacts, routines, projects, actions, pluginActions, sections],
+    [sessions, artifacts, routines, projects, actions, pluginActions, sections, pluginSettings],
   )
 }
 
@@ -399,6 +401,41 @@ function usePluginActionEntries(): SearchEntry[] {
         }),
       ),
     [hostIds, byHost, language.language, namesHosts, only, hostName, t],
+  )
+}
+
+/**
+ * The settings plugins declare, on the host the Marketplace shows, whose plugin pages they open.
+ * A plugin that is off keeps its settings.
+ */
+function usePluginSettingEntries(): SearchEntry[] {
+  const { t, i18n: language } = useTranslation('sidebar')
+  const only = useOnlyHost()
+  const hostId = only ?? null
+  const surfaces = usePluginSurfacesStore((s) => s.byHost[hostId ?? ''])
+  useEffect(() => {
+    if (!surfaces) void loadPluginSurfaces(hostId)
+  }, [hostId, surfaces])
+  return useMemo(
+    () =>
+      (surfaces?.settings ?? []).flatMap((plugin) => {
+        const pluginTitle = surfaceTitle(plugin, language.language)
+        return plugin.settings.map((setting): SearchEntry => ({
+          kind: 'section',
+          key: `pluginSetting:${plugin.pluginId}/${setting.key}`,
+          title: setting.title,
+          meta: setting.description ?? null,
+          trailing: t('search.pluginSetting', { plugin: pluginTitle }),
+          haystack: haystackOf(setting.title, setting.description, pluginTitle),
+          at: 0,
+          pluginSetting: {
+            pluginId: plugin.pluginId,
+            row: settingRow(setting.key),
+            plugin: { name: plugin.name, title: pluginTitle, icon: plugin.icon },
+          },
+        }))
+      }),
+    [surfaces, language.language, t],
   )
 }
 

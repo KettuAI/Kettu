@@ -2,6 +2,7 @@
 // items every agent can use. Kettu's own content sits under the format's client namespace
 // `sh.kettu`: that entry of the manifest's `extensions`, and the top-level `sh.kettu/` folder.
 
+import type { AgentId } from './agents'
 import type { McpSpec } from './marketplace'
 import type { PluginLinkDecl, PluginMentionDecl } from './plugin-refs'
 import type { PluginChannelDecl, PluginNoticeKind } from './plugin-channels'
@@ -40,6 +41,8 @@ export const PLUGIN_STORAGE_LIMITS = { bytes: 256 * 1024, keys: 1_000, keyChars:
 /** A text setting's length at most, and a secret's size in bytes. */
 export const PLUGIN_SETTING_CHARS = 2_048
 export const PLUGIN_SECRET_BYTES = 8_192
+/** The one line of plain text a script may say about itself, such as who it is signed in as. */
+export const PLUGIN_STATUS_CHARS = 120
 
 const ITEM_PREFIX = 'plugin:'
 
@@ -227,7 +230,7 @@ export interface PluginServer {
   runs: string
 }
 
-/** A setting the plugin declares: drawn on its page in Settings and listed in the settings catalog. */
+/** A setting the plugin declares: drawn on its page and listed in the settings catalog. */
 export interface PluginSetting {
   key: string
   type: 'boolean' | 'string' | 'select' | 'secret'
@@ -235,6 +238,8 @@ export interface PluginSetting {
   description?: string
   default?: string | boolean
   options?: { value: string; title: string }[]
+  /** A text or a secret the plugin cannot work without: while it is empty it needs setup. */
+  required?: true
 }
 
 export type PluginSettingValue = string | boolean
@@ -475,6 +480,52 @@ export interface InstalledKettuPlugin {
    * hosts.
    */
   scriptState?: 'idle' | 'active' | 'disabled' | null
+  /** The line of plain text its script last set about itself; absent from older hosts. */
+  status?: string | null
+  /** The agents its tools go to; absent from older hosts, which give them to every agent. */
+  toolAgents?: 'all' | AgentId[]
+}
+
+/**
+ * How an installed plugin stands, as Kettu judges it: `needsSetup` while a required setting is
+ * empty, `error` once its script was stopped for crashing too often. A script's own status line
+ * never changes it.
+ */
+export type PluginState = 'ready' | 'needsSetup' | 'off' | 'error'
+
+/** The required settings that are empty: a text with nothing but spaces, a secret not set. */
+export function missingSettings(
+  plugin: Pick<InstalledKettuPlugin, 'contents' | 'values' | 'secretsSet'>,
+): PluginSetting[] {
+  return plugin.contents.settings.filter((setting) => {
+    if (!setting.required) return false
+    if (setting.type === 'secret') return !(plugin.secretsSet ?? []).includes(setting.key)
+    if (setting.type !== 'string') return false
+    const value = plugin.values?.[setting.key] ?? effectiveSetting(setting, undefined)
+    return typeof value !== 'string' || value.trim() === ''
+  })
+}
+
+export function pluginState(plugin: InstalledKettuPlugin): PluginState {
+  if (!plugin.enabled) return 'off'
+  if (plugin.scriptState === 'disabled') return 'error'
+  return missingSettings(plugin).length > 0 ? 'needsSetup' : 'ready'
+}
+
+/**
+ * The status line a script sets, as Kettu keeps it: one line of at most `PLUGIN_STATUS_CHARS`
+ * characters with its spaces and control characters folded, or null to clear it. Throws for
+ * anything else, so a script learns why.
+ */
+export function pluginStatusText(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') throw new Error('The status must be a text, or null to clear it')
+  // eslint-disable-next-line no-control-regex
+  const line = value.replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, ' ').trim()
+  if ([...line].length > PLUGIN_STATUS_CHARS) {
+    throw new Error(`The status takes at most ${PLUGIN_STATUS_CHARS} characters`)
+  }
+  return line === '' ? null : line
 }
 
 /** A plugin's command, role, theme or template as its own feature reads it. */

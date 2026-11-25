@@ -243,7 +243,8 @@
       "title": "{{name}} 用于哪些智能体",
       "description": "这些智能体的新会话会用上这个服务器；已打开的会话保持原样。",
       "descriptionSkill": "这些智能体的新会话会用上这个技能；已打开的会话保持原样。",
-      "save": "保存"
+      "save": "保存",
+      "descriptionTools": "这些智能体的会话从下一轮起能用它的工具。"
     },
     "uninstall": {
       "title": "卸载 {{name}}？",
@@ -475,7 +476,8 @@
       "updated": "{{name}} 已更新到 {{version}}",
       "upToDate": "{{name}} 已是最新版本",
       "rollBackFailed": "无法回退 {{name}}：{{error}}",
-      "rolledBack": "{{name}} 已回退到 {{version}}"
+      "rolledBack": "{{name}} 已回退到 {{version}}",
+      "installedSetup": "已安装 {{name}}。填好{{what}}就能用了。"
     },
     "tags": {
       "skill_other": "{{count}} 个技能",
@@ -506,7 +508,9 @@
       "devNote": "从 {{path}} 添加。改动在重新载入后生效。",
       "updateError": "无法检查更新：{{error}}",
       "skipped_other": "跳过了 {{count}} 个技能",
-      "skippedSkill": "技能 {{name}} 没有添加：已经添加过同名的技能，来自 {{from}}。智能体用的是那一个。"
+      "skippedSkill": "技能 {{name}} 没有添加：已经添加过同名的技能，来自 {{from}}。智能体用的是那一个。",
+      "setUp": "设置",
+      "setUpName": "设置 {{name}}"
     },
     "menu": {
       "reload": "重新载入",
@@ -529,7 +533,54 @@
     "side": {
       "license": "许可证",
       "format": "格式",
-      "formatValue": "Agent Plugins，Kettu {{version}}"
+      "formatValue": "Agent Plugins，Kettu {{version}}",
+      "versionWaits": "{{version}} · {{next}} 在等你确认",
+      "scriptYes": "是，在沙箱里"
+    },
+    "state": {
+      "ready": "可用",
+      "needsSetup": "需要设置",
+      "off": "已关",
+      "error": "出错",
+      "needs": "需要{{what}}"
+    },
+    "page": {
+      "required": "必填",
+      "settings": "设置",
+      "missing": "填好{{what}}就能用了。",
+      "notices": "要发的通知",
+      "noticesHint": "打开的几类通知会发到这里。不选的话什么都不会发。",
+      "status": "状态",
+      "where": "出现在哪",
+      "uninstall": "卸载…",
+      "crashed": "它的脚本一分钟内崩溃了三次，已被停下。把插件关掉再打开，就会重新启动。"
+    },
+    "where": {
+      "sidePanel": "侧边面板",
+      "mentions": "@ 菜单",
+      "mentionNote": "提到一项，它给的内容随消息一起发出",
+      "replies": "回复",
+      "links": "链接画成引用",
+      "linksNote": "{{hosts}}，悬停时有卡片",
+      "search": "搜索",
+      "agentsPlace": "智能体",
+      "tools_one": "{{count}} 个工具",
+      "tools_other": "{{count}} 个工具",
+      "agents_one": "{{count}} 个智能体",
+      "agents_other": "{{count}} 个智能体",
+      "noAgent": "不给任何智能体",
+      "chooseAgents": "选择哪些智能体能用 {{name}} 的工具",
+      "openInSession": "在上一个会话里打开"
+    },
+    "secret": {
+      "set": "已设置",
+      "notSet": "未设置",
+      "setAction": "设置…",
+      "change": "更改…",
+      "clear": "清除",
+      "save": "保存",
+      "cancel": "取消",
+      "placeholder": "粘贴密钥"
     }
   },
   "skill": {

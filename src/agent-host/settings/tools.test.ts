@@ -323,7 +323,7 @@ describe("a plugin's settings", () => {
     const { tools } = harness({ plugins, pluginFacts })
     const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'verbose' }))
     expect(found).toContain(`plugins.switch:${PLUGIN}:verbose`)
-    expect(found).toContain('Plugins › Acme › Verbose logging')
+    expect(found).toContain('Marketplace › Acme › Verbose logging')
     expect(found).toContain('Logs more.')
     expect(found).toContain('value: Off')
     const mode = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'acme mode' }))
@@ -354,11 +354,11 @@ describe("a plugin's settings", () => {
     await vi.waitFor(() => expect(asked).toHaveLength(1))
     expect(asked[0]!.items[0]).toMatchObject({
       id: `plugins.switch:${PLUGIN}:verbose`,
-      place: 'Plugins › Acme',
+      place: 'Marketplace › Acme',
       name: 'Verbose logging',
       from: { value: false, text: 'Off' },
       to: { value: true, text: 'On' },
-      section: 'plugins',
+      section: 'marketplace',
       item: PLUGIN,
       row: 'setting-verbose',
     })
@@ -396,9 +396,10 @@ describe("a plugin's settings", () => {
     await expect(tools.undo(recorded[0]!)).rejects.toBeInstanceOf(StaleUndo)
   })
 
-  it('open at the plugin’s page and the row on it', async () => {
+  it('open at the plugin’s page in the Marketplace and the row on it, not in Settings', async () => {
     const { tools } = harness({ plugins, pluginFacts })
     const result = await tools.call(CALLER, OPEN_SETTINGS, { id: `plugins.secret:${PLUGIN}:token` })
-    expect(text(result)).toContain('Plugins › Acme › Access token')
+    expect(text(result)).toContain('it is in Marketplace › Acme › Access token.')
+    expect(text(result)).not.toContain('Settings ›')
   })
 })

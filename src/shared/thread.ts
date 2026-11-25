@@ -34,7 +34,7 @@ import type {
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { PluginConversion } from './plugin-convert'
 import type { RoutineRef } from './routines'
-import type { SettingScalar, SettingsSection } from './settings-catalog'
+import type { CatalogSection, SettingScalar } from './settings-catalog'
 import type { TaskDeliverable, Workflow } from './workflow'
 
 export {
@@ -916,8 +916,12 @@ export interface SettingChangeItem {
   to: { value: SettingScalar; text: string }
   /** What an always-asking row opens up, said on the card. */
   warning?: string
-  /** Where View in Settings opens: the section, an agent's or harness's page, and the row. */
-  section: SettingsSection
+  /**
+   * Where View in Settings opens: the section, an agent's or harness's page, and the row; for a
+   * plugin's setting, `marketplace` and the plugin's page there. Lines written before have
+   * `plugins` for those.
+   */
+  section: CatalogSection
   item: string | null
   row: string
 }

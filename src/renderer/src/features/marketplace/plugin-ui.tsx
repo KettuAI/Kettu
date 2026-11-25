@@ -10,12 +10,11 @@ import {
   InformationCircleIcon,
   MoreHorizontalIcon,
   PuzzleIcon,
-  Tick02Icon,
   Undo02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { PLUGIN_FORMAT, pluginState } from '@shared/plugins'
 import type { InstalledKettuPlugin, PluginContents } from '@shared/plugins'
-import { PLUGIN_FORMAT } from '@shared/plugins'
 import type { CommunityItem } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
 import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
@@ -38,6 +37,8 @@ import {
   uninstallPlugin,
 } from './plugin-actions'
 import { Line, PermissionLine, PluginUpdateDialog } from './plugin-install'
+import { openPluginPage } from './plugin-landing'
+import { PluginStateMark } from './plugin-state'
 import {
   openPlugin,
   useInstalledPlugins,
@@ -45,7 +46,6 @@ import {
   usePluginOfItem,
   usePluginName,
   usePluginOfListing,
-  usePluginPublisher,
   useSourceReading,
 } from './plugin-hooks'
 import {
@@ -54,18 +54,14 @@ import {
   addsRows,
   addsTags,
   contentsRows,
-  contentsTags,
-  itemCount,
   permissionRows,
-  pluginDescription,
   pluginTitle,
   type PluginItemRow,
   type PluginTag,
 } from './plugin-model'
-import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
-import { InstalledCheck, ItemRow, KindTag } from './rows'
+import { ExternalLink } from './parts'
+import { InstalledCheck, ItemRow } from './rows'
 import { kettuPluginSubject } from './tile-art'
-import { ItemTile } from './tiles'
 
 function useTagLabel(): (tag: PluginTag) => string {
   const { t } = useTranslation('marketplace')
@@ -114,25 +110,31 @@ function AsksForMore({ plugin }: { plugin: InstalledKettuPlugin }) {
   )
 }
 
-/** A plugin's row in Installed: its facts, tags and switch; a folder's Dev tag, path and Reload. */
+/**
+ * A plugin's row in Installed: the state Kettu judges first, the line its script sets, its version
+ * and the agents its tools go to; Set up while a setting it needs is empty, Review update for an
+ * update that asks for more; a folder's Dev tag, path and Reload. The row opens its page.
+ */
 export function PluginInstalledRow({ plugin }: { plugin: InstalledKettuPlugin }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  const publisher = usePluginPublisher()
   const [updating, setUpdating] = useState(false)
   const locale = currentLocale()
   const { contents } = plugin
   const title = pluginTitle(contents, locale)
   const busy = useBusy(pluginBusy(plugin.id))
-  const count = itemCount(contents)
+  const state = pluginState(plugin)
   const path = plugin.source.kind === 'local' ? homeShort(plugin.source.path) : null
+  const tools = contents.permissions.includes('tools') ? contents.tools.length : 0
+  const agents = plugin.toolAgents ?? 'all'
   const facts = [
-    publisher(plugin),
+    plugin.status && state !== 'error' ? plugin.status : null,
     contents.version,
-    t('plugin.row.items', { count }),
-    plugin.skipped?.length ? t('plugin.row.skipped', { count: plugin.skipped.length }) : null,
-    t('listing.everyAgent'),
-    plugin.enabled ? null : t('installed.off'),
+    tools === 0
+      ? null
+      : agents === 'all'
+        ? t('listing.everyAgent')
+        : t('plugin.where.agents', { count: agents.length }),
   ].filter((fact): fact is string => !!fact)
   return (
     <>
@@ -145,15 +147,31 @@ export function PluginInstalledRow({ plugin }: { plugin: InstalledKettuPlugin })
             {plugin.held && <AsksForMore plugin={plugin} />}
           </>
         }
-        meta={facts.map((fact) => (
-          <span key={fact}>{fact}</span>
-        ))}
-        line={path ?? (pluginDescription(contents, locale) || null)}
-        oneLine={path !== null}
-        extra={<PluginTags tags={contentsTags(contents)} />}
+        meta={
+          <>
+            <PluginStateMark plugin={plugin} long />
+            {facts.map((fact) => (
+              <span key={fact} title={fact}>
+                {fact}
+              </span>
+            ))}
+          </>
+        }
+        line={path}
+        oneLine
         onOpen={() => openPlugin(plugin.id, 'installed')}
         end={
           <>
+            {state === 'needsSetup' && (
+              <Button
+                size="md"
+                variant="primary"
+                aria-label={t('plugin.row.setUpName', { name: title })}
+                onClick={() => openPluginPage(plugin.id, { setup: true })}
+              >
+                {t('plugin.row.setUp')}
+              </Button>
+            )}
             {plugin.held && (
               <Button size="md" variant="secondary" onClick={() => setUpdating(true)}>
                 {t('plugin.row.viewUpdate')}
@@ -187,7 +205,7 @@ export function PluginInstalledRow({ plugin }: { plugin: InstalledKettuPlugin })
   )
 }
 
-/** An installed plugin's controls: Installed, its switch, and its other actions in a menu. */
+/** An installed plugin's controls: its state, its switch, and its other actions in a menu. */
 export function PluginControls({
   plugin,
   onRemoved,
@@ -203,10 +221,7 @@ export function PluginControls({
   const rollBackTo = plugin.previous?.version
   return (
     <>
-      <span className="k-mkt-head__on">
-        <Icon icon={Tick02Icon} size={14} />
-        {t('listing.installed')}
-      </span>
+      <PluginStateMark plugin={plugin} />
       <SettingSwitch
         label={t('listing.switch', { name: title })}
         checked={plugin.enabled}
@@ -433,6 +448,18 @@ export function PluginSide({
   )
 }
 
+/** The side column of an installed plugin's page. */
+export function PluginInstalledSide({
+  plugin,
+  publisher,
+}: {
+  plugin: InstalledKettuPlugin
+  publisher: string
+}) {
+  const { t } = useTranslation('marketplace')
+  return <PluginSide rows={installedSide(plugin, publisher, t)} />
+}
+
 function SideRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <>
@@ -442,7 +469,10 @@ function SideRow({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-/** The side column of an installed plugin: where it is from, its license and the format it is in. */
+/**
+ * The side column of an installed plugin, as its listing has it: who publishes it, its version,
+ * where it is from, its license, whether it runs a script and the format it is in.
+ */
 function installedSide(
   plugin: InstalledKettuPlugin,
   publisher: string,
@@ -451,6 +481,19 @@ function installedSide(
   const { contents, source } = plugin
   const rows: { label: string; value: ReactNode }[] = [
     { label: t('listing.side.publisher'), value: publisher },
+    ...(contents.version
+      ? [
+          {
+            label: t('listing.facts.version'),
+            value: plugin.held?.version
+              ? t('plugin.side.versionWaits', {
+                  version: contents.version,
+                  next: plugin.held.version,
+                })
+              : contents.version,
+          },
+        ]
+      : []),
     {
       label: t('listing.facts.source'),
       value:
@@ -466,6 +509,10 @@ function installedSide(
     },
   ]
   if (contents.license) rows.push({ label: t('plugin.side.license'), value: contents.license })
+  rows.push({
+    label: t('plugin.facts.script'),
+    value: contents.script ? t('plugin.side.scriptYes') : t('plugin.facts.scriptNo'),
+  })
   rows.push({
     label: t('plugin.side.format'),
     value: t('plugin.side.formatValue', { version: PLUGIN_FORMAT }),
@@ -483,107 +530,6 @@ function installedSide(
     })
   }
   return rows
-}
-
-/** An installed plugin's page: what it holds, what its script may do, and its controls. */
-export function PluginPage({ id, back }: { id: string; tab: MarketplaceTab; back: () => void }) {
-  const { t } = useTranslation('marketplace')
-  const { useMarketplaceStore } = useHostScope()
-  const plugins = useInstalledPlugins()
-  const error = useMarketplaceStore((s) => s.pluginsError)
-  const publisher = usePluginPublisher()
-  const [updating, setUpdating] = useState(false)
-  const plugin = plugins?.find((item) => item.id === id) ?? null
-  if (!plugin) {
-    return (
-      <ListingFrame back={back}>
-        {plugins === null && !error ? <ListingSkeleton /> : <Missing back={back} />}
-      </ListingFrame>
-    )
-  }
-  const locale = currentLocale()
-  const { contents } = plugin
-  const title = pluginTitle(contents, locale)
-  const description = pluginDescription(contents, locale)
-  return (
-    <ListingFrame back={back} rise>
-      <header className="k-mkt-head">
-        <ItemTile
-          subject={kettuPluginSubject({ name: contents.name, icon: contents.icon })}
-          size="big"
-        />
-        <span className="k-mkt-head__title">
-          <span className="k-mkt-head__name">
-            <h1>{title}</h1>
-            <KindTag kind="plugin" />
-            {plugin.development && <Pill>{t('plugin.install.dev')}</Pill>}
-          </span>
-          <span className="k-mkt-head__pub">
-            {publisher(plugin)}
-            {contents.version && <span className="k-mkt-head__trust">{contents.version}</span>}
-          </span>
-          {description && <span className="k-mkt-head__line">{description}</span>}
-        </span>
-        <span className="k-mkt-head__act">
-          <PluginControls plugin={plugin} onRemoved={back} />
-        </span>
-      </header>
-
-      {plugin.held && (
-        <div className="k-plug-banner" role="status">
-          <Icon icon={Alert02Icon} size={16} />
-          <span>
-            <b>
-              {plugin.held.version
-                ? t('plugin.row.asksForMore', { version: plugin.held.version })
-                : t('plugin.row.asksForMoreNoVersion')}
-            </b>
-            <small>{t('plugin.row.asksNote')}</small>
-          </span>
-          <Button size="md" variant="secondary" onClick={() => setUpdating(true)}>
-            {t('plugin.row.viewUpdate')}
-          </Button>
-          <PluginUpdateDialog plugin={plugin} open={updating} onOpenChange={setUpdating} />
-        </div>
-      )}
-      {plugin.updateError && !plugin.held && (
-        <p className="k-mkt-stale" role="status">
-          <span>{t('plugin.row.updateError', { error: plugin.updateError })}</span>
-        </p>
-      )}
-      {plugin.skipped?.map((skill) => (
-        <p key={skill.name} className="k-mkt-stale" role="status" data-selectable="">
-          <span>{t('plugin.row.skippedSkill', { name: skill.name, from: skill.from })}</span>
-        </p>
-      ))}
-      {plugin.development && (
-        <p className="k-mkt-section-note k-plug-devnote">
-          {t('plugin.row.devNote', {
-            path: plugin.source.kind === 'local' ? homeShort(plugin.source.path) : '',
-          })}
-        </p>
-      )}
-
-      <PluginFacts
-        version={contents.version}
-        updated={plugin.updatedAt}
-        script={contents.script !== null}
-      />
-
-      <div className="k-mkt-body">
-        <div className="k-mkt-body__main">
-          <PluginItemsSection rows={contentsRows(contents)} />
-          <PluginRunsSection contents={contents} />
-          {contents.warnings.length > 0 && (
-            <p className="k-mkt-section-note k-plug-devnote" data-selectable="">
-              {t('plugin.note.warnings', { list: contents.warnings.slice(0, 3).join('; ') })}
-            </p>
-          )}
-        </div>
-        <PluginSide rows={installedSide(plugin, publisher(plugin), t)} />
-      </div>
-    </ListingFrame>
-  )
 }
 
 /** "From <plugin>": opens the plugin an item came with. Quiet while the plugin is not read yet. */

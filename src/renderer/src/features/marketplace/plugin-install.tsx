@@ -45,6 +45,7 @@ import { currentLocale } from '@renderer/lib/i18n'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { setMarketplaceTab } from '@renderer/stores/view'
 import { applyHeldUpdate, declineHeldUpdate, discardPlan, installPlan } from './plugin-actions'
+import { landOnPlugin } from './plugin-landing'
 import {
   ITEM_ICON,
   SCRIPT_ICON,
@@ -377,6 +378,7 @@ export function PluginConsent({
       done.current = true
       onInstalled?.(plugin)
       onClose()
+      landOnPlugin(plugin)
     } catch (e) {
       setError(errorMessage(e))
     } finally {

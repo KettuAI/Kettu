@@ -30,7 +30,7 @@ import {
   type CatalogEntry,
   type SettingId,
   type SettingScalar,
-  type SettingsSection,
+  type CatalogSection,
 } from '@shared/settings-catalog'
 import type { SettingChangeItem, SettingsChangeOutcome } from '@shared/thread'
 import { matchesWords } from '@shared/word-match'
@@ -192,7 +192,7 @@ export interface SettingsToolsDeps {
 
 /** Where open_settings and View in Settings take the user. */
 export interface SettingsTarget {
-  section: SettingsSection
+  section: CatalogSection
   item: string | null
   row: string
   /** A row of the desktop app's own, which a window showing another host's session lacks. */
@@ -220,11 +220,11 @@ class Refusal extends Error {
   }
 }
 
-const SECTION_TITLES: Partial<Record<SettingsSection, string>> = {
+const SECTION_TITLES: Partial<Record<CatalogSection, string>> = {
   usage: 'usage:settings.title',
 }
 
-function sectionTitle(section: SettingsSection): string {
+function sectionTitle(section: CatalogSection): string {
   return SECTION_TITLES[section] ?? `sections.${section}`
 }
 
@@ -652,9 +652,11 @@ export class SettingsTools {
       row: target.row,
       desktop: row.entry.part === 'desktop',
     })
+    // A plugin's settings are on its page in the Marketplace, not in Settings.
+    const where = row.entry.section === 'marketplace' ? place : `Settings › ${place}`
     const text = opened
-      ? `Opened Settings at ${place} in the window that shows this session.`
-      : `No Kettu desktop window shows this session now, so nothing opened. Tell the user it is in Settings › ${place}.`
+      ? `Opened ${where} in the window that shows this session.`
+      : `No Kettu desktop window shows this session now, so nothing opened. Tell the user it is in ${where}.`
     return reply(text, { opened, place })
   }
 

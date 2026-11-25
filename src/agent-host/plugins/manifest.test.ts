@@ -180,6 +180,52 @@ describe('the sh.kettu entry', () => {
     expect(parsed.warnings).toHaveLength(2)
   })
 
+  it('reads which settings are required, on a text or a secret', () => {
+    const parsed = read(
+      kettu({
+        settings: [
+          { key: 'webhook', type: 'string', title: 'Webhook address', required: true },
+          { key: 'token', type: 'secret', title: 'Token', required: true },
+          { key: 'keyword', type: 'string', title: 'Keyword', required: false },
+        ],
+      }),
+    )
+    expect(parsed.kettu?.settings.map((setting) => setting.required)).toEqual([
+      true,
+      true,
+      undefined,
+    ])
+    expect(parsed.warnings).toEqual([])
+  })
+
+  it('passes over a setting field a later Kettu may add, with a warning', () => {
+    const parsed = read(
+      kettu({ settings: [{ key: 'a', type: 'string', title: 'A', placeholder: 'https://' }] }),
+    )
+    expect(parsed.kettu?.settings).toEqual([{ key: 'a', type: 'string', title: 'A' }])
+    expect(parsed.warnings).toEqual([expect.stringContaining('placeholder')])
+  })
+
+  it('reads which views are drawn on the plugin page alone', () => {
+    const parsed = read(
+      kettu({
+        script: './main.js',
+        api: 1,
+        views: [
+          { id: 'status', kind: 'detail', title: 'Status', page: true },
+          { id: 'test', kind: 'actions', title: 'Test', page: false },
+          { id: 'list', kind: 'list', title: 'List', pane: true },
+        ],
+      }),
+    )
+    expect(parsed.kettu?.views.map((view) => [view.page, view.pane])).toEqual([
+      [true, undefined],
+      [undefined, undefined],
+      [undefined, true],
+    ])
+    expect(parsed.warnings).toEqual([])
+  })
+
   it('reads the events that wake the script, only those whose permission it asks for', () => {
     const parsed = read(
       kettu({
@@ -377,6 +423,44 @@ describe('the sh.kettu entry', () => {
         script: './m.js',
         api: 1,
         views: [{ id: 'a', kind: 'list', title: 'A', pane: 'yes' }],
+      }),
+    ],
+    [
+      'a page flag that is not a boolean',
+      kettu({
+        script: './m.js',
+        api: 1,
+        views: [{ id: 'a', kind: 'list', title: 'A', page: 1 }],
+      }),
+    ],
+    [
+      'a view that is both a pane and on the plugin page',
+      kettu({
+        script: './m.js',
+        api: 1,
+        views: [{ id: 'a', kind: 'list', title: 'A', pane: true, page: true }],
+      }),
+    ],
+    [
+      'a required flag that is not a boolean',
+      kettu({ settings: [{ key: 'a', type: 'string', title: 'A', required: 'yes' }] }),
+    ],
+    [
+      'a required switch, which always has a value',
+      kettu({ settings: [{ key: 'a', type: 'boolean', title: 'A', required: true }] }),
+    ],
+    [
+      'a required choice, which always has a value',
+      kettu({
+        settings: [
+          {
+            key: 'a',
+            type: 'select',
+            title: 'A',
+            options: [{ value: 'x', title: 'X' }],
+            required: true,
+          },
+        ],
       }),
     ],
     ['actions that are not objects', kettu({ script: './m.js', api: 1, actions: ['run'] })],

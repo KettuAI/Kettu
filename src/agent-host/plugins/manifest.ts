@@ -85,7 +85,16 @@ const MAX_TEXT = 2_000
 const MAX_LIST = 64
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
 const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
-const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon', 'pane'])
+const SETTING_FIELDS = new Set([
+  'key',
+  'type',
+  'title',
+  'description',
+  'default',
+  'options',
+  'required',
+])
+const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon', 'pane', 'page'])
 const ACTION_FIELDS = new Set(['id', 'title', 'description', 'icon'])
 const MENTION_FIELDS = new Set(['id', 'title', 'icon'])
 const LINK_FIELDS = new Set(['id', 'patterns', 'icon'])
@@ -180,7 +189,11 @@ function texts(value: unknown, field: string): PluginTexts {
   return out
 }
 
-function settings(value: unknown, field: string): PluginSetting[] {
+/**
+ * The settings a manifest declares. A field a later Kettu may add is passed over with a warning;
+ * `required` is taken only by a text or a secret, the kinds that can be left empty.
+ */
+function settings(value: unknown, field: string, warnings: string[]): PluginSetting[] {
   if (value === undefined) return []
   if (!Array.isArray(value) || value.length > MAX_LIST) throw badField(field)
   const keys = new Set<string>()
@@ -193,6 +206,11 @@ function settings(value: unknown, field: string): PluginSetting[] {
     }
     keys.add(key)
     if (!(SETTING_TYPES as readonly unknown[]).includes(type)) throw badField(`${at}.type`)
+    for (const name of Object.keys(raw)) {
+      if (!SETTING_FIELDS.has(name)) {
+        warnings.push(t('plugins.warn.settingField', { setting: key, field: name.slice(0, 100) }))
+      }
+    }
     const title = optionalText(raw, 'title', `${at}.title`)
     if (title === null || title.trim() === '') throw badField(`${at}.title`)
     const description = optionalText(raw, 'description', `${at}.description`)
@@ -223,6 +241,13 @@ function settings(value: unknown, field: string): PluginSetting[] {
       })
     } else if (options !== undefined) {
       throw badField(`${at}.options`)
+    }
+    if (raw.required !== undefined) {
+      if (typeof raw.required !== 'boolean') throw badField(`${at}.required`)
+      if (raw.required) {
+        if (type !== 'string' && type !== 'secret') throw badField(`${at}.required`)
+        setting.required = true
+      }
     }
     return setting
   })
@@ -270,6 +295,11 @@ export function parseViews(value: unknown, where: string, warnings: string[]): P
     if (raw.pane !== undefined) {
       if (typeof raw.pane !== 'boolean') throw badField(`${at}.pane`)
       if (raw.pane) decl.pane = true
+    }
+    // A view of the plugin's page is never one of a session's panes.
+    if (raw.page !== undefined) {
+      if (typeof raw.page !== 'boolean' || (raw.page && decl.pane)) throw badField(`${at}.page`)
+      if (raw.page) decl.page = true
     }
     return decl
   })
@@ -664,7 +694,7 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     kettu: range,
     titles: texts(raw.title, `${where}.title`),
     descriptions: texts(raw.description, `${where}.description`),
-    settings: settings(raw.settings, `${where}.settings`),
+    settings: settings(raw.settings, `${where}.settings`, warnings),
     tools: toolList,
     views,
     actions,

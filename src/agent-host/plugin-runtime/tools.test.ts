@@ -50,6 +50,7 @@ function installed(overrides: Partial<InstalledTool> = {}): InstalledTool {
     pluginId: 'p000000000001',
     pluginName: 'Acme Tools',
     plugin: 'Acme',
+    agents: 'all',
     ...overrides,
   }
 }

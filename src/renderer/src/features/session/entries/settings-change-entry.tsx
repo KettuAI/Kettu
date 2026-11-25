@@ -19,6 +19,7 @@ import { PermissionRequest } from '@renderer/components/affect/permission-reques
 import { Button } from '@renderer/components/ui/button'
 import { toast } from '@renderer/components/ui/toast'
 import { emitAppEvent } from '@renderer/app/events'
+import { openCatalogRow } from '@renderer/features/marketplace/plugin-landing'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMac, isWeb } from '@renderer/lib/platform'
@@ -26,7 +27,6 @@ import { cn } from '@renderer/lib/utils'
 import { hostScope, LOCAL_SCOPE, useSettingsHostStore } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { openSettingsRow } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { revealWaiting } from './helpers'
@@ -70,7 +70,7 @@ function viewInSettings(hostId: string | null, item: SettingChangeItem): void {
   const parsed = parseToolId(item.id)
   const desktop = parsed ? CATALOG[parsed.id].part === 'desktop' : false
   useSettingsHostStore.setState({ hostId: desktop ? null : hostId })
-  openSettingsRow(item.section, item.item, item.row)
+  openCatalogRow(item.section, item.item, item.row)
 }
 
 function SettingsRows({ items }: { items: SettingChangeItem[] }) {
