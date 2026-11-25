@@ -1,5 +1,5 @@
 // Which of a Markdown table's columns hold numbers, so they line up on the right, and which hold
-// sentences, so they wrap.
+// more words than a short label, so they wrap.
 
 interface HastNode {
   type: string
@@ -57,13 +57,15 @@ export function numericColumns(table: HastNode | undefined): number[] {
   return numeric
 }
 
-// Past this many character widths a cell reads as a sentence; a Han character counts as two.
-const PROSE_WIDTH = 48
+// Past this many character widths a cell is more than a label and may wrap; a Han character
+// counts as two. A column of shorter cells stays on one line, so it never wraps a name.
+const PROSE_WIDTH = 24
 const HAN_CHARS = /\p{Script=Han}/gu
 
 /**
- * The indexes of the columns with a cell long enough to read as a sentence, which wrap; a cell
- * with nowhere to break, such as a path or an address, stays on one line and scrolls.
+ * The indexes of the columns with a cell longer than a label, which wrap so the table fits the
+ * reply; a cell with nowhere to break, such as a path or an address, stays on one line and
+ * scrolls.
  */
 export function proseColumns(table: HastNode | undefined): number[] {
   const rows = elements(table, 'tbody').flatMap((body) => elements(body, 'tr'))
