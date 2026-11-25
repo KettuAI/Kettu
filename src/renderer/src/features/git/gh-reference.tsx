@@ -533,6 +533,7 @@ export function ReferenceHoverCard({
   align = 'start',
   sideOffset,
   anchor,
+  onOpenChange,
 }: {
   reference: GitHubReference
   trigger: React.ReactElement
@@ -541,9 +542,10 @@ export function ReferenceHoverCard({
   sideOffset?: number
   /** What the card lines up with, when not the trigger, such as the whole sidebar row. */
   anchor?: () => Element | null
+  onOpenChange?: (open: boolean) => void
 }) {
   return (
-    <HoverCard>
+    <HoverCard onOpenChange={onOpenChange}>
       <HoverCardTrigger render={trigger} delay={400} />
       <HoverCardContent
         side={side}

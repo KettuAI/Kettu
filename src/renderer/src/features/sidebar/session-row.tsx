@@ -46,6 +46,7 @@ import { openSession, useViewStore } from '@renderer/stores/view'
 import { RenameHints } from './rename-hints'
 import { useRenameHints } from './rename-scope'
 import { isReturning, rowVariants } from './row-exit'
+import { badgeInUse } from './row-badges'
 import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionCard } from './session-card'
@@ -263,9 +264,9 @@ export const SessionRow = memo(function SessionRow({
           {title}
         </span>
         {summary.worktree && (
-          <WorktreeRowMark worktree={summary.worktree} onEnter={() => setCardOpen(false)} />
+          <WorktreeRowMark worktree={summary.worktree} onOpen={() => setCardOpen(false)} />
         )}
-        <PrBadge summary={summary} onEnter={() => setCardOpen(false)} />
+        <PrBadge summary={summary} onOpen={() => setCardOpen(false)} />
         {hasChildren && !expanded && (
           <span
             aria-label={t('row.subSessions', { count: children.length })}
@@ -279,7 +280,7 @@ export const SessionRow = memo(function SessionRow({
           <SubagentBadge
             parent={summary}
             subagents={node.subagents}
-            onEnter={() => setCardOpen(false)}
+            onOpen={() => setCardOpen(false)}
           />
         )}
         <RowEnd>
@@ -348,10 +349,8 @@ export const SessionRow = memo(function SessionRow({
               {/* A trigger's render must take its props, so the card's Root wraps the menu trigger. */}
               <HoverCard
                 open={cardOpen}
-                // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
-                onOpenChange={(open) =>
-                  setCardOpen(open && !row.current?.querySelector('[data-subagent-badge]:hover'))
-                }
+                // A badge's own card stands in for the row's, so only one shows at a time.
+                onOpenChange={(open) => setCardOpen(open && !badgeInUse(row.current))}
               >
                 <HoverCardTrigger
                   delay={600}

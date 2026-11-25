@@ -65,15 +65,15 @@ export function WorktreeBarChip({ worktree }: { worktree: SessionWorktree }) {
 /** On a sidebar row: the mark alone, the branch and folder on hover. */
 export function WorktreeRowMark({
   worktree,
-  onEnter,
+  onOpen,
 }: {
   worktree: SessionWorktree
-  /** The pointer came onto the mark, whose tooltip takes the place of the row's card. */
-  onEnter: () => void
+  /** The mark's tooltip opened, taking the place of the row's card. */
+  onOpen: () => void
 }) {
   const { t } = useTranslation('session')
   return (
-    <Tooltip>
+    <Tooltip onOpenChange={(open) => open && onOpen()}>
       <TooltipTrigger
         delay={400}
         render={
@@ -81,7 +81,7 @@ export function WorktreeRowMark({
           <span
             role="img"
             aria-label={t('worktree.inWorktree', { branch: worktree.branch })}
-            onPointerEnter={onEnter}
+            data-worktree-mark=""
             className="inline-flex h-5 shrink-0 items-center px-[3px] text-tertiary"
           />
         }
