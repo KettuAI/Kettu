@@ -162,7 +162,7 @@ function context(host: ReturnType<typeof fakeHost>, spawned: HostedSpawnOptions[
     spec: {
       command: '/usr/bin/node',
       args: ['/data/harnesses/cline/3.0.74/node_modules/cline/bin/cline', '--acp'],
-      env: {},
+      env: { CLINE_NO_AUTO_UPDATE: '1' },
       shell: false,
       display: { command: 'node', args: [], env: {} },
     },
@@ -262,6 +262,8 @@ describe('Cline connection', () => {
     })
     expect(spawned[0]!.env).toMatchObject({
       HOME: '/home/u',
+      // The launch's own variables, such as the one that keeps Cline from updating itself.
+      CLINE_NO_AUTO_UPDATE: '1',
       ELECTRON_RUN_AS_NODE: '1',
       NODE_COMPILE_CACHE: '/data/harnesses/cline/3.0.74/node_modules/.cache/kettu-compile',
     })
