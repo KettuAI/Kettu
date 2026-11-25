@@ -260,6 +260,43 @@ export function githubReferenceFromLink(href: string): GitHubReference | null {
   return githubReferenceOf(`https://github.com/${owner}/${repo}/${kind}/${Number(number)}`)
 }
 
+// `github.com/owner/repo/pull/12` as text writes it without `https://`, with `www.` or without,
+// and the part of it a link points into. Not after a letter, a dot, `@`, a slash or what a query
+// holds, so `gist.github.com`, a path such as `src/github.com/...`, an email and an address
+// inside another link stay out; in ASCII, so CJK punctuation right after it stays out too.
+const SCHEMELESS_GITHUB_LINK =
+  /(?<![\w.@/:=?&%#~+-])(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+(?:[/?#][\w\-./?#=&%~+:@!$*,;]*)?(?![\w-])/g
+
+/** Where text writes a link, and the full address it stands for. */
+export interface TextLink {
+  from: number
+  to: number
+  url: string
+}
+
+/**
+ * The github.com pull request and issue links text writes without `https://`, such as
+ * `github.com/owner/repo/issues/12`, each without the punctuation that ends a sentence after it
+ * and with the `https://` address it stands for, which names the same reference.
+ */
+export function schemelessGitHubLinks(text: string): TextLink[] {
+  const links: TextLink[] = []
+  for (const match of text.matchAll(SCHEMELESS_GITHUB_LINK)) {
+    const written = match[0].replace(/[.,;:!?]+$/, '')
+    const url = `https://${written}`
+    if (githubReferenceFromLink(url)) {
+      links.push({ from: match.index, to: match.index + written.length, url })
+    }
+  }
+  return links
+}
+
+/** The `https://` address of text that is all one such link, else null. */
+export function schemelessGitHubUrl(text: string): string | null {
+  const [link] = schemelessGitHubLinks(text)
+  return link && link.from === 0 && link.to === text.length ? link.url : null
+}
+
 /** A canonical URL for `owner/repo#number`; GitHub redirects `/issues/<n>` to a pull request. */
 export function githubIssueUrl(owner: string, repo: string, number: number): string {
   return `https://github.com/${owner}/${repo}/issues/${number}`

@@ -17,7 +17,7 @@ import {
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { type ArtifactTypeInfo, isArtifactTypeName } from '@shared/artifact-types'
 import type { SessionOutputs } from '@shared/agent-host'
-import { githubReferenceFromLink } from '@shared/git'
+import { githubReferenceFromLink, schemelessGitHubLinks } from '@shared/git'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
@@ -347,12 +347,16 @@ const GITHUB_LINK = /https:\/\/(?:www\.)?github\.com\/[\w\-./?#=&%~+:@!$*,;]+/g
 
 /** The canonical pull request and issue addresses a reply links, in their order. */
 function githubLinks(markdown: string): string[] {
-  const links: string[] = []
-  for (const [match] of markdown.matchAll(GITHUB_LINK)) {
-    const ref = githubReferenceFromLink(match.replace(/[.,;:!?]+$/, ''))
-    if (ref) links.push(ref.url)
+  const links: { at: number; url: string }[] = []
+  for (const match of markdown.matchAll(GITHUB_LINK)) {
+    const ref = githubReferenceFromLink(match[0].replace(/[.,;:!?]+$/, ''))
+    if (ref) links.push({ at: match.index, url: ref.url })
   }
-  return links
+  for (const link of schemelessGitHubLinks(markdown)) {
+    const ref = githubReferenceFromLink(link.url)
+    if (ref) links.push({ at: link.from, url: ref.url })
+  }
+  return links.sort((a, b) => a.at - b.at).map((link) => link.url)
 }
 
 // The content refs that carry bytes, which a large one keeps in the blobs table.

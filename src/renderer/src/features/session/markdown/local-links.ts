@@ -1,5 +1,7 @@
 // A remark plugin for links to local paths, and to addresses Kettu does not open.
 
+import { schemelessGitHubUrl } from '@shared/git'
+
 interface MdNode {
   type: string
   url?: string
@@ -15,9 +17,13 @@ const UNOPENED = '#unopened:'
 // Streamdown's href for a link still streaming in, which its sanitizing keeps.
 export const INCOMPLETE_LINK = 'streamdown:incomplete-link'
 
-/** Whether a link's URL is a local path or a `file:` URI, which `localLinks` marks. */
+/**
+ * Whether a link's URL is a local path or a `file:` URI, which `localLinks` marks. A GitHub pull
+ * request or issue written without `https://` is the web link `githubRefs` makes of it.
+ */
 export function isLocalLink(url: string): boolean {
   if (url === '' || url.startsWith('#') || url.startsWith('//')) return false
+  if (schemelessGitHubUrl(url)) return false
   return !SCHEME.test(url) || DRIVE.test(url) || FILE_URI.test(url)
 }
 
