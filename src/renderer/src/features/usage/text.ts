@@ -3,7 +3,14 @@ import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { count, percent, usd } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
-import { addDays, type MetricKind } from './model'
+import {
+  addDays,
+  namesYear,
+  wholeMonth,
+  type MetricKind,
+  type TrendBar,
+  type TrendUnit,
+} from './model'
 import { usageAgentName } from './series'
 
 /** "Sep 1 - Oct 22" for [from, to), or one day alone. */
@@ -26,7 +33,7 @@ export function useRangeText(): (from: number, to: number) => string {
 }
 
 /** "3:00 PM – 4:00 PM" for an hour, with the time zones when `zoned`. */
-export function useHourText(zoned: boolean): (from: number, to: number) => string {
+function useHourText(zoned: boolean): (from: number, to: number) => string {
   const { t, i18n } = useTranslation('usage')
   return useCallback(
     (from: number, to: number) => {
@@ -102,4 +109,60 @@ export function wholePercent(share: number): string {
 export function sharePercent(share: number): string {
   const text = percent(share)
   return share > 0 && text === percent(0) ? `<${percent(0.001)}` : text
+}
+
+/** A share as a whole percentage, or "<1%" for a sliver that would read as none. */
+export function shareWhole(share: number): string {
+  const text = wholePercent(share)
+  return share > 0 && text === wholePercent(0) ? `<${wholePercent(0.01)}` : text
+}
+
+/** A change as a signed whole percentage: "+23%", "−8%". */
+export function changePercent(share: number): string {
+  return new Intl.NumberFormat(currentLocale(), {
+    style: 'percent',
+    maximumFractionDigits: 0,
+    signDisplay: 'exceptZero',
+  }).format(share)
+}
+
+/**
+ * Each period's labels: short for an axis, "3 PM" or "Nov 2", with the year where the periods
+ * cross one; and long for a tooltip, the hour, the day, the week's days or the month.
+ */
+export function usePeriodText(
+  unit: TrendUnit,
+  bars: readonly Pick<TrendBar, 'from' | 'to'>[],
+  zoned = false,
+): { short: string[]; long: string[] } {
+  const { i18n } = useTranslation('usage')
+  const rangeText = useRangeText()
+  const hourText = useHourText(zoned)
+  return useMemo(() => {
+    const froms = bars.map((bar) => bar.from)
+    if (unit === 'hour') {
+      const time = new Intl.DateTimeFormat(i18n.language, { hour: 'numeric' })
+      return {
+        short: froms.map((from) => time.format(from)),
+        long: bars.map((bar) => hourText(bar.from, bar.to)),
+      }
+    }
+    const date: Intl.DateTimeFormatOptions =
+      unit === 'month' ? { month: 'short' } : { month: 'short', day: 'numeric' }
+    const plain = new Intl.DateTimeFormat(i18n.language, date)
+    const dated = new Intl.DateTimeFormat(i18n.language, { ...date, year: 'numeric' })
+    const monthYear = new Intl.DateTimeFormat(i18n.language, { month: 'short', year: 'numeric' })
+    return {
+      short: froms.map((from, i) =>
+        (namesYear(froms, i, i > 0 ? i - 1 : null) ? dated : plain).format(from),
+      ),
+      long: bars.map((bar) =>
+        unit === 'day'
+          ? dayText(bar.from)
+          : unit === 'month' && wholeMonth(bar)
+            ? monthYear.format(bar.from)
+            : rangeText(bar.from, bar.to),
+      ),
+    }
+  }, [unit, bars, i18n.language, hourText, rangeText])
 }

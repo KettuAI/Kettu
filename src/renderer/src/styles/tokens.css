@@ -234,6 +234,8 @@
   --usage-red: #dc3f3a;
   /* How strongly a ring's disc shows its pie's color under the pie. */
   --ring-tint: 16%;
+  /* Laid over a plan ring's track for the time already passed in its window, a step darker. */
+  --ring-passed: 22%;
 
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
@@ -604,13 +606,6 @@
   --plan-bad-text: #d1342f;
   --plan-bad-chip: rgb(220 63 58 / 10%);
   --plan-bad-chip-text: #c9302b;
-  /* Usage's time of day, its busiest hour, and the activity grid's four steps. */
-  --tod-bar: #b3cff6;
-  --tod-peak: #3c85e9;
-  --activity-1: #d6e5fb;
-  --activity-2: #9fc2f4;
-  --activity-3: #5f9bec;
-  --activity-4: #2f6fd6;
   /* The hairline a gray tray takes beside white controls, and a hover card's drop. */
   --tray-edge: rgb(0 0 0 / 6%);
   --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
@@ -856,6 +851,7 @@
     --usage-orange: #f2a03d;
     --usage-red: #e5605a;
     --ring-tint: 24%;
+    --ring-passed: 28%;
 
     /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
        the update card: dark in both themes, with white on them. */
@@ -1047,12 +1043,6 @@
     --plan-bad-text: #f0716b;
     --plan-bad-chip: rgb(229 96 90 / 16%);
     --plan-bad-chip-text: #f0716b;
-    --tod-bar: #b3cff6;
-    --tod-peak: #3c85e9;
-    --activity-1: #1d3354;
-    --activity-2: #27508a;
-    --activity-3: #5f9bec;
-    --activity-4: #2f6fd6;
     --tray-edge: rgb(255 255 255 / 10%);
     --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
     --sketch-accent: #2f6bff;
@@ -1268,6 +1258,7 @@
   --usage-orange: #f2a03d;
   --usage-red: #e5605a;
   --ring-tint: 24%;
+  --ring-passed: 28%;
 
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
@@ -1459,12 +1450,6 @@
   --plan-bad-text: #f0716b;
   --plan-bad-chip: rgb(229 96 90 / 16%);
   --plan-bad-chip-text: #f0716b;
-  --tod-bar: #b3cff6;
-  --tod-peak: #3c85e9;
-  --activity-1: #1d3354;
-  --activity-2: #27508a;
-  --activity-3: #5f9bec;
-  --activity-4: #2f6fd6;
   --tray-edge: rgb(255 255 255 / 10%);
   --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
   --sketch-accent: #2f6bff;
@@ -1612,13 +1597,6 @@
   --plan-bad-text: var(--danger);
   --plan-bad-chip: color-mix(in srgb, var(--danger) 12%, transparent);
   --plan-bad-chip-text: var(--danger);
-  /* Amounts by hour and by day deepen in the theme's heat color, as its heatmap does. */
-  --tod-bar: var(--heat-2);
-  --tod-peak: var(--heat-hue);
-  --activity-1: var(--heat-1);
-  --activity-2: var(--heat-2);
-  --activity-3: var(--heat-3);
-  --activity-4: var(--heat-4);
   --tray-edge: var(--border-subtle);
   --sketch-accent: var(--context-1);
   --series-1: var(--context-1);
@@ -1761,12 +1739,22 @@
   --share-4: color-mix(in oklab, var(--heat-hue) 44%, var(--bg-surface));
   --share-5: color-mix(in oklab, var(--heat-hue) 24%, var(--bg-surface));
   --share-rest: var(--agent-other);
-  /* The kinds of tokens, in grays from the text toward the card. */
-  --part-input: color-mix(in oklab, var(--text-primary) 82%, var(--bg-surface));
-  --part-output: color-mix(in oklab, var(--text-primary) 62%, var(--bg-surface));
-  --part-reasoning: color-mix(in oklab, var(--text-primary) 44%, var(--bg-surface));
-  --part-cache-read: color-mix(in oklab, var(--text-primary) 28%, var(--bg-surface));
-  --part-cache-write: color-mix(in oklab, var(--text-primary) 14%, var(--bg-surface));
+  /* The kinds of tokens: the cache's in the first chart color, the rest in grays of the text. */
+  --part-cache-read: var(--context-1);
+  --part-cache-write: color-mix(in srgb, var(--context-1) 55%, var(--bg-surface));
+  --part-input: color-mix(in oklab, var(--text-primary) 32%, var(--bg-surface));
+  --part-output: color-mix(in oklab, var(--text-primary) 66%, var(--bg-surface));
+  --part-reasoning: color-mix(in oklab, var(--text-primary) 48%, var(--bg-surface));
+  /* The Usage page: its wells, a figure's earlier bars, the weekends behind a chart of days, the
+     busiest hours behind the time of day, and its other hours. */
+  --usage-well: light-dark(
+    color-mix(in srgb, var(--bg-subtle) 55%, var(--bg-surface)),
+    var(--shell-card)
+  );
+  --usage-ghost: color-mix(in srgb, var(--text-primary) 10%, var(--bg-surface));
+  --usage-weekend: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --usage-band: color-mix(in srgb, var(--heat-hue) 7%, transparent);
+  --usage-hour: color-mix(in srgb, var(--heat-hue) 48%, var(--bg-surface));
   --heat-1: color-mix(in srgb, var(--heat-hue) var(--heat-step-1), var(--bg-surface));
   --heat-2: color-mix(in srgb, var(--heat-hue) var(--heat-step-2), var(--bg-surface));
   --heat-3: color-mix(in srgb, var(--heat-hue) var(--heat-step-3), var(--bg-surface));

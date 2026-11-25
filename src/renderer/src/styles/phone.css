@@ -185,6 +185,8 @@
   }
   :root .k-u__actions {
     flex: 1 0 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
     overflow-x: auto;
     padding: 2px 12px 2px 4px;
     scrollbar-width: none;
