@@ -25,6 +25,7 @@ import {
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
+import type { ContextEstimates } from '@shared/context'
 import type { AgentId, ConfigOption, PermissionOption } from '@shared/thread'
 import {
   AgentRequestError,
@@ -46,8 +47,9 @@ import {
   type SignInClient,
 } from '../connection'
 import { agentEntryBefore } from '../artifacts/entries'
-import type { MovedAccounts } from '../catalog'
+import type { LaunchSpec, MovedAccounts } from '../catalog'
 import type { AgentTransport, MessageTransport } from '../driver'
+import type { Env } from '../find-command'
 import { t } from '../i18n'
 import { planRevision } from '../plan-revision'
 import {
@@ -96,6 +98,8 @@ import {
   withFullAccess,
 } from './agy-access'
 import { AgyCommands } from './agy-commands'
+import { AgyContextEstimator } from './agy-context'
+import { AgyMetrics, agyStepReader, type AgyStepReader } from './agy-metrics'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { AGY_ELICITATION, askInCard, asksQuestions, OpenAsks } from './agy-questions'
 import {
@@ -184,6 +188,14 @@ export interface AcpOptions {
   movedAccounts?: MovedAccounts
   /** Where agy's sub-agents are read from, its own conversation store unless given. */
   agyStore?: AgyStore
+  /** 启动该代理的可执行命令与参数，用于执行 agy 的只读查询子命令（如 /skills）。 */
+  spec?: LaunchSpec
+  /** 启动该代理时的环境变量。 */
+  env?: Env
+  /** 读取 agy transcript 单步用量的函数，便于单元测试注入。 */
+  agyStepReader?: AgyStepReader
+  /** agy 上下文定义估算器，便于单元测试注入。 */
+  agyContext?: AgyContextEstimator
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -428,6 +440,10 @@ export class AcpConnection implements AgentConnection {
   private readonly subagentParents = new Map<string, string>()
   /** Sub-agents opened again whose replay Kettu already shows. */
   private readonly muted = new Set<string>()
+  /** agy 会话的单步请求计时器，结合 transcript.jsonl 输出 TPS 与最近一次请求统计。 */
+  private readonly agyMetrics: AgyMetrics | null = null
+  /** 仅在 Antigravity 连接上挂载：估算当前会话可加载的 Skills 与 MCP 工具定义大小。 */
+  readonly readContextEstimates?: (sessionId: string, cwd: string) => Promise<ContextEstimates>
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -531,6 +547,22 @@ export class AcpConnection implements AgentConnection {
         if (!ctx.method.startsWith('$/')) hooks.ignored(null, `notification ${ctx.method}`)
       })
     this.connection = app.connect(this.tap(transport.stream))
+    if (this.agy) {
+      this.agyMetrics = new AgyMetrics(hooks.agyStepReader ?? agyStepReader(), {
+        target: (id) => this.targets.get(id),
+      })
+      const estimator =
+        hooks.agyContext ??
+        new AgyContextEstimator({
+          program: hooks.spec?.command,
+          args: hooks.spec?.args.filter((arg) => arg !== 'acp'),
+          env: hooks.env,
+        })
+      this.readContextEstimates = (sessionId, cwd) => {
+        const opened = this.agyOpened.get(sessionId)
+        return estimator.read(cwd, opened?.options.mcpServers ?? [])
+      }
+    }
   }
 
   static connect(transport: AcpTransport | AgentTransport, hooks: AcpHooks): AcpConnection {
@@ -601,9 +633,11 @@ export class AcpConnection implements AgentConnection {
     const target = this.targets.get(sessionId)
     if (target) {
       this.notePlanWrite(sessionId, update)
+      const replaying = target.context().replaying
       target.apply(this.withAccess(sessionId, this.map(update, target.context())))
       this.noteCommand(sessionId, update, target)
-      this.subagents?.noted(sessionId, update, target.context().replaying)
+      this.subagents?.noted(sessionId, update, replaying)
+      this.agyMetrics?.onUpdate(sessionId, update, replaying)
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -673,6 +707,7 @@ export class AcpConnection implements AgentConnection {
     this.agyPlans.delete(sessionId)
     this.agyBuildModes.delete(sessionId)
     this.agyCommands.delete(sessionId)
+    this.agyMetrics?.forget(sessionId)
     this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -697,6 +732,7 @@ export class AcpConnection implements AgentConnection {
   }
 
   close(): void {
+    this.agyMetrics?.stop()
     this.connection.close()
     this.transport.close()
   }
@@ -884,7 +920,10 @@ export class AcpConnection implements AgentConnection {
     this.readPlan(response._meta)
     this.allowWithoutAsking(response.sessionId, options)
     if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
-    else this.openedAgy(response.sessionId, cwd, options)
+    else {
+      this.openedAgy(response.sessionId, cwd, options)
+      this.agyMetrics?.onNewSession(response.sessionId)
+    }
     return {
       sessionId: response.sessionId,
       config: this.opened(
@@ -916,6 +955,7 @@ export class AcpConnection implements AgentConnection {
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, options)
     this.openedAgy(sessionId, cwd, options)
+    this.agyMetrics?.onExistingSession(sessionId)
     await this.subagents?.replay(sessionId)
     return {
       config: this.opened(
@@ -944,6 +984,7 @@ export class AcpConnection implements AgentConnection {
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, options)
     this.openedAgy(sessionId, cwd, options)
+    this.agyMetrics?.onExistingSession(sessionId)
     // Its process started again, without the sub-agents it ran.
     this.subagents?.restarted(sessionId)
     return {
@@ -956,9 +997,9 @@ export class AcpConnection implements AgentConnection {
     }
   }
 
-  /** Notes where an agy session opened, for the sub-agents it starts. */
+  /** 记录每个 agy 会话打开时的目录与 MCP 服务器，供子代理加载和上下文估算复用。 */
   private openedAgy(sessionId: string, cwd: string, options: SessionOptions): void {
-    if (this.subagents) this.agyOpened.set(sessionId, { cwd, options })
+    if (this.agy) this.agyOpened.set(sessionId, { cwd, options })
   }
 
   /**
@@ -1007,6 +1048,7 @@ export class AcpConnection implements AgentConnection {
     this.agyOpened.delete(sessionId)
     this.subagentParents.delete(sessionId)
     this.subagents?.forget(sessionId)
+    this.agyMetrics?.forget(sessionId)
   }
 
   async listSessions(
@@ -1042,6 +1084,7 @@ export class AcpConnection implements AgentConnection {
       this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
     }
     this.prompting.add(sessionId)
+    await this.agyMetrics?.preparePrompt(sessionId)
     let answer: ChainAnswer
     try {
       const sent = this.sendPrompt(sessionId, prompt)
@@ -1073,6 +1116,7 @@ export class AcpConnection implements AgentConnection {
       tokens: answer.tokens,
       models: answer.models,
     }
+    this.agyMetrics?.onPromptEnd(sessionId, result.stopReason)
     if (planning && result.stopReason === 'end_turn') await this.showPlan(sessionId)
     if (this.agy && result.stopReason === 'end_turn' && compactsAgy(this.version)) {
       if (sentCompact(prompt)) this.showCompaction(sessionId)

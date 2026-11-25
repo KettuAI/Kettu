@@ -26,6 +26,7 @@ import {
 } from '../connection'
 import { newTurnScope, type MapperEffect } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
+import { AgyContextEstimator } from './agy-context'
 import { mapConfig } from './mapper'
 import edit from './fixtures/agy-edit-request.json'
 import requests from './fixtures/agy-permissions.json'
@@ -1404,5 +1405,101 @@ describe("agy's commands that outlive their turn", () => {
     )
     expect(agy.methods()).toEqual(['resume'])
     connection.close()
+  })
+})
+
+describe("agy's metrics and context estimates", () => {
+  it('在每次模型调用后写入 lastRequest，并为 Antigravity 暴露 readContextEstimates', async () => {
+    const app = agent({ name: 'agy-test' })
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {} } },
+        agentInfo: { name: 'Antigravity ACP Server', version: '1.5.16' },
+        authMethods: [],
+      }))
+      .onRequest(methods.agent.session.new, () => ({ sessionId: 's-metrics' }))
+      .onRequest(methods.agent.session.prompt, async (ctx) => {
+        await ctx.client.notify(
+          methods.client.session.update,
+          update(ctx.params.sessionId, {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Done.' },
+          }),
+        )
+        await ctx.client.notify(
+          methods.client.session.update,
+          update(ctx.params.sessionId, {
+            sessionUpdate: 'usage_update',
+            used: 44_636,
+            size: 1_048_576,
+          }),
+        )
+        return { stopReason: 'end_turn' as const }
+      })
+
+    const receivedServers: string[] = []
+    const estimator = {
+      read: async (cwd: string, servers: readonly { name: string }[] = []) => {
+        receivedServers.push(`${cwd}:${servers.map((s) => s.name).join(',')}`)
+        return {
+          skills: [{ name: 'frontend-design', tokens: 64 }],
+          mcpServers: servers.map((s) => ({ name: s.name, tokens: 120 })),
+        }
+      },
+    } as unknown as AgyContextEstimator
+
+    const connection = AcpConnection.connect(inProcessTransport(app), {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+      agentId: 'antigravity',
+      name: 'Google Antigravity',
+      agyStepReader: async () => ({
+        stepIndex: 1,
+        model: 'gemini-4-neon-xhigh',
+        createdAt: 1_000,
+        input: 5_683,
+        cacheRead: 38_953,
+        cacheWrite: null,
+        output: 679,
+      }),
+      agyContext: estimator,
+    })
+
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo', { mcpServers: MCP })
+    const thread = threadTarget()
+    connection.register(sessionId, thread.target)
+    await connection.prompt(sessionId, text('go'))
+
+    await vi.waitFor(() =>
+      expect(thread.target.context().thread.session.lastRequest).toMatchObject({
+        input: 5_683,
+        cacheRead: 38_953,
+        output: 679,
+      }),
+    )
+
+    expect(connection.readContextEstimates).toBeDefined()
+    const estimates = await connection.readContextEstimates!(sessionId, '/repo')
+    expect(estimates).toEqual({
+      skills: [{ name: 'frontend-design', tokens: 64 }],
+      mcpServers: [{ name: 'kettu', tokens: 120 }],
+    })
+    expect(receivedServers).toEqual(['/repo:kettu'])
+    connection.close()
+
+    // 非 Antigravity 的 ACP 连接不挂载 readContextEstimates。
+    const other = AcpConnection.connect(inProcessTransport(app), {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+      agentId: 'gemini',
+      name: 'Gemini CLI',
+    })
+    expect(other.readContextEstimates).toBeUndefined()
+    other.close()
   })
 })
