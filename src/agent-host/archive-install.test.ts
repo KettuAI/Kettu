@@ -71,6 +71,7 @@ describe('an update from a registry archive', () => {
       cmd: './tool',
       bare: true,
       platform: process.platform,
+      env: {},
       timeoutMs: 10_000,
     })
     expect(update.version).toBe('1.1.0')
@@ -96,6 +97,7 @@ describe('an update from a registry archive', () => {
         cmd: './tool',
         bare: true,
         platform: process.platform,
+        env: {},
         timeoutMs: 10_000,
       }),
     ).rejects.toThrow(/does not match its SHA-256/)
