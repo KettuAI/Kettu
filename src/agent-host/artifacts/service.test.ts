@@ -34,11 +34,18 @@ describe('the servers a session attaches with', () => {
   })
 
   // Allowed tools run without asking the user, so none may reach past Kettu's own data.
-  it("allow without asking only Kettu's plan, report, memory, session, workflow, Marketplace and settings tools, its guide, listing, reading and naming terminals and reading pages", async () => {
+  it("allow without asking only Kettu's safe read-only, thread, memory, session, workflow, Marketplace and settings tools, and gate reversible edits to Auto mode", async () => {
     const service = await started()
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
       'set_plan',
+      'read_artifact',
+      'list_artifacts',
+      'list_artifact_versions',
+      'list_artifact_types',
+      'read_artifact_type',
+      'read_comments',
+      'read_artifact_data',
       // A terminal of the user's asks them in Kettu's own card before these reach it.
       'terminal_list',
       'terminal_read',
@@ -49,6 +56,11 @@ describe('the servers a session attaches with', () => {
       'browser_wait_for',
       'browser_console_messages',
       'browser_network_requests',
+      'device_list',
+      'device_snapshot',
+      'device_screenshot',
+      'device_logs',
+      'computer_list_apps',
       'report_problem',
       'list_memories',
       'read_memory',
@@ -81,13 +93,69 @@ describe('the servers a session attaches with', () => {
       'list_skills',
       'read_skill',
     ]
+    const expectedAutoMode = [
+      'create_artifact',
+      'update_artifact',
+      'create_artifact_from_type',
+      'restore_artifact_version',
+      'reply_comment',
+      'resolve_comment',
+      'browser_navigate',
+      'browser_navigate_back',
+      'browser_reload',
+      'browser_click',
+      'browser_type',
+      'browser_press_key',
+      'browser_scroll',
+      'browser_select_option',
+      'browser_evaluate',
+      'browser_ask_user',
+      'browser_tabs',
+      'device_open',
+      'device_close',
+      'device_tap',
+      'device_fill',
+      'device_type',
+      'device_scroll',
+      'device_swipe',
+      'device_press_button',
+      'device_rotate',
+      'device_install_app',
+      'device_launch_app',
+      'device_terminate_app',
+      'device_open_url',
+      'device_set_appearance',
+      'device_set_location',
+      'device_set_permission',
+      'terminal_stop',
+      'computer_list_windows',
+      'computer_get_window_state',
+    ]
+    const guarded = [
+      'delete_artifact',
+      'write_artifact_data',
+      'terminal_run',
+      'terminal_input',
+      'computer_click',
+      'computer_type_text',
+      'computer_press_key',
+      'computer_hotkey',
+      'computer_scroll',
+      'computer_drag',
+      'computer_invoke_menu',
+    ]
     for (const server of [
       ...service.servers('s1', '/repo'),
       ...service.folderServers(process, '/repo', 's2'),
     ]) {
-      expect(server.type === 'stdio' ? [] : [...(server.autoAllow ?? [])].sort()).toEqual(
-        [...expected].sort(),
-      )
+      const always = server.type === 'stdio' ? [] : [...(server.autoAllow ?? [])].sort()
+      const onAuto = server.type === 'stdio' ? [] : [...(server.autoModeAllow ?? [])].sort()
+      expect(always).toEqual([...expected].sort())
+      expect(onAuto).toEqual([...expectedAutoMode].sort())
+      for (const name of guarded) {
+        expect(always).not.toContain(name)
+        expect(onAuto).not.toContain(name)
+      }
     }
   })
 })
@@ -361,6 +429,7 @@ describe("a plugin's tools", () => {
     })
     for (const server of service.servers('s1', '/repo')) {
       expect(server.type === 'stdio' ? [] : (server.autoAllow ?? [])).not.toContain(tool.name)
+      expect(server.type === 'stdio' ? [] : (server.autoModeAllow ?? [])).not.toContain(tool.name)
     }
     const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
     expect(tools.map((entry) => entry.name)).toContain(tool.name)

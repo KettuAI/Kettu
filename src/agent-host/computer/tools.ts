@@ -257,6 +257,15 @@ export const COMPUTER_TOOLS: Tool[] = [
   },
 ]
 
+/** 仅列出桌面运行中应用的只读工具。 */
+export const COMPUTER_READ_TOOLS: readonly ComputerToolName[] = ['computer_list_apps']
+
+/** 仅在 Auto 模式下自动放行的桌面只读查看工具（首次访问应用仍由 Kettu 授权卡把关，点击/键入仍需授权）。 */
+export const COMPUTER_AUTO_MODE_TOOLS: readonly ComputerToolName[] = [
+  'computer_list_windows',
+  'computer_get_window_state',
+]
+
 /** A call that fits its schema, as the driver takes it, with what the checks around it read. */
 export interface ComputerCall {
   tool: ComputerToolName

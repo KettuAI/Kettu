@@ -2,7 +2,14 @@
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
 // HTTP in plain JSON, one stateless transport per request.
 
-import { DEVICE_TOOLS, DeviceTools, isDeviceToolName, type DeviceToolDeps } from '../devices/tools'
+import {
+  DEVICE_AUTO_MODE_TOOLS,
+  DEVICE_READ_TOOLS,
+  DEVICE_TOOLS,
+  DeviceTools,
+  isDeviceToolName,
+  type DeviceToolDeps,
+} from '../devices/tools'
 import {
   callGuide,
   GUIDE_TOOL,
@@ -14,6 +21,7 @@ import {
 } from '../guide/guide'
 import {
   isTerminalToolName,
+  TERMINAL_AUTO_MODE_TOOLS,
   TERMINAL_READ_TOOLS,
   TERMINAL_TOOLS,
   TerminalTools,
@@ -64,6 +72,7 @@ import {
 } from '../session-tools'
 import {
   BrowserTools,
+  BROWSER_AUTO_MODE_TOOLS,
   BROWSER_READ_TOOLS,
   BROWSER_TOOLS,
   isBrowserToolName,
@@ -91,7 +100,7 @@ import {
   ReportTools,
   type ReportToolsDeps,
 } from '../report-tool'
-import { COMPUTER_TOOLS } from '../computer/tools'
+import { COMPUTER_AUTO_MODE_TOOLS, COMPUTER_READ_TOOLS, COMPUTER_TOOLS } from '../computer/tools'
 import {
   isMemoryToolName,
   MEMORY_TOOL_NAMES,
@@ -110,8 +119,16 @@ import { isPluginToolName } from '@shared/plugins'
 import type { PluginTools } from '../plugin-runtime/tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
-import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
-import { ArtifactTools, isToolName, TOOLS, type ArtifactToolsDeps, type Caller } from './tools'
+import { DATA_READ_TOOLS, DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
+import {
+  ARTIFACT_AUTO_MODE_TOOLS,
+  ARTIFACT_READ_TOOLS,
+  ArtifactTools,
+  isToolName,
+  TOOLS,
+  type ArtifactToolsDeps,
+  type Caller,
+} from './tools'
 
 export { SERVICE_NAME }
 export const SERVICE_PATH = '/mcp'
@@ -288,17 +305,15 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      // Kettu's own tools, which reach no further than its thread, memory, the project's sessions,
-      // its own guide, the skills given to the session, reading the user's Marketplace listings, listing, reading and naming the
-      // session's terminals and reading its browser's pages, a terminal, name or tab of the
-      // user's asking them in Kettu's own card; the
-      // browser, computer use, devices, running and typing in terminals and artifacts still ask.
-      // Publishing, unlisting and the settings tools ask in Kettu's own card where they ask, so
-      // the agent's prompt never does.
+      // Kettu 内置安全只读及自带内部确认卡的工具：在所有模式下自动放行，不重复弹出 Agent 权限卡。
       autoAllow: [
         PLAN_TOOL,
+        ...ARTIFACT_READ_TOOLS,
+        ...DATA_READ_TOOLS,
         ...TERMINAL_READ_TOOLS,
         ...BROWSER_READ_TOOLS,
+        ...DEVICE_READ_TOOLS,
+        ...COMPUTER_READ_TOOLS,
         REPORT_TOOL,
         GUIDE_TOOL,
         ...SKILL_TOOL_NAMES,
@@ -307,6 +322,14 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
         ...WORKFLOW_TOOL_NAMES,
         ...MARKET_AUTO_ALLOW,
         ...SETTINGS_TOOL_NAMES,
+      ],
+      // 仅在 Auto 权限模式下自动放行的可回滚内置工具（不可逆删除、高危终端命令、桌面点击/键入与插件工具仍需确认）。
+      autoModeAllow: [
+        ...ARTIFACT_AUTO_MODE_TOOLS,
+        ...BROWSER_AUTO_MODE_TOOLS,
+        ...DEVICE_AUTO_MODE_TOOLS,
+        ...TERMINAL_AUTO_MODE_TOOLS,
+        ...COMPUTER_AUTO_MODE_TOOLS,
       ],
       prompt,
       secret: true,

@@ -270,6 +270,8 @@ export type McpServer =
       headers: { name: string; value: string }[]
       /** Tools of the server that an agent runs without asking, where its own settings can say so. */
       autoAllow?: string[]
+      /** 仅在 Auto 权限模式下自动放行的可回滚内置工具（不涉及不可逆破坏操作）。 */
+      autoModeAllow?: string[]
       /** A paragraph for the agent's own instructions, where it takes one. */
       prompt?: string
       /** Holds a token or a value from the key store, so it must never reach a command line. */

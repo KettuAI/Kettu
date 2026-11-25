@@ -148,6 +148,9 @@ export const DATA_TOOLS: Tool[] = [
 
 const NAMES = new Set(DATA_TOOLS.map((tool) => tool.name))
 
+/** 仅读取产物数据的只读工具，可在所有模式下自动放行。 */
+export const DATA_READ_TOOLS: readonly string[] = ['read_artifact_data']
+
 export function isDataToolName(name: string): boolean {
   return NAMES.has(name)
 }
