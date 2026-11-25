@@ -10,10 +10,9 @@ import {
   type WorkflowStep,
   type StepPick,
 } from '@shared/workflow'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import type { ConfigOption } from '@shared/thread'
 import { shownChoice } from '@renderer/features/session/composer/model-list'
 import { i18n } from '@renderer/lib/i18n'
-import type { OptionValues } from '@renderer/stores/agent-options'
 
 /** The mark of a workflow wherever one is chosen or named. */
 export const WORKFLOW_ICON = FlowIcon
@@ -40,41 +39,6 @@ function levelOption(
   const own = model === null ? undefined : entry?.levels[model]
   const option = own ?? entry?.config.find((o) => o.category === 'thought_level')
   return isSelect(option) ? option : undefined
-}
-
-/** The option values that start the agent with the pick's model and effort. */
-export function pickValues(entry: AgentOptions | undefined, pick: StepPick): OptionValues {
-  const values: OptionValues = {}
-  const model = modelOption(entry)
-  if (model && pick.model !== null) values[model.id] = pick.model
-  const level = levelOption(entry, pick.model)
-  if (level && pick.effort !== null) values[level.id] = pick.effort
-  return values
-}
-
-/** The pick that option values stand for: their model and effort, else the agent's own. */
-export function pickOf(
-  entry: AgentOptions | undefined,
-  agentId: AgentId,
-  values: OptionValues,
-): StepPick {
-  const model = modelOption(entry)
-  const chosen = model ? values[model.id] : undefined
-  const modelValue =
-    typeof chosen === 'string' ? chosen : typeof model?.value === 'string' ? model.value : null
-  const level = levelOption(entry, modelValue)
-  const effort = level ? values[level.id] : undefined
-  return {
-    agentId,
-    model: modelValue,
-    effort:
-      typeof effort === 'string' ? effort : typeof level?.value === 'string' ? level.value : null,
-  }
-}
-
-/** The model of option values, for the menu's model id. */
-export function modelOptionId(entry: AgentOptions | undefined): string | null {
-  return modelOption(entry)?.id ?? null
 }
 
 /** The names a pick shows: its model's and its effort's, as the agent lists them. */

@@ -1285,20 +1285,7 @@
       "balanced": "均衡",
       "thorough": "周全"
     },
-    "auto": "Auto",
-    "you": "你",
-    "youReview": "你来审",
-    "source": {
-      "first": "第一步",
-      "pinned": "已固定",
-      "task": "本需求",
-      "you": "你"
-    },
-    "reviews": "审查{{steps}}",
     "hint": "“{{hint}}”",
-    "pinnedHint": "在这个工作流的市场页面上为每个需求固定",
-    "backToAuto": "改回 Auto",
-    "whoDoes": "谁做{{step}}",
     "pinEveryTask": "为每个需求固定步骤",
     "suggest": {
       "steps_other": "{{count}} 步"

@@ -1331,20 +1331,7 @@
       "balanced": "Balanced",
       "thorough": "Thorough"
     },
-    "auto": "Auto",
-    "you": "You",
-    "youReview": "You review",
-    "source": {
-      "first": "First step",
-      "pinned": "Pinned",
-      "task": "This task",
-      "you": "You"
-    },
-    "reviews": "Reviews {{steps}}",
     "hint": "“{{hint}}”",
-    "pinnedHint": "Pinned for every task of this workflow, on its Marketplace page",
-    "backToAuto": "Back to Auto",
-    "whoDoes": "Who does {{step}}",
     "pinEveryTask": "Pin steps for every task",
     "suggest": {
       "steps_one": "{{count}} step",
