@@ -73,6 +73,23 @@ export function stripElectronUserAgent(userAgent: string): string {
   return userAgent.replace(/\sElectron\/[\d.]+/g, '')
 }
 
+/** Cloudflare's challenge platform, which runs Turnstile's checks. */
+const CHALLENGE_URLS = ['https://challenges.cloudflare.com/*']
+
+/**
+ * A challenge request's headers with Electron's own user agent in place of the stripped one;
+ * a user agent a phone or tablet size set stays as it is.
+ */
+function challengeHeaders(
+  headers: Record<string, string>,
+  stripped: string,
+  full: string,
+): Record<string, string> {
+  const key = Object.keys(headers).find((name) => name.toLowerCase() === 'user-agent')
+  if (!key || headers[key] !== stripped) return headers
+  return { ...headers, [key]: full }
+}
+
 export interface BrowserPolicyDeps {
   /** A page asked to download; the pane tells the user and points at the system browser. */
   downloadBlocked(contents: WebContents): void
@@ -91,7 +108,14 @@ export class BrowserPolicy {
   install(): void {
     if (this.installed) return
     this.installed = true
-    this.session.setUserAgent(stripElectronUserAgent(this.session.getUserAgent()))
+    const full = this.session.getUserAgent()
+    const stripped = stripElectronUserAgent(full)
+    this.session.setUserAgent(stripped)
+    // Turnstile fails a page whose fingerprint is Electron's while its requests claim another
+    // Chromium (error 600010), so only its own requests say Electron.
+    this.session.webRequest.onBeforeSendHeaders({ urls: CHALLENGE_URLS }, (details, callback) => {
+      callback({ requestHeaders: challengeHeaders(details.requestHeaders, stripped, full) })
+    })
     this.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
     this.session.setPermissionCheckHandler(() => false)
     this.session.setDevicePermissionHandler(() => false)
