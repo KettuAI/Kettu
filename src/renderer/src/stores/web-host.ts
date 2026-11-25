@@ -9,6 +9,8 @@ import type { DirectAddress } from '@shared/remote/protocol'
 // set, so it reads nothing from it as it loads.
 
 export interface WebHost {
+  /** The host's key as this browser paired with it, the same at every address that reaches it. */
+  id: string
   name: string
   /** As the last welcome said; null before the first one. */
   platform: Platform | null

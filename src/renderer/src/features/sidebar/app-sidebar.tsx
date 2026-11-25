@@ -30,9 +30,9 @@ import { NoticeCard } from '@renderer/features/updates/update-notice'
 import { useUpdates } from '@renderer/features/updates/use-updates'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
-import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
+import { useInsecureState } from '@renderer/stores/insecure-notice'
 import {
   noProjectKey,
   noProjectPinned,
@@ -807,12 +807,13 @@ function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
 export function SidebarNotices() {
   const { signIn } = useNotices()
   const { card, items, batch } = useUpdates()
+  const insecure = useInsecureState() === 'shown'
   return (
     <>
-      {isWeb && !window.isSecureContext && <InsecureCard />}
+      {insecure && <InsecureCard />}
       {signIn.length > 0 && <SignInCard names={signIn} />}
       {card && <UpdateCardView card={card} items={items} batch={batch} />}
-      <StarCard blocked={(isWeb && !window.isSecureContext) || signIn.length > 0 || !!card} />
+      <StarCard blocked={insecure || signIn.length > 0 || !!card} />
     </>
   )
 }

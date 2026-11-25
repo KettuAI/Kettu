@@ -95,6 +95,8 @@ function portState(link: HostLink): PortConnectionState {
 
 /** What the web client knows of the host it connects to beyond the link. */
 export interface WebHostContext {
+  /** The host's key as this browser paired with it, encoded. */
+  id: string
   /** The page's own address, which this browser reaches the host at; null through the relay. */
   address: DirectAddress | null
   /** The names this browser kept from the last welcome, shown until the next one. */
@@ -191,6 +193,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
 
   useWebHostStore.setState({
     host: {
+      id: context.id,
       name: context.known.name,
       platform: null,
       version: null,
