@@ -696,6 +696,15 @@ describe('isThreadEntry', () => {
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
     ).toBe(false)
     expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'info',
+        title: 'x',
+        cause: 'reports_paused',
+      }),
+    ).toBe(true)
+    expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'warning', title: 'x', model: 1 }),
     ).toBe(false)
   })
