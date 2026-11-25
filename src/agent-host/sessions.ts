@@ -873,7 +873,7 @@ interface Live {
   background: boolean
   /** The agent sent its full list of background work, background subagents among it. */
   backgroundListed: boolean
-  /** What runs on after its turn as its summary last said, in JSON. */
+  /** What runs on after its turn as its last summary said, in JSON. */
   stillShown: string
   /** Jobs the agent scheduled to wake the session later, such as cron and /loop wakeups. */
   scheduled: number
@@ -1712,9 +1712,10 @@ export class SessionManager {
   private touch(sessionId: string): void {
     if (!this.has(sessionId)) return
     const summary = this.summary(sessionId)
+    const live = this.live.get(sessionId)
+    if (live) live.stillShown = JSON.stringify(summary.stillRunning ?? null)
     const json = JSON.stringify(summary)
     if (this.lastSummaries.get(sessionId) === json) return
-    const live = this.live.get(sessionId)
     if (live) this.flushPatches(live)
     this.lastSummaries.set(sessionId, json)
     this.updateBusy()
@@ -6500,10 +6501,7 @@ export class SessionManager {
 
   /** Sends the session's summary again once what it runs on between turns changed. */
   private showStillRunning(live: Live): void {
-    const shown = JSON.stringify(this.stillRunning(live))
-    if (shown === live.stillShown) return
-    live.stillShown = shown
-    this.touch(live.id)
+    if (JSON.stringify(this.stillRunning(live)) !== live.stillShown) this.touch(live.id)
   }
 
   /** What the session runs beside a turn, as `holdReason` counts it; null when nothing. */
