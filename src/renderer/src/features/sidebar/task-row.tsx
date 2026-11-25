@@ -33,6 +33,7 @@ import {
   taskRowStatus,
 } from '@renderer/features/tasks/model'
 import { TaskCard } from '@renderer/features/tasks/task-card'
+import { badgeInUse } from './row-badges'
 import { rowStatus, type RowStatus } from './row-status'
 import {
   CancelTaskDialog,
@@ -202,7 +203,7 @@ export const TaskRow = memo(function TaskRow({
         <span className="ui-as-side__text" dir="auto">
           {task.title}
         </span>
-        {prs.length > 0 && <PullRequestsBadge prs={prs} onEnter={() => setCardOpen(false)} />}
+        {prs.length > 0 && <PullRequestsBadge prs={prs} onOpen={() => setCardOpen(false)} />}
         {progress && (
           <span
             aria-label={t('row.stepOf', progress)}
@@ -270,9 +271,7 @@ export const TaskRow = memo(function TaskRow({
             >
               <HoverCard
                 open={cardOpen}
-                onOpenChange={(open) =>
-                  setCardOpen(open && !row.current?.querySelector('[data-pr-badge]:hover'))
-                }
+                onOpenChange={(open) => setCardOpen(open && !badgeInUse(row.current))}
               >
                 <HoverCardTrigger
                   delay={600}

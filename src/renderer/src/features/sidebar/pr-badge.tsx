@@ -48,22 +48,22 @@ function useBadgeLabel(prs: SessionPullRequest[]): string {
  */
 export function PrBadge({
   summary,
-  onEnter,
+  onOpen,
 }: {
   summary: SessionSummary
-  /** The pointer came onto the badge, whose card takes the place of the row's own. */
-  onEnter: () => void
+  /** The badge's card opened, taking the place of the row's own. */
+  onOpen: () => void
 }) {
-  return <PullRequestsBadge prs={sessionPullRequests(summary)} onEnter={onEnter} />
+  return <PullRequestsBadge prs={sessionPullRequests(summary)} onOpen={onOpen} />
 }
 
 /** The badge for a list of pull requests, such as those on a task's branch. */
 export function PullRequestsBadge({
   prs,
-  onEnter,
+  onOpen,
 }: {
   prs: SessionPullRequest[]
-  onEnter: () => void
+  onOpen: () => void
 }) {
   const label = useBadgeLabel(prs)
   const self = useRef<HTMLSpanElement>(null)
@@ -99,17 +99,24 @@ export function PullRequestsBadge({
       role="img"
       aria-label={label}
       data-pr-badge=""
-      onPointerEnter={onEnter}
       className="relative inline-flex h-5 shrink-0 items-center gap-[3px] rounded-[5px] px-[3px] text-[12px] font-normal text-tertiary tabular-nums hover:bg-selected data-popup-open:bg-selected"
     >
       {content}
     </span>
   )
+  const change = (open: boolean) => open && onOpen()
   if (prs.length === 1) {
-    return <ReferenceHoverCard reference={referenceOf(prs[0]!)} side="right" trigger={badge} />
+    return (
+      <ReferenceHoverCard
+        reference={referenceOf(prs[0]!)}
+        side="right"
+        trigger={badge}
+        onOpenChange={change}
+      />
+    )
   }
   return (
-    <HoverCard>
+    <HoverCard onOpenChange={change}>
       <HoverCardTrigger delay={400} closeDelay={200} render={badge} />
       <HoverCardContent
         side="right"

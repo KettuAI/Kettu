@@ -437,37 +437,44 @@
   ) {
   color: revert-layer;
 }
-/* 有子代理徽标时，空状态槽收起，让徽标贴近行尾。 */
-.ui-as-chat-row:has([data-subagent-badge]) .kettu-row-end:not(:has(> :not(:empty))) {
-  display: none;
-}
-/* 会话和任务行默认用满宽度。子代理徽标所在的行在工具出现时为它们留出空间，
-   其余行继续用遮罩和工具一起淡出行尾内容。触屏沿用 App Shell 的布局。 */
+/* A session's or task's row keeps no room for its tools, More and Pin: on hover or focus they sit
+   over its end, which fades out under them through a mask, since the sidebar's fill is translucent.
+   A row with a badge (sub-agents, worktree, pull requests) keeps their room instead, as a project's
+   row does, so no badge goes under them. Nothing moves. Touch keeps App Shell's layout. */
 @property --kettu-row-cover {
   syntax: '<number>';
   inherits: false;
   initial-value: 0;
 }
+@media (hover: none) {
+  /* An empty status slot leaves a sub-agent badge at the row's end. */
+  .ui-as-chat-row:has([data-subagent-badge]) .kettu-row-end:not(:has(> :not(:empty))) {
+    display: none;
+  }
+}
 @media (hover: hover) {
-  .ui-as.ui-as
-    .ui-as-chat-row:not(:has([data-subagent-badge])):is(:hover, :has(:focus-visible), [data-menu])
-    .ui-as-chat-row__link,
+  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
   .ui-as.ui-as
     .ui-as-chat-folder-row:is(:hover, :has(:focus-visible), [data-menu])
     > .ui-as-chat-folder {
     padding-right: 6px;
   }
-  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end {
+  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end,
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]) .kettu-row-end {
     min-width: 42px;
   }
-  .ui-as-chat-row:has([data-subagent-badge]):is(:hover, :has(:focus-visible), [data-menu])
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]):is(
+      :hover,
+      :has(:focus-visible),
+      [data-menu]
+    )
     .kettu-row-end {
-    position: absolute;
     opacity: 0;
-    pointer-events: none;
     transition: none;
   }
-  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):not(:has([data-subagent-badge])) {
+  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):not(
+      :has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
+    ) {
     .kettu-row-body {
       transition: --kettu-row-cover var(--duration-fast) ease;
     }

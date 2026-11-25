@@ -30,12 +30,12 @@ const nothing = () => {}
 export function SubagentBadge({
   parent,
   subagents,
-  onEnter,
+  onOpen,
 }: {
   parent: SessionSummary
   subagents: SessionSummary[]
-  /** The pointer came onto the badge, whose list takes the place of the row's own card. */
-  onEnter: () => void
+  /** The badge's list opened, taking the place of the row's own card. */
+  onOpen: () => void
 }) {
   const { t } = useTranslation('sidebar')
   const showFinished = useViewStore((s) => s.showFinishedSubagents)
@@ -48,12 +48,11 @@ export function SubagentBadge({
     : t('subagents.count', { count: listed.length })
 
   return (
-    <HoverCard>
+    <HoverCard onOpenChange={(open) => open && onOpen()}>
       <HoverCardTrigger
         delay={300}
         closeDelay={200}
         aria-label={label}
-        onPointerEnter={onEnter}
         render={
           // As an image, its label goes into the name of the row's button around it.
           <span
