@@ -1756,14 +1756,14 @@ export class AgentHost {
       this.broadcast({ type: 'environment.changed', info })
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
     })
-    // As Reload does: the fallback's PATH may have missed programs the login shell's finds.
+    // As Reload does: the fallback's PATH may have missed programs the login shell's finds. Git's
+    // tools are probed again by setEnvironment above.
     this.env.onRecovered(() => {
-      void (async () => {
-        await this.agents.redetect()
-        if (this.git) await this.gitCall((g) => g.reloadTools())
-      })().catch((error: unknown) =>
-        log('warn', `Could not detect the agents again: ${(error as Error).message}`),
-      )
+      this.agents
+        .redetect()
+        .catch((error: unknown) =>
+          log('warn', `Could not detect the agents again: ${(error as Error).message}`),
+        )
     })
     this.git =
       typeof options.git === 'function'
@@ -4027,9 +4027,11 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.discardChanges(p, paths)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
       'git.issue': ({ url }) => this.gitCall((g) => g.issue(url)),
-      'git.watchReferences': ({ urls }, { portId }) => {
-        if (this.hub.has(portId)) this.requireGit().watchReferences(portId, urls)
-      },
+      // Its first sweep probes gh, so it waits for the environment as every other git call does.
+      'git.watchReferences': ({ urls }, { portId }) =>
+        this.gitCall(async (g) => {
+          if (this.hub.has(portId)) g.watchReferences(portId, urls)
+        }),
       'git.avatarUrl': ({ login }) => this.gitCall((g) => g.avatarUrl(login)),
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),

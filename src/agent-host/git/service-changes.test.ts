@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, realpath, rm, unlink, utimes, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { GitStatus } from '@shared/git'
+import type { GitStatus, GitTools } from '@shared/git'
 import type { GitServiceApi } from './api'
+import type { Exec } from './exec'
 import { createGitService } from './service'
 
 const ENV = {
@@ -100,5 +101,39 @@ describe('git.changed for edits that keep the counts', () => {
     await write('b.txt', 'b2\n')
     git(dir, 'add', 'b.txt')
     expect(await refresh()).toBe(1)
+  })
+})
+
+describe('git tools probed before the environment was read', () => {
+  it('probes again in the new environment and sends the result', async () => {
+    let path = '/usr/bin:/bin'
+    let probes = 0
+    const exec: Exec = async (file, args) => {
+      if (file === 'gh' && args[0] === '--version') probes++
+      if (file === 'gh' && !path.startsWith('/opt/homebrew/bin')) {
+        return { code: null, stdout: '', stderr: '', failure: 'not-found', message: 'ENOENT' }
+      }
+      const stdout =
+        file === 'git'
+          ? 'git version 2.50.0\n'
+          : args[0] === '--version'
+            ? 'gh version 2.105.0 (2026-11-17)\n'
+            : 'github.com\n  Logged in to github.com account octocat (keyring)\n'
+      return { code: 0, stdout, stderr: '', failure: null, message: '' }
+    }
+    const service = createGitService({ env: { PATH: path }, log: () => {} }, { exec })
+    const sent: GitTools[] = []
+    service.onTools((tools) => sent.push(tools))
+
+    expect((await service.tools()).gh.state).toBe('not-installed')
+    path = '/opt/homebrew/bin:/usr/bin:/bin'
+    service.setEnvironment({ PATH: path })
+    expect(await service.tools()).toMatchObject({ gh: { state: 'ready', account: 'octocat' } })
+    expect(sent.map((tools) => tools.gh.state)).toEqual(['ready'])
+
+    service.setEnvironment({ PATH: path })
+    await service.tools()
+    expect(probes).toBe(2)
+    await service.dispose()
   })
 })
