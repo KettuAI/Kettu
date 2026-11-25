@@ -677,6 +677,105 @@ describe('isThreadEntry', () => {
       device: { id: 'phone', name: 'Phone' },
       after: 'm:1',
     },
+    {
+      kind: 'settings_change',
+      id: 'e:21',
+      items: [
+        {
+          id: 'appearance.color-mode',
+          place: 'Appearance › Theme',
+          name: 'Color mode',
+          from: { value: 'system', text: 'System' },
+          to: { value: 'dark', text: 'Dark' },
+          section: 'appearance',
+          item: null,
+          row: 'color-mode',
+        },
+        {
+          id: 'remote.direct',
+          place: 'Remote access › Connections',
+          name: 'Direct connections',
+          from: { value: false, text: 'Off' },
+          to: { value: true, text: 'On' },
+          warning: 'Lets devices on your network connect.',
+          section: 'remote',
+          item: null,
+          row: 'direct',
+        },
+      ],
+      asked: true,
+      expiresAt: 1_700_000_000_000,
+      outcome: null,
+      after: 't:1',
+    },
+    {
+      kind: 'settings_change',
+      id: 'e:22',
+      items: [
+        {
+          id: 'plugin.ntfy.topic',
+          place: 'ntfy',
+          name: 'Topic',
+          from: { value: null, text: 'Not set' },
+          to: { value: 3, text: '3' },
+          section: 'marketplace',
+          item: 'ntfy',
+          row: 'topic',
+        },
+      ],
+      asked: false,
+      expiresAt: null,
+      outcome: { kind: 'changed', undone: true, stale: true },
+      after: null,
+    },
+    {
+      kind: 'settings_change',
+      id: 'e:23',
+      items: [],
+      asked: true,
+      expiresAt: 1_700_000_000_000,
+      outcome: { kind: 'failed', message: 'No such row' },
+      device: { id: 'phone', name: 'Phone' },
+      after: 'm:1',
+    },
+    {
+      kind: 'settings_change',
+      id: 'e:24',
+      items: [],
+      asked: true,
+      expiresAt: 1_700_000_000_000,
+      outcome: { kind: 'declined' },
+      after: 'm:1',
+    },
+    {
+      kind: 'project_mcp',
+      id: 'e:25',
+      servers: [{ name: 'db', target: 'npx db-mcp' }],
+      decision: null,
+      after: null,
+    },
+    {
+      kind: 'project_mcp',
+      id: 'e:26',
+      servers: [],
+      decision: 'timeout',
+      device: { id: 'phone', name: 'Phone' },
+      after: 't:1',
+    },
+    {
+      kind: 'project_hooks',
+      id: 'e:27',
+      hooks: [{ event: 'PreToolUse', target: './check.sh' }],
+      decision: null,
+      after: null,
+    },
+    {
+      kind: 'project_hooks',
+      id: 'e:28',
+      hooks: [{ event: 'env', target: 'API_URL, DEBUG' }],
+      decision: 'all',
+      after: 'm:1',
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -711,6 +810,32 @@ describe('isThreadEntry', () => {
     expect(
       isThreadEntry({ ...routine, routine: { ...routine.routine, timeLimitMinutes: 7 } }),
     ).toBe(false)
+    const settings = valid.find((entry) => entry.kind === 'settings_change')!
+    const row = settings.items[0]!
+    expect(isThreadEntry({ ...settings, asked: 'yes' })).toBe(false)
+    expect(isThreadEntry({ ...settings, expiresAt: undefined })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: undefined })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: [{ ...row, name: 1 }] })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: [{ ...row, to: { value: {}, text: 'x' } }] })).toBe(
+      false,
+    )
+    expect(isThreadEntry({ ...settings, items: [{ ...row, from: { value: 1 } }] })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: [{ ...row, warning: 1 }] })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: [{ ...row, item: undefined }] })).toBe(false)
+    expect(isThreadEntry({ ...settings, items: [{ ...row, row: null }] })).toBe(false)
+    expect(isThreadEntry({ ...settings, outcome: { kind: 'kept' } })).toBe(false)
+    expect(isThreadEntry({ ...settings, outcome: { kind: 'failed' } })).toBe(false)
+    expect(isThreadEntry({ ...settings, outcome: { kind: 'changed', undone: false } })).toBe(false)
+    expect(isThreadEntry({ ...settings, outcome: 'declined' })).toBe(false)
+    expect(isThreadEntry({ ...settings, after: 1 })).toBe(false)
+    const mcp = valid.find((entry) => entry.kind === 'project_mcp')!
+    expect(isThreadEntry({ ...mcp, servers: [{ name: 'db' }] })).toBe(false)
+    expect(isThreadEntry({ ...mcp, decision: 'allow' })).toBe(false)
+    expect(isThreadEntry({ ...mcp, after: undefined })).toBe(false)
+    const hooks = valid.find((entry) => entry.kind === 'project_hooks')!
+    expect(isThreadEntry({ ...hooks, hooks: [{ target: './check.sh' }] })).toBe(false)
+    expect(isThreadEntry({ ...hooks, decision: 'once' })).toBe(false)
+    expect(isThreadEntry({ ...hooks, after: 1 })).toBe(false)
     expect(isThreadEntry({ ...artifact, writes: undefined })).toBe(false)
     expect(isThreadEntry({ ...artifact, after: 1 })).toBe(false)
     const origin = valid.find((entry) => entry.kind === 'browser_origin')!
