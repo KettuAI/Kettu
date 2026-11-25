@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import {
+  groupCodeOf,
+  groupPairCode,
+  newPairGroup,
   pairCode,
   pairCommit,
+  parsePairGroup,
   parseDiscoveredHosts,
   parseDiscoveryEvent,
   parsePairCommit,
   parsePairConfirm,
   parsePairNonce,
   parsePairReveal,
+  parseReverseGrant,
+  parseReverseHost,
   revealMatches,
 } from './discovery'
+import vectors from './pair-code-vectors.json'
+import { decodeRelayBytes } from './relay'
 
 const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte)
+const bytes = (value: string): Uint8Array => decodeRelayBytes(value)!
 
 const NONCE = 'AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM'
 const COMMIT = 'ZIqlxXn7MPOK90TZfW7IQMepEnekmaDXgPPnMU7KCQs'
@@ -28,6 +37,65 @@ describe('the code of a pairing with a host of the account', () => {
     expect(await revealMatches(COMMIT, filled(3))).toBe(true)
     expect(await revealMatches(COMMIT, filled(4))).toBe(false)
     expect(await revealMatches('short', filled(3))).toBe(false)
+  })
+})
+
+describe('the codes in the test vectors other apps check against', () => {
+  it("gives each exchange's code", async () => {
+    for (const vector of vectors.single) {
+      const { hash, hostNonce, deviceNonce, code } = vector
+      expect(await pairCode(bytes(hash), bytes(hostNonce), bytes(deviceNonce))).toBe(code)
+    }
+  })
+
+  it("gives a batch's code over its computers in order", async () => {
+    for (const vector of vectors.group) {
+      const parts = vector.hosts.map((host) => ({
+        relayId: host.relayId,
+        hash: bytes(host.hash),
+        hostNonce: bytes(host.hostNonce),
+        deviceNonce: bytes(host.deviceNonce),
+      }))
+      expect(await groupPairCode(parts)).toBe(vector.code)
+      expect(await groupPairCode([...parts].reverse())).not.toBe(vector.code)
+      const transcripts = new Map(vector.hosts.map((host) => [host.relayId, host]))
+      const hosts = vector.hosts.map((host) => host.relayId)
+      expect(await groupCodeOf(hosts, transcripts)).toBe(vector.code)
+      expect(await groupCodeOf([...hosts, 'a'.repeat(26)], transcripts)).toBeNull()
+    }
+  })
+})
+
+describe('a batch of computers connected to with one code', () => {
+  const [a, b, c] = vectors.group[1]!.hosts.map((host) => host.relayId) as [string, string, string]
+
+  it('takes an id of 16 bytes and 2 to 16 relay ids in order, each once', () => {
+    const group = newPairGroup([c, a, b, a])
+    expect(group.hosts).toEqual([a, b, c])
+    expect(parsePairGroup(group)).toEqual(group)
+    const { id } = group
+    expect(parsePairGroup({ id, hosts: [a] })).toBeNull()
+    expect(parsePairGroup({ id, hosts: [b, a] })).toBeNull()
+    expect(parsePairGroup({ id, hosts: [a, a] })).toBeNull()
+    expect(parsePairGroup({ id, hosts: [a, 'NOT-A-RELAY-ID'] })).toBeNull()
+    const many = [...'abcdefghijklmnopq'].map((letter) => `${'a'.repeat(25)}${letter}`)
+    expect(parsePairGroup({ id, hosts: many.slice(0, 16) })).not.toBeNull()
+    expect(parsePairGroup({ id, hosts: many })).toBeNull()
+    expect(parsePairGroup({ id: id.slice(1), hosts: [a, b] })).toBeNull()
+    expect(parsePairGroup({ id, hosts: [a, b], extra: true })).toBeNull()
+  })
+
+  it('rides on the commit, which refuses a malformed one', () => {
+    const group = newPairGroup([a, b])
+    expect(parsePairCommit({ type: 'pair-commit', commit: COMMIT, group })).toEqual({
+      type: 'pair-commit',
+      commit: COMMIT,
+      group,
+    })
+    expect(
+      parsePairCommit({ type: 'pair-commit', commit: COMMIT, group: { ...group, hosts: [a] } }),
+    ).toBeNull()
+    expect(parsePairCommit({ type: 'pair-commit', commit: COMMIT, group: null })).toBeNull()
   })
 })
 
@@ -64,6 +132,8 @@ describe('the discovery messages', () => {
         code: '001133',
         startedAt: 1,
         expiresAt: 2,
+        deviceConfirmed: false,
+        transcript: { hash: NONCE, hostNonce: NONCE, deviceNonce: COMMIT },
       },
     }
     expect(parseDiscoveryEvent({ ...confirm, request: { ...confirm.request } })).toBeNull()
@@ -94,5 +164,38 @@ describe('the discovery messages', () => {
     })
     expect(parseDiscoveredHosts({ state: 'signed_out' })).toEqual({ state: 'signed_out' })
     expect(parseDiscoveredHosts({ state: 'ok', hosts: [{ ...host, relayId: 'x' }] })).toBeNull()
+  })
+})
+
+describe('the reverse grant', () => {
+  const host = {
+    relayId: 'eh7ddx5bksrgcytl7bkai36se4',
+    publicKey: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+    name: 'Studio',
+    platform: 'darwin',
+    relays: ['https://relay.example.test'],
+    version: '0.2.0',
+  }
+
+  it("takes the calling computer's own host only as a whole, reachable through its relay", () => {
+    expect(parseReverseHost(host)).toEqual(host)
+    expect(parseReverseHost({ ...host, extra: 1 })).toBeNull()
+    expect(parseReverseHost({ ...host, relayId: 'x' })).toBeNull()
+    expect(parseReverseHost({ ...host, publicKey: host.publicKey.slice(1) })).toBeNull()
+    expect(parseReverseHost({ ...host, name: ' Studio' })).toBeNull()
+    expect(parseReverseHost({ ...host, platform: 'Mac OS' })).toBeNull()
+    expect(parseReverseHost({ ...host, relays: [] })).toBeNull()
+    expect(parseReverseHost({ ...host, relays: ['https://relay.example.test/path'] })).toBeNull()
+    expect(parseReverseHost({ ...host, relays: ['javascript:alert(1)'] })).toBeNull()
+    expect(parseReverseHost({ ...host, version: undefined })).toBeNull()
+  })
+
+  it("takes the answering computer's device key, name and platform, and nothing else", () => {
+    const grant = { deviceKey: host.publicKey, name: 'Laptop', platform: 'macOS 26' }
+    expect(parseReverseGrant(grant)).toEqual(grant)
+    expect(parseReverseGrant('unsupported')).toBeNull()
+    expect(parseReverseGrant({ ...grant, deviceKey: 'AQ==' })).toBeNull()
+    expect(parseReverseGrant({ ...grant, name: '' })).toBeNull()
+    expect(parseReverseGrant({ ...grant, account: 'a' })).toBeNull()
   })
 })

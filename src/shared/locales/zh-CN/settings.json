@@ -1698,13 +1698,41 @@
         "intro": "稍后这里和 {{name}} 上会显示一个验证码。",
         "check": "确认 {{name}} 上显示的是同一个验证码。",
         "differs": "不一致就取消：可能是别的电脑在应答。",
-        "matched": "验证码一致。在 {{name}} 上点添加即可完成。",
+        "matched": "验证码一致。在 {{name}} 上或你的另一台能用它的设备上添加这台电脑。",
         "match": "验证码一致"
       },
       "failed": {
         "void": "{{name}} 添加之前请求就结束了：已过期，或在那边被关掉了。再试一次。",
         "rejected": "{{name}} 没有添加这台电脑。",
         "unreachable": "经 Kettu 中继连不上 {{name}}。确认它开着机并已登录，再试一次。"
+      },
+      "connectAll": "全部连接",
+      "connectAllLabel": "连接全部 {{count}} 台电脑",
+      "reverse": "也让 {{name}} 用这台电脑",
+      "reverseAdded": "{{name}} 也能用这台电脑了。",
+      "reverseFailed": "没能让 {{name}} 用这台电脑。还想这样的话，在设置 › 远程访问里添加它。",
+      "reverseUnsupported": "{{name}} 上的 Kettu 没有窗口，用不了别的电脑。",
+      "pairAll": {
+        "title": "连接 {{count}} 台电脑",
+        "intro": "稍后这里和每台电脑上会显示一个验证码。",
+        "check": "确认每台电脑，或你的另一台能用它们的设备上，显示的是这个验证码。",
+        "each": "或逐台核对",
+        "matched": "验证码一致。在每台电脑上，或你的另一台能用它们的设备上添加这台电脑。",
+        "added_other": "已连接 {{count}} 台电脑",
+        "partial": "已连接 {{count}} 台中的 {{added}} 台电脑",
+        "none": "没有添加任何电脑",
+        "state": {
+          "connecting": "正在连接…",
+          "matched": "等待添加…",
+          "added": "已添加",
+          "failed": "没有添加"
+        },
+        "failed": {
+          "void": "已过期，或在那边被关闭",
+          "rejected": "在那边被拒绝了",
+          "unreachable": "连不上它",
+          "other": "无法通过中继连上它"
+        }
       }
     },
     "load": {
@@ -1955,7 +1983,11 @@
         "sessionDeleted": "删除会话“{{title}}”",
         "sessionDeletedUnknown": "删除了一个会话",
         "terminalOpened": "打开终端",
-        "terminalClosed": "关闭终端"
+        "terminalClosed": "关闭终端",
+        "pairedSsh": "经 SSH 加入这台电脑",
+        "pairedSsh_web": "经 SSH 加入 {{host}}",
+        "pairedReverse": "这台电脑加入它时添加",
+        "pairedReverse_web": "{{host}} 加入它时添加"
       },
       "remove": {
         "name": "移除这台设备",
@@ -1966,7 +1998,9 @@
         "body": "它马上断开，之后连不上这台电脑；它缓存的会话列表，等它下次连上时清掉。要再用，得重新扫码添加。",
         "body_web": "它马上断开，之后连不上 {{host}}；它缓存的会话列表，等它下次连上时清掉。要再用，得重新扫码添加。",
         "confirm": "移除"
-      }
+      },
+      "joinedSsh": "{{date}}，经 SSH 添加",
+      "joinedReverse": "{{date}}，这台电脑加入它时添加"
     },
     "time": {
       "today": "今天 {{time}}",
@@ -2116,7 +2150,22 @@
         "cancelled": "{{name}} 取消了连接请求",
         "expired": "{{name}} 的连接请求已过期",
         "stopped": "远程访问已停止，{{name}} 的连接请求随之结束"
-      }
+      },
+      "bodyOn": "{{name}} 想连接 {{host}}。它登录着你的 Kettu 账号，只有是你自己在设置它时才添加。",
+      "answeredOn": {
+        "added": "{{name}} 已在 {{place}} 上添加",
+        "rejected": "{{name}} 已在 {{place}} 上被拒绝"
+      },
+      "gone": "{{name}} 的请求已在别处答复，或已结束",
+      "groupTitle": "要把这台设备加到 {{count}} 台电脑吗？",
+      "groupBody": "{{name}} 想连接 {{hosts}}。它登录着你的 Kettu 账号，只有是你自己在设置它时才添加。",
+      "groupCheck": "确认 {{name}} 上为这几台电脑显示的是同一个验证码。"
+    },
+    "joined": {
+      "toast": "{{name}} 已加入 {{host}}",
+      "remove": "移除",
+      "removed": "已移除 {{name}}",
+      "notRemoved": "没能移除 {{name}}"
     }
   },
   "usage": {

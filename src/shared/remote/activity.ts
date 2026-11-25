@@ -13,9 +13,16 @@ export const ACTIVITY_TITLE_CHARS = 200
 /** Who renamed a device: the owner, on the host, or the device itself. */
 export type ActivityActor = 'owner' | 'device'
 
+/** How a device was added other than by a code. */
+export type PairedVia = 'account' | 'ssh' | 'reverse'
+
 export type DeviceActivity =
-  /** `via`: added from a request of a device signed in to the same Kettu account, not a code. */
-  | { at: number; kind: 'paired'; via?: 'account' }
+  /**
+   * `via`, absent for a code: `account`, a request of a device signed in to the same Kettu
+   * account; `ssh`, a computer that added this host over SSH; `reverse`, a computer this host was
+   * just added to, which it let use this one in turn.
+   */
+  | { at: number; kind: 'paired'; via?: PairedVia }
   | { at: number; kind: 'connected' }
   | { at: number; kind: 'renamed'; from: string; to: string; by: ActivityActor }
   /** `unseen`: 90 days without a connection; `reset`: remote access was reset. */

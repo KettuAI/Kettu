@@ -168,7 +168,10 @@ export class WebPushSender {
         TTL: String(TTL_S),
         // A newer push of the same subject replaces this one while it waits at the push service.
         Topic: tag,
-        Urgency: job.event.kind === 'permission' ? 'high' : 'normal',
+        Urgency:
+          job.event.kind === 'permission' || job.event.kind === 'device-request'
+            ? 'high'
+            : 'normal',
       },
       body: new Uint8Array(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

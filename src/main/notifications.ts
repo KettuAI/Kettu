@@ -113,6 +113,8 @@ function validAnswer(value: unknown): { requestId: string; optionId: string } | 
 }
 
 let discovery: { requestId: number; notification: Notification } | null = null
+/** The request last notified, which its later events do not notify again. */
+let notifiedRequest: number | null = null
 
 /**
  * A device of the account asks to be added: an OS notification while no window is focused, whose
@@ -130,7 +132,11 @@ export function notifyDiscovery(
     }
     return
   }
+  // The same request again, now that its device confirmed the code, is no new notice, even when
+  // the first one was dismissed or failed.
+  if (notifiedRequest === event.requestId) return
   if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return
+  notifiedRequest = event.requestId
   discovery?.notification.close()
   const notification = new Notification({
     title: t('notifications.discoveryTitle'),
@@ -150,6 +156,45 @@ export function notifyDiscovery(
     log.warn(`Notification failed: ${error}`)
   })
   discovery = { requestId: event.requestId, notification }
+  notification.show()
+}
+
+/**
+ * A device joined this computer: an OS notification, focused or not, with Remove; its click
+ * opens the device list.
+ */
+export function notifyJoined(
+  device: { id: string; name: string },
+  hostName: string,
+  settings: SettingsFile,
+  actions: { remove(): void; open(): void },
+): void {
+  if (!Notification.isSupported()) return
+  const key = `joined:${device.id}`
+  shown.get(key)?.close()
+  const notification = new Notification({
+    title: t('notifications.joinedTitle', { name: device.name, host: hostName }),
+    body: t('notifications.joinedBody'),
+    silent: !settings.notifications.sound,
+    actions: [{ type: 'button' as const, text: t('notifications.remove') }],
+  })
+  const forget = (): void => {
+    if (shown.get(key) === notification) shown.delete(key)
+  }
+  notification.on('click', () => {
+    forget()
+    actions.open()
+  })
+  notification.on('action', () => {
+    forget()
+    actions.remove()
+  })
+  notification.on('close', forget)
+  notification.on('failed', (_, error) => {
+    forget()
+    log.warn(`Notification failed: ${error}`)
+  })
+  shown.set(key, notification)
   notification.show()
 }
 

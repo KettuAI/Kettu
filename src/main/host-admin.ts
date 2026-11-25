@@ -11,6 +11,12 @@ import type { PortErrorCode } from '@shared/port-rpc'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
 import {
+  parseReverseHost,
+  type DiscoveryRequestEvent,
+  type ReverseGrant,
+  type ReverseHost,
+} from '@shared/remote/discovery'
+import {
   hostSettingsPart,
   isHostAdminMethod,
   splitSettingsPatch,
@@ -21,6 +27,8 @@ import {
   type HostAttention,
   type HostInfo,
   type HostThemes,
+  type JoinedDevice,
+  type JoinedVia,
 } from '@shared/remote/host-admin'
 import type { PairingState } from '@shared/remote/pairing'
 import { parseReportRequest, type ReportRequest, type ReportSubmitResult } from '@shared/report'
@@ -123,6 +131,15 @@ export interface AdminRemote {
   pair(listener: (pairing: PairingState) => void): number | null
   closePairing(codeId: number): void
   answerPairing(codeId: number, add: boolean, name: string): void
+  /** The request of a device of the account that waits now, if any. */
+  pendingDiscovery(): DiscoveryRequestEvent | null
+  /** An answer to it from the paired device named `by`: true when it was the first and counted. */
+  answerDiscovery(requestId: number, add: boolean, name: string, by: string): Promise<boolean>
+  /**
+   * Keeps the calling device's own host as a host of this computer's client; `unsupported` where
+   * there is none, as under the daemon, and null when it could not be kept.
+   */
+  addReverseHost(host: ReverseHost): Promise<ReverseGrant | 'unsupported' | null>
   /** False when the device could not be renamed. */
   renameDevice(id: string, name: string): Promise<boolean>
   /** False when the device could not be removed. */
@@ -206,8 +223,8 @@ export interface HostAdminDeps {
   submitReport?: (ref: string) => Promise<ReportSubmitResult>
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
-  /** Tells every owner's device, or only `deviceId`. */
-  send(event: HostAdminEvent, deviceId: string | null): void
+  /** Tells every owner's device but `except`, or only `deviceId`. */
+  send(event: HostAdminEvent, deviceId: string | null, except?: string): void
 }
 
 /** Answers the owner's devices and tells them what changes on the host. */
@@ -216,6 +233,8 @@ export class HostAdmin {
   private readonly codes = new Map<number, string>()
   private sentSettings: string
   private sentRemote: string | null = null
+  /** The devices with a session open as remote access last said, which a new one is not among. */
+  private online = new Set<string>()
   /** Calls waiting for the updater to say what it does next. */
   private updateWaiters: (() => void)[] = []
   /** Themes a device's install showed, which its answer tells it to show. */
@@ -272,10 +291,28 @@ export class HostAdmin {
       this.codes.delete(codeId)
       this.deps.remote.closePairing(codeId)
     }
+    // A device that connects while a request waits hears of it, as the others did.
+    const pending = this.deps.remote.pendingDiscovery()
+    for (const deviceId of status.online) {
+      if (pending && !this.online.has(deviceId)) {
+        this.deps.send({ type: 'remote.discovery', event: pending }, deviceId)
+      }
+    }
+    this.online = new Set(status.online)
     const sent = JSON.stringify(status)
     if (sent === this.sentRemote) return
     this.sentRemote = sent
     this.deps.send({ type: 'remote.changed', status }, null)
+  }
+
+  /** A device of the account asks to be added, or that request ended: every device hears it. */
+  discoveryChanged(event: DiscoveryRequestEvent): void {
+    this.deps.send({ type: 'remote.discovery', event }, null)
+  }
+
+  /** A device joined: every other device hears it. */
+  deviceJoined(device: JoinedDevice, via: JoinedVia): void {
+    this.deps.send({ type: 'remote.deviceJoined', device, via }, null, device.id)
   }
 
   sharingChanged(status: SharingStatus): void {
@@ -347,6 +384,12 @@ export class HostAdmin {
     // The file keeps the desktop app's default, which a host that always serves never reads.
     if (this.deps.remoteAlwaysOn) part.remote.enabled = true
     return part
+  }
+
+  /** A paired device's name, for where an answer came from. */
+  private deviceNamed(deviceId: string): string {
+    const device = this.deps.remoteStatus().devices.find((entry) => entry.id === deviceId)
+    return device?.name ?? deviceId.slice(0, 8)
   }
 
   private ownCode(deviceId: string, value: unknown): number | null {
@@ -457,6 +500,27 @@ export class HostAdmin {
         const owned = this.ownCode(deviceId, codeId)
         if (owned !== null) remote.answerPairing(owned, add, add ? deviceName(name) : '')
         return null
+      }
+      case 'remote.pendingDiscovery':
+        return remote.pendingDiscovery()
+      case 'remote.answerDiscovery': {
+        const { requestId, add, name } = fields(params)
+        if (typeof add !== 'boolean') throw invalid('"add" must be a boolean')
+        const by = this.deviceNamed(deviceId)
+        const counted = await remote.answerDiscovery(
+          pairingCode(requestId),
+          add,
+          add ? deviceName(name) : '',
+          by,
+        )
+        return counted ? null : 'gone'
+      }
+      case 'remote.addReverseHost': {
+        const host = parseReverseHost(params)
+        if (!host) throw invalid("params must be the calling computer's own host")
+        const grant = await remote.addReverseHost(host)
+        if (grant === null) throw new AdminError('unavailable', t('hostAdmin.noReverseHost'))
+        return grant
       }
       case 'remote.renameDevice': {
         const { id, name } = fields(params)

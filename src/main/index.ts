@@ -70,7 +70,13 @@ import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
 import { isOpenedAtLogin, startMode, syncLoginItem } from './login-item'
-import { notifyAttention, notifyDiscovery, notifyNotice, RepeatedNotices } from './notifications'
+import {
+  notifyAttention,
+  notifyDiscovery,
+  notifyJoined,
+  notifyNotice,
+  RepeatedNotices,
+} from './notifications'
 import { RoutinesAwake } from './power-save'
 import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
@@ -914,7 +920,18 @@ async function start(): Promise<void> {
     },
     discoveryChanged: (event) => {
       broadcast('remote:discovery', event)
+      hostAdmin?.discoveryChanged(event)
       notifyDiscovery(event, settings.get(), () => void showMainWindow())
+    },
+    deviceJoined: (device, via) => {
+      hostAdmin?.deviceJoined(device, via)
+      notifyJoined(device, hostName(), settings.get(), {
+        remove: () => void remoteHost.removeDevice(device.id),
+        open: () => {
+          void showMainWindow()
+          sendCommand({ kind: 'open-settings', section: 'remote' })
+        },
+      })
     },
     relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
@@ -1153,7 +1170,7 @@ async function start(): Promise<void> {
     printPdf: (id, version) => artifacts.printPdf(ownArtifact(id), version),
     report: (request) => reports.forDevice(request),
     submitReport: (ref) => reports.submit(ref),
-    send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
+    send: (event, deviceId, except) => remoteHost.adminEvent(event, deviceId, except),
   })
 
   const menuDeps = {

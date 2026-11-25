@@ -142,8 +142,8 @@ export function App() {
         <ReportDialog />
         {/* Kettu's browser, which sign-ins are brought into, runs in the desktop app alone. */}
         {!isWeb && <SignInsDialog />}
-        {/* Devices of the account ask the host's own windows; a browser is never asked. */}
-        {!isWeb && cloud && <DiscoveryRequestDialog />}
+        {/* Devices of the account ask every window of the hosts it uses, a browser's too. */}
+        {(isWeb || cloud) && <DiscoveryRequestDialog />}
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

@@ -111,6 +111,8 @@ export interface NotificationChoices {
   errors: boolean
   /** A routine's run ended, or the routines paused near a plan limit. */
   routines: boolean
+  /** A device of the account asks to be added, or a device joined the host. */
+  device: boolean
   /** Only while the user is not at the host, when the host can tell: the desktop app can. */
   onlyAway: boolean
   /** Titles and text; without them a notification says only which host needs the user. */
@@ -124,6 +126,7 @@ export const DEFAULT_CHOICES: NotificationChoices = {
   turnEnded: true,
   errors: true,
   routines: false,
+  device: true,
   onlyAway: true,
   details: true,
   muted: [],
@@ -204,6 +207,7 @@ const SWITCHES = [
   'turnEnded',
   'errors',
   'routines',
+  'device',
   'onlyAway',
   'details',
 ] as const satisfies readonly (keyof NotificationChoices)[]
@@ -286,6 +290,10 @@ export type PushEvent =
   | { kind: 'turn-ended' | 'error' | 'routine-ended'; sessionId: string }
   /** An agent's routines paused near a plan limit; it opens the Routines page. */
   | { kind: 'routine-paused'; agentId: string }
+  /** A device of the account asks to be added; it opens the request's card. */
+  | { kind: 'device-request'; requestId: number }
+  /** A device joined the host, which the device may remove. */
+  | { kind: 'device-joined'; deviceId: string }
   /** Removes the notification of the same tag, which no longer applies. */
   | { kind: 'withdraw'; sessionId?: string }
   /** A Live Activity's state: how many requests wait, and the session of the latest. */

@@ -18,6 +18,10 @@ export type Command =
   | { kind: 'status' }
   | { kind: 'devices' }
   | { kind: 'devices-remove'; id: string }
+  /** A device of the account that asks to be added: shown, added, under `name` if given, or not. */
+  | { kind: 'requests' }
+  | { kind: 'requests-add'; name: string | null }
+  | { kind: 'requests-reject' }
   | { kind: 'pair' }
   | { kind: 'direct' }
   /** `yes`: change it without asking. */
@@ -73,6 +77,9 @@ Commands:
   devices                      List the devices paired with this computer
   devices remove <id>          Remove a paired device and close its sessions
   pair                         Add a device: show a code to scan, then confirm the device
+  requests                     Show the device of your Kettu account that asks to be added
+  requests add [<name>]        Add it, under another name if given, once the codes match
+  requests reject              Turn it down
   direct                       Show the port and the addresses devices connect to directly
   direct port <port>           Listen on another port, from 1024 to 65535
   direct add <host>:<port>     Add an address of your own, such as a forwarded port
@@ -126,9 +133,9 @@ Environment:
   KETTU_RELAY_LINK             The link your own relay printed, checked and used at every start
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
-kettu status and the devices, pair, direct, terminal, relay and verbose commands exit with 3 when the
-daemon is not running. kettu direct exits with 1 when direct connections cannot listen. kettu
-report without a running daemon saves the logs and settings alone.
+kettu status and the devices, requests, pair, direct, terminal, relay and verbose commands exit
+with 3 when the daemon is not running. kettu direct exits with 1 when direct connections cannot
+listen. kettu report without a running daemon saves the logs and settings alone.
 `
 
 const OPTIONS = {
@@ -346,6 +353,13 @@ function parseWords(words: string[], yes: boolean): Command {
       }
       if (rest.length < 2) return { kind: 'usage', message: "Name the device's id to remove" }
       return extra(2) ?? { kind: 'devices-remove', id: rest[1]! }
+    case 'requests':
+      if (rest.length === 0) return { kind: 'requests' }
+      if (rest[0] === 'reject') return extra(1) ?? { kind: 'requests-reject' }
+      if (rest[0] !== 'add') {
+        return { kind: 'usage', message: `Unknown requests command ${quote(rest[0]!)}` }
+      }
+      return extra(2) ?? { kind: 'requests-add', name: rest[1] ?? null }
     case 'direct':
       return parseDirect(rest, yes)
     case 'terminal':

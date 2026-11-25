@@ -4,15 +4,30 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AccountComputer, DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
-import type { HostPairingFailure, HostPairingState, HostStatus } from '@shared/remote/hosts'
+import { currentLocale } from '@renderer/lib/i18n'
+import {
+  groupCodeOf,
+  newPairGroup,
+  type AccountComputer,
+  type DiscoveredHost,
+  type DiscoveredHosts,
+  type PairTranscript,
+} from '@shared/remote/discovery'
+import type {
+  HostPairingFailure,
+  HostPairingState,
+  HostStatus,
+  ReverseOutcome,
+} from '@shared/remote/hosts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog } from '@renderer/components/ui/dialog'
 import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { signIn } from '@renderer/stores/account'
 import { connectTo, loadDiscovered, useHostsStore } from '@renderer/stores/hosts'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { IconAction, Pill, SetButton, Skel, Spin } from './controls'
 import { Added } from './host-added'
 import { platformName } from './host-text'
@@ -154,10 +169,19 @@ export function AccountHostsState({ discovered }: { discovered: DiscoveredHosts 
 export function AccountHostsActions({ signedOut }: { signedOut: boolean }) {
   const { t } = useTranslation('settings')
   const refresh = useRefresh()
+  const listed = useHostsStore((s) => (s.discovered?.state === 'ok' ? s.discovered.hosts : null))
   // Drawn only while Settings shows the list.
   useRereadDiscovered()
   return (
     <>
+      {listed && listed.length > 1 && (
+        <SetButton
+          aria-label={t('hosts.account.connectAllLabel', { count: listed.length })}
+          onClick={() => connectTo(listed)}
+        >
+          {t('hosts.account.connectAll')}
+        </SetButton>
+      )}
       {!signedOut && (
         <IconAction
           label={t('hosts.account.refresh')}
@@ -175,7 +199,11 @@ export function AccountHostsActions({ signedOut }: { signedOut: boolean }) {
  * The account's hosts at the top of Add host, once there are any; Connect pairs within the
  * dialog.
  */
-export function AccountHostsPicker({ onConnect }: { onConnect: (host: DiscoveredHost) => void }) {
+export function AccountHostsPicker({
+  onConnect,
+}: {
+  onConnect: (host: DiscoveredHost | DiscoveredHost[]) => void
+}) {
   const { t } = useTranslation('settings')
   const discovered = useDiscoveredHosts()
   const now = useNow()
@@ -185,9 +213,19 @@ export function AccountHostsPicker({ onConnect }: { onConnect: (host: Discovered
   if (discovered.hosts.length === 0 && others.length === 0) return null
   return (
     <section aria-labelledby="account-hosts-label" className="kettu-sd__field">
-      <h3 id="account-hosts-label" className="kettu-sd__label">
-        {t('hosts.account.group')}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 id="account-hosts-label" className="kettu-sd__label">
+          {t('hosts.account.group')}
+        </h3>
+        {discovered.hosts.length > 1 && (
+          <SetButton
+            aria-label={t('hosts.account.connectAllLabel', { count: discovered.hosts.length })}
+            onClick={() => onConnect(discovered.hosts)}
+          >
+            {t('hosts.account.connectAll')}
+          </SetButton>
+        )}
+      </div>
       <ul className="kettu-sd__list kettu-sd__account">
         {discovered.hosts.map((host) => (
           <li key={host.relayId} className="kettu-sd__row">
@@ -254,14 +292,24 @@ function ConnectHostDialog() {
       }}
     >
       <SettingsDialogContent ref={popup} initialFocus={popup} className="sm:max-w-110">
-        {shown && (
-          <AccountPairFlow
+        {Array.isArray(shown) ? (
+          <AccountPairAllFlow
             key={round}
-            host={shown}
+            hosts={shown}
             open={host !== null}
             activeRef={active}
             onDone={() => connectTo(null)}
           />
+        ) : (
+          shown && (
+            <AccountPairFlow
+              key={round}
+              host={shown}
+              open={host !== null}
+              activeRef={active}
+              onDone={() => connectTo(null)}
+            />
+          )
         )}
       </SettingsDialogContent>
     </Dialog>
@@ -274,7 +322,7 @@ type AccountPairFailure = Exclude<HostPairingFailure, `ssh_${string}`> | 'unavai
 type AccountPairStep =
   | { kind: 'connecting' }
   | { kind: 'compare'; code: string; matched: boolean }
-  | { kind: 'added'; host: HostStatus }
+  | { kind: 'added'; host: HostStatus; reverse?: ReverseOutcome }
   | { kind: 'failed'; reason: AccountPairFailure }
 
 /** Failures worth trying again at once, rather than after something changes. */
@@ -311,6 +359,8 @@ export function AccountPairFlow({
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const [step, setStep] = useState<AccountPairStep>({ kind: 'connecting' })
+  const offerReverse = useReverseOffered([host])
+  const [reverse, setReverse] = useState(false)
   const pairing = useRef<number | null>(null)
   const attempt = useRef(0)
   // Progress of a pairing main has not named yet, as an event may beat the answer to the call.
@@ -322,7 +372,11 @@ export function AccountPairFlow({
     if (state.state === 'compare') {
       setStep({ kind: 'compare', code: state.code, matched: state.matched })
     } else if (state.state === 'added') {
-      setStep({ kind: 'added', host: state.host })
+      setStep({
+        kind: 'added',
+        host: state.host,
+        ...(state.reverse ? { reverse: state.reverse } : {}),
+      })
     } else if (state.state === 'failed') {
       const reason = state.reason.startsWith('ssh_') ? 'unreachable' : state.reason
       setStep({ kind: 'failed', reason: reason as AccountPairFailure })
@@ -346,7 +400,7 @@ export function AccountPairFlow({
   const pair = (): void => {
     close()
     const run = ++attempt.current
-    window.kettu.hosts.pairDiscovered(host.relayId).then(
+    window.kettu.hosts.pairDiscovered(host.relayId, {}).then(
       (started) => {
         if (run !== attempt.current) {
           if (started.kind === 'pairing') void window.kettu.hosts.closePairing(started.pairId)
@@ -400,7 +454,7 @@ export function AccountPairFlow({
     const pairId = pairing.current
     if (pairId === null || step.kind !== 'compare') return
     setStep({ ...step, matched: true })
-    window.kettu.hosts.matchPairing(pairId, true).catch(() => {
+    window.kettu.hosts.matchPairing(pairId, true, offerReverse && reverse).catch(() => {
       if (pairing.current === pairId) setStep({ kind: 'failed', reason: 'unreachable' })
     })
   }
@@ -418,6 +472,7 @@ export function AccountPairFlow({
       <Added
         host={step.host}
         title={t('hosts.account.pair.title', { name })}
+        note={step.reverse && <ReverseNote outcome={step.reverse} name={name} />}
         onDone={() => onDone(step.host)}
       />
     )
@@ -462,6 +517,14 @@ export function AccountPairFlow({
                 </>
               )}
             </div>
+            {offerReverse && (
+              <ReverseOption
+                label={t('hosts.account.reverse', { name })}
+                checked={reverse}
+                disabled={matched}
+                onChange={setReverse}
+              />
+            )}
           </>
         )}
       </SettingsDialogBody>
@@ -501,6 +564,374 @@ export function AccountPairFlow({
       </SettingsDialogFooter>
     </>
   )
+}
+
+/**
+ * Whether to offer letting the hosts use this computer too: only a desktop app whose own remote
+ * access is on can be used, and only by hosts that are not known to be a daemon.
+ */
+function useReverseOffered(hosts: DiscoveredHost[]): boolean {
+  const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
+  return remoteOn && hosts.some((host) => host.kind !== 'daemon')
+}
+
+/** The choice to let the hosts connected to use this computer in turn. */
+function ReverseOption({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  disabled: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <label className="flex items-center gap-2.5 self-center text-ui text-primary">
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onChange(value === true)}
+      />
+      {label}
+    </label>
+  )
+}
+
+/** Whether the host added may now use this computer too, or why not. */
+function ReverseNote({ outcome, name }: { outcome: ReverseOutcome; name: string }) {
+  const { t } = useTranslation('settings')
+  const text =
+    outcome === 'added'
+      ? t('hosts.account.reverseAdded', { name })
+      : outcome === 'unsupported'
+        ? t('hosts.account.reverseUnsupported', { name })
+        : t('hosts.account.reverseFailed', { name })
+  return (
+    <p
+      role={outcome === 'failed' ? 'alert' : undefined}
+      className={outcome === 'failed' ? 'kettu-sd__error' : 'kettu-sd__hint'}
+    >
+      {text}
+    </p>
+  )
+}
+
+/** One computer of a batch connected to under one code. */
+interface BatchHost {
+  host: DiscoveredHost
+  pairId: number | null
+  step: AccountPairStep
+  transcript: PairTranscript | null
+}
+
+/**
+ * Connecting to several of the account's hosts at once: every exchange starts together, under
+ * one batch, and both the batch's code and each computer's own show. Codes match under the batch's
+ * code confirms every computer still waiting; each computer's own button confirms only it, for
+ * one asked on its own window or by a device that cannot use them all.
+ */
+export function AccountPairAllFlow({
+  hosts,
+  open,
+  activeRef,
+  onDone,
+  onBack,
+}: {
+  hosts: DiscoveredHost[]
+  open: boolean
+  activeRef: RefObject<boolean>
+  onDone: (added: HostStatus | null) => void
+  onBack?: () => void
+}) {
+  const { t } = useTranslation(['settings', 'common'])
+  const [batch, setBatch] = useState<BatchHost[]>(() =>
+    hosts.map((host) => ({ host, pairId: null, step: { kind: 'connecting' }, transcript: null })),
+  )
+  const [group] = useState(() => newPairGroup(hosts.map((host) => host.relayId)))
+  const offerReverse = useReverseOffered(hosts)
+  const [reverse, setReverse] = useState(false)
+  const [code, setCode] = useState<string | null>(null)
+  const early = useRef(new Map<number, HostPairingState[]>())
+  const pairIds = useRef(new Map<number, string>())
+
+  const update = (relayId: string, state: HostPairingState): void =>
+    setBatch((now) =>
+      now.map((entry) => {
+        if (entry.host.relayId !== relayId) return entry
+        if (state.state === 'compare') {
+          return {
+            ...entry,
+            step: { kind: 'compare', code: state.code, matched: state.matched },
+            transcript: state.transcript ?? entry.transcript,
+          }
+        }
+        if (state.state === 'added') {
+          const added: AccountPairStep = {
+            kind: 'added',
+            host: state.host,
+            ...(state.reverse ? { reverse: state.reverse } : {}),
+          }
+          return { ...entry, pairId: null, step: added }
+        }
+        if (state.state === 'failed') {
+          const reason = state.reason.startsWith('ssh_') ? 'unreachable' : state.reason
+          return {
+            ...entry,
+            pairId: null,
+            step: { kind: 'failed', reason: reason as AccountPairFailure },
+          }
+        }
+        if (state.state === 'confirm' && entry.step.kind === 'compare') {
+          return { ...entry, step: { ...entry.step, matched: true } }
+        }
+        return entry
+      }),
+    )
+
+  useEffect(() => {
+    if (!open) return
+    let live = true
+    const started = pairIds.current
+    const off = window.kettu.hosts.onPairing(({ pairId, pairing: state }) => {
+      const relayId = started.get(pairId)
+      if (relayId) update(relayId, state)
+      else early.current.set(pairId, [...(early.current.get(pairId) ?? []), state])
+    })
+    for (const { relayId } of hosts) {
+      window.kettu.hosts.pairDiscovered(relayId, { group }).then(
+        (begun) => {
+          if (begun.kind !== 'pairing') {
+            const reason = begun.kind === 'unavailable' ? 'unavailable' : 'host_offline'
+            return update(relayId, { state: 'failed', reason: reason as HostPairingFailure })
+          }
+          if (!live) return void window.kettu.hosts.closePairing(begun.pairId)
+          started.set(begun.pairId, relayId)
+          setBatch((now) =>
+            now.map((entry) =>
+              entry.host.relayId === relayId ? { ...entry, pairId: begun.pairId } : entry,
+            ),
+          )
+          const waiting = early.current.get(begun.pairId) ?? []
+          early.current.delete(begun.pairId)
+          for (const state of waiting) update(relayId, state)
+        },
+        () => update(relayId, { state: 'failed', reason: 'unreachable' }),
+      )
+    }
+    return () => {
+      live = false
+      off()
+      for (const pairId of started.keys()) void window.kettu.hosts.closePairing(pairId)
+      started.clear()
+    }
+    // One batch for each opening; the handlers reach only refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // The batch's code once every computer's exchange is known; a computer that failed voids it.
+  const transcripts = batch.every(
+    (entry) => entry.transcript !== null && entry.step.kind !== 'failed',
+  )
+    ? new Map(batch.map((entry) => [entry.host.relayId, entry.transcript!]))
+    : null
+  const transcriptKey = transcripts ? JSON.stringify([...transcripts]) : ''
+  useEffect(() => {
+    if (!transcripts) return
+    let live = true
+    void groupCodeOf(group.hosts, transcripts).then((worked) => {
+      if (live) setCode(worked)
+    })
+    return () => {
+      live = false
+    }
+    // The transcripts are read again only when one of them changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcriptKey, group])
+  const shownCode = transcripts ? code : null
+
+  const waiting = batch.filter((entry) => entry.step.kind === 'compare' && !entry.step.matched)
+  const active = batch.some(
+    (entry) => entry.step.kind === 'connecting' || entry.step.kind === 'compare',
+  )
+  useEffect(() => {
+    activeRef.current = active
+    return () => {
+      activeRef.current = false
+    }
+  }, [active, activeRef])
+
+  const matchOne = (entry: BatchHost): void => {
+    const { pairId, step } = entry
+    if (pairId === null || step.kind !== 'compare' || step.matched) return
+    update(entry.host.relayId, { state: 'compare', code: step.code, matched: true })
+    // A daemon has no client to keep this computer with, so it is not asked.
+    const asked = offerReverse && reverse && entry.host.kind !== 'daemon'
+    window.kettu.hosts.matchPairing(pairId, true, asked).catch(() => {
+      update(entry.host.relayId, { state: 'failed', reason: 'unreachable' })
+    })
+  }
+  const matchAll = (): void => {
+    for (const entry of waiting) matchOne(entry)
+  }
+  const cancel = (): void => {
+    for (const entry of batch) {
+      if (entry.pairId !== null) void window.kettu.hosts.matchPairing(entry.pairId, false, false)
+    }
+    if (onBack) onBack()
+    else onDone(null)
+  }
+
+  const added = batch.filter((entry) => entry.step.kind === 'added').length
+  const matchedAny = batch.some(
+    (entry) => entry.step.kind === 'added' || (entry.step.kind === 'compare' && entry.step.matched),
+  )
+  const status = batch.some((entry) => entry.step.kind === 'connecting')
+    ? t('hosts.account.pair.connecting')
+    : null
+  return (
+    <>
+      <SettingsDialogHeader
+        title={
+          active
+            ? t('hosts.account.pairAll.title', { count: hosts.length })
+            : added === hosts.length
+              ? t('hosts.account.pairAll.added', { count: added })
+              : added === 0
+                ? t('hosts.account.pairAll.none')
+                : t('hosts.account.pairAll.partial', { added, count: hosts.length })
+        }
+      />
+      <SettingsDialogBody>
+        {active && (
+          <>
+            <PairCode code={shownCode} />
+            <div className="kettu-sd__pair-text">
+              <p>
+                {shownCode === null
+                  ? t('hosts.account.pairAll.intro')
+                  : waiting.length === 0
+                    ? t('hosts.account.pairAll.matched')
+                    : t('hosts.account.pairAll.check')}
+              </p>
+            </div>
+          </>
+        )}
+        <section aria-labelledby={active ? 'pair-all-each' : undefined} className="kettu-sd__field">
+          {active && (
+            <h3 id="pair-all-each" className="kettu-sd__label">
+              {t('hosts.account.pairAll.each')}
+            </h3>
+          )}
+          <ul className="kettu-sd__list kettu-sd__account">
+            {batch.map((entry) => (
+              <BatchRow key={entry.host.relayId} entry={entry} onMatch={() => matchOne(entry)} />
+            ))}
+          </ul>
+        </section>
+        {offerReverse && active && (
+          <ReverseOption
+            label={t('hosts.account.reverse', {
+              name: new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
+                hosts.filter((host) => host.kind !== 'daemon').map((host) => host.name),
+              ),
+            })}
+            checked={reverse}
+            disabled={matchedAny}
+            onChange={setReverse}
+          />
+        )}
+      </SettingsDialogBody>
+      <SettingsDialogFooter
+        start={
+          status && (
+            <span role="status" className="kettu-sd__status">
+              <Spin />
+              {status}
+            </span>
+          )
+        }
+      >
+        {active ? (
+          <>
+            <SetButton size="md" variant="ghost" onClick={cancel}>
+              {t('common:actions.cancel')}
+            </SetButton>
+            {waiting.length > 0 && (
+              <SetButton
+                size="md"
+                variant="primary"
+                disabled={shownCode === null}
+                onClick={matchAll}
+              >
+                {t('hosts.account.pair.match')}
+              </SetButton>
+            )}
+          </>
+        ) : (
+          <SetButton size="md" variant="primary" onClick={() => onDone(null)}>
+            {t('hosts.add.done')}
+          </SetButton>
+        )}
+      </SettingsDialogFooter>
+    </>
+  )
+}
+
+/** One computer of a batch: its own code with its own Codes match, or how it went. */
+function BatchRow({ entry, onMatch }: { entry: BatchHost; onMatch: () => void }) {
+  const { t } = useTranslation('settings')
+  const { host, step } = entry
+  const line =
+    step.kind === 'compare'
+      ? `${step.code.slice(0, 3)} ${step.code.slice(3)}`
+      : step.kind === 'added'
+        ? step.reverse && reverseLine(t, step.reverse, host.name)
+        : step.kind === 'failed'
+          ? t(
+              `hosts.account.pairAll.failed.${OWN_TEXT.has(step.reason) ? (step.reason as 'void') : 'other'}`,
+            )
+          : t('hosts.account.pairAll.state.connecting')
+  return (
+    <li className="kettu-sd__row">
+      <DeviceTile icon={<HostIcon platform={host.platform} />} />
+      <span className="ui-sg-label">
+        <b className="k-name">{host.name}</b>
+        {line && (
+          <small className={step.kind === 'compare' ? 'kettu-sd__each-code' : undefined}>
+            {line}
+          </small>
+        )}
+      </span>
+      {step.kind === 'compare' && !step.matched ? (
+        <SetButton
+          aria-label={t('hosts.account.pair.title', { name: host.name })}
+          onClick={onMatch}
+        >
+          {t('hosts.account.pair.match')}
+        </SetButton>
+      ) : step.kind === 'compare' ? (
+        <Pill>{t('hosts.account.pairAll.state.matched')}</Pill>
+      ) : step.kind === 'added' ? (
+        <Pill tone="success">{t('hosts.account.pairAll.state.added')}</Pill>
+      ) : step.kind === 'failed' ? (
+        <Pill tone="warning">{t('hosts.account.pairAll.state.failed')}</Pill>
+      ) : (
+        <Spin />
+      )}
+    </li>
+  )
+}
+
+function reverseLine(
+  t: ReturnType<typeof useTranslation<'settings'>>['t'],
+  outcome: ReverseOutcome,
+  name: string,
+): string {
+  if (outcome === 'added') return t('hosts.account.reverseAdded', { name })
+  if (outcome === 'unsupported') return t('hosts.account.reverseUnsupported', { name })
+  return t('hosts.account.reverseFailed', { name })
 }
 
 /** The six-digit code both screens show, in two groups of three; a spinner until it is known. */

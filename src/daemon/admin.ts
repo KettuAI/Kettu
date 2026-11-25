@@ -28,6 +28,8 @@ export type DaemonHosts = Pick<
   | 'pair'
   | 'closePairing'
   | 'answerPairing'
+  | 'pendingDiscovery'
+  | 'answerDiscovery'
   | 'renameDevice'
   | 'removeDevice'
   | 'activity'
@@ -122,6 +124,11 @@ export async function startDaemonAdmin({
       closePairing: (codeId) => hosts.closePairing(codeId),
       answerPairing: (codeId, add, name) =>
         void unlessStopped(() => hosts.answerPairing(codeId, add, name)),
+      pendingDiscovery: () => hosts.pendingDiscovery(),
+      answerDiscovery: (requestId, add, name, by) =>
+        hosts.answerDiscovery(requestId, add, name, by),
+      // The daemon connects to no host, so it cannot be given one.
+      addReverseHost: async () => 'unsupported',
       renameDevice: async (id, name) => hosts.renameDevice(id, name),
       removeDevice: async (id) => {
         try {
@@ -173,7 +180,7 @@ export async function startDaemonAdmin({
     remoteAlwaysOn: true,
     report,
     submitReport,
-    send: (event, deviceId) => hosts.adminEvent(event, deviceId),
+    send: (event, deviceId, except) => hosts.adminEvent(event, deviceId, except),
   })
   settings.onChange((next, changed) => {
     hosts.settingsChanged(changed)

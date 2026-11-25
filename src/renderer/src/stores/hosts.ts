@@ -34,8 +34,8 @@ interface HostsStore {
   kept: OtherHost[]
   /** The account's hosts this computer may pair with; null until first read. */
   discovered: DiscoveredHosts | null
-  /** The account's host Connect was chosen for, while its pairing dialog is open. */
-  connecting: DiscoveredHost | null
+  /** The account's hosts Connect or Connect all was chosen for, while the dialog is open. */
+  connecting: DiscoveredHost | DiscoveredHost[] | null
   /** Updates of hosts added over SSH, by host id: under way to a version, or how one failed. */
   sshUpdates: Record<string, SshUpdate>
 }
@@ -267,7 +267,10 @@ export function loadDiscovered(): Promise<void> {
   return discovering
 }
 
-/** Opens the pairing dialog for one of the account's hosts, or closes it with null. */
-export function connectTo(host: DiscoveredHost | null): void {
+/**
+ * Opens the pairing dialog for one of the account's hosts, or for several under one code, or
+ * closes it with null.
+ */
+export function connectTo(host: DiscoveredHost | DiscoveredHost[] | null): void {
   useHostsStore.setState({ connecting: host })
 }

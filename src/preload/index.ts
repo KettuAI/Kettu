@@ -175,6 +175,8 @@ const api: KettuApi = {
     answerDiscovery: (requestId, add, name) =>
       invoke('remote:discovery-answer', requestId, add, name),
     onDiscovery: onRemoteDiscovery,
+    // Main tells this computer's user of a device that joined with a system notification.
+    onDeviceJoined: () => () => {},
     offer: () => invoke('remote:offer'),
     answerOffer: (clientId, turnOn) => invoke('remote:answer-offer', clientId, turnOn),
     onOffer: onRemoteOffer,
@@ -196,8 +198,9 @@ const api: KettuApi = {
     chooseKeyFile: () => invoke('hosts:choose-key-file'),
     closePairing: (pairId) => invoke('hosts:pair-close', pairId),
     discover: () => invoke('hosts:discover'),
-    pairDiscovered: (relayId) => invoke('hosts:pair-discovered', relayId),
-    matchPairing: (pairId, match) => invoke('hosts:pair-match', pairId, match),
+    pairDiscovered: (relayId, options) => invoke('hosts:pair-discovered', relayId, options ?? {}),
+    matchPairing: (pairId, match, reverse) =>
+      invoke('hosts:pair-match', pairId, match, reverse === true),
     rename: (id, name) => invoke('hosts:rename', id, name),
     setAddresses: (id, addresses) => invoke('hosts:set-addresses', id, addresses),
     remove: (id) => invoke('hosts:remove', id),

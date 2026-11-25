@@ -95,7 +95,10 @@
     "allowOnce": "允许一次",
     "open": "打开",
     "discoveryTitle": "有设备请求添加",
-    "discoveryBody": "{{name}} 登录了你的 Kettu 账号，请求添加为这台电脑的设备。"
+    "discoveryBody": "{{name}} 登录了你的 Kettu 账号，请求添加为这台电脑的设备。",
+    "joinedTitle": "{{name}} 已加入 {{host}}",
+    "joinedBody": "它现在能用这台电脑了。不是你加的就移除。",
+    "remove": "移除"
   },
   "attachments": {
     "hostDown": "智能体后台进程没有运行，请等它重启后再试。"
@@ -197,7 +200,8 @@
     "noRender": "这台电脑不渲染页面",
     "noPrint": "这台电脑不支持打印",
     "noReports": "这台电脑不生成问题报告",
-    "noSubmit": "这台电脑不提交问题报告"
+    "noSubmit": "这台电脑不提交问题报告",
+    "noReverseHost": "这台电脑没能把另一台加为主机"
   },
   "remoteHost": {
     "notOn": "远程访问没有打开",

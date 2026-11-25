@@ -5,7 +5,7 @@
 // device, which shows they control the host and want it. Imports nothing of Node.js.
 
 import type { Platform } from '../platform'
-import { isDeviceModel, isDeviceName } from './device'
+import { isDeviceField, isDeviceModel, isDeviceName } from './device'
 import type { DeviceChannel } from './device-channel'
 import type { PairingDevice } from './pairing'
 import { currentPrimitives } from './primitives'
@@ -16,6 +16,8 @@ import {
   decodeRelayBytes,
   encodeRelayBytes,
   isRelayHostId,
+  parseHostRelay,
+  type HostRelay,
 } from './relay'
 
 /** Binds a discovery handshake apart from a paired device's and a code's. */
@@ -33,10 +35,34 @@ export const DISCOVERY_COOLDOWN_MS = 10 * 60_000
 /** The bytes of each side's random nonce. */
 export const DISCOVERY_NONCE_BYTES = 32
 
-/** The device's first message on the channel: the SHA-256 of its nonce, in base64url. */
+/**
+ * The device's first message on the channel: the SHA-256 of its nonce, in base64url, and the
+ * batch of computers it connects to at once, when it connects to several.
+ */
 export interface PairCommit {
   type: 'pair-commit'
   commit: string
+  group?: PairGroup
+}
+
+/**
+ * Several computers connected to with one code: `id` is 16 random bytes in base64url, `hosts` the
+ * relay ids of every computer in the batch, sorted, each host's own among them.
+ */
+export interface PairGroup {
+  id: string
+  hosts: string[]
+}
+
+export const MIN_GROUP_HOSTS = 2
+export const MAX_GROUP_HOSTS = 16
+const GROUP_ID_BYTES = 16
+
+/** What both sides of one exchange hold that the code is made of, each in base64url. */
+export interface PairTranscript {
+  hash: string
+  hostNonce: string
+  deviceNonce: string
 }
 
 /** The host's answer to the commit: its nonce, in base64url. */
@@ -66,6 +92,11 @@ export interface DiscoveredHost {
   publicKey: string
   name: string
   platform: Platform
+  /**
+   * The desktop app or the daemon, as the account's client of the same name says; absent when
+   * none does. Only a desktop app can be let use the computer that connects to it.
+   */
+  kind?: 'desktop' | 'daemon'
 }
 
 /**
@@ -127,8 +158,14 @@ export type DiscoveryRequestState =
       code: string
       startedAt: number
       expiresAt: number
+      /** The device's user confirmed the code; Add waits for it. */
+      deviceConfirmed: boolean
+      /** For the code of a batch, which an approver holding every request of it works out. */
+      transcript: PairTranscript
+      group?: PairGroup
     }
-  | { state: 'closed'; reason: DiscoveryEnd }
+  /** `answeredOn`: the paired device whose answer counted, absent when the host's own did. */
+  | { state: 'closed'; reason: DiscoveryEnd; answeredOn?: string }
 
 /** A discovery request's progress, to every window of the host. */
 export interface DiscoveryRequestEvent {
@@ -137,6 +174,7 @@ export interface DiscoveryRequestEvent {
 }
 
 const CODE_CONTEXT = new TextEncoder().encode('kettu-pair-code/1')
+const GROUP_CODE_CONTEXT = new TextEncoder().encode('kettu-pair-code-group/1')
 
 const isNonce = (value: unknown): value is string =>
   typeof value === 'string' && decodeRelayBytes(value)?.length === DISCOVERY_NONCE_BYTES
@@ -160,7 +198,52 @@ export async function pairCode(
   hostNonce: Uint8Array,
   deviceNonce: Uint8Array,
 ): Promise<string> {
-  const parts = [CODE_CONTEXT, handshakeHash, hostNonce, deviceNonce]
+  return sixDigits([CODE_CONTEXT, handshakeHash, hostNonce, deviceNonce])
+}
+
+/** One computer's part of a batch's code: its relay id and its exchange's transcript. */
+export interface GroupCodePart {
+  relayId: string
+  hash: Uint8Array
+  hostNonce: Uint8Array
+  deviceNonce: Uint8Array
+}
+
+/**
+ * The code of a batch: as one computer's, over its own context and, in the batch's order, each
+ * computer's relay id in ASCII, handshake hash and both nonces.
+ */
+export async function groupPairCode(parts: readonly GroupCodePart[]): Promise<string> {
+  return sixDigits([
+    GROUP_CODE_CONTEXT,
+    ...parts.flatMap((part) => [
+      new TextEncoder().encode(part.relayId),
+      part.hash,
+      part.hostNonce,
+      part.deviceNonce,
+    ]),
+  ])
+}
+
+/** A batch's code from the transcripts the hosts reported, in `hosts` order; null if one is bad. */
+export async function groupCodeOf(
+  hosts: readonly string[],
+  transcripts: ReadonlyMap<string, PairTranscript>,
+): Promise<string | null> {
+  const parts: GroupCodePart[] = []
+  for (const relayId of hosts) {
+    const transcript = transcripts.get(relayId)
+    const hash = transcript && decodeRelayBytes(transcript.hash)
+    const hostNonce = transcript && decodeRelayBytes(transcript.hostNonce)
+    const deviceNonce = transcript && decodeRelayBytes(transcript.deviceNonce)
+    if (!hash || !hostNonce || !deviceNonce) return null
+    parts.push({ relayId, hash, hostNonce, deviceNonce })
+  }
+  return groupPairCode(parts)
+}
+
+/** SHA-256 over the parts; its first four bytes as a big-endian number, modulo a million. */
+async function sixDigits(parts: readonly Uint8Array[]): Promise<string> {
   const input = new Uint8Array(parts.reduce((length, part) => length + part.length, 0))
   let offset = 0
   for (const part of parts) {
@@ -172,6 +255,34 @@ export async function pairCode(
   return String(number % 1_000_000).padStart(6, '0')
 }
 
+/** A new batch of the computers with these relay ids. */
+export function newPairGroup(relayIds: readonly string[]): PairGroup {
+  const id = encodeRelayBytes(crypto.getRandomValues(new Uint8Array(GROUP_ID_BYTES)))
+  return { id, hosts: [...new Set(relayIds)].sort() }
+}
+
+/** A batch as a device sends it, or null: an id of 16 bytes and 2 to 16 sorted relay ids. */
+export function parsePairGroup(value: unknown): PairGroup | null {
+  if (!only(value, ['id', 'hosts'])) return null
+  const { id, hosts } = value
+  if (typeof id !== 'string' || decodeRelayBytes(id)?.length !== GROUP_ID_BYTES) return null
+  if (!Array.isArray(hosts) || hosts.length < MIN_GROUP_HOSTS) return null
+  if (hosts.length > MAX_GROUP_HOSTS || !hosts.every(isRelayHostId)) return null
+  for (let i = 1; i < hosts.length; i++) {
+    if ((hosts[i - 1] as string) >= (hosts[i] as string)) return null
+  }
+  return { id, hosts: [...(hosts as string[])] }
+}
+
+/** A transcript as a host sends it, or null when one of its parts is not 32 bytes. */
+export function parseTranscript(value: unknown): PairTranscript | null {
+  if (!only(value, ['hash', 'hostNonce', 'deviceNonce'])) return null
+  const { hash, hostNonce, deviceNonce } = value
+  return isNonce(hash) && isNonce(hostNonce) && isNonce(deviceNonce)
+    ? { hash, hostNonce, deviceNonce }
+    : null
+}
+
 /** Whether the object has exactly these keys. */
 function only(value: unknown, keys: string[]): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -180,8 +291,12 @@ function only(value: unknown, keys: string[]): value is Record<string, unknown> 
 }
 
 export function parsePairCommit(value: unknown): PairCommit | null {
-  if (!only(value, ['type', 'commit']) || value.type !== 'pair-commit') return null
-  return isNonce(value.commit) ? { type: 'pair-commit', commit: value.commit } : null
+  const keys = typeof value === 'object' && value !== null && 'group' in value ? ['group'] : []
+  if (!only(value, ['type', 'commit', ...keys]) || value.type !== 'pair-commit') return null
+  if (!isNonce(value.commit)) return null
+  if (keys.length === 0) return { type: 'pair-commit', commit: value.commit }
+  const group = parsePairGroup(value.group)
+  return group ? { type: 'pair-commit', commit: value.commit, group } : null
 }
 
 export function parsePairNonce(value: unknown): PairNonce | null {
@@ -211,7 +326,7 @@ export async function revealMatches(commit: string, nonce: Uint8Array): Promise<
 /** The device's side once the handshake is done: the code, or why the host ended it. */
 export type DeviceDiscovery =
   /** `channel`: the same channel, its messages after the nonce passed on to the next listener. */
-  | { code: string; channel: DeviceChannel }
+  | { code: string; transcript: PairTranscript; channel: DeviceChannel }
   /** The host's closing reason, or null when it said none or broke the exchange. */
   | { closing: ClosingReason | null }
 
@@ -220,7 +335,10 @@ export type DeviceDiscovery =
  * order ends the connection. The commit goes before the host's nonce is seen, so whoever sits in
  * the middle cannot try nonces until the codes match.
  */
-export async function deviceDiscovery(channel: DeviceChannel): Promise<DeviceDiscovery> {
+export async function deviceDiscovery(
+  channel: DeviceChannel,
+  group?: PairGroup,
+): Promise<DeviceDiscovery> {
   const nonce = discoveryNonce()
   const commit = await pairCommit(nonce)
   return new Promise((resolve) => {
@@ -251,12 +369,18 @@ export async function deviceDiscovery(channel: DeviceChannel): Promise<DeviceDis
       void (async () => {
         const reveal: PairReveal = { type: 'pair-reveal', nonce: encodeRelayBytes(nonce) }
         await channel.send(reveal)
-        const code = await pairCode(channel.handshakeHash, decodeRelayBytes(answer.nonce)!, nonce)
+        const hostNonce = decodeRelayBytes(answer.nonce)!
+        const code = await pairCode(channel.handshakeHash, hostNonce, nonce)
+        const transcript: PairTranscript = {
+          hash: encodeRelayBytes(channel.handshakeHash),
+          hostNonce: answer.nonce,
+          deviceNonce: encodeRelayBytes(nonce),
+        }
         const onMessage = (listener: (value: unknown) => void): void => {
           next = listener
           for (const value of later.splice(0)) listener(value)
         }
-        resolve({ code, channel: { ...channel, onMessage } })
+        resolve({ code, transcript, channel: { ...channel, onMessage } })
       })().catch(() => {
         channel.close()
         resolve({ closing: null })
@@ -267,7 +391,7 @@ export async function deviceDiscovery(channel: DeviceChannel): Promise<DeviceDis
       done = true
       resolve({ closing })
     })
-    const first: PairCommit = { type: 'pair-commit', commit }
+    const first: PairCommit = { type: 'pair-commit', commit, ...(group ? { group } : {}) }
     channel.send(first).catch(fail)
   })
 }
@@ -349,12 +473,18 @@ export function parseDiscoveredHosts(value: unknown): DiscoveredHosts | null {
   const kept: DiscoveredHost[] = []
   for (const entry of hosts) {
     if (typeof entry !== 'object' || entry === null) return null
-    const { relayId, publicKey, name, platform } = entry as Record<string, unknown>
+    const { relayId, publicKey, name, platform, kind } = entry as Record<string, unknown>
     if (!isRelayHostId(relayId) || !isText(publicKey, 64) || !isText(name, MAX_PROFILE_NAME)) {
       return null
     }
     if (!isText(platform, 32)) return null
-    kept.push({ relayId, publicKey, name, platform: platform as Platform })
+    kept.push({
+      relayId,
+      publicKey,
+      name,
+      platform: platform as Platform,
+      ...(kind === 'desktop' || kind === 'daemon' ? { kind } : {}),
+    })
   }
   if (computers === undefined) return { state, hosts: kept }
   if (!Array.isArray(computers) || computers.length > MAX_ACCOUNT_COMPUTERS) return null
@@ -365,6 +495,8 @@ export function parseDiscoveredHosts(value: unknown): DiscoveredHosts | null {
 
 const ENDS: readonly string[] = ['added', 'rejected', 'cancelled', 'expired', 'stopped']
 
+const MAX_ANSWERED_ON = 100
+
 /** A discovery request's event, checked where it crosses a process; null if not one. */
 export function parseDiscoveryEvent(value: unknown): DiscoveryRequestEvent | null {
   if (typeof value !== 'object' || value === null) return null
@@ -373,16 +505,26 @@ export function parseDiscoveryEvent(value: unknown): DiscoveryRequestEvent | nul
   if (typeof request !== 'object' || request === null) return null
   const fields = request as Record<string, unknown>
   if (fields.state === 'closed') {
-    return ENDS.includes(fields.reason as string)
-      ? {
-          requestId: requestId as number,
-          request: { state: 'closed', reason: fields.reason as DiscoveryEnd },
-        }
-      : null
+    const { reason, answeredOn } = fields
+    if (!ENDS.includes(reason as string)) return null
+    if (answeredOn !== undefined && !isText(answeredOn, MAX_ANSWERED_ON)) return null
+    return {
+      requestId: requestId as number,
+      request: {
+        state: 'closed',
+        reason: reason as DiscoveryEnd,
+        ...(answeredOn === undefined ? {} : { answeredOn }),
+      },
+    }
   }
   if (fields.state !== 'confirm') return null
-  const { device, code, startedAt, expiresAt } = fields
+  const { device, code, startedAt, expiresAt, deviceConfirmed } = fields
   if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return null
+  if (typeof deviceConfirmed !== 'boolean') return null
+  const transcript = parseTranscript(fields.transcript)
+  if (!transcript) return null
+  const group = fields.group === undefined ? undefined : parsePairGroup(fields.group)
+  if (group === null) return null
   if (!Number.isSafeInteger(startedAt) || !Number.isSafeInteger(expiresAt)) return null
   if (typeof device !== 'object' || device === null) return null
   const { name, model, kind, platform, known } = device as Record<string, unknown>
@@ -396,6 +538,69 @@ export function parseDiscoveryEvent(value: unknown): DiscoveryRequestEvent | nul
       code,
       startedAt: startedAt as number,
       expiresAt: expiresAt as number,
+      deviceConfirmed,
+      transcript,
+      ...(group ? { group } : {}),
     },
   }
+}
+
+/**
+ * The welcome's feature of a host that takes `remote.addReverseHost`: a desktop app, whose own
+ * client can be given another computer as a host. A daemon has no client and leaves it out.
+ */
+export const REVERSE_HOST_FEATURE = 'reverse-host'
+
+/**
+ * `remote.addReverseHost`'s params: the connecting computer's own host, which the host it was
+ * just added to keeps as a host of its own client.
+ */
+export interface ReverseHost {
+  relayId: string
+  /** Its X25519 public key, in base64, as a known host keeps it. */
+  publicKey: string
+  name: string
+  platform: Platform
+  /** The relays it signs in to, each an origin. */
+  relays: string[]
+  /** Kettu's version on it. */
+  version: string
+}
+
+/** What a desktop host answers: its own client's device key, in base64, with its name and system. */
+export interface ReverseGrant {
+  deviceKey: string
+  name: string
+  platform: string
+}
+
+const BASE64_KEY = /^[A-Za-z0-9+/]{43}=$/
+
+/** `remote.addReverseHost`'s params as a device sends them, or null when they are not ones. */
+export function parseReverseHost(value: unknown): ReverseHost | null {
+  if (!only(value, ['relayId', 'publicKey', 'name', 'platform', 'relays', 'version'])) return null
+  const { relayId, publicKey, name, platform, relays, version } = value
+  if (!isRelayHostId(relayId) || typeof publicKey !== 'string' || !BASE64_KEY.test(publicKey)) {
+    return null
+  }
+  if (!isText(name, MAX_PROFILE_NAME) || name.trim() !== name) return null
+  if (!isText(platform, 32) || !/^[a-z0-9]+$/.test(platform) || !isText(version, 64)) return null
+  if (!Array.isArray(relays) || relays.length === 0) return null
+  const relay = parseHostRelay({ id: relayId, urls: relays })
+  if (!relay || relay.urls.length !== relays.length) return null
+  return { relayId, publicKey, name, platform: platform as Platform, relays: relay.urls, version }
+}
+
+/** The relay a reverse host is reached through, as a known host keeps it. */
+export function reverseHostRelay(host: ReverseHost): HostRelay {
+  return { id: host.relayId, urls: host.relays }
+}
+
+/** A desktop host's answer, or null when it is not one. */
+export function parseReverseGrant(value: unknown): ReverseGrant | null {
+  if (!only(value, ['deviceKey', 'name', 'platform'])) return null
+  const { deviceKey, name, platform } = value
+  if (typeof deviceKey !== 'string' || !BASE64_KEY.test(deviceKey)) return null
+  if (!isDeviceName(name) || !isDeviceField(platform)) return null
+  return { deviceKey, name, platform }
 }

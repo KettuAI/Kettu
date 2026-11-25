@@ -1,5 +1,6 @@
 // What `kettu status`, `kettu devices` and `kettu terminal` print.
 
+import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import type { RelayStatus } from '@shared/remote/relay-host'
 import type { RelayReport } from '@shared/remote/status'
 import type { DaemonStatus, DeviceSummary, HostStatus } from './control'
@@ -145,6 +146,26 @@ export function devicesReport(devices: DeviceSummary[], now: number): string {
       )
       .join('\n') + '\n'
   )
+}
+
+/** What `kettu requests` shows of the device of the account that asks to be added. */
+export function requestReport(event: DiscoveryRequestEvent | null, now: number): string {
+  if (event?.request.state !== 'confirm') {
+    return 'No device of your Kettu account asks to be added.\n'
+  }
+  const { device, code, expiresAt, deviceConfirmed } = event.request
+  const about = [device.model, device.platform].filter((part) => part !== '').join(', ')
+  const seconds = Math.max(0, Math.ceil((expiresAt - now) / 1000))
+  return [
+    `${device.name}${about ? ` (${about})` : ''} asks to be added to this computer.`,
+    `Code: ${code.slice(0, 3)} ${code.slice(3)}`,
+    deviceConfirmed ? 'Its user confirmed the code.' : 'Its user has not confirmed the code yet.',
+    `Answer within ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}: kettu requests add [<name>], or kettu requests reject.`,
+    device.known ? 'This device was added before.' : '',
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+    .concat('\n')
 }
 
 function since(at: number | null, now: number): string {

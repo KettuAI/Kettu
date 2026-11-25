@@ -28,7 +28,13 @@ import { resolveLocale, type Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus, isPort } from '@shared/remote/address'
 import { deviceId, otherAccount, type NewDevice } from '@shared/remote/device'
-import type { HostAdminEvent } from '@shared/remote/host-admin'
+import { parseDiscoveryEvent, type DiscoveryRequestEvent } from '@shared/remote/discovery'
+import {
+  parseJoined,
+  type HostAdminEvent,
+  type JoinedDevice,
+  type JoinedVia,
+} from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import { relayReport, type RelayReport, type RemoteStatus } from '@shared/remote/status'
@@ -164,6 +170,10 @@ export interface HostsOptions {
   sshPortChanged?(port: number): void
   /** A host's inspector in a debug run, by its name, or null once the host is gone. */
   inspector?(name: string, url: string | null): void
+  /** A device of the account asks to be added, or that request ended. */
+  discoveryChanged?(event: DiscoveryRequestEvent): void
+  /** A device that was not paired was added, by any path. */
+  deviceJoined?(device: JoinedDevice, via: JoinedVia): void
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -197,6 +207,8 @@ export class Hosts {
   private sentHostName: string | null = null
   private readonly requests = new Map<number, (message: RemoteHostToMain | null) => void>()
   private nextRequest = 1
+  /** The discovery request the owner is asked about now. */
+  private discoveryRequest: DiscoveryRequestEvent | null = null
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly attentionListeners = new Set<(message: Attention) => void>()
@@ -367,6 +379,7 @@ export class Hosts {
         push: options.pushUrl,
         waiting: this.waiting,
         account: this.sentAccount(),
+        discoverable: this.initDiscoverable(),
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -375,6 +388,7 @@ export class Hosts {
       onExit: () => {
         this.setRemoteStatus(null)
         this.voidCodes()
+        this.discoveryGone()
         for (const answer of [...this.requests.values()]) answer(null)
       },
     })
@@ -604,9 +618,66 @@ export class Hosts {
     return (name === 'agent' ? this.agent : this.terminal).restart()
   }
 
-  /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
-  adminEvent(event: HostAdminEvent, deviceId: string | null): void {
-    this.remote.post({ type: 'remote-host:admin-event', event, deviceId })
+  /** Tells the owner's devices something of the host: every one but `except`, or only `deviceId`. */
+  adminEvent(event: HostAdminEvent, deviceId: string | null, except?: string): void {
+    this.remote.post({
+      type: 'remote-host:admin-event',
+      event,
+      deviceId,
+      ...(except === undefined ? {} : { except }),
+    })
+  }
+
+  /** The request of a device of the account that waits now, if any. */
+  pendingDiscovery(): DiscoveryRequestEvent | null {
+    return this.discoveryRequest
+  }
+
+  /**
+   * An answer to that request, from the CLI or, under `by`, a paired device: true when it was the
+   * first and counted.
+   */
+  async answerDiscovery(
+    discoveryId: number,
+    add: boolean,
+    name: string,
+    by: string | null = null,
+  ): Promise<boolean> {
+    if (this.discoveryRequest?.requestId !== discoveryId) return false
+    const answer = await this.request((requestId) => ({
+      type: 'remote-host:discovery-answer',
+      requestId,
+      discoveryId,
+      add,
+      name,
+      by,
+    }))
+    return answer?.type === 'remote-host:discovery-answer' && answer.counted === true
+  }
+
+  /** Whether devices of the account find this computer on the relay, as the setting is now. */
+  private sentDiscoverable: boolean | null = null
+
+  private initDiscoverable(): boolean {
+    this.sentDiscoverable = this.settings().remote.discoverable
+    return this.sentDiscoverable
+  }
+
+  private discoverableChanged(): void {
+    const enabled = this.settings().remote.discoverable
+    if (enabled === this.sentDiscoverable) return
+    if (this.remote.post({ type: 'remote-host:discoverable', enabled })) {
+      this.sentDiscoverable = enabled
+    }
+  }
+
+  /** The remote host went, and the request with it. */
+  private discoveryGone(): void {
+    const request = this.discoveryRequest
+    this.discoveryRequest = null
+    if (!request) return
+    const { requestId } = request
+    this.options.discoveryChanged?.({ requestId, request: { state: 'closed', reason: 'stopped' } })
   }
 
   /** The sign-in changed, so the Marketplace tools are listed or not. */
@@ -642,6 +713,7 @@ export class Hosts {
       this.directChanged()
       this.terminalChanged()
       this.relayChanged()
+      this.discoverableChanged()
       const name = this.hostName()
       if (name !== this.sentHostName && this.remote.post({ type: 'remote-host:host-name', name })) {
         this.sentHostName = name
@@ -1014,8 +1086,22 @@ export class Hosts {
       case 'remote-host:open-device-port':
         if (Number.isSafeInteger(message.requestId)) void this.openDevices(message.requestId)
         break
+      case 'remote-host:discovery': {
+        const event = parseDiscoveryEvent(message.event)
+        if (!event) break
+        if (event.request.state === 'confirm') this.discoveryRequest = event
+        else if (this.discoveryRequest?.requestId === event.requestId) this.discoveryRequest = null
+        this.options.discoveryChanged?.(event)
+        break
+      }
+      case 'remote-host:device-joined': {
+        const joined = parseJoined(message)
+        if (joined) this.options.deviceJoined?.(joined.device, joined.via)
+        break
+      }
       case 'remote-host:activity':
       case 'remote-host:reset':
+      case 'remote-host:discovery-answer':
         this.requests.get(message.requestId)?.(message)
         break
       case 'remote-host:admin-call':

@@ -3,7 +3,10 @@
 // senders between them, the push gateway's for APNs and Web Push's for browsers. Only a host with
 // its Ed25519 key has them, since every push is signed.
 
+import { t } from '@shared/hosts-text'
 import { addLogSecret } from '@shared/log/process-log'
+import type { PairedDevice } from '@shared/remote/device'
+import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import {
   DEFAULT_CHOICES,
   encodeSealed,
@@ -18,6 +21,7 @@ import { MAX_WITHDRAWN, type NotificationsWithdrawn } from '@shared/remote/web-p
 import type { LogFn } from '../agent-host/storage'
 import { publicKeyBytes, type DeviceStore } from './devices'
 import {
+  DEVICE_REQUEST_SUBJECT,
   Notifier,
   type Attention,
   type AttentionKind,
@@ -139,6 +143,8 @@ export class DeviceNotifications {
    * by subject, oldest first. A push cannot withdraw a notification, so the page closes these.
    */
   private readonly withdrawn = new Map<string, Map<string, string>>()
+  /** The discovery request the devices were told of, told once however often it changes. */
+  private toldRequest: number | null = null
 
   constructor(private readonly options: DeviceNotificationsOptions) {
     const { devices } = options
@@ -189,6 +195,7 @@ export class DeviceNotifications {
         const push = devices.push(deviceId)
         return Boolean(push?.web && !push.target && options.foreground(deviceId))
       },
+      foreground: options.foreground,
       send: (job) => {
         this.sender.send(job)
         this.sendWeb(job)
@@ -269,6 +276,39 @@ export class DeviceNotifications {
 
   setPresent(present: boolean): void {
     this.notifier.setPresent(present)
+  }
+
+  /** A device of the account asks to be added, which the devices hear until it ends. */
+  discoveryChanged({ requestId, request }: DiscoveryRequestEvent): void {
+    if (request.state === 'closed') {
+      if (this.toldRequest !== requestId) return
+      this.toldRequest = null
+      this.notifier.withdrawNotice(DEVICE_REQUEST_SUBJECT)
+      return
+    }
+    if (this.toldRequest === requestId) return
+    this.toldRequest = requestId
+    const host = this.options.hostName()
+    this.notifier.deviceNotice({
+      subject: DEVICE_REQUEST_SUBJECT,
+      event: { kind: 'device-request', requestId },
+      title: t('push.deviceRequestTitle', { device: request.device.name, host }),
+      body: t('push.deviceRequestBody'),
+    })
+  }
+
+  /** A device joined: every other device hears it. */
+  deviceJoined(device: PairedDevice): void {
+    const host = this.options.hostName()
+    this.notifier.deviceNotice(
+      {
+        subject: `device-joined:${device.id}`,
+        event: { kind: 'device-joined', deviceId: device.id },
+        title: t('push.deviceJoinedTitle', { device: device.name, host }),
+        body: t('push.deviceJoinedBody'),
+      },
+      device.id,
+    )
   }
 
   /** A device was removed, and its notifications with it. */

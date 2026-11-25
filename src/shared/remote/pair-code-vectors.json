@@ -1,0 +1,65 @@
+{
+  "about": "Test vectors for the six-digit codes of pairing within one Kettu account. single: SHA-256 over 'kettu-pair-code/1', the handshake hash, the host nonce and the device nonce. group: SHA-256 over 'kettu-pair-code-group/1', then for each host in order its relay id in ASCII, handshake hash, host nonce and device nonce. Each code is the digest's first four bytes as a big-endian number, modulo 1,000,000, padded to six digits. Bytes are base64url without padding.",
+  "single": [
+    {
+      "hash": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "hostNonce": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "deviceNonce": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+      "code": "001133"
+    },
+    {
+      "hash": "QAB1BpwZe7ywEUxm_crvpT4iTeY7vlj2f5r1RpHJlvo",
+      "hostNonce": "wVHjkspS1XP0W53oSvTloX9wH8Unch9YZOLuVqgFza0",
+      "deviceNonce": "3V6GQa9H4lD-K9srTk0MuRAVTO5cQSLYFLW3zmt487s",
+      "code": "043449"
+    },
+    {
+      "hash": "WA423ob-X94kwNZ96QPqzwUxvtxcfhUCBYBiS_P70vU",
+      "hostNonce": "hpR9FK9WdJ_XhGhFjMPJh24iLQSzfd3mQ0e3F3a5to8",
+      "deviceNonce": "v9eb7lcwZ52q4sua8WNtBEZQmDjCR0__tSR9ku2Jqmw",
+      "code": "203429"
+    }
+  ],
+  "group": [
+    {
+      "hosts": [
+        {
+          "relayId": "hylpivr464gluj5jwr4j6axvdd",
+          "hash": "bmTJkXXGFUOyg9mR_f9KHtOr2FBwaWqPF9kz2kg2g2g",
+          "hostNonce": "AxkU7s25JcV5SGyYx-79tUAySE49-GlD2n_GxR5D0Eg",
+          "deviceNonce": "8HZ2RsELbrYAh8fiMSbrQ-pZv4eRQIvBzkJWJ-LOwlc"
+        },
+        {
+          "relayId": "jq2agnvu3wbvci2zadjsfe5mmv",
+          "hash": "VxflBq38JQGuM5xfb5QpMxhlNIq1oQEpvkn7DDsUg4c",
+          "hostNonce": "nCU1N9gru8a1cIJimWTE_DV7wv5qFJTejIBK1ZozkkU",
+          "deviceNonce": "yLtILc_-eL9P7Gv2PpUgSpIXKZ9S0IzOYfw7koyGMxo"
+        }
+      ],
+      "code": "764749"
+    },
+    {
+      "hosts": [
+        {
+          "relayId": "oc5cdhsnrg7ijahqbc5bczs2wy",
+          "hash": "EhOh2w8O36w0CFCX6XAp5mJlEh4OmHVsTc1cw_uq9CM",
+          "hostNonce": "5DGUGbCMCc1FZUKqK2qXHW_RB6Sl809h9ft6DhKDYaU",
+          "deviceNonce": "dZwJgWYazQZOoCRrmPBloFe5h6LKiFOpMBp3WtBSRJM"
+        },
+        {
+          "relayId": "udqhjgp6dk7kcgy75aeo5zswyw",
+          "hash": "Men03mDQoBLLTZ0mduyxoCZ1srsZZ3hQJVG3HcYkBSY",
+          "hostNonce": "hqtyrrDkBoB8saJ4Qk7xrj-P2ic0td4zVshG7UfzIw8",
+          "deviceNonce": "8LWy2yN_pZCvCa0RuTzMfYybNtIxCs_mcVKux_RjPjY"
+        },
+        {
+          "relayId": "yuh7g2lgwsmhpr7alkvrpyxsne",
+          "hash": "gMhPm1yD0GYh735BcgsBEEktX44y6WbcGsLkl_Yuu_M",
+          "hostNonce": "lEmTVnpFluGjiK91pt1NQCBeQaM-yB4DHmfUecRJb6E",
+          "deviceNonce": "7mLn8tzICfEkb4H9IZBvv5WWqlRUaFHLYgvbLQAlTPU"
+        }
+      ],
+      "code": "270357"
+    }
+  ]
+}
