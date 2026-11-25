@@ -1,6 +1,6 @@
-// What a Marketplace item's tile shows, in order: a bundled brand mark; the icon of the site a
-// remote MCP server connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
-// harness's color; else its kind's glyph and color.
+// What a Marketplace item's tile shows, in order: a Kettu plugin's own icon; a bundled brand mark;
+// the icon of the site a remote MCP server connects to; a glyph and color Kettu gives the items it
+// knows; a plugin's category glyph on its harness's color; else its kind's glyph and color.
 
 import {
   AiBrain01Icon,
@@ -123,14 +123,19 @@ export const workflowSubject = (workflow: {
   source: workflow.source,
 })
 
-/** A listing's tile: its kind's glyph, never a maker's mark, since anyone may take a name. */
+/**
+ * A listing's tile: a plugin's own icon, else its kind's glyph, and a maker's mark only for Kettu's
+ * own publisher, since anyone else may take a name.
+ */
 export function communitySubject(
-  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'> & { official?: boolean },
+  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug' | 'icon'> & { official?: boolean },
 ): TileSubject {
   const official = item.official === true
   if (item.kind === 'skill') return skillSubject(item.slug)
   if (item.kind === 'workflow') return workflowSubject({ id: item.slug, source: 'community' })
-  if (item.kind === 'agent-plugin') return kettuPluginSubject({ name: item.slug, official })
+  if (item.kind === 'agent-plugin') {
+    return kettuPluginSubject({ name: item.slug, official, icon: item.icon })
+  }
   if (item.kind === 'plugin') {
     return pluginSubject({
       harness: item.harness ?? 'claude-code',
@@ -226,7 +231,10 @@ const HARNESS_COLOR: Record<PluginHarness, string> = {
   codex: 'var(--brand-codex-3)',
 }
 
-type Art = { type: 'mark'; mark: Mark } | { type: 'glyph'; icon: IconSvgElement; color: string }
+type Art =
+  | { type: 'image'; src: string }
+  | { type: 'mark'; mark: Mark }
+  | { type: 'glyph'; icon: IconSvgElement; color: string }
 
 function categoryGlyph(category: string | null): IconSvgElement {
   const words = category?.toLowerCase() ?? ''
@@ -253,6 +261,7 @@ function nameColor(name: string): string {
 
 export function tileArt(subject: TileSubject): Art {
   if (subject.kind === 'kettu-plugin') {
+    if (subject.icon) return { type: 'image', src: subject.icon }
     const mark = subject.marks ? brandMark(subject.name) : null
     if (mark) return { type: 'mark', mark }
     return { type: 'glyph', icon: PuzzleIcon, color: nameColor(subject.name) }

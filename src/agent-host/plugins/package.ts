@@ -14,10 +14,12 @@ import {
   type PluginItem,
   type PluginSkill,
 } from '@shared/plugins'
+import { MARKET_ICON_LIMITS } from '@shared/market-publish'
 import { t } from '../i18n'
 import { frontmatter } from '../marketplace/frontmatter'
 import { SKILL_FILE, SKILL_MD_BYTES, skillFields } from '../marketplace/skill-catalog'
 import { parseWorkflow, problemText } from '../workflow/format'
+import { ICON_FILES, iconDataUrl, iconType } from './icon'
 import { parseManifest, refusal, type PluginManifest } from './manifest'
 import { parseServers, type PortableServer } from './mcp'
 
@@ -37,13 +39,6 @@ export const PACKAGE_LIMITS: PackageLimits = { files: 2_000, bytes: 50 * 1024 * 
 export const MANIFEST_FILE = 'plugin.json'
 const MANIFEST_BYTES = 256 * 1024
 const ITEM_BYTES = 256 * 1024
-const ICON_BYTES = 512 * 1024
-// PNG is the format every client shows; SVG is left out, since it can carry active content.
-const ICONS: readonly [string, string][] = [
-  ['assets/icon.png', 'image/png'],
-  ['assets/icon.webp', 'image/webp'],
-  ['assets/icon.jpg', 'image/jpeg'],
-]
 /** The file a folder item of each kind is defined by. */
 const ENTRY_FILES: Record<PluginFolder, string> = {
   commands: 'command.md',
@@ -212,11 +207,12 @@ function readItems(
   return items.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** The first icon file that is the image its name says, at most 512 KB, as a data URL. */
 function readIcon(files: readonly PackageFile[]): string | null {
-  for (const [file, type] of ICONS) {
+  for (const [file, type] of ICON_FILES) {
     const icon = files.find((item) => item.path === file)
-    if (icon && icon.data.length > 0 && icon.data.length <= ICON_BYTES) {
-      return `data:${type};base64,${icon.data.toString('base64')}`
+    if (icon && icon.data.length <= MARKET_ICON_LIMITS.bytes && iconType(icon.data) === type) {
+      return iconDataUrl(icon.data, type)
     }
   }
   return null

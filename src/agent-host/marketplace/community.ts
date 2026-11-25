@@ -22,6 +22,7 @@ import {
   VERSION,
   type MarketAccount,
   type MarketCall,
+  type MarketIcon,
   type MarketListing,
   type MarketResults,
   type MineListing,
@@ -171,6 +172,8 @@ export interface CommunityDeps {
     text: string,
     origin: CommunityOrigin,
   ): Promise<{ entry: WorkflowEntry; updated: boolean }>
+  /** A plugin version's icon as a data URL, checked; without it plugins show no icon. */
+  icon?(icon: MarketIcon | null | undefined): Promise<string | null>
   now?: () => number
 }
 
@@ -327,23 +330,27 @@ export class MarketCommunityService {
     }
     const items =
       page.status === 'fulfilled'
-        ? page.value.items
-            .filter((listing) => listing.visibility === 'public' && listing.kind !== 'plugin')
-            .map(itemOf)
+        ? await this.withIcons(
+            page.value.items
+              .filter((listing) => listing.visibility === 'public' && listing.kind !== 'plugin')
+              .map((listing) => [itemOf(listing), listing.icon] as const),
+          )
         : []
     const yours =
       mine.status === 'fulfilled' && mine.value
-        ? mine.value.listings
-            .filter(
-              (listing) =>
-                listing.visibility === 'private' &&
-                listing.kind !== 'plugin' &&
-                listing.current !== null &&
-                listing.takenDown === null,
-            )
-            .map(mineItem)
-            .filter((item) => (query.kind ? item.kind === query.kind : true))
-            .filter((item) => matchesQuery(item, query.q ?? ''))
+        ? await this.withIcons(
+            mine.value.listings
+              .filter(
+                (listing) =>
+                  listing.visibility === 'private' &&
+                  listing.kind !== 'plugin' &&
+                  listing.current !== null &&
+                  listing.takenDown === null,
+              )
+              .map((listing) => [mineItem(listing), listing.icon] as const)
+              .filter(([item]) => (query.kind ? item.kind === query.kind : true))
+              .filter(([item]) => matchesQuery(item, query.q ?? '')),
+          )
         : []
     const result: CommunityDirectory = {
       signedIn: true,
@@ -360,6 +367,21 @@ export class MarketCommunityService {
       }
     }
     return result
+  }
+
+  /** The rows, a plugin's with its icon as a data URL; an icon that does not come is left out. */
+  private withIcons(
+    rows: readonly (readonly [CommunityItem, MarketIcon | null | undefined])[],
+  ): Promise<CommunityItem[]> {
+    return Promise.all(
+      rows.map(async ([item, icon]) =>
+        item.kind === 'agent-plugin' ? { ...item, icon: await this.iconOf(icon) } : item,
+      ),
+    )
+  }
+
+  private async iconOf(icon: MarketIcon | null | undefined): Promise<string | null> {
+    return icon && this.deps.icon ? this.deps.icon(icon) : null
   }
 
   /** The whole public workflow catalog, with no search text or private listings. */
@@ -473,7 +495,8 @@ export class MarketCommunityService {
       )
       bundle = uploadedBundle(version.files) ?? urlBundle(listing.server)
     }
-    return { state: 'listed', listing, server, bundle }
+    const icon = listing.kind === 'agent-plugin' ? await this.iconOf(listing.icon) : null
+    return { state: 'listed', listing, server, bundle, icon }
   }
 
   /**

@@ -44,6 +44,7 @@ import {
   useConvertListing,
   useNewVersionItems,
   usePickFolder,
+  usePublishedIcon,
   usePublishedStore,
   useRelist,
   type FolderChoice,
@@ -345,6 +346,7 @@ function NeedsYou({
 /** A version that waits for review or was not approved, which its page tells more of. */
 function ReviewRow({ listing, version }: Review) {
   const { t } = useTranslation('marketplace')
+  const icon = usePublishedIcon(listing.id)
   const held = version.status === 'held'
   const stays = listing.current ? t('published.needs.stays', { version: listing.current }) : null
   const line = held
@@ -357,7 +359,7 @@ function ReviewRow({ listing, version }: Review) {
       : t('published.review.refusedBare', { version: version.version })
   return (
     <div className="k-pub-need">
-      <ItemTile subject={listingSubject(listing)} />
+      <ItemTile subject={listingSubject(listing, icon)} />
       <span className="k-pub-need__text">
         <span className="k-pub-need__name">
           <b>{`${listing.name} ${version.version}`}</b>
@@ -395,6 +397,7 @@ export function ReviewPill({ held }: { held: boolean }) {
 
 function NeedRow({ draft, listing }: { draft: PublishDraft; listing: MineListing | null }) {
   const { t } = useTranslation('marketplace')
+  const icon = usePublishedIcon(draft.listingId)
   const scope = useHostScope()
   const store = usePublishedStore()
   const [folder, setFolder] = useState<FolderChoice | null>(null)
@@ -456,7 +459,12 @@ function NeedRow({ draft, listing }: { draft: PublishDraft; listing: MineListing
   )
   return (
     <div className="k-pub-need">
-      <ItemTile subject={listingSubject({ ...manifest, id: draft.listingId })} />
+      <ItemTile
+        subject={listingSubject(
+          { ...manifest, id: draft.listingId, official: listing?.official },
+          icon,
+        )}
+      />
       <span className="k-pub-need__text">
         <span className="k-pub-need__name">
           <b>{refused ? `${manifest.name} ${manifest.version}` : manifest.name}</b>
@@ -587,6 +595,7 @@ function MineRow({
   const [dialog, setDialog] = useState<ListingDialog | null>(null)
   const [folder, setFolder] = useState<FolderChoice | null>(null)
   const relist = useRelist()
+  const icon = published.icons?.[listing.id] ?? null
   const versionItems = useNewVersionItems(listing, published, setFolder)
   const { convert, converting } = useConvertListing(setFolder)
   const open = () => openMarketplace({ item: publishedItem(listing.id), tab: 'published' })
@@ -618,7 +627,7 @@ function MineRow({
         onClick={open}
       >
         <span role="cell" className="k-pub-td-name">
-          <ItemTile subject={listingSubject(listing)} />
+          <ItemTile subject={listingSubject(listing, icon)} />
           <span>
             <span className="k-pub-td-name__top">
               <button

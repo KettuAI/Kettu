@@ -49,10 +49,10 @@ export function ItemTile({
     !quiet && art.type === 'glyph' && subject.kind === 'mcp' ? (subject.site ?? null) : null
   const logo = useServerIcon(site)
   const sized = size === 'row' ? undefined : size
-  if (subject.kind === 'kettu-plugin' && subject.icon) {
+  if (art.type === 'image') {
     return (
-      <span aria-hidden className="ui-as-int-logo k-mkt-tile" data-size={sized}>
-        <SiteIconImage className="k-mkt-tile__logo" src={subject.icon} />
+      <span aria-hidden className="ui-as-int-logo k-mkt-tile" data-size={sized} data-image="">
+        <SiteIconImage className="k-mkt-tile__logo" src={art.src} />
       </span>
     )
   }

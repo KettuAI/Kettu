@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type {
   MarketAccount,
   MarketCall,
+  MarketIcon,
   MarketListing,
   MineListing,
   VersionFile,
@@ -101,12 +102,14 @@ function service(
     account?: MarketAccount | null
     workflows?: WorkflowLibrary
     now?: () => number
+    icon?: (icon: MarketIcon | null | undefined) => Promise<string | null>
   } = {},
 ) {
   return new MarketCommunityService({
     userDataPath: root,
     log,
     now: extra.now,
+    icon: extra.icon,
     account: () => (extra.account === undefined ? ACCOUNT : extra.account),
     kept: () => [],
     call: (async (call: MarketCall) => {
@@ -282,6 +285,39 @@ describe('MarketCommunityService', () => {
     expect(await page([pkg({ fileSha256: undefined })])).toBeNull()
     expect(await page([pkg({ fileSha256: 'abc' })])).toBeNull()
     expect(await page([pkg({})], { 'echo.mcpb': 'zip' })).toMatchObject({ from: 'upload' })
+  })
+
+  it('gives a plugin’s row and page its icon, and no other kind’s', async () => {
+    const icon: MarketIcon = {
+      url: '/api/v1/marketplace/listings/plugaaaa23/versions/1.0.0/icon',
+      sha256: 'a'.repeat(64),
+      type: 'image/png',
+    }
+    const plugin = listing({ id: 'plugaaaa23', slug: 'linear', kind: 'agent-plugin', icon })
+    const bare = listing({ id: 'plugbbbb23', slug: 'ntfy', kind: 'agent-plugin' })
+    const skill = listing({ icon })
+    const mine = mineListing({ kind: 'agent-plugin', icon })
+    const asked: (MarketIcon | null | undefined)[] = []
+    const community = service(
+      fake({ directory: [plugin, bare, skill], mine: [mine], listings: { plugaaaa23: plugin } }),
+      {
+        icon: async (ref) => {
+          asked.push(ref)
+          return ref ? 'data:image/png;base64,AAAA' : null
+        },
+      },
+    )
+    const directory = await community.directory({})
+    expect(directory.items.map((item) => item.icon)).toEqual([
+      'data:image/png;base64,AAAA',
+      null,
+      undefined,
+    ])
+    expect(directory.yours.map((item) => item.icon)).toEqual(['data:image/png;base64,AAAA'])
+    expect(await community.listing('plugaaaa23')).toMatchObject({
+      icon: 'data:image/png;base64,AAAA',
+    })
+    expect(asked.filter(Boolean)).toHaveLength(3)
   })
 
   it('lists only public listings, and the account’s own Only me ones as Yours', async () => {

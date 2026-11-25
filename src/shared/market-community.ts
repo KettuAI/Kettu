@@ -49,6 +49,8 @@ export interface CommunityItem {
   waits?: string[]
   /** What a plugin's version holds, as its publisher's check listed it; only for a plugin. */
   adds?: PublishAdds[]
+  /** A plugin's icon as a data URL, the host's checked copy of the one its version stores. */
+  icon?: string | null
 }
 
 export interface CommunityDirectory {
@@ -73,6 +75,8 @@ export type CommunityListing =
       server: CatalogServer | null
       /** An MCP server's bundle, installed in two steps; null when it has none. */
       bundle: BundleRef | null
+      /** A plugin's icon as a data URL, as `CommunityItem.icon`; absent from older hosts. */
+      icon?: string | null
     }
   | { state: 'taken-down' }
   // Deleted, never there, or another account's Only me listing.

@@ -82,6 +82,25 @@
   height: 14px;
   border-radius: 3px;
 }
+/* A plugin's own icon fills its tile, under a hairline edge that keeps a white icon a tile */
+.k-mkt-tile[data-image] {
+  position: relative;
+}
+.k-mkt-tile[data-image] .k-mkt-tile__logo,
+.k-mkt-tile[data-image][data-size] .k-mkt-tile__logo {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+}
+.k-mkt-tile[data-image]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  pointer-events: none;
+}
 /* What an agent keeps itself: the kind's glyph, muted, on the plain tile */
 .k-mkt-scroll .k-mkt-tile[data-quiet] {
   color: var(--muted);

@@ -17,6 +17,7 @@ import {
   type MarketAccount,
   type MarketCall,
   type MarketFailure,
+  type MarketIcon,
   type MarketMine,
   type MarketProblem,
   type MarketPublished,
@@ -45,7 +46,7 @@ import { parseWorkflow } from '../workflow/format'
 import { sameFlow } from '../workflow/graph'
 import { forAgent, problem, problemOf, problemWith } from './localized-error'
 import type { PluginConverter } from './plugin-conversions'
-import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
+import { checkFolder, type CheckedFile, type FolderCheck, type IconNote } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
 export const MARKET_CHECK = 'marketplace_check'
@@ -106,7 +107,9 @@ export const MARKET_TOOLS: Tool[] = [
       'upload and their size, what an install adds and runs (for a workflow, its steps, those ' +
       'that wait for the user and the MCP servers and Skills they name; for a plugin, its ' +
       'skills, servers, commands, roles and workflows, and the permissions of its script, which ' +
-      'only Kettu’s own publisher may publish), whether the user published it before, and ' +
+      'only Kettu’s own publisher may publish, and whether the Marketplace shows its icon, ' +
+      'assets/icon.png, .webp or .jpg, square, 256 to 1024 px and at most 512 KB, which never ' +
+      'keeps it from being published), whether the user published it before, and ' +
       'every problem that keeps it from being published, such as a missing field, a ' +
       'workflow.yaml the workflow format refuses, too many files or a secret in a file. A ' +
       'Claude Code or Codex plugin is not published as it is: convert it with ' +
@@ -302,6 +305,8 @@ export interface MarketToolsDeps {
   /** The Kettu version, which a plugin's own range of versions is checked against. */
   appVersion: string
   home: string
+  /** A plugin version's icon as a data URL, checked; without it Published shows no icons. */
+  icon?(icon: MarketIcon | null | undefined): Promise<string | null>
 }
 
 /**
@@ -592,11 +597,23 @@ export class MarketTools {
     if (!account) return { account: null, mine: null, error: null, drafts, origins }
     try {
       const mine = await this.deps.call({ kind: 'mine' })
-      return { account, mine, error: null, drafts, origins }
+      return { account, mine, error: null, drafts, origins, icons: await this.iconsOf(mine) }
     } catch (error) {
       if (!(error instanceof MarketCallError)) throw error
       return { account, mine: null, error: userText(error.failure), drafts, origins }
     }
+  }
+
+  /** The account's plugins' icons as data URLs, by listing id. */
+  private async iconsOf(mine: MarketMine): Promise<Record<string, string>> {
+    const icon = this.deps.icon
+    if (!icon) return {}
+    const found = await Promise.all(
+      mine.listings
+        .filter((listing) => listing.kind === 'agent-plugin' && listing.icon)
+        .map(async (listing) => [listing.id, await icon(listing.icon)] as const),
+    )
+    return Object.fromEntries(found.filter((entry): entry is [string, string] => entry[1] !== null))
   }
 
   /** From a folder: the same check and what to confirm as a session's card, uploading nothing. */
@@ -871,6 +888,7 @@ export class MarketTools {
       )
       if (check.kind === 'workflow') lines.push(...workflowLines(check.adds))
       if (check.plugin) lines.push(...pluginLines(check.plugin))
+      if (check.icon) lines.push(iconLine(check.icon))
       if (listing) {
         lines.push(
           `It would be a new version of ${listingName(listing)}, now at ${listing.current ?? 'no live version'}.`,
@@ -913,6 +931,7 @@ export class MarketTools {
               leftOut: check.plugin.warnings,
             }
           : {}),
+        ...(check.icon ? { icon: check.icon } : {}),
         problems: forAgent(problems),
       },
     }
@@ -1614,6 +1633,18 @@ function workflowLines(adds: readonly PublishAdds[]): string[] {
   const tools = [...of('servers'), ...of('skills')]
   if (tools.length > 0) lines.push(`Names the MCP servers and Skills: ${tools.join(', ')}.`)
   return lines
+}
+
+/** Whether the Marketplace would show the plugin's icon; a skipped icon never stops a publish. */
+function iconLine(icon: IconNote): string {
+  if (icon.result === 'passed') {
+    return `Icon: ${icon.path}, ${icon.note}; the Marketplace shows it from this version on.`
+  }
+  return (
+    `Icon skipped, which does not stop the publish: ${icon.note}. The Marketplace shows a ` +
+    'puzzle glyph for it until a version carries assets/icon.png, .webp or .jpg that is ' +
+    'square, 256 to 1024 px a side and at most 512 KB.'
+  )
 }
 
 /** A plugin's script with its permissions, and what an install would leave out, for the agent. */

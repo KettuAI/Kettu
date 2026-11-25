@@ -366,6 +366,7 @@ export function CommunityListingPage({
         listing={page.listing.listing}
         server={page.listing.server}
         bundle={page.listing.bundle}
+        icon={page.listing.icon ?? null}
         tab={tab}
         back={back}
       />
@@ -437,6 +438,7 @@ export function CommunityPreviewPage({ id, tab }: { id: string; tab: Marketplace
       listing={page.listing.listing}
       server={page.listing.server}
       bundle={page.listing.bundle}
+      icon={page.listing.icon ?? null}
       tab={tab}
       back={own}
       preview
@@ -565,6 +567,7 @@ function Listed({
   listing,
   server,
   bundle,
+  icon,
   tab,
   back,
   preview = false,
@@ -572,6 +575,8 @@ function Listed({
   listing: MarketListing
   server: CatalogServer | null
   bundle: BundleRef | null
+  /** A plugin's icon as the host's data URL. */
+  icon: string | null
   tab: MarketplaceTab
   back: () => void
   /** As others see it: no sign of the owner, nothing installed here, Install and Report off. */
@@ -584,7 +589,7 @@ function Listed({
   return (
     <>
       <header className="k-mkt-head">
-        <ItemTile subject={communitySubject(listing)} size="big" />
+        <ItemTile subject={communitySubject({ ...listing, icon })} size="big" />
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{listing.name}</h1>
