@@ -199,7 +199,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       }
     },
     'devices.list': async () => starting().devices(),
-    'requests.get': async () => starting().pendingDiscovery(),
+    'requests.get': async () => {
+      const running = starting()
+      const event = running.pendingDiscovery()
+      return event && { event, added: running.discoveryAdded() }
+    },
     'requests.answer': async ({ requestId, add, name }) =>
       (await starting().answerDiscovery(requestId, add, name)) ? null : 'gone',
     'devices.remove': async ({ id }) => {

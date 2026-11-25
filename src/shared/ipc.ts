@@ -165,6 +165,8 @@ export type AppCommand =
   | { kind: 'open-project' }
   | { kind: 'new-session' }
   | { kind: 'open-settings'; section?: string }
+  /** A device that joined this computer: its page in Settings, asking to remove it. */
+  | { kind: 'remove-device'; deviceId: string }
   /** Kettu was started again to debug, while this run is a normal one. */
   | { kind: 'confirm-debug-restart' }
   | { kind: 'toggle-sidebar' }

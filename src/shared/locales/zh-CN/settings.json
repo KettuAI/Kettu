@@ -2163,9 +2163,7 @@
     },
     "joined": {
       "toast": "{{name}} 已加入 {{host}}",
-      "remove": "移除",
-      "removed": "已移除 {{name}}",
-      "notRemoved": "没能移除 {{name}}"
+      "remove": "移除"
     }
   },
   "usage": {

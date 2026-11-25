@@ -16,13 +16,14 @@ import {
 import { basename, monthDay } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
-import { useHostScope } from '@renderer/stores/host-scope'
+import { useHostScope, useSettingsHostStore } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError, DangerButton, IconAction, Pill, Spin } from './controls'
+import { useDeviceRemove } from './device-remove'
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { ThisBrowserBadge } from './remote-section'
 import { changeDevice, deviceLine, nextDeviceName, whenAt } from './remote-text'
@@ -400,9 +401,12 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
   const onHost = useHostContext()
   // The web client removing its own browser ends this page's connection for good.
   const own = useWebHostStore((s) => s.host?.device.id === device.id)
-  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hostId = useSettingsHostStore((s) => s.hostId)
+  const open = useDeviceRemove((s) => s.open?.hostId === hostId && s.open.id === device.id)
+  const setOpen = (next: boolean): void =>
+    useDeviceRemove.setState({ open: next ? { hostId, id: device.id } : null })
   const remove = async (): Promise<void> => {
     setBusy(true)
     setError(null)

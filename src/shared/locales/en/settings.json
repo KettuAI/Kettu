@@ -2188,9 +2188,7 @@
     },
     "joined": {
       "toast": "{{name}} joined {{host}}",
-      "remove": "Remove",
-      "removed": "{{name}} is removed",
-      "notRemoved": "{{name}} could not be removed"
+      "remove": "Remove"
     }
   },
   "usage": {

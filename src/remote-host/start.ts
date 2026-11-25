@@ -417,14 +417,15 @@ export function startRemoteHost(
     const ownHost = (): ReverseHost | null => {
       const served = onRelay()
       const profile = hostProfile(staticKey.publicKey, server.options.host.name, platform)
-      // A relay of the owner's own takes its pin, which a host given this one is not handed.
-      if (!served || served.pin || served.urls.length === 0 || !profile) return null
+      if (!served || served.urls.length === 0 || !profile) return null
       return {
         relayId: served.id,
         publicKey,
         name: profile.name,
         platform,
         relays: served.urls,
+        // The owner's own relay at an IP address, which the other computer checks by its pin.
+        ...(served.pin ? { pin: served.pin } : {}),
         version: appVersion,
       }
     }

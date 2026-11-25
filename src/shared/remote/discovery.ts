@@ -563,6 +563,11 @@ export interface ReverseHost {
   platform: Platform
   /** The relays it signs in to, each an origin. */
   relays: string[]
+  /**
+   * The certificate pin of the first relay, base64url, for the owner's own relay at an IP address,
+   * as a pairing code carries it.
+   */
+  pin?: string
   /** Kettu's version on it. */
   version: string
 }
@@ -578,22 +583,34 @@ const BASE64_KEY = /^[A-Za-z0-9+/]{43}=$/
 
 /** `remote.addReverseHost`'s params as a device sends them, or null when they are not ones. */
 export function parseReverseHost(value: unknown): ReverseHost | null {
-  if (!only(value, ['relayId', 'publicKey', 'name', 'platform', 'relays', 'version'])) return null
-  const { relayId, publicKey, name, platform, relays, version } = value
+  const pinned = typeof value === 'object' && value !== null && 'pin' in value ? ['pin'] : []
+  const keys = ['relayId', 'publicKey', 'name', 'platform', 'relays', 'version', ...pinned]
+  if (!only(value, keys)) return null
+  const { relayId, publicKey, name, platform, relays, version, pin } = value
   if (!isRelayHostId(relayId) || typeof publicKey !== 'string' || !BASE64_KEY.test(publicKey)) {
     return null
   }
   if (!isText(name, MAX_PROFILE_NAME) || name.trim() !== name) return null
   if (!isText(platform, 32) || !/^[a-z0-9]+$/.test(platform) || !isText(version, 64)) return null
   if (!Array.isArray(relays) || relays.length === 0) return null
-  const relay = parseHostRelay({ id: relayId, urls: relays })
+  const relay = parseHostRelay({ id: relayId, urls: relays, ...(pinned.length ? { pin } : {}) })
   if (!relay || relay.urls.length !== relays.length) return null
-  return { relayId, publicKey, name, platform: platform as Platform, relays: relay.urls, version }
+  // A pin that is not 32 bytes for an https relay is dropped there, which ends it here.
+  if (pinned.length && relay.pin !== pin) return null
+  return {
+    relayId,
+    publicKey,
+    name,
+    platform: platform as Platform,
+    relays: relay.urls,
+    ...(relay.pin ? { pin: relay.pin } : {}),
+    version,
+  }
 }
 
 /** The relay a reverse host is reached through, as a known host keeps it. */
 export function reverseHostRelay(host: ReverseHost): HostRelay {
-  return { id: host.relayId, urls: host.relays }
+  return { id: host.relayId, urls: host.relays, ...(host.pin ? { pin: host.pin } : {}) }
 }
 
 /** A desktop host's answer, or null when it is not one. */

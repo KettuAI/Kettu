@@ -160,14 +160,14 @@ export function notifyDiscovery(
 }
 
 /**
- * A device joined this computer: an OS notification, focused or not, with Remove; its click
- * opens the device list.
+ * A device joined this computer: an OS notification, focused or not, with Remove; Remove and its
+ * click both do `ask`, the device's page with its remove confirmation, as removing asks first.
  */
 export function notifyJoined(
   device: { id: string; name: string },
   hostName: string,
   settings: SettingsFile,
-  actions: { remove(): void; open(): void },
+  ask: () => void,
 ): void {
   if (!Notification.isSupported()) return
   const key = `joined:${device.id}`
@@ -183,11 +183,11 @@ export function notifyJoined(
   }
   notification.on('click', () => {
     forget()
-    actions.open()
+    ask()
   })
   notification.on('action', () => {
     forget()
-    actions.remove()
+    ask()
   })
   notification.on('close', forget)
   notification.on('failed', (_, error) => {
