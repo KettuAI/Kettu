@@ -228,9 +228,9 @@ describe('inspecting a plugin', () => {
     await expect(h.plugins.install(plan.token)).rejects.toMatchObject({ code: 'not_found' })
   })
 
-  it('blocks a package whose skill has the name of one Kettu already keeps', async () => {
+  it('installs the rest of a package whose skill has the name of one Kettu keeps, and says so', async () => {
     const h = await host()
-    h.settings.skills.push({
+    const mine: MarketSkill = {
       id: 'local:11111111-1111-4111-8111-111111111111',
       name: 'review',
       description: 'Mine.',
@@ -239,15 +239,27 @@ describe('inspecting a plugin', () => {
       version: null,
       agents: 'all',
       on: true,
-    })
+    }
+    h.settings.skills.push(mine)
     const folder = path.join(root, 'source')
     await writeTree(folder, packageFiles())
     const plan = await h.plugins.inspect({ kind: 'local', path: folder })
-    expect(plan.blocked).toContain('review')
-    await expect(h.plugins.install(plan.token)).rejects.toMatchObject({ code: 'conflict' })
-    expect(h.settings.skills).toHaveLength(1)
+    expect(plan.blocked).toBeNull()
+    expect(plan.skipped).toEqual([{ name: 'review', from: '/skills/review' }])
+    const plugin = await h.plugins.install(plan.token)
+    expect(plugin.skipped).toEqual([{ name: 'review', from: '/skills/review' }])
+    expect(plugin.kept.skills).toEqual([])
+    expect(h.settings.skills).toEqual([mine])
+    expect(existsSync(h.skillFile(pluginItemId(plugin.id, 'review'), 'review'))).toBe(false)
+    expect(h.settings.servers.map((server) => server.name).sort()).toEqual(['local', 'tracker'])
+    expect(await h.library.list()).toHaveLength(1)
+    expect(h.saved().plugins[plugin.id]!.skipped).toEqual(plugin.skipped)
+    await h.plugins.setEnabled(plugin.id, false)
+    await h.plugins.setEnabled(plugin.id, true)
+    expect(h.settings.skills).toEqual([mine])
+    await h.plugins.uninstall(plugin.id)
+    expect(h.settings.skills).toEqual([mine])
     expect(h.settings.servers).toEqual([])
-    expect(await h.plugins.list()).toEqual([])
   })
 })
 
@@ -698,6 +710,31 @@ describe('updating a plugin', () => {
       held: { revision: '1.2.0', permissions: ['tools', 'sessions.start'] },
     })
     expect(await h.plugins.applyUpdate(id)).toMatchObject({ revision: '1.2.0', held: null })
+  })
+
+  it('adds a skill it skipped once an update finds its name free', async () => {
+    const h = await host()
+    h.settings.skills.push({
+      id: 'local:11111111-1111-4111-8111-111111111111',
+      name: 'review',
+      description: 'Mine.',
+      source: 'local',
+      origin: '/skills/review',
+      version: null,
+      agents: 'all',
+      on: true,
+    })
+    const plugin = await h.plugins.install((await h.plugins.inspect(fromMarket)).token)
+    expect(plugin.skipped).toEqual([{ name: 'review', from: '/skills/review' }])
+    h.settings.skills = []
+    next(h, '1.1.0', packageFiles())
+    const [updated] = await h.plugins.checkUpdates()
+    const skillId = pluginItemId(plugin.id, 'review')
+    expect(updated).toMatchObject({ revision: '1.1.0', skipped: [], kept: { skills: [skillId] } })
+    expect(h.settings.skills).toEqual([
+      expect.objectContaining({ id: skillId, name: 'review', source: 'plugin', on: true }),
+    ])
+    expect(await readFile(h.skillFile(skillId, 'review'), 'utf8')).toContain('name: review')
   })
 
   it('keeps the version in place when the newer one cannot be installed', async () => {

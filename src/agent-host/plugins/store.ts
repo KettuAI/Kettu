@@ -18,6 +18,7 @@ import {
   type PluginHeldUpdate,
   type PluginItem,
   type PluginSettingValue,
+  type PluginSkippedSkill,
   type PluginSource,
   type PluginTool,
 } from '@shared/plugins'
@@ -53,6 +54,8 @@ export interface PluginRecord {
   dir: string
   contents: PluginContents
   kept: { skills: string[]; servers: string[]; workflows: string[] }
+  /** Its skills left out of `kept`, since a skill from elsewhere has the name. */
+  skipped: PluginSkippedSkill[]
   /** The skills and servers that were on when the plugin was turned off, turned on again with it. */
   wasOn: string[]
   previous: { dir: string; version: string | null; revision: string | null } | null
@@ -306,6 +309,20 @@ function heldOf(value: unknown): PluginHeldUpdate | null {
   }
 }
 
+/** The skipped skills that are skills of the package in place, each once. */
+function skippedOf(value: unknown, contents: PluginContents): PluginSkippedSkill[] {
+  if (!Array.isArray(value)) return []
+  const skipped: PluginSkippedSkill[] = []
+  for (const raw of value.slice(0, MAX_ITEMS)) {
+    if (!isRecord(raw) || typeof raw.name !== 'string' || !text(raw.from)) continue
+    const { name } = raw
+    if (!contents.skills.some((skill) => skill.name === name)) continue
+    if (skipped.some((item) => item.name === name)) continue
+    skipped.push({ name, from: raw.from })
+  }
+  return skipped
+}
+
 /** Parses the file; a record that does not read is dropped alone. */
 export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | string {
   if (!isRecord(data.plugins)) return 'plugins is not an object'
@@ -348,6 +365,7 @@ export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | s
             )
           : [],
       },
+      skipped: skippedOf(raw.skipped, contents),
       wasOn: ids(raw.wasOn, id),
       previous,
       held: heldOf(raw.held),

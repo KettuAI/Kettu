@@ -394,7 +394,8 @@
       "replaceTitle": "替换 {{name}}",
       "fromFolder": "这台电脑上的文件夹",
       "dev": "开发中",
-      "failed": "无法安装：{{error}}"
+      "failed": "无法安装：{{error}}",
+      "skipsSkill": "会跳过技能 {{name}}：已经添加过同名的技能，来自 {{from}}。"
     },
     "holds": {
       "heading": "会添加什么",
@@ -503,7 +504,9 @@
       "viewUpdate": "查看更新",
       "items_other": "{{count}} 项内容",
       "devNote": "从 {{path}} 添加。改动在重新载入后生效。",
-      "updateError": "无法检查更新：{{error}}"
+      "updateError": "无法检查更新：{{error}}",
+      "skipped_other": "跳过了 {{count}} 个技能",
+      "skippedSkill": "技能 {{name}} 没有添加：已经添加过同名的技能，来自 {{from}}。智能体用的是那一个。"
     },
     "menu": {
       "reload": "重新载入",

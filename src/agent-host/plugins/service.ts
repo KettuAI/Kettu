@@ -23,6 +23,7 @@ import {
   type PluginPlan,
   type PluginResource,
   type PluginSettingValue,
+  type PluginSkippedSkill,
   type PluginSource,
   type PluginTool,
 } from '@shared/plugins'
@@ -158,6 +159,23 @@ interface Fetched {
 interface Plan extends Fetched {
   source: PluginSource
   at: number
+}
+
+/**
+ * The plugin's skills whose name a skill Kettu keeps from elsewhere has, which are left out:
+ * agents would keep only one of two skills of a name.
+ */
+function taken(
+  id: string,
+  own: readonly { name: string }[],
+  kept: readonly MarketSkill[],
+): PluginSkippedSkill[] {
+  return own.flatMap((skill) => {
+    const other = kept.find(
+      (item) => item.name === skill.name && item.id !== pluginItemId(id, skill.name),
+    )
+    return other ? [{ name: skill.name, from: other.origin }] : []
+  })
 }
 
 /** What a newer version asks for that the one in place does not. */
@@ -475,12 +493,15 @@ export class PluginsService {
     }
     while (this.plans.size >= MAX_PLANS) this.plans.delete(this.plans.keys().next().value!)
     this.plans.set(token, { ...fetched, source, at: this.now() })
+    const { skills } = await this.deps.settings()
     return {
       token,
       source,
       contents: fetched.pkg.contents,
       replaces: file.plugins[id] ? id : null,
-      blocked: await this.blocked(id, fetched.pkg),
+      // Older clients keep Install off for any reason given here.
+      blocked: null,
+      skipped: taken(id, fetched.pkg.contents.skills, skills),
     }
   }
 
@@ -701,8 +722,6 @@ export class PluginsService {
     before: PluginRecord | undefined,
     keep: boolean,
   ): Promise<PluginRecord> {
-    const problem = await this.blocked(id, fetched.pkg)
-    if (problem) throw new HostError('conflict', problem)
     const dir = `v-${randomBytes(6).toString('hex')}`
     await this.writePackage(this.packageDir({ id, dir }), fetched.pkg.files)
     const file = await this.load()
@@ -718,6 +737,7 @@ export class PluginsService {
       dir,
       contents: fetched.pkg.contents,
       kept: { skills: [], servers: [], workflows: [] },
+      skipped: [],
       wasOn: [],
       previous: null,
       held: null,
@@ -779,7 +799,8 @@ export class PluginsService {
   /**
    * Brings the plugin's items in line with the package in `dir`: its skills and servers in the
    * settings' lists, keeping the agents and the switch of each one already there, and its
-   * workflows in the library; what the package no longer holds goes.
+   * workflows in the library; what the package no longer holds goes. A skill whose name is
+   * taken stays out until a later change finds the name free.
    */
   private async apply(record: PluginRecord, pkg: PluginPackage, dir: string): Promise<void> {
     const { id } = record
@@ -791,7 +812,9 @@ export class PluginsService {
     // What a version added while the plugin is off comes on with the plugin, as a new item would.
     const added: string[] = []
     const skills: MarketSkill[] = []
+    const skipped = taken(id, contents.skills, settings.skills)
     for (const skill of contents.skills) {
+      if (skipped.some((item) => item.name === skill.name)) continue
       const itemId = pluginItemId(id, skill.name)
       const prefix = `${skill.path}/`
       const files = pkg.files
@@ -835,6 +858,7 @@ export class PluginsService {
       servers: { remove: gone(record.kept.servers, servers), put: servers },
     })
     record.kept.skills = skills.map((item) => item.id)
+    record.skipped = skipped
     record.kept.servers = servers.map((item) => item.id)
     const workflows: string[] = []
     for (const item of contents.workflows) {
@@ -868,18 +892,6 @@ export class PluginsService {
       ),
       ...(record.enabled ? [] : added),
     ]
-  }
-
-  /** Why the package cannot go in as it is: a skill of it has the name of another Kettu keeps. */
-  private async blocked(id: string, pkg: PluginPackage): Promise<string | null> {
-    const { skills } = await this.deps.settings()
-    for (const skill of pkg.contents.skills) {
-      const other = skills.find(
-        (item) => item.name === skill.name && item.id !== pluginItemId(id, skill.name),
-      )
-      if (other) return t('marketSkills.nameTaken', { name: skill.name, from: other.origin })
-    }
-    return null
   }
 
   /** A source's package, read and checked. */
@@ -966,6 +978,7 @@ export class PluginsService {
         : null,
       held: record.held,
       updateError: record.updateError,
+      skipped: record.skipped.map((item) => ({ ...item })),
       values: Object.fromEntries(
         record.contents.settings.flatMap((setting) => {
           const value = effectiveSetting(setting, record.values[setting.key])
