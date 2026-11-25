@@ -612,11 +612,13 @@ describe('the Claude Agent SDK driver', () => {
         { type: 'stdio', name: 'playwright', command: 'npx', args: [], env: [] },
       ],
     })
-    await settle()
+    await vi.waitFor(() =>
+      expect(sdk.queries.at(-1)?.calls.map((call) => call.method)).toContain('setMcpServers'),
+    )
     const query = sdk.last
     expect(query.options.resume).toBe('closed')
     const methods = (): string[] => query.calls.map((call) => call.method)
-    expect(methods()).toContain('setMcpServers')
+    expect(methods()).not.toContain('mcpServerStatus')
     expect(methods()).not.toContain('getContextUsage')
     connected()
     expect(await reading).toMatchObject({ used: 10_000 })
