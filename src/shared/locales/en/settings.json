@@ -85,7 +85,7 @@
     },
     "promptSuggestions": {
       "name": "Suggest the next message",
-      "description": "After a turn, the empty message box shows what you might say next; Tab fills it in. Claude Code only, from its prompt cache.",
+      "description": "After a turn, the empty message box shows what you might say next; Tab fills it in. The agent guesses from the conversation, mostly from its prompt cache.",
       "keywords": "suggestion predict next message prompt tab autocomplete composer"
     },
     "agentPasswords": {

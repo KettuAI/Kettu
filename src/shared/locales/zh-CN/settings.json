@@ -84,7 +84,7 @@
     },
     "promptSuggestions": {
       "name": "建议下一条消息",
-      "description": "一轮结束后，空着的输入框显示你接下来可能要说的话，按 Tab 填入。目前只有 Claude Code，借用它的提示词缓存。",
+      "description": "一轮结束后，空着的输入框显示你接下来可能要说的话，按 Tab 填入。由 Agent 自己看着对话来猜，大多借用它的提示词缓存。",
       "keywords": "建议 预测 下一条 消息 补全 输入框 suggestion predict next prompt tab autocomplete"
     },
     "agentPasswords": {

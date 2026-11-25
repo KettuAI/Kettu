@@ -1799,6 +1799,11 @@ export class AcpConnection implements AgentConnection {
     return this.removal !== null
   }
 
+  /** agy asks for every MCP tool, and Kettu answers for those it allows; other agents ask the user. */
+  get allowsKettuTools(): boolean {
+    return this.agy
+  }
+
   async removeHidden(sessionId: string, log: (message: string) => void): Promise<void> {
     this.unregister(sessionId)
     this.unprompted.delete(sessionId)

@@ -40,6 +40,7 @@ import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
 import { canEditAt, promptLine, promptOccurrence, turnsFrom, usedAtEnd } from '@shared/rewind'
 import { firstLine, outlineText } from '@shared/outline'
+import { limitLevel, limitsForModel } from '@shared/plan-limits'
 import { reachedLimit } from '@shared/session-groups'
 import { longEnough, queryWords } from '@shared/search-fold'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
@@ -320,6 +321,14 @@ import {
   sideRoute,
   sideRouteWith,
 } from './side-chat'
+import {
+  planModeOn,
+  SUGGEST_QUESTION,
+  SUGGEST_TIMEOUT_MS,
+  suggestionRoute,
+  suggestionText,
+  type SuggestionRoute,
+} from './next-message'
 import { SIDE_ENTRIES, type StoredSideChat } from './threads/side-chat'
 import { ToolActivity } from './session-activity'
 import { listedTitle, titleMessageText, writeBranchSlug, writeSessionTitle } from './session-titles'
@@ -444,8 +453,16 @@ export interface SessionEvents {
 
 /** The artifacts service and the Marketplace's servers, as the sessions pass them to their agents. */
 export interface SessionMcp {
-  /** What an attach of the session through `connection` passes in `mcpServers`. */
-  servers(sessionId: string, record: SessionRecord, connection: AgentConnection): McpServer[]
+  /**
+   * What an attach of the session through `connection` passes in `mcpServers`; `suggests` lists
+   * the next-message tool and asks for it in the service's prompt.
+   */
+  servers(
+    sessionId: string,
+    record: SessionRecord,
+    connection: AgentConnection,
+    suggests: boolean,
+  ): McpServer[]
   /**
    * The Marketplace's servers an attach of the agent's session passes beside those, over the
    * transports it speaks, renamed where `taken` already has a name.
@@ -462,9 +479,10 @@ export interface SessionMcp {
   turnEnded(sessionId: string): void
   /**
    * The paragraph on where Kettu's tools are and when to use them, for an agent that takes it
-   * ahead of its prompt rather than in instructions of its own.
+   * ahead of its prompt rather than in instructions of its own; `suggests` asks for the
+   * next-message tool.
    */
-  guide(agentId: AgentId): string
+  guide(agentId: AgentId, suggests: boolean): string
 }
 
 /** Kettu's own slash commands, as sessions use them. */
@@ -667,6 +685,8 @@ interface Turn {
   byAgent: boolean
   /** Told once it has ended, as an edit from a message waits for the turn it stops. */
   ends: (() => void)[]
+  /** The next message the agent's tool suggested in the turn, shown once it ends normally. */
+  suggestion: string | null
 }
 
 /** What `sessions.prepare` asks for: the agent and where the session will work. */
@@ -1296,6 +1316,8 @@ export class SessionManager {
   private readonly contextEstimateRuns = new WeakMap<Live, Promise<ContextEstimates | null>>()
   /** The side question each session is answering, stopped through its controller. */
   private readonly sideRuns = new Map<string, AbortController>()
+  /** The forks asked for a session's next-message suggestion, one at a time. */
+  private readonly suggestRuns = new Map<string, AbortController>()
   /** What the last clear of each session's side chat emptied, for its undo. */
   private readonly sideCleared = new Map<string, SideChatEntry[]>()
   /** Sessions whose outline titles are being written, and when the last failed for others. */
@@ -3879,7 +3901,9 @@ export class SessionManager {
     const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
     const append = runtime?.connection.systemPromptAppend
       ? kettuAhead(
-          reached ? (this.deps.mcp?.guide(record.agentId) ?? null) : null,
+          reached
+            ? (this.deps.mcp?.guide(record.agentId, this.suggestsByTool(record, runtime)) ?? null)
+            : null,
           memory?.text ?? null,
           role,
         )
@@ -4116,8 +4140,33 @@ export class SessionManager {
   ): McpServer[] {
     if (!this.deps.mcp || !runtime) return []
     return runtime.init.capabilities.mcpHttp && runtime.kettu
-      ? this.deps.mcp.servers(sessionId, record, runtime.connection)
+      ? this.deps.mcp.servers(
+          sessionId,
+          record,
+          runtime.connection,
+          this.suggestsByTool(record, runtime),
+        )
       : []
+  }
+
+  /** How the session's agent suggests the next message; null when it gives none. */
+  private suggestionRouteOf(
+    record: SessionRecord,
+    runtime: AgentRuntime | null | undefined,
+  ): SuggestionRoute | null {
+    if (!runtime || record.origin === 'subagent') return null
+    return suggestionRoute(
+      record.agentId,
+      runtime.init.capabilities,
+      runtime.connection.allowsKettuTools === true,
+    )
+  }
+
+  /** Whether the session is given the next-message tool: its agent suggests by it, and it is on. */
+  private suggestsByTool(record: SessionRecord, runtime: AgentRuntime | null | undefined): boolean {
+    return (
+      this.deps.settings().promptSuggestions && this.suggestionRouteOf(record, runtime) === 'tool'
+    )
   }
 
   private libraryServers(
@@ -4137,6 +4186,7 @@ export class SessionManager {
   }
 
   private dropLive(live: Live): void {
+    this.stopSuggesting(live.id)
     // A card still waiting goes unanswered; the session's next start asks again.
     const card = this.projectMcpCards.get(live.id)
     const waiting = card ? live.thread.byId[card.entryId] : undefined
@@ -7683,6 +7733,7 @@ export class SessionManager {
             },
           },
     ])
+    this.stopSuggesting(live.id)
     this.update(live, {
       agentId,
       acpSessionId: record.acpSessionId,
@@ -7822,7 +7873,7 @@ export class SessionManager {
       ? servers
           .flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? [])))
           .join('\n\n')
-      : (this.deps.mcp?.guide(record.agentId) ?? '')
+      : (this.deps.mcp?.guide(record.agentId, this.suggestsByTool(record, runtime)) ?? '')
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
     const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
     return kettuAhead(tools && this.deps.mcp && text ? text : null, memory, role)
@@ -8351,8 +8402,10 @@ export class SessionManager {
       requested: false,
       byAgent,
       ends: [],
+      suggestion: null,
     }
     live.turn = turn
+    this.stopSuggesting(live.id)
     live.sender =
       portId === null ? null : { portId, device: this.deps.portDevice?.(portId) ?? null }
     live.scope = newTurnScope()
@@ -9317,6 +9370,7 @@ export class SessionManager {
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
+    this.suggestNext(live, turn, stopReason)
     this.followAgentTurn(live)
     // An agent that lists its titles sends none in the thread: the turn's end reads the session's.
     this.maybeReadListedTitle(live, this.userMessages(live) === 1)
@@ -9738,6 +9792,7 @@ export class SessionManager {
     this.emit(live, [{ op: 'thread.truncate', id: entryId }])
     const used = usedAtEnd(live.thread)
     const usage = live.thread.session.usage
+    this.stopSuggesting(live.id)
     this.update(live, {
       rewound: { turns: live.record.rewound.turns },
       ...(usage && used !== null ? { usage: { ...usage, used } } : {}),
@@ -10125,6 +10180,109 @@ export class SessionManager {
     } catch (error) {
       throw agentError(error)
     }
+  }
+
+  // Next-message suggestions.
+
+  /**
+   * The next-message tool's call: kept for when the running turn ends normally; false when the
+   * session gives no suggestion by the tool now.
+   */
+  noteSuggestion(sessionId: string, message: string): boolean {
+    const live = this.live.get(sessionId)
+    if (!live?.turn || !this.deps.settings().promptSuggestions) return false
+    const runtime = this.deps.agents.runtime(live.record.agentId)
+    if (this.suggestionRouteOf(live.record, runtime) !== 'tool') return false
+    live.turn.suggestion = message
+    return true
+  }
+
+  /**
+   * Gives the next-message suggestion once a turn ended normally, for an agent without prompt
+   * suggestions of its own: the one its tool kept, or one asked of a fork of the session.
+   */
+  private suggestNext(live: Live, turn: Turn, stopReason: StopReason): void {
+    // A queued message that went on is the next one already.
+    if (stopReason !== 'end_turn' || live.turn || live.closing) return
+    if (!this.deps.settings().promptSuggestions || planModeOn(live.thread.session.config)) return
+    const route = this.suggestionRouteOf(live.record, this.deps.agents.runtime(live.record.agentId))
+    if (route === 'tool') {
+      if (turn.suggestion !== null) this.update(live, { suggestion: turn.suggestion })
+      return
+    }
+    // A fork is a request of its own, which a plan near its limit is better kept for.
+    if ((route === 'codex' || route === 'fork') && !this.nearPlanLimit(live)) {
+      void this.suggestByFork(live, route)
+    }
+  }
+
+  /** Whether a window that holds back the session's model is 90% used or more. */
+  private nearPlanLimit(live: Live): boolean {
+    const { agentId } = live.record
+    if (!this.deps.agents.has(agentId)) return false
+    const now = this.now()
+    const model = live.thread.session.config.find((option) => option.category === 'model')
+    return limitsForModel(this.deps.agents.status(agentId).limits, model).some(
+      (limit) =>
+        !limit.extraUsage &&
+        limitLevel(limit) === 'bad' &&
+        (limit.resetsAt === null || limit.resetsAt > now),
+    )
+  }
+
+  /** Asks a fork of the session, the way its side questions go, what the user sends next. */
+  private async suggestByFork(live: Live, route: 'codex' | 'fork'): Promise<void> {
+    this.stopSuggesting(live.id)
+    const controller = new AbortController()
+    this.suggestRuns.set(live.id, controller)
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(SUGGEST_TIMEOUT_MS)])
+    const ask = { question: SUGGEST_QUESTION, history: [] }
+    const events: SideAnswerEvents = { text: () => {}, step: () => {} }
+    try {
+      const result =
+        route === 'codex'
+          ? await this.sideOwn(live, 'codex', ask, events, signal)
+          : await this.sideFork(live, ask, events, signal)
+      this.recordSuggestUsage(live, result)
+      if (signal.aborted || live.turn || this.live.get(live.id) !== live) return
+      const text = result.synthetic ? null : suggestionText(result.text)
+      if (text && this.deps.settings().promptSuggestions) this.update(live, { suggestion: text })
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        this.deps.diagnostics.log(
+          'info',
+          `No next-message suggestion from a fork of ${live.id}: ${logText(error)}`,
+        )
+      }
+    } finally {
+      if (this.suggestRuns.get(live.id) === controller) this.suggestRuns.delete(live.id)
+    }
+  }
+
+  private recordSuggestUsage(live: Live, result: SideAnswer): void {
+    if (!result.tokens || !this.deps.usage) return
+    this.deps.usage.record(
+      recordRows({
+        sessionId: live.id,
+        acpSessionId: live.record.acpSessionId,
+        agentId: live.record.agentId,
+        project: live.record.projectPath,
+        turnEntryId: `suggest-${randomUUID()}`,
+        at: this.now(),
+        tokens: result.tokens,
+        models: result.model ? [{ model: result.model, tokens: result.tokens }] : [],
+        model: result.model ?? null,
+      }),
+    )
+  }
+
+  /** Stops the fork asked for the session's suggestion; true when one was running. */
+  private stopSuggesting(sessionId: string): boolean {
+    const run = this.suggestRuns.get(sessionId)
+    if (!run) return false
+    this.suggestRuns.delete(sessionId)
+    run.abort()
+    return true
   }
 
   // Side questions.

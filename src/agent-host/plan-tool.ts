@@ -7,6 +7,7 @@ import { longer } from '@shared/artifacts'
 import type { PlanItem } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
 import { FORGET_MEMORY_TOOL, REMEMBER_TOOL, UPDATE_MEMORY_TOOL } from './memory/tools'
+import { SUGGEST_TOOL } from './next-message'
 import { REPORT_TOOL } from './report-tool'
 import { SERVICE_NAME } from './service-name'
 
@@ -97,8 +98,16 @@ const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set([
   FORGET_MEMORY_TOOL,
 ])
 
-/** Kettu's tools whose calls show no row: the plan, the drafted report and memory writes. */
-const ROWLESS_TOOLS: ReadonlySet<string> = new Set([PLAN_TOOL, REPORT_TOOL, ...MEMORY_WRITE_TOOLS])
+/**
+ * Kettu's tools whose calls show no row: the plan, the next-message suggestion, the drafted report
+ * and memory writes.
+ */
+const ROWLESS_TOOLS: ReadonlySet<string> = new Set([
+  PLAN_TOOL,
+  SUGGEST_TOOL,
+  REPORT_TOOL,
+  ...MEMORY_WRITE_TOOLS,
+])
 
 const CLAUDE_PREFIX = `mcp__${SERVICE_NAME}__`
 
