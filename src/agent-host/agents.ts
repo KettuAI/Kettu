@@ -66,6 +66,7 @@ import {
   antigravitySignInMethod,
 } from './vendor-usage/antigravity'
 import { readAntigravityUsage } from './antigravity-usage'
+import { savedGoogleSignIn } from './antigravity-sign-in'
 import { signsInWithKeyOnly } from '@shared/agents'
 import { takesAutoCompact } from '@shared/auto-compact'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
@@ -187,7 +188,7 @@ import type { Diagnostics } from './diagnostics'
 import type { AgentDriver, AgentTransport } from './driver'
 import { driverOf, preferredProtocol, protocolFor, type DriverOverrides } from './drivers'
 import { HostError, invalidParams } from './errors'
-import { findCommand, getEnv, isExecutableFile, type Env } from './find-command'
+import { findCommand, getEnv, isExecutableFile, needsShell, type Env } from './find-command'
 import {
   fetchManifest,
   inNpmRange,
@@ -571,6 +572,9 @@ class Slot {
   progress = new TextRing(8 * 1024)
   /** Stops the sign-in in progress; the agent is not stopped for being idle while it runs. */
   signInAbort: AbortController | null = null
+  /** The process whose refused sign-in was checked against the Google sign-in agy holds. */
+  signInChecked: AgentRun | null = null
+  signInCheck: Promise<void> | null = null
   /** The key of its `keySignIn` changed, so its next start signs in with it. */
   keySignInPending = false
   /** The method a `sharesSignIn` agent is signed in with, as it and its files show; null unknown. */
@@ -675,15 +679,17 @@ function unavailable(state: AgentState): boolean {
 }
 
 /**
- * The version that runs: the handshake's, else the program's, else the installed package's, since
- * a package harness has no program to ask and Grok names none in its handshake.
+ * The version that runs: the handshake's, else the program's, else the user's own CLI's or the
+ * installed package's, since Grok names none in its handshake.
  */
 function runningVersion(slot: Slot): string | null {
   const detection = slot.h.detection
-  const adapter = detection?.state === 'available' ? detection.adapter : null
+  const available = detection?.state === 'available' ? detection : null
+  const adapter = available?.adapter ?? null
   return (
     slot.init?.version ??
     slot.h.binaryVersion ??
+    available?.cli?.version ??
     (adapter?.current ?? adapter?.fallback)?.version ??
     null
   )
@@ -5012,9 +5018,96 @@ export class AgentManager {
 
   authRequired(agentId: AgentId): void {
     const slot = this.slots.get(agentId)
-    if (!slot || slot.signIn === 'required') return
+    if (!slot || slot.signInCheck) return
+    if (this.checksSavedSignIn(slot)) {
+      slot.signInCheck = this.checkSavedSignIn(slot).finally(() => {
+        slot.signInCheck = null
+      })
+      return
+    }
+    if (slot.signIn === 'required') return
     slot.signIn = 'required'
     this.emit(slot)
+  }
+
+  /**
+   * Whether a refused sign-in is first checked against the Google sign-in agy holds: once per
+   * process of the default Antigravity agent, whose sign-in is the user's terminal `agy`'s.
+   */
+  private checksSavedSignIn(slot: Slot): boolean {
+    return (
+      slot.def.id === 'antigravity' &&
+      !!slot.def.configFlag &&
+      !this.ownHome(slot) &&
+      !!slot.runtime &&
+      slot.launched !== null &&
+      slot.signInChecked !== slot.launched
+    )
+  }
+
+  /**
+   * agy refused a session though it may still hold a Google sign-in: its ACP mode keeps to the
+   * method its last ACP client chose, such as an API key that is gone since. When a scratch agy
+   * shows that sign-in, the running one is signed in with it, which opens no browser; otherwise
+   * the agent must sign in.
+   */
+  private async checkSavedSignIn(slot: Slot): Promise<void> {
+    const { runtime, launched } = slot
+    slot.signInChecked = launched
+    const log = (level: 'info' | 'warn', message: string): void =>
+      this.deps.diagnostics.log(level, `${slot.name}: ${message}`)
+    try {
+      const method = await savedGoogleSignIn({
+        parent: this.deps.reportsDir,
+        launch: (folder) => this.launchSignInCheck(slot, folder),
+      })
+      // A process started since is checked on its own refusal.
+      if (!runtime || slot.runtime !== runtime) return
+      if (method) {
+        const abort = new AbortController()
+        const timer = setTimeout(() => abort.abort(), SIGN_IN_CHECK_MS)
+        try {
+          // A page to open means a new sign-in, which is the user's to start.
+          await runtime.connection.authenticate(method, {
+            openLink: () => abort.abort(),
+            signal: abort.signal,
+          })
+        } finally {
+          clearTimeout(timer)
+        }
+        log('info', `signed in again with the Google sign-in agy holds (${method})`)
+        slot.signIn = 'signed-in'
+        slot.accountRefused = false
+        this.emit(slot)
+        this.hooks.signedIn(slot.id)
+        void this.readSignInMethod(slot)
+        return
+      }
+      log('info', 'refused a session and holds no Google sign-in')
+    } catch (error) {
+      log('warn', `could not sign in again with its Google sign-in: ${agentError(error).message}`)
+    }
+    if (slot.signIn === 'required') return
+    slot.signIn = 'required'
+    this.emit(slot)
+  }
+
+  /** The user's `agy acp` as the agent runs it, with its folder in `folder` instead. */
+  private launchSignInCheck(slot: Slot, folder: string): LaunchedAgent {
+    const words = this.display(slot)
+    const flag = slot.def.configFlag!
+    const paths = this.deps.platform === 'win32' ? path.win32 : path.posix
+    const args = [...words.args, flag.flag, paths.join(folder, flag.under)]
+    const base = this.deps.env.agentEnv(slot.id)
+    const env = this.deps.launchEnv?.(slot.id, base) ?? base
+    const spec: LaunchSpec = {
+      command: words.command,
+      args,
+      env: words.env,
+      shell: needsShell(words.command, this.deps.platform),
+      display: { ...words, args },
+    }
+    return this.deps.launcher.launch(slot.def, spec, env, { stderr: () => {}, event: () => {} })
   }
 
   /** A session request succeeded, so the agent is signed in. */
@@ -5999,6 +6092,8 @@ export class AgentManager {
 // A stop waits this long at most for a hidden session's removal, well under the 6 s main gives
 // the host to stop on quit; removing takes milliseconds unless the agent hangs.
 const REMOVAL_WAIT_MS = 1_000
+/** How long signing agy in again with the Google sign-in it holds may take. */
+const SIGN_IN_CHECK_MS = 30_000
 /** The reset credits are not asked for twice within this, however a read was started. */
 const RESETS_GAP_MS = 5_000
 /** How soon a read that fell short of the credits' expiries is tried again. */
