@@ -35,8 +35,13 @@ export function agentFolder(
 export interface AgentFilesDeps {
   platform: Platform
   homeDir: string
-  /** The session's agent and that agent's id of it, or null for a session Kettu does not hold. */
-  session(sessionId: string): { agentId: AgentId; agentSessionId: string } | null
+  /**
+   * The session's agent, that agent's id of it and the agent's own folder it was started in, or
+   * null for a session Kettu does not hold.
+   */
+  session(
+    sessionId: string,
+  ): { agentId: AgentId; agentSessionId: string; configDir: string | null } | null
   /** Reads the regular file at `real`, a real path allowed here, under the name `shown`. */
   read(real: string, shown: string): Promise<FileContent>
 }
@@ -48,10 +53,11 @@ export class AgentFiles {
   folder(sessionId: string): string | null {
     const session = this.deps.session(sessionId)
     if (!session) return null
+    // An added agy agent's process takes its own folder for the home folder.
     return agentFolder(
       session.agentId,
       session.agentSessionId,
-      this.deps.homeDir,
+      session.configDir ?? this.deps.homeDir,
       this.deps.platform,
     )
   }

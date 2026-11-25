@@ -28,6 +28,11 @@ export const ANTIGRAVITY: AgentDefinition = {
     order: ['script'],
   },
   cli: AGY_CLI,
+  // agy 1.5.17 has no variable that moves `~/.gemini`; `agy acp` takes it with this flag.
+  configFlag: { flag: '--gemini-dir', under: '.gemini' },
+  // agy keeps its Google sign-in in one keychain entry per computer whatever the folder, so a
+  // second sign-in would replace the first; this keeps it in a file in the agent's own folder.
+  addedEnv: { AGY_CLI_FORCE_FILE_TOKEN_STORAGE: '1' },
   sharesSignIn: true,
   // `authenticate` with this method switches agy to the key in its environment; the key alone
   // does not (agy 1.5.9).

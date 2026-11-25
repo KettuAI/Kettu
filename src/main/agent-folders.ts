@@ -172,5 +172,9 @@ export class AgentFolders {
     if (harness === 'claude-code' && wanted === (await resolved(this.root))) {
       throw new SettingsError(t('agents.folderTaken', { agent: 'Kettu' }))
     }
+    // An Antigravity agent's files go in `.gemini` of its folder, the default agent's in the home's.
+    if (harness === 'antigravity' && wanted === (await resolved(os.homedir()))) {
+      throw new SettingsError(t('agents.folderTaken', { agent: 'Google Antigravity' }))
+    }
   }
 }

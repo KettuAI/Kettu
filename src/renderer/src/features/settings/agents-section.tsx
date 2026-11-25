@@ -398,7 +398,9 @@ function AddAgentDialog({
   const providers = chosen?.apiKey?.providers ?? false
   // An added agent of such a harness has no other sign-in, and picks the site its key is from.
   const keyOnly = !useDefault && !!chosen && KEY_ONLY_ADDED_HARNESSES.includes(chosen.harnessId)
-  const loginMode: Login = keyOnly ? 'api-key' : login
+  // A harness Kettu hands no key to, such as Google Antigravity, signs in on the agent's page.
+  const takesKey = !!chosen?.apiKey
+  const loginMode: Login = keyOnly ? 'api-key' : takesKey ? login : 'terminal'
   const valid =
     !!chosen &&
     trimmed.length > 0 &&
@@ -587,7 +589,7 @@ function AddAgentDialog({
                 />
               </SettingsField>
             )}
-            {!useDefault && (
+            {!useDefault && (takesKey || keyOnly) && (
               <SettingsField
                 label={t('agents.add.login')}
                 hint={keyOnly && t('agents.keyOnly.note', { name: chosen?.harnessName ?? '' })}

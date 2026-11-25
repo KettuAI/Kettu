@@ -444,10 +444,13 @@ export function configLocations(
       ]
     }
     case 'antigravity': {
-      // agy 1.5.9's data folder, and the instructions it reads for every project.
-      const base = p.join(home, '.gemini')
+      // agy 1.5.9's data folder, and the instructions it reads for every project. An added agent's
+      // process takes `<its folder>/.gemini` with `--gemini-dir`.
+      const base = p.join(chosen ?? home, '.gemini')
       return [
-        { id: 'folder', candidates: [p.join(base, 'antigravity-cli')], env: null },
+        chosen !== null
+          ? { id: 'folder', candidates: [chosen], env: null, chosen: true }
+          : { id: 'folder', candidates: [p.join(base, 'antigravity-cli')], env: null },
         {
           id: 'instructions',
           candidates: [p.join(base, 'GEMINI.md'), p.join(base, 'AGENTS.md')],

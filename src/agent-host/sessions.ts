@@ -11560,9 +11560,16 @@ export class SessionManager {
   }
 
   /** The session's agent now and that agent's own id of it, null for a session Kettu does not hold. */
-  agentSession(sessionId: string): { agentId: AgentId; agentSessionId: string } | null {
+  agentSession(
+    sessionId: string,
+  ): { agentId: AgentId; agentSessionId: string; configDir: string | null } | null {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
-    return record ? { agentId: record.agentId, agentSessionId: record.acpSessionId } : null
+    if (!record) return null
+    return {
+      agentId: record.agentId,
+      agentSessionId: record.acpSessionId,
+      configDir: record.configDir ?? null,
+    }
   }
 
   /** The session's title as another thread's label shows it, "Untitled session" when it has none. */

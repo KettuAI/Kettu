@@ -26,6 +26,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
 import type { ContextEstimates } from '@shared/context'
+import type { Platform } from '@shared/platform'
 import type {
   AgentId,
   ConfigOption,
@@ -56,6 +57,7 @@ import { agentEntryBefore } from '../artifacts/entries'
 import type { LaunchSpec, MovedAccounts } from '../catalog'
 import type { AgentTransport, MessageTransport } from '../driver'
 import type { Env } from '../find-command'
+import { withHome } from '../shell-env'
 import { t } from '../i18n'
 import { planRevision } from '../plan-revision'
 import {
@@ -115,6 +117,7 @@ import { AGY_ELICITATION, askInCard, asksQuestions, OpenAsks } from './agy-quest
 import {
   AgySubagents,
   agyStore,
+  agyStoreFile,
   followsSubagents,
   PARENT_SESSION_META,
   type AgyStore,
@@ -203,6 +206,11 @@ export interface AcpOptions {
   spec?: LaunchSpec
   /** 启动该代理时的环境变量。 */
   env?: Env
+  /**
+   * An added agy agent's own folder, given to its process with `--gemini-dir`: agy's files are
+   * read under it, and its print mode runs with it as the home folder.
+   */
+  home?: string
   /** 读取 agy transcript 单步用量的函数，便于单元测试注入。 */
   agyStepReader?: AgyStepReader
   /** agy 上下文定义估算器，便于单元测试注入。 */
@@ -578,15 +586,19 @@ export class AcpConnection implements AgentConnection {
       })
     this.connection = app.connect(this.tap(transport.stream))
     if (this.agy) {
-      this.agyMetrics = new AgyMetrics(hooks.agyStepReader ?? agyStepReader(), {
+      this.agyMetrics = new AgyMetrics(hooks.agyStepReader ?? agyStepReader(hooks.home), {
         target: (id) => this.targets.get(id),
       })
+      // agy's print mode takes no `--gemini-dir`, so an added agent's runs with its folder as home.
+      const platform = process.platform as Platform
       const estimator =
         hooks.agyContext ??
         new AgyContextEstimator({
           program: hooks.spec?.command,
           args: hooks.spec?.args.filter((arg) => arg !== 'acp'),
-          env: hooks.env,
+          env: hooks.home && hooks.env ? withHome(hooks.env, hooks.home, platform) : hooks.env,
+          platform,
+          ...(hooks.home ? { home: hooks.home } : {}),
         })
       this.readContextEstimates = (sessionId, cwd) => {
         const opened = this.agyOpened.get(sessionId)
@@ -918,7 +930,7 @@ export class AcpConnection implements AgentConnection {
     this.subagents?.stop()
     this.subagents =
       this.agy && followsSubagents(result.version)
-        ? new AgySubagents(this.hooks.agyStore ?? agyStore(), {
+        ? new AgySubagents(this.hooks.agyStore ?? agyStore(agyStoreFile(this.hooks.home)), {
             target: (id) => this.targets.get(id),
             prompting: (id) => this.prompting.has(id),
             load: (childId, parentId, quiet) => this.loadSubagent(childId, parentId, quiet),

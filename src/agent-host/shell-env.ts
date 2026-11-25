@@ -123,6 +123,18 @@ export function applyConfigFolder(
   return out
 }
 
+/**
+ * `env` with the home folder moved to `home`, as a program reads it: USERPROFILE on Windows, HOME
+ * elsewhere. Only for a command that runs nothing of the user's, whose tools read the home folder.
+ */
+export function withHome(env: Env, home: string, platform: Platform): Env {
+  const name = platform === 'win32' ? 'USERPROFILE' : 'HOME'
+  const out = { ...env }
+  deleteEnv(out, name, platform)
+  out[name] = home
+  return out
+}
+
 /** The variable that moves an agent's configuration folder, and the folder picked for it. */
 export interface ConfigFolder {
   variable: string

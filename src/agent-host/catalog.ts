@@ -199,6 +199,13 @@ export interface AgentDefinition {
   /** The variable that moves its configuration folder, which gives each agent a folder of its own. */
   configVariable?: string
   /**
+   * Moves its configuration folder with a flag of its launch instead of a variable: an added
+   * agent's process gets `flag <agent's folder>/<under>`. Its other commands have no such flag and
+   * find the folder under the home folder, so for that agent they run with the home folder moved
+   * to its folder (agy 1.5.17, whose print mode takes no `--gemini-dir`).
+   */
+  configFlag?: { flag: string; under: string }
+  /**
    * The file in which it keeps MCP servers of its own, besides its settings file: `project` is a
    * project's own, relative to its folder, and `listCommand` lists them in a session.
    */
@@ -369,6 +376,11 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
+}
+
+/** Whether the harness carries agents besides its default one, each in a folder of its own. */
+export function carriesAgents(def: AgentDefinition): boolean {
+  return !!def.configVariable || !!def.configFlag
 }
 
 /**

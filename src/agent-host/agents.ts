@@ -162,6 +162,7 @@ import {
   type InstallPlan,
 } from './binary-install'
 import {
+  carriesAgents,
   detectAgent,
   displayCommand,
   EXTENSIONS_FOLDER,
@@ -251,7 +252,7 @@ import {
   mergeReadLimits,
   planWindow,
 } from './session-updates'
-import type { EnvironmentService } from './shell-env'
+import { withHome, type EnvironmentService } from './shell-env'
 import type {
   AgentsFile,
   AgentUpdatesFile,
@@ -880,7 +881,7 @@ export class AgentManager {
       if (this.slots.has(agent.id)) continue
       const h = this.harnesses.get(harnessOf(agent.id))
       // An agent of a harness this build does not have stays in the settings, unlisted.
-      if (!h?.def.configVariable) continue
+      if (!h || !carriesAgents(h.def)) continue
       const slot = new Slot(agent.id, h, agent)
       if (h.detection) {
         slot.state = h.detection.state
@@ -1529,9 +1530,18 @@ export class AgentManager {
     env: Env,
   ): { launched: AgentRun; connection: AgentConnection } {
     const driver = this.driver(slot)
-    const context = { def: slot.def, hooks: this.connectionHooks(slot), spec, env }
+    const home = this.ownHome(slot)
+    const context = {
+      def: slot.def,
+      hooks: this.connectionHooks(slot),
+      spec,
+      env,
+      ...(home ? { home } : {}),
+    }
     if (driver.kind === 'process') {
-      const launched = this.deps.launcher.launch(slot.def, spec, env, {
+      const folder = this.folderArgs(slot)
+      const run = folder.length > 0 ? { ...spec, args: [...spec.args, ...folder] } : spec
+      const launched = this.deps.launcher.launch(slot.def, run, env, {
         stderr: (text) => this.onStderr(slot, text),
         event: (event, detail) => this.deps.diagnostics.event(slot.id, event, detail),
       })
@@ -4327,7 +4337,10 @@ export class AgentManager {
     if (!versionAtLeast(version, ANTIGRAVITY_USAGE_VERSION)) return
     const command = this.display(slot)
     const base = this.deps.env.agentEnv(slot.id)
-    const env = { ...(this.deps.launchEnv?.(slot.id, base) ?? base), ...command.env }
+    const env = this.commandEnv(slot, {
+      ...(this.deps.launchEnv?.(slot.id, base) ?? base),
+      ...command.env,
+    })
     await mkdir(this.deps.reportsDir, { recursive: true })
     const now = Date.now()
     let usage: VendorUsage
@@ -4376,7 +4389,8 @@ export class AgentManager {
    */
   private async readSignInMethod(slot: Slot): Promise<string | null> {
     if (slot.def.id !== 'antigravity') return null
-    const text = await readFile(antigravityAuthStateFile(os.homedir()), 'utf8').catch(() => '')
+    const home = this.ownHome(slot) ?? os.homedir()
+    const text = await readFile(antigravityAuthStateFile(home), 'utf8').catch(() => '')
     slot.signInFile = antigravitySignInMethod(text)
     return this.decideSignIn(slot)
   }
@@ -5095,13 +5109,41 @@ export class AgentManager {
   }
 
   /**
-   * The agent's own folder, which Kettu sets in its harness's variable: an added agent's, or one a
-   * default agent was given before agents could be added; null at the harness's default.
+   * The agent's own folder, which Kettu sets in its harness's variable or flag: an added agent's,
+   * or one a default agent was given before agents could be added; null at the harness's default.
    */
   private chosenFolder(slot: Slot): string | null {
-    if (!slot.def.configVariable) return null
+    if (!carriesAgents(slot.def)) return null
     if (slot.added) return slot.added.configDir
+    if (!slot.def.configVariable) return null
     return this.deps.settings().agents[slot.def.id]?.configDir ?? null
+  }
+
+  /**
+   * The home folder of an agent whose harness moves its folder with a flag, for its commands that
+   * take none: its own folder; null for the user's home folder.
+   */
+  private ownHome(slot: Slot): string | null {
+    return slot.def.configFlag ? this.chosenFolder(slot) : null
+  }
+
+  /** The launch's words with the flag that gives the process the agent's own folder, if any. */
+  private folderArgs(slot: Slot): string[] {
+    const home = this.ownHome(slot)
+    const flag = slot.def.configFlag
+    if (!home || !flag) return []
+    const paths = this.deps.platform === 'win32' ? path.win32 : path.posix
+    return [flag.flag, paths.join(home, flag.under)]
+  }
+
+  /**
+   * The environment of an agent's command that runs nothing of the user's, such as agy's print
+   * mode: an agent whose harness moves its folder with a flag gets its own folder as home.
+   */
+  private commandEnv(slot: Slot, env: Env): Env {
+    const home = this.ownHome(slot)
+    if (!home) return env
+    return withHome({ ...env, ...slot.def.addedEnv }, home, this.deps.platform)
   }
 
   /** Whether Kettu's MCP server is on for this agent, from the settings. */
@@ -5375,7 +5417,7 @@ export class AgentManager {
 
   /** The configuration folder `env` gives the agent; null for an agent whose folder is fixed. */
   private configIn(slot: Slot, env: Env): RunningConfig | null {
-    if (!slot.def.configVariable) return null
+    if (!carriesAgents(slot.def)) return null
     const { platform } = this.deps
     const chosen = this.chosenFolder(slot)
     const locations = configLocations(
@@ -5420,6 +5462,7 @@ export class AgentManager {
     display: CommandWords,
     method: AuthMethodInfo,
     folderEnv: Record<string, string>,
+    folderArgs: readonly string[],
   ): string {
     const env = { ...display.env, ...method.env, ...folderEnv }
     if (slot.def.id === 'kimi' && method.id === 'login') {
@@ -5432,7 +5475,7 @@ export class AgentManager {
       return formatCommand({ command: method.command, args: method.args, env }, this.deps.platform)
     }
     return formatCommand(
-      { command: display.command, args: [...display.args, ...method.args], env },
+      { command: display.command, args: [...display.args, ...method.args, ...folderArgs], env },
       this.deps.platform,
     )
   }
@@ -5455,6 +5498,8 @@ export class AgentManager {
     const signInFolder = (active ?? config)?.chosen
     const folderEnv: Record<string, string> =
       signInFolder && slot.def.configVariable ? { [slot.def.configVariable]: signInFolder } : {}
+    const folderArgs = this.folderArgs(slot)
+    if (folderArgs.length > 0) Object.assign(folderEnv, slot.def.addedEnv)
     // An added agent that signs in only with its key offers none of the agent's own methods.
     const declared = signsInWithKeyOnly(agentId) ? [] : (init?.authMethods ?? [])
     // Mistral Vibe offers its browser sign-in twice, under one name, once the client takes its page.
@@ -5480,7 +5525,7 @@ export class AgentManager {
           }
         : {}),
       ...(method.type === 'terminal'
-        ? { command: this.signInCommand(slot, display, method, folderEnv) }
+        ? { command: this.signInCommand(slot, display, method, folderEnv, folderArgs) }
         : {}),
     }))
     const { keySignIn, terminalSignIn } = slot.def
@@ -5502,9 +5547,11 @@ export class AgentManager {
       // agy 1.5.9 declares its terminal sign-in itself to a client that runs one; it goes first.
       const own = authMethods.find((item) => item.type === 'terminal')
       const kept = authMethods.filter((item) => !replaced.includes(item) && item !== own)
+      // The program's own sign-in takes no folder flag, so an agent with a folder of its own would
+      // sign the default agent in; such an agent signs in only through the one its launch declares.
       const terminal: AgentAuthMethod | null =
         own ??
-        (replaced.length > 0
+        (replaced.length > 0 && folderArgs.length === 0
           ? {
               id: `${slot.def.id}-terminal-login`,
               name: replaced.map((item) => item.name).join(' / '),
@@ -5640,7 +5687,8 @@ export class AgentManager {
       ...(slot.def.id === 'deepseek' ? { balance: slot.balance } : {}),
       ...(slot.balances.length ? { balances: slot.balances } : {}),
       ...(limitsReason ? { limitsReason } : {}),
-      ...(slot.def.sharesSignIn ? { sharesSignIn: true } : {}),
+      // An agent in a folder of its own keeps its sign-in and sessions apart from the vendor's apps.
+      ...(slot.def.sharesSignIn && !this.ownHome(slot) ? { sharesSignIn: true } : {}),
       ...(slot.def.movedAccounts
         ? {
             movedAccounts: {
