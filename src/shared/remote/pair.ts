@@ -22,6 +22,8 @@ export type PairFailure =
   | 'own_relay'
   /** A relay's own page: the code does not go through this relay. */
   | 'other_relay'
+  /** The host is signed in to another Kettu account than the one the hello named. */
+  | 'other_account'
 
 export type PairProgress =
   | { state: 'connecting' }
@@ -41,6 +43,8 @@ export interface PairOptions {
   key: KeyPair
   client: Hello['client']
   device: NonNullable<Hello['device']>
+  /** The Kettu account the device is signed in to, which the host checks; none when absent. */
+  account?: string | null
   /** Why a failed dial failed, when the dial can say; else it counts as unreachable. */
   dialFailure?(error: unknown): PairFailure | null
 }
@@ -57,7 +61,7 @@ export async function pair(
       hostKey: options.payload.hostKey,
       key: options.key,
       psk: options.payload.secret,
-      hello: hello(options.client, options.device),
+      hello: hello(options.client, options.device, options.account),
     })
   } catch (error) {
     // The host drops a handshake whose code it does not hold: expired, used, or another host's.
@@ -77,7 +81,10 @@ export async function pair(
   progress({
     state: 'failed',
     reason:
-      reason === 'rejected' || reason === 'update_client' || reason === 'update_host'
+      reason === 'rejected' ||
+      reason === 'update_client' ||
+      reason === 'update_host' ||
+      reason === 'other_account'
         ? reason
         : 'void',
   })

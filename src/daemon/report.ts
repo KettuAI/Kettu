@@ -128,7 +128,11 @@ export function devicesReport(devices: DeviceSummary[], now: number): string {
       device.name,
       device.kind,
       device.platform,
-      device.connected ? 'connected now' : since(device.lastConnectedAt, now),
+      device.otherAccount
+        ? 'another account'
+        : device.connected
+          ? 'connected now'
+          : since(device.lastConnectedAt, now),
     ]),
   ]
   const widths = table[0]!.map((_, column) => Math.max(...table.map((row) => row[column]!.length)))

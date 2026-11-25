@@ -2,14 +2,18 @@
 // the link is not connected, with a retry, the other hosts of the account, and another account when
 // the host is signed in to one. The app's own states cover a connection that drops and comes back.
 
-import type { RelayProblem } from '@shared/remote/hosts'
 import type { HostLink } from '@shared/remote/link'
-import { ProblemCard, type ProblemOptions, type ShownProblem } from './problem-card'
+import {
+  ProblemCard,
+  type HostedProblem,
+  type ProblemOptions,
+  type ShownProblem,
+} from './problem-card'
 
 export type { ProblemOptions }
 
 export function showProblems(options: ProblemOptions): {
-  report(problem: RelayProblem | null): void
+  report(problem: HostedProblem | null): void
   follow(link: HostLink): void
 } {
   let shown: ShownProblem = { problem: null, connected: false }

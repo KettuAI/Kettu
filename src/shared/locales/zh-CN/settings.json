@@ -1425,6 +1425,7 @@
       "removed": "已被移除",
       "update_client": "要更新这台电脑的 Kettu",
       "update_host": "要更新它上面的 Kettu",
+      "other_account": "另一个账号",
       "relay": {
         "unreachable": "离线 · 连不上 Kettu 中继",
         "wrong_account": "离线 · 要用那台电脑主人的账号登录",
@@ -1433,6 +1434,10 @@
     },
     "note": "要从手机或其他电脑访问这台电脑，请在<link>远程访问</link>中添加设备。",
     "plainTextKey": "这台电脑连别的电脑用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
+    "otherAccount": {
+      "title_other": "另一个账号的 {{count}} 台电脑",
+      "body_other": "它们属于另一个 Kettu 账号，不是这里登录的这个。用那个账号登录后就会回来。"
+    },
     "keyFailed": "系统没能解开这台电脑连别的电脑用的密钥，所以连不了别的电脑。",
     "add": {
       "button": "添加电脑…",
@@ -1450,6 +1455,7 @@
       "rejected": "那台电脑没有添加这台电脑。",
       "unreachable": "15 秒内没连上那台电脑。确认两台电脑在同一网络或同一个 VPN 里、那台电脑开着远程访问；用的是你给它加的地址时，确认端口转发还在。",
       "wrong_account": "Kettu 中继只把登录着同一个账号的电脑接到那台电脑上。在这里登录那台电脑所用的账号后再试。",
+      "other_account": "这台电脑属于另一个 Kettu 账号，用那个账号登录后才能用。",
       "signed_out": "这个配对码要经 Kettu 中继连那台电脑，需要 Kettu 账号。先在设置 › 账号里登录，再试一次。",
       "self": "这是本机自己的配对码。要让别的设备连这台电脑，在那台设备上扫码或粘贴。",
       "update_client": "这台电脑的 Kettu 太旧，连不了那台电脑。更新 Kettu 后再试。",
@@ -1578,6 +1584,10 @@
         "title": "要更新 {{name}} 上的 Kettu",
         "body": "{{name}} 上的 Kettu 太旧，读不懂这台电脑说的。在它上面更新 Kettu 后会自动连上。"
       },
+      "other_account": {
+        "title": "{{name}} 属于另一个账号",
+        "body": "这台电脑属于另一个 Kettu 账号，用那个账号登录后才能用。"
+      },
       "kettu": {
         "name": "Kettu",
         "older": "{{version}}，比这台电脑旧",
@@ -1659,6 +1669,12 @@
       "note": "连接时两台电脑会显示同一个验证码。确认一致后，在那台电脑上添加这台电脑。",
       "connect": "连接",
       "connectTo": "连接 {{name}}",
+      "computer": {
+        "added": "已添加",
+        "remoteOff": "没打开远程访问",
+        "remoteOffHint": "没打开远程访问，或没让同一个账号的设备找到它。在那台电脑的设置 › 远程访问里打开。",
+        "lastSeen": "上次在线 {{ago}}"
+      },
       "refresh": "刷新",
       "or": "或用配对链接、SSH 连接",
       "back": "返回",
@@ -1768,6 +1784,7 @@
       "add": "添加设备…",
       "addOff": "打开远程访问后才能添加设备。",
       "online": "在线",
+      "otherAccount": "另一个账号",
       "seenToday": "今天 {{time}} 连接过",
       "seenYesterday": "昨天 {{time}} 连接过",
       "seenDaysAgo_other": "{{count}} 天前连接过",
@@ -1905,6 +1922,8 @@
       "joinedAccount": "{{date}}，通过 Kettu 账号添加",
       "joinedLink": "{{date}}，粘贴链接添加",
       "lastConnected": "上次连接",
+      "otherAccount": "它上次连接时登录的 Kettu 账号和这台电脑的不同，所以连不上。这台电脑登录回那个账号后它照旧能用，也可以移除它。",
+      "otherAccount_web": "它上次连接时登录的 Kettu 账号和 {{host}} 的不同，所以连不上。{{host}} 登录回那个账号后它照旧能用，也可以移除它。",
       "onlineSince": "现在在线，{{time}} 连上",
       "never": "还没连接过",
       "activity": "活动记录",

@@ -68,9 +68,44 @@ export interface DiscoveredHost {
   platform: Platform
 }
 
+/**
+ * One of the account's computers that the relay does not offer to connect to, and why: `added`,
+ * already a known host here; `remote_off`, signed in and used in the last 5 minutes but not
+ * listed, so remote access is off there or it is hidden from the account's devices; `offline`,
+ * used longer ago. The ones to connect to are `hosts`.
+ */
+export interface AccountComputer {
+  name: string
+  /** Its system as a host names it, or empty when only its system's name is known. */
+  platform: Platform | ''
+  state: 'added' | 'remote_off' | 'offline'
+  /** `added`: the known host, whose page it opens. */
+  hostId?: string
+  /** `offline`: when the account service last saw it, in Unix milliseconds. */
+  lastSeenAt?: number
+}
+
+/**
+ * A client of the account that may use this computer once remote access is on, which the
+ * desktop app asks about once while it is off.
+ */
+export interface RemoteOffer {
+  /** The client's sign-in at the account service. */
+  clientId: string
+  name: string
+  kind: 'ios' | 'web' | 'desktop' | 'daemon'
+}
+
+/** How recently a computer the relay does not list used the account to count as on. */
+export const RECENTLY_USED_MS = 5 * 60_000
+
+/** The account's computers listed at most, beside those to connect to. */
+export const MAX_ACCOUNT_COMPUTERS = 200
+
 /** What listing the account's hosts gives. */
 export type DiscoveredHosts =
-  | { state: 'ok'; hosts: DiscoveredHost[] }
+  /** `computers`: the account's other computers, absent where the account service was not read. */
+  | { state: 'ok'; hosts: DiscoveredHost[]; computers?: AccountComputer[] }
   /** No Kettu sign-in, so no relay to ask. */
   | { state: 'signed_out' }
   /** No relay answered. */
@@ -242,10 +277,73 @@ export async function deviceDiscovery(channel: DeviceChannel): Promise<DeviceDis
 const isText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max
 
+/** A system's name, as the account service has it from a client, as a host's platform. */
+export function platformOfSystem(system: string): Platform | '' {
+  if (/mac|darwin/i.test(system)) return 'darwin'
+  if (/windows/i.test(system)) return 'win32'
+  if (/linux|ubuntu|debian|fedora|arch/i.test(system)) return 'linux'
+  return ''
+}
+
+/**
+ * Every computer of the account beside this one, from what the relay lists and the account
+ * service's signed-in clients: one row each, matched by name, the relay's offer to connect first,
+ * then the known hosts, then the rest by how recently they used the account.
+ */
+export function accountComputers(input: {
+  listed: DiscoveredHost[]
+  known: { id: string; name: string; platform: Platform; account?: string | null }[]
+  clients: { kind: string; name: string; os: string; lastUsedAt: number; current: boolean }[]
+  account: string
+  now: number
+}): AccountComputer[] {
+  const computers: AccountComputer[] = []
+  const named = new Set(input.listed.map((host) => host.name))
+  const clients = input.clients.filter(
+    (client) => !client.current && (client.kind === 'desktop' || client.kind === 'daemon'),
+  )
+  const signedIn = new Set(clients.map((client) => client.name))
+  for (const host of input.known) {
+    if (host.account !== input.account && !signedIn.has(host.name)) continue
+    if (named.has(host.name)) continue
+    named.add(host.name)
+    computers.push({ name: host.name, platform: host.platform, state: 'added', hostId: host.id })
+  }
+  for (const client of clients) {
+    if (named.has(client.name)) continue
+    named.add(client.name)
+    const platform = platformOfSystem(client.os)
+    computers.push(
+      input.now - client.lastUsedAt <= RECENTLY_USED_MS
+        ? { name: client.name, platform, state: 'remote_off' }
+        : { name: client.name, platform, state: 'offline', lastSeenAt: client.lastUsedAt },
+    )
+  }
+  return computers.slice(0, MAX_ACCOUNT_COMPUTERS)
+}
+
+const COMPUTER_STATES: readonly string[] = ['added', 'remote_off', 'offline']
+
+function parseComputer(value: unknown): AccountComputer | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { name, platform, state, hostId, lastSeenAt } = value as Record<string, unknown>
+  if (!isText(name, 100) || !COMPUTER_STATES.includes(state as string)) return null
+  if (platform !== '' && !isText(platform, 32)) return null
+  if (hostId !== undefined && !isText(hostId, 64)) return null
+  if (lastSeenAt !== undefined && !Number.isSafeInteger(lastSeenAt)) return null
+  return {
+    name,
+    platform: platform as Platform | '',
+    state: state as AccountComputer['state'],
+    ...(typeof hostId === 'string' ? { hostId } : {}),
+    ...(typeof lastSeenAt === 'number' ? { lastSeenAt } : {}),
+  }
+}
+
 /** What `hosts:discover` answered, checked where it crosses a process; null if not one. */
 export function parseDiscoveredHosts(value: unknown): DiscoveredHosts | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, hosts } = value as Record<string, unknown>
+  const { state, hosts, computers } = value as Record<string, unknown>
   if (state === 'signed_out' || state === 'unavailable') return { state }
   if (state !== 'ok' || !Array.isArray(hosts) || hosts.length > MAX_LISTED_HOSTS) return null
   const kept: DiscoveredHost[] = []
@@ -258,7 +356,11 @@ export function parseDiscoveredHosts(value: unknown): DiscoveredHosts | null {
     if (!isText(platform, 32)) return null
     kept.push({ relayId, publicKey, name, platform: platform as Platform })
   }
-  return { state, hosts: kept }
+  if (computers === undefined) return { state, hosts: kept }
+  if (!Array.isArray(computers) || computers.length > MAX_ACCOUNT_COMPUTERS) return null
+  const others = computers.map(parseComputer)
+  if (others.some((computer) => computer === null)) return null
+  return { state, hosts: kept, computers: others as AccountComputer[] }
 }
 
 const ENDS: readonly string[] = ['added', 'rejected', 'cancelled', 'expired', 'stopped']

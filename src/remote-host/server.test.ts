@@ -56,8 +56,11 @@ async function setup(
     admin?: RemoteServerOptions['admin']
     /** Whether the host has its signing key, and so sends notifications. */
     push?: boolean
+    /** The Kettu account the host is signed in to; none when absent. */
+    account?: string
   } = {},
 ) {
+  const signedIn = { account: options.account ?? null }
   agent = await startTestHost()
   const logs: string[] = []
   const log = (level: string, message: string) => logs.push(`${level}: ${message}`)
@@ -132,6 +135,7 @@ async function setup(
     },
     changed: () => changes++,
     log,
+    account: () => signedIn.account,
     ...(options.admin ? { admin: options.admin } : {}),
     ...(options.helloTimeoutMs ? { helloTimeoutMs: options.helloTimeoutMs } : {}),
     ...(options.resumeMs ? { resumeMs: options.resumeMs } : {}),
@@ -189,6 +193,7 @@ async function setup(
     agent,
     server,
     hostKey,
+    signedIn,
     devices,
     activity,
     pairing,
@@ -1501,5 +1506,112 @@ describe("a desktop app's browser", () => {
         answer: { result: { text: 'no', value: {} } },
       }),
     ).rejects.toMatchObject({ code: 'forbidden' })
+  })
+})
+
+describe('a device of another account', () => {
+  const OTHER = { account: 'account-b' }
+
+  it("is welcomed with the host's account, and turned away once it names another", async () => {
+    const t = await setup({ account: 'account-a' })
+    const same = await t.connect(undefined, { account: 'account-a' })
+    expect(await same.first).toMatchObject({ type: 'welcome', account: 'account-a' })
+    expect(t.devices.get(t.phone.id)!.account).toBe('account-a')
+    same.close()
+
+    const other = await t.connect(undefined, OTHER)
+    expect(await other.first).toEqual({ type: 'closing', reason: 'other_account' })
+    expect(await other.closing).toEqual({ type: 'closing', reason: 'other_account' })
+    // The device list marks it, and the host was never left with a session for it.
+    expect(t.devices.get(t.phone.id)!.account).toBe('account-b')
+    await expect.poll(() => t.server.online()).toEqual([])
+  })
+
+  it('connects when its hello names no account, or the host is signed in to none', async () => {
+    const signedOut = await setup()
+    const any = await signedOut.connect(undefined, OTHER)
+    expect(await any.first).toMatchObject({ type: 'welcome' })
+    expect(await any.first).not.toHaveProperty('account')
+
+    const t = await setup({ account: 'account-a' })
+    const none = await t.connect()
+    expect(await none.first).toMatchObject({ type: 'welcome', account: 'account-a' })
+    expect(t.devices.get(t.phone.id)!.account).toBeNull()
+  })
+
+  it('cannot resume its session under another account', async () => {
+    const t = await setup({ account: 'account-a' })
+    const protocol = { min: 1, max: PROTOCOL_VERSION }
+    const device = await t.connect(undefined, { protocol, account: 'account-a' })
+    const { resume: token } = (await device.first) as { resume: string }
+    device.close()
+    const again = await t.connect(undefined, {
+      protocol,
+      account: 'account-b',
+      resume: { token, received: device.received() },
+    })
+    expect(await again.first).toEqual({ type: 'closing', reason: 'other_account' })
+  })
+
+  it('is closed when the host signs in to another account, and works when it signs back', async () => {
+    const t = await setup({ account: 'account-a' })
+    const device = await t.connect(undefined, { account: 'account-a' })
+    await device.first
+    t.signedIn.account = 'account-b'
+    t.server.accountChanged()
+    expect(await device.closing).toEqual({ type: 'closing', reason: 'other_account' })
+
+    t.signedIn.account = 'account-a'
+    const back = await t.connect(undefined, { account: 'account-a' })
+    expect(await back.first).toMatchObject({ type: 'welcome', account: 'account-a' })
+  })
+
+  it('pairing with the code is turned away without voiding the code or asking the owner', async () => {
+    const t = await setup({ account: 'account-a' })
+    const secret = t.openCode()
+    const stranger = await t.connect(
+      await generateKeyPair(),
+      {
+        client: { kind: 'ios', version: '1.0.0', platform: 'iOS 26.1' },
+        device: { name: 'Their phone', model: 'iPhone 17' },
+        ...OTHER,
+      },
+      secret,
+    )
+    expect(await stranger.closing).toEqual({ type: 'closing', reason: 'other_account' })
+    // The code was handed back, and its asker never asked.
+    expect(new Set(t.states())).toEqual(new Set(['waiting']))
+    expect(t.server.refused).toBe(0)
+    // No attempt was spent: the code still adds the owner's device.
+    const padKey = await generateKeyPair()
+    const pad = await t.connect(
+      padKey,
+      {
+        client: { kind: 'ios', version: '1.0.0', platform: 'iPadOS 26.1' },
+        device: { name: 'iPad Air', model: 'iPad Air' },
+        account: 'account-a',
+      },
+      secret,
+    )
+    await t.until(1, 'confirm')
+    t.pairing.answer(1, { add: true, name: 'iPad Air' })
+    expect(await pad.first).toMatchObject({ type: 'welcome', account: 'account-a' })
+    expect(t.devices.get(await deviceId(padKey.publicKey))!.account).toBe('account-a')
+  })
+
+  it('asking as a device of the account is turned away before the owner hears of it', async () => {
+    const t = await setup({ account: 'account-a' })
+    const exchange = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    if (!('code' in exchange)) throw new Error('The host refused the exchange')
+    const messages = heard(exchange.channel)
+    await exchange.channel.send({ ...LAPTOP_HELLO, ...OTHER })
+    await exchange.channel.closed
+    expect(messages).toEqual([{ type: 'closing', reason: 'other_account' }])
+    expect(t.discoveryEvents).toEqual([])
+    // It counted as no strike: the next device of the account is asked about.
+    const next = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    if (!('code' in next)) throw new Error('The host refused the exchange')
+    await next.channel.send({ ...LAPTOP_HELLO, account: 'account-a' })
+    await expect.poll(() => t.discoveryEvents.length).toBe(1)
   })
 })

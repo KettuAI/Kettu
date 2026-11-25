@@ -93,6 +93,11 @@ export interface RemoteHostDeps {
   useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
   /** Whether devices of the account find this computer on the relay, as the setting is now. */
   discoverable(): boolean
+  /**
+   * The id of the Kettu account this computer is signed in to with Kettu's services on, null for
+   * none: devices of another account are turned away, and hellos to other hosts name it.
+   */
+  account?(): string | null
   /** A device of the account asks to be added, or that request ended. */
   discoveryChanged?(event: DiscoveryRequestEvent): void
   /** A pairing is about to start: resolves once the relay's token was handed on, or none can be. */
@@ -140,6 +145,10 @@ export type HostPairingListener = (pairId: number, pairing: HostPairingState) =>
 
 export type RemoteHostState = 'off' | 'starting' | 'on' | 'failed'
 
+/** A host the remote host stopped connecting to, as another account's. */
+const folded = (host: HostStatus): boolean =>
+  host.connection.state === 'stopped' && host.connection.reason === 'other_account'
+
 function isStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
   const { publicKey, plainTextKey, devices, online, refused, direct, relays } = value as Record<
@@ -181,6 +190,8 @@ export class RemoteHost {
   private relayOn: string | null = null
   /** Whether devices of the account find this computer, as the running process was last told. */
   private discoverableOn: boolean | null = null
+  /** The account, as the running process was last told. */
+  private accountOn: string | null = null
   /** Listings of the account's hosts under way, which keep the process running. */
   private discovering = 0
   /** The discovery request the owner is asked about now. */
@@ -251,10 +262,18 @@ export class RemoteHost {
     return this.discoveryRequest
   }
 
-  /** The known hosts, or null while the remote host has not reported them yet. */
+  /**
+   * The known hosts, or null while the remote host has not reported them yet; those of another
+   * account than the one signed in to now are folded away and left out.
+   */
   get hosts(): HostStatus[] | null {
-    if (this.hostList) return this.hostList
+    if (this.hostList) return this.hostList.filter((host) => !folded(host))
     return this.host || this.known ? null : []
+  }
+
+  /** How many known hosts belong to another account than the one signed in to now. */
+  get otherAccountHosts(): number {
+    return this.hostList?.filter(folded).length ?? 0
   }
 
   /** The device key is kept in a file only the user can read, without the system's encryption. */
@@ -324,6 +343,18 @@ export class RemoteHost {
     if (this.host?.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
       this.relayOn = sent
     }
+  }
+
+  /** Tells the process when the account this computer is signed in to changed; each start reads it. */
+  accountChanged(): void {
+    const account = this.deps.account?.() ?? null
+    if (account === this.accountOn) return
+    if (this.host?.post({ type: 'remote-host:account', account })) this.accountOn = account
+  }
+
+  /** The account this computer is signed in to, as the running process knows it. */
+  get account(): string | null {
+    return this.deps.account?.() ?? null
   }
 
   /** Tells the process when Let devices of the account find it changed; each start reads it. */
@@ -812,6 +843,7 @@ export class RemoteHost {
       waiting: this.waiting,
       ...(this.present === null ? {} : { present: this.present }),
       discoverable: this.initDiscoverable(),
+      account: this.initAccount(),
       ...(this.device
         ? { device: { privateKey: this.device.privateKey, platform: this.platform } }
         : {}),
@@ -827,6 +859,11 @@ export class RemoteHost {
   private initTerminal(): boolean {
     this.terminal = this.deps.terminal()
     return this.terminal
+  }
+
+  private initAccount(): string | null {
+    this.accountOn = this.deps.account?.() ?? null
+    return this.accountOn
   }
 
   private initDiscoverable(): boolean {

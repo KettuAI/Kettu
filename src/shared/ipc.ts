@@ -23,7 +23,7 @@ import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
 import type { HostAdminMethod } from './remote/host-admin'
-import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
+import type { DiscoveredHosts, DiscoveryRequestEvent, RemoteOffer } from './remote/discovery'
 import type {
   HostPairingState,
   HostPairStart,
@@ -447,6 +447,10 @@ export interface IpcInvokeContract {
     args: [requestId: number, add: boolean, name: string]
     result: void
   }
+  // Whether to let another client of the account use this computer: null when nothing is asked.
+  'remote:offer': { args: []; result: RemoteOffer | null }
+  // Turn on turns remote access on; either answer is kept for every client asked about with it.
+  'remote:answer-offer': { args: [clientId: string, turnOn: boolean]; result: void }
   // Null once done, else a code the page words in the user's language.
   'remote:rename-device': { args: [id: string, name: string]; result: 'not_renamed' | null }
   'remote:remove-device': { args: [id: string]; result: 'not_removed' | null }
@@ -587,6 +591,8 @@ export interface IpcEventContract {
   'remote:pairing': RemotePairingEvent
   /** Sent to every window: a device of the account asks to be added, or that request ended. */
   'remote:discovery': DiscoveryRequestEvent
+  /** Sent to every window: the offer to let another client of the account in, or null. */
+  'remote:offer': RemoteOffer | null
   'hosts:changed': HostsStatus
   /** Sent only to the page that pasted the link. */
   'hosts:pairing': HostPairingEvent
@@ -824,6 +830,10 @@ export interface KettuApi {
     /** Adds the device of a discovery request, under `name`, or turns it down. */
     answerDiscovery(requestId: number, add: boolean, name: string): Promise<void>
     onDiscovery(listener: (event: DiscoveryRequestEvent) => void): () => void
+    /** Whether to ask about letting another client of the account use this computer. */
+    offer(): Promise<RemoteOffer | null>
+    answerOffer(clientId: string, turnOn: boolean): Promise<void>
+    onOffer(listener: (offer: RemoteOffer | null) => void): () => void
     /** Null once renamed, else why not. */
     renameDevice(id: string, name: string): Promise<'not_renamed' | null>
     /** Removes the device and ends its sessions at once; null once removed, else why not. */

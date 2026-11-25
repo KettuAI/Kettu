@@ -20,6 +20,7 @@ import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
+import { isAccountId } from '@shared/remote/protocol'
 import { importKeyPair } from '@shared/remote/noise'
 import { parseSshAddress, parseSshManageAction, type SshManageResult } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
@@ -190,6 +191,8 @@ export function startRemoteHost(
   let present: boolean | null = null
   // Whether devices of the account find this host on the relay, while it is signed in to it.
   let discoverable = false
+  // The Kettu account this computer is signed in to, as a host and as a device alike.
+  let account: string | null = null
   const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
   let nextAdminCall = 1
 
@@ -287,6 +290,7 @@ export function startRemoteHost(
       changed,
       log,
       relay: onRelay,
+      account: () => account,
       ...(regions
         ? {
             regions: {
@@ -505,6 +509,7 @@ export function startRemoteHost(
       hosts,
       client: { kind: 'desktop', version: appVersion, platform: device.platform },
       name: () => hostName,
+      account: () => account,
       openMainPort: deps.openMainPort,
       ...(relayUrl
         ? {
@@ -539,6 +544,7 @@ export function startRemoteHost(
     waiting = parseWaiting(message.waiting) ?? {}
     if (typeof message.present === 'boolean') present = message.present
     discoverable = message.discoverable === true
+    account = isAccountId(message.account) ? message.account : null
     if (message.relay && typeof message.relay.url === 'string') {
       relayUrl = message.relay.url
       ownRelay = ownOf(message.relay.own)
@@ -734,6 +740,14 @@ export function startRemoteHost(
         if (!had && now) withRunning(() => client?.resume())
         // Without a token the relay may not be used, so links through it end too.
         if (had && !now) withRunning(() => client?.leaveRelay())
+        break
+      }
+      case 'remote-host:account': {
+        const next = isAccountId(message.account) ? message.account : null
+        if (next === account) break
+        account = next
+        withServing(({ server: s }) => s.accountChanged())
+        withRunning(() => client?.accountChanged())
         break
       }
       case 'remote-host:relay-retry':

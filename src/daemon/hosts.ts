@@ -27,7 +27,7 @@ import { BROWSER_UNAVAILABLE } from '@shared/browser'
 import { resolveLocale, type Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus, isPort } from '@shared/remote/address'
-import { deviceId, type NewDevice } from '@shared/remote/device'
+import { deviceId, otherAccount, type NewDevice } from '@shared/remote/device'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
@@ -150,6 +150,8 @@ export interface HostsOptions {
   pushUrl: string
   /** Whether the daemon is signed in to a Kettu account now. */
   signedIn(): boolean
+  /** The id of the Kettu account the daemon is signed in to now, null for none. */
+  accountId?(): string | null
   /** The system's name for this computer, which devices show unless the owner names it. */
   hostName: string
   env: NodeJS.ProcessEnv
@@ -364,6 +366,7 @@ export class Hosts {
         relay: this.initRelay(),
         push: options.pushUrl,
         waiting: this.waiting,
+        account: this.sentAccount(),
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -422,6 +425,7 @@ export class Hosts {
       platform: device.platform,
       connected: status.online.includes(device.id),
       lastConnectedAt: device.lastConnectedAt,
+      ...(otherAccount(device, this.options.accountId?.() ?? null) ? { otherAccount: true } : {}),
     }))
   }
 
@@ -439,6 +443,7 @@ export class Hosts {
       direct: status?.direct ?? { state: 'off' },
       relay: this.relayReport(),
       ownRelayKeyEnd: accessKeyEnd(this.options.accessKey()),
+      account: this.options.accountId?.() ?? null,
     }
   }
 
@@ -471,6 +476,21 @@ export class Hosts {
       this.sentRelay = sent
     }
     for (const listener of [...this.statusListeners]) listener()
+  }
+
+  /** The account the remote host was last told of, which each start reads anew. */
+  private account: string | null = null
+
+  private sentAccount(): string | null {
+    this.account = this.options.accountId?.() ?? null
+    return this.account
+  }
+
+  /** The daemon signed in to another account, or out: the remote host hears it. */
+  accountChanged(): void {
+    const account = this.options.accountId?.() ?? null
+    if (account === this.account) return
+    if (this.remote.post({ type: 'remote-host:account', account })) this.account = account
   }
 
   /**

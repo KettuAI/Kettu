@@ -1438,6 +1438,7 @@
       "removed": "Removed",
       "update_client": "Update Kettu here",
       "update_host": "Update Kettu on it",
+      "other_account": "Another account",
       "relay": {
         "unreachable": "Offline · cannot reach the Kettu relay",
         "wrong_account": "Offline · sign in with the host owner’s account",
@@ -1446,6 +1447,12 @@
     },
     "note": "To reach this computer from a phone or another computer, add the device in <link>Remote access</link>.",
     "plainTextKey": "The key this computer connects to other hosts with is kept in a file only you can read, because the system has no keyring.",
+    "otherAccount": {
+      "title_one": "{{count}} computer of another account",
+      "title_other": "{{count}} computers of another account",
+      "body_one": "It belongs to another Kettu account than the one signed in here. Sign in with that account to bring it back.",
+      "body_other": "They belong to another Kettu account than the one signed in here. Sign in with that account to bring them back."
+    },
     "keyFailed": "The system could not decrypt the key this computer connects to other hosts with, so it connects to none.",
     "add": {
       "button": "Add host…",
@@ -1463,6 +1470,7 @@
       "rejected": "The host did not add this computer.",
       "unreachable": "Could not reach the host within 15 seconds. Check that both computers are on the same network or VPN and that remote access is on there; for an address you added for the host, check that the port forwarding still works.",
       "wrong_account": "The Kettu relay joins only computers signed in to the host’s account. Sign in here with the account the host is signed in to, then try again.",
+      "other_account": "This computer belongs to another Kettu account. Sign in with that account to use it.",
       "signed_out": "This code reaches its host through the Kettu relay, which needs a Kettu account. Sign in here in Settings › Account, then try again.",
       "self": "This is this computer’s own pairing code. To connect another device to this computer, scan or paste it on that device.",
       "update_client": "Kettu on this computer is too old for this host. Update it and try again.",
@@ -1591,6 +1599,10 @@
         "title": "Update Kettu on {{name}}",
         "body": "Kettu on {{name}} is too old for this computer. It connects once Kettu there is updated."
       },
+      "other_account": {
+        "title": "{{name}} belongs to another account",
+        "body": "This computer belongs to another Kettu account. Sign in with that account to use it."
+      },
       "kettu": {
         "name": "Kettu",
         "older": "{{version}}, older than this computer",
@@ -1672,6 +1684,12 @@
       "note": "Connecting shows a code on both computers. Once you check that it matches, add this computer on the other one.",
       "connect": "Connect",
       "connectTo": "Connect to {{name}}",
+      "computer": {
+        "added": "Added",
+        "remoteOff": "Remote access off",
+        "remoteOffHint": "Remote access is off on it, or it is hidden from this account’s devices. Turn it on in its Settings › Remote access.",
+        "lastSeen": "Last seen {{ago}}"
+      },
       "refresh": "Refresh",
       "or": "or connect with a link or over SSH",
       "back": "Back",
@@ -1784,6 +1802,7 @@
       "add": "Add device…",
       "addOff": "Turn on remote access to add a device.",
       "online": "Online",
+      "otherAccount": "Another account",
       "seenToday": "Connected today at {{time}}",
       "seenYesterday": "Connected yesterday at {{time}}",
       "seenDaysAgo_one": "Connected {{count}} day ago",
@@ -1927,6 +1946,8 @@
       "joinedAccount": "{{date}}, through your Kettu account",
       "joinedLink": "{{date}}, from a pasted link",
       "lastConnected": "Last connected",
+      "otherAccount": "It last connected signed in to another Kettu account than this computer’s, so it cannot connect. It works again once this computer signs in to that account. You can also remove it.",
+      "otherAccount_web": "It last connected signed in to another Kettu account than {{host}}’s, so it cannot connect. It works again once {{host}} signs in to that account. You can also remove it.",
       "onlineSince": "Online now, connected at {{time}}",
       "never": "Never",
       "activity": "Activity",

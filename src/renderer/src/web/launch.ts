@@ -30,6 +30,8 @@ export interface LaunchOptions {
   /** The connection pairing left open, which the link takes as its first. */
   paired: Paired | null
   client: Hello['client']
+  /** The Kettu account this browser is signed in to, which the hello names; none when absent. */
+  account?: string | null
   /** What the hello names beyond the shared link's own, as the hosted build's regions. */
   features?: string[]
   settings: WebSettings
@@ -65,7 +67,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
       (() => [{ key: 'host', relay: options.address === null, dial: options.dial }]),
     hostKey: options.hostKey,
     key: options.key,
-    hello: withFeatures(hello(options.client), options.features ?? []),
+    hello: withFeatures(hello(options.client, undefined, options.account), options.features ?? []),
     ...(options.paired ? { adopt: options.paired } : {}),
     visible: () => document.visibilityState === 'visible',
   })

@@ -21,7 +21,7 @@ import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, DangerButton, SetButton, SetInput, Spin } from './controls'
 import { LoadColumns } from './host-load'
 import { webHostLine } from './host-text'
-import { HostState } from './hosts-section'
+import { HostState, OtherAccountHosts } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { ItemLine, Thing } from './rows'
 
@@ -59,9 +59,11 @@ export function WebHostRow({ host }: { host: WebHost }) {
 export function OtherWebHosts() {
   const { t } = useTranslation('settings')
   const others = useWebHostStore((s) => s.others)
+  const folded = useWebHostStore((s) => s.otherAccount)
   const actions = useWebHostStore((s) => s.actions)
   return (
     <>
+      {folded > 0 && <OtherAccountHosts count={folded} />}
       {others.map((other) => (
         <div key={other.id} className="ui-sg-row">
           <Thing

@@ -48,6 +48,8 @@ export interface DeviceSummary {
   /** It has a session open now. */
   connected: boolean
   lastConnectedAt: number | null
+  /** Its last connection named another Kettu account than the daemon's, so it cannot connect. */
+  otherAccount?: boolean
 }
 
 export interface DaemonStatus {

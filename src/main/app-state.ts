@@ -11,6 +11,7 @@ export interface AppState {
   updateAfterMove: string | null // the version Update moved the app to /Applications for
   notifiedUpdate: string | null // the version the island or a notification announced, once
   updateSources: SignedSourceList | null // the latest source list, checked again when read
+  askedClients: string[] // the account's clients already asked about turning remote access on for
 }
 
 interface AppStateFile extends AppState {
@@ -35,6 +36,7 @@ function parseAppState(raw: unknown): AppState | null {
     updateAfterMove = null,
     updateSources = null,
     notifiedUpdate = null,
+    askedClients = [],
   } = raw as Record<string, unknown>
   const optionalString = (value: unknown): value is string | null =>
     value === null || (typeof value === 'string' && value.length <= 256)
@@ -54,7 +56,18 @@ function parseAppState(raw: unknown): AppState | null {
     updateAfterMove,
     updateSources: signedList(updateSources),
     notifiedUpdate,
+    askedClients: clientIds(askedClients),
   }
+}
+
+/** The most clients kept as asked about, the newest kept. */
+const MAX_ASKED = 200
+
+function clientIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128)
+    .slice(-MAX_ASKED)
 }
 
 /** Owns app-state.json: small facts main remembers between launches. */
@@ -72,6 +85,7 @@ export class AppStateStore {
       updateAfterMove: null,
       updateSources: null,
       notifiedUpdate: null,
+      askedClients: [],
     }
     const read = await readJsonFile(path)
     let state = empty
@@ -98,12 +112,13 @@ export class AppStateStore {
       next.dismissedUpdate === this.state.dismissedUpdate &&
       next.updateAfterMove === this.state.updateAfterMove &&
       next.updateSources === this.state.updateSources &&
-      next.notifiedUpdate === this.state.notifiedUpdate
+      next.notifiedUpdate === this.state.notifiedUpdate &&
+      next.askedClients === this.state.askedClients
     ) {
       return
     }
-    this.state = next
-    const file: AppStateFile = { version: 1, ...next }
+    this.state = { ...next, askedClients: next.askedClients.slice(-MAX_ASKED) }
+    const file: AppStateFile = { version: 1, ...this.state }
     this.writer.schedule(file)
   }
 

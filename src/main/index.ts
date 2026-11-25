@@ -79,6 +79,7 @@ import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { loadStoredDevices } from './remote-devices'
 import { RemoteHost } from './remote-host'
+import { RemoteOffers } from './remote-offer'
 import {
   loadDeviceKey,
   loadIdentity,
@@ -708,11 +709,22 @@ async function start(): Promise<void> {
       (remoteHost.hosts?.length ?? 0) > 0,
     send: (token, relay) => remoteHost.setToken(token, relay),
   })
+  // Asks once per other client of the account whether to let it use this computer.
+  const remoteOffers = new RemoteOffers({
+    eligible: () =>
+      accountInUse() && !settings.get().remote.enabled && remoteHost.devices.length === 0,
+    clients: () => account.clients(),
+    asked: () => appState.get().askedClients,
+    keepAsked: (ids) => appState.update({ askedClients: ids }),
+    changed: (offer) => broadcast('remote:offer', offer),
+  })
   /** The sign-in changed: the relay's token, and the direct connections it holds on without one. */
   function accountChanged(): void {
     relayToken.update()
+    remoteHost.accountChanged()
     remoteHost.directChanged()
     remoteChanged()
+    void remoteOffers.check()
   }
   const remoteStatus = (): RemoteStatus => {
     const status = remoteHost.status
@@ -734,6 +746,7 @@ async function start(): Promise<void> {
         keyEnd: accessKeyEnd(ownRelayKey),
       }),
       ownRelayKeyEnd: accessKeyEnd(ownRelayKey),
+      account: remoteHost.account,
     }
   }
   const remoteChanged = (): void => {
@@ -741,6 +754,7 @@ async function start(): Promise<void> {
     broadcast('remote:changed', status)
     tray.setRemote(status)
     hostAdmin?.remoteChanged(status)
+    remoteOffers.refresh()
   }
   let computerModel = ''
   const hostsStatus = (): HostsStatus => ({
@@ -753,6 +767,7 @@ async function start(): Promise<void> {
     hosts: remoteHost.hosts,
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
+    otherAccount: remoteHost.otherAccountHosts,
   })
   // What an agent's settings tools read beyond the file: counts, and the account as Settings shows
   // it. A secret goes only as whether it is set.
@@ -893,6 +908,10 @@ async function start(): Promise<void> {
         check: checkRelayHere,
       }),
     discoverable: () => settings.get().remote.discoverable,
+    account: () => {
+      const status = account.status()
+      return accountInUse() && status.state === 'signed-in' ? status.account.id : null
+    },
     discoveryChanged: (event) => {
       broadcast('remote:discovery', event)
       notifyDiscovery(event, settings.get(), () => void showMainWindow())
@@ -1191,10 +1210,12 @@ async function start(): Promise<void> {
       // The window signs out first, while the service can still be told; this forgets it here.
       if (!next.cloud.enabled && account.status().state !== 'signed-out') void account.signOut()
       relayToken.update()
+      remoteHost.accountChanged()
       remoteHost.relayChanged()
       remoteHost.directChanged()
       sharing.kettuChanged()
       remoteChanged()
+      void remoteOffers.check()
       agentHost.pushMarketAccount(marketAccount())
     }
     // After the remote host, so devices hear why their terminals close; it reads `remote.terminal`.
@@ -1237,6 +1258,7 @@ async function start(): Promise<void> {
     sharing,
     marketKeys,
     remoteHost,
+    remoteOffers,
     hostSessions,
     hostMedia,
     remoteStatus,
@@ -1297,7 +1319,8 @@ async function start(): Promise<void> {
   // A sign-in left from before Kettu cloud was turned off is forgotten here, without the service.
   if (!cloudOn() && account.status().state !== 'signed-out') void account.signOut()
   relayToken.update()
-  void remoteHost.setEnabled(settings.get().remote.enabled)
+  // After the paired devices are read, which an offer depends on.
+  void remoteHost.setEnabled(settings.get().remote.enabled).finally(() => remoteOffers.start())
   watchPresence((present) => remoteHost.setPresent(present))
   const window = createMainWindow(start)
   window.once('show', () => {

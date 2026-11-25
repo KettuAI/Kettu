@@ -23,6 +23,7 @@ import { forbiddenToDevices } from '@shared/remote/allow-list'
 import { Channel, type ChannelMessage } from '@shared/remote/channel'
 import {
   normalizeDeviceName,
+  otherAccount,
   type NewDevice,
   type PairedDevice,
   type PortDevice,
@@ -183,6 +184,11 @@ export interface RemoteServerOptions {
   terminal?: boolean
   /** The host's id on the Kettu relay and its relays while it uses the relay, for welcomes. */
   relay?(): HostRelay | null
+  /**
+   * The Kettu account the host is signed in to now, null for none: a device whose hello names
+   * another is turned away on every path. Absent, as in tests, the host is signed in to none.
+   */
+  account?(): string | null
   /** The relay regions, which devices that read them hear of; none without the relay. */
   regions?: ServerRegions
   /** The devices' notifications, which a host without its signing key has none of. */
@@ -244,6 +250,30 @@ export class RemoteServer {
   accept(transport: Transport, via: 'direct' | 'relay' = 'direct'): void {
     if (this.stopped) return transport.close()
     this.connections.add(new DeviceConnection(transport, this, via === 'relay'))
+  }
+
+  /** The host's Kettu account now, null while it is signed in to none. */
+  get account(): string | null {
+    return this.options.account?.() ?? null
+  }
+
+  /**
+   * The host signed in to another account, or out: devices last seen with another account than
+   * the new one are turned away, their sessions closed, and the next welcomes carry it.
+   */
+  accountChanged(): void {
+    const account = this.account
+    if (account === null) return
+    const away = (id: string | undefined): boolean => {
+      const device = id === undefined ? null : this.options.devices.get(id)
+      return device !== null && otherAccount(device, account)
+    }
+    for (const connection of this.connections) {
+      if (away(connection.device?.id)) void connection.close('other_account')
+    }
+    for (const session of this.sessions) {
+      if (away(session.device.id)) void session.close('other_account')
+    }
   }
 
   /** The welcome's relay, while the host uses it. */
@@ -841,6 +871,17 @@ class DeviceConnection {
     const joining = this.pairing !== null || this.discovery !== null
     // The device may have been removed, or paired again, since its handshake.
     const known = this.device ?? this.removed
+    const account = hello.account ?? null
+    const hostAccount = this.server.account
+    if (account !== null && hostAccount !== null && account !== hostAccount) {
+      // Neither a failed try at the code nor a request the owner hears of: the code stays open.
+      if (this.device) this.server.options.devices.noteAccount(this.device.id, account)
+      this.server.options.log(
+        'info',
+        `Turned away ${this.device ? `device ${this.device.id}` : 'a device'} of another account`,
+      )
+      return void this.close('other_account')
+    }
     const device = this.discovery
       ? await this.confirmDiscovery(hello)
       : this.pairing
@@ -854,6 +895,7 @@ class DeviceConnection {
       return this.close('removed')
     }
     this.device = device
+    if (!joining) this.server.options.devices.noteAccount(device.id, account)
     if (hello.resume && version >= RESUME_VERSION && !joining) {
       if (hello.standby === 'join') {
         const kept = this.server.findSession(hello.resume.token, device.id)
@@ -932,6 +974,7 @@ class DeviceConnection {
       model,
       kind,
       platform,
+      account: hello.account ?? null,
     })
     if (!added || this.state !== 'confirming') return null
     options.pairing.added(code, added)
@@ -973,6 +1016,7 @@ class DeviceConnection {
         model,
         kind,
         platform,
+        account: hello.account ?? null,
       },
       'account',
     )
@@ -1432,6 +1476,7 @@ class DeviceSession {
       ...this.server.relay(),
       ...(this.token ? { resume: this.token } : {}),
       ...(resumed ? { resumed } : {}),
+      ...(this.server.account !== null ? { account: this.server.account } : {}),
     }
     connection.channel!.send({ kind: 'json', value: welcome }).catch(() => {})
   }

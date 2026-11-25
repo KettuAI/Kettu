@@ -4,14 +4,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
+import type { AccountComputer, DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
 import type { HostPairingFailure, HostPairingState, HostStatus } from '@shared/remote/hosts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
 import { Dialog } from '@renderer/components/ui/dialog'
+import { mediumAgo } from '@renderer/lib/format'
+import { useNow } from '@renderer/lib/use-now'
 import { signIn } from '@renderer/stores/account'
 import { connectTo, loadDiscovered, useHostsStore } from '@renderer/stores/hosts'
-import { IconAction, SetButton, Skel, Spin } from './controls'
+import { openSettingsItem } from '@renderer/stores/view'
+import { IconAction, Pill, SetButton, Skel, Spin } from './controls'
 import { Added } from './host-added'
 import { platformName } from './host-text'
 import { closeRequest } from './pair-close'
@@ -44,6 +47,52 @@ export function AccountHostRow({ host }: { host: DiscoveredHost }) {
           {t('hosts.account.connect')}
         </SetButton>
       </span>
+    </div>
+  )
+}
+
+/**
+ * One of the account's computers that cannot be connected from here now, and why: added already,
+ * remote access off there, or offline since it was last seen.
+ */
+export function AccountComputerRow({ computer }: { computer: AccountComputer }) {
+  const { t } = useTranslation('settings')
+  const now = useNow()
+  const system = computer.platform ? platformName(computer.platform) : null
+  const line =
+    computer.state === 'remote_off'
+      ? t('hosts.account.computer.remoteOffHint')
+      : computer.state === 'offline' && computer.lastSeenAt !== undefined
+        ? [
+            system,
+            t('hosts.account.computer.lastSeen', { ago: mediumAgo(computer.lastSeenAt, now) }),
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : system
+  const end =
+    computer.state === 'added' ? (
+      computer.hostId ? (
+        <SetButton onClick={() => openSettingsItem('hosts', computer.hostId!)}>
+          {t('hosts.account.computer.added')}
+        </SetButton>
+      ) : (
+        <Pill tone="success">{t('hosts.account.computer.added')}</Pill>
+      )
+    ) : computer.state === 'remote_off' ? (
+      <Pill tone="warning">{t('hosts.account.computer.remoteOff')}</Pill>
+    ) : (
+      <Pill>{t('hosts.state.offline')}</Pill>
+    )
+  return (
+    <div className="ui-sg-row">
+      <Thing
+        mark={<DeviceTile icon={<HostIcon platform={computer.platform} />} />}
+        name={<span className="k-name">{computer.name}</span>}
+      >
+        {line && <ItemLine>{line}</ItemLine>}
+      </Thing>
+      <span className="ui-sg-control">{end}</span>
     </div>
   )
 }
@@ -132,8 +181,11 @@ export function AccountHostsActions({ signedOut }: { signedOut: boolean }) {
 export function AccountHostsPicker({ onConnect }: { onConnect: (host: DiscoveredHost) => void }) {
   const { t } = useTranslation('settings')
   const discovered = useDiscoveredHosts()
+  const now = useNow()
   useRereadDiscovered()
-  if (discovered?.state !== 'ok' || discovered.hosts.length === 0) return null
+  if (discovered?.state !== 'ok') return null
+  const others = (discovered.computers ?? []).filter((computer) => computer.state !== 'added')
+  if (discovered.hosts.length === 0 && others.length === 0) return null
   return (
     <section aria-labelledby="account-hosts-label" className="kettu-sd__field">
       <h3 id="account-hosts-label" className="kettu-sd__label">
@@ -153,6 +205,28 @@ export function AccountHostsPicker({ onConnect }: { onConnect: (host: Discovered
             >
               {t('hosts.account.connect')}
             </SetButton>
+          </li>
+        ))}
+        {others.map((computer) => (
+          <li key={`${computer.state}-${computer.name}`} className="kettu-sd__row">
+            <DeviceTile icon={<HostIcon platform={computer.platform} />} />
+            <span className="ui-sg-label">
+              <b className="k-name">{computer.name}</b>
+              <small>
+                {computer.state === 'remote_off'
+                  ? t('hosts.account.computer.remoteOffHint')
+                  : computer.lastSeenAt !== undefined
+                    ? t('hosts.account.computer.lastSeen', {
+                        ago: mediumAgo(computer.lastSeenAt, now),
+                      })
+                    : t('hosts.state.offline')}
+              </small>
+            </span>
+            {computer.state === 'remote_off' ? (
+              <Pill tone="warning">{t('hosts.account.computer.remoteOff')}</Pill>
+            ) : (
+              <Pill>{t('hosts.state.offline')}</Pill>
+            )}
           </li>
         ))}
       </ul>
