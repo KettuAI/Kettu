@@ -6,6 +6,8 @@ import {
   DIRECTORY_CURSOR,
   HANDLE,
   LISTING_ID,
+  MARKET_ICON_LIMITS,
+  MARKET_ICON_TYPES,
   VERSION,
   type ListingChange,
   type ListingVisibility,
@@ -13,6 +15,8 @@ import {
   type MarketCallAnswer,
   type MarketDirectory,
   type MarketFailure,
+  type MarketIcon,
+  type MarketIconType,
   type MarketListing,
   type MarketMine,
   type MarketProblem,
@@ -30,8 +34,12 @@ import {
   type VersionStatus,
 } from '@shared/market-publish'
 import { locale, t } from './i18n'
+import { readBody } from './theme-catalog'
 
 const TIMEOUT_MS = 120_000
+const ICON_TIMEOUT_MS = 20_000
+const API = '/api/v1/marketplace'
+const SHA256 = /^[0-9a-f]{64}$/
 const MAX_MESSAGE = 500
 const MAX_PROBLEMS = 100
 const MAX_CHECKS = 50
@@ -116,6 +124,32 @@ function parseAdds(value: unknown): { adds?: PublishAdds[] } {
 function parseServer(value: unknown): { server?: Record<string, unknown> } {
   const server = record(value)
   return server ? { server } : {}
+}
+
+/**
+ * The part of an icon's address after the Marketplace API's own path, which the account service's
+ * base is put before; null for an address anywhere else, a full one included, so the access token
+ * never goes to another site.
+ */
+export function iconPath(url: string): string | null {
+  if (url.length > 1024 || !url.startsWith(`${API}/`)) return null
+  const parts = url.slice(API.length + 1).split('/')
+  const plain = parts.every(
+    (part) => /^[A-Za-z0-9._~-]+$/.test(part) && part !== '.' && part !== '..',
+  )
+  return plain ? `/${parts.join('/')}` : null
+}
+
+/** A version's icon as the service names it; null without one, or for one Kettu would not fetch. */
+function parseIcon(value: unknown): MarketIcon | null {
+  const fields = record(value)
+  const url = text(fields?.url)
+  const sha256 = text(fields?.sha256)?.toLowerCase() ?? null
+  const type = fields?.type as MarketIconType
+  if (url === null || iconPath(url) === null || sha256 === null || !SHA256.test(sha256)) {
+    return null
+  }
+  return MARKET_ICON_TYPES.includes(type) ? { url, sha256, type } : null
 }
 
 /** The fields every listing has, mine or another account's. */
@@ -224,6 +258,7 @@ export function parseMineListing(value: unknown): MineListing {
   return {
     ...base,
     current: text(fields.current),
+    icon: parseIcon(fields.icon),
     versions: Array.isArray(fields.versions) ? fields.versions.map(parseVersion) : [],
     installs: {
       total: isCount(installs?.total) ? installs.total : 0,
@@ -248,6 +283,7 @@ function parseListing(value: unknown): MarketListing {
     versions: Array.isArray(fields.versions)
       ? fields.versions.filter((v): v is string => typeof v === 'string')
       : [version],
+    icon: parseIcon(fields.icon),
     ...parseAdds(fields.adds),
     ...parseServer(fields.server),
     installs: isCount(fields.installs) ? fields.installs : 0,
@@ -530,6 +566,32 @@ export class MarketApi {
     return { bytes, sha256: response.headers.get('x-content-sha256') }
   }
 
+  /**
+   * A version's icon at the path the listing named, with the SHA-256 the service says it has; the
+   * caller checks it. No more than the largest icon allowed is read.
+   */
+  async icon(url: string): Promise<{ bytes: Uint8Array; sha256: string | null }> {
+    const path = iconPath(url)
+    if (path === null) {
+      throw new MarketApiError({ code: 'invalid', status: null, message: 'Not an icon address.' })
+    }
+    const response = await this.send(
+      path,
+      { method: 'GET', headers: { accept: MARKET_ICON_TYPES.join(', ') } },
+      ICON_TIMEOUT_MS,
+    )
+    if (!response.ok) await this.refused(response)
+    const bytes = await readBody(response, MARKET_ICON_LIMITS.bytes)
+    if (bytes === null) {
+      throw new MarketApiError({
+        code: 'too_large',
+        status: null,
+        message: 'The icon is too large.',
+      })
+    }
+    return { bytes, sha256: response.headers.get('x-content-sha256') }
+  }
+
   async countInstall(id: string, at: string, reason: 'install' | 'update'): Promise<void> {
     await this.json(`/listings/${listing(id)}/installs`, {
       method: 'POST',
@@ -541,17 +603,17 @@ export class MarketApi {
     await this.json(`/listings/${listing(id)}/reports`, { method: 'POST', json: { message } })
   }
 
-  private async send(path: string, init: RequestInit): Promise<Response> {
+  private async send(path: string, init: RequestInit, timeout = TIMEOUT_MS): Promise<Response> {
     const headers = {
       ...Object.fromEntries(new Headers(init.headers)),
       authorization: `Bearer ${this.deps.token}`,
     }
     try {
-      return await this.deps.fetch(`${this.deps.base}/api/v1/marketplace${path}`, {
+      return await this.deps.fetch(`${this.deps.base}${API}${path}`, {
         ...init,
         headers,
         redirect: 'error',
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeout),
       })
     } catch (error) {
       throw new MarketApiError({
@@ -668,6 +730,8 @@ export function marketCallOf(value: unknown): MarketCall | null {
         : null
     case 'file':
       return id() && at() && isText(call.path, 1024) ? (call as MarketCall) : null
+    case 'icon':
+      return isText(call.url, 1024) ? (call as MarketCall) : null
     case 'install':
       return id() && at() && (call.reason === 'install' || call.reason === 'update')
         ? (call as MarketCall)
@@ -744,6 +808,10 @@ async function perform(api: MarketApi, call: MarketCall): Promise<unknown> {
       return api.version(call.id, call.version)
     case 'file': {
       const { bytes, sha256 } = await api.file(call.id, call.version, call.path)
+      return { data: Buffer.from(bytes).toString('base64'), sha256 }
+    }
+    case 'icon': {
+      const { bytes, sha256 } = await api.icon(call.url)
       return { data: Buffer.from(bytes).toString('base64'), sha256 }
     }
     case 'install':

@@ -154,6 +154,7 @@ import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
 import { bundlesFile, MarketBundlesService } from './marketplace/bundles'
 import { MarketCommunityService } from './marketplace/community'
+import { MarketIcons } from './marketplace/icons'
 import { MarketConnectionsService } from './marketplace/connections'
 import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
@@ -774,6 +775,11 @@ export class AgentHost {
       appVersion: options.appVersion,
       folder: path.join(options.userDataPath, 'plugin-conversions'),
     })
+    const marketIcons = new MarketIcons({
+      dir: path.join(options.userDataPath, 'marketplace-icons'),
+      log,
+      call: (call) => this.marketCall(call),
+    })
     this.marketTools = new MarketTools({
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
@@ -806,6 +812,7 @@ export class AgentHost {
       converter: this.pluginConverter,
       appVersion: options.appVersion,
       home: options.homeDir ?? os.homedir(),
+      icon: (icon) => marketIcons.waited(icon),
     })
     this.settingsTools = new SettingsTools({
       platform,
@@ -882,6 +889,7 @@ export class AgentHost {
         ...this.workflowLibrary.listingIds(),
       ],
       installWorkflow: (text, origin) => this.workflowLibrary.installListing(text, origin),
+      icon: (icon) => marketIcons.waited(icon),
     })
     this.marketBundles = new MarketBundlesService({
       userDataPath: options.userDataPath,

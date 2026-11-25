@@ -17,10 +17,10 @@ export function PluginTile({
   size?: number
 }) {
   const art = tileArt(kettuPluginSubject({ name, icon }))
-  if (icon) {
+  if (art.type === 'image') {
     return (
       <span aria-hidden className="kpv-tile" style={{ width: size, height: size }}>
-        <SiteIconImage className="kpv-tile__logo" src={icon} />
+        <SiteIconImage className="kpv-tile__logo" src={art.src} />
       </span>
     )
   }

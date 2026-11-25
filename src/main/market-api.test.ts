@@ -3,6 +3,7 @@ import type { PublishManifest } from '@shared/market-publish'
 import {
   MarketApi,
   MarketUnauthorized,
+  iconPath,
   marketCallOf,
   runMarketCall,
   type Fetch,
@@ -298,6 +299,82 @@ describe('MarketApi directory', () => {
   })
 })
 
+const ICON_PATH = '/api/v1/marketplace/listings/abcdefgh23/versions/1.0.0/icon'
+const ICON = { url: ICON_PATH, sha256: 'A'.repeat(64), type: 'image/png' }
+
+describe('MarketApi icons', () => {
+  it('takes an icon address only as a path under the Marketplace API', () => {
+    expect(iconPath(ICON_PATH)).toBe('/listings/abcdefgh23/versions/1.0.0/icon')
+    for (const url of [
+      'https://elsewhere.example/api/v1/marketplace/listings/abcdefgh23/versions/1.0.0/icon',
+      `${BASE}${ICON_PATH}`,
+      '//elsewhere.example/api/v1/marketplace/x',
+      'api/v1/marketplace/listings/x',
+      '/api/v1/marketplacex/listings',
+      '/api/v1/other/icon',
+      '/api/v1/marketplace/',
+      '/api/v1/marketplace/listings/../../../account',
+      '/api/v1/marketplace/listings/./icon',
+      '/api/v1/marketplace/listings/%2e%2e/icon',
+      '/api/v1/marketplace/listings//icon',
+      '/api/v1/marketplace/icon?to=https://elsewhere.example',
+      '/api/v1/marketplace/icon#x',
+      '/api/v1/marketplace/a\\b',
+      `/api/v1/marketplace/${'x'.repeat(1024)}`,
+    ]) {
+      expect(iconPath(url), url).toBeNull()
+    }
+  })
+
+  it('reads a listing’s icon, and none from another site or of another type', async () => {
+    const item = { ...LISTING, kind: 'agent-plugin', version: '1.0.0', versions: ['1.0.0'] }
+    const items = [
+      { ...item, icon: ICON },
+      { ...item, icon: { ...ICON, url: `https://elsewhere.example${ICON_PATH}` } },
+      { ...item, icon: { ...ICON, type: 'image/svg+xml' } },
+      { ...item, icon: { ...ICON, sha256: 'not-a-hash' } },
+      { ...item, icon: null },
+      item,
+    ]
+    const { fetch } = fake(() => json(200, { items, next: null }))
+    const directory = await api(fetch).directory({})
+    expect(directory.items.map((l) => l.icon)).toEqual([
+      { ...ICON, sha256: 'a'.repeat(64) },
+      null,
+      null,
+      null,
+      null,
+      null,
+    ])
+  })
+
+  it('fetches an icon from the account service with the token, at most 512 KB', async () => {
+    const png = new Uint8Array([1, 2, 3])
+    const ok = fake(
+      () => new Response(png, { status: 200, headers: { 'x-content-sha256': 'abc' } }),
+    )
+    expect(await api(ok.fetch).icon(ICON_PATH)).toEqual({ bytes: Buffer.from(png), sha256: 'abc' })
+    expect(ok.sent[0]!.url).toBe(`${BASE}${ICON_PATH}`)
+    expect((ok.sent[0]!.init.headers as Record<string, string>).authorization).toBe('Bearer t1')
+    expect(ok.sent[0]!.init.redirect).toBe('error')
+
+    const elsewhere = fake(() => new Response(png))
+    await expect(
+      api(elsewhere.fetch).icon(`https://elsewhere.example${ICON_PATH}`),
+    ).rejects.toThrow()
+    expect(elsewhere.sent).toHaveLength(0)
+
+    const large = fake(() => new Response(new Uint8Array(512 * 1024 + 1)))
+    await expect(api(large.fetch).icon(ICON_PATH)).rejects.toMatchObject({
+      failure: { code: 'too_large' },
+    })
+    const missing = fake(() => json(404, { error: 'not_found' }))
+    await expect(api(missing.fetch).icon(ICON_PATH)).rejects.toMatchObject({
+      failure: { status: 404 },
+    })
+  })
+})
+
 describe('runMarketCall', () => {
   class SignedOut extends Error {}
 
@@ -369,6 +446,8 @@ describe('marketCallOf', () => {
     expect(marketCallOf({ kind: 'set-publisher', handle: 7 })).toBeNull()
     expect(marketCallOf({ kind: 'publish', manifest: {}, files: [{ path: 'a' }] })).toBeNull()
     expect(marketCallOf({ kind: 'update', id: 'x' })).toBeNull()
+    expect(marketCallOf({ kind: 'icon', url: ICON_PATH })).not.toBeNull()
+    expect(marketCallOf({ kind: 'icon', url: 7 })).toBeNull()
     expect(marketCallOf({ kind: 'drop-tables' })).toBeNull()
     expect(marketCallOf('mine')).toBeNull()
   })

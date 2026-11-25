@@ -39,18 +39,27 @@ export function kindOf(kind: PublishKind): ItemKind {
   return kind === 'mcp-server' ? 'mcp' : kind === 'agent-plugin' ? 'plugin' : kind
 }
 
-/** A listing's tile, as the Community section draws it; a draft of a new one goes by its slug. */
-export function listingSubject(listing: {
-  id?: string | null
-  kind: PublishKind
-  harness?: PublishHarness | null
-  slug: string
-}): TileSubject {
+/**
+ * A listing's tile, as the Community section draws it, with a plugin's icon as the host's data
+ * URL; a draft of a new one goes by its slug.
+ */
+export function listingSubject(
+  listing: {
+    id?: string | null
+    kind: PublishKind
+    harness?: PublishHarness | null
+    slug: string
+    official?: boolean
+  },
+  icon: string | null = null,
+): TileSubject {
   return communitySubject({
     id: listing.id ?? listing.slug,
     kind: listing.kind,
     slug: listing.slug,
     ...(listing.harness ? { harness: listing.harness } : {}),
+    official: listing.official === true,
+    icon,
   })
 }
 

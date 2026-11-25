@@ -4,6 +4,7 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PUBLISH_LIMITS } from '@shared/market-publish'
+import { png } from '../plugins/icon-fixture'
 import { checkFolder, describe as describeText, findSecrets } from './publish-check'
 
 const APP = '0.3.0'
@@ -133,6 +134,33 @@ describe('checkFolder', () => {
       })
       expect(check.plugin).toMatchObject({ script: null, permissions: [] })
       expect(check.files.map((file) => file.path)).toContain('plugin.json')
+    })
+
+    it('notes whether the Marketplace shows its icon, which never stops a publish', async () => {
+      await put(files())
+      const none = await checkFolder(root, APP)
+      expect(none.problems).toEqual([])
+      expect(none.icon).toEqual({
+        result: 'skipped',
+        path: null,
+        note: expect.stringContaining('assets/icon.png'),
+      })
+
+      await put({ 'assets/icon.png': png(128) })
+      const small = await checkFolder(root, APP)
+      expect(small.problems).toEqual([])
+      expect(small.icon).toEqual({
+        result: 'skipped',
+        path: 'assets/icon.png',
+        note: 'assets/icon.png is 128 x 128 px, not between 256 and 1024 px',
+      })
+
+      await put({ 'assets/icon.png': png(512) })
+      expect((await checkFolder(root, APP)).icon).toEqual({
+        result: 'passed',
+        path: 'assets/icon.png',
+        note: '512 x 512 px',
+      })
     })
 
     it('lists a script with its permissions apart from what it adds', async () => {

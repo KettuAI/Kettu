@@ -24,6 +24,7 @@ import type { ConvertFrom } from '@shared/plugin-convert'
 import type { PluginContents } from '@shared/plugins'
 import type { HostKey } from '../i18n'
 import { HARNESS_MANIFESTS } from '../plugins/convert'
+import { checkIcon, ICON_FILES } from '../plugins/icon'
 import { MANIFEST_FILE, readPackage, type PackageFile } from '../plugins/package'
 import { parseWorkflow, problemText } from '../workflow/format'
 import { frontmatter } from './frontmatter'
@@ -59,12 +60,25 @@ export interface FolderCheck {
   runs: string[]
   /** For a Kettu plugin: what its package holds, as the plugin reader reads it. */
   plugin: PluginContents | null
+  /**
+   * For a Kettu plugin: whether the Marketplace would show its icon, and why not. It never keeps a
+   * version from publishing; one without an icon shows the puzzle glyph.
+   */
+  icon: IconNote | null
   /** The harness whose plugin this folder is, which converts into a Kettu plugin. */
   convertible: ConvertFrom | null
   /** What would upload. */
   files: CheckedFile[]
   bytes: number
   problems: MarketProblem[]
+}
+
+/** A plugin's icon as the check found it: its size, or why the Marketplace would not show it. */
+export interface IconNote {
+  result: 'passed' | 'skipped'
+  /** The icon file, null when the package has none. */
+  path: string | null
+  note: string
 }
 
 // Never uploaded: a repository's own data and the Finder's.
@@ -479,6 +493,23 @@ function pluginAdds(contents: PluginContents): PublishAdds[] {
   return adds
 }
 
+/** The first icon file the package has, checked by the rules the Marketplace stores icons by. */
+export function iconNote(files: readonly Pick<CheckedFile, 'path' | 'data'>[]): IconNote {
+  for (const [file, type] of ICON_FILES) {
+    const found = files.find((item) => item.path === file)
+    if (!found) continue
+    const checked = checkIcon(found.data, type)
+    return checked.ok
+      ? { result: 'passed', path: file, note: `${checked.width} x ${checked.height} px` }
+      : { result: 'skipped', path: file, note: `${file} ${checked.reason}` }
+  }
+  return {
+    result: 'skipped',
+    path: null,
+    note: `The package has none of ${ICON_FILES.map(([file]) => file).join(', ')}`,
+  }
+}
+
 /** A Kettu plugin: its package read by the plugin reader, so it publishes as it installs. */
 function readPlugin(check: FolderCheck, appVersion: string): void {
   const manifest = check.files.find((file) => file.path === MANIFEST_FILE)
@@ -529,6 +560,7 @@ function readPlugin(check: FolderCheck, appVersion: string): void {
   }
   check.adds = pluginAdds(contents)
   check.runs = contents.servers.map((server) => server.runs)
+  check.icon = iconNote(check.files)
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -571,6 +603,7 @@ export async function checkFolder(target: string, appVersion: string): Promise<F
     adds: [],
     runs: [],
     plugin: null,
+    icon: null,
     convertible: null,
     files: [],
     bytes: 0,

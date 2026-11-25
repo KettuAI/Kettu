@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { jpeg, png } from './icon-fixture'
 import { expand, serverSpec } from './mcp'
 import { readPackage, readPackageFolder, safePackagePath, type PackageFile } from './package'
 
@@ -196,14 +197,23 @@ describe('a plugin package', () => {
   })
 
   it('takes the icon from assets/icon.png alone', () => {
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+    const icon = png(256)
     const { contents } = read([
       manifest(),
-      { path: 'assets/icon.png', data: png, mode: 0o644 },
+      { path: 'assets/icon.png', data: icon, mode: 0o644 },
       file('assets/icon.svg', '<svg onload="x()"/>'),
     ])
-    expect(contents.icon).toBe(`data:image/png;base64,${png.toString('base64')}`)
+    expect(contents.icon).toBe(`data:image/png;base64,${icon.toString('base64')}`)
     expect(read([manifest(), file('assets/icon.svg', '<svg/>')]).contents.icon).toBeNull()
+  })
+
+  it('reads an icon file only as the image its name says', () => {
+    const svg = file('assets/icon.png', '<svg onload="x()"/>')
+    expect(read([manifest(), svg]).contents.icon).toBeNull()
+    const named = { path: 'assets/icon.png', data: jpeg(256), mode: 0o644 }
+    const next = { path: 'assets/icon.jpg', data: jpeg(256), mode: 0o644 }
+    expect(read([manifest(), named]).contents.icon).toBeNull()
+    expect(read([manifest(), named, next]).contents.icon).toMatch(/^data:image\/jpeg;base64,/)
   })
 
   it('refuses a package without a manifest, or with a path that could leave it', () => {

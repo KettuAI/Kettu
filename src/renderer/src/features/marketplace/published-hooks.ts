@@ -31,6 +31,12 @@ export function usePublishedStore(): PublishedStoreHook {
   return publishedStore(hostId, request)
 }
 
+/** A plugin listing's icon as the host's data URL; null without one. */
+export function usePublishedIcon(id: string | null | undefined): string | null {
+  const store = usePublishedStore()
+  return store((s) => (id ? (s.published?.icons?.[id] ?? null) : null))
+}
+
 /**
  * Whether the host's Kettu account shows the Published tab: signed in with Kettu's services on.
  * Asked once the page shows; the host says when it changes.

@@ -98,6 +98,26 @@ export interface MineVersion {
   publishedAt: string
 }
 
+/** The image types a Kettu plugin's icon may have; SVG is never one, since it can carry scripts. */
+export type MarketIconType = 'image/png' | 'image/webp' | 'image/jpeg'
+export const MARKET_ICON_TYPES: readonly MarketIconType[] = [
+  'image/png',
+  'image/webp',
+  'image/jpeg',
+]
+/** The largest icon, and its least and greatest side in pixels; it is square. */
+export const MARKET_ICON_LIMITS = { bytes: 512 * 1024, min: 256, max: 1024 } as const
+
+/**
+ * The icon the service stores with a Kettu plugin's version: a path on the account service, never
+ * another site's address, and the SHA-256 and type its bytes must have.
+ */
+export interface MarketIcon {
+  url: string
+  sha256: string
+  type: MarketIconType
+}
+
 /** A listing of the signed-in account's own. */
 export interface MineListing {
   id: string
@@ -115,6 +135,8 @@ export interface MineListing {
   official: boolean
   /** The version installs get. */
   current: string | null
+  /** The current version's icon, or the latest held one's without a current version. */
+  icon?: MarketIcon | null
   versions: MineVersion[]
   /** `days`: the last 30, oldest first. */
   installs: { total: number; week: number; days: number[] }
@@ -165,6 +187,8 @@ export interface MarketListing {
   official: boolean
   version: string
   versions: string[]
+  /** The current version's icon; none from a service that stores none. */
+  icon?: MarketIcon | null
   adds?: PublishAdds[]
   server?: Record<string, unknown>
   installs: number
@@ -236,6 +260,7 @@ export type MarketCall =
   | { kind: 'listing'; id: string }
   | { kind: 'version'; id: string; version: string }
   | { kind: 'file'; id: string; version: string; path: string }
+  | { kind: 'icon'; url: string }
   | { kind: 'install'; id: string; version: string; reason: 'install' | 'update' }
   | { kind: 'report'; id: string; message: string }
 
@@ -252,6 +277,7 @@ export interface MarketResults {
   listing: MarketListing
   version: MarketVersionFiles
   file: { data: string; sha256: string | null }
+  icon: { data: string; sha256: string | null }
   install: null
   report: null
 }
@@ -285,6 +311,8 @@ export interface MarketPublished {
   drafts: PublishDraft[]
   /** By listing id. */
   origins: Record<string, PublishOrigin>
+  /** The icons of the account's plugins as data URLs, by listing id; absent from older hosts. */
+  icons?: Record<string, string>
 }
 
 /** A version the user put off, or the service refused, kept on the host to publish later. */

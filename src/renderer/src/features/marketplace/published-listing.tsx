@@ -130,7 +130,10 @@ function Listing({
   return (
     <ListingFrame back={back} label={t('published.listing.back')} rise>
       <header className="k-mkt-head">
-        <ItemTile subject={listingSubject(listing)} size="big" />
+        <ItemTile
+          subject={listingSubject(listing, published.icons?.[listing.id] ?? null)}
+          size="big"
+        />
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{listing.name}</h1>
