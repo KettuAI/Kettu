@@ -2642,6 +2642,10 @@ export function createValidators(platform: Platform): Validators {
         ...(permanently === undefined ? {} : { permanently }),
       }
     },
+    'files.preview': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), path: relativePath(o, 'path', platform) }
+    },
     'artifacts.list': (params) => {
       const o = params === undefined || params === null ? {} : fields(params)
       const deleted = optionalFlag(o, 'deleted')

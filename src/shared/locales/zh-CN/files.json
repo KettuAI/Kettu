@@ -83,6 +83,14 @@
   "link": {
     "open": "打开 {{target}}"
   },
+  "htmlPreview": {
+    "preview": "预览",
+    "inKettu": "在 Kettu 浏览器里预览",
+    "inDefault": "用默认浏览器打开",
+    "openFile": "打开文件",
+    "failed": "无法预览这个页面：{{error}}",
+    "tooManyTabs": "这个会话的浏览器标签页已经开满了，关掉一个再预览。"
+  },
   "unsaved": {
     "title": "要保存对 {{name}} 的更改吗？",
     "description": "不保存的话，你的更改会丢失。",

@@ -275,6 +275,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'files.copy': NONE,
   'files.upload': NONE,
   'files.delete': NONE,
+  'files.preview': HOST_MS,
   'media.open': HOST_MS,
   'media.authorize': HOST_MS,
   'usage.summary': AGENT_MS,

@@ -146,6 +146,7 @@ import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
 import { setLocale, t, tSettings, tSettingsEnglish } from './i18n'
 import { FilesService } from './files'
+import { HtmlPreviews } from './html-preview'
 import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
@@ -534,6 +535,7 @@ export class AgentHost {
   private readonly sessionFiles: SessionFiles
   /** Grants for the media a thread names and the Files pane opens, which main serves. */
   private readonly media: MediaService
+  private readonly htmlPreviews: HtmlPreviews
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
   private readonly gitRetains = new GitRetains()
@@ -731,6 +733,11 @@ export class AgentHost {
       homeDir: options.homeDir ?? os.homedir(),
       names: (sessionId, text) => this.sessions.names(sessionId, text),
       grant: (grant) => options.send({ type: 'host:media-grant', grant }),
+    })
+    this.htmlPreviews = new HtmlPreviews({
+      platform,
+      folderOf: (sessionId) => this.sessions.openWorkFolder(sessionId),
+      log: (level, message) => writeLog(level, 'host', message),
     })
     this.files = new FilesService({
       exec: this.execRunner.exec,
@@ -1529,7 +1536,10 @@ export class AgentHost {
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
         },
-        ended: (sessionIds) => options.send({ type: 'host:sessions-ended', sessionIds }),
+        ended: (sessionIds) => {
+          this.htmlPreviews.end(sessionIds)
+          options.send({ type: 'host:sessions-ended', sessionIds })
+        },
         returned: (sessionId, portIds) => {
           if (portIds) this.hub.send(portIds, { type: 'session.returned', sessionId })
           else this.hub.broadcast({ type: 'session.returned', sessionId })
@@ -3463,6 +3473,7 @@ export class AgentHost {
       ])
       await Promise.all([
         this.artifactService.stop(),
+        this.htmlPreviews.stop(),
         this.computer?.shutdown(),
         this.projects.flush(),
         this.sessions.flush(),
@@ -4112,6 +4123,11 @@ export class AgentHost {
         ),
       'files.delete': ({ projectPath, paths, permanently }) =>
         this.filesCall(projectPath, (root) => this.files.delete(root, paths, permanently === true)),
+      'files.preview': ({ sessionId, path }, { device }) => {
+        // Served on this computer's loopback address, which only its own browser reaches.
+        if (device) throw new HostError('forbidden', 'Only a window may call "files.preview"')
+        return this.htmlPreviews.url(sessionId, path)
+      },
       'media.open': async ({ projectPath, path, sessionId }) => {
         const root = await projects.resolveDirectory(projectPath)
         this.assertOpenFolder(root)

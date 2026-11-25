@@ -1939,6 +1939,10 @@ export interface HostContract {
     params: { projectPath: string; paths: string[]; permanently?: boolean }
     result: void
   }
+  // The address at which the agent host serves an HTML file of the session's folder, read-only on
+  // the loopback address, for Kettu's browser on the same computer; `path` is relative to that
+  // folder. A paired device is refused it.
+  'files.preview': { params: { sessionId: string; path: string }; result: string }
   // `path` as the thread writes it: absolute, `~/`, a `file:` URI, or relative to `projectPath`,
   // the session's folder. `sessionId` lets a file outside it through when that thread names it.
   'media.open': {
@@ -2504,6 +2508,7 @@ export const HOST_METHODS = [
   'files.copy',
   'files.upload',
   'files.delete',
+  'files.preview',
   'media.open',
   'media.authorize',
   'usage.summary',

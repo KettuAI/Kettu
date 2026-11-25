@@ -21,6 +21,7 @@ import {
 import {
   ArrowRight01Icon,
   AtIcon,
+  BrowserIcon,
   ComputerTerminal01Icon,
   Copy01Icon,
   Delete02Icon,
@@ -63,6 +64,7 @@ import { ChangeBadge } from './change-badge'
 import { columnOf, NO_PATHS, saveColumn } from './column'
 import { DeletePrompt, type Deleting } from './delete-prompt'
 import { FileTypeIcon } from './file-type-icon'
+import { isHtmlFile, previewHtml, useHtmlPreview } from './html-preview'
 import { mentionPaths } from './mention-lines'
 import {
   copyEntries,
@@ -321,6 +323,7 @@ export function FileTree({
   const cut = useMemo(() => new Set(clipboard?.cut ? clipboard.paths : []), [clipboard])
   const terminal = useTerminalAllowed(projectPath)
   const sessionId = panelSession(panel)
+  const previews = useHtmlPreview(sessionId, projectPath)
 
   const adding = edit?.kind === 'new' ? edit : null
   const rows = withDraft(treeRows(index, expanded), adding)
@@ -696,6 +699,10 @@ export function FileTree({
   const dropping = dropFolder ?? fileDrop.over
   const menuTargets = targetsOf(menuPath)
   const menuFolder = folderFor(menuPath, menuPath !== null && isFolder(menuPath))
+  // An HTML file of the session's folder, whose page the menu offers to preview.
+  const menuFile = menuTargets.length === 1 ? menuTargets[0]! : null
+  const menuPage =
+    previews && menuFile !== null && !isFolder(menuFile) && isHtmlFile(menuFile) ? menuFile : null
   const shortcut = (keys: string) => (
     <ContextMenuShortcut>{formatShortcut(keys)}</ContextMenuShortcut>
   )
@@ -786,6 +793,15 @@ export function FileTree({
         </ContextMenuTrigger>
         {/* The menu leaves the focus alone for what takes it once it closes. */}
         <ContextMenuContent className="min-w-56" finalFocus={() => !keepsFocus.current}>
+          {menuPage !== null && sessionId && (
+            <>
+              <ContextMenuItem onClick={() => void previewHtml(sessionId, menuPage)}>
+                <PaneIcon icon={BrowserIcon} size={16} />
+                {t('htmlPreview.preview')}
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem
             onClick={() => queue(() => onEdit({ kind: 'new', folder: menuFolder, type: 'file' }))}
           >

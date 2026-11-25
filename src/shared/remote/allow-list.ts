@@ -3,9 +3,9 @@
 
 import type { HostMethod } from '../agent-host'
 
-// A file main's media scheme serves. A device adds a project by typing its folder, which the agent
-// host checks is one.
-const MAIN_ONLY: ReadonlySet<string> = new Set<HostMethod>(['media.open'])
+// A file main's media scheme serves, and a page Kettu's browser loads from this computer's loopback
+// address. A device adds a project by typing its folder, which the agent host checks is one.
+const MAIN_ONLY: ReadonlySet<string> = new Set<HostMethod>(['media.open', 'files.preview'])
 
 function hasGrant(params: unknown): boolean {
   if (typeof params !== 'object' || params === null) return false

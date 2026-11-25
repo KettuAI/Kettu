@@ -2383,6 +2383,78 @@
 .ks-file__dir {
   color: var(--thread-faint);
 }
+/* A changed HTML file: the row and its Preview button fill as one. */
+.ks-file-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  border-radius: 7px;
+}
+.ks-file-row > .ks-file {
+  flex: 1;
+  min-width: 0;
+}
+.ks-file-row:hover,
+.ks-file-row:has(> .ks-file[data-panel-open]) {
+  background: var(--thread-hover);
+}
+.ks-file-row > .ks-file:hover,
+.ks-file-row > .ks-file[data-panel-open] {
+  background: none;
+}
+.ks-file-row > .ks-page-btn {
+  margin-right: 4px;
+}
+
+/* A small button that opens an HTML file's page: on a changed file's row, and after a reply's
+   reference to the file, where it stands over the text while the reference is hovered. */
+.ks-page-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--thread-card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--thread-line-strong),
+    var(--thread-card-shadow);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--thread-ink);
+  white-space: nowrap;
+}
+.ks-page-btn:hover {
+  /* The card's own color under the hover's tint, so the text beneath never shows through. */
+  background: linear-gradient(var(--thread-hover), var(--thread-hover)), var(--thread-card);
+}
+.ks-page-btn svg {
+  color: var(--thread-muted);
+}
+.ks-ref-page {
+  position: relative;
+  display: inline-block;
+}
+.ks-ref-page__dock {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  z-index: 1;
+  /* The pointer crosses the gap without leaving the reference. */
+  padding-left: 4px;
+  translate: 0 -50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast);
+}
+.ks-ref-page:hover .ks-ref-page__dock,
+.ks-ref-page:focus-within .ks-ref-page__dock {
+  opacity: 1;
+  pointer-events: auto;
+}
 .ks-changes__more[aria-expanded='true'] svg {
   transform: rotate(180deg);
 }

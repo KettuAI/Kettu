@@ -1,26 +1,41 @@
-import { FolderOpenIcon, Link01Icon } from '@hugeicons/core-free-icons'
+import { useContext, useEffect } from 'react'
+import { BrowserIcon, File01Icon, FolderOpenIcon, Link01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import { toast } from '@renderer/components/ui/toast'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { SessionIdContext } from '@renderer/features/session/media/grants'
+import { BrowserIcon as DefaultBrowserIcon } from '@renderer/features/session/markdown/web-link'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
+import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { FileTypeIcon } from './file-type-icon'
 import type { AgentFileRef, FileRef } from './file-refs'
+import { isHtmlFile, openHtmlInBrowser, previewHtml, useHtmlPreview } from './html-preview'
 import { hostFilePath } from './operations'
 import { nameOf } from './paths'
+
+/** An HTML file's page, in a tab of the session's browser or in the default one. */
+interface PagePreview {
+  inKettu: () => void
+  inBrowser: () => void
+}
 
 /**
  * The chip both kinds of file reference draw, like the thread's links: the file's icon and name
  * over one line, with the path in its tooltip. A right click offers to show the file in the file
- * manager, which only this computer's files can be, and to copy its path.
+ * manager, which only this computer's files can be, and to copy its path. An HTML file's page
+ * can be previewed too: from a small button over the text after the chip while it is hovered or
+ * focused, so the line never moves, and from the menu.
  */
 function FileChip({
   path,
@@ -28,6 +43,7 @@ function FileChip({
   projectPath,
   hostFile,
   onOpen,
+  page = null,
 }: {
   path: string
   line: number | null
@@ -35,11 +51,12 @@ function FileChip({
   /** The file's path as its host writes it. */
   hostFile: string
   onOpen: () => void
+  page?: PagePreview | null
 }) {
   const { t } = useTranslation('files')
   const target = line ? `${path}:${line}` : path
   const local = !isWeb && hostOfPath(projectPath) === null
-  return (
+  const chip = (
     <ContextMenu>
       <ContextMenuTrigger
         className="select-auto"
@@ -65,6 +82,7 @@ function FileChip({
         </span>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-56">
+        {page && <PageItems page={page} onOpen={onOpen} />}
         {local && (
           <ContextMenuItem
             onClick={() =>
@@ -91,6 +109,55 @@ function FileChip({
       </ContextMenuContent>
     </ContextMenu>
   )
+  if (!page) return chip
+  return (
+    <span className="ks-ref-page">
+      {chip}
+      <span className="ks-ref-page__dock">
+        <Tooltip>
+          <TooltipTrigger
+            delay={500}
+            render={
+              <button
+                type="button"
+                className="ks-page-btn focus-ring"
+                aria-label={t('htmlPreview.inKettu')}
+                onClick={page.inKettu}
+              />
+            }
+          >
+            <HugeiconsIcon icon={BrowserIcon} size={13} strokeWidth={1.9} aria-hidden />
+            {t('htmlPreview.preview')}
+          </TooltipTrigger>
+          <TooltipContent>{t('htmlPreview.inKettu')}</TooltipContent>
+        </Tooltip>
+      </span>
+    </span>
+  )
+}
+
+/** The menu's first items for an HTML file: its page in either browser, or its source. */
+function PageItems({ page, onOpen }: { page: PagePreview; onOpen: () => void }) {
+  const { t } = useTranslation('files')
+  const browser = useDefaultBrowser()
+  useEffect(loadSiteIcons, [])
+  return (
+    <>
+      <ContextMenuItem onClick={page.inKettu}>
+        <HugeiconsIcon icon={BrowserIcon} strokeWidth={1.9} aria-hidden />
+        {t('htmlPreview.inKettu')}
+      </ContextMenuItem>
+      <ContextMenuItem onClick={page.inBrowser}>
+        <DefaultBrowserIcon browser={browser} className="size-3.75" />
+        {t('htmlPreview.inDefault')}
+      </ContextMenuItem>
+      <ContextMenuItem onClick={onOpen}>
+        <HugeiconsIcon icon={File01Icon} strokeWidth={1.9} aria-hidden />
+        {t('htmlPreview.openFile')}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+    </>
+  )
 }
 
 /**
@@ -98,6 +165,8 @@ function FileChip({
  * line, with the path in its tooltip. It opens the file in the Files pane at its line.
  */
 export function FileLink({ file }: { file: FileRef & { projectPath: string } }) {
+  const sessionId = useContext(SessionIdContext)
+  const previewable = useHtmlPreview(sessionId, file.projectPath) && isHtmlFile(file.path)
   return (
     <FileChip
       path={file.path}
@@ -105,6 +174,14 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
       projectPath={file.projectPath}
       hostFile={hostFilePath(file.projectPath, file.path)}
       onOpen={() => openFile(file.projectPath, file.path, file.line, { preview: true })}
+      page={
+        previewable && sessionId
+          ? {
+              inKettu: () => void previewHtml(sessionId, file.path),
+              inBrowser: () => void openHtmlInBrowser(sessionId, file.path),
+            }
+          : null
+      }
     />
   )
 }

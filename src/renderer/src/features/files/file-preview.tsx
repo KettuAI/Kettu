@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  BrowserIcon,
   CodeIcon,
   FileNotFoundIcon,
   FloppyDiskIcon,
@@ -82,6 +83,7 @@ import {
 import { ChangeBadge } from './change-badge'
 import { PreviewFileContext } from './file-refs'
 import { PathCopy, PreviewEditToggle } from './file-header'
+import { isHtmlFile, previewHtml, useHtmlPreview } from './html-preview'
 import { mentionPaths } from './mention-lines'
 import { copyPaths } from './operations'
 import { openInEditor } from './open-in-editor'
@@ -135,6 +137,7 @@ export function FilePreview({
   const markdown = isMarkdown(file.path) && file.content?.kind === 'text'
   const local = isLocal(projectPath)
   const sessionId = panelSession(panel)
+  const page = useHtmlPreview(sessionId, projectPath) && !file.agent && isHtmlFile(file.path)
   const mention = (): void => {
     if (!sessionId) return
     const missed = mentionPaths(sessionId, projectPath, [{ path: file.path, folder: false }])
@@ -187,6 +190,14 @@ export function FilePreview({
                 value={svgSource ? 'edit' : 'preview'}
                 onChange={(next) => showSvgSource(next === 'edit')}
               />
+            )}
+            {page && sessionId && (
+              <PanelButton
+                label={t('htmlPreview.inKettu')}
+                onClick={() => void previewHtml(sessionId, file.path)}
+              >
+                <PaneIcon icon={BrowserIcon} />
+              </PanelButton>
             )}
             {onShowDiff && (
               <PanelButton label={t('preview.showChanges')} onClick={onShowDiff}>

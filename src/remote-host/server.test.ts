@@ -273,6 +273,10 @@ describe('a paired device', () => {
     await expect(
       device.port.request('attachments.add', { source: { grantId: 'grant' }, thumb: null }),
     ).rejects.toMatchObject({ code: 'forbidden' })
+    // The page would be served on the host's own loopback address, for its own browser.
+    await expect(
+      device.port.request('files.preview', { sessionId: 'none', path: 'index.html' }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
     await expect(
       device.port.request('files.upload', {
         projectPath: t.agent.project,
@@ -286,6 +290,7 @@ describe('a paired device', () => {
     expect(t.logs).toEqual([
       `warn: Device ${t.phone.id} asked for media.open, which devices may not call`,
       `warn: Device ${t.phone.id} asked for attachments.add, which devices may not call`,
+      `warn: Device ${t.phone.id} asked for files.preview, which devices may not call`,
       `warn: Device ${t.phone.id} asked for files.upload, which devices may not call`,
     ])
   })
