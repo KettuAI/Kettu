@@ -5468,22 +5468,26 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   font-variant-numeric: tabular-nums;
 }
 
-/* Four levels by how much is used, for the context ring, the tray's limit and the plan bars. */
+/* 四级用量语义色：供上下文圆环、托盘限额与套餐限额双轨条共用 */
 :is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit) {
   --meter: var(--composer-meter-ok);
   --meter-wash: var(--composer-meter-ok-wash);
+  --meter-text: var(--composer-ink);
 }
 :is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='mid'] {
   --meter: var(--composer-meter-mid);
   --meter-wash: var(--composer-meter-mid-wash);
+  --meter-text: var(--composer-ink);
 }
 :is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='high'] {
   --meter: var(--composer-meter-high);
   --meter-wash: var(--composer-meter-high-wash);
+  --meter-text: var(--plan-warn-text);
 }
 :is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='full'] {
   --meter: var(--composer-meter-full);
   --meter-wash: var(--composer-meter-full-wash);
+  --meter-text: var(--plan-bad-text);
 }
 .kettu-meter-ring {
   flex: none;
@@ -5869,11 +5873,40 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  min-height: 20px;
+}
+.kettu-ctx__plan-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   font-weight: 500;
   color: var(--composer-strong);
 }
+.kettu-ctx__plan-view {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--composer-muted);
+  outline: none;
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+}
+.kettu-ctx__plan-view:hover {
+  background: var(--composer-chip);
+  color: var(--composer-ink);
+}
+.kettu-ctx__plan-view:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 0;
+}
 .kettu-ctx__tier {
+  flex: none;
   height: 20px;
   padding: 0 6px;
   border-radius: 5px;
@@ -5882,38 +5915,118 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   font-weight: 500;
   line-height: 20px;
   color: var(--composer-text);
+  white-space: nowrap;
 }
-.kettu-limit {
+/* 套餐限额分组双轨卡片（方案 A）：组名独占顶行零折行，组内窗口左右并排对照 */
+.kettu-plan-groups {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+.kettu-plan-group {
+  padding: 7px 10px 8px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--composer-strong) 2.8%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--composer-strong) 7%, transparent);
+}
+.kettu-plan-group[data-current] {
+  background: color-mix(in srgb, var(--control-on) 4.5%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--control-on) 22%, transparent);
+}
+.kettu-plan-group[data-solo] {
+  padding: 8px 10px;
+}
+.kettu-plan-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.kettu-plan-group__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--composer-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-plan-group__badge {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--control-on);
+  white-space: nowrap;
+}
+.kettu-plan-group__models {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--composer-faint);
+  white-space: nowrap;
+  transition: color var(--duration-fast);
+}
+.kettu-plan-group__models:hover {
+  color: var(--composer-muted);
+}
+.kettu-plan-group__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.kettu-plan-group__grid[data-single] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.kettu-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(odd):not(:last-child) {
+  padding-right: 10px;
+}
+.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(even) {
+  padding-left: 10px;
+  border-left: 0.5px solid var(--composer-line);
+}
+.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(odd):last-child {
+  grid-column: 1 / -1;
+}
+.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(n + 3) {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 0.5px solid var(--composer-line);
+}
 .kettu-limit__row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 6px;
+  line-height: 16px;
 }
 .kettu-limit__label {
-  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--composer-ink);
-}
-.kettu-limit__reset {
-  flex: none;
-  font-size: 12px;
-  color: var(--composer-muted);
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--composer-text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .kettu-limit__value {
   flex: none;
-  min-width: 36px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--meter-text);
   text-align: right;
-  color: var(--composer-text);
 }
 .kettu-limit__bar {
   height: 4px;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: 999px;
   background: var(--composer-chip-hover);
 }
 .kettu-limit__bar > span {
@@ -5921,6 +6034,50 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   height: 100%;
   border-radius: inherit;
   background: var(--meter);
+  transition:
+    width var(--duration-slow) var(--ease-out-quint),
+    background-color var(--duration-fast);
+}
+.kettu-limit__bar > span[data-tiny] {
+  min-width: 6px;
+}
+.kettu-limit__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.kettu-limit__reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 3.5px;
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--composer-faint);
+  white-space: nowrap;
+}
+.kettu-limit__reset > svg {
+  flex: none;
+  opacity: 0.78;
+}
+.kettu-limit__reset > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kettu-limit[data-level='full'] .kettu-limit__reset {
+  color: var(--plan-bad-text);
+}
+.kettu-limit__amount {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--composer-faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* The Model Picker's model marks without a tile, a size up from the picker's own. */
