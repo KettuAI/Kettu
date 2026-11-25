@@ -718,6 +718,8 @@ interface PreparedSlot {
   next: Live | null
   /** The agent's settings changed since `current` opened, so a send waits for `next`. */
   stale: boolean
+  /** The window's last prepare, which its agent refused until it signs in, as it asked for it. */
+  refused: PrepareParams | null
 }
 
 interface PendingRequest {
@@ -4792,6 +4794,7 @@ export class SessionManager {
   portClosed(portId: string): void {
     const slot = this.preparedSlots.get(portId)
     for (const live of [slot?.current, slot?.next]) if (live) void this.dropPrepared(live)
+    this.preparedSlots.delete(portId)
     const shown = this.shown.get(portId)
     this.shown.delete(portId)
     for (const [sessionId, ports] of this.watchers) {
@@ -5210,6 +5213,7 @@ export class SessionManager {
     this.deps.agents.assertEnabled(params.agentId)
     const key = preparedKey(params)
     const slot = this.slotOf(portId)
+    slot.refused = null
     const held = slot.next ?? (slot.stale ? null : slot.current)
     if (!params.replace && held?.prepared?.key === key) {
       await held.prepared.opening
@@ -5228,6 +5232,7 @@ export class SessionManager {
       await live.prepared!.opening
     } catch (error) {
       if (slot.next === live) slot.next = null
+      this.noteRefused(portId, params, error)
       throw error
     }
     if (slot.next === live) {
@@ -5240,6 +5245,23 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  /**
+   * Keeps a prepare the agent refused for want of a sign-in it asks no one for, as while Kettu
+   * looks for a sign-in agy already holds, to open again once the agent signs in. New session
+   * itself prepares again after a sign-in the agent asked the user for.
+   */
+  private noteRefused(portId: string, params: PrepareParams, error: unknown): void {
+    if (!(error instanceof HostError) || error.code !== 'auth_required') return
+    if (this.deps.agents.status(params.agentId).signIn === 'required') return
+    // The window asked for another meanwhile.
+    if (this.preparedSlots.get(portId)?.next) return
+    this.slotOf(portId).refused = {
+      agentId: params.agentId,
+      projectPath: params.projectPath,
+      ...(params.parentId !== undefined ? { parentId: params.parentId } : {}),
+    }
+  }
+
   /** Removes a prepared session that was not adopted; one already adopted or gone is left. */
   async discard(sessionId: string): Promise<void> {
     const live = this.live.get(sessionId)
@@ -5249,7 +5271,7 @@ export class SessionManager {
   private slotOf(portId: string): PreparedSlot {
     let slot = this.preparedSlots.get(portId)
     if (!slot) {
-      slot = { current: null, next: null, stale: false }
+      slot = { current: null, next: null, stale: false, refused: null }
       this.preparedSlots.set(portId, slot)
     }
     return slot
@@ -6295,6 +6317,12 @@ export class SessionManager {
       if (live.record.agentId !== agentId) continue
       this.settleSignInNotices(live)
       if (live.thread.session.status === 'auth_required') void this.retry(live.id).catch(() => {})
+    }
+    for (const [portId, slot] of [...this.preparedSlots]) {
+      const refused = slot.refused
+      if (refused?.agentId !== agentId) continue
+      slot.refused = null
+      this.prepare(refused, portId).catch(() => {})
     }
   }
 

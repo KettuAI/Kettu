@@ -162,6 +162,12 @@ export function receivePrepared(summary: SessionSummary, hostId: string | null):
   // A replacement that answered ends the wait; a change to the one held does not.
   const opening = held?.id === summary.id ? current.opening : false
   setPrepared({ ...current, summary, opening, error: null })
+  // The host opened it again after this window's prepare failed, so the picks go to it now.
+  if (!held && current.error !== null) {
+    const picks = picksOf(useAgentOptionsStore.getState(), hostId, summary.agentId) ?? {}
+    for (const [optionId, value] of Object.entries(picks))
+      setOption(hostId, summary.agentId, optionId, value)
+  }
 }
 
 /** A prepared session the window did not discard went, as with its agent's exit. */
