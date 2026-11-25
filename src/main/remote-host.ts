@@ -271,6 +271,11 @@ export class RemoteHost {
     return this.host || this.known ? null : []
   }
 
+  /** Every known host, folded ones included, as the remote host last reported them. */
+  get knownHosts(): HostStatus[] {
+    return this.hostList ?? []
+  }
+
   /** How many known hosts belong to another account than the one signed in to now. */
   get otherAccountHosts(): number {
     return this.hostList?.filter(folded).length ?? 0

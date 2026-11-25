@@ -55,23 +55,26 @@ export class RemoteOffers {
     if (this.offer && !this.options.eligible()) this.set(null)
   }
 
-  /** Reads the account's clients for an offer, unless one is shown or none can be made. */
+  /**
+   * Reads the account's clients for an offer; one shown stays while its client is signed in, and
+   * gives way to another once it signed out.
+   */
   async check(): Promise<void> {
     if (!this.options.eligible()) return this.set(null)
-    if (this.offer || this.reading) return
+    if (this.reading) return
     this.reading = true
     try {
       const clients = await this.options.clients()
-      if (!this.options.eligible() || this.offer) return
+      if (!this.options.eligible()) return this.set(null)
       const asked = new Set(this.options.asked())
       const others = clients
         .filter((client) => !client.current && USERS.has(client.kind))
         .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
-      // The most recently used one names the offer; answering it answers for the others listed.
-      const fresh = others.find((client) => !asked.has(client.id))
-      if (!fresh) return
       this.listed = others.map((client) => client.id)
-      this.set({ clientId: fresh.id, name: fresh.name, kind: fresh.kind })
+      const shown = this.offer && others.find((client) => client.id === this.offer?.clientId)
+      // The most recently used one names the offer; answering it answers for the others listed.
+      const named = shown || others.find((client) => !asked.has(client.id))
+      this.set(named ? { clientId: named.id, name: named.name, kind: named.kind } : null)
     } catch {
       // Read again at the next check.
     } finally {

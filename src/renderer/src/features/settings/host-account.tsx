@@ -13,7 +13,6 @@ import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { signIn } from '@renderer/stores/account'
 import { connectTo, loadDiscovered, useHostsStore } from '@renderer/stores/hosts'
-import { openSettingsItem } from '@renderer/stores/view'
 import { IconAction, Pill, SetButton, Skel, Spin } from './controls'
 import { Added } from './host-added'
 import { platformName } from './host-text'
@@ -72,13 +71,7 @@ export function AccountComputerRow({ computer }: { computer: AccountComputer }) 
         : system
   const end =
     computer.state === 'added' ? (
-      computer.hostId ? (
-        <SetButton onClick={() => openSettingsItem('hosts', computer.hostId!)}>
-          {t('hosts.account.computer.added')}
-        </SetButton>
-      ) : (
-        <Pill tone="success">{t('hosts.account.computer.added')}</Pill>
-      )
+      <Pill tone="success">{t('hosts.account.computer.added')}</Pill>
     ) : computer.state === 'remote_off' ? (
       <Pill tone="warning">{t('hosts.account.computer.remoteOff')}</Pill>
     ) : (
@@ -90,7 +83,11 @@ export function AccountComputerRow({ computer }: { computer: AccountComputer }) 
         mark={<DeviceTile icon={<HostIcon platform={computer.platform} />} />}
         name={<span className="k-name">{computer.name}</span>}
       >
-        {line && <ItemLine>{line}</ItemLine>}
+        {computer.state === 'remote_off' ? (
+          <small data-wrap="">{line}</small>
+        ) : (
+          line && <ItemLine>{line}</ItemLine>
+        )}
       </Thing>
       <span className="ui-sg-control">{end}</span>
     </div>

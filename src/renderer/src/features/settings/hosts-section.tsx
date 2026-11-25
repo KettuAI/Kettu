@@ -146,7 +146,7 @@ export function OtherAccountHosts({ count }: { count: number }) {
         mark={<DeviceTile icon={<Icon icon={UserSwitchIcon} size={16} />} />}
         name={<span className="k-name">{t('hosts.otherAccount.title', { count })}</span>}
       >
-        <ItemLine>{t('hosts.otherAccount.body', { count })}</ItemLine>
+        <small data-wrap="">{t('hosts.otherAccount.body', { count })}</small>
       </Thing>
     </div>
   )

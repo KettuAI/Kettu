@@ -154,6 +154,8 @@ const REJOIN_MS = 10_000
 
 /** The longest wait between tries, which a host that needs an update also waits. */
 const MAX_RETRY_MS = 60_000
+/** How often a host that turned this computer away as another account's is tried again. */
+const TURNED_AWAY_MS = 10 * 60_000
 
 /** Host protocol messages kept for main's port while it is on its way; more are dropped. */
 const MAX_QUEUED = 1000
@@ -551,14 +553,26 @@ class HostLink {
 
   start(): void {
     if (this.host?.removed) return this.set({ state: 'stopped', reason: 'removed' })
-    if (this.folded()) return this.set({ state: 'stopped', reason: 'other_account' })
+    if (this.folded()) {
+      this.set({ state: 'stopped', reason: 'other_account' })
+      // One that only turned this computer away may have signed back in since: asked quietly.
+      if (!this.anotherAccount()) this.schedule(0)
+      return
+    }
     void this.connect()
   }
 
-  /** Whether the host belongs to another account than the one this computer is signed in to. */
+  /** Whether the host is folded away as another account's, which the list leaves out. */
   private folded(): boolean {
     const host = this.host
     return host !== null && foldedHost(host, this.client.account())
+  }
+
+  /** Whether the host's account, from its last welcome, is another than this computer's. */
+  private anotherAccount(): boolean {
+    const current = this.client.account()
+    const account = this.host?.account
+    return current !== null && account !== undefined && account !== null && account !== current
   }
 
   /**
@@ -572,7 +586,9 @@ class HostLink {
       this.cancel()
       this.drop()
       this.lose()
-      return this.set({ state: 'stopped', reason: 'other_account' })
+      this.set({ state: 'stopped', reason: 'other_account' })
+      if (!this.anotherAccount()) this.schedule(TURNED_AWAY_MS)
+      return
     }
     if (!this.stoppedFor('other_account')) return
     this.failures = 0
@@ -702,7 +718,7 @@ class HostLink {
   private async connect(): Promise<void> {
     const host = this.host
     if (this.closed || this.session || this.trying || !host || host.removed) return
-    if (this.folded()) return this.set({ state: 'stopped', reason: 'other_account' })
+    if (this.anotherAccount()) return this.set({ state: 'stopped', reason: 'other_account' })
     const { options } = this.client
     const trying = (this.trying = new AbortController())
     const hostKey = publicKeyBytes(host.publicKey)!
@@ -1293,7 +1309,9 @@ class HostLink {
       const current = this.client.account()
       if (current !== null) hosts.update(this.id, { otherAccount: current })
       this.lose()
-      return this.set({ state: 'stopped', reason })
+      this.set({ state: 'stopped', reason })
+      // It may sign back in to this computer's account; nothing else would say so.
+      return this.schedule(TURNED_AWAY_MS)
     }
     if (reason === 'update_host') {
       this.set({ state: 'stopped', reason })
@@ -1333,6 +1351,7 @@ class HostLink {
     this.expireKept()
     // A host that needs an update keeps saying so, and waits the longest, between its tries.
     if (this.stoppedFor('update_host')) return this.schedule(MAX_RETRY_MS)
+    if (this.stoppedFor('other_account')) return this.schedule(TURNED_AWAY_MS)
     this.set(relay ? { state: 'offline', relay } : { state: 'offline' })
     this.schedule(this.client.retryDelay(this.failures))
   }

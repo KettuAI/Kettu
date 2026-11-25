@@ -79,8 +79,6 @@ export interface AccountComputer {
   /** Its system as a host names it, or empty when only its system's name is known. */
   platform: Platform | ''
   state: 'added' | 'remote_off' | 'offline'
-  /** `added`: the known host, whose page it opens. */
-  hostId?: string
   /** `offline`: when the account service last saw it, in Unix milliseconds. */
   lastSeenAt?: number
 }
@@ -304,10 +302,14 @@ export function accountComputers(input: {
   )
   const signedIn = new Set(clients.map((client) => client.name))
   for (const host of input.known) {
+    // Another account's host is folded away, not listed here.
+    if (host.account !== undefined && host.account !== null && host.account !== input.account) {
+      continue
+    }
     if (host.account !== input.account && !signedIn.has(host.name)) continue
     if (named.has(host.name)) continue
     named.add(host.name)
-    computers.push({ name: host.name, platform: host.platform, state: 'added', hostId: host.id })
+    computers.push({ name: host.name, platform: host.platform, state: 'added' })
   }
   for (const client of clients) {
     if (named.has(client.name)) continue
@@ -326,16 +328,14 @@ const COMPUTER_STATES: readonly string[] = ['added', 'remote_off', 'offline']
 
 function parseComputer(value: unknown): AccountComputer | null {
   if (typeof value !== 'object' || value === null) return null
-  const { name, platform, state, hostId, lastSeenAt } = value as Record<string, unknown>
+  const { name, platform, state, lastSeenAt } = value as Record<string, unknown>
   if (!isText(name, 100) || !COMPUTER_STATES.includes(state as string)) return null
   if (platform !== '' && !isText(platform, 32)) return null
-  if (hostId !== undefined && !isText(hostId, 64)) return null
   if (lastSeenAt !== undefined && !Number.isSafeInteger(lastSeenAt)) return null
   return {
     name,
     platform: platform as Platform | '',
     state: state as AccountComputer['state'],
-    ...(typeof hostId === 'string' ? { hostId } : {}),
     ...(typeof lastSeenAt === 'number' ? { lastSeenAt } : {}),
   }
 }

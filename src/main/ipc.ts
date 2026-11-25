@@ -912,7 +912,8 @@ export function registerIpcHandlers({
     if (discovered.state !== 'ok' || !clients || status.state !== 'signed-in') return discovered
     const computers = accountComputers({
       listed: discovered.hosts,
-      known: (remoteHost.hosts ?? []).filter((host) => !host.removed),
+      // Folded hosts too: one of this account that turned this computer away is still added.
+      known: remoteHost.knownHosts.filter((host) => !host.removed),
       clients,
       account: status.account.id,
       now: Date.now(),
