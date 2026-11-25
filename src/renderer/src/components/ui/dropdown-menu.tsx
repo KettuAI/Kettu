@@ -5,6 +5,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { cn } from 'cn'
 import { ArrowRight01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { menuCollisionPadding } from '@renderer/lib/platform'
 import { useOverlayRoot } from '@renderer/stores/overlays'
 import { GlideHighlight } from '@renderer/components/glide-highlight'
 
@@ -45,13 +46,16 @@ function DropdownMenuContent({
   >) {
   return (
     <MenuPrimitive.Portal>
+      {/* The portal comes after the page, so its no-drag wins over a top bar's drag region under
+          it and a row lying over the bar still takes its clicks. */}
       <MenuPrimitive.Positioner
-        className="isolate z-(--layer-menu) outline-none"
+        className="isolate z-(--layer-menu) outline-none app-region-no-drag"
         anchor={anchor}
         align={align}
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        collisionPadding={menuCollisionPadding}
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
