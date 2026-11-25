@@ -139,10 +139,11 @@ export class RoutinesManager {
     this.timings = { ...ROUTINE_TIMINGS, ...deps.timings }
     this.scheduler = new RoutineScheduler({
       clock: this.clock,
+      // A routine being deleted has no times due; if the delete fails, they come due after it.
       routines: () =>
-        [...this.routines.values()].map((routine) =>
-          schedulerRoutine(routine, this.modelOf(routine)),
-        ),
+        [...this.routines.values()]
+          .filter((routine) => !this.deleting.has(routine.id))
+          .map((routine) => schedulerRoutine(routine, this.modelOf(routine))),
       due: (routineId, at, trigger, count) => this.scheduled(routineId, at, trigger, count),
       accounted: (routineId, at) => this.account(routineId, at),
       limits: (agentId, model) => this.limitsFor(agentId, model),
@@ -334,7 +335,7 @@ export class RoutinesManager {
 
   async runNow(routineId: string): Promise<RoutineRun> {
     if (!this.loaded) await this.load()
-    const routine = this.routineOf(routineId)
+    const routine = this.presentOf(routineId)
     if (this.activeOf(routineId)) throw new HostError('busy', t('routines.busy'))
     if (this.stopped) throw new HostError('busy', t('routines.stopping'))
     const run = this.launch(routine, 'manual', null, 1)
@@ -776,6 +777,10 @@ export class RoutinesManager {
     let summary: SessionSummary
     try {
       const folder = routine.projectPath ?? (await this.routineFolder(routine.id))
+      if (!this.isPresent(routine.id)) {
+        this.discard(live)
+        return
+      }
       summary = await this.deps.sessions.createRun({
         agentId: routine.agentId,
         projectPath: folder,
@@ -795,15 +800,15 @@ export class RoutinesManager {
       this.finish(live, 'failed', { error: { message: messageOf(error) } })
       return
     }
-    const current = this.runs.get(live.run.id)
-    if (!current) {
-      // The routine went while its session started: the session goes with it. A run that ended
-      // by itself keeps its session, which stays in the session index.
-      if (!this.routines.has(routine.id)) {
-        void this.deps.sessions.delete(summary.id).catch(() => {})
-      }
+    // The routine went or is being deleted while its session started: the session goes with it.
+    if (!this.isPresent(routine.id)) {
+      live.run.sessionId = summary.id
+      this.discard(live)
       return
     }
+    const current = this.runs.get(live.run.id)
+    // A run that ended by itself keeps its session, which stays in the session index.
+    if (!current) return
     if (current.run.status === 'starting') {
       current.run.status = 'running'
       this.resumeClock(current)
@@ -848,6 +853,10 @@ export class RoutinesManager {
   }
 
   private finish(live: LiveRun, status: RunStatus, result: RunEnd): void {
+    if (!this.isPresent(live.run.routineId)) {
+      this.discard(live)
+      return
+    }
     this.pauseClock(live)
     if (live.timer) clearTimeout(live.timer)
     live.timer = null
@@ -876,6 +885,27 @@ export class RoutinesManager {
       const routine = this.routines.get(run.routineId)
       if (routine?.trigger.schedule.kind === 'once') this.finishOnce(run.routineId)
     }
+    this.startNext()
+  }
+
+  /**
+   * Ends a run of a routine that is gone or being deleted, as the delete ends its runs: no record,
+   * no notification, and its session goes with the routine.
+   */
+  private discard(live: LiveRun): void {
+    this.pauseClock(live)
+    this.dequeue(live.run.id)
+    if (this.runs.get(live.run.id) === live) this.runs.delete(live.run.id)
+    const sessionId = live.run.sessionId
+    if (sessionId) {
+      if (this.bySession.get(sessionId) === live.run.id) this.bySession.delete(sessionId)
+      if (this.deps.sessions.has(sessionId)) {
+        void this.deps.sessions.delete(sessionId).catch((error: unknown) => {
+          this.deps.log('warn', `Could not delete the session of a run: ${messageOf(error)}`)
+        })
+      }
+    }
+    this.setWorking()
     this.startNext()
   }
 
@@ -1083,6 +1113,10 @@ export class RoutinesManager {
   private presentOf(routineId: string): Routine {
     if (this.deleting.has(routineId)) throw new HostError('not_found', t('routines.notFound'))
     return this.routineOf(routineId)
+  }
+
+  private isPresent(routineId: string): boolean {
+    return this.routines.has(routineId) && !this.deleting.has(routineId)
   }
 
   private nameOf(routineId: string): string {

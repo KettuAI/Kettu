@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 import type { Routine, RoutineRun, RoutineView } from '@shared/routines'
+import { nextRuns } from '@shared/schedule'
 import type { JsonFile, RoutinesFile } from '../storage'
 import type { ThreadStore } from '../threads/store'
 import type { RoutineCallName, RoutineCalls, RoutineRunStats } from './calls'
@@ -143,10 +144,16 @@ function setup() {
   // What a client shows, fed by the events alone.
   const shown = new Map<string, RoutineView>()
   const events: string[] = []
+  const attention: string[] = []
   const live = new Set<string>()
   let project: Promise<void> = Promise.resolve()
+  let creating: Promise<void> = Promise.resolve()
+  let now = NOW
+  let timer: (() => void) | null = null
   const sessions: RoutineSessions = {
+    // A session starts after its folder is resolved, as the sessions manager starts one.
     createRun: async (params) => {
+      await creating
       const id = `s-${live.size + 1}`
       live.add(id)
       manager.hooks.sessionCreated(id, params.routine)
@@ -184,19 +191,45 @@ function setup() {
       },
       run: () => {},
       working: () => {},
-      attention: () => {},
+      attention: (kind, sessionId) => attention.push(`${kind} ${sessionId}`),
       paused: () => {},
     },
     resolveProject: async (folder) => {
       await project
       return folder
     },
-    clock: { now: () => NOW, setTimeout: () => 0, clearTimeout: () => {} },
+    clock: {
+      now: () => now,
+      setTimeout: (callback) => {
+        timer = callback
+        return 1
+      },
+      clearTimeout: () => {
+        timer = null
+      },
+    },
   })
   const holdProject = (): (() => void) => {
     const gate = deferred()
     project = gate.promise
     return gate.resolve
+  }
+  /** Holds the next sessions' start until it is released or fails. */
+  const holdCreate = (): { release: () => void; fail: (error: Error) => void } => {
+    let release!: () => void
+    let fail!: (error: Error) => void
+    creating = new Promise<void>((resolve, reject) => {
+      release = resolve
+      fail = reject
+    })
+    return { release, fail }
+  }
+  /** Moves the clock to `at` and fires the scheduler's timer. */
+  const advance = (at: number): void => {
+    now = at
+    const fire = timer
+    timer = null
+    fire?.()
   }
   /** Starts a run and its first turn; resolves with its session. */
   const running = async (): Promise<string> => {
@@ -209,7 +242,19 @@ function setup() {
     expect(shown.get(ID)?.activeRun?.status).toBe('running')
     return sessionId
   }
-  return { manager, store, saved, shown, events, holdProject, running }
+  return {
+    manager,
+    store,
+    saved,
+    shown,
+    events,
+    attention,
+    live,
+    holdProject,
+    holdCreate,
+    advance,
+    running,
+  }
 }
 
 describe('RoutinesManager', () => {
@@ -283,5 +328,75 @@ describe('RoutinesManager', () => {
     await expect(updating).rejects.toMatchObject({ code: 'not_found' })
     expect(h.events.at(-1)).toBe(`removed ${ID}`)
     expect(h.shown.has(ID)).toBe(false)
+  })
+
+  it('starts no run now for a routine being deleted', async () => {
+    const h = setup()
+    await h.manager.load()
+    const releaseRemove = h.store.hold('remove')
+    const deleting = h.manager.delete(ID)
+    await vi.waitFor(() => expect(h.store.waiting('remove')).toBe(1))
+    await expect(h.manager.runNow(ID)).rejects.toMatchObject({ code: 'not_found' })
+    releaseRemove()
+    await deleting
+    await settle()
+    expect(h.live.size).toBe(0)
+    expect(h.store.runs.size).toBe(0)
+    expect(h.attention).toEqual([])
+    expect(h.events.at(-1)).toBe(`removed ${ID}`)
+  })
+
+  it('starts no scheduled run for a routine being deleted', async () => {
+    const h = setup()
+    await h.manager.load()
+    h.manager.start()
+    const releaseRemove = h.store.hold('remove')
+    const deleting = h.manager.delete(ID)
+    await vi.waitFor(() => expect(h.store.waiting('remove')).toBe(1))
+    h.advance(nextRuns(ROUTINE.trigger.schedule, NOW, { count: 1 })[0]!.at)
+    await settle()
+    releaseRemove()
+    await deleting
+    for (const sessionId of [...h.live]) h.manager.hooks.turnEnded(sessionId, ENDED)
+    await settle()
+    expect(h.live.size).toBe(0)
+    expect(h.store.runs.size).toBe(0)
+    expect(h.attention).toEqual([])
+    expect(h.events.at(-1)).toBe(`removed ${ID}`)
+  })
+
+  it('removes a session that started while its routine was deleted', async () => {
+    const h = setup()
+    await h.manager.load()
+    const create = h.holdCreate()
+    await h.manager.runNow(ID)
+    await settle()
+    const releaseRemove = h.store.hold('remove')
+    const deleting = h.manager.delete(ID)
+    await vi.waitFor(() => expect(h.store.waiting('remove')).toBe(1))
+    create.release()
+    await settle()
+    releaseRemove()
+    await deleting
+    h.manager.hooks.turnEnded('s-1', ENDED)
+    await settle()
+    expect(h.live.size).toBe(0)
+    expect(h.store.runs.size).toBe(0)
+    expect(h.attention).toEqual([])
+    expect(h.events.at(-1)).toBe(`removed ${ID}`)
+  })
+
+  it('records nothing for a run that ends after its routine went', async () => {
+    const h = setup()
+    await h.manager.load()
+    const create = h.holdCreate()
+    await h.manager.runNow(ID)
+    await settle()
+    await h.manager.delete(ID)
+    create.fail(new Error('The agent is not installed'))
+    await settle()
+    expect(h.store.runs.size).toBe(0)
+    expect(h.attention).toEqual([])
+    expect(h.events.at(-1)).toBe(`removed ${ID}`)
   })
 })
