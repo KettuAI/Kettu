@@ -20,6 +20,8 @@ import { useThreadsStore } from '@renderer/stores/threads'
 export interface EditFacts {
   turns: number
   files: number
+  /** The agent takes back the files changed since too, until Put back returns them. */
+  filesBack: boolean
   commands: boolean
   running: boolean
   tasks: number
@@ -51,9 +53,13 @@ export function EditConfirm({
             {t('editFrom.stopsTasks', { count: facts.tasks })}
           </Fact>
         )}
-        {facts.files > 0 && (
-          <Fact icon={File01Icon}>{t('editFrom.files', { count: facts.files })}</Fact>
-        )}
+        {facts.filesBack
+          ? (facts.files > 0 || facts.commands) && (
+              <Fact icon={File01Icon}>{t('editFrom.filesBack')}</Fact>
+            )
+          : facts.files > 0 && (
+              <Fact icon={File01Icon}>{t('editFrom.files', { count: facts.files })}</Fact>
+            )}
         <CacheFact sessionId={sessionId} kept={facts.kept} />
       </ul>
       <div className="kettu-edit__actions">

@@ -150,6 +150,8 @@ export interface AgentInit {
     steering: boolean
     /** Cuts a session's conversation before a turn, for an edit from a message. */
     rewind?: boolean
+    /** The cut also takes back the files the agent changed since, staged as the edit goes back. */
+    rewindFiles?: boolean
     /** MCP servers over HTTP, which the artifacts service needs. */
     mcpHttp: boolean
     /** MCP servers over the older SSE transport. */
@@ -506,6 +508,13 @@ export interface AgentConnection {
     point: RewindPoint,
     title: string | null,
   ): Promise<RewoundSession>
+  /**
+   * For an agent with `rewindFiles`: stages the cut before the prompt `point` names as the edit
+   * goes back, which takes back the files changed since; `rewindSession` then commits it.
+   */
+  stageRewind?(sessionId: string, cwd: string, point: RewindPoint): Promise<void>
+  /** Clears what `stageRewind` staged, which returns the files it took back. */
+  unstageRewind?(sessionId: string, cwd: string): Promise<void>
 
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
   register(sessionId: string, target: SessionTarget): void

@@ -196,6 +196,7 @@ import {
   SideQuestionUnsupported,
   type AgentConnection,
   type ForkPoint,
+  type RewindPoint,
   type RewoundSession,
   type McpServer,
   type ModelTokens,
@@ -9766,8 +9767,14 @@ export class SessionManager {
     if (status === 'starting' || status === 'auth_required') throw busyError(status)
     if (!editable()) throw new HostError('restricted', t('rewind.notEligible'))
     const entry = live.thread.byId[entryId] as Extract<ThreadEntry, { kind: 'user' }>
-    const content = await this.composerCopy(live, entry.content)
     const at = live.thread.order.indexOf(entryId)
+    const point: RewindPoint = {
+      ref: entry.agentRef ?? null,
+      text: promptLine(entry.content),
+      occurrence: promptOccurrence(live.thread, at),
+    }
+    await this.stageRewind(live, point)
+    const content = await this.composerCopy(live, entry.content)
     const aside = live.thread.order.slice(at).flatMap((id) => {
       const item = live.thread.byId[id]
       const pos = live.positions.get(id)
@@ -9788,11 +9795,7 @@ export class SessionManager {
       turns: turnsFrom(live.thread, at) + (prior?.turns ?? 0),
       draft: prior?.draft ?? draft,
       used: prior ? prior.used : (live.thread.session.usage?.used ?? null),
-      point: {
-        ref: entry.agentRef ?? null,
-        text: promptLine(entry.content),
-        occurrence: promptOccurrence(live.thread, at),
-      },
+      point,
       ...(carry ? { carry } : {}),
       ...(stowed ? { lastTurn: stowed } : {}),
     }
@@ -9913,6 +9916,10 @@ export class SessionManager {
     if (live.rewinding || (live.turn && !live.turn.ended)) {
       throw busyError(live.thread.session.status)
     }
+    await this.unstageRewind(live)
+    if (live.record.rewound !== rewound || live.setAside !== aside) {
+      throw new HostError('restricted', t('rewind.nothing'))
+    }
     const from = aside[0]?.pos ?? live.nextPos
     // Entries added since, as a notice, follow the returned ones as they followed the cut.
     const later = live.thread.order.flatMap((id) => {
@@ -9948,6 +9955,49 @@ export class SessionManager {
         item.type !== 'ref' || item.ref.kind !== 'attachment' || held.has(item.ref.attachment.id),
     )
     return { draft }
+  }
+
+  /**
+   * An agent whose cut takes back the files stages it as the edit goes back, so the files go back
+   * with the turns; when that fails nothing has changed.
+   */
+  private async stageRewind(live: Live, point: RewindPoint): Promise<void> {
+    const connection = await this.fileRewinder(live)
+    if (!connection) return
+    try {
+      await connection.stageRewind!(live.record.acpSessionId, await this.cwdOf(live), point)
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
+  /** Put back clears what the edit staged, so the files it took back return with the turns. */
+  private async unstageRewind(live: Live): Promise<void> {
+    const connection = await this.fileRewinder(live)
+    if (!connection) return
+    try {
+      await connection.unstageRewind!(live.record.acpSessionId, await this.cwdOf(live))
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
+  /** The connection of an agent whose cut takes back the files, for a session it holds. */
+  private async fileRewinder(live: Live): Promise<AgentConnection | null> {
+    const { record } = live
+    if (record.acpSessionId === '') return null
+    if (!this.deps.agents.status(record.agentId).capabilities.rewindFiles) return null
+    const runtime = await this.deps.agents.ensureReady(record.agentId)
+    const { connection } = runtime
+    if (
+      !runtime.init.capabilities.rewindFiles ||
+      !connection.stageRewind ||
+      !connection.unstageRewind
+    ) {
+      const agent = this.deps.agents.name(record.agentId)
+      throw new HostError('restricted', t('rewind.unsupported', { agent }))
+    }
+    return connection
   }
 
   /** Cuts the agent's own session where an edit went back to, once, before anything else reaches it. */

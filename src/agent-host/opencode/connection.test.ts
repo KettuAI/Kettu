@@ -14,105 +14,10 @@ import {
   questionAnswer,
 } from './connection'
 import type { FormInfo, MessageInfo, ServerEvent } from './protocol'
-import { ServerError, type RunningServer, type ServerApi } from './server'
-import { CWD, TestThread, recorded, rootOf, storedMessages } from './testing'
+import { ServerError, type RunningServer } from './server'
+import { CWD, FakeServer, MODEL, TestThread, recorded, rootOf, storedMessages } from './testing'
 
-const MODEL = { id: 'deepseek-flash', providerID: 'deepseek' }
 const SES = 'ses_1'
-
-interface Sent {
-  method: string
-  path: string
-  body: unknown
-}
-
-type Route = (sent: Sent) => unknown
-
-/** A scripted server: it answers by the first route that matches, and sends what a test pushes. */
-class FakeServer {
-  readonly sent: Sent[] = []
-  streams = 0
-  private readonly routes: { method: string; path: RegExp; answer: Route }[] = []
-  private emit: ((event: ServerEvent) => void) | null = null
-  private end: (() => void) | null = null
-  private sessions = 0
-
-  constructor() {
-    this.on('GET', /^\/api\/model\/default/, () => ({ data: MODEL }))
-    this.on('GET', /^\/api\/model\?/, () => ({
-      data: [
-        {
-          ...MODEL,
-          name: 'DeepSeek Flash',
-          variants: [{ id: 'low' }, { id: 'high' }],
-          limit: { context: 1000 },
-          settings: { apiKey: 'sk-never-kept' },
-        },
-        { id: 'gpt', providerID: 'openai', name: 'GPT', variants: [{ id: 'high' }] },
-      ],
-    }))
-    this.on('GET', /^\/api\/agent\?/, () => ({
-      data: [
-        { id: 'build', name: 'Build', mode: 'primary' },
-        { id: 'plan', name: 'Plan', mode: 'primary', description: 'Read-only' },
-        { id: 'title', name: 'Title', mode: 'primary', hidden: true },
-        { id: 'explore', name: 'Explore', mode: 'subagent' },
-      ],
-    }))
-    this.on('GET', /^\/api\/command\?/, () => ({
-      data: [{ name: 'review', description: 'review' }],
-    }))
-    this.on('POST', /^\/api\/session$/, () => ({ data: this.info(`ses_${++this.sessions}`) }))
-    this.on('GET', /^\/api\/session\/active$/, () => ({ data: {} }))
-    this.on('GET', /^\/api\/session\/[^/]+$/, ({ path }) => ({
-      data: this.info(path.split('/')[3]!),
-    }))
-    this.on('GET', /\/instructions\/entries$/, () => ({ data: [] }))
-    this.on('GET', /\/(permission|form|inbox)$/, () => ({ data: [] }))
-    this.on('GET', /\/message\?/, () => ({ data: [], cursor: {} }))
-    this.on('POST', /\/interrupt$/, () => ({ interrupted: true }))
-  }
-
-  info(id: string): Record<string, unknown> {
-    return { id, time: { created: 1, updated: 2 }, location: { directory: CWD }, title: 'T' }
-  }
-
-  /** Answers a request, ahead of the routes set before. */
-  on(method: string, path: RegExp, answer: Route): void {
-    this.routes.unshift({ method, path, answer })
-  }
-
-  readonly api: ServerApi = {
-    request: async <T>(method: string, path: string, body?: unknown): Promise<T> => {
-      const sent = { method, path, body }
-      this.sent.push(sent)
-      const route = this.routes.find((item) => item.method === method && item.path.test(path))
-      return (route ? route.answer(sent) : undefined) as T
-    },
-    events: (onEvent, signal) =>
-      new Promise<void>((resolve) => {
-        this.streams++
-        this.emit = onEvent
-        this.end = resolve
-        signal.addEventListener('abort', () => resolve(), { once: true })
-        queueMicrotask(() => onEvent({ type: 'server.connected', data: {} }))
-      }),
-  }
-
-  push(...events: ServerEvent[]): void {
-    for (const event of events) this.emit?.(event)
-  }
-
-  /** Ends the stream, as a server that dropped it does. */
-  drop(): void {
-    this.emit = null
-    this.end?.()
-  }
-
-  posts(path: RegExp): Sent[] {
-    return this.sent.filter((sent) => sent.method !== 'GET' && path.test(sent.path))
-  }
-}
 
 /** A recorded stream as the session `sessionId` and its subagents would send it. */
 function as(events: readonly ServerEvent[], sessionId: string): ServerEvent[] {
@@ -190,6 +95,9 @@ describe('starting', () => {
       steering: true,
       ownTitles: 'sent',
       mcpHttp: true,
+      // An edit from a message goes back through OpenCode's revert, which takes the files too.
+      rewind: true,
+      rewindFiles: true,
     })
     // The stream is open before anything is sent, since it replays nothing.
     expect(server.streams).toBe(1)
@@ -1131,6 +1039,87 @@ describe('forks', () => {
     await expect(forked({ messageId: 'acp-7', text: 'Never said', occurrence: 1 })).rejects.toThrow(
       'no longer has that reply',
     )
+  })
+})
+
+describe('edit from a message', () => {
+  const HISTORY: MessageInfo[] = [
+    { type: 'user', id: 'msg_u1', text: 'one' },
+    { type: 'assistant', id: 'msg_a1', content: [{ type: 'text', text: 'First reply' }] },
+    { type: 'user', id: 'msg_u2', text: '<kettu-guide>\nguide\n</kettu-guide>\n\ntwo' },
+    { type: 'assistant', id: 'msg_a2', content: [{ type: 'text', text: 'Second reply' }] },
+    { type: 'user', id: 'msg_u3', text: 'two' },
+  ]
+  const point = (ref: string | null, text: string, occurrence = 1) => ({ ref, text, occurrence })
+  const changes = (setup: Setup) =>
+    setup.server.posts(/\/revert/).map((sent) => [sent.method, sent.path, sent.body])
+
+  it('hears the id OpenCode gives each prompt, for an edit to find it by', async () => {
+    const setup = await connect()
+    const { id } = await session(setup)
+    setup.server.on('POST', /\/prompt$/, () => {
+      queueMicrotask(() => setup.server.push(...as(recorded('turn'), id)))
+      return { data: { id: 'msg_u9', sessionID: id, type: 'user' } }
+    })
+    const heard: string[] = []
+    await setup.connection.prompt(id, text('Read note.txt'), (ref) => heard.push(ref))
+    expect(heard).toEqual(['msg_u9'])
+  })
+
+  it('stages the revert as the edit goes back, clears it for Put back and commits it', async () => {
+    const setup = await connect()
+    await setup.connection.stageRewind(SES, CWD, point('msg_u2', 'two'))
+    await setup.connection.unstageRewind(SES)
+    setup.server.on('GET', /^\/api\/session\/ses_1$/, () => ({
+      data: { ...setup.server.info(SES), revert: { messageID: 'msg_u2' } },
+    }))
+    expect(await setup.connection.rewindSession(SES, CWD, point('msg_u2', 'two'))).toEqual({
+      sessionId: SES,
+    })
+    expect(changes(setup)).toEqual([
+      ['POST', `/api/session/${SES}/revert/stage`, { messageID: 'msg_u2', files: true }],
+      ['DELETE', `/api/session/${SES}/revert`, undefined],
+      ['POST', `/api/session/${SES}/revert/commit`, undefined],
+    ])
+  })
+
+  it('finds by its text a message the session has under another id, or none', async () => {
+    const setup = await connect()
+    setup.server.on('GET', /\/message\?/, () => ({ data: HISTORY, cursor: {} }))
+    setup.server.on('POST', /\/revert\/stage$/, ({ body }) => {
+      if ((body as { messageID: string }).messageID !== 'msg_gone') return { data: body }
+      throw new ServerError(404, 'MessageNotFoundError', 'Message not found')
+    })
+    // A prompt the guide went ahead of still holds the line.
+    await setup.connection.stageRewind(SES, CWD, point('msg_gone', 'two', 2))
+    await setup.connection.stageRewind(SES, CWD, point(null, 'two', 1))
+    expect(changes(setup).map(([, , body]) => body)).toEqual([
+      { messageID: 'msg_gone', files: true },
+      { messageID: 'msg_u3', files: true },
+      { messageID: 'msg_u2', files: true },
+    ])
+    await expect(
+      setup.connection.stageRewind(SES, CWD, point(null, 'never sent')),
+    ).rejects.toMatchObject({ kind: 'agent_error', message: expect.stringMatching(/no longer/) })
+  })
+
+  it('stages a revert cleared elsewhere again without the files before it commits', async () => {
+    const setup = await connect()
+    await setup.connection.rewindSession(SES, CWD, point('msg_u2', 'two'))
+    expect(changes(setup)).toEqual([
+      ['POST', `/api/session/${SES}/revert/stage`, { messageID: 'msg_u2', files: false }],
+      ['POST', `/api/session/${SES}/revert/commit`, undefined],
+    ])
+  })
+
+  it('fails with OpenCode’s words when it is busy, staging nothing', async () => {
+    const setup = await connect()
+    setup.server.on('POST', /\/revert\/stage$/, () => {
+      throw new ServerError(409, 'SessionBusyError', 'Session is busy')
+    })
+    await expect(
+      setup.connection.stageRewind(SES, CWD, point('msg_u2', 'two')),
+    ).rejects.toMatchObject({ kind: 'agent_error', message: 'Session is busy' })
   })
 })
 

@@ -1,6 +1,11 @@
 import { rm } from 'node:fs/promises'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
+import type { HostedDriver } from './driver'
+import { OpenCodeConnection } from './opencode/connection'
+import type { ServerEvent } from './opencode/protocol'
+import { ServerError } from './opencode/server'
+import { FakeServer, recorded, rootOf } from './opencode/testing'
 import { FakeAppServer, FakeRpcError, threadResponse, turn } from './testing/fake-app-server'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 import { tempFolder } from './testing/temp'
@@ -196,4 +201,144 @@ it('refuses a message of an older thread its agent cannot cut', async () => {
   await expect(
     reopened.request('sessions.rewind', { sessionId: id, entryId: one.id, draft: [] }),
   ).rejects.toMatchObject({ code: 'restricted' })
+})
+
+/**
+ * OpenCode through its own server, scripted: each prompt becomes a user message with an id of its
+ * own, and the revert it stages, clears and commits is recorded with the prompts it drops.
+ */
+function openCode() {
+  const server = new FakeServer()
+  const prompts: { id: string; text: string }[] = []
+  server.on('POST', /\/prompt$/, ({ path, body }) => {
+    const sessionId = path.split('/')[3]!
+    const message = { id: `msg_u${prompts.length + 1}`, text: (body as { text: string }).text }
+    prompts.push(message)
+    const events = recorded('turn')
+    const turn = JSON.parse(
+      JSON.stringify(events).replaceAll(rootOf(events), sessionId),
+    ) as ServerEvent[]
+    queueMicrotask(() => server.push(...turn))
+    return { data: { id: message.id, sessionID: sessionId, type: 'user' } }
+  })
+  let staged: string | null = null
+  server.on('GET', /^\/api\/session\/ses_[^/]+$/, ({ path }) => {
+    const info = server.info(path.split('/')[3]!)
+    return { data: staged ? { ...info, revert: { messageID: staged } } : info }
+  })
+  server.on('POST', /\/revert\/stage$/, ({ body }) => {
+    staged = (body as { messageID: string }).messageID
+    return { data: { messageID: staged } }
+  })
+  server.on('DELETE', /\/revert$/, () => {
+    staged = null
+  })
+  server.on('POST', /\/revert\/commit$/, () => {
+    const at = prompts.findIndex((prompt) => prompt.id === staged)
+    if (at >= 0) prompts.splice(at)
+    staged = null
+  })
+  const driver: HostedDriver = {
+    kind: 'hosted',
+    connect: (context) =>
+      new OpenCodeConnection(context, async () => ({
+        api: server.api,
+        version: '2.3.2',
+        exited: new Promise<void>(() => {}),
+        stop: () => {},
+      })),
+  }
+  return { server, prompts, driver }
+}
+
+it('goes back in an OpenCode session with its files, puts them back, and commits at the next send', async () => {
+  const { server, prompts, driver } = openCode()
+  const host = await startTestHost({
+    fakeAs: ['opencode'],
+    programVersions: { opencode: '2.3.2' },
+    drivers: { 'opencode-server': driver },
+    sessionTimings: { checkpointMs: 10 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'opencode',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  const send = async (text: string) => {
+    await window.request('sessions.queue', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.until(
+      () => said(window.entries(id)).includes(text) && window.summary(id)?.status === 'ready',
+    )
+  }
+  await send('one')
+  await send('two')
+  // The button shows for OpenCode, and its confirmation says the files go back too.
+  const [status] = (await window.request('agents.list', undefined)).filter(
+    (agent) => agent.id === 'opencode',
+  )
+  expect(status?.capabilities).toMatchObject({ rewind: true, rewindFiles: true })
+  const two = entryOf(window, id, 'two')
+  expect(two).toMatchObject({ agentRef: 'msg_u2' })
+  const reverts = () =>
+    server.posts(/\/revert/).map((sent) => `${sent.method} ${sent.path.split('/').pop()}`)
+
+  // The revert is staged as the edit goes back, so OpenCode takes the files back at once.
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  expect(server.posts(/\/revert\/stage$/).map((sent) => sent.body)).toEqual([
+    { messageID: 'msg_u2', files: true },
+  ])
+  expect(said(window.entries(id))).toEqual(['one'])
+
+  // Put back clears it, which returns the files, and nothing is committed.
+  await window.request('sessions.putBack', { sessionId: id })
+  await window.until(() => said(window.entries(id)).includes('two'))
+  expect(reverts()).toEqual(['POST stage', 'DELETE revert'])
+
+  // Going back again and sending commits the revert before the new message goes.
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  await send('two again')
+  expect(reverts()).toEqual(['POST stage', 'DELETE revert', 'POST stage', 'POST commit'])
+  const order = server.sent.map((sent) => sent.path)
+  expect(order.findLastIndex((path) => path.endsWith('/prompt'))).toBeGreaterThan(
+    order.findLastIndex((path) => path.endsWith('/revert/commit')),
+  )
+  expect(prompts.map((prompt) => prompt.text.split('\n').at(-1))).toEqual(['one', 'two again'])
+  expect(said(window.entries(id))).toEqual(['one', 'two again'])
+  expect(window.thread(id).session.rewound).toBeNull()
+})
+
+it('keeps an OpenCode session as it was when its revert cannot be staged', async () => {
+  const { server, driver } = openCode()
+  server.on('POST', /\/revert\/stage$/, () => {
+    throw new ServerError(409, 'SessionBusyError', 'Session is busy')
+  })
+  const host = await startTestHost({
+    fakeAs: ['opencode'],
+    programVersions: { opencode: '2.3.2' },
+    drivers: { 'opencode-server': driver },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'opencode',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  await window.request('sessions.queue', {
+    sessionId: id,
+    content: [{ type: 'text', text: 'one' }],
+  })
+  await window.until(
+    () => said(window.entries(id)).includes('one') && window.summary(id)?.status === 'ready',
+  )
+  const one = entryOf(window, id, 'one')
+  await expect(
+    window.request('sessions.rewind', { sessionId: id, entryId: one.id, draft: [] }),
+  ).rejects.toMatchObject({ message: 'Session is busy' })
+  expect(said(window.entries(id))).toEqual(['one'])
+  expect(window.thread(id).session.rewound ?? null).toBeNull()
 })
