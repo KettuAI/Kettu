@@ -587,6 +587,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       reload: () => unsupported('show the browser'),
       stop: () => unsupported('show the browser'),
       openExternal: () => unsupported('show the browser'),
+      setPageSize: () => unsupported('show the browser'),
       freeze: async () => null,
       capture: async () => null,
       thaw: async () => {},

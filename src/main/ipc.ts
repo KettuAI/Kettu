@@ -29,7 +29,12 @@ import { isRelayHostId } from '@shared/remote/relay'
 import { parseOwnRelayInput } from './own-relay'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
-import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
+import {
+  PAGE_SIZE_NAMES,
+  type BrowserBounds,
+  type BrowserOriginDecision,
+  type PageSizeName,
+} from '@shared/browser'
 import { isAgentId } from '@shared/agents'
 import { isControlOutcome, type ControlAgent } from '@shared/control'
 import { isAgentColor } from '@shared/settings'
@@ -994,6 +999,13 @@ export function registerIpcHandlers({
   })
   handle('browser:stop', 1, (_, id) => browserViews.stop(sessionId(id)))
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
+  handle('browser:page-size', 2, async (_, id, size) => {
+    if (!(PAGE_SIZE_NAMES as readonly unknown[]).includes(size)) {
+      throw new Error('A page size must be desktop, tablet or phone')
+    }
+    const page = sessionId(id)
+    if (browserViews.paneControl(page)) await browserViews.setPageSize(page, size as PageSizeName)
+  })
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
   handle('browser:capture', 1, (_, id) => browserViews.capture(sessionId(id)))

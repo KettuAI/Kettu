@@ -3,14 +3,35 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
+  ComputerIcon,
   Globe02Icon,
   LinkSquare02Icon,
   ReloadIcon,
+  SmartPhone01Icon,
+  Tablet01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { fitViewport, type BrowserNotice, type BrowserViewport } from '@shared/browser'
+import {
+  fitViewport,
+  PAGE_SIZE_NAMES,
+  PAGE_SIZES,
+  SIZE_LINE_ROOM,
+  type BrowserNotice,
+  type BrowserViewport,
+  type PageSize,
+  type PageSizeName,
+} from '@shared/browser'
 import { onAppEvent } from '@renderer/app/events'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PaneBody, PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -227,6 +248,13 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   />
                 }
               />
+              {sessionId && (
+                <PageSizeMenu
+                  sessionId={sessionId}
+                  viewport={state.viewport}
+                  fills={!state.agentUsed}
+                />
+              )}
               <PanelButton
                 label={t('actions.openExternal')}
                 disabled={!url}
@@ -291,8 +319,77 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   )
 }
 
-/** How much room under the page's box its size line needs, in CSS pixels. */
-const SIZE_LINE_ROOM = 36
+const SIZE_ICONS = { desktop: ComputerIcon, tablet: Tablet01Icon, phone: SmartPhone01Icon }
+
+/**
+ * The size of the selected tab's page. Desktop lets a page no agent used fill the pane, and keeps
+ * one an agent used at the agent's size; a size the agent gave itself shows as custom.
+ */
+function PageSizeMenu({
+  sessionId,
+  viewport,
+  fills,
+}: {
+  sessionId: string
+  viewport: PageSize | null
+  /** At the desktop's size the page fills the pane, as one no agent used does. */
+  fills: boolean
+}) {
+  const { t } = useTranslation('browser')
+  const chosen = viewport?.name ?? 'desktop'
+  const label = t('viewport.menu')
+  const choose = (value: unknown) => {
+    if (!(PAGE_SIZE_NAMES as readonly unknown[]).includes(value) || value === chosen) return
+    void window.kettu.browser
+      .setPageSize(sessionId, value as PageSizeName)
+      .catch((error: unknown) => console.error('Could not resize the page', error))
+  }
+  const sizeOf = (size: BrowserViewport) =>
+    t('viewport.size', { width: size.width, height: size.height })
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <button type="button" aria-label={label} className="kp-tool app-region-no-drag" />
+              }
+            />
+          }
+        >
+          <PaneIcon icon={chosen === 'custom' ? ComputerIcon : SIZE_ICONS[chosen]} />
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{label}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={chosen} onValueChange={choose}>
+            {PAGE_SIZE_NAMES.map((name) => (
+              <DropdownMenuRadioItem key={name} value={name}>
+                <PaneIcon icon={SIZE_ICONS[name]} size={16} />
+                <span className="min-w-0 flex-1 truncate">{t(`viewport.${name}`)}</span>
+                <span className="shrink-0 text-small text-tertiary tabular-nums">
+                  {name === 'desktop' && fills ? t('viewport.fits') : sizeOf(PAGE_SIZES[name])}
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+            {viewport?.name === 'custom' && (
+              <DropdownMenuRadioItem value="custom" disabled>
+                <PaneIcon icon={ComputerIcon} size={16} />
+                <span className="min-w-0 flex-1 truncate">{t('viewport.custom')}</span>
+                <span className="shrink-0 text-small text-tertiary tabular-nums">
+                  {sizeOf(viewport)}
+                </span>
+              </DropdownMenuRadioItem>
+            )}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 /**
  * The box of a page that keeps its own size, where main draws it scaled inside the frame, and
@@ -315,7 +412,6 @@ function FittedPage({
     width: number
     height: number
     percent: number
-    room: number
   } | null>(null)
 
   useLayoutEffect(() => {
@@ -334,20 +430,20 @@ function FittedPage({
           radius: 0,
         },
         viewport,
+        Math.round(SIZE_LINE_ROOM * zoom),
       )
       const next = {
         left: bounds.x / zoom,
         width: bounds.width / zoom,
         height: bounds.height / zoom,
         percent: Math.round(scale * 100),
-        room: rect.height - bounds.height / zoom,
       }
       setBox((last) =>
         last &&
         last.left === next.left &&
         last.width === next.width &&
         last.height === next.height &&
-        last.room === next.room
+        last.percent === next.percent
           ? last
           : next,
       )
@@ -368,14 +464,12 @@ function FittedPage({
       >
         {still && <img src={still} alt="" aria-hidden className="kp-view__still" />}
       </div>
-      {box.room >= SIZE_LINE_ROOM && (
-        <Tooltip>
-          <TooltipTrigger render={<span className="kp-view__size" style={{ top: box.height }} />}>
-            {box.percent < 100 ? t('viewport.scaled', size) : t('viewport.size', size)}
-          </TooltipTrigger>
-          <TooltipContent>{t('viewport.hint')}</TooltipContent>
-        </Tooltip>
-      )}
+      <Tooltip>
+        <TooltipTrigger render={<span className="kp-view__size" style={{ top: box.height }} />}>
+          {box.percent < 100 ? t('viewport.scaled', size) : t('viewport.size', size)}
+        </TooltipTrigger>
+        <TooltipContent>{t('viewport.hint')}</TooltipContent>
+      </Tooltip>
     </>
   )
 }

@@ -66,6 +66,45 @@ describe('browser_tabs arguments', () => {
   })
 })
 
+describe('browser_resize arguments', () => {
+  it.each([
+    [{ size: 'desktop' }, { size: 'desktop' }],
+    [{ size: 'tablet' }, { size: 'tablet' }],
+    [{ size: 'phone' }, { size: 'phone' }],
+    [
+      { width: 1440, height: 900 },
+      { width: 1440, height: 900 },
+    ],
+    [
+      { width: 320, height: 2560 },
+      { width: 320, height: 2560 },
+    ],
+  ])('forwards %j to main as %j', async (input, args) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_resize', input)
+    expect(result.isError).toBeUndefined()
+    expect(call.mock.calls[0][0]).toMatchObject({ tool: 'browser_resize', args })
+  })
+
+  it.each([
+    [{}, /Give size/],
+    [{ size: 'watch' }, /desktop, tablet or phone/],
+    [{ size: 'phone', width: 390 }, /not both/],
+    [{ width: 1440 }, /width and height must both/],
+    [{ width: 319, height: 800 }, /320 to 2560/],
+    [{ width: 1280, height: 2561 }, /320 to 2560/],
+    [{ width: 1280.5, height: 800 }, /whole numbers/],
+    [{ width: '1280', height: '800' }, /whole numbers/],
+    [{ size: 'phone', mobile: true }, /Unknown argument mobile/],
+  ])('refuses %j before main sees it', async (input, message) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_resize', input)
+    expect(result.structuredContent).toMatchObject({ code: 'invalid' })
+    expect(String((result.content[0] as { text: string }).text)).toMatch(message)
+    expect(call).not.toHaveBeenCalled()
+  })
+})
+
 describe('an agent using a tab the user opened', () => {
   /** Main says the call needs the user's tab "t2" until a call brings the allow for it. */
   function userTab(access: Partial<NonNullable<BrowserToolsDeps['access']>> = {}) {

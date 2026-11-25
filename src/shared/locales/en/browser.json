@@ -129,7 +129,13 @@
   "viewport": {
     "size": "{{width}} × {{height}}",
     "scaled": "{{width}} × {{height}} · {{percent}}%",
-    "hint": "This page keeps its own size. Resizing the panel only scales it."
+    "hint": "This page keeps its own size. Resizing the panel only scales it.",
+    "menu": "Page size",
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "phone": "Phone",
+    "custom": "Custom",
+    "fits": "Fits the panel"
   },
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",

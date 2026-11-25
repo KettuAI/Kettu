@@ -129,7 +129,13 @@
   "viewport": {
     "size": "{{width}} × {{height}}",
     "scaled": "{{width}} × {{height}} · {{percent}}%",
-    "hint": "这个页面保持自己的尺寸，调整面板只会缩放显示。"
+    "hint": "这个页面保持自己的尺寸，调整面板只会缩放显示。",
+    "menu": "页面尺寸",
+    "desktop": "桌面",
+    "tablet": "平板",
+    "phone": "手机",
+    "custom": "自定义",
+    "fits": "跟随面板"
   },
   "notice": {
     "downloadBlocked": "Kettu 的浏览器会拦截下载",

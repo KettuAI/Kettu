@@ -19,25 +19,86 @@ export interface BrowserViewport {
   height: number
 }
 
+/** The sizes a page can be given by name, by an agent's `browser_resize` or the pane's menu. */
+export const PAGE_SIZE_NAMES = ['desktop', 'tablet', 'phone'] as const
+export type PageSizeName = (typeof PAGE_SIZE_NAMES)[number]
+
+/** A size a page keeps, and whether it lays out there as a phone or a tablet does. */
+export interface PageSize extends BrowserViewport {
+  /** Which named size it is; custom for a width and height an agent gave. */
+  name: PageSizeName | 'custom'
+  /** Touch, a mobile browser's user agent and the page's own viewport tag. */
+  mobile: boolean
+}
+
+export const PAGE_SIZES: Record<PageSizeName, PageSize> = {
+  desktop: { name: 'desktop', width: 1280, height: 800, mobile: false },
+  tablet: { name: 'tablet', width: 768, height: 1024, mobile: true },
+  phone: { name: 'phone', width: 390, height: 844, mobile: true },
+}
+
 /**
- * The size the pages an agent uses lay out at. It never follows the pane, so the page an agent
- * reads and clicks stays as it is while the user resizes what is around it.
+ * The size the pages an agent uses lay out at until it or the user picks another. It never follows
+ * the pane, so the page an agent reads and clicks stays as it is while the user resizes around it.
  */
-export const AGENT_VIEWPORT: BrowserViewport = { width: 1280, height: 800 }
+export const AGENT_VIEWPORT: PageSize = PAGE_SIZES.desktop
+
+/** The sides of a size an agent gives itself, in CSS pixels. */
+export const MIN_PAGE_SIDE = 320
+export const MAX_PAGE_SIDE = 2560
+
+/** The size `browser_resize`'s arguments ask for, or what is wrong with them. */
+export function pageSizeOf(args: Record<string, unknown>): PageSize | { error: string } {
+  const { size, width, height } = args
+  if (size !== undefined) {
+    if (width !== undefined || height !== undefined) {
+      return { error: 'Give size, or width and height, not both.' }
+    }
+    if (!(PAGE_SIZE_NAMES as readonly unknown[]).includes(size)) {
+      return { error: 'size must be desktop, tablet or phone.' }
+    }
+    return PAGE_SIZES[size as PageSizeName]
+  }
+  const side = (value: unknown): value is number =>
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= MIN_PAGE_SIDE &&
+    value <= MAX_PAGE_SIDE
+  if (width === undefined && height === undefined) {
+    return { error: 'Give size (desktop, tablet or phone), or width and height.' }
+  }
+  if (!side(width) || !side(height)) {
+    return {
+      error: `width and height must both be whole numbers from ${MIN_PAGE_SIDE} to ${MAX_PAGE_SIDE}.`,
+    }
+  }
+  return { name: 'custom', width, height, mobile: false }
+}
+
+/** Whether two sizes lay a page out the same. */
+export function samePageSize(a: PageSize | null, b: PageSize | null): boolean {
+  if (a === null || b === null) return a === b
+  return a.name === b.name && a.width === b.width && a.height === b.height && a.mobile === b.mobile
+}
+
+/** The room kept under a page of a fixed size for the line with its size, in CSS pixels. */
+export const SIZE_LINE_ROOM = 36
 
 /**
  * Where a page of a fixed size shows in the pane's frame: whole, scaled down to fit and never
- * enlarged, at the top and centred. `scale` is exact for the box's width, so the page's picture
- * ends where the box does.
+ * enlarged, at the top and centred, with `below` of the frame's height kept free under it. `scale`
+ * is exact for the box's width, so the page's picture ends where the box does.
  */
 export function fitViewport(
   frame: BrowserBounds,
   viewport: BrowserViewport,
+  below = 0,
 ): { bounds: BrowserBounds; scale: number } {
-  const fit = Math.min(1, frame.width / viewport.width, frame.height / viewport.height)
+  const room = Math.max(1, frame.height - below)
+  const fit = Math.min(1, frame.width / viewport.width, room / viewport.height)
   const width = Math.max(1, Math.floor(viewport.width * fit))
   const scale = width / viewport.width
-  const height = Math.max(1, Math.min(frame.height, Math.round(viewport.height * scale)))
+  const height = Math.max(1, Math.min(room, Math.round(viewport.height * scale)))
   return {
     bounds: {
       x: frame.x + Math.floor((frame.width - width) / 2),
@@ -127,7 +188,9 @@ export interface BrowserState {
   /** Whether the selected tab has a page, which main shows even before it has an address. */
   page: boolean
   /** The size the selected tab's page keeps; null when it fills the pane's frame. */
-  viewport: BrowserViewport | null
+  viewport: PageSize | null
+  /** An agent used the selected tab, so at the desktop's size it keeps one rather than filling. */
+  agentUsed: boolean
   title: string | null
   loading: boolean
   canGoBack: boolean
@@ -157,6 +220,7 @@ export const BROWSER_TOOL_NAMES = [
   'browser_evaluate',
   'browser_ask_user',
   'browser_tabs',
+  'browser_resize',
 ] as const
 
 /** What `browser_tabs` does. */
