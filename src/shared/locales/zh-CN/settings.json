@@ -942,6 +942,13 @@
     "signInRow": "登录",
     "signInRowHint": "由 Harness 自己在终端里登录，Kettu 不经手凭据。",
     "signInAgain": "在终端中重新登录",
+    "signInEnds": {
+      "name": "登录到期",
+      "days": "{{latest}}前（最早可能 {{earliest}}）· 还有 {{from}}–{{to}} 天",
+      "atMost_other": "{{latest}}前（最早可能 {{earliest}}）· 最多还有 {{count}} 天",
+      "today": "{{latest}}前（最早可能 {{earliest}}）· 最晚今天到期",
+      "ended": "可能已过期"
+    },
     "empty": {
       "title": "还没有智能体",
       "description": "添加第一个智能体开始使用。如果它的 Harness 还没安装，Kettu 会先帮你安装。",

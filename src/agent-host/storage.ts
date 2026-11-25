@@ -1183,6 +1183,7 @@ function accountOf(value: unknown): AgentAccount | null {
     label: value.label,
     email: isString(value.email) ? value.email : null,
     ...(isString(value.tier) ? { tier: value.tier } : {}),
+    ...(isTime(value.signInEnds) ? { signInEnds: value.signInEnds } : {}),
   }
 }
 

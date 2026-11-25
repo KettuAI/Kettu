@@ -91,6 +91,8 @@ export interface SessionTarget {
 export interface ConnectionHooks {
   traffic(direction: 'in' | 'out', message: unknown): void
   account(account: AgentAccount): void
+  /** When the agent's stored subscription sign-in ends at the latest, as a turn's result says. */
+  signInEnds?(at: number): void
   /** The providers an agent that signs in to each one itself lists models from (Pi). */
   modelProviders?(providers: ModelProvider[]): void
   /**

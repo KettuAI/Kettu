@@ -820,6 +820,8 @@
         "fix": "Fix",
         "failed": "Failed",
         "signIn": "Sign in",
+        "signInEnding": "Sign-in ending",
+        "signInEnded": "Sign-in may have ended",
         "installing": "Installing…",
         "setsUp": "Sets up",
         "noBalance": "No balance",

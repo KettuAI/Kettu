@@ -75,6 +75,7 @@ import { InsecureCard } from './insecure-card'
 import { RemoteOfferCard } from './remote-offer-card'
 import { useRemoteOffer } from './use-remote-offer'
 import { signInLabel, useNotices } from './notices'
+import { SignInEndCard } from './sign-in-end-card'
 import { NoProjectMenuItems, ProjectMenuItems } from './project-menu'
 import { RemoveProjectDialog } from './remove-project'
 import { GroupRenameHints } from './rename-hints'
@@ -803,11 +804,12 @@ function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
 }
 
 /**
- * The cards over the account row: the web client's insecure page, agents that need sign-in, the
- * offer to turn remote access on and one update card for Kettu and the harnesses, never stacked.
+ * The cards over the account row: the web client's insecure page, agents that need sign-in, a
+ * sign-in that ends soon, the offer to turn remote access on and one update card for Kettu and the
+ * harnesses, never stacked.
  */
 export function SidebarNotices() {
-  const { signIn } = useNotices()
+  const { signIn, signInEnd } = useNotices()
   const { card, items, batch } = useUpdates()
   const insecure = useInsecureState() === 'shown'
   const offer = useRemoteOffer()
@@ -815,9 +817,10 @@ export function SidebarNotices() {
     <>
       {insecure && <InsecureCard />}
       {signIn.length > 0 && <SignInCard names={signIn} />}
+      {signInEnd && <SignInEndCard card={signInEnd} />}
       {offer && <RemoteOfferCard offer={offer} />}
       {card && <UpdateCardView card={card} items={items} batch={batch} />}
-      <StarCard blocked={insecure || signIn.length > 0 || !!offer || !!card} />
+      <StarCard blocked={insecure || signIn.length > 0 || !!signInEnd || !!offer || !!card} />
     </>
   )
 }

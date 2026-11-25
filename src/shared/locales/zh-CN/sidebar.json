@@ -315,6 +315,14 @@
     "noticesName": "通知：{{list}}",
     "listSeparator": "，"
   },
+  "signInEnds": {
+    "inDays_other": "{{name}} 登录 {{count}} 天后到期",
+    "anyDay": "{{name}} 登录随时可能到期",
+    "ended": "{{name}} 登录可能已过期",
+    "detail": "登录最晚 {{latest}}到期，最早可能 {{earliest}}。重新登录即可续期。",
+    "endedDetail": "登录最晚应在 {{latest}}到期，现在可能已经失效。重新登录后才能继续使用。",
+    "signIn": "重新登录"
+  },
   "countdown": {
     "minutes": "{{count}} 分钟",
     "hours": "{{count}} 小时",

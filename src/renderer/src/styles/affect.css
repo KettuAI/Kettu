@@ -4350,6 +4350,12 @@ li[data-row-exit='dust'] > * {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+:is(.kettu-settings, .kettu-sd) .k-fact[data-wide] {
+  max-width: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-fact[data-tone='warning'] {
+  color: var(--warning);
+}
 :is(.kettu-settings, .kettu-sd) .k-wrap {
   flex-wrap: wrap;
 }

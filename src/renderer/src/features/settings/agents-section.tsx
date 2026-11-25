@@ -40,7 +40,6 @@ import {
   type AgentColor,
 } from '@shared/settings'
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
-import { newSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
@@ -58,15 +57,13 @@ import {
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
-import { toast } from '@renderer/components/ui/toast'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { programCopy } from '@renderer/features/agents/harness-problem'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
-import { focusedPane } from '@renderer/features/split/layout'
+import { agentSignInEnd, signInEndValue } from '@renderer/features/agents/sign-in-end'
+import { signInTerminal } from '@renderer/features/agents/sign-in-terminal'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
-import { hostOfPath } from '@renderer/lib/host-paths'
-import { i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -85,20 +82,8 @@ import {
   type AgentsStoreHook,
 } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
-import { createTerminal } from '@renderer/stores/terminals'
-import {
-  closeSettings,
-  newSessionPanel,
-  openAgentSettings,
-  openHarnessSettings,
-  openMarketplace,
-  panelOf,
-  sessionsShown,
-  toggleTerminal,
-  useViewStore,
-} from '@renderer/stores/view'
+import { openAgentSettings, openHarnessSettings, openMarketplace } from '@renderer/stores/view'
 import {
   Fact,
   ListMeter,
@@ -113,7 +98,6 @@ import {
   currentLimits,
   FOLLOW_AGENT,
   harnessVersion,
-  signInFolder,
   startModeView,
   useAction,
   useAgentReads,
@@ -179,42 +163,6 @@ function listed(agents: AgentsStoreHook, agentId: AgentId): Promise<void> {
       stop()
       resolve()
     })
-  })
-}
-
-/**
- * Runs the agent's terminal sign-in in the built-in terminal of the side panel in view, when it
- * works in a folder of this computer, else of New session in one; copies the command without one.
- */
-function signInTerminal(status: AgentStatus, command: string): void {
-  const view = useViewStore.getState()
-  const focused = focusedPane(view.layout).view
-  const here =
-    sessionsShown(view.main) && focused.projectPath && hostOfPath(focused.projectPath) === null
-      ? { projectPath: focused.projectPath, panel: panelOf(focused) }
-      : null
-  const projectPath =
-    here?.projectPath ??
-    signInFolder({
-      selected: view.projectPath,
-      projects: useProjectsStore.getState().projects,
-      sessions: useSessionsStore.getState().byId,
-    })
-  if (!projectPath) {
-    void navigator.clipboard.writeText(command).then(
-      () => toast(i18n.t('settings:agents.signInCopied')),
-      () => toast(i18n.t('settings:agents.signInCopyFailed'), undefined, { tone: 'warning' }),
-    )
-    return
-  }
-  closeSettings()
-  if (!here) newSession(projectPath)
-  const panel = here?.panel ?? newSessionPanel(projectPath)
-  toggleTerminal(panel, true)
-  void createTerminal(projectPath, panel, undefined, {
-    text: command,
-    run: true,
-    signInAgent: status.id,
   })
 }
 
@@ -915,6 +863,26 @@ function AgentEnvKeyRow({
   )
 }
 
+/** When the subscription sign-in ends; nothing for an agent that reports no end. */
+function SignInEndRow({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('settings')
+  const now = useNow()
+  const end = agentSignInEnd(status, now)
+  if (!end) return null
+  return (
+    <RowFrame text={<RowText name={t('agents.signInEnds.name')} />}>
+      <span
+        className="k-fact"
+        data-wide=""
+        data-tone={end.phase === 'ended' ? 'warning' : undefined}
+        data-selectable=""
+      >
+        {signInEndValue(end, now)}
+      </span>
+    </RowFrame>
+  )
+}
+
 function AgentPageBody({ status }: { status: AgentStatus }) {
   const { hostId, request } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
@@ -1090,6 +1058,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     />
                   )),
                 )}
+              <SignInEndRow status={status} />
               {((terminalSignIn && hostId === null) ||
                 (status.canLogout && status.signIn === 'signed-in')) && (
                 <RowFrame

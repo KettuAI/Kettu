@@ -828,6 +828,22 @@ describe('the host files', () => {
       version: 1,
       agents: { 'claude-code': { account: { ...account, tier: '5x' }, limits: [] } },
     })
+    // When a subscription sign-in ends is kept as a time, and dropped as anything else.
+    const ends = Date.parse('2026-12-02T13:46:01.033Z')
+    expect(
+      parseAgentsFile({
+        agents: {
+          'claude-code': { account: { ...account, signInEnds: ends }, limits: [] },
+          codex: { account: { ...account, signInEnds: '2026-12-02' }, limits: [] },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        'claude-code': { account: { ...account, signInEnds: ends }, limits: [] },
+        codex: { account, limits: [] },
+      },
+    })
     const init = { version: '0.94.0', capabilities: { forkSession: true, steering: 'yes' } }
     expect(
       parseAgentsFile({

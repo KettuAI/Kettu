@@ -5,6 +5,7 @@ import type { AgentStatus, PlanLimit, ProviderBalance } from '@shared/agent-host
 import { holdingLimit } from '@shared/plan-limits'
 import type { ConfigOption } from '@shared/thread'
 import { harnessProblem } from '@renderer/features/agents/harness-problem'
+import { agentSignInEnd, signInEndSentence } from '@renderer/features/agents/sign-in-end'
 import { limitPhrase, limitShort, limitShortScope, resetDay, resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
@@ -100,10 +101,10 @@ export function limitsOf(
 
 /**
  * The tag of an agent's row, the first of these that applies: a version Kettu's checks reject,
- * what the agent needs before it starts, a used-up balance, a used-up plan window that extra usage
- * covers, a used-up plan window, a window at 90% or more. `limits` are the account's newest
- * reading and `model` the one a new session starts on, since a window of another model does not
- * hold it back. Null when nothing is wrong.
+ * what the agent needs before it starts, a used-up balance, a sign-in past its end, a used-up plan
+ * window that extra usage covers, a used-up plan window, a window at 90% or more, a sign-in that
+ * ends soon. `limits` are the account's newest reading and `model` the one a new session starts
+ * on, since a window of another model does not hold it back. Null when nothing is wrong.
  */
 export function agentTag(
   status: AgentStatus,
@@ -180,8 +181,16 @@ export function agentTag(
       t('session:newSession.picker.balanceUsedUp'),
     )
   }
+  const end = agentSignInEnd(status, now)
+  if (end?.phase === 'ended') {
+    return tag(t('session:newSession.picker.tag.signInEnded'), 'attention', signInEndSentence(end))
+  }
   const held = holdingLimit(limitsOf(status, options.limits, model), model, now)
-  if (!held) return null
+  if (!held) {
+    return end?.phase === 'soon'
+      ? tag(t('session:newSession.picker.tag.signInEnding'), 'attention', signInEndSentence(end))
+      : null
+  }
   const limit = plain(held.limit)
   const window = limitShort(limit)
   const scope = limitShortScope(limit)

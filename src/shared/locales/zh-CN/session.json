@@ -796,6 +796,8 @@
         "fix": "解决",
         "failed": "失败",
         "signIn": "登录",
+        "signInEnding": "登录快到期",
+        "signInEnded": "登录可能已过期",
         "installing": "正在安装…",
         "setsUp": "待配置",
         "noBalance": "余额用完",
