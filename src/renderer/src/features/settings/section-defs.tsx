@@ -53,7 +53,17 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { pageRow } from '@renderer/features/sidebar/sidebar-pages'
-import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
+import {
+  AboutHero,
+  AutomaticUpdates,
+  ContactEmailText,
+  CopyContactEmail,
+  DownloadSource,
+  FollowOnX,
+  NewIssue,
+  NoUpdates,
+  UpdateRow,
+} from './about-section'
 import { useIdleSessionRows } from './idle-sessions'
 import { IslandSwitch } from './island-row'
 import { useIslandDescription } from './island-state'
@@ -1060,6 +1070,7 @@ export function useAboutSection(): SectionDef {
   const githubOnly = useGitHubOnly()
   const cloudOffHere = useCloudOffHere()
   const updates = group('updates', t('about.groups.updates'))
+  const contact = group('contact', t('about.groups.contact'))
   return {
     id: 'about',
     title: t('sections.about'),
@@ -1095,6 +1106,15 @@ export function useAboutSection(): SectionDef {
               render: () => <DownloadSource />,
             },
           ] satisfies RowDef[])),
+      { id: 'issues', setting: 'about.issues', group: contact, render: () => <NewIssue /> },
+      {
+        id: 'email',
+        setting: 'about.email',
+        rich: <ContactEmailText />,
+        group: contact,
+        render: () => <CopyContactEmail />,
+      },
+      { id: 'x', setting: 'about.x', group: contact, render: () => <FollowOnX /> },
       {
         id: 'github',
         setting: 'about.github',

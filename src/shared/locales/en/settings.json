@@ -1243,8 +1243,27 @@
       "name": "GitHub",
       "keywords": "source code repository license issue bug report"
     },
+    "issues": {
+      "name": "Bugs and suggestions",
+      "description": "Open an issue on GitHub, in any language.",
+      "keywords": "feedback contact bug feature request suggestion issue",
+      "open": "New issue"
+    },
+    "email": {
+      "name": "Email",
+      "description": "hello@kettu.sh",
+      "keywords": "email mail contact address feedback",
+      "copy": "Copy address"
+    },
+    "x": {
+      "name": "X",
+      "description": "@KettuAI",
+      "keywords": "x twitter follow news contact",
+      "open": "Follow"
+    },
     "groups": {
-      "updates": "Updates"
+      "updates": "Updates",
+      "contact": "Contact us"
     }
   },
   "pages": {
@@ -1259,7 +1278,7 @@
     "git": "The top bar’s branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
-    "about": "Kettu’s version and updates.",
+    "about": "Kettu’s version, updates and how to reach us.",
     "archived": "Off the sidebar but kept. Restore one to put it back where it was.",
     "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
     "sharing": "Publish artifacts to links, on Kettu or through your own Cloudflare account; choose who can open a page on Kettu.",
