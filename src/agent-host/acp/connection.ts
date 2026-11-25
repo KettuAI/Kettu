@@ -73,8 +73,10 @@ import {
   antigravityTierSignIn,
 } from '../vendor-usage/antigravity'
 import {
+  GOOSE_SESSION_UPDATE,
   KNOWN_UPDATES,
   chunkTokens,
+  gooseCallUsage,
   mapAuthStatus,
   mapReportedAuthStatus,
   mapConfig,
@@ -222,6 +224,12 @@ const CLIENT_CAPABILITIES = {
   // Kilo publishes its terminal sign-in command only to a client that advertises this, and Mistral
   // Vibe its sign-in whose page the client opens.
   _meta: { 'terminal-auth': true, [DELEGATED_SIGN_IN]: true },
+}
+
+/** goose reports each model call's usage only to a client that takes its own notifications. */
+const GOOSE_CLIENT_CAPABILITIES = {
+  ...CLIENT_CAPABILITIES,
+  _meta: { ...CLIENT_CAPABILITIES._meta, goose: { customNotifications: true } },
 }
 
 type AuthMethodMeta = {
@@ -431,6 +439,8 @@ export class AcpConnection implements AgentConnection {
   private readonly prompting = new Set<string>()
   /** The tokens of the model calls of each prompt in flight, as its message chunks carried them. */
   private readonly chunkUsage = new Map<string, TokenTotals>()
+  /** goose's model calls of each prompt in flight, from its own notifications, by message id. */
+  private readonly gooseCalls = new Map<string, { tokens: TokenTotals | null; ids: Set<string> }>()
   /** agy's plan files, by session. */
   private readonly agyPlans = new Map<string, AgyPlans>()
   /** The mode each agy session was in before it entered Plan mode, which a plan builds in. */
@@ -556,6 +566,12 @@ export class AcpConnection implements AgentConnection {
           else hooks.ignored(null, '_auth/status_update with an unknown shape')
         },
       )
+      // Only its per-call usage is read; its status, context and voice updates are not shown.
+      .onNotification(
+        GOOSE_SESSION_UPDATE,
+        (params: unknown) => params,
+        (ctx) => this.countGooseCall(ctx.params),
+      )
       .onNotification('*', (ctx) => {
         // `$/cancel_request` is handled by the SDK itself before it reaches here.
         if (!ctx.method.startsWith('$/')) hooks.ignored(null, `notification ${ctx.method}`)
@@ -642,6 +658,10 @@ export class AcpConnection implements AgentConnection {
     return this.hooks.agentId === 'antigravity'
   }
 
+  private get goose(): boolean {
+    return this.hooks.agentId === 'goose'
+  }
+
   private map(update: SessionUpdate, ctx: MapperContext): MapperOutput {
     if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
       return mapSessionUpdate(update, ctx)
@@ -704,6 +724,23 @@ export class AcpConnection implements AgentConnection {
     const tokens = chunkTokens(update)
     if (!tokens) return
     this.chunkUsage.set(sessionId, addTokenTotals(this.chunkUsage.get(sessionId) ?? null, tokens))
+  }
+
+  /** Adds a model call of a goose turn in flight, each message once, never a replayed one's. */
+  private countGooseCall(params: unknown): void {
+    const sessionId = (params as { sessionId?: unknown } | null | undefined)?.sessionId
+    if (typeof sessionId !== 'string' || !this.prompting.has(sessionId)) return
+    if (this.targets.get(sessionId)?.context().replaying) return
+    const call = gooseCallUsage(params)
+    if (!call) return
+    const turn = this.gooseCalls.get(sessionId) ?? { tokens: null, ids: new Set<string>() }
+    if (call.messageId !== null) {
+      if (turn.ids.has(call.messageId)) return
+      turn.ids.add(call.messageId)
+    }
+    const tokens = mapTokenTotals(call.usage)
+    if (tokens) turn.tokens = addTokenTotals(turn.tokens, tokens)
+    this.gooseCalls.set(sessionId, turn)
   }
 
   private learnChild(sessionId: string, update: SessionUpdate): void {
@@ -821,7 +858,9 @@ export class AcpConnection implements AgentConnection {
           clientInfo: { name: 'Kettu', title: 'Kettu', version: appVersion },
           clientCapabilities: this.agy
             ? { ...CLIENT_CAPABILITIES, elicitation: AGY_ELICITATION }
-            : CLIENT_CAPABILITIES,
+            : this.goose
+              ? GOOSE_CLIENT_CAPABILITIES
+              : CLIENT_CAPABILITIES,
         },
         signal ? { cancellationSignal: signal } : undefined,
       ),
@@ -1103,6 +1142,7 @@ export class AcpConnection implements AgentConnection {
     this.subagents?.forget(sessionId)
     this.agyMetrics?.forget(sessionId)
     this.chunkUsage.delete(sessionId)
+    this.gooseCalls.delete(sessionId)
   }
 
   async listSessions(
@@ -1139,8 +1179,10 @@ export class AcpConnection implements AgentConnection {
     }
     this.prompting.add(sessionId)
     this.chunkUsage.delete(sessionId)
+    this.gooseCalls.delete(sessionId)
     let answer: ChainAnswer | null = null
     let chunked: TokenTotals | null
+    let called: TokenTotals | null
     let failed = false
     try {
       await this.agyMetrics?.preparePrompt(sessionId)
@@ -1168,6 +1210,8 @@ export class AcpConnection implements AgentConnection {
       this.prompting.delete(sessionId)
       chunked = this.chunkUsage.get(sessionId) ?? null
       this.chunkUsage.delete(sessionId)
+      called = this.gooseCalls.get(sessionId)?.tokens ?? null
+      this.gooseCalls.delete(sessionId)
       const aborted = failed || answer?.response.stopReason === 'cancelled'
       this.carryCommands(sessionId, aborted)
       this.subagents?.turnEnded(sessionId)
@@ -1176,8 +1220,9 @@ export class AcpConnection implements AgentConnection {
     const { response, tokens, models } = answer!
     const result: PromptResult = {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
-      // What the response reports wins, so a call is never counted from both.
-      tokens: tokens ?? (models.length === 0 ? chunked : null),
+      // What the response reports wins, so a call is never counted from both; goose's response
+      // holds only its latest call, so the sum of its calls wins there.
+      tokens: (this.goose ? called : null) ?? tokens ?? (models.length === 0 ? chunked : null),
       models,
     }
     this.agyMetrics?.onPromptEnd(sessionId, result.stopReason)

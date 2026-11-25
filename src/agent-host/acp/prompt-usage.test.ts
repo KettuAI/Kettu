@@ -107,3 +107,154 @@ describe('a turn of an ACP agent', () => {
     expect(first.tokens).toBeNull()
   })
 })
+
+/** goose's own notification of one model call, its input holding the call's cache reads. */
+const gooseCall = (messageId: string, usage: Record<string, number>) => ({
+  update: { sessionUpdate: 'message_usage', messageId, usage: { ...usage, isCompaction: false } },
+})
+
+/** goose's other updates of its own, which are read for nothing. */
+const gooseOther = [
+  {
+    update: {
+      sessionUpdate: 'usage_update',
+      used: 12950,
+      contextLimit: 200000,
+      accumulatedInputTokens: 24800,
+      accumulatedOutputTokens: 450,
+    },
+  },
+  { update: { sessionUpdate: 'status_message', status: { type: 'notice', message: 'Compacted' } } },
+  {
+    update: {
+      sessionUpdate: 'live_voice_interaction_ended',
+      interactionId: 'l1',
+      outcome: 'stopped',
+    },
+  },
+]
+
+/**
+ * A turn of an agent that, as goose does, sends its own notifications only to a client whose
+ * initialize declares them, and reports only the latest model call on its prompt response.
+ */
+async function gooseTurn(
+  agentId: 'goose' | 'qwen',
+  notes: readonly object[],
+  latest: { inputTokens: number; outputTokens: number; totalTokens: number },
+) {
+  let declared = false
+  const ignored: string[] = []
+  const app = agent({ name: 'prompt-usage-test' })
+    .onRequest(methods.agent.initialize, (ctx) => {
+      const meta = ctx.params.clientCapabilities?._meta as
+        { goose?: { customNotifications?: boolean } } | undefined
+      declared = meta?.goose?.customNotifications === true
+      return {
+        protocolVersion: 1,
+        agentCapabilities: {},
+        agentInfo: { name: agentId, version: '1.0.0' },
+      }
+    })
+    .onRequest(methods.agent.session.new, () => ({ sessionId: 's-1' }))
+    .onRequest(methods.agent.session.prompt, async (ctx) => {
+      await ctx.client.notify(methods.client.session.update, {
+        sessionId: ctx.params.sessionId,
+        update: text('Done.'),
+      })
+      for (const note of notes) {
+        await ctx.client.notify('_goose/unstable/session/update', {
+          sessionId: ctx.params.sessionId,
+          ...note,
+        })
+      }
+      return { stopReason: 'end_turn' as const, usage: latest }
+    })
+  const connection = AcpConnection.connect(inProcessTransport(app), {
+    traffic: () => {},
+    account: () => {},
+    ignored: (_sessionId, what) => ignored.push(what),
+    log: () => {},
+    agentId,
+  })
+  const target = {
+    context: () => ({ replaying: false }),
+    apply: () => {},
+  } as unknown as SessionTarget
+  await connection.initialize('1.0.0')
+  const { sessionId } = await connection.newSession('/tmp/probe')
+  connection.register(sessionId, target)
+  const first = await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+  connection.close()
+  return { declared, first, ignored }
+}
+
+const firstCall = {
+  inputTokens: 12000,
+  outputTokens: 300,
+  totalTokens: 12300,
+  cacheReadTokens: 10000,
+}
+const lastCall = {
+  inputTokens: 12800,
+  outputTokens: 150,
+  totalTokens: 12950,
+  cacheReadTokens: 12000,
+  cacheWriteTokens: 200,
+}
+// goose 1.x's prompt response: the latest call's input, output and total only.
+const latest = { inputTokens: 12800, outputTokens: 150, totalTokens: 12950 }
+const bothCalls = {
+  total: 25250,
+  input: 2600,
+  output: 450,
+  thought: null,
+  cacheRead: 22000,
+  cacheWrite: 200,
+}
+
+describe('a turn of goose', () => {
+  it('sums every model call its own notifications report over the latest one', async () => {
+    const notes = [gooseCall('m1', firstCall), ...gooseOther, gooseCall('m2', lastCall)]
+    const { declared, first, ignored } = await gooseTurn('goose', notes, latest)
+    expect(declared).toBe(true)
+    expect(first.tokens).toEqual(bothCalls)
+    expect(ignored).toEqual([])
+  })
+
+  it('counts a message reported twice once', async () => {
+    const notes = [
+      gooseCall('m1', firstCall),
+      gooseCall('m2', lastCall),
+      gooseCall('m1', firstCall),
+    ]
+    const { first } = await gooseTurn('goose', notes, latest)
+    expect(first.tokens).toEqual(bothCalls)
+  })
+
+  it("keeps the response's usage when no call was reported", async () => {
+    const { first } = await gooseTurn('goose', gooseOther, latest)
+    expect(first.tokens).toEqual({
+      total: 12950,
+      input: 12800,
+      output: 150,
+      thought: null,
+      cacheRead: null,
+      cacheWrite: null,
+    })
+  })
+
+  it("leaves other agents on their response's usage, declaring nothing of goose's", async () => {
+    const notes = [gooseCall('m1', firstCall), gooseCall('m2', lastCall)]
+    const { declared, first } = await gooseTurn('qwen', notes, latest)
+    expect(declared).toBe(false)
+    expect(first.tokens).toEqual({
+      total: 12950,
+      input: 12800,
+      output: 150,
+      thought: null,
+      cacheRead: null,
+      cacheWrite: null,
+    })
+  })
+})
