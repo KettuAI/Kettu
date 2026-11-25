@@ -67,7 +67,10 @@ export function createRedactor(options: RedactorOptions = {}): Redactor {
   }
 }
 
-/** The home folder as it appears in text: plain, and with backslashes escaped as in JSON. */
+/**
+ * The home folder as it appears in text: plain, with backslashes escaped as in JSON, and
+ * percent-encoded as in a URL or an id built from a path.
+ */
 function homePatterns(home: string | undefined, platform: NodeJS.Platform): RegExp[] {
   if (!home || home.length < 2) return []
   const trimmed = home.replace(/[\\/]+$/, '')
@@ -75,7 +78,26 @@ function homePatterns(home: string | undefined, platform: NodeJS.Platform): RegE
   if (platform === 'win32') forms.add(trimmed.replace(/\\/g, '/'))
   const flags = platform === 'win32' ? 'gi' : 'g'
   // Only a whole path segment: /Users/ann must not match /Users/anna.
-  return [...forms].map(
+  const plain = [...forms].map(
     (form) => new RegExp(`${escapeRegExp(form)}(?=$|[\\\\/"'\\s:;,)\\]}])`, flags),
   )
+  const encoded = new Set([encodeURIComponent(trimmed), encodeURI(trimmed)])
+  if (platform === 'win32') encoded.add(encodeURI(trimmed.replace(/\\/g, '/')))
+  // A whole segment here ends where an encoded or a plain separator follows.
+  const percent = [...encoded]
+    .filter((form) => form.includes('%'))
+    .map(
+      (form) => new RegExp(`${anyHexCase(form)}(?=$|%2[Ff]|%5[Cc]|[\\\\/"'\\s:;,)\\]}&#?])`, flags),
+    )
+  return [...plain, ...percent]
+}
+
+/** A percent-encoded text as a pattern whose escapes match in either case, as `%2f` and `%2F`. */
+function anyHexCase(form: string): string {
+  return escapeRegExp(form).replace(/%([0-9A-F]{2})/g, (_, hex: string) => {
+    const digits = [...hex].map((digit) =>
+      /[A-F]/.test(digit) ? `[${digit}${digit.toLowerCase()}]` : digit,
+    )
+    return `%${digits.join('')}`
+  })
 }
