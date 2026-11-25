@@ -17,7 +17,7 @@ import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Segmented, SetButton, Spin } from './controls'
-import { AccountHostsPicker, AccountPairFlow } from './host-account'
+import { AccountHostsPicker, AccountPairAllFlow, AccountPairFlow } from './host-account'
 import { Added } from './host-added'
 import { SshListBody, SshManualBody } from './host-add-ssh'
 import { closeRequest } from './pair-close'
@@ -115,7 +115,7 @@ function AddHostFlow({
   onDone: (added: HostStatus | null) => void
 }) {
   // One of the account's hosts, once its Connect was chosen.
-  const [account, setAccount] = useState<DiscoveredHost | null>(null)
+  const [account, setAccount] = useState<DiscoveredHost | DiscoveredHost[] | null>(null)
   const cloudOff = useCloudOff()
   const [tab, setTab] = useState<AddHostTab>(sshTarget ? 'ssh' : 'link')
   const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
@@ -222,13 +222,23 @@ function AddHostFlow({
   if (account && !cloudOff) {
     return (
       <SettingsDialogContent finalFocus={finalFocus}>
-        <AccountPairFlow
-          host={account}
-          open={open}
-          activeRef={pairingRef}
-          onDone={onDone}
-          onBack={() => setAccount(null)}
-        />
+        {Array.isArray(account) ? (
+          <AccountPairAllFlow
+            hosts={account}
+            open={open}
+            activeRef={pairingRef}
+            onDone={onDone}
+            onBack={() => setAccount(null)}
+          />
+        ) : (
+          <AccountPairFlow
+            host={account}
+            open={open}
+            activeRef={pairingRef}
+            onDone={onDone}
+            onBack={() => setAccount(null)}
+          />
+        )}
       </SettingsDialogContent>
     )
   }

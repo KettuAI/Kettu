@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import type { HostStatus } from '@shared/remote/hosts'
@@ -17,11 +17,14 @@ import {
 export function Added({
   host,
   title,
+  note,
   onDone,
 }: {
   host: HostStatus
   /** The dialog's title, when it is not Add host. */
   title?: string
+  /** A line under the host, as whether it may use this computer too. */
+  note?: ReactNode
   onDone: () => void
 }) {
   const { t } = useTranslation('settings')
@@ -57,6 +60,7 @@ export function Added({
             </small>
           </span>
         </div>
+        {note}
         <SettingsField
           label={t('hosts.add.nameLabel', { name: host.name })}
           htmlFor="host-device-name"

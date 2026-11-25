@@ -172,6 +172,8 @@ export type WebPushContent = PushContent &
   (
     | { kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'; sessionId: string }
     | { kind: 'routine-paused'; agentId: string }
+    | { kind: 'device-request'; requestId: number }
+    | { kind: 'device-joined'; deviceId: string }
   )
 
 function parseContent(value: unknown): WebPushContent | null {
@@ -190,6 +192,12 @@ function parseContent(value: unknown): WebPushContent | null {
       return isId(content.sessionId) ? (content as WebPushContent) : null
     case 'routine-paused':
       return isId(content.agentId) ? (content as WebPushContent) : null
+    case 'device-request':
+      return Number.isSafeInteger(content.requestId) ? (content as WebPushContent) : null
+    case 'device-joined':
+      return typeof content.deviceId === 'string' && /^[0-9a-f]{32}$/.test(content.deviceId)
+        ? (content as WebPushContent)
+        : null
     default:
       return null
   }

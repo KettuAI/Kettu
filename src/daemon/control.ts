@@ -15,6 +15,7 @@ import {
   type NewDevice,
 } from '@shared/remote/device'
 import type { Platform } from '@shared/platform'
+import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import type { PairingState } from '@shared/remote/pairing'
 import {
   parseReportRequest,
@@ -102,6 +103,13 @@ export interface ControlCalls {
   'host.socket': { params: { host: HostName }; result: { path: string } }
   'devices.list': { params: undefined; result: DeviceSummary[] }
   'devices.remove': { params: { id: string }; result: null }
+  /** The request of a device of the account that waits now, if any. */
+  'requests.get': { params: undefined; result: DiscoveryRequestEvent | null }
+  /** Answers it; `gone` when it was answered elsewhere first, or ended. */
+  'requests.answer': {
+    params: { requestId: number; add: boolean; name: string }
+    result: 'gone' | null
+  }
   /**
    * Opens a pairing code for this connection, voiding any other. Its progress comes as `pairing`
    * events on the connection, and the code is void once the connection closes.
@@ -250,6 +258,17 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
       throw new ControlError('invalid_params', "A device's id is 32 hexadecimal digits")
     }
     return { id }
+  },
+  'requests.get': none,
+  'requests.answer': (raw) => {
+    const { requestId, add, name } = record(raw)
+    if (!Number.isSafeInteger(requestId)) {
+      throw new ControlError('invalid_params', 'requestId must be an integer')
+    }
+    if (typeof add !== 'boolean') throw new ControlError('invalid_params', 'add must be a boolean')
+    const kept = add ? normalizeDeviceName(name) : ''
+    if (kept === null) throw new ControlError('invalid_params', 'The name must not be empty')
+    return { requestId: requestId as number, add, name: kept }
   },
   'pair.open': none,
   'pair.answer': (raw) => {

@@ -7,6 +7,7 @@ import { DEVICE_ID, isDeviceName } from './device'
 import { isAccountId, type DirectAddress } from './protocol'
 import { parseHostRelay, relayOrigin, type HostRelay } from './relay'
 import { isRegionName } from './relay-regions'
+import { parseTranscript, type PairTranscript } from './discovery'
 
 /** How long pairing waits for a finished handshake before the host counts as unreachable. */
 export const PAIR_HOST_TIMEOUT_MS = 15_000
@@ -312,13 +313,22 @@ export type HostPairingState =
   | { state: 'confirm' }
   /**
    * Pairing with a host of the account: both screens show `code`; `matched` once this computer's
-   * user said it is the same, while the host's owner still decides.
+   * user said it is the same, while the host's owner still decides. `transcript`: what the code
+   * is made of, for the code of a batch.
    */
-  | { state: 'compare'; code: string; matched: boolean }
+  | { state: 'compare'; code: string; matched: boolean; transcript?: PairTranscript }
   | ({ state: 'ssh' } & SshStep)
-  | { state: 'added'; host: HostStatus }
+  /**
+   * `reverse`, when this computer asked to let the host use it in turn: whether the host now
+   * may, or why not, `unsupported` for a host without a client of its own, as a daemon.
+   */
+  | { state: 'added'; host: HostStatus; reverse?: ReverseOutcome }
   /** `detail`: output to show beside the reason, as the end of a failed install's. */
   | { state: 'failed'; reason: HostPairingFailure; detail?: string }
+
+export type ReverseOutcome = 'added' | 'failed' | 'unsupported'
+
+const REVERSE_OUTCOMES: readonly string[] = ['added', 'failed', 'unsupported']
 
 /** What main answers to a pasted link or an SSH address: a pairing under an id, or why not. */
 export type HostPairStart =
@@ -515,9 +525,12 @@ export function parseHostPairingState(value: unknown): HostPairingState | null {
   if (state === 'connecting' || state === 'confirm') return { state }
   if (state === 'compare') {
     const { code, matched } = fields
-    return typeof code === 'string' && /^\d{6}$/.test(code) && typeof matched === 'boolean'
-      ? { state, code, matched }
-      : null
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code) || typeof matched !== 'boolean') {
+      return null
+    }
+    const transcript = fields.transcript === undefined ? null : parseTranscript(fields.transcript)
+    if (fields.transcript !== undefined && !transcript) return null
+    return transcript ? { state, code, matched, transcript } : { state, code, matched }
   }
   if (state === 'ssh') {
     const step = parseSshStep(fields)
@@ -525,7 +538,11 @@ export function parseHostPairingState(value: unknown): HostPairingState | null {
   }
   if (state === 'added') {
     const parsed = parseHostStatus(host)
-    return parsed ? { state, host: parsed } : null
+    if (!parsed) return null
+    const { reverse } = fields
+    return typeof reverse === 'string' && REVERSE_OUTCOMES.includes(reverse)
+      ? { state, host: parsed, reverse: reverse as ReverseOutcome }
+      : { state, host: parsed }
   }
   if (state === 'failed' && FAILURES.includes(reason as string)) {
     const failed = { state, reason: reason as HostPairingFailure } as const

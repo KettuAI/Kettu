@@ -12,6 +12,7 @@ import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-ch
 import {
   DISCOVER_PROLOGUE,
   deviceDiscovery,
+  newPairGroup,
   pairCommit,
   type DiscoveryRequestEvent,
 } from '@shared/remote/discovery'
@@ -92,6 +93,8 @@ async function setup(
   let changes = 0
   const host = agent.host
   const relayKey = await importRelayKey(await newRelaySeed())
+  const relayId = await relayHostId(relayKey.publicKey)
+  const joined: { id: string; via: string }[] = []
   const notifications = options.push
     ? new DeviceNotifications({
         devices,
@@ -136,6 +139,8 @@ async function setup(
     changed: () => changes++,
     log,
     account: () => signedIn.account,
+    relayId: () => relayId,
+    joined: (device, via) => joined.push({ id: device.id, via }),
     ...(options.admin ? { admin: options.admin } : {}),
     ...(options.helloTimeoutMs ? { helloTimeoutMs: options.helloTimeoutMs } : {}),
     ...(options.resumeMs ? { resumeMs: options.resumeMs } : {}),
@@ -206,6 +211,8 @@ async function setup(
     forwarded,
     agentPorts,
     relayKey,
+    relayId,
+    joined,
     connect,
     openCode,
     pairWith,
@@ -1075,6 +1082,69 @@ describe('pairing with a device of the account', () => {
       })
   })
 
+  it('takes a batch only when it names this host, and tells the owner what its code is made of', async () => {
+    const t = await setup()
+    const other = 'a'.repeat(26)
+    const outside = await t.discover(await generateKeyPair())
+    const refused = heard(outside)
+    await outside.send({
+      type: 'pair-commit',
+      commit: await pairCommit(new Uint8Array(32).fill(1)),
+      group: newPairGroup([other, 'b'.repeat(26)]),
+    })
+    await outside.closed
+    expect(refused).toEqual([{ type: 'closing', reason: 'invalid' }])
+
+    const group = newPairGroup([other, t.relayId])
+    const exchange = await deviceDiscovery(await t.discover(await generateKeyPair()), group)
+    if (!('code' in exchange)) throw new Error('The host refused the exchange')
+    await exchange.channel.send(LAPTOP_HELLO)
+    await expect.poll(() => t.discoveryEvents.length).toBe(1)
+    expect(t.discoveryEvents[0]!.request).toMatchObject({
+      state: 'confirm',
+      code: exchange.code,
+      deviceConfirmed: false,
+      transcript: exchange.transcript,
+      group,
+    })
+    await exchange.channel.send({ type: 'pair-confirm' })
+    await expect
+      .poll(() => t.discoveryEvents.at(-1)?.request)
+      .toMatchObject({ state: 'confirm', deviceConfirmed: true })
+  })
+
+  it('says a device joined by any path once, not when it is added again', async () => {
+    const t = await setup()
+    const exchange = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    if (!('code' in exchange)) throw new Error('The host refused the exchange')
+    await exchange.channel.send(LAPTOP_HELLO)
+    await exchange.channel.send({ type: 'pair-confirm' })
+    await expect.poll(() => t.discoveryEvents.length).toBeGreaterThan(0)
+    t.discovery.answer(1, true, 'Laptop', 'Phone')
+    await expect.poll(() => t.joined.map((entry) => entry.via)).toEqual(['account'])
+    expect(t.discoveryEvents.at(-1)?.request).toEqual({
+      state: 'closed',
+      reason: 'added',
+      answeredOn: 'Phone',
+    })
+
+    const key = await generateKeyPair()
+    const device = {
+      publicKey: base64(key.publicKey),
+      name: 'Studio',
+      kind: 'desktop',
+      platform: 'macOS 26',
+      model: '',
+    }
+    await t.server.addDevice(device, 'reverse')
+    await t.server.addDevice(device, 'ssh')
+    expect(t.joined.map((entry) => entry.via)).toEqual(['account', 'reverse'])
+    expect(t.activity.list(await deviceId(key.publicKey)).map((event) => event.kind)).toEqual([
+      'paired',
+      'paired',
+    ])
+  })
+
   it('closes the device the owner rejects, with the reason', async () => {
     const t = await setup()
     const exchange = await deviceDiscovery(await t.discover(await generateKeyPair()))
@@ -1082,7 +1152,9 @@ describe('pairing with a device of the account', () => {
     const messages = heard(exchange.channel)
     await exchange.channel.send(LAPTOP_HELLO)
     await exchange.channel.send({ type: 'pair-confirm' })
-    await expect.poll(() => t.discoveryEvents.length).toBe(1)
+    await expect
+      .poll(() => t.discoveryEvents.at(-1)?.request)
+      .toMatchObject({ state: 'confirm', deviceConfirmed: true })
     t.discovery.answer(1, false, '')
     await exchange.channel.closed
     expect(messages).toEqual([{ type: 'closing', reason: 'rejected' }])

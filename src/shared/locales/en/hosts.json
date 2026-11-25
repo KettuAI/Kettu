@@ -96,5 +96,11 @@
       "not-paired": "Trust this computer on the device",
       "camera-in-use": "An app on the device is using the camera or microphone"
     }
+  },
+  "push": {
+    "deviceRequestTitle": "{{device}} wants to connect to {{host}}",
+    "deviceRequestBody": "Open to check the code and add it.",
+    "deviceJoinedTitle": "{{device}} joined {{host}}",
+    "deviceJoinedBody": "Open to remove it if this was not you."
   }
 }

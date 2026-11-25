@@ -199,6 +199,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       }
     },
     'devices.list': async () => starting().devices(),
+    'requests.get': async () => starting().pendingDiscovery(),
+    'requests.answer': async ({ requestId, add, name }) =>
+      (await starting().answerDiscovery(requestId, add, name)) ? null : 'gone',
     'devices.remove': async ({ id }) => {
       await starting().removeDevice(id)
       return null
@@ -531,6 +534,16 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       admin
         ? admin.answer(deviceId, method, params)
         : { error: { code: 'unavailable', message: t('hostAdmin.starting') } },
+    discoveryChanged: (event) => {
+      admin?.discoveryChanged(event)
+      if (event.request.state === 'confirm' && !event.request.deviceConfirmed) {
+        log.info('A device of the account asks to be added; see "kettu requests"')
+      }
+    },
+    deviceJoined: (device, via) => {
+      admin?.deviceJoined(device, via)
+      log.info(`Device ${device.id} joined (${via})`)
+    },
   })
   hosts = running
   if (account) {

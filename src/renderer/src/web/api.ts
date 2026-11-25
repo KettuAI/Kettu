@@ -21,13 +21,15 @@ import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
 import { parseHostRenamed, type DirectAddress } from '@shared/remote/protocol'
-import type {
-  HostAdminEvent,
-  HostAdminMethod,
-  HostAdminParams,
-  HostAdminResult,
-  HostInfo,
+import {
+  parseJoined,
+  type HostAdminEvent,
+  type HostAdminMethod,
+  type HostAdminParams,
+  type HostAdminResult,
+  type HostInfo,
 } from '@shared/remote/host-admin'
+import { parseDiscoveryEvent } from '@shared/remote/discovery'
 import type { TerminalEvent } from '@shared/terminal-host'
 import { copyPath } from '@renderer/lib/copy-path'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
@@ -383,10 +385,19 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       closePairing: (codeId) => done(admin('remote.closePairing', { codeId })),
       answerPairing: (codeId, add, name) =>
         done(admin('remote.answerPairing', { codeId, add, name })),
-      // Devices of the account ask the host's own windows; the web client is never asked.
-      pendingDiscovery: () => Promise.resolve(null),
-      answerDiscovery: () => unsupported('answer devices of the account'),
-      onDiscovery: never,
+      pendingDiscovery: () => admin('remote.pendingDiscovery'),
+      answerDiscovery: (requestId, add, name) =>
+        admin('remote.answerDiscovery', { requestId, add, name }),
+      onDiscovery: (listener) =>
+        adminEvent('remote.discovery', (event) => {
+          const parsed = parseDiscoveryEvent(event.event)
+          if (parsed) listener(parsed)
+        }),
+      onDeviceJoined: (listener) =>
+        adminEvent('remote.deviceJoined', (event) => {
+          const joined = parseJoined(event)
+          if (joined) listener(joined)
+        }),
       // Asked in the desktop app's own window, about itself.
       offer: () => Promise.resolve(null),
       answerOffer: () => unsupported('turn remote access on for the account'),

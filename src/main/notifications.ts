@@ -130,6 +130,8 @@ export function notifyDiscovery(
     }
     return
   }
+  // The same request again, now that its device confirmed the code, is no new notice.
+  if (discovery?.requestId === event.requestId) return
   if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return
   discovery?.notification.close()
   const notification = new Notification({
@@ -150,6 +152,45 @@ export function notifyDiscovery(
     log.warn(`Notification failed: ${error}`)
   })
   discovery = { requestId: event.requestId, notification }
+  notification.show()
+}
+
+/**
+ * A device joined this computer: an OS notification, focused or not, with Remove; its click
+ * opens the device list.
+ */
+export function notifyJoined(
+  device: { id: string; name: string },
+  hostName: string,
+  settings: SettingsFile,
+  actions: { remove(): void; open(): void },
+): void {
+  if (!Notification.isSupported()) return
+  const key = `joined:${device.id}`
+  shown.get(key)?.close()
+  const notification = new Notification({
+    title: t('notifications.joinedTitle', { name: device.name, host: hostName }),
+    body: t('notifications.joinedBody'),
+    silent: !settings.notifications.sound,
+    actions: [{ type: 'button' as const, text: t('notifications.remove') }],
+  })
+  const forget = (): void => {
+    if (shown.get(key) === notification) shown.delete(key)
+  }
+  notification.on('click', () => {
+    forget()
+    actions.open()
+  })
+  notification.on('action', () => {
+    forget()
+    actions.remove()
+  })
+  notification.on('close', forget)
+  notification.on('failed', (_, error) => {
+    forget()
+    log.warn(`Notification failed: ${error}`)
+  })
+  shown.set(key, notification)
   notification.show()
 }
 

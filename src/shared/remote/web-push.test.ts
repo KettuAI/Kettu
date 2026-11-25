@@ -139,6 +139,20 @@ describe("a push's signature", () => {
     expect(await openWebPush(payload.subarray(0, 60), t.browser, t.keys)).toBeNull()
   })
 
+  it("shows a device's request and a device that joined, each naming what it is about", async () => {
+    const t = await setup()
+    const base = { v: 1, host: t.hostId, hostName: 'Studio', at: 1, tag: 'tag_2', title: 'Laptop' }
+    const request = { ...base, kind: 'device-request', requestId: 3 } as PushContent
+    const joined = { ...base, kind: 'device-joined', deviceId: 'a'.repeat(32) } as PushContent
+    for (const content of [request, joined]) {
+      const payload = await signWebPush(content, t.browser, t.key)
+      expect(await openWebPush(payload, t.browser, t.keys)).toEqual(content)
+    }
+    const named = { ...base, kind: 'device-joined', deviceId: 'Laptop' } as PushContent
+    const payload = await signWebPush(named, t.browser, t.key)
+    expect(await openWebPush(payload, t.browser, t.keys)).toBeNull()
+  })
+
   it('drops content that is not an alert, though signed', async () => {
     const t = await setup()
     const withdraw = { ...t.content, kind: 'withdraw' } as unknown as PushContent

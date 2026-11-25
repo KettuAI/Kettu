@@ -15,10 +15,16 @@ import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { PortError } from './port-rpc'
-import type { DeviceActivity } from './remote/activity'
+import type { DeviceActivity, PairedVia } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
-import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
-import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
+import type {
+  DiscoveredHosts,
+  DiscoveryRequestEvent,
+  PairGroup,
+  ReverseGrant,
+  ReverseHost,
+} from './remote/discovery'
+import type { HostAdminEvent, HostAdminMethod, JoinedDevice, JoinedVia } from './remote/host-admin'
 import type {
   HostPairingState,
   HostStatus,
@@ -579,6 +585,11 @@ export type MainToRemoteHost =
        * Local mode: hosts turn away devices of another account, and hellos name it.
        */
       account?: string | null
+      /**
+       * The desktop app's client takes another computer as a host when a device asks, so
+       * welcomes offer `remote.addReverseHost`. Absent, as under the daemon, they do not.
+       */
+      reverseHosts?: boolean
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -592,7 +603,9 @@ export type MainToRemoteHost =
   // The owner allowed devices the terminal or stopped allowing it.
   | { type: 'remote-host:terminal'; allowed: boolean }
   | { type: 'remote-host:locale'; locale: Locale }
-  | { type: 'remote-host:add-device'; device: NewDevice }
+  // Adds a device the parent vouches for: one that set up this host over SSH, or a computer this
+  // computer was just added to; every other device hears it joined.
+  | { type: 'remote-host:add-device'; device: NewDevice; via?: Exclude<PairedVia, 'account'> }
   // Forgets the device and closes its sessions at once.
   | { type: 'remote-host:remove-device'; id: string }
   // The direct connections' settings changed.
@@ -612,14 +625,34 @@ export type MainToRemoteHost =
   | { type: 'remote-host:relay'; enabled: boolean; own?: OwnRelayInit | null }
   // Whether devices of the account find this host on the relay; off ends the open request.
   | { type: 'remote-host:discoverable'; enabled: boolean }
-  // The owner's answer to a discovery request, with the name to add the device under.
-  | { type: 'remote-host:discovery-answer'; requestId: number; add: boolean; name: string }
+  // An answer to the discovery request `discoveryId`, with the name to add the device under and
+  // the paired device's name that gave it, null for the host's own; answered by
+  // remote-host:discovery-answer under the same id, which says whether it was the first.
+  | {
+      type: 'remote-host:discovery-answer'
+      requestId: number
+      discoveryId: number
+      add: boolean
+      name: string
+      by: string | null
+    }
   // Lists the account's hosts this computer may pair with; answered by remote-host:discovered.
   | { type: 'remote-host:discover'; requestId: number }
-  // Pairs with a host remote-host:discover listed, by its relay id, as remote-host:pair-host does.
-  | { type: 'remote-host:pair-discovered'; pairId: number; relayId: string; model: string }
-  // This computer's user saw the same code on both screens, or not, which ends the pairing.
-  | { type: 'remote-host:pair-match'; pairId: number; match: boolean }
+  // Pairs with a host remote-host:discover listed, by its relay id, as remote-host:pair-host does:
+  // in a batch under one code when `group` names it.
+  | {
+      type: 'remote-host:pair-discovered'
+      pairId: number
+      relayId: string
+      model: string
+      group?: PairGroup
+    }
+  // A device that added this computer keeps the device's own host as a host here; answered by
+  // remote-host:reverse-host under the same id.
+  | { type: 'remote-host:add-reverse-host'; requestId: number; host: ReverseHost }
+  // This computer's user saw the same code on both screens, or not, which ends the pairing;
+  // `reverse`: once added, that host is let use this computer too.
+  | { type: 'remote-host:pair-match'; pairId: number; match: boolean; reverse?: boolean }
   // A fresh access token of the account this computer is signed in to, or null once signed out,
   // which closes every relay socket; with it, once the main relay takes them, a relay token that
   // the relays get in its place. Never logged.
@@ -682,7 +715,13 @@ export type MainToRemoteHost =
   // The answer to remote-host:admin-call under the same id.
   | ({ type: 'remote-host:admin-result'; requestId: number } & AdminAnswer)
   // Something the owner's devices hear of the host: every one, or only `deviceId`'s sessions.
-  | { type: 'remote-host:admin-event'; event: HostAdminEvent; deviceId: string | null }
+  // `except`: a device that does not hear it, as the one that just joined.
+  | {
+      type: 'remote-host:admin-event'
+      event: HostAdminEvent
+      deviceId: string | null
+      except?: string
+    }
   // What the agent host says needs the user, what waits and what was seen, for the devices'
   // notifications.
   | { type: 'remote-host:attention'; attention: Extract<HostToMain, { type: 'host:attention' }> }
@@ -782,6 +821,12 @@ export type RemoteHostToMain =
   // A device of the account asks to be added, or that request ended.
   | { type: 'remote-host:discovery'; event: DiscoveryRequestEvent }
   | { type: 'remote-host:discovered'; requestId: number; result: DiscoveredHosts }
+  // Whether the answer to remote-host:discovery-answer was the first and counted.
+  | { type: 'remote-host:discovery-answer'; requestId: number; counted: boolean }
+  // A device was added, by any path.
+  | { type: 'remote-host:device-joined'; device: JoinedDevice; via: JoinedVia }
+  // The answer to remote-host:add-reverse-host: this computer's device, or null when it could not.
+  | { type: 'remote-host:reverse-host'; requestId: number; grant: ReverseGrant | null }
   // The known hosts and their connections, whenever they change.
   | { type: 'remote-host:hosts'; hosts: HostStatus[] }
   | { type: 'remote-host:host-pairing'; pairId: number; pairing: HostPairingState }

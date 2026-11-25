@@ -96,5 +96,11 @@
       "not-paired": "请在设备上信任这台电脑",
       "camera-in-use": "设备上有 App 正在使用摄像头或麦克风"
     }
+  },
+  "push": {
+    "deviceRequestTitle": "{{device}} 想连接 {{host}}",
+    "deviceRequestBody": "打开核对验证码并添加。",
+    "deviceJoinedTitle": "{{device}} 已加入 {{host}}",
+    "deviceJoinedBody": "不是你加的就打开移除。"
   }
 }

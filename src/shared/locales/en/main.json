@@ -98,7 +98,10 @@
     "allowOnce": "Allow once",
     "open": "Open",
     "discoveryTitle": "A device asks to be added",
-    "discoveryBody": "{{name}}, signed in to your Kettu account, asks to be added as a device of this computer."
+    "discoveryBody": "{{name}}, signed in to your Kettu account, asks to be added as a device of this computer.",
+    "joinedTitle": "{{name}} joined {{host}}",
+    "joinedBody": "It can now use this computer. Remove it if you did not add it.",
+    "remove": "Remove"
   },
   "attachments": {
     "hostDown": "The agent host isn't running. Try again once it has restarted."
@@ -203,7 +206,8 @@
     "noRender": "This host does not render pages",
     "noPrint": "This host does not print",
     "noReports": "This host makes no reports",
-    "noSubmit": "This host submits no reports"
+    "noSubmit": "This host submits no reports",
+    "noReverseHost": "This computer could not keep the other one as a host"
   },
   "remoteHost": {
     "notOn": "Remote access is not on",

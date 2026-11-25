@@ -74,11 +74,27 @@ export class LinkRequests {
   private readonly uploads = new Map<number, Outgoing>()
   private wire: RequestWire | null = null
   private nextWire = 1
+  /** The link's own requests, under negative ids main never uses, by id. */
+  private readonly own = new Map<number, (answer: Record<string, unknown>) => void>()
+  private nextOwn = -1
 
   constructor(private readonly options: LinkRequestsOptions) {}
 
   private toMain(message: unknown): void {
-    this.options.toMain(message)
+    const id = (message as { id?: unknown } | null)?.id
+    const own = typeof id === 'number' ? this.own.get(id) : undefined
+    if (!own) return this.options.toMain(message)
+    this.own.delete(id as number)
+    own(message as Record<string, unknown>)
+  }
+
+  /** A request of the link's own, as main's go: its `response` or `error` message. */
+  call(method: string, params: unknown): Promise<Record<string, unknown>> {
+    const id = this.nextOwn--
+    return new Promise((resolve) => {
+      this.own.set(id, resolve)
+      this.request({ type: 'request', id, method, params })
+    })
   }
 
   /** Requests waiting for an answer. */
@@ -114,6 +130,10 @@ export class LinkRequests {
   /** The host's session is gone: nothing more is answered here. */
   lose(): void {
     this.wire = null
+    for (const [id, own] of [...this.own]) {
+      this.own.delete(id)
+      own({ type: 'error', id, error: internal('The host is gone') })
+    }
     this.outgoing.clear()
     this.byWire.clear()
     this.downloads.clear()

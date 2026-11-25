@@ -22,8 +22,13 @@ import type { MarketKeysPatch, MarketKeyState } from './marketplace'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
-import type { HostAdminMethod } from './remote/host-admin'
-import type { DiscoveredHosts, DiscoveryRequestEvent, RemoteOffer } from './remote/discovery'
+import type { HostAdminMethod, JoinedDevice, JoinedVia } from './remote/host-admin'
+import type {
+  DiscoveredHosts,
+  DiscoveryRequestEvent,
+  PairGroup,
+  RemoteOffer,
+} from './remote/discovery'
 import type {
   HostPairingState,
   HostPairStart,
@@ -62,6 +67,11 @@ import type { IslandState } from './island'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
 import type { UpdateStatus } from './updates'
+
+/** How a host of the account is connected to: alone, or in a batch under one code. */
+export interface DiscoveredPairOptions {
+  group?: PairGroup
+}
 
 export interface AppInfo {
   name: string
@@ -445,7 +455,7 @@ export interface IpcInvokeContract {
   'remote:discovery-pending': { args: []; result: DiscoveryRequestEvent | null }
   'remote:discovery-answer': {
     args: [requestId: number, add: boolean, name: string]
-    result: void
+    result: 'gone' | null
   }
   // Whether to let another client of the account use this computer: null when nothing is asked.
   'remote:offer': { args: []; result: RemoteOffer | null }
@@ -476,9 +486,14 @@ export interface IpcInvokeContract {
   // out.
   'hosts:discover': { args: []; result: DiscoveredHosts }
   // Pairs with a host `hosts:discover` listed, its progress as `hosts:pairing` under the id.
-  'hosts:pair-discovered': { args: [relayId: string]; result: HostPairStart }
-  // This computer's user saw the same code on both screens, or not, which ends the pairing.
-  'hosts:pair-match': { args: [pairId: number, match: boolean]; result: void }
+  // `group`: the batch it is connected to with one code.
+  'hosts:pair-discovered': {
+    args: [relayId: string, options: DiscoveredPairOptions]
+    result: HostPairStart
+  }
+  // This computer's user saw the same code on both screens, or not, which ends the pairing;
+  // `reverse`: once added, let that host use this computer too.
+  'hosts:pair-match': { args: [pairId: number, match: boolean, reverse: boolean]; result: void }
   // This computer's name on a connected host. Each change answers null once done, else a code
   // the page words in the user's language.
   'hosts:rename': { args: [id: string, name: string]; result: 'not_connected' | null }
@@ -827,9 +842,17 @@ export interface KettuApi {
     answerPairing(codeId: number, add: boolean, name: string): Promise<void>
     /** The discovery request waiting for the owner's answer, if any. */
     pendingDiscovery(): Promise<DiscoveryRequestEvent | null>
-    /** Adds the device of a discovery request, under `name`, or turns it down. */
-    answerDiscovery(requestId: number, add: boolean, name: string): Promise<void>
+    /**
+     * Adds the device of a discovery request, under `name`, or turns it down; `gone` when it was
+     * answered elsewhere first, or ended.
+     */
+    answerDiscovery(requestId: number, add: boolean, name: string): Promise<'gone' | null>
     onDiscovery(listener: (event: DiscoveryRequestEvent) => void): () => void
+    /**
+     * A device joined the host: a browser hears it from its host, while the desktop app's own
+     * window hears nothing, since main posts a system notification.
+     */
+    onDeviceJoined(listener: (joined: { device: JoinedDevice; via: JoinedVia }) => void): () => void
     /** Whether to ask about letting another client of the account use this computer. */
     offer(): Promise<RemoteOffer | null>
     answerOffer(clientId: string, turnOn: boolean): Promise<void>
@@ -870,9 +893,9 @@ export interface KettuApi {
     /** The account's hosts this computer may pair with. */
     discover(): Promise<DiscoveredHosts>
     /** Pairs with a host `discover` listed. */
-    pairDiscovered(relayId: string): Promise<HostPairStart>
+    pairDiscovered(relayId: string, options?: DiscoveredPairOptions): Promise<HostPairStart>
     /** Whether the code on both screens is the same; false ends the pairing. */
-    matchPairing(pairId: number, match: boolean): Promise<void>
+    matchPairing(pairId: number, match: boolean, reverse?: boolean): Promise<void>
     /** Renames this computer on a connected host; null once renamed, else why not. */
     rename(id: string, name: string): Promise<'not_connected' | null>
     setAddresses(id: string, addresses: DirectAddress[]): Promise<'unknown_host' | null>

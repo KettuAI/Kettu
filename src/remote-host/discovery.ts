@@ -1,7 +1,8 @@
 // Requests from devices of the same Kettu account to be added: one at a time, each asked of the
-// host's owner for DISCOVERY_ASK_MS. A device is added only once the owner said add and the
-// device's user said the codes match. DISCOVERY_STRIKES requests in a row that end without one
-// stop the host taking any for DISCOVERY_COOLDOWN_MS.
+// host's owner for DISCOVERY_ASK_MS, in the host's own windows and on every paired device. The
+// first answer counts. A device is added only once the owner said add and the device's user said
+// the codes match. DISCOVERY_STRIKES requests in a row that end without one stop the host taking
+// any for DISCOVERY_COOLDOWN_MS.
 
 import {
   DISCOVERY_ASK_MS,
@@ -9,6 +10,8 @@ import {
   DISCOVERY_STRIKES,
   type DiscoveryEnd,
   type DiscoveryRequestEvent,
+  type PairGroup,
+  type PairTranscript,
 } from '@shared/remote/discovery'
 import type { PairingDevice } from '@shared/remote/pairing'
 
@@ -25,13 +28,16 @@ interface Asked {
   code: string
   startedAt: number
   expiresAt: number
+  transcript: PairTranscript
+  group: PairGroup | null
 }
 
 interface Request extends DiscoverySlot {
   /** Set once the owner is asked. */
   requestId: number | null
   asked: Asked | null
-  owner: { name: string } | null
+  /** The answer that counted: the name to add under, and the paired device that gave it. */
+  owner: { name: string; by: string | null } | null
   confirmed: boolean
   timer: ReturnType<typeof setTimeout> | null
   settle: ((outcome: DiscoveryOutcome) => void) | null
@@ -95,7 +101,13 @@ export class DiscoveryRequests {
   }
 
   /** Asks the owner about the device; settles once both sides said yes, or the request ended. */
-  ask(slot: DiscoverySlot, device: PairingDevice, code: string): Promise<DiscoveryOutcome> {
+  ask(
+    slot: DiscoverySlot,
+    device: PairingDevice,
+    code: string,
+    transcript: PairTranscript,
+    group: PairGroup | null = null,
+  ): Promise<DiscoveryOutcome> {
     const request = this.request
     if (request !== slot || request.requestId !== null) {
       return Promise.resolve({ add: false, reason: 'stopped' })
@@ -107,27 +119,35 @@ export class DiscoveryRequests {
       request.timer = null
       this.end(request, 'expired')
     }, expiresAt - startedAt)
-    request.asked = { device, code, startedAt, expiresAt }
+    request.asked = { device, code, startedAt, expiresAt, transcript, group }
     return new Promise((resolve) => {
       request.settle = resolve
       this.options.send(this.event(request))
     })
   }
 
-  /** The owner's answer; a no ends the request. */
-  answer(requestId: number, add: boolean, name: string): void {
+  /**
+   * The owner's answer, from the host itself or from the paired device `by` names; a no ends the
+   * request. False when another answer counted already, or the request is over.
+   */
+  answer(requestId: number, add: boolean, name: string, by: string | null = null): boolean {
     const request = this.request
-    if (!request || request.requestId !== requestId || !request.timer || request.owner) return
-    if (!add) return this.end(request, 'rejected')
-    request.owner = { name }
+    if (!request || request.requestId !== requestId || !request.timer || request.owner) return false
+    if (!add) {
+      this.end(request, 'rejected', by)
+      return true
+    }
+    request.owner = { name, by }
     this.decide(request)
+    return true
   }
 
-  /** The device's user said the codes match. */
+  /** The device's user said the codes match, which every place asking hears. */
   confirm(slot: DiscoverySlot): void {
     const request = this.request
     if (request !== slot || !request.timer || request.confirmed) return
     request.confirmed = true
+    if (!request.owner) this.options.send(this.event(request))
     this.decide(request)
   }
 
@@ -166,7 +186,11 @@ export class DiscoveryRequests {
     settle?.({ add: true, name: request.owner.name })
   }
 
-  private end(request: Request, reason: Exclude<DiscoveryEnd, 'added'>): void {
+  private end(
+    request: Request,
+    reason: Exclude<DiscoveryEnd, 'added'>,
+    by: string | null = null,
+  ): void {
     if (this.request !== request) return
     if (reason !== 'stopped' && ++this.strikes >= (this.options.strikes ?? DISCOVERY_STRIKES)) {
       this.strikes = 0
@@ -174,24 +198,36 @@ export class DiscoveryRequests {
     }
     const settle = request.settle
     request.settle = null
-    this.close(request, reason)
+    this.close(request, reason, by)
     settle?.({ add: false, reason })
   }
 
-  private close(request: Request, reason: DiscoveryEnd): void {
+  private close(request: Request, reason: DiscoveryEnd, by: string | null = null): void {
     if (request.timer) clearTimeout(request.timer)
     request.timer = null
     this.request = null
-    if (request.requestId !== null) {
-      this.options.send({ requestId: request.requestId, request: { state: 'closed', reason } })
-    }
+    if (request.requestId === null) return
+    const answeredOn = by ?? (reason === 'added' ? request.owner?.by : null)
+    this.options.send({
+      requestId: request.requestId,
+      request: { state: 'closed', reason, ...(answeredOn ? { answeredOn } : {}) },
+    })
   }
 
   private event(request: Request): DiscoveryRequestEvent {
-    const { device, code, startedAt, expiresAt } = request.asked!
+    const { device, code, startedAt, expiresAt, transcript, group } = request.asked!
     return {
       requestId: request.requestId!,
-      request: { state: 'confirm', device, code, startedAt, expiresAt },
+      request: {
+        state: 'confirm',
+        device,
+        code,
+        startedAt,
+        expiresAt,
+        deviceConfirmed: request.confirmed,
+        transcript,
+        ...(group ? { group } : {}),
+      },
     }
   }
 }

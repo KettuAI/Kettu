@@ -109,11 +109,18 @@ import {
   shownLayoutSessions,
   useViewStore,
 } from '@renderer/stores/view'
+import {
+  hostRequestEvent,
+  hostRequestsClosed,
+  hostRequestsOpened,
+} from '@renderer/features/settings/host-requests'
 import { goneHosts, hostListed, initHostSessions } from './host-sessions'
 import { followWindowTitle } from './window-title'
 
 /** An event of this computer's agent host, or with `hostId` of another host's. */
 function onHostEvent(event: HostEvent, hostId: string | null = null): void {
+  // Another host's requests of devices of the account, which this computer may answer too.
+  if (hostId !== null && hostRequestEvent(hostId, event)) return
   switch (event.type) {
     case 'session.patches':
       receiveBatch(event.batch)
@@ -437,6 +444,7 @@ export function bootstrap(): Promise<unknown> {
         routinesHostOpened(hostId)
         tasksHostOpened(hostId)
         hostScopeOpened(hostId)
+        hostRequestsOpened(hostId)
         hostRestarted(hostId)
         hostLoadOpened(hostId)
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
@@ -445,6 +453,7 @@ export function bootstrap(): Promise<unknown> {
         if (waitingSessions.size > 0) closeUnlistedPanes(waitingSessions)
       },
       closed: (hostId) => {
+        hostRequestsClosed(hostId)
         artifactsHostClosed(hostId)
         routinesHostClosed(hostId)
         tasksHostClosed(hostId)

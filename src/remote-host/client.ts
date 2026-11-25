@@ -16,8 +16,15 @@ import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-ch
 import {
   DISCOVER_PROLOGUE,
   deviceDiscovery,
+  parseReverseGrant,
+  REVERSE_HOST_FEATURE,
+  reverseHostRelay,
   type DiscoveredHost,
   type DiscoveredHosts,
+  type PairGroup,
+  type PairTranscript,
+  type ReverseGrant,
+  type ReverseHost,
 } from '@shared/remote/discovery'
 import {
   DEVICE_KEEPALIVE,
@@ -157,6 +164,9 @@ const MAX_RETRY_MS = 60_000
 /** How often a host that turned this computer away as another account's is tried again. */
 const TURNED_AWAY_MS = 10 * 60_000
 
+/** How long a host that just added this computer has to take its own host in turn. */
+const REVERSE_TIMEOUT_MS = 20_000
+
 /** Host protocol messages kept for main's port while it is on its way; more are dropped. */
 const MAX_QUEUED = 1000
 
@@ -244,6 +254,12 @@ export interface HostClientOptions {
   changed(): void
   /** How a pairing goes, for the Add host that pasted its link. */
   pairing(pairId: number, state: HostPairingState): void
+  /**
+   * Letting a host this computer was just added to use it in turn: this computer's own host as
+   * that host keeps it, null while it serves no devices through the relay, and adding that
+   * host's device here, false when it could not be.
+   */
+  reverse?: { own(): ReverseHost | null; grant(grant: ReverseGrant): Promise<boolean> }
   log: LogFn
   connect?: Connect
   /** The relay; absent, hosts are reached directly alone. */
@@ -650,6 +666,23 @@ class HostLink {
     if (!this.session?.open) return false
     this.session.send({ type: 'rename', name })
     return true
+  }
+
+  /** A request of this computer's own on the host's session: its result, or why it failed. */
+  async call(
+    method: string,
+    params: unknown,
+    timeoutMs: number,
+  ): Promise<{ result: unknown } | { error: string }> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<Record<string, unknown>>((resolve) => {
+      timer = setTimeout(() => resolve({ type: 'error', error: { code: 'timeout' } }), timeoutMs)
+    })
+    const answer = await Promise.race([this.requests.call(method, params), late])
+    clearTimeout(timer)
+    if (answer.type === 'response') return { result: answer.result }
+    const code = (answer.error as { code?: unknown } | undefined)?.code
+    return { error: typeof code === 'string' ? code : 'internal' }
   }
 
   /** A port on this computer that reaches `forward` on the host; null without its session. */
@@ -1576,15 +1609,22 @@ class DiscoveryPairing {
   private readonly aborting = new AbortController()
   private session: HostSession | null = null
   private code: string | null = null
+  private transcript: PairTranscript | null = null
   private matched = false
   private done = false
+  private reverse = false
 
   constructor(
     private readonly client: HostClient,
     readonly pairId: number,
   ) {}
 
-  async run(relayId: string, ownKey: string | null, model: string): Promise<void> {
+  async run(
+    relayId: string,
+    ownKey: string | null,
+    model: string,
+    group: PairGroup | null,
+  ): Promise<void> {
     const { options } = this.client
     this.say({ state: 'connecting' })
     // Listed again, so the key and relays are the relay's now and not a page's.
@@ -1629,10 +1669,11 @@ class DiscoveryPairing {
       }
       return this.fail('unreachable')
     }
-    const exchange = await deviceDiscovery(result.channel)
+    const exchange = await deviceDiscovery(result.channel, group ?? undefined)
     if (this.done) return result.channel.close()
     if (!('code' in exchange)) return this.fail(discoveryFailure(exchange.closing))
     this.code = exchange.code
+    this.transcript = exchange.transcript
     const session = new HostSession(exchange.channel, result.via, options.log, options.keepalive)
     this.session = session
     session.start(
@@ -1646,17 +1687,26 @@ class DiscoveryPairing {
       null,
     )
     session.send(this.client.hello(model))
-    this.say({ state: 'compare', code: exchange.code, matched: false })
+    this.say({
+      state: 'compare',
+      code: exchange.code,
+      matched: false,
+      transcript: exchange.transcript,
+    })
   }
 
-  /** This computer's user saw the same code on both screens, or not, which ends the pairing. */
-  match(match: boolean): void {
+  /**
+   * This computer's user saw the same code on both screens, or not, which ends the pairing;
+   * `reverse`: once added, the host is let use this computer too.
+   */
+  match(match: boolean, reverse = false): void {
     if (this.done) return
     if (!match) return this.fail('void')
-    if (!this.session || this.code === null || this.matched) return
+    if (!this.session || this.code === null || this.transcript === null || this.matched) return
     this.matched = true
+    this.reverse = reverse
     this.session.send({ type: 'pair-confirm' })
-    this.say({ state: 'compare', code: this.code, matched: true })
+    this.say({ state: 'compare', code: this.code, matched: true, transcript: this.transcript })
   }
 
   /** Add host closed: a pairing the host has not added ends, and the host's request with it. */
@@ -1677,7 +1727,12 @@ class DiscoveryPairing {
     if (this.done) return
     this.done = true
     this.client.ended(this)
-    this.say({ state: 'added', host: status })
+    if (!this.reverse) return this.say({ state: 'added', host: status })
+    // The channel was verified by the codes, so the host takes this computer's own host on it.
+    const reverse = welcome.features.includes(REVERSE_HOST_FEATURE)
+      ? await this.client.grantReverse(status.id)
+      : 'unsupported'
+    this.say({ state: 'added', host: this.client.statusOf(status.id) ?? status, reverse })
   }
 
   private fail(reason: HostPairingFailure): void {
@@ -2373,18 +2428,87 @@ export class HostClient {
     }
   }
 
-  /** Pairs with a host `discover` listed; its progress goes to `options.pairing` under `pairId`. */
-  pairDiscovered(pairId: number, relayId: string, ownKey: string | null, model: string): void {
+  /**
+   * Pairs with a host `discover` listed, in the batch `group` names if any; its progress goes to
+   * `options.pairing` under `pairId`.
+   */
+  pairDiscovered(
+    pairId: number,
+    relayId: string,
+    ownKey: string | null,
+    model: string,
+    group: PairGroup | null = null,
+  ): void {
     if (this.stopped || this.pairings.has(pairId)) return
     const pairing = new DiscoveryPairing(this, pairId)
     this.pairings.set(pairId, pairing)
-    void pairing.run(relayId, ownKey, model)
+    void pairing.run(relayId, ownKey, model, group)
+  }
+
+  /**
+   * Hands a host that just added this computer this computer's own host, and adds the device
+   * that host answers with here.
+   */
+  async grantReverse(hostId: string): Promise<'added' | 'failed' | 'unsupported'> {
+    const reverse = this.options.reverse
+    const own = reverse?.own()
+    const link = this.links.get(hostId)
+    if (!reverse || !own || !link) return 'failed'
+    const answer = await link.call('remote.addReverseHost', own, REVERSE_TIMEOUT_MS)
+    if ('error' in answer) {
+      this.options.log('warn', `A host did not take this computer as a host: ${answer.error}`)
+      return 'failed'
+    }
+    if (answer.result === 'unsupported') return 'unsupported'
+    const grant = parseReverseGrant(answer.result)
+    if (!grant) {
+      this.options.log('warn', 'A host answered remote.addReverseHost with no device')
+      return 'failed'
+    }
+    return (await reverse.grant(grant)) ? 'added' : 'failed'
+  }
+
+  /**
+   * Keeps the host of a computer this one just added as a host here, reached through the relay
+   * it named, and connects to it: this computer's device as that host then adds it, or null when
+   * it cannot be kept.
+   */
+  async addReverseHost(host: ReverseHost): Promise<ReverseGrant | null> {
+    if (this.stopped) return null
+    const name = normalizeDeviceName(this.options.name()) ?? 'Kettu'
+    const kept = await this.options.hosts.add({
+      publicKey: host.publicKey,
+      name: host.name,
+      platform: host.platform,
+      version: host.version,
+      addresses: [],
+      deviceName: name,
+      relay: reverseHostRelay(host),
+      ...(this.account() !== null ? { account: this.account() } : {}),
+    })
+    if (!kept) return null
+    // A link that was there, as for a host removed and added back, tries again with what is kept.
+    this.links.get(kept.id)?.close()
+    this.links.delete(kept.id)
+    this.linkFor(kept.id).start()
+    this.options.changed()
+    return {
+      deviceKey: Buffer.from(this.options.key.publicKey).toString('base64'),
+      name,
+      platform: this.options.client.platform,
+    }
+  }
+
+  /** A known host with its connection now, or null when it is not known. */
+  statusOf(id: string): HostStatus | null {
+    const host = this.options.hosts.get(id)
+    return host ? this.status(host) : null
   }
 
   /** Whether this computer's user saw the same code as the host's; false ends the pairing. */
-  matchPairing(pairId: number, match: boolean): void {
+  matchPairing(pairId: number, match: boolean, reverse = false): void {
     const pairing = this.pairings.get(pairId)
-    if (pairing instanceof DiscoveryPairing) pairing.match(match)
+    if (pairing instanceof DiscoveryPairing) pairing.match(match, reverse)
   }
 
   /** Runs the setup script on a machine: its run, and what it printed; null once aborted. */

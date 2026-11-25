@@ -5,6 +5,8 @@
 // and devices that want it only while the user is away wait until they leave. A session's
 // notifications merge into one, and one that no longer applies, a request answered elsewhere or a
 // turn seen since, is withdrawn. Requests that wait also drive each device's Live Activity.
+// Devices joining the host are notices of their own: a device of the account that asks to be
+// added, until it is answered, and a device that joined, to every device that is not in front.
 
 import type { DevicePush, NotificationChoices, PushActions, PushEvent } from '@shared/remote/push'
 
@@ -61,6 +63,8 @@ export interface NotifierOptions {
    * it is connected: it is pushed nothing meanwhile.
    */
   notifiesItself?(deviceId: string): boolean
+  /** Whether the device is connected and in front, so it shows a notice in the app instead. */
+  foreground?(deviceId: string): boolean
   send(job: PushJob): void
   /** How long a device's notifications of one subject wait to merge into one. */
   mergeMs?: number
@@ -68,6 +72,17 @@ export interface NotifierOptions {
 
 /** The subject of the Live Activity's tag. */
 export const ACTIVITY_SUBJECT = 'activity'
+
+/** The subject of the notice of a device of the account that asks to be added. */
+export const DEVICE_REQUEST_SUBJECT = 'device-request'
+
+/** A notice about devices, which goes out at once to each device that wants it. */
+export interface DeviceNotice {
+  subject: string
+  event: PushEvent
+  title: string
+  body: string
+}
 
 const MERGE_MS = 1000
 
@@ -134,6 +149,8 @@ export class Notifier {
   private readonly queued = new Map<string, { attention: Attention; timer: NodeJS.Timeout }>()
   private readonly activities = new Map<string, Activity>()
   private readonly activityTimers = new Map<string, NodeJS.Timeout>()
+  /** Per device, the subjects of the device notices it was sent. */
+  private readonly noticed = new Map<string, Set<string>>()
   private readonly mergeMs: number
 
   constructor(private readonly options: NotifierOptions) {
@@ -217,6 +234,33 @@ export class Notifier {
     this.activitiesChanged()
   }
 
+  /** Tells every device that wants notices about devices, but `except`. */
+  deviceNotice(notice: DeviceNotice, except?: string): void {
+    for (const device of this.options.devices()) {
+      if (device.id === except) continue
+      const { push } = device
+      if (!reachable(push) || !push.choices.device || this.held(push.choices)) continue
+      if (this.options.notifiesItself?.(device.id)) continue
+      if (this.options.foreground?.(device.id)) continue
+      const { subject, event, title, body } = notice
+      // Only a request is withdrawn later; a device that joined stays told.
+      if (subject === DEVICE_REQUEST_SUBJECT) {
+        const noticed = this.noticed.get(device.id) ?? new Set<string>()
+        noticed.add(subject)
+        this.noticed.set(device.id, noticed)
+      }
+      this.options.send({ deviceId: device.id, subject, type: 'alert', event, title, body })
+    }
+  }
+
+  /** A device notice no longer applies, as a request answered elsewhere: it is withdrawn. */
+  withdrawNotice(subject: string): void {
+    for (const [deviceId, noticed] of this.noticed) {
+      if (!noticed.delete(subject)) continue
+      this.options.send({ deviceId, subject, type: 'background', event: { kind: 'withdraw' } })
+    }
+  }
+
   /** A device changed its target or choices: its Live Activity follows. */
   deviceChanged(): void {
     this.activitiesChanged()
@@ -225,6 +269,7 @@ export class Notifier {
   /** A device was removed: nothing more goes to it. */
   forget(deviceId: string): void {
     this.told.delete(deviceId)
+    this.noticed.delete(deviceId)
     this.activities.delete(deviceId)
     const timer = this.activityTimers.get(deviceId)
     if (timer) clearTimeout(timer)

@@ -44,7 +44,13 @@ import { DaemonSignIn } from './sign-in'
 import { proxiedFetch } from './proxy'
 import { controlSocketPath, DATA_ENV, dataPath, logFolderPath } from './paths'
 import { terminalQuestions } from './questions'
-import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
+import {
+  devicesReport,
+  requestReport,
+  runningReport,
+  stoppedReport,
+  terminalReport,
+} from './report'
 import {
   installService,
   restartService,
@@ -678,6 +684,11 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
       }
     }
 
+    case 'requests':
+    case 'requests-add':
+    case 'requests-reject':
+      return requests(socket, command)
+
     case 'pair':
       return pair(socket)
 
@@ -859,3 +870,42 @@ void main(process.argv.slice(2)).then((code) => {
   // Whatever still holds the event loop, such as a host that would not die, does not hold the exit.
   setTimeout(() => process.exit(code), 2000).unref()
 })
+
+/**
+ * `kettu requests`: shows the device of the account that asks to be added, or answers it; the
+ * answer goes to the request shown, so one that came meanwhile is not answered unseen.
+ */
+async function requests(
+  socket: string,
+  command: Extract<Command, { kind: 'requests' | 'requests-add' | 'requests-reject' }>,
+): Promise<number> {
+  try {
+    const pending = await callControl(socket, 'requests.get', undefined)
+    if (command.kind === 'requests' || pending?.request.state !== 'confirm') {
+      out(requestReport(pending, Date.now()))
+      return command.kind === 'requests' || pending ? 0 : 1
+    }
+    const add = command.kind === 'requests-add'
+    const name = add ? (command.name ?? pending.request.device.name) : ''
+    const answer = await callControl(socket, 'requests.answer', {
+      requestId: pending.requestId,
+      add,
+      name,
+    })
+    if (answer === 'gone') {
+      throw new Failure('The request was already answered, or it ended.')
+    }
+    out(
+      add
+        ? pending.request.deviceConfirmed
+          ? `Adding ${name}.\n`
+          : `${name} is added once its user confirms the code.\n`
+        : `Turned down ${pending.request.device.name}.\n`,
+    )
+    return 0
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
+  }
+}

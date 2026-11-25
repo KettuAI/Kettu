@@ -32,6 +32,7 @@ import type {
 } from '../themes'
 import type { UpdateStatus } from '../updates'
 import type { DeviceActivity } from './activity'
+import type { DiscoveryRequestEvent, ReverseGrant, ReverseHost } from './discovery'
 import type { OwnRelayCheck, OwnRelayInput } from './own-relay'
 import type { RemoteStatus } from './status'
 
@@ -284,6 +285,18 @@ export interface HostAdminContract {
   'remote.pair': { params: undefined; result: number | null }
   'remote.closePairing': { params: { codeId: number }; result: null }
   'remote.answerPairing': { params: { codeId: number; add: boolean; name: string }; result: null }
+  /** The request of a device of the account that waits now, if any. */
+  'remote.pendingDiscovery': { params: undefined; result: DiscoveryRequestEvent | null }
+  /** The first answer counts; `gone` when it was answered elsewhere, expired or closed. */
+  'remote.answerDiscovery': {
+    params: { requestId: number; add: boolean; name: string }
+    result: 'gone' | null
+  }
+  /**
+   * Keeps the calling computer's own host as a host of this computer's client, after this host
+   * added it; `unsupported` where there is no client, as under the daemon.
+   */
+  'remote.addReverseHost': { params: ReverseHost; result: ReverseGrant | 'unsupported' }
   'remote.renameDevice': { params: { id: string; name: string }; result: 'not_renamed' | null }
   'remote.removeDevice': { params: { id: string }; result: 'not_removed' | null }
   'remote.activity': { params: { id: string }; result: DeviceActivity[] }
@@ -381,6 +394,9 @@ const METHODS: Record<HostAdminMethod, true> = {
   'remote.pair': true,
   'remote.closePairing': true,
   'remote.answerPairing': true,
+  'remote.pendingDiscovery': true,
+  'remote.answerDiscovery': true,
+  'remote.addReverseHost': true,
   'remote.renameDevice': true,
   'remote.removeDevice': true,
   'remote.activity': true,
@@ -435,15 +451,28 @@ export type HostAdminEvent =
   | { type: 'settings.changed'; settings: HostSettingsPart }
   | { type: 'remote.changed'; status: RemoteStatus }
   | { type: 'remote.pairing'; event: RemotePairingEvent }
+  | { type: 'remote.discovery'; event: DiscoveryRequestEvent }
+  | { type: 'remote.deviceJoined'; device: JoinedDevice; via: JoinedVia }
   | { type: 'sharing.changed'; status: SharingStatus }
   | { type: 'updates.changed'; status: UpdateStatus }
   | { type: 'themes.changed'; themes: HostThemes }
   | { type: 'attention'; attention: HostAttention }
 
+/** How a device joined the host: a pairing code, the account, SSH, or a host it added in turn. */
+export type JoinedVia = 'code' | 'account' | 'ssh' | 'reverse'
+
+export interface JoinedDevice {
+  id: string
+  name: string
+  platform?: string
+}
+
 const EVENTS: Record<HostAdminEvent['type'], true> = {
   'settings.changed': true,
   'remote.changed': true,
   'remote.pairing': true,
+  'remote.discovery': true,
+  'remote.deviceJoined': true,
   'sharing.changed': true,
   'updates.changed': true,
   'themes.changed': true,
@@ -462,4 +491,24 @@ export interface PathCompletion {
   entries: { name: string; kind: 'folder' | 'file'; executable: boolean; repo?: boolean }[]
   /** Whether the typed path itself exists, and what it is. */
   exact: { kind: 'folder' | 'file'; executable: boolean } | null
+}
+
+const VIAS: readonly string[] = ['code', 'account', 'ssh', 'reverse']
+
+/** A joined device as the remote host reports it, or null when it is not one. */
+export function parseJoined(message: {
+  device?: unknown
+  via?: unknown
+}): { device: JoinedDevice; via: JoinedVia } | null {
+  const { device, via } = message
+  if (typeof via !== 'string' || !VIAS.includes(via)) return null
+  if (typeof device !== 'object' || device === null) return null
+  const { id, name, platform } = device as Record<string, unknown>
+  if (typeof id !== 'string' || !/^[0-9a-f]{32}$/.test(id)) return null
+  if (typeof name !== 'string' || name.length === 0 || name.length > 200) return null
+  const kept: JoinedDevice = { id, name }
+  if (typeof platform === 'string' && platform.length > 0 && platform.length <= 64) {
+    kept.platform = platform
+  }
+  return { device: kept, via: via as JoinedVia }
 }

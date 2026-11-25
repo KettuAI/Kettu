@@ -12,6 +12,7 @@ import type { Platform } from '@shared/platform'
 import {
   hostSettingsPart,
   isHostAdminEvent,
+  parseJoined,
   splitSettingsPatch,
   withHostSettings,
   type HostAdminEvent,
@@ -21,6 +22,7 @@ import {
   type HostInfo,
   type HostSettingsPart,
 } from '@shared/remote/host-admin'
+import { parseDiscoveryEvent } from '@shared/remote/discovery'
 import {
   applyListEdit,
   DEFAULT_SETTINGS,
@@ -372,10 +374,19 @@ function createScope(hostId: string): OtherScope {
     closePairing: (codeId) => done(admin('remote.closePairing', { codeId })),
     answerPairing: (codeId, add, name) =>
       done(admin('remote.answerPairing', { codeId, add, name })),
-    // Another host asks its own windows about devices of the account, not its devices.
-    pendingDiscovery: () => Promise.resolve(null),
-    answerDiscovery: () => Promise.reject(new Error('Answered on the host itself')),
-    onDiscovery: () => () => {},
+    pendingDiscovery: () => admin('remote.pendingDiscovery'),
+    answerDiscovery: (requestId, add, name) =>
+      admin('remote.answerDiscovery', { requestId, add, name }),
+    onDiscovery: (listener) =>
+      listen('remote.discovery', (event) => {
+        const parsed = parseDiscoveryEvent(event.event)
+        if (parsed) listener(parsed)
+      }),
+    onDeviceJoined: (listener) =>
+      listen('remote.deviceJoined', (event) => {
+        const joined = parseJoined(event)
+        if (joined) listener(joined)
+      }),
     // Each desktop app asks about itself in its own window.
     offer: () => Promise.resolve(null),
     answerOffer: () => Promise.reject(new Error('Answered on the host itself')),

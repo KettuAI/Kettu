@@ -14,7 +14,7 @@ import {
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { addressKey, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID } from '@shared/remote/device'
-import { accountComputers, type DiscoveredHosts } from '@shared/remote/discovery'
+import { accountComputers, parsePairGroup, type DiscoveredHosts } from '@shared/remote/discovery'
 import {
   MAX_HOST_ADDRESSES,
   parseIdentityFile,
@@ -36,6 +36,7 @@ import { isAgentColor } from '@shared/settings'
 import { isComputerPermissionKind } from '@shared/computer-use'
 import type {
   AppInfo,
+  DiscoveredPairOptions,
   IpcInvokeChannel,
   IpcInvokeResult,
   IpcSendContract,
@@ -822,10 +823,11 @@ export function registerIpcHandlers({
     const owned = ownCode(event.sender, codeId)
     if (owned !== null) remoteHost.answerPairing(owned, add, add ? deviceName(name) : '')
   })
-  handle('remote:discovery-pending', 0, () => remoteHost.pendingDiscovery)
-  handle('remote:discovery-answer', 3, (_, requestId, add, name) => {
+  handle('remote:discovery-pending', 0, () => remoteHost.pendingDiscovery())
+  handle('remote:discovery-answer', 3, async (_, requestId, add, name) => {
     if (typeof add !== 'boolean') throw new Error('"remote:discovery-answer" takes whether to add')
-    remoteHost.answerDiscovery(pairingCode(requestId), add, add ? deviceName(name) : '')
+    const named = add ? deviceName(name) : ''
+    return (await remoteHost.answerDiscovery(pairingCode(requestId), add, named)) ? null : 'gone'
   })
   handle('remote:offer', 0, () => remoteOffers.current)
   handle('remote:answer-offer', 2, async (_, clientId, turnOn) => {
@@ -918,17 +920,39 @@ export function registerIpcHandlers({
       account: status.account.id,
       now: Date.now(),
     })
-    return { ...discovered, computers }
+    // Matched by name, as the list of computers is: a renamed one says nothing.
+    const kinds = new Map(
+      clients
+        .filter(
+          (client) => !client.current && (client.kind === 'desktop' || client.kind === 'daemon'),
+        )
+        .map((client) => [client.name, client.kind as 'desktop' | 'daemon']),
+    )
+    const hosts = discovered.hosts.map((host) => {
+      const kind = kinds.get(host.name)
+      return kind ? { ...host, kind } : host
+    })
+    return { ...discovered, hosts, computers }
   })
-  handle('hosts:pair-discovered', 1, async ({ event }, relayId): Promise<HostPairStart> => {
+  handle('hosts:pair-discovered', 2, async ({ event }, relayId, value): Promise<HostPairStart> => {
     if (!isRelayHostId(relayId)) return { kind: 'invalid' }
+    const options = discoveredPairOptions(value)
+    if (!options || (options.group && !options.group.hosts.includes(relayId))) {
+      return { kind: 'invalid' }
+    }
     const model = await computerModel()
-    return pairFor(event.sender, (listener) => remoteHost.pairDiscovered(relayId, model, listener))
+    return pairFor(event.sender, (listener) =>
+      remoteHost.pairDiscovered(relayId, model, listener, options.group),
+    )
   })
-  handle('hosts:pair-match', 2, ({ event }, value, match) => {
-    if (typeof match !== 'boolean') throw new Error('"hosts:pair-match" takes whether they match')
+  handle('hosts:pair-match', 3, ({ event }, value, match, reverse) => {
+    if (typeof match !== 'boolean' || typeof reverse !== 'boolean') {
+      throw new Error('"hosts:pair-match" takes whether they match and whether to let it in here')
+    }
     const pairId = pairingCode(value)
-    if (pairOwners.get(pairId) === event.sender) remoteHost.matchHostPairing(pairId, match)
+    // Only a computer that serves devices itself can let the host it connects to in.
+    const letIn = reverse && settings.get().remote.enabled
+    if (pairOwners.get(pairId) === event.sender) remoteHost.matchHostPairing(pairId, match, letIn)
   })
   handle('hosts:pair-close', 1, ({ event }, value) => {
     const pairId = pairingCode(value)
@@ -1106,4 +1130,13 @@ export function registerSignInIpc(signIns: SignIns): void {
   handle('sign-ins:brought', 0, () => signIns.brought())
   handle('sign-ins:remove', 1, (_, site) => signIns.remove(signInSite(site)))
   handle('sign-ins:offer', 1, (_, url) => signIns.offer(offerUrl(url)))
+}
+
+/** What a window asks of a pairing with a host of the account, or null when it is not that. */
+function discoveredPairOptions(value: unknown): DiscoveredPairOptions | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { group } = value as Record<string, unknown>
+  const parsed = group === undefined ? undefined : parsePairGroup(group)
+  if (parsed === null) return null
+  return parsed ? { group: parsed } : {}
 }

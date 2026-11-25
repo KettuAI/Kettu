@@ -1713,13 +1713,35 @@
         "intro": "A code shows here and on {{name}} in a moment.",
         "check": "Check that {{name}} shows the same code.",
         "differs": "If it differs, cancel: another computer may be answering.",
-        "matched": "Codes match. Click Add on {{name}} to finish.",
+        "matched": "Codes match. Add this computer on {{name}}, or on another device of yours that uses it.",
         "match": "Codes match"
       },
       "failed": {
         "void": "The request ended before {{name}} added this computer: it expired or was closed there. Try again.",
         "rejected": "{{name}} did not add this computer.",
         "unreachable": "Could not reach {{name}} through the Kettu relay. Check that it is on and signed in, then try again."
+      },
+      "connectAll": "Connect all",
+      "connectAllLabel": "Connect to all {{count}} computers",
+      "reverse": "Also let {{name}} use this computer",
+      "reverseAll": "Also let them use this computer",
+      "reverseAdded": "{{name}} can use this computer too.",
+      "reverseFailed": "Could not let {{name}} use this computer. You can still add it in Settings › Remote access.",
+      "reverseUnsupported": "{{name}} runs Kettu without a window, so it cannot use other computers.",
+      "pairAll": {
+        "title": "Connect to {{count}} computers",
+        "intro": "A code shows here and on each computer in a moment.",
+        "check": "Check that every computer, or another device of yours that uses them, shows this code.",
+        "each": "Or check each computer on its own",
+        "matched": "Codes match. Add this computer on each of them, or on another device of yours that uses them.",
+        "added": "Connected to {{count}} computers",
+        "state": {
+          "connecting": "Connecting…",
+          "compare": "Check the code",
+          "matched": "Waiting to be added…",
+          "added": "Added",
+          "failed": "Not added"
+        }
       }
     },
     "load": {
@@ -1979,7 +2001,11 @@
         "sessionDeleted": "Deleted “{{title}}”",
         "sessionDeletedUnknown": "Deleted a session",
         "terminalOpened": "Opened a terminal",
-        "terminalClosed": "Closed a terminal"
+        "terminalClosed": "Closed a terminal",
+        "pairedSsh": "Added to this computer over SSH",
+        "pairedSsh_web": "Added to {{host}} over SSH",
+        "pairedReverse": "Added when this computer was added to it",
+        "pairedReverse_web": "Added when {{host}} was added to it"
       },
       "remove": {
         "name": "Remove this device",
@@ -1990,7 +2016,9 @@
         "body": "It disconnects at once and can no longer reach this computer; the session list it cached is cleared the next time it connects. To use it again, scan a code to add it again.",
         "body_web": "It disconnects at once and can no longer reach {{host}}; the session list it cached is cleared the next time it connects. To use it again, scan a code to add it again.",
         "confirm": "Remove"
-      }
+      },
+      "joinedSsh": "{{date}}, over SSH",
+      "joinedReverse": "{{date}}, when this computer was added to it"
     },
     "time": {
       "today": "Today {{time}}",
@@ -2140,7 +2168,22 @@
         "cancelled": "{{name}} stopped asking to connect",
         "expired": "The request from {{name}} expired",
         "stopped": "The request from {{name}} ended because remote access stopped"
-      }
+      },
+      "bodyOn": "{{name}} wants to connect to {{host}}. It is signed in to your Kettu account; add it only if you are setting it up yourself.",
+      "answeredOn": {
+        "added": "{{name}} was added on {{place}}",
+        "rejected": "{{name}} was turned down on {{place}}"
+      },
+      "gone": "The request from {{name}} was already answered somewhere else, or it ended",
+      "groupTitle": "Add this device to {{count}} computers?",
+      "groupBody": "{{name}} wants to connect to {{hosts}}. It is signed in to your Kettu account; add it only if you are setting it up yourself.",
+      "groupCheck": "Check that {{name}} shows the same code for all of them."
+    },
+    "joined": {
+      "toast": "{{name}} joined {{host}}",
+      "remove": "Remove",
+      "removed": "{{name}} is removed",
+      "notRemoved": "{{name}} could not be removed"
     }
   },
   "usage": {

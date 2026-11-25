@@ -33,9 +33,16 @@ export interface PushWorkerScope {
 }
 
 function commandOf(content: WebPushContent): AppCommand {
-  return content.kind === 'routine-paused'
-    ? { kind: 'open-routines' }
-    : { kind: 'open-session', sessionId: content.sessionId }
+  switch (content.kind) {
+    case 'routine-paused':
+      return { kind: 'open-routines' }
+    // A request's card shows once the page is connected; Remote access lists the devices.
+    case 'device-request':
+    case 'device-joined':
+      return { kind: 'open-settings', section: 'remote' }
+    default:
+      return { kind: 'open-session', sessionId: content.sessionId }
+  }
 }
 
 async function show(worker: PushWorkerScope, event: PushEvent): Promise<void> {

@@ -75,9 +75,13 @@ function DevicePageBody({
   const joined = t(
     paired?.via === 'account'
       ? 'remote.device.joinedAccount'
-      : device.kind === 'desktop'
-        ? 'remote.device.joinedLink'
-        : 'remote.device.joinedScan',
+      : paired?.via === 'ssh'
+        ? 'remote.device.joinedSsh'
+        : paired?.via === 'reverse'
+          ? 'remote.device.joinedReverse'
+          : device.kind === 'desktop'
+            ? 'remote.device.joinedLink'
+            : 'remote.device.joinedScan',
     {
       date: monthDay(device.addedAt),
     },
@@ -221,9 +225,13 @@ function eventText(
       return t(
         event.via === 'account'
           ? 'remote.device.events.pairedAccount'
-          : kind === 'desktop'
-            ? 'remote.device.events.pairedLink'
-            : 'remote.device.events.paired',
+          : event.via === 'ssh'
+            ? 'remote.device.events.pairedSsh'
+            : event.via === 'reverse'
+              ? 'remote.device.events.pairedReverse'
+              : kind === 'desktop'
+                ? 'remote.device.events.pairedLink'
+                : 'remote.device.events.paired',
         onHost,
       )
     case 'connected':

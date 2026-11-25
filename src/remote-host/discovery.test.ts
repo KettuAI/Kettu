@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import { DiscoveryRequests, type DiscoveryOutcome, type DiscoverySlot } from './discovery'
 
+const TRANSCRIPT = {
+  hash: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE',
+  hostNonce: 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI',
+  deviceNonce: 'AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM',
+}
+
 const DEVICE = {
   name: 'Laptop',
   model: 'MacBook Air',
@@ -30,7 +36,7 @@ function setup() {
     const slot = requests.claim()
     if (typeof slot === 'string') throw new Error(`Refused: ${slot}`)
     let settled: DiscoveryOutcome | null = null
-    void requests.ask(slot, DEVICE, '001133').then((outcome) => (settled = outcome))
+    void requests.ask(slot, DEVICE, '001133', TRANSCRIPT).then((outcome) => (settled = outcome))
     return { slot, outcome: () => settled }
   }
   const last = () => events.at(-1)!
@@ -73,6 +79,44 @@ describe('discovery requests', () => {
     t.requests.answer(2, true, 'Desk')
     await Promise.resolve()
     expect(second.outcome()).toEqual({ add: true, name: 'Desk' })
+  })
+
+  it('counts the first answer, from any place, and says where it came from', async () => {
+    const t = setup()
+    const first = t.ask()
+    expect(t.last().request).toMatchObject({ deviceConfirmed: false, transcript: TRANSCRIPT })
+    t.requests.confirm(first.slot)
+    // Every place asking hears that the device's user confirmed, so Add may be pressed.
+    expect(t.last()).toMatchObject({ requestId: 1, request: { deviceConfirmed: true } })
+    expect(t.requests.answer(1, true, 'Laptop', 'Amy’s iPhone')).toBe(true)
+    // A second answer, from the window or another device, is too late.
+    expect(t.requests.answer(1, false, '')).toBe(false)
+    expect(t.requests.answer(1, true, 'Other', 'iPad')).toBe(false)
+    await Promise.resolve()
+    expect(first.outcome()).toEqual({ add: true, name: 'Laptop' })
+    t.requests.added(first.slot)
+    expect(t.last()).toEqual({
+      requestId: 1,
+      request: { state: 'closed', reason: 'added', answeredOn: 'Amy’s iPhone' },
+    })
+    expect(t.requests.answer(1, true, 'Laptop')).toBe(false)
+
+    const second = t.ask()
+    expect(t.requests.answer(2, false, '', 'iPad')).toBe(true)
+    await Promise.resolve()
+    expect(second.outcome()).toEqual({ add: false, reason: 'rejected' })
+    expect(t.last()).toEqual({
+      requestId: 2,
+      request: { state: 'closed', reason: 'rejected', answeredOn: 'iPad' },
+    })
+
+    // The host's own answer names no device.
+    const third = t.ask()
+    t.requests.confirm(third.slot)
+    expect(t.requests.answer(3, true, 'Desk')).toBe(true)
+    await Promise.resolve()
+    t.requests.added(third.slot)
+    expect(t.last()).toEqual({ requestId: 3, request: { state: 'closed', reason: 'added' } })
   })
 
   it('ends a request the owner rejects, or nobody answers in time', async () => {

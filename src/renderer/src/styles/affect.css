@@ -5050,6 +5050,11 @@ li[data-row-exit='dust'] > * {
 .kettu-sd .kettu-sd__code[data-pending] {
   color: var(--muted);
 }
+.kettu-sd .kettu-sd__each-code {
+  font-family: var(--code-face);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
 .kettu-sd .kettu-sd__label {
   margin: 0;
   font-size: 13px;
