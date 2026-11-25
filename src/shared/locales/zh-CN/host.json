@@ -1127,7 +1127,12 @@
     "permission": {
       "allowAlways": "本会话始终允许"
     },
-    "signInFirst": "请先登录 Cline，再开始会话"
+    "signInFirst": "请先登录 Cline，再开始会话",
+    "compact": {
+      "command": "压缩会话的上下文",
+      "nothing": "还没有可以压缩的内容。",
+      "off": "Cline 自己的设置里关掉了上下文压缩。"
+    }
   },
   "question": {
     "other": "其他回答…"

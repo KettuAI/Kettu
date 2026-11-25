@@ -15,6 +15,7 @@ import {
   type ClineModel,
   type ClineProvider,
   type ClineSettings,
+  type CompactResult,
   type HelloResult,
   type ModelsParams,
   type ModelsResult,
@@ -70,6 +71,8 @@ const AUTH_ERRORS = [
 ]
 /** OpenAI's limit on a function name, which Cline's own MCP tool names keep to. */
 const TOOL_NAME_LIMIT = 64
+/** The input a compaction by hand shrinks toward for a model no catalog sizes, as Cline's CLI. */
+const FALLBACK_INPUT_TOKENS = 64_000
 
 /**
  * The input a model takes, which Cline compacts against: a catalog that names it beside the whole
@@ -86,7 +89,7 @@ export class HostError extends Error {
     readonly code: number,
     message: string,
     // The process cannot translate, so the agent host words a refusal it names by reason.
-    readonly reason?: 'signIn' | 'betweenTurns',
+    readonly reason?: 'signIn' | 'betweenTurns' | 'compactionOff',
   ) {
     super(message)
   }
@@ -104,6 +107,8 @@ interface Session {
   /** The conversation the next core starts from: the store's, or the core's before it. */
   messages: SdkMessage[] | null
   running: boolean
+  /** Stops the compaction the user asked for while it runs. */
+  compacting: AbortController | null
   /** A failure the running turn cannot go on from, which its answer carries. */
   fatal: string | null
   /** Tools the user allowed for the rest of the session. */
@@ -166,6 +171,8 @@ export class Host {
         return this.prompt(params as PromptParams)
       case METHOD.steer:
         return this.steer(params as PromptParams)
+      case METHOD.compact:
+        return this.compact((params as { sessionId: string }).sessionId)
       case METHOD.cancel:
         return this.cancel((params as { sessionId: string }).sessionId)
       case METHOD.set:
@@ -303,6 +310,7 @@ export class Host {
       manager: null,
       messages: messages.length > 0 ? messages : null,
       running: false,
+      compacting: null,
       fatal: null,
       allowed: new Set(),
       autoAllowed: new Set(),
@@ -526,9 +534,105 @@ export class Host {
     }
   }
 
+  /**
+   * Compacts the conversation because the user asked, as Cline's own `/compact` does: the whole
+   * of it is summarized into the session's working context, and its stored messages stay. Its
+   * notices go out as a turn's do, which draw the divider.
+   */
+  private async compact(sessionId: string): Promise<CompactResult> {
+    const session = this.require(sessionId)
+    if (session.running) throw new HostError(ERROR.failed, 'A turn is already running')
+    const setting = this.compacts()
+    if (!setting.enabled) {
+      throw new HostError(ERROR.failed, 'Compaction is off in Cline', 'compactionOff')
+    }
+    // A session nobody prompted has nothing to compact, and gets no core for it.
+    if (!session.core && !session.messages) return { finishReason: 'completed', empty: true }
+    session.running = true
+    const abort = new AbortController()
+    session.compacting = abort
+    const event = (event: ClineEvent): void =>
+      this.peer.notify(METHOD.event, { sessionId: session.id, event })
+    try {
+      const core = await this.ensureCore(session)
+      const all = await core.readMessages(session.id)
+      // Each `/compact` summarizes the whole conversation, never the summary before it.
+      const conversation = all.filter((message) => message.metadata?.displayOnly !== true)
+      if (conversation.length === 0) return { finishReason: 'completed', empty: true }
+      const { sdk } = this
+      const { provider, model } = session.settings
+      const saved = this.settings.getProviderSettings(provider)
+      const apiKey = sdk.getPersistedProviderApiKey(provider, saved)
+      const known = (await sdk.Llms.getModelsForProvider(provider).catch(() => undefined))?.[model]
+      const pass = sdk.createContextCompactionPrepareTurn(
+        {
+          providerConfig: sdk.toProviderConfig({
+            ...saved,
+            provider,
+            model,
+            ...(apiKey ? { apiKey } : {}),
+          }),
+          providerId: provider,
+          modelId: model,
+          compaction: setting,
+          sessionId: session.id,
+        },
+        { mode: 'manual' },
+      )
+      const result = await pass?.({
+        agentId: 'kettu',
+        conversationId: session.id,
+        parentAgentId: null,
+        iteration: 0,
+        messages: conversation,
+        apiMessages: conversation,
+        abortSignal: abort.signal,
+        systemPrompt: '',
+        tools: [],
+        model: {
+          id: model,
+          provider,
+          info: known
+            ? { ...known, id: model }
+            : { id: model, maxInputTokens: FALLBACK_INPUT_TOKENS },
+        },
+        emitStatusNotice: (message, metadata) =>
+          event({
+            type: 'notice',
+            noticeType: 'status',
+            message,
+            ...(typeof metadata?.reason === 'string' ? { reason: metadata.reason } : {}),
+            ...(metadata ? { metadata } : {}),
+          }),
+      })
+      if (abort.signal.aborted) return { finishReason: 'aborted', empty: false }
+      if (result?.messages) {
+        const state = sdk.createSessionCompactionState({
+          sourceMessages: all,
+          compactedMessages: result.messages,
+          conversationId: session.id,
+          systemPrompt: result.systemPrompt,
+        })
+        const kept = await core.updateSessionCompactionState(session.id, state)
+        if (!kept.updated) throw new Error('Cline did not keep the compacted context')
+      }
+      return { finishReason: 'completed', empty: false }
+    } catch (error) {
+      if (abort.signal.aborted) return { finishReason: 'aborted', empty: false }
+      const message = messageOf(error)
+      // Ends the divider as failed; the error the turn fails with says why.
+      event({ type: 'error', error: { message }, recoverable: false, iteration: 0 })
+      throw new HostError(isAuthError(message) ? ERROR.authRequired : ERROR.failed, message)
+    } finally {
+      session.running = false
+      session.compacting = null
+    }
+  }
+
   private async steer(params: PromptParams): Promise<SteerResult> {
     const session = this.require(params.sessionId)
-    if (!session.running || !session.core) return { injected: false }
+    // A compaction is no turn of the core's, so a message waits for it to end.
+    if (!session.running || !session.core || session.compacting) return { injected: false }
     // Resolves once the runtime queued it; the running turn's own answer carries the rest.
     void session.core
       .send({
@@ -546,7 +650,8 @@ export class Host {
 
   private async cancel(sessionId: string): Promise<Record<string, never>> {
     const session = this.sessions.get(sessionId)
-    if (session?.core && session.running) {
+    if (session?.compacting) session.compacting.abort()
+    else if (session?.core && session.running) {
       await session.core.abort(session.id, new Error('The user stopped the turn')).catch(() => {})
     }
     return {}
@@ -589,6 +694,7 @@ export class Host {
     const session = this.sessions.get(sessionId)
     if (!session) return {}
     this.sessions.delete(sessionId)
+    session.compacting?.abort()
     await this.teardown(session, 'kettu_session_closed')
     return {}
   }
