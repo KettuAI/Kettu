@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import {
   DragDropProvider,
@@ -25,6 +26,7 @@ import {
   Delete02Icon,
   FileAddIcon,
   FilePasteIcon,
+  FileUploadIcon,
   FolderAddIcon,
   FolderOpenIcon,
   Link01Icon,
@@ -42,10 +44,11 @@ import {
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import { toast } from '@renderer/components/ui/toast'
+import { chooseFiles } from '@renderer/features/session/composer/attachments'
 import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
-import { fileManagerName, formatShortcut, isMac, isMod } from '@renderer/lib/platform'
+import { fileManagerName, formatShortcut, isMac, isMod, isWeb } from '@renderer/lib/platform'
 import {
   openFile,
   readIgnoredFolder,
@@ -90,6 +93,7 @@ import {
   type Folder,
   type TreeRow,
 } from './paths'
+import { uploadInto, useUploadDrop, type Incoming } from './upload'
 import { VirtualRows, type RowKey } from './virtual-rows'
 
 // A single click in a list opens the preview tab, which the next single click replaces.
@@ -240,6 +244,7 @@ export function FileTree({
   edit,
   onEdit,
   collapsed,
+  uploadRef,
 }: {
   projectPath: string
   /** The side panel the pane shows in, whose session a mention goes to. */
@@ -254,6 +259,8 @@ export function FileTree({
   onEdit: (edit: TreeEdit | null) => void
   /** Counts Collapse all, which closes every folder. */
   collapsed: number
+  /** Set while the tree shows to what uploads into its chosen row's folder. */
+  uploadRef?: RefObject<((incoming: Incoming[]) => void) | null>
 }) {
   const { t } = useTranslation(['files', 'common', 'composer'])
   const hideIgnored = useFilesStore((s) => s.hideIgnored)
@@ -459,6 +466,48 @@ export function FileTree({
     showPaths(arrived, clipboard.cut ? movesOf(clipboard.paths, folder, arrived) : [])
   }
 
+  /** Uploads into `folder`, then opens the folders above what arrived and chooses it. */
+  const upload = (folder: string, incoming: Incoming[]) =>
+    void uploadInto(projectPath, panel, folder, incoming).then((arrived) => {
+      if (arrived.length === 0) return
+      setExpanded((open) => new Set([...open, ...arrived.flatMap((path) => foldersAbove(path))]))
+      choose(arrived)
+      // A long upload leaves the focus where the user went meanwhile.
+      const active = document.activeElement
+      if (!active || active === document.body || box.current?.contains(active)) {
+        setFocusPath(arrived[0]!)
+      }
+    })
+
+  /** The folder of the chosen row, the one clicked last when several are; the project's when none. */
+  const chosenFolder = (): string => {
+    const path =
+      anchor !== null && selected.has(anchor)
+        ? anchor
+        : selected.size === 1
+          ? [...selected][0]!
+          : null
+    return folderFor(path, path !== null && isFolder(path))
+  }
+  useEffect(() => {
+    if (!uploadRef) return
+    uploadRef.current = (incoming) => upload(chosenFolder(), incoming)
+    return () => {
+      uploadRef.current = null
+    }
+  })
+
+  // Files dragged in from the file manager go into the folder under the pointer.
+  const folderAt = (target: EventTarget | null): string => {
+    const path =
+      target instanceof Element
+        ? target.closest<HTMLElement>('[data-path]')?.dataset.path
+        : undefined
+    if (path === undefined || path === DRAFT) return ''
+    return isFolder(path) ? path : folderOf(path)
+  }
+  const fileDrop = useUploadDrop(folderAt, upload)
+
   const reveal = (path: string) =>
     void window.kettu.shell
       .showItem(hostFilePath(projectPath, path))
@@ -643,6 +692,8 @@ export function FileTree({
     }
   }
 
+  // Where rows dragged in the tree, or files dragged in from outside, would go.
+  const dropping = dropFolder ?? fileDrop.over
   const menuTargets = targetsOf(menuPath)
   const menuFolder = folderFor(menuPath, menuPath !== null && isFolder(menuPath))
   const shortcut = (keys: string) => (
@@ -669,10 +720,11 @@ export function FileTree({
         <ContextMenuTrigger
           ref={box}
           className="kp-tree select-none"
-          data-drop={dropFolder === '' || undefined}
+          data-drop={dropping === '' || undefined}
           onContextMenu={onContextMenu}
           onKeyDownCapture={onKeyDownCapture}
           onKeyDown={onKeyDown}
+          {...fileDrop.handlers}
         >
           {rows.length === 0 ? (
             <p className="kp-tree__note">{t('browser.empty')}</p>
@@ -719,9 +771,7 @@ export function FileTree({
                     current={row.path === openPath}
                     chosen={selected.has(row.path)}
                     cut={[...cut].some((path) => isWithin(row.path, path))}
-                    drop={
-                      dropFolder !== null && dropFolder !== '' && isWithin(row.path, dropFolder)
-                    }
+                    drop={dropping !== null && dropping !== '' && isWithin(row.path, dropping)}
                     change={row.folder ? undefined : changes.get(row.path)}
                     onClick={(event) => onRowClick(row, event)}
                     onDoubleClick={
@@ -748,6 +798,22 @@ export function FileTree({
             <PaneIcon icon={FolderAddIcon} size={16} />
             {t('tree.newFolder')}
           </ContextMenuItem>
+          {/* The browser's picker opens while the click lasts, so it is not queued. */}
+          {isWeb && (
+            <ContextMenuItem
+              onClick={() =>
+                void chooseFiles().then((chosen) =>
+                  upload(
+                    menuFolder,
+                    chosen.map((file) => ({ file, folder: false })),
+                  ),
+                )
+              }
+            >
+              <PaneIcon icon={FileUploadIcon} size={16} />
+              {t('upload.choose')}
+            </ContextMenuItem>
+          )}
           <ContextMenuSeparator />
           {local && (
             <ContextMenuItem onClick={() => reveal(menuTargets[0] ?? '')}>

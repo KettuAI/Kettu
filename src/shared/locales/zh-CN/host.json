@@ -564,6 +564,8 @@
     "notFolder": "{{path}} 不是文件夹",
     "notFile": "{{path}} 不是文件",
     "outsideProject": "{{path}} 在项目之外",
+    "folderInTheWay": "{{path}} 是文件夹，不能用文件替换它",
+    "fileInTheWay": "{{path}} 不是文件夹，不能把文件夹放进去",
     "tooManyCopies": "{{name}} 的副本太多了",
     "notExist": "{{path}} 不存在"
   },

@@ -4093,6 +4093,17 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.rename(root, from, to)),
       'files.copy': ({ projectPath, paths, folder }) =>
         this.filesCall(projectPath, (root) => this.files.copy(root, paths, folder)),
+      'files.upload': ({ projectPath, path, source, replace }) =>
+        this.filesCall(projectPath, (root) =>
+          this.files.upload(
+            root,
+            path,
+            'grantId' in source
+              ? { path: this.attachments.takeGrant(source.grantId).path }
+              : source,
+            replace === true,
+          ),
+        ),
       'files.delete': ({ projectPath, paths, permanently }) =>
         this.filesCall(projectPath, (root) => this.files.delete(root, paths, permanently === true)),
       'media.open': async ({ projectPath, path, sessionId }) => {

@@ -159,6 +159,108 @@ describe('FilesService file operations', () => {
   })
 })
 
+describe('FilesService uploads', () => {
+  const bytes = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer
+
+  it('puts bytes or a granted file in a folder, over what is there only when replacing', async () => {
+    const { root, outside, files } = await setup()
+    await mkdir(path.join(root, 'dir'))
+    await files.upload(root, 'dir/a.txt', { bytes: bytes('one') }, false)
+    expect(await readFile(path.join(root, 'dir/a.txt'), 'utf8')).toBe('one')
+    await files.upload(root, 'empty', { bytes: new ArrayBuffer(0) }, false)
+    expect(await readFile(path.join(root, 'empty'), 'utf8')).toBe('')
+    await rejectsWith(files.upload(root, 'dir/a.txt', { bytes: bytes('two') }, false), 'conflict')
+    expect(await readFile(path.join(root, 'dir/a.txt'), 'utf8')).toBe('one')
+    await files.upload(root, 'dir/a.txt', { bytes: bytes('two') }, true)
+    expect(await readFile(path.join(root, 'dir/a.txt'), 'utf8')).toBe('two')
+    await writeFile(path.join(outside, 'picked.txt'), 'picked')
+    await files.upload(root, 'picked.txt', { path: path.join(outside, 'picked.txt') }, false)
+    expect(await readFile(path.join(root, 'picked.txt'), 'utf8')).toBe('picked')
+    await rejectsWith(files.upload(root, 'dir', { bytes: bytes('x') }, true), 'invalid_params')
+    expect((await lstat(path.join(root, 'dir'))).isDirectory()).toBe(true)
+    await rejectsWith(
+      files.upload(root, 'nowhere/a.txt', { bytes: bytes('x') }, false),
+      'not_found',
+    )
+    expect(await exists(path.join(root, 'nowhere'))).toBe(false)
+  })
+
+  it('replaces a link itself, and never writes through one', async () => {
+    const { root, outside, files } = await setup()
+    await writeFile(path.join(outside, 'secret'), 's')
+    await symlink(path.join(outside, 'secret'), path.join(root, 'link'))
+    await symlink(path.join(outside, 'missing'), path.join(root, 'dangling'))
+    await rejectsWith(files.upload(root, 'link', { bytes: bytes('x') }, false), 'conflict')
+    await rejectsWith(files.upload(root, 'dangling', { bytes: bytes('x') }, false), 'conflict')
+    const picked = { path: path.join(outside, 'secret') }
+    await rejectsWith(files.upload(root, 'dangling', picked, false), 'conflict')
+    expect(await exists(path.join(outside, 'missing'))).toBe(false)
+    await files.upload(root, 'link', { bytes: bytes('x') }, true)
+    expect((await lstat(path.join(root, 'link'))).isSymbolicLink()).toBe(false)
+    expect(await readFile(path.join(root, 'link'), 'utf8')).toBe('x')
+    expect(await readFile(path.join(outside, 'secret'), 'utf8')).toBe('s')
+  })
+
+  it('refuses paths out of the project, into .git or through a link that leaves', async () => {
+    const { root, outside, files } = await setup()
+    await mkdir(path.join(root, '.git'))
+    await symlink(outside, path.join(root, 'away'))
+    for (const bad of ['../x', '/x', '', '.', '.git/x', 'a/.git', 'away/x', 'a/../../x']) {
+      await rejectsWith(files.upload(root, bad, { bytes: bytes('x') }, true), 'invalid_params')
+    }
+    expect(await exists(path.join(outside, 'x'))).toBe(false)
+    expect(await exists(path.join(root, '.git/x'))).toBe(false)
+  })
+
+  it('copies a granted folder with links as links and no .git, merging only when replacing', async () => {
+    const { root, outside, files } = await setup()
+    const drop = path.join(outside, 'drop')
+    await mkdir(path.join(drop, 'sub'), { recursive: true })
+    await mkdir(path.join(drop, '.git'))
+    await writeFile(path.join(drop, 'a.txt'), 'a')
+    await writeFile(path.join(drop, 'sub/b.txt'), 'b')
+    await writeFile(path.join(drop, '.git/HEAD'), 'ref')
+    await symlink('a.txt', path.join(drop, 'link'))
+    await files.upload(root, 'drop', { path: drop }, false)
+    expect(await readFile(path.join(root, 'drop/a.txt'), 'utf8')).toBe('a')
+    expect(await readFile(path.join(root, 'drop/sub/b.txt'), 'utf8')).toBe('b')
+    expect(await readlink(path.join(root, 'drop/link'))).toBe('a.txt')
+    expect(await exists(path.join(root, 'drop/.git'))).toBe(false)
+    await rejectsWith(files.upload(root, 'drop', { path: drop }, false), 'conflict')
+    await writeFile(path.join(drop, 'a.txt'), 'new')
+    await writeFile(path.join(root, 'drop/kept.txt'), 'kept')
+    await files.upload(root, 'drop', { path: drop }, true)
+    expect(await readFile(path.join(root, 'drop/a.txt'), 'utf8')).toBe('new')
+    expect(await readFile(path.join(root, 'drop/kept.txt'), 'utf8')).toBe('kept')
+    await writeFile(path.join(root, 'file'), 'f')
+    await rejectsWith(files.upload(root, 'file', { path: drop }, true), 'invalid_params')
+    expect(await readFile(path.join(root, 'file'), 'utf8')).toBe('f')
+  })
+
+  it('never merges a folder through a link, nor copies one into itself', async () => {
+    const { root, outside, files } = await setup()
+    const drop = path.join(outside, 'drop')
+    await mkdir(path.join(drop, 'sub'), { recursive: true })
+    await writeFile(path.join(drop, 'sub/b.txt'), 'b')
+    const elsewhere = path.join(outside, 'elsewhere')
+    await mkdir(elsewhere)
+    await symlink(elsewhere, path.join(root, 'drop'))
+    await rejectsWith(files.upload(root, 'drop', { path: drop }, true), 'invalid_params')
+    await rm(path.join(root, 'drop'))
+    await mkdir(path.join(root, 'drop'))
+    await symlink(elsewhere, path.join(root, 'drop/sub'))
+    await rejectsWith(files.upload(root, 'drop', { path: drop }, true), 'invalid_params')
+    expect(await exists(path.join(elsewhere, 'b.txt'))).toBe(false)
+    await mkdir(path.join(root, 'in'))
+    await rejectsWith(files.upload(root, 'in/copy', { path: root }, false), 'invalid_params')
+    await rejectsWith(
+      files.upload(root, 'copy', { path: path.dirname(root) }, false),
+      'invalid_params',
+    )
+    expect(await exists(path.join(root, 'in/copy'))).toBe(false)
+  })
+})
+
 describe('FilesService empty folders', () => {
   it('lists the empty folders of a folder outside git', async () => {
     const { root, files } = await setup()

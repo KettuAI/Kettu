@@ -26,6 +26,8 @@ export interface ToastOptions {
   icon?: IconSvgElement
   /** In ms; the default suits a message that is read once. */
   duration?: number
+  /** A line under the title, such as what went wrong for each of several items. */
+  description?: string
 }
 
 // The toasts on screen, so the layer can tell the browser pane it is covered.
@@ -70,7 +72,7 @@ export function toast(
   action?: { label: string; onClick: () => void },
   options: ToastOptions = {},
 ) {
-  const { tone, icon, duration } = options
+  const { tone, icon, duration, description } = options
   const show =
     tone === 'success' ? affectToast.success : tone === 'info' ? affectToast.info : affectToast
   const mark =
@@ -86,6 +88,7 @@ export function toast(
     ) : undefined
   track((settings) => show(title, settings), {
     icon: mark,
+    ...(description !== undefined && { description }),
     ...(duration !== undefined && { duration }),
     ...(action && { action: actionOf(action), duration: 6000 }),
   })

@@ -1914,6 +1914,18 @@ export interface HostContract {
     params: { projectPath: string; paths: string[]; folder: string }
     result: string[]
   }
+  // A file the user dropped or chose, put at `path` in a folder that is there: its bytes, or a file
+  // or folder main granted for a drop, copied. `conflict` when something is at `path` and `replace`
+  // is not set; a replaced folder takes the dropped one's files, replacing those of the same names.
+  'files.upload': {
+    params: {
+      projectPath: string
+      path: string
+      source: { bytes: ArrayBuffer } | { grantId: string }
+      replace?: boolean
+    }
+    result: void
+  }
   // To the system's trash, or for good with `permanently`; what is gone already is skipped.
   // `unavailable` when the host could not put them in a trash.
   'files.delete': {
@@ -2481,6 +2493,7 @@ export const HOST_METHODS = [
   'files.create',
   'files.rename',
   'files.copy',
+  'files.upload',
   'files.delete',
   'media.open',
   'media.authorize',

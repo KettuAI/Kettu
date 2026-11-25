@@ -384,11 +384,17 @@ export class Attachments {
   }
 
   private addGranted(grantId: string, thumb: string | null): Promise<Attachment> {
+    const grant = this.takeGrant(grantId)
+    return this.addPath(grant.path, grant.kind, thumb)
+  }
+
+  /** The path main granted for a pick or a drop, which serves this one use. */
+  takeGrant(grantId: string): AttachmentGrant {
     const grant = this.grants.get(grantId)
     this.grants.delete(grantId)
     if (!grant || grant.at < this.now() - GRANT_MAX_AGE_MS)
       throw invalidParams(t('attachment.grantExpired'))
-    return this.addPath(grant.path, grant.kind, thumb)
+    return grant
   }
 
   /**
