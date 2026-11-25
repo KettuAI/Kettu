@@ -84,6 +84,14 @@
   "link": {
     "open": "Open {{target}}"
   },
+  "htmlPreview": {
+    "preview": "Preview",
+    "inKettu": "Preview in Kettu's browser",
+    "inDefault": "Open in default browser",
+    "openFile": "Open file",
+    "failed": "Couldn't preview the page: {{error}}",
+    "tooManyTabs": "The session's browser has as many tabs as it can hold. Close one, then preview again."
+  },
   "unsaved": {
     "title": "Save changes to {{name}}?",
     "description": "Your changes are lost if you don't save them.",

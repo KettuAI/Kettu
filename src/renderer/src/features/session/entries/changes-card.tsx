@@ -1,5 +1,10 @@
 import { memo, useMemo, useState } from 'react'
-import { ArrowDown01Icon, GitPullRequestIcon, ViewIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  BrowserIcon,
+  GitPullRequestIcon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -10,6 +15,7 @@ import {
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
+import { isHtmlFile, previewHtml, useHtmlPreview } from '@renderer/features/files/html-preview'
 import { relativePath } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { openDiff } from '@renderer/stores/files'
@@ -73,6 +79,7 @@ export const ChangesCard = memo(function ChangesCard({
   const ordered = useMemo(() => (counted ? byChangedLines(changes) : changes), [changes, counted])
   const [allShown, setAllShown] = useState(false)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
+  const previewable = useHtmlPreview(sessionId, projectPath)
   if (changes.length === 0) return null
   const hidden = ordered.length - SHOWN
 
@@ -88,6 +95,12 @@ export const ChangesCard = memo(function ChangesCard({
       )
   }
   const first = ordered.map((change) => review(change.path)).find((open) => open !== null)
+  const page = (path: string): (() => void) | null => {
+    const file = previewable ? within(path, projectPath) : null
+    return file === null || !isHtmlFile(file) ? null : () => void previewHtml(sessionId, file)
+  }
+  // Every row keeps the room of a Preview button when one has it, so the counts stay in a column.
+  const pages = ordered.some((change) => page(change.path) !== null)
   const committable =
     root === null
       ? []
@@ -139,6 +152,8 @@ export const ChangesCard = memo(function ChangesCard({
           change={change}
           projectPath={projectPath}
           counting={!settled}
+          onPage={page(change.path)}
+          pages={pages}
         />
       ))}
       {hidden > 0 && (
@@ -165,32 +180,65 @@ function Counts({ insertions, deletions }: { insertions: number; deletions: numb
   )
 }
 
-/** A changed file; a click unfolds its diffs under it. */
+/**
+ * A changed file; a click unfolds its diffs under it. An HTML file's page has a Preview at its end,
+ * whose room the other rows keep while `pages`.
+ */
 function ChangeRow({
   change,
   projectPath,
   counting,
+  onPage,
+  pages,
 }: {
   change: Change
   projectPath: string
   counting: boolean
+  onPage: (() => void) | null
+  pages: boolean
 }) {
+  const { t } = useTranslation('files')
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   const cut = shown.lastIndexOf('/') + 1
+  const trigger = (
+    <CollapsibleTrigger
+      className={cn('ks-file focus-ring', counting && !pages && 'invisible')}
+      title={shown}
+    >
+      <FileTypeIcon path={change.path} className="size-4" />
+      <span className="ks-file__name">
+        <span className="ks-file__dir">{shown.slice(0, cut)}</span>
+        {shown.slice(cut)}
+      </span>
+      {stats && <Counts insertions={stats.insertions} deletions={stats.deletions} />}
+    </CollapsibleTrigger>
+  )
   return (
     <Collapsible>
-      <CollapsibleTrigger
-        className={cn('ks-file focus-ring', counting && 'invisible')}
-        title={shown}
-      >
-        <FileTypeIcon path={change.path} className="size-4" />
-        <span className="ks-file__name">
-          <span className="ks-file__dir">{shown.slice(0, cut)}</span>
-          {shown.slice(cut)}
-        </span>
-        {stats && <Counts insertions={stats.insertions} deletions={stats.deletions} />}
-      </CollapsibleTrigger>
+      {pages ? (
+        <div className={cn('ks-file-row', counting && 'invisible')}>
+          {trigger}
+          {onPage ? (
+            <button
+              type="button"
+              className="ks-page-btn focus-ring"
+              title={t('htmlPreview.inKettu')}
+              onClick={onPage}
+            >
+              <Icon icon={BrowserIcon} size={13} />
+              {t('htmlPreview.preview')}
+            </button>
+          ) : (
+            <span aria-hidden className="ks-page-btn invisible">
+              <Icon icon={BrowserIcon} size={13} />
+              {t('htmlPreview.preview')}
+            </span>
+          )}
+        </div>
+      ) : (
+        trigger
+      )}
       <CollapsibleContent className={PANEL} keepMounted={false}>
         <div className="flex flex-col gap-2 px-1.5 pt-1 pb-2">
           {change.diffs.map((diff, index) => (

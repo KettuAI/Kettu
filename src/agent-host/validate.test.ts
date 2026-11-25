@@ -793,6 +793,22 @@ describe('createValidators', () => {
     rejects(() => windows['files.read']({ projectPath: 'C:\\p', path: '\\Windows\\a.ini' }))
     expect(windows['files.read']({ projectPath: 'C:\\p', path: 'src/a.ts' })).toMatchObject({})
 
+    // The host decides which files of the session's folder it serves.
+    const preview = posix['files.preview']
+    expect(preview({ sessionId: 's', path: 'site/index.html', extra: 1 })).toEqual({
+      sessionId: 's',
+      path: 'site/index.html',
+    })
+    rejects(() => preview({ path: 'index.html' }))
+    rejects(() => preview({ sessionId: '', path: 'index.html' }))
+    rejects(() => preview({ sessionId: 's' }))
+    rejects(() => preview({ sessionId: 's', path: '' }))
+    rejects(() => preview({ sessionId: 's', path: '/etc/index.html' }))
+    rejects(() => preview({ sessionId: 's', path: 'a\0b.html' }))
+    rejects(() => preview({ sessionId: 's', path: 'x'.repeat(32_768) }))
+    rejects(() => windows['files.preview']({ sessionId: 's', path: 'C:\\a\\index.html' }))
+    rejects(() => windows['files.preview']({ sessionId: 's', path: '\\\\server\\a.html' }))
+
     // A thread may name any path; the host decides what it grants.
     const media = posix['media.open']
     expect(media({ projectPath: '/p', path: '/etc/a b.png', sessionId: 's', extra: 1 })).toEqual({

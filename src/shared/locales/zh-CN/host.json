@@ -567,7 +567,9 @@
     "folderInTheWay": "{{path}} 是文件夹，不能用文件替换它",
     "fileInTheWay": "{{path}} 不是文件夹，不能把文件夹放进去",
     "tooManyCopies": "{{name}} 的副本太多了",
-    "notExist": "{{path}} 不存在"
+    "notExist": "{{path}} 不存在",
+    "previewRefused": "{{path}} 在文件夹外或是隐藏文件，不能预览",
+    "previewNotHtml": "{{path}} 不是 HTML 文件"
   },
   "worktree": {
     "branchDeleteFailed": "无法删除分支 {{branch}}：{{reason}}",

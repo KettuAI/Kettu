@@ -11613,6 +11613,12 @@ export class SessionManager {
     return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.commandTools ?? null
   }
 
+  /** The folder of a session that has not ended, which its HTML previews are served from. */
+  openWorkFolder(sessionId: string): string | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    return record && record.archivedAt === undefined ? this.workFolder(sessionId) : null
+  }
+
   /** The folder the session works in, its worktree or its project; null for one Kettu does not hold. */
   workFolder(sessionId: string): string | null {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)

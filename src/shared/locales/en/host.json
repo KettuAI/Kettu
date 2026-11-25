@@ -571,7 +571,9 @@
     "folderInTheWay": "A folder is at {{path}}, so a file cannot replace it",
     "fileInTheWay": "{{path}} is not a folder, so a folder cannot go into it",
     "tooManyCopies": "Too many copies of {{name}}",
-    "notExist": "{{path}} does not exist"
+    "notExist": "{{path}} does not exist",
+    "previewRefused": "{{path}} is outside the folder or hidden, so it cannot be previewed",
+    "previewNotHtml": "{{path}} is not an HTML file"
   },
   "worktree": {
     "branchDeleteFailed": "Could not delete {{branch}}: {{reason}}",
