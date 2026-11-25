@@ -45,6 +45,7 @@ import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia, MediaRows } from '@renderer/features/session/media/local-media'
 import { MediaGrid } from '@renderer/features/session/media/media-grid'
+import { useNearView } from '@renderer/features/session/media/near-view'
 import {
   NamedMedia,
   NamedMediaContext,
@@ -150,7 +151,9 @@ function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
   if (local !== null && preview) {
     return <PreviewImage key={local} file={preview} written={local} alt={props.alt ?? ''} />
   }
-  if (local !== null) return <LocalMedia key={local} path={local} alt={props.alt ?? ''} image />
+  if (local !== null) {
+    return <LocalMedia key={local} path={local} origin="image" alt={props.alt ?? ''} />
+  }
   const remote = /^https?:/i.test(src) ? URL.parse(src) : null
   if (remote) {
     return <ConfirmedLink url={src}>{remote.host}</ConfirmedLink>
@@ -200,12 +203,13 @@ function MediaUnder({ node }: ExtraProps) {
     setClaim(next)
     return named.claim(next)
   }, [named, key])
+  const shown = enabled && claim && named ? named.shown(claim) : []
+  const near = useNearView(ref, shown.length > 0)
   if (!enabled || paths.length === 0) return null
-  const shown = claim && named ? named.shown(claim) : []
   return (
-    // Empty until it shows a file, which hides it (globals.css).
+    // Empty, a box of no height, until the host finds a file it names (globals.css).
     <div ref={ref} data-media-block="" className="flex flex-col items-start gap-3">
-      <MediaRows paths={shown} />
+      <MediaRows paths={shown} near={near} />
     </div>
   )
 }

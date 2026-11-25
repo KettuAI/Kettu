@@ -1,5 +1,5 @@
-import { useContext, useEffect, useState, type RefObject } from 'react'
-import type { MediaGrant } from '@shared/media'
+import { useContext, useEffect, useRef, useState, type RefObject } from 'react'
+import type { MediaGrant, MediaOpenResult } from '@shared/media'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage } from '@renderer/lib/host'
 import { openViewer } from '@renderer/stores/viewer'
@@ -11,25 +11,90 @@ import { fileKey, fileName } from './viewer-items'
 export type Shown =
   | { kind: 'asking' }
   | { kind: 'granted'; grant: MediaGrant }
-  | { kind: 'text' } // not allowed, not media, or a bare name or `/name` of no file: as written
+  | { kind: 'text' } // not allowed, not media, or no file where none had to show: as written
   | { kind: 'missing' }
   | { kind: 'unsupported'; grant: MediaGrant }
   | { kind: 'failed'; message: string }
 
 /**
- * A media file a reply names by its path, from the media scheme: what the host answers for it once
- * `near`, the element shown while it asks, comes near the view, and the viewer it opens in.
- * `image` marks a Markdown image, which the blocks of its message then leave out. The caller keys
- * it by path, so a different path starts over.
+ * Where a reply names a media file: a Markdown image, which the agent wrote to show; its text,
+ * inline code or a link, which may only name a file somewhere else; or a tool call, which touched
+ * it.
  */
-export function useMediaFile(path: string, image: boolean, near: RefObject<Element | null>) {
+export type MediaOrigin = 'image' | 'text' | 'tool'
+
+/**
+ * What the host's answer for a file shows. A file it did not find is missing only for a Markdown
+ * image or a tool call's path; one the text names stays as written, as does a tool call's bare
+ * name or `/name`, which may name none, as a site's path does.
+ */
+function shownOf(result: MediaOpenResult, path: string, origin: MediaOrigin): Shown {
+  if (result.kind === 'granted') return { kind: 'granted', grant: result.grant }
+  if (result.kind !== 'not_found' || origin === 'text') return { kind: 'text' }
+  return origin === 'image' || !(bareName(path) || rootFile(path))
+    ? { kind: 'missing' }
+    : { kind: 'text' }
+}
+
+/** Asks the host for a file the thread names, and what its answer shows. */
+function askMedia(
+  projectPath: string,
+  path: string,
+  sessionId: string,
+  origin: MediaOrigin,
+  fresh = false,
+): Promise<Shown> {
+  return openMedia(projectPath, path, sessionId, fresh).then(
+    (result) => shownOf(result, path, origin),
+    (error: unknown): Shown => ({ kind: 'failed', message: errorMessage(error) }),
+  )
+}
+
+/**
+ * The host's answers for the media files a block's text names, asked for once the block is
+ * `near` the view, by path. A path is asked once; its own `useMediaFile` asks again on Retry.
+ */
+export function useTextMedia(paths: readonly string[], near: boolean): ReadonlyMap<string, Shown> {
+  const projectPath = useContext(ProjectPathContext)
+  const sessionId = useContext(SessionIdContext)
+  const [answers, setAnswers] = useState<ReadonlyMap<string, Shown>>(() => new Map())
+  const asked = useRef(new Set<string>())
+  const key = paths.join('\0')
+  useEffect(() => {
+    if (!near || !projectPath || !sessionId || key === '') return
+    for (const path of key.split('\0')) {
+      if (asked.current.has(path)) continue
+      asked.current.add(path)
+      void askMedia(projectPath, path, sessionId, 'text').then((shown) =>
+        setAnswers((old) => new Map(old).set(path, shown)),
+      )
+    }
+  }, [near, key, projectPath, sessionId])
+  return answers
+}
+
+/**
+ * A media file a reply names by its path, from the media scheme: what the host answers for it once
+ * `near`, the element shown while it asks, comes near the view, and the viewer it opens in. A
+ * Markdown image is one the blocks of its message then leave out. `known` is the answer its block
+ * already has, which it starts from without asking. The caller keys it by path, so a different
+ * path starts over.
+ */
+export function useMediaFile(
+  path: string,
+  origin: MediaOrigin,
+  near: RefObject<Element | null>,
+  known?: Shown,
+) {
   const projectPath = useContext(ProjectPathContext)
   const sessionId = useContext(SessionIdContext)
   const entryId = useContext(EntryIdContext)
   const named = useContext(NamedMediaContext)
   const enabled = !!projectPath && !!sessionId
-  const isNear = useNearView(near, enabled)
-  const [shown, setShown] = useState<Shown>({ kind: 'asking' })
+  const image = origin === 'image'
+  // A known answer was asked for near the view, so asking again needs no wait.
+  const isNear = useNearView(near, enabled && !known) || !!known
+  const [shown, setShown] = useState<Shown>(known ?? { kind: 'asking' })
   // Each retry, and a grant main no longer holds, asks the host again.
   const [asked, setAsked] = useState(0)
   // A file that fails to load is asked for once more, since main may have dropped its grant.
@@ -42,27 +107,18 @@ export function useMediaFile(path: string, image: boolean, near: RefObject<Eleme
     [image, enabled, named, path],
   )
 
+  const startsKnown = useRef(!!known)
   useEffect(() => {
     if (!projectPath || !sessionId || !isNear) return
+    if (asked === 0 && startsKnown.current) return
     let current = true
-    openMedia(projectPath, path, sessionId, asked > 0).then(
-      (result) => {
-        if (!current) return
-        if (result.kind === 'granted') setShown({ kind: 'granted', grant: result.grant })
-        // A bare name or a `/name` that is no file may name none, as a site's path does: it stays
-        // text, as a Markdown image cannot.
-        else if (result.kind === 'not_found' && (image || !(bareName(path) || rootFile(path)))) {
-          setShown({ kind: 'missing' })
-        } else setShown({ kind: 'text' })
-      },
-      (error: unknown) => {
-        if (current) setShown({ kind: 'failed', message: errorMessage(error) })
-      },
-    )
+    void askMedia(projectPath, path, sessionId, origin, asked > 0).then((next) => {
+      if (current) setShown(next)
+    })
     return () => {
       current = false
     }
-  }, [projectPath, sessionId, path, image, asked, isNear])
+  }, [projectPath, sessionId, path, origin, asked, isNear])
 
   const ask = () => {
     setShown({ kind: 'asking' })

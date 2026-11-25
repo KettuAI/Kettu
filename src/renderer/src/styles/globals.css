@@ -1175,8 +1175,11 @@
     margin: 0 0 0.75em;
     font-family: var(--font-sans);
   }
+  /* Empty until the host finds a file it names: a box of no height, which margins collapse
+     through, so it can still tell when it nears the view. */
   & [data-media-block]:empty {
-    display: none;
+    display: block;
+    margin: 0;
   }
 
   /* More space above than below, so a heading sits on its content: three steps only, 20, 16.5
@@ -1291,7 +1294,7 @@
   & [data-streamdown='list-item'] > p {
     margin: 0;
   }
-  & [data-streamdown='list-item'] > [data-media-block] {
+  & [data-streamdown='list-item'] > [data-media-block]:not(:empty) {
     margin-block: 0.4em;
   }
   /* A task's box takes the bullet's place; a done task's text turns gray and struck through. */

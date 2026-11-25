@@ -97,7 +97,7 @@ function FileThumb({
 }) {
   const { t } = useTranslation('session')
   const near = useRef<HTMLSpanElement>(null)
-  const media = useMediaFile(picture.path, false, near)
+  const media = useMediaFile(picture.path, 'tool', near)
   const { shown, name } = media
   const [loaded, setLoaded] = useState(false)
   const asking = shown.kind === 'asking' && media.enabled

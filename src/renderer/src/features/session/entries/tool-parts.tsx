@@ -125,7 +125,7 @@ export function ToolMedia({
       <EntryIdContext value={entryId}>
         <div className="flex flex-col items-start gap-3 empty:hidden">
           {media.map((path) => (
-            <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
+            <LocalMedia key={path} path={path} origin="tool" imageHeight={MEDIA_IMAGE_HEIGHT} />
           ))}
         </div>
       </EntryIdContext>
