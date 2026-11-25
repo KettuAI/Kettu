@@ -154,7 +154,7 @@ it('gives the agent what a mentioned item adds, and says in the thread what was 
         plugin: 'tracker',
         items: [
           { title: 'Issue T-1', text: 'Body of T-1' },
-          { title: 'Gone', text: '', failed: 'failed' },
+          { title: 'Gone', text: '', failed: 'failed', detail: 'The tracker has no T-9' },
         ],
       },
     ],

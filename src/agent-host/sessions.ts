@@ -8931,6 +8931,7 @@ export class SessionManager {
         ...(item.title === undefined ? {} : { title: item.title }),
         text: item.text,
         ...(item.failed === undefined ? {} : { failed: item.failed }),
+        ...(item.detail === undefined ? {} : { detail: item.detail }),
       })
       byPlugin.set(item.pluginId, group)
     }

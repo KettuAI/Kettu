@@ -2,7 +2,7 @@
 // data folder, and whoever keeps the themes, main or the daemon, reads the files like any other
 // theme file, so nothing of a plugin's theme is trusted before it passes the same checks.
 
-import type { PluginResource } from './plugins'
+import { PLUGIN_ID, type PluginResource } from './plugins'
 import { themeSlug } from './themes'
 
 export const PLUGIN_THEMES_FILE = 'plugin-themes.json'
@@ -38,4 +38,11 @@ export function pluginThemeEntries(resources: readonly PluginResource[]): Plugin
     taken.add(id)
     return { id, pluginId: item.pluginId, plugin: item.plugin, file: item.file }
   })
+}
+
+/** The plugin a theme's id says brought it; null for a theme installed from a file. */
+export function pluginOfTheme(themeId: string): string | null {
+  const at = themeId.indexOf('--')
+  const pluginId = at < 0 ? '' : themeId.slice(0, at)
+  return PLUGIN_ID.test(pluginId) ? pluginId : null
 }

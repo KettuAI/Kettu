@@ -81,7 +81,11 @@ import { initHosts, loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
-import { initThemes } from '@renderer/stores/themes'
+import {
+  followUninstalledPluginThemes,
+  initThemes,
+  leaveUninstalledPluginTheme,
+} from '@renderer/stores/themes'
 import { keepWatched, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { forgetViewers, receiveViewers } from '@renderer/stores/viewers'
 import { initUpdates } from '@renderer/stores/updates'
@@ -199,6 +203,8 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     void loadKettuRoles(hostId)
     pluginSurfacesChanged(hostId)
     void loadPluginRefs(hostId)
+    // A plugin uninstalled while off takes its chosen theme with it, though no theme changed.
+    if (hostId === null) void leaveUninstalledPluginTheme()
   }
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
@@ -412,6 +418,7 @@ export function bootstrap(): Promise<unknown> {
 
   const settingsReady = initSettings()
   const themesReady = initThemes()
+  followUninstalledPluginThemes()
   void initRemote()
   // A host without them, as the daemon, is never asked.
   whenHostHas('sharing', () => void initSharing())

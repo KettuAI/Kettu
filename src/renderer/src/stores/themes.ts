@@ -1,5 +1,7 @@
 import { create } from 'zustand'
+import { pluginOfTheme } from '@shared/plugin-themes'
 import { BUILTIN_THEME_ID, type Theme, type ThemesState } from '@shared/themes'
+import { hostAt } from '@renderer/lib/host'
 import { applyThemeStyle } from '@renderer/lib/theme-style'
 import { useSettingsStore } from './settings'
 
@@ -16,15 +18,6 @@ export const useThemesStore = create<ThemesStore>()(() => ({
 
 /** Takes main's answer; the shown theme's colors are written before anyone is told. */
 export function receiveThemes(state: ThemesState): void {
-  const was = useThemesStore.getState().state.installed.find(({ id }) => id === state.chosen)
-  // A plugin's theme leaves with its plugin, so the built-in theme takes its place for good,
-  // as it does when the chosen theme is removed.
-  if (was?.plugin && state.failed?.id === state.chosen) {
-    useSettingsStore
-      .getState()
-      .update({ appearance: { colorTheme: BUILTIN_THEME_ID } })
-      .catch((error: unknown) => console.error("Could not leave a plugin's theme", error))
-  }
   const chosen = state.failed ? undefined : state.installed.find(({ id }) => id === state.chosen)
   const next = chosen?.theme ?? null
   const { shown } = useThemesStore.getState()
@@ -32,6 +25,35 @@ export function receiveThemes(state: ThemesState): void {
   const same = JSON.stringify(next) === JSON.stringify(shown)
   if (!same) applyThemeStyle(next)
   useThemesStore.setState({ state, shown: same ? shown : next })
+}
+
+/**
+ * A plugin's theme that cannot show stays chosen while its plugin is installed, so turning the
+ * plugin off only shows the built-in theme until it is on again. Once the plugin is uninstalled the
+ * built-in theme takes its place for good, as it does when the chosen theme is removed. A host that
+ * cannot say keeps the choice.
+ */
+export async function leaveUninstalledPluginTheme(): Promise<void> {
+  const { chosen, failed } = useThemesStore.getState().state
+  const pluginId = failed?.id === chosen ? pluginOfTheme(chosen) : null
+  if (pluginId === null) return
+  const gone = await hostAt(null, 'plugins.list', undefined).then(
+    ({ plugins }) => !plugins.some(({ id }) => id === pluginId),
+    () => false,
+  )
+  const now = useThemesStore.getState().state
+  if (!gone || now.chosen !== chosen || now.failed?.id !== chosen) return
+  await useSettingsStore
+    .getState()
+    .update({ appearance: { colorTheme: BUILTIN_THEME_ID } })
+    .catch((error: unknown) => console.error("Could not leave a plugin's theme", error))
+}
+
+/** The main window's part: every new list is checked for a plugin's theme left behind. */
+export function followUninstalledPluginThemes(): void {
+  useThemesStore.subscribe((s, previous) => {
+    if (s.state !== previous.state) void leaveUninstalledPluginTheme()
+  })
 }
 
 /** Loads the themes and follows every change; the first render waits for it. */

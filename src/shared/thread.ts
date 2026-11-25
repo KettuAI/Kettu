@@ -484,9 +484,10 @@ export interface PluginAttached {
   plugin: string
   /**
    * `failed` says why a mentioned item could not be added (`text` is then empty): the plugin did
-   * not answer in time, was unavailable, or answered with what was not content.
+   * not answer in time, was unavailable, or answered with what was not content. `detail` is the
+   * plugin's own message for it, untrusted text; entries stored before it have none.
    */
-  items: { title?: string; text: string; failed?: string }[]
+  items: { title?: string; text: string; failed?: string; detail?: string }[]
 }
 
 /**
@@ -1871,7 +1872,8 @@ function isPluginAttached(value: unknown): value is PluginAttached {
         isRecord(item) &&
         typeof item.text === 'string' &&
         (item.title === undefined || typeof item.title === 'string') &&
-        (item.failed === undefined || typeof item.failed === 'string'),
+        (item.failed === undefined || typeof item.failed === 'string') &&
+        (item.detail === undefined || typeof item.detail === 'string'),
     )
   )
 }
