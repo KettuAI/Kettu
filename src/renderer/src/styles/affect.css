@@ -7027,28 +7027,6 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   --ui-cmc-ok: var(--success);
   --ui-cmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
 }
-[data-installed-theme] .ui-cbc {
-  --ui-cbc-card: var(--shell-card);
-  --ui-cbc-ink: var(--text-primary);
-  --ui-cbc-strong: var(--text-primary);
-  --ui-cbc-text: var(--text-secondary);
-  --ui-cbc-muted: var(--text-tertiary);
-  --ui-cbc-faint: var(--text-disabled);
-  --ui-cbc-line: var(--border-subtle);
-  --ui-cbc-wash: var(--bg-hover);
-  --ui-cbc-fill: var(--bg-selected);
-  --ui-cbc-up: var(--success);
-  --ui-cbc-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
-  --ui-cbc-down: var(--danger);
-  --ui-cbc-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
-  --ui-cbc-c1: color-mix(in srgb, var(--context-1) 76.5%, transparent);
-  --ui-cbc-c2: color-mix(in srgb, var(--context-1) 50%, transparent);
-  --ui-cbc-c3: color-mix(in srgb, var(--context-1) 32%, transparent);
-  --ui-cbc-c4: color-mix(in srgb, var(--context-1) 18%, transparent);
-  --ui-cbc-c5: var(--border-strong);
-  --ui-cbc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
-  --ui-cbc-focus: var(--focus-ring-color);
-}
 [data-installed-theme] .ui-cwc {
   --ui-cwc-card: var(--shell-card);
   --ui-cwc-strong: var(--text-primary);
@@ -7167,24 +7145,6 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   --ui-fmc-check: var(--control-on);
   --ui-fmc-focus: var(--focus-ring-color);
   --ui-fmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
-}
-[data-installed-theme] .ui-kpic {
-  --ui-kpic-card: var(--shell-card);
-  --ui-kpic-pop: var(--bg-surface);
-  --ui-kpic-ink: var(--text-primary);
-  --ui-kpic-strong: var(--text-primary);
-  --ui-kpic-text: var(--text-secondary);
-  --ui-kpic-muted: var(--text-tertiary);
-  --ui-kpic-line: var(--border-subtle);
-  --ui-kpic-grid: var(--border-subtle);
-  --ui-kpic-guide: var(--border-default);
-  --ui-kpic-up: var(--success);
-  --ui-kpic-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
-  --ui-kpic-down: var(--danger);
-  --ui-kpic-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
-  --ui-kpic-focus: var(--focus-ring-color);
-  --ui-kpic-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
-  --ui-kpic-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
 }
 [data-installed-theme] .ui-mac {
   --ui-mac-card: var(--shell-card);
@@ -7409,11 +7369,11 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   --ui-agc-flag-ink: var(--agent-flag-ink);
 }
 
-/* The answer and the breakdown stop their motion under the system's reduced motion only; the app's
-   own Reduce motion setting stops it too. */
-:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *,
-:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *::before,
-:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *::after {
+/* The answer stops its motion under the system's reduced motion only; the app's own Reduce motion
+   setting stops it too. */
+:root[data-reduce-motion='always'] .ui-ansc *,
+:root[data-reduce-motion='always'] .ui-ansc *::before,
+:root[data-reduce-motion='always'] .ui-ansc *::after {
   animation: none !important;
   transition: none !important;
 }

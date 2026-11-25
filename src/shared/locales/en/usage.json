@@ -13,12 +13,9 @@
     "title": "Usage",
     "synced": "Synced {{ago}}",
     "syncing": "Reading the logs…",
-    "record": "Kettu’s record",
     "sync": "Sync now",
-    "syncAction": "Sync",
     "syncFailed": "Could not sync",
     "agents": "Agents",
-    "allShort": "All",
     "metric": "Metric",
     "range": "Time range",
     "ranges": {
@@ -31,18 +28,16 @@
     },
     "rangesShort": {
       "1": "Today",
-      "7": "7 d",
-      "30": "30 d",
-      "90": "90 d",
-      "365": "1 y",
-      "all": "All time"
+      "7": "7d",
+      "30": "30d",
+      "90": "90d",
+      "365": "1y",
+      "all": "All"
     },
     "allHosts": "All hosts",
     "scope": "Source",
     "scopes": {
-      "computer": "This computer",
-      "computer_mac": "This Mac",
-      "computer_web": "{{host}}",
+      "computer": "Logs + Kettu",
       "kettu": "Kettu only"
     },
     "importing": "Reading the agents’ logs: {{done}} of {{total}}",
@@ -54,7 +49,8 @@
     "scopeNotes": {
       "computer": "Kettu, and the agents’ own logs",
       "kettu": "Only the turns Kettu ran"
-    }
+    },
+    "computer": "Computer"
   },
   "metrics": {
     "tokens": "Tokens",
@@ -71,49 +67,62 @@
   },
   "figures": {
     "label": "Figures",
-    "total": "Total tokens",
-    "cost": "Total cost",
-    "totalRequests": "Total requests",
-    "totalTurns": "Total turns",
-    "requestsPerDay": "{{value}} a day on the days you worked",
-    "turnsPerDay": "{{value}} a day on the days you worked",
-    "requestsPerHour": "{{value}} an hour in the hours you worked",
-    "turnsPerHour": "{{value}} an hour in the hours you worked",
-    "perRequest": "{{value}} tokens per request",
-    "perTurn": "{{value}} tokens per turn",
-    "estimated": "Estimated at API prices · prices as of {{date}}",
+    "cost": "Est. cost",
     "unpriced": "{{tokens}} tokens of models without a price are not counted",
-    "days_one": "{{range}} · {{count}} day",
-    "days_other": "{{range}} · {{count}} days",
-    "average": "Daily average",
-    "active_one": "Used on {{active}} of {{count}} day",
-    "active_other": "Used on {{active}} of {{count}} days",
-    "peak": "Busiest day",
-    "hourlyAverage": "Hourly average",
-    "activeHours_one": "Used in {{active}} of {{count}} hour",
-    "activeHours_other": "Used in {{active}} of {{count}} hours",
-    "peakHour": "Busiest hour",
-    "none": "No usage"
+    "none": "No usage",
+    "tokens": "Tokens",
+    "cache": "From cache",
+    "mix": "Token mix",
+    "since": "Since {{date}}",
+    "noneYesterday": "None by this time yesterday",
+    "noneBefore_one": "None the day before",
+    "noneBefore_other": "None in the previous {{count}} days",
+    "vsYesterday": "<b>{{change}}</b> vs yesterday",
+    "vsBefore_one": "<b>{{change}}</b> vs the day before",
+    "vsBefore_other": "<b>{{change}}</b> vs previous {{count}} days",
+    "yesterdayUntil": "Yesterday until {{time}}",
+    "tokensPer": {
+      "hour_one": "<b>{{value}}</b> an hour in {{active}} of {{count}} hour",
+      "hour_other": "<b>{{value}}</b> an hour in {{active}} of {{count}} hours",
+      "day_one": "<b>{{value}}</b> a day on {{active}} of {{count}} day",
+      "day_other": "<b>{{value}}</b> a day on {{active}} of {{count}} days"
+    },
+    "requestsPer": {
+      "requests": {
+        "hour": "<b>{{value}}</b> an hour · <b>{{tokens}}</b> tokens each",
+        "day": "<b>{{value}}</b> a day · <b>{{tokens}}</b> tokens each"
+      },
+      "turns": {
+        "hour": "<b>{{value}}</b> an hour · <b>{{tokens}}</b> tokens each",
+        "day": "<b>{{value}}</b> a day · <b>{{tokens}}</b> tokens each"
+      }
+    },
+    "costPer": {
+      "requests": "<b>{{value}}</b> a request",
+      "turns": "<b>{{value}}</b> a turn"
+    },
+    "unpricedShort": "{{tokens}} not priced",
+    "noPrice": "No model used had a price",
+    "saved": "<ok>{{cost}} saved</ok> at API prices",
+    "savedNone": "Nothing saved at API prices",
+    "cacheNone": "Nothing was read from the cache",
+    "cacheParts": "<b>{{read}}</b> read · <b>{{written}}</b> written",
+    "bars": {
+      "day_one": "{{count}} day",
+      "day_other": "{{count}} days",
+      "week_one": "{{count}} week",
+      "week_other": "{{count}} weeks",
+      "month_one": "{{count}} month",
+      "month_other": "{{count}} months"
+    }
   },
   "cache": {
-    "title": "Where the tokens come from",
-    "none": "None of these tokens came from the prompt cache.",
-    "saved": "At API prices, that saved about {{cost}}.",
-    "share": "{{share}} of them were read from the prompt cache.",
-    "withSaved": "{{line}} {{saved}}",
-    "fromCache": "{{share}} came from the prompt cache",
-    "savedLine": "{{line}} · <b>about {{cost}} saved</b> at API prices",
-    "totalAll": "{{range}} · all agents",
-    "totalOne": "{{range}} · {{agent}}",
     "noSplit": {
       "requests": "Requests don’t split by token type. Switch the metric to Tokens or Cost.",
       "turns": "Turns don’t split by token type. Switch the metric to Tokens or Cost."
-    },
-    "prices": "Estimated at API prices as of {{date}}",
-    "unpriced": "{{tokens}} tokens have no price"
+    }
   },
   "trend": {
-    "title": "Over time",
     "daily": "Tokens per day",
     "weekly": "Tokens per week",
     "monthly": "Tokens per month",
@@ -140,8 +149,36 @@
     "legend": "Agents shown in the chart",
     "keepOne": "At least one agent stays in the chart",
     "plot": "{{title}}; use the arrow keys to read each value",
-    "footer": "One line per agent · {{range}}",
-    "footerOne": "{{agent}} · {{range}}"
+    "average": {
+      "hour": "30-day average",
+      "day": "Daily average",
+      "week": "Weekly average",
+      "month": "Monthly average"
+    },
+    "now": "Now",
+    "today": "Today",
+    "toCome": "Still to come",
+    "total": "Total",
+    "busiest": "Busiest <b>{{when}}</b> · {{value}}",
+    "active": {
+      "hour_one": "Used in <b>{{active}} of {{count}}</b> hour",
+      "hour_other": "Used in <b>{{active}} of {{count}}</b> hours",
+      "day_one": "Used on <b>{{active}} of {{count}}</b> day",
+      "day_other": "Used on <b>{{active}} of {{count}}</b> days",
+      "week_one": "Used in <b>{{active}} of {{count}}</b> week",
+      "week_other": "Used in <b>{{active}} of {{count}}</b> weeks",
+      "month_one": "Used in <b>{{active}} of {{count}}</b> month",
+      "month_other": "Used in <b>{{active}} of {{count}}</b> months"
+    },
+    "per": {
+      "hour": "<b>{{value}}</b> an hour",
+      "day": "<b>{{value}}</b> a day",
+      "week": "<b>{{value}}</b> a week",
+      "month": "<b>{{value}}</b> a month"
+    },
+    "above_one": "Above the 30-day average in <b>{{count}}</b> hour",
+    "above_other": "Above the 30-day average in <b>{{count}}</b> hours",
+    "weekends": "Weekends"
   },
   "limits": {
     "title": "Plan limits",
@@ -175,15 +212,28 @@
     "showMore_other": "Show {{count}} more",
     "showFewer": "Show fewer",
     "near_one": "· {{count}} near a limit",
-    "near_other": "· {{count}} near a limit"
+    "near_other": "· {{count}} near a limit",
+    "passedKey": "Darker track: time passed",
+    "percentUsed": "{{percent}}% used",
+    "percentLeft": "{{percent}}% left",
+    "outIn": "Runs out in {{time}} · back {{day}}",
+    "pace": {
+      "passed": "{{share}} of the window has passed",
+      "out": "runs out in {{time}}, back {{back}}",
+      "heads": "heads for {{percent}}% by the reset"
+    },
+    "resets": {
+      "title": "Resets ahead",
+      "next": "Next 7 days",
+      "none": "No window resets in the next 7 days.",
+      "row": "{{window}}: resets {{time}}, {{percent}}"
+    }
   },
   "activity": {
     "title": "Activity",
     "less": "Less",
     "more": "More",
-    "outside": "Days outside the range are gray",
     "label": "Tokens per day over the last 53 weeks; use the arrow keys to move between days",
-    "cell": "{{date}} · {{value}}",
     "stats": {
       "active": "Active days",
       "activeOf": "of {{count}}",
@@ -193,12 +243,18 @@
       "days_one": "{{count}} day",
       "days_other": "{{count}} days",
       "none": "None",
-      "shareOf": {
-        "tokens": "{{share}} of tokens",
-        "requests": "{{share}} of requests",
-        "turns": "{{share}} of turns",
-        "cost": "{{share}} of the cost"
-      }
+      "average": "Daily average",
+      "onActive": "on active days"
+    },
+    "span": "Last 12 months",
+    "spanGray": "Last 12 months · days outside {{range}} are gray",
+    "ranges": {
+      "1": "today",
+      "7": "the last 7 days",
+      "30": "the last 30 days",
+      "90": "the last 90 days",
+      "365": "the last year",
+      "all": "all time"
     }
   },
   "parts": {
@@ -214,7 +270,8 @@
     "groups": {
       "model": "Model",
       "project": "Project",
-      "agent": "Agent"
+      "agent": "Agent",
+      "type": "Type"
     },
     "others": {
       "model_one": "{{count}} other model",
@@ -226,13 +283,22 @@
     },
     "unknownModel": "Unknown model",
     "noProject": "No project",
-    "units": {
-      "tokens": "tokens",
-      "requests": "requests",
-      "turns": "turns",
-      "cost": "at API prices"
+    "share": "Share",
+    "kinds_one": "in {{count}} kind of token",
+    "kinds_other": "in {{count}} kinds of token",
+    "across": {
+      "model_one": "in {{count}} model",
+      "model_other": "in {{count}} models",
+      "project_one": "in {{count}} project",
+      "project_other": "in {{count}} projects",
+      "agent_one": "from {{count}} agent",
+      "agent_other": "from {{count}} agents"
     },
-    "total": "{{metric}} · {{range}}"
+    "fromCache": "<b>{{share}}</b> from the cache",
+    "tokens": "<b>{{tokens}}</b> tokens",
+    "atPrices": "<b>{{cost}}</b> at API prices",
+    "andMore_one": "and {{count}} more",
+    "andMore_other": "and {{count}} more"
   },
   "noUsage": "No usage in this range.",
   "noCost": "No cost in this range.",
@@ -327,21 +393,17 @@
   },
   "timeOfDay": {
     "title": "Time of day",
-    "by": {
-      "tokens": "Tokens by hour",
-      "requests": "Requests by hour",
-      "turns": "Turns by hour",
-      "cost": "Cost by hour"
-    },
-    "byHourOver": "{{metric}} · {{range}}",
-    "busiest": "Busiest",
     "label": "The range by hour of the day; the busiest is {{hour}}",
-    "span": {
-      "tokens": "{{share}} of the tokens were used between {{from}} and {{to}}.",
-      "requests": "{{share}} of the requests were made between {{from}} and {{to}}.",
-      "turns": "{{share}} of the turns ran between {{from}} and {{to}}.",
-      "cost": "{{share}} of the cost fell between {{from}} and {{to}}."
-    }
+    "lastDays_one": "Last {{count}} day",
+    "lastDays_other": "Last {{count}} days",
+    "busiest": "Busiest <b>{{hour}}</b>",
+    "holds": {
+      "tokens": "<b>{{from}} – {{to}}</b> holds {{share}}",
+      "requests": "<b>{{from}} – {{to}}</b> holds {{share}}",
+      "turns": "<b>{{from}} – {{to}}</b> holds {{share}}",
+      "cost": "<b>{{from}} – {{to}}</b> holds {{share}}"
+    },
+    "quietest": "Quietest <b>{{hour}}</b>"
   },
   "resets": {
     "count_one": "{{count}} reset",
@@ -372,5 +434,12 @@
       "no_credit": "That reset is no longer available.",
       "already_redeemed": "That reset was already used."
     }
+  },
+  "foot": {
+    "prices": "Costs are estimates at API prices as of {{date}}",
+    "unpriced": "{{tokens}} tokens without a price aren’t counted",
+    "logs": "{{agents}} from their own logs",
+    "kettu": "{{agents}} from Kettu’s record",
+    "zone": "Times in {{zone}}"
   }
 }

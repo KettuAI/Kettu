@@ -1,16 +1,16 @@
 import {
   useCallback,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent,
-  type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { UsageScope } from '@shared/usage'
+import { monthDay } from '@renderer/lib/format'
 import type { UsagePage as PageData } from '@renderer/stores/usage'
+import { ChartTip, TipRow } from './chart'
 import {
   addDays,
   busiestWeekday,
@@ -22,24 +22,34 @@ import {
   streaks,
   type DayTotal,
   type Metric,
+  type RangeChoice,
 } from './model'
 import { dayText, useMetricText, useRangeText, wholePercent } from './text'
 
 /** Jan 4, 2026 was a Sunday, so the days after it name each weekday. */
 const A_SUNDAY = new Date(2026, 0, 4).getTime()
+/** The weekdays the rows are named by: Monday, Wednesday and Friday. */
+const NAMED_DAYS = [1, 3, 5]
+/** A month's name needs this many week columns clear before the next one. */
+const MONTH_COLUMNS = 3
 
-/** The last 53 weeks day by day, then what they add up to. */
+/**
+ * The last 53 weeks day by day, the days outside the range in gray steps of the same shades, then
+ * what those weeks add up to, whatever the range.
+ */
 export function Activity({
   days,
   page,
   metric,
   scope,
+  className,
 }: {
   /** The page's days for the agents the filter keeps. */
   days: DayTotal[]
   page: PageData
   metric: Metric
   scope: UsageScope
+  className?: string
 }) {
   const { t, i18n } = useTranslation('usage')
   const kind = metricKind(metric, scope)
@@ -55,20 +65,32 @@ export function Activity({
     () => heatDays.map((d) => metricValue(d.parts, metric, scope) ?? 0),
     [heatDays, metric, scope],
   )
+  const inRange = useCallback(
+    (day: number) => day >= page.range.from && day < page.range.to,
+    [page.range],
+  )
+  const grayed = starts.some((day, i) => values[i]! > 0 && !inRange(day))
   // The card is the last year's, whatever the range above.
   const year = useMemo(() => ({ from: heat.from, to: heat.to }), [heat.from, heat.to])
-  const active = useMemo(() => figures(days, year), [days, year])
+  const active = useMemo(() => figures(days, year, metric, scope), [days, year, metric, scope])
   const runs = useMemo(() => streaks(days, year, page.today), [days, year, page.today])
   const weekday = useMemo(
     () => busiestWeekday(days, year, page.firstDay, metric, scope),
     [days, year, page.firstDay, metric, scope],
   )
+  const weekdayName = (day: number, style: 'long' | 'short') =>
+    new Intl.DateTimeFormat(i18n.language, { weekday: style }).format(addDays(A_SUNDAY, day))
   const none = t('activity.stats.none')
-  const stats: { label: string; value: string; tail?: ReactNode; title?: string }[] = [
+  const stats = [
     {
       label: t('activity.stats.active'),
       value: String(active.activeDays),
       tail: t('activity.stats.activeOf', { count: active.days }),
+    },
+    {
+      label: t('activity.stats.average'),
+      value: active.average === null ? none : text.short(active.average),
+      tail: active.average === null ? null : t('activity.stats.onActive'),
     },
     {
       label: t('activity.stats.current'),
@@ -77,57 +99,65 @@ export function Activity({
     {
       label: t('activity.stats.longest'),
       value: runs.longest ? t('activity.stats.days', { count: runs.longest.days }) : none,
-      title: runs.longest ? rangeText(runs.longest.from, addDays(runs.longest.to, 1)) : undefined,
+      tail: runs.longest
+        ? runs.longest.days === 1
+          ? monthDay(runs.longest.from)
+          : rangeText(runs.longest.from, addDays(runs.longest.to, 1))
+        : null,
     },
     {
       label: t('activity.stats.weekday'),
-      value: weekday
-        ? new Intl.DateTimeFormat(i18n.language, { weekday: 'long' }).format(
-            addDays(A_SUNDAY, weekday.weekday),
-          )
-        : none,
+      value: weekday ? weekdayName(weekday.weekday, 'long') : none,
       tail: weekday && wholePercent(weekday.share),
     },
   ]
+  const rangeName =
+    page.filters.range.kind === 'custom'
+      ? rangeText(page.range.from, page.range.to)
+      : t(
+          `activity.ranges.${(page.filters.range as Exclude<RangeChoice, { kind: 'custom' }>).kind}`,
+        )
 
   return (
-    <div className="k-u-card k-u-act">
-      <span className="k-u-act__head">
-        <span className="k-u-cap">{t('activity.title')}</span>
-        <span className="k-u-act__legend">
+    <section className={`k-u-card k-u-act ${className ?? ''}`} aria-labelledby="activity-title">
+      <header className="k-u-card__head">
+        <h3 id="activity-title">{t('activity.title')}</h3>
+        <span className="k-u-meta">
+          {grayed ? t('activity.spanGray', { range: rangeName }) : t('activity.span')}
+        </span>
+        <span aria-hidden className="k-u-act__legend">
           {t('activity.less')}
           {[0, 1, 2, 3, 4].map((v) => (
             <i key={v} data-v={v} />
           ))}
           {t('activity.more')}
         </span>
-      </span>
+      </header>
       <div className="k-u-act__body">
         <Heatmap
           days={starts}
           values={values}
+          today={page.today}
+          firstDay={page.firstDay}
+          inRange={inRange}
+          weekday={(day) => weekdayName(day, 'short')}
           label={t('activity.label')}
-          tip={(i) =>
-            t('activity.cell', {
-              date: dayText(starts[i]!),
-              value: values[i]! > 0 ? text.short(values[i]!) : t('figures.none'),
-            })
-          }
+          tip={(i) => (values[i]! > 0 ? text.short(values[i]!) : t('figures.none'))}
           spoken={(i) => text.sentence(dayText(starts[i]!), values[i]!)}
         />
-        <dl className="k-u-act__stats">
-          {stats.map((stat) => (
-            <div key={stat.label}>
-              <dt>{stat.label}</dt>
-              <dd className="k-num" title={stat.title}>
-                {stat.value}
-                {stat.tail && <small> {stat.tail}</small>}
-              </dd>
-            </div>
-          ))}
-        </dl>
       </div>
-    </div>
+      <dl className="k-u-act__stats">
+        {stats.map((stat) => (
+          <div key={stat.label}>
+            <dt>{stat.label}</dt>
+            <dd className="k-num">
+              {stat.value}
+              {stat.tail && <small>{stat.tail}</small>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 
@@ -141,12 +171,17 @@ function moveDay(key: string, index: number, count: number): number | null {
 }
 
 /**
- * A week to a column, the first day of the week on top; the days after today are outlined. A
- * day is read on hover, or with the arrow keys once the grid has focus.
+ * A week to a column, the first day of the week on top, the months named above and three
+ * weekdays beside; today is outlined and the days after it are left empty. A day is read on
+ * hover, or with the arrow keys once the grid has focus.
  */
 function Heatmap({
   days,
   values,
+  today,
+  firstDay,
+  inRange,
+  weekday,
   label,
   tip,
   spoken,
@@ -154,15 +189,18 @@ function Heatmap({
   /** The heatmap's day starts, oldest first, starting on the first day of a week. */
   days: readonly number[]
   values: readonly number[]
+  today: number
+  firstDay: number
+  inRange: (day: number) => boolean
+  weekday: (day: number) => string
   label: string
   tip: (index: number) => string
   spoken: (index: number) => string
 }) {
+  const { i18n } = useTranslation('usage')
   const grid = useRef<HTMLDivElement>(null)
   const [chosen, setChosen] = useState<number | null>(null)
-  const [box, setBox] = useState<{ x: number; y: number; size: number; column: number } | null>(
-    null,
-  )
+  const [at, setAt] = useState<DOMRect | null>(null)
   const levels = useMemo(() => heatLevels(values), [values])
   const busiest = useMemo(
     () =>
@@ -171,85 +209,88 @@ function Heatmap({
   )
   const future = (7 - (days.length % 7)) % 7
   const columns = Math.ceil(days.length / 7)
+  const months = useMemo(() => {
+    const format = new Intl.DateTimeFormat(i18n.language, { month: 'short' })
+    const out: { column: number; text: string }[] = []
+    for (let column = 0; column < columns; column++) {
+      const first = days[column * 7]
+      if (first === undefined) continue
+      const date = new Date(first)
+      if (date.getDate() > 7) continue
+      const last = out[out.length - 1]
+      if (last && column - last.column < MONTH_COLUMNS) continue
+      out.push({ column, text: format.format(first) })
+    }
+    // The first column's month gives way to the next one's when they would crowd.
+    if (out.length > 1 && out[1]!.column - out[0]!.column < MONTH_COLUMNS) out.shift()
+    return out
+  }, [days, columns, i18n.language])
 
-  useLayoutEffect(() => {
+  const choose = (index: number | null) => {
+    setChosen(index)
     const cell =
-      chosen === null ? null : grid.current?.querySelector<HTMLElement>(`[data-i="${chosen}"]`)
-    setBox(
-      chosen !== null && cell
-        ? {
-            x: cell.offsetLeft,
-            y: cell.offsetTop,
-            size: cell.offsetWidth,
-            column: Math.floor(chosen / 7),
-          }
-        : null,
-    )
-  }, [chosen, days])
-
-  const pick = useCallback((event: PointerEvent) => {
+      index === null ? null : grid.current?.querySelector<HTMLElement>(`[data-i="${index}"]`)
+    setAt(cell ? cell.getBoundingClientRect() : null)
+  }
+  const pick = (event: PointerEvent) => {
     const index = (event.target as HTMLElement).dataset.i
-    if (index !== undefined) setChosen(Number(index))
-  }, [])
-  // The tooltip starts at its day near the left edge, ends at it near the right, else centres.
-  const align = !box ? 0 : box.column < 4 ? 0 : box.column >= columns - 4 ? 1 : 0.5
+    if (index !== undefined && Number(index) !== chosen) choose(Number(index))
+  }
 
   return (
-    <>
+    <div className="k-u-heat" style={{ '--weeks': columns } as CSSProperties}>
+      <span aria-hidden className="k-u-heat__months">
+        {months.map((month) => (
+          <span key={month.column} style={{ gridColumnStart: month.column + 1 }}>
+            {month.text}
+          </span>
+        ))}
+      </span>
+      <span aria-hidden className="k-u-heat__days">
+        {Array.from({ length: 7 }, (_, row) => {
+          const day = (firstDay + row) % 7
+          return <span key={row}>{NAMED_DAYS.includes(day) ? weekday(day) : ''}</span>
+        })}
+      </span>
       <div
         ref={grid}
         role="group"
         tabIndex={0}
         aria-label={label}
         className="k-u-act__grid"
-        style={{ '--weeks': columns } as CSSProperties}
         onPointerOver={pick}
-        onPointerLeave={() => setChosen(null)}
+        onPointerLeave={() => choose(null)}
         onFocus={(event) => {
-          if (event.target.matches(':focus-visible') && days.length > 0) setChosen(busiest)
+          if (event.target.matches(':focus-visible') && days.length > 0) choose(busiest)
         }}
-        onBlur={() => setChosen(null)}
+        onBlur={() => choose(null)}
         onKeyDown={(event) => {
           const next = moveDay(event.key, chosen ?? busiest, days.length)
           if (next === null) return
           event.preventDefault()
-          setChosen(next)
+          choose(next)
         }}
       >
         {levels.map((level, i) => (
-          <i key={i} data-i={i} data-v={level} />
+          <i
+            key={i}
+            data-i={i}
+            data-v={level}
+            data-out={(level > 0 && !inRange(days[i]!)) || undefined}
+            data-today={days[i] === today || undefined}
+            data-on={chosen === i || undefined}
+          />
         ))}
         {Array.from({ length: future }, (_, i) => (
-          <i key={`f${i}`} data-out />
+          <i key={`f${i}`} data-later />
         ))}
-        {box && chosen !== null && (
-          <>
-            <span
-              aria-hidden
-              className="k-u-act__ring"
-              style={{
-                width: box.size,
-                height: box.size,
-                transform: `translate(${box.x}px, ${box.y}px)`,
-              }}
-            />
-            <span
-              aria-hidden
-              className="k-u-act__tip"
-              style={{
-                left: box.x + box.size * align,
-                top: box.y,
-                transform: `translate(${-align * 100}%, calc(-100% - 6px))`,
-              }}
-            >
-              {tip(chosen)}
-            </span>
-          </>
-        )}
       </div>
+      <ChartTip at={at}>
+        {chosen !== null && <TipRow label={dayText(days[chosen]!)} value={tip(chosen)} />}
+      </ChartTip>
       <span role="status" className="sr-only">
         {chosen !== null ? spoken(chosen) : ''}
       </span>
-    </>
+    </div>
   )
 }

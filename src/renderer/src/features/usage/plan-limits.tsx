@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown01Icon, ArrowReloadHorizontalIcon, Clock01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  ArrowReloadHorizontalIcon,
+  Clock01Icon,
+  InformationCircleIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { PlanLimit, ProviderBalance } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -8,6 +13,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
@@ -19,6 +25,7 @@ import {
   monthDayTime,
   planAmount,
   planBalance,
+  resetDay,
   resetTime,
   shortAgo,
 } from '@renderer/lib/format'
@@ -35,13 +42,32 @@ import {
   useWindowHost,
   useWindowHostAway,
 } from '@renderer/stores/window-host'
-import { planColumns, ringStroke, usageCards, type LimitRead, type UsageCard } from './plan-cards'
+import {
+  planColumns,
+  resetsAhead,
+  ringStroke,
+  usageCards,
+  windowPace,
+  type CardRing,
+  type LimitRead,
+  type UsageCard,
+  type WindowPace,
+} from './plan-cards'
 import { SpendResetDialog } from './spend-reset'
+import { wholePercent } from './text'
 
 const RINGS = 80
 /** A reading this old says on its card how long ago it was taken. */
 const STALE = 60 * 60_000
-const DAY = 24 * 60 * 60_000
+const HOUR = 60 * 60_000
+const DAY = 24 * HOUR
+/** Up to this many windows, each gets a second line with its reset. */
+const TWO_LINES = 2
+
+/** A time ahead in one unit or two at most, rounded to the hour past one: "42m", "2h", "1d 5h". */
+function roughly(ms: number): string {
+  return (ms < HOUR ? countdown(ms) : countdown(Math.round(ms / HOUR) * HOUR)) ?? ''
+}
 
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
@@ -92,31 +118,56 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
     }
   }, [toRead])
   const { cards, unreported } = usageCards(shownHosts, readings, used, reads, now)
+  const view = useLimitView()
   const named = shownHosts.length > 1
   const read = Math.max(0, ...cards.map((card) => card.readAt ?? 0))
   const names = new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
     unreported.map((a) => a.name),
   )
-  const columns = planColumns(cards.length)
-  const fold = columns * 2
+  // The resets after the cards are one more card, while any card has a window.
+  const resets = cards.some((card) => card.rings.length > 0) ? resetsAhead(cards, now) : null
+  const columns = planColumns(cards.length + (resets ? 1 : 0))
+  const fold = columns * 2 - (resets ? 1 : 0)
   const shown = open || cards.length <= fold ? cards : cards.slice(0, fold)
   const hidden = cards.slice(fold)
   const near = hidden.filter((card) =>
     card.rings.some((ring) => ring.level === 'warn' || ring.level === 'bad'),
   ).length
+  const paced =
+    view === 'used' &&
+    cards.some((card) => card.rings.some((ring) => windowPace(ring.limit, now) !== null))
   const head = [
     cards.length > 0 ? t('limits.accounts', { count: cards.length }) : null,
     read > 0 ? t('limits.read', { ago: longAgo(read, now) }) : null,
   ].filter(Boolean)
   return (
-    <section className="k-u-sec" aria-labelledby="plan-limits-title">
+    <section className="k-u-sec k-u-span-12" aria-labelledby="plan-limits-title">
       <header className="k-u-sec__head">
         <h2 id="plan-limits-title">{t('limits.title')}</h2>
-        {head.length > 0 && <span>{head.join(' · ')}</span>}
-        {cards.length > 0 && <LimitViewSwitch className="ml-auto" />}
+        {head.length > 0 && <span className="k-u-meta">{head.join(' · ')}</span>}
+        <span className="k-u-sec__keys">
+          {paced && (
+            <span className="k-u-key">
+              <PassedKey />
+              {t('limits.passedKey')}
+            </span>
+          )}
+          {unreported.length > 0 && (
+            <span
+              className="k-u-key"
+              title={t('limits.notReported', { name: names, count: unreported.length })}
+            >
+              <Icon icon={InformationCircleIcon} size={13} />
+              <span className="k-u-key__text">
+                {t('limits.notReported', { name: names, count: unreported.length })}
+              </span>
+            </span>
+          )}
+          {cards.length > 0 && <LimitViewSwitch />}
+        </span>
       </header>
       {cards.length === 0 ? (
-        <div className="k-u-card">
+        <div className="k-u-card k-u-pad">
           <p className="k-u-none">{t('limits.none')}</p>
         </div>
       ) : (
@@ -124,6 +175,7 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
           {shown.map((card) => (
             <PlanCard key={card.key} card={card} named={named} now={now} />
           ))}
+          {resets && <ResetsAhead resets={resets} now={now} />}
         </div>
       )}
       {hidden.length > 0 && (
@@ -140,10 +192,78 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
           <Icon icon={ArrowDown01Icon} size={13} />
         </button>
       )}
-      {unreported.length > 0 && (
-        <p className="k-u-note">
-          {t('limits.notReported', { name: names, count: unreported.length })}
-        </p>
+    </section>
+  )
+}
+
+/** The legend's ring: its track, the part passed a step darker, and a short use. */
+function PassedKey() {
+  return (
+    <PlanRings
+      rings={[{ id: 'key', percent: 25, level: 'ok', passed: 0.62 }]}
+      size={13}
+      stroke={2.6}
+      gap={0}
+      className="k-u-key__ring"
+    />
+  )
+}
+
+/**
+ * The windows that reset within the next week, the soonest first, each with its account and how
+ * much of it is used; a used-up one in the error color.
+ */
+function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; now: number }) {
+  const { t } = useTranslation('usage')
+  const view = useLimitView()
+  return (
+    <section className="k-u-card k-u-resets" aria-labelledby="resets-ahead-title">
+      <header className="k-u-card__head">
+        <h3 id="resets-ahead-title">{t('limits.resets.title')}</h3>
+        <span className="k-u-meta">{t('limits.resets.next')}</span>
+      </header>
+      {resets.length === 0 ? (
+        <p className="k-u-resets__none">{t('limits.resets.none')}</p>
+      ) : (
+        <ol className="k-u-resets__list">
+          {resets.map(({ key, card, ring, at }) => {
+            const when = at - now < DAY ? countdown(at - now) : resetTime(at, now)
+            const window = limitShort(ring.limit, ' · ')
+            const percent = shownPercent(ring.percent, view)
+            return (
+              <Tooltip key={key}>
+                <TooltipTrigger
+                  render={
+                    <li
+                      className="k-u-resets__row"
+                      data-level={ring.level}
+                      aria-label={t('limits.resets.row', {
+                        window: `${card.name} · ${limitLabel(ring.limit)}`,
+                        time: monthDayTime(at),
+                        percent: t(view === 'left' ? 'limits.percentLeft' : 'limits.percentUsed', {
+                          percent,
+                        }),
+                      })}
+                    />
+                  }
+                >
+                  <span aria-hidden className="k-u-resets__pin" />
+                  <b aria-hidden className="k-num">
+                    {when}
+                  </b>
+                  <span aria-hidden className="k-u-resets__who">
+                    <AgentMark agent={card.agentId} hostId={card.hostId} size={13} />
+                    <span>{`${card.name} · ${window}`}</span>
+                  </span>
+                  <span aria-hidden className="k-num k-u-resets__pct" data-level={ring.level}>
+                    {percent}%
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{`${limitLabel(ring.limit)} · ${monthDayTime(at)}`}</TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </ol>
       )}
     </section>
   )
@@ -256,55 +376,21 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
               id: ring.limit.window,
               percent: shownPercent(ring.percent, view),
               level: ring.level,
+              passed: view === 'used' ? windowPace(ring.limit, now)?.passed : null,
             }))}
             size={RINGS}
             {...ringStroke(card.rings.length, RINGS)}
             className="k-u-rings"
           />
-          <div className="k-u-plan__lines">
-            {card.rings.map((ring) => {
-              const name = limitLabel(ring.limit)
-              const reset =
-                ring.limit.resetsAt === null ? null : planReset(ring.limit.resetsAt, now)
-              const unit =
-                ring.limit.amount?.unit === 'credits'
-                  ? t('limits.units.credits')
-                  : ring.limit.amount?.unit === 'requests'
-                    ? t('limits.units.premiumRequests')
-                    : ring.limit.amount?.unit
-              return (
-                <div key={ring.limit.window} className="k-u-plan__window">
-                  <span className="k-u-plan__line">
-                    <span aria-hidden className="k-u-plan__win">
-                      {limitShort(ring.limit, ' · ')}
-                    </span>
-                    <b aria-hidden className="k-num" data-level={ring.level}>
-                      {ring.reached && ring.limit.resetsAt! > now
-                        ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
-                        : `${shownPercent(ring.percent, view)}%`}
-                    </b>
-                    {reset && <small aria-hidden>{reset}</small>}
-                    <span className="sr-only">
-                      {t(view === 'left' ? 'limits.windowLeft' : 'limits.windowUsed', {
-                        window: name,
-                        percent: shownPercent(ring.percent, view),
-                      })}
-                      {reset && ` ${reset}`}
-                    </span>
-                  </span>
-                  {ring.limit.amount && (
-                    <span className="k-u-plan__amount">
-                      {planAmount(
-                        ring.limit.amount.used,
-                        ring.limit.amount.total,
-                        ring.limit.amount.unit,
-                        unit ?? ring.limit.amount.unit,
-                      )}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+          <div className="k-u-plan__lines" data-two={card.rings.length <= TWO_LINES || undefined}>
+            {card.rings.map((ring) => (
+              <WindowLine
+                key={ring.limit.window}
+                ring={ring}
+                now={now}
+                second={card.rings.length <= TWO_LINES}
+              />
+            ))}
             {failed && card.readAt !== null && (
               <span className="k-u-plan__last">
                 {t('limits.lastRead', { ago: longAgo(card.readAt, now) })}
@@ -421,17 +507,28 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
             <span className="col-span-3 truncate font-medium text-primary">
               {card.plan ? `${card.name} · ${card.plan}` : card.name}
             </span>
-            {card.rings.map((ring) => (
-              <span key={ring.limit.window} className="contents">
-                <span className="text-tertiary">{limitLabel(ring.limit)}</span>
-                <span className="text-right font-medium text-primary tabular-nums">
-                  {shownPercent(ring.percent, view)}%
+            {card.rings.map((ring) => {
+              const pace = windowPace(ring.limit, now)
+              return (
+                <span key={ring.limit.window} className="contents">
+                  <span className="text-tertiary">{limitLabel(ring.limit)}</span>
+                  <span className="text-right font-medium text-primary tabular-nums">
+                    {shownPercent(ring.percent, view)}%
+                  </span>
+                  <span className="text-right whitespace-nowrap text-secondary">
+                    {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}
+                  </span>
+                  {pace && !ring.reached && (
+                    <span
+                      className="col-span-3 -mt-1 truncate text-tertiary data-out:text-(--plan-bad-text)"
+                      data-out={pace.outAt !== null || undefined}
+                    >
+                      <PaceText pace={pace} ring={ring} now={now} />
+                    </span>
+                  )}
                 </span>
-                <span className="text-right whitespace-nowrap text-secondary">
-                  {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}
-                </span>
-              </span>
-            ))}
+              )
+            })}
             {resets?.each?.map((credit, index) => (
               <span key={credit.id} className="contents">
                 <span className="col-span-2 truncate text-tertiary">
@@ -456,6 +553,91 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           </div>
         </HoverCardContent>
       </HoverCard>
+    </>
+  )
+}
+
+/**
+ * A window's line: its short name and percentage, or when it comes back once used up. With room,
+ * a second line says when it resets; one that runs out before its reset at its pace says when,
+ * in the error color, in place of that line or as a second line of its own.
+ */
+function WindowLine({ ring, now, second }: { ring: CardRing; now: number; second: boolean }) {
+  const { t } = useTranslation('usage')
+  const view = useLimitView()
+  const name = limitLabel(ring.limit)
+  const resetsAt = ring.limit.resetsAt
+  const reset = resetsAt === null ? null : planReset(resetsAt, now)
+  const pace = ring.reached ? null : windowPace(ring.limit, now)
+  const out =
+    pace?.outAt != null && resetsAt !== null
+      ? t('limits.outIn', { time: roughly(pace.outAt - now), day: resetDay(resetsAt, now) })
+      : null
+  const unit =
+    ring.limit.amount?.unit === 'credits'
+      ? t('limits.units.credits')
+      : ring.limit.amount?.unit === 'requests'
+        ? t('limits.units.premiumRequests')
+        : ring.limit.amount?.unit
+  const below = out ?? (second ? reset : null)
+  return (
+    <div className="k-u-plan__window">
+      <span className="k-u-plan__line">
+        <span aria-hidden className="k-u-plan__win">
+          {limitShort(ring.limit, ' · ')}
+        </span>
+        <b aria-hidden className="k-num" data-level={ring.level}>
+          {ring.reached && resetsAt! > now
+            ? t('limits.backIn', { time: countdown(resetsAt! - now)! })
+            : `${shownPercent(ring.percent, view)}%`}
+        </b>
+        {reset && !below && <small aria-hidden>{reset}</small>}
+        <span className="sr-only">
+          {t(view === 'left' ? 'limits.windowLeft' : 'limits.windowUsed', {
+            window: name,
+            percent: shownPercent(ring.percent, view),
+          })}
+          {` ${out ?? reset ?? ''}`}
+        </span>
+      </span>
+      {below && (
+        <span aria-hidden className="k-u-plan__below" data-out={out !== null || undefined}>
+          {below}
+        </span>
+      )}
+      {ring.limit.amount && (
+        <span className="k-u-plan__amount">
+          {planAmount(
+            ring.limit.amount.used,
+            ring.limit.amount.total,
+            ring.limit.amount.unit,
+            unit ?? ring.limit.amount.unit,
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Where a window's use heads at its pace so far: how much of it has passed, then by when. */
+function PaceText({ pace, ring, now }: { pace: WindowPace; ring: CardRing; now: number }) {
+  const { t } = useTranslation('usage')
+  const passed = t('limits.pace.passed', { share: wholePercent(pace.passed) })
+  if (pace.outAt !== null && ring.limit.resetsAt !== null) {
+    return (
+      <>
+        {passed} ·{' '}
+        {t('limits.pace.out', {
+          time: roughly(pace.outAt - now),
+          back: resetTime(ring.limit.resetsAt, now),
+        })}
+      </>
+    )
+  }
+  if (pace.projected === null) return <>{passed}</>
+  return (
+    <>
+      {passed} · {t('limits.pace.heads', { percent: Math.round(Math.min(100, pace.projected)) })}
     </>
   )
 }

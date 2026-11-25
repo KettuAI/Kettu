@@ -7,6 +7,7 @@ import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from '@shared/
 import {
   addDays,
   clockZones,
+  comparison,
   dayOf,
   dayStarts,
   firstDayOfWeek,
@@ -15,6 +16,7 @@ import {
   oneDay,
   rangeOf,
   type AgentFilter,
+  type Comparison,
   type DayRange,
   type Generations,
   type Metric,
@@ -57,6 +59,10 @@ export interface UsagePage {
   hours: { starts: number[]; summary: UsageSummary } | null
   /** The days the summary's hours of the day cover: the range, or the last 30 days for one day. */
   clock: DayRange
+  /** What the figures are set against; the days before the range are among `starts`. */
+  compare: Comparison
+  /** Yesterday up to the time it was read, when today is set against it. */
+  sameTime: UsageSummary | null
 }
 
 /** Days the hours of the day cover when the range is one day, whose trend is by hour already. */
@@ -202,6 +208,8 @@ interface PageParts {
   summaries: Map<string | null, UsageSummary>
   /** A one-day range's sums per hour, by host. */
   hours: Map<string | null, UsageSummary>
+  /** Yesterday up to the same time, by host, when today is set against it. */
+  sameTime: Map<string | null, UsageSummary>
 }
 
 let pageOpen = false
@@ -276,14 +284,21 @@ export async function loadUsagePage(): Promise<void> {
     for (let pass = 0; pass < 2; pass++) {
       const range = rangeOf(filters.range, today, first)
       const heat = heatmapRange(today, firstDay)
-      // The heatmap always shows the last 53 weeks, whatever the range.
+      const compare = comparison(filters.range, range, today, Date.now())
+      // The heatmap always shows the last 53 weeks, whatever the range, and the days before the
+      // range are what it is set against.
       const starts = dayStarts({
-        from: Math.min(range.from, heat.from),
+        from: Math.min(
+          range.from,
+          heat.from,
+          compare.kind === 'before' ? compare.range.from : range.from,
+        ),
         to: Math.max(range.to, heat.to),
       })
       const hourly = oneDay(range) ? hourStarts(range) : null
       const clock = hourly ? { from: addDays(range.to, -CLOCK_DAYS), to: range.to } : range
-      const read = async (boundaries: number[], byHour = false) =>
+      const sameTime = compare.kind === 'sameTime' ? compare.range : null
+      const read = async (span: DayRange, boundaries: number[], byHour = false) =>
         new Map(
           await readEach(
             targets,
@@ -293,7 +308,7 @@ export async function loadUsagePage(): Promise<void> {
                 await hostAt(
                   hostId,
                   'usage.summary',
-                  summaryParams(range, filters.scope, boundaries, byHour ? clock : null),
+                  summaryParams(span, filters.scope, boundaries, byHour ? clock : null),
                 ),
               ] as const,
           ),
@@ -301,9 +316,10 @@ export async function loadUsagePage(): Promise<void> {
       // All time starts at the first day with usage of this scope, known only from the answer, so
       // its hours are read after it; any other range's along with it.
       const settled = filters.range.kind !== 'all'
-      const [summaries, early] = await Promise.all([
-        read(starts, true),
-        settled && hourly ? read(hourly) : null,
+      const [summaries, early, before] = await Promise.all([
+        read(range, starts, true),
+        settled && hourly ? read(range, hourly) : null,
+        sameTime ? read(sameTime, [sameTime.from, sameTime.to]) : null,
       ])
       if (id !== request) return
       const summary = mergeSummaries([...summaries.values()])
@@ -311,7 +327,7 @@ export async function loadUsagePage(): Promise<void> {
         first = summary.first
         continue
       }
-      const hours = hourly && (early ?? (await read(hourly)))
+      const hours = hourly && (early ?? (await read(range, hourly)))
       if (id !== request) return
       const next: UsagePage = {
         key,
@@ -326,8 +342,16 @@ export async function loadUsagePage(): Promise<void> {
         hours:
           hourly && hours ? { starts: hourly, summary: mergeSummaries([...hours.values()]) } : null,
         clock,
+        compare,
+        sameTime: before ? mergeSummaries([...before.values()]) : null,
       }
-      parts = { request: id, page: next, summaries, hours: hours ?? new Map() }
+      parts = {
+        request: id,
+        page: next,
+        summaries,
+        hours: hours ?? new Map(),
+        sameTime: before ?? new Map(),
+      }
       keptPages.set(key, next)
       useUsageStore.setState({ page: next, loading: false, error: null })
       return
@@ -371,15 +395,23 @@ async function readHostPart(hostId: string | null): Promise<void> {
   if (!pageOpen || !reachable(hostId)) return
   if (!base || !page || base.request !== request || base.page !== page) return readPage()
   if (page.today !== dayOf(Date.now())) return readPage()
-  const ask = (dayStarts: number[], clock: DayRange | null) =>
-    hostAt(hostId, 'usage.summary', summaryParams(page.range, page.filters.scope, dayStarts, clock))
+  // Yesterday up to the same time has moved on, for every host at once.
+  const compare = comparison(page.filters.range, page.range, page.today, Date.now())
+  if (compare.kind === 'sameTime' && page.compare.kind === 'sameTime') {
+    if (compare.range.to !== page.compare.range.to) return readPage()
+  }
+  const ask = (dayStarts: number[], clock: DayRange | null, span = page.range) =>
+    hostAt(hostId, 'usage.summary', summaryParams(span, page.filters.scope, dayStarts, clock))
+  const sameTime = page.compare.kind === 'sameTime' ? page.compare.range : null
   let summary: UsageSummary | null = null
   let hours: UsageSummary | null = null
+  let before: UsageSummary | null = null
   let failed: unknown = null
   try {
-    ;[summary, hours] = await Promise.all([
+    ;[summary, hours, before] = await Promise.all([
       ask(page.starts, page.clock),
       page.hours ? ask(page.hours.starts, null) : null,
+      sameTime ? ask([sameTime.from, sameTime.to], null, sameTime) : null,
     ])
   } catch (error) {
     failed = error
@@ -391,10 +423,13 @@ async function readHostPart(hostId: string | null): Promise<void> {
   // other host answered.
   const summaries = new Map(base.summaries)
   const byHour = new Map(base.hours)
+  const sameTimes = new Map(base.sameTime)
   if (summary) summaries.set(hostId, summary)
   else summaries.delete(hostId)
   if (hours) byHour.set(hostId, hours)
   else byHour.delete(hostId)
+  if (before) sameTimes.set(hostId, before)
+  else sameTimes.delete(hostId)
   if (summaries.size === 0) {
     useUsageStore.setState({ error: errorMessage(failed) })
     return
@@ -405,6 +440,7 @@ async function readHostPart(hostId: string | null): Promise<void> {
   if (moved || (shown.hours && byHour.size === 0)) return readPage()
   base.summaries = summaries
   base.hours = byHour
+  base.sameTime = sameTimes
   const next: UsagePage = {
     ...shown,
     summary: merged,
@@ -413,6 +449,7 @@ async function readHostPart(hostId: string | null): Promise<void> {
       starts: shown.hours.starts,
       summary: mergeSummaries([...byHour.values()]),
     },
+    sameTime: shown.sameTime && mergeSummaries([...sameTimes.values()]),
   }
   base.page = next
   keptPages.set(next.key, next)

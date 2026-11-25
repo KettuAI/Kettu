@@ -252,3 +252,62 @@ export function ringStroke(count: number, size: number): { stroke: number; gap: 
   }
   return { stroke: 2, gap: 1 }
 }
+
+/** Before this share of a window has passed, its rate says too little to project. */
+const PACE_FROM = 0.05
+
+/** How a window's use stands against its time. */
+export interface WindowPace {
+  /** The share of the window already passed, 0 to 1. */
+  passed: number
+  /** Where its use heads by the reset at the rate so far, in percent; null too early to tell. */
+  projected: number | null
+  /** When it runs out at that rate, if that is before its reset; null otherwise. */
+  outAt: number | null
+}
+
+/**
+ * A window's pace, for one of known length and reset time that counts a share of the plan; null
+ * for one counted in credits or requests, one of unknown length, and one whose reset has passed.
+ */
+export function windowPace(limit: PlanLimit, now: number): WindowPace | null {
+  if (limit.amount || limit.usedPercent === null || limit.resetsAt === null) return null
+  if (limit.resetsAt <= now) return null
+  const length = windowLength(limit.window)
+  if (length === null) return null
+  const elapsed = length - Math.min(limit.resetsAt - now, length)
+  const passed = elapsed / length
+  if (passed < PACE_FROM) return { passed, projected: null, outAt: null }
+  const used = Math.min(100, limit.usedPercent)
+  const projected = used / passed
+  const outAt =
+    used > 0 && used < 100 && projected > 100 ? now + ((100 - used) / used) * elapsed : null
+  return { passed, projected, outAt: outAt !== null && outAt < limit.resetsAt ? outAt : null }
+}
+
+/** A window of a card that resets soon, for the list after the cards. */
+export interface ResetAhead {
+  key: string
+  card: UsageCard
+  ring: CardRing
+  at: number
+}
+
+/** How far ahead the list of resets looks, and how many it lists. */
+const RESETS_AHEAD = 7 * DAY
+const RESETS_SHOWN = 5
+
+/** Every window that resets within the next week, the soonest first. */
+export function resetsAhead(cards: readonly UsageCard[], now: number): ResetAhead[] {
+  return cards
+    .flatMap((card) =>
+      card.rings.flatMap((ring) => {
+        const at = ring.limit.resetsAt
+        return at !== null && at > now && at <= now + RESETS_AHEAD
+          ? [{ key: `${card.key}\n${ring.limit.window}`, card, ring, at }]
+          : []
+      }),
+    )
+    .sort((a, b) => a.at - b.at)
+    .slice(0, RESETS_SHOWN)
+}

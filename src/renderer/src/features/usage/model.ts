@@ -174,6 +174,54 @@ export function hoursSoFar(starts: readonly number[], now: number): DayRange {
   return { from: starts[0]!, to: end }
 }
 
+/** What a range's figures are set against. */
+export type Comparison =
+  /** As many days right before the range. */
+  | { kind: 'before'; range: DayRange }
+  /** Today against yesterday from its start to the same time of day, to the quarter hour. */
+  | { kind: 'sameTime'; range: DayRange }
+  /** A year or all time is set against nothing, and says since when it counts. */
+  | { kind: 'since'; from: number }
+
+export function comparison(
+  choice: RangeChoice,
+  range: DayRange,
+  today: number,
+  now: number,
+): Comparison {
+  if (choice.kind === '365' || choice.kind === 'all') return { kind: 'since', from: range.from }
+  if (oneDay(range) && range.from === today) {
+    const from = addDays(today, -1)
+    const at = new Date(now)
+    const same = new Date(
+      at.getFullYear(),
+      at.getMonth(),
+      at.getDate() - 1,
+      at.getHours(),
+      at.getMinutes(),
+    ).getTime()
+    // Today counts the quarter hour under way, so yesterday counts its match too.
+    const to = Math.ceil((same + 1) / QUARTER_MS) * QUARTER_MS
+    return {
+      kind: 'sameTime',
+      range: { from, to: Math.min(today, Math.max(from + QUARTER_MS, to)) },
+    }
+  }
+  const days = dayStarts(range).length - 1
+  return { kind: 'before', range: { from: addDays(range.from, -days), to: range.from } }
+}
+
+/** The change from `previous` to `current` as a share, 0.23 for 23% more; null from nothing. */
+export function change(current: number, previous: number): number | null {
+  return previous > 0 ? current / previous - 1 : null
+}
+
+/** The average over the periods that have any; null when none has. */
+export function activeAverage(values: readonly number[]): number | null {
+  const used = values.filter((value) => value > 0)
+  return used.length > 0 ? used.reduce((sum, value) => sum + value, 0) / used.length : null
+}
+
 export interface DayTotal {
   /** The day's start, or the hour's when summed over `hourStarts`. */
   day: number
@@ -382,16 +430,6 @@ export function busiestWeekday(
     if (sums[weekday]! > sums[best]!) best = weekday
   }
   return { weekday: best, share: sums[best]! / total }
-}
-
-/** The range's tokens per request; null without requests. */
-export function tokensPerRequest(facts: Pick<Figures, 'tokens' | 'total'>): number | null {
-  return facts.total > 0 ? facts.tokens / facts.total : null
-}
-
-/** The tokens no cost counts, when there are any: the note under the Cost figures. */
-export function unpricedTokens(facts: Pick<Figures, 'parts'>): number | null {
-  return facts.parts.unpricedTokens > 0 ? facts.parts.unpricedTokens : null
 }
 
 export interface TrendBar {
@@ -771,4 +809,14 @@ export function busiestHours(
     if (sum > best.sum) best = { from, sum }
   }
   return { from: best.from, share: best.sum / total }
+}
+
+/** The hour with the least, the earliest of equals; null when nothing was used. */
+export function quietestHour(values: readonly number[]): number | null {
+  if (!values.some((value) => value > 0)) return null
+  let best = 0
+  for (let hour = 1; hour < values.length; hour++) {
+    if (values[hour]! < values[best]!) best = hour
+  }
+  return best
 }

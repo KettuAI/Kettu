@@ -6,12 +6,15 @@ export interface PlanRing {
   /** The whole percentage used. */
   percent: number
   level: LimitLevel
+  /** The share of the window's time already passed, drawn a step darker on its track. */
+  passed?: number | null
 }
 
 /**
  * One ring per plan window, the first innermost, each filled to how much of it is used, on a
- * track in a tint of its own color, or in a neutral gray with `track="neutral"`. `size` is the
- * diagram's width in pixels.
+ * track in a tint of its own color, or in a neutral gray with `track="neutral"`; a tinted track
+ * darkens a step over the time already passed when a ring says how much. `size` is the diagram's
+ * width in pixels.
  */
 export function PlanRings({
   rings,
@@ -42,6 +45,7 @@ export function PlanRings({
         const r = center - stroke / 2 - fromOuter * (stroke + gap)
         const length = 2 * Math.PI * r
         const share = Math.min(100, ring.percent) / 100
+        const passed = track === 'tint' && ring.passed ? Math.min(1, ring.passed) : 0
         return (
           <g key={ring.id} className={LIMIT_STROKE[ring.level]}>
             <circle
@@ -56,6 +60,17 @@ export function PlanRings({
                   : 'stroke-current opacity-(--ring-tint)'
               }
             />
+            {passed > 0 && (
+              <circle
+                cx={center}
+                cy={center}
+                r={r}
+                fill="none"
+                strokeWidth={stroke}
+                strokeDasharray={`${passed * length} ${length}`}
+                className="stroke-current opacity-(--ring-passed)"
+              />
+            )}
             {share > 0 && (
               <circle
                 cx={center}

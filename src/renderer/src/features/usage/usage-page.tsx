@@ -1,40 +1,45 @@
-// Usage on affectUI's Analytics screen: the head with the period, the filters, then the plan
-// limits, the figures, where the tokens come from and what they went to, the usage over time
-// with one line per agent, the time of day and the activity of the last year.
+// Usage as a grid: the head with what is counted, the range and Sync, then the plan limits, four
+// figures, the trend beside its breakdown, the year's activity beside the time of day, and a line
+// on what the numbers rest on.
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Alert02Icon,
   ArrowDown01Icon,
   ChartLineData01Icon,
   ComputerIcon,
+  DatabaseIcon,
+  FilterIcon,
+  InformationCircleIcon,
+  Layers01Icon,
   RefreshIcon,
 } from '@hugeicons/core-free-icons'
-import { Trans, useTranslation } from 'react-i18next'
-import { sortAgentIds, type AgentId } from '@shared/thread'
-import type { UsageScope } from '@shared/usage'
+import { useTranslation } from 'react-i18next'
+import type { AgentId } from '@shared/thread'
+import type { UsageScope, UsageSource } from '@shared/usage'
 import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
-import { CompactBreakdown, type BreakdownItem } from '@renderer/components/affect/compact-breakdown'
 import { DateRangePicker } from '@renderer/components/affect/date-range-picker'
-import { KpiChart } from '@renderer/components/affect/kpi-chart'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { useRefresh } from '@renderer/components/refresh'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { chosenHost } from '@renderer/features/account/model'
 import { Notice } from '@renderer/features/routines/kit'
 import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
-import { basename, bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
+import { bytes, longAgo, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
-import { isMac } from '@renderer/lib/platform'
+import { isWeb } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
+import { switchHost } from '@renderer/stores/host-switch'
 import { HostScopeContext, useHostScope } from '@renderer/stores/host-scope'
+import { useOtherHosts } from '@renderer/stores/hosts'
 import { openReport } from '@renderer/stores/report'
 import {
   loadUsagePage,
@@ -45,65 +50,50 @@ import {
   useUsageStore,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
+import { THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
 import {
   useHostName,
   useNamesHosts,
-  useWindowHost,
   useWindowHostAway,
   useWindowScope,
 } from '@renderer/stores/window-host'
 import { Activity } from './activity'
+import { BreakdownCard } from './breakdown'
+import { FigureCards, type HourTotals } from './figures'
 import {
   addDays,
-  agentRows,
   clocksChange,
   dayOf,
   dayTotals,
   figures,
   firstDayOfWeek,
-  foldRows,
-  fromCache,
   hourBars,
+  hourValues,
   hoursSoFar,
-  legendHidden,
   metricKind,
-  modelRows,
-  namesYear,
+  oneDay,
   presets,
-  projectRows,
   RANGE_KINDS,
-  seriesOf,
-  shownSeries,
-  tokenParts,
-  tokensPerRequest,
   trend,
-  unpricedTokens,
-  wholeMonth,
   type AgentFilter,
   type DayTotal,
   type Metric,
-  type MetricKind,
   type RangeKind,
   type TrendBar,
   type TrendUnit,
 } from './model'
 import { PlanLimits } from './plan-limits'
-import { useAgentColor, usageAgentName } from './series'
+import { usageAgentName } from './series'
 import { TimeOfDay } from './time-of-day'
-import { Count, FigureValue } from './count'
-import { dayText, useHourText, useRangeText } from './text'
+import { TrendCard } from './trend'
+import { useRangeText } from './text'
 import './usage.css'
 
 /** A scan with less than this to read is over before its progress is worth showing. */
 const IMPORT_SHOWN = 50_000_000
-
-/** A one-day range's totals per hour, and the hour starts they were summed over. */
-interface HourTotals {
-  totals: DayTotal[]
-  starts: number[]
-  /** The clocks change that day, so its hours name their time zones. */
-  zoned: boolean
-}
+const DAY_MS = 86_400_000
+/** The computer choice for every host added up; host ids never take this form. */
+const ALL_HOSTS = '\nall'
 
 /**
  * The usage page: a dashboard of the tokens the agents used, for a chosen agent and range, on the
@@ -181,10 +171,12 @@ function Page() {
         page={page}
         loading={!page && !error}
         notice={
-          <>
-            {error && <ReadFailed error={error} kept={!!page} />}
-            {page && importing && <ImportProgress alone={false} />}
-          </>
+          (error || (page && importing)) && (
+            <>
+              {error && <ReadFailed error={error} kept={!!page} />}
+              {page && importing && <ImportProgress alone={false} />}
+            </>
+          )
         }
       />
     )
@@ -204,8 +196,10 @@ const NO_TOTALS: DayTotal[] = []
 const LOADING_AFTER_MS = 200
 
 /**
- * The sticky head: the title, then the range picker and the periods. On macOS with the sidebar
- * collapsed it leaves room for the controls in the corner.
+ * The sticky head: the title, then what is counted (the agents, the computers and the source), the
+ * metric and the range, then Sync. On macOS with the sidebar collapsed it leaves room for the
+ * controls in the corner. With nothing read yet only the computers can be chosen; while the host
+ * is away, nothing but them.
  */
 function Head({
   page,
@@ -216,7 +210,7 @@ function Head({
 }: {
   page: PageData | null
   used: ReadonlySet<number>
-  /** Only the title, with nothing to filter yet. */
+  /** Only the title and the computers, with nothing to filter yet. */
   bare?: boolean
   /** The figures are what was last read from a host that is away, so nothing can be chosen. */
   away?: boolean
@@ -225,7 +219,211 @@ function Head({
 }) {
   const { t } = useTranslation('usage')
   const cornered = useCornered()
-  const host = useHostText()
+  return (
+    <header className="k-u__head app-region-drag" data-cornered={cornered || undefined}>
+      <span className="k-u__lead">
+        {cornered && <CornerControlsSpace />}
+        <span aria-hidden className="k-u__title">
+          {t('page.title')}
+        </span>
+        {waiting && <Spinner className="k-u__wait" />}
+      </span>
+      <span className="k-u__actions">
+        {bare ? (
+          <ComputerPicker />
+        ) : (
+          <>
+            <span className="k-u__group">
+              <span className="k-u__group" inert={away || undefined} data-away={away || undefined}>
+                <AgentPicker page={page} />
+              </span>
+              <ComputerPicker />
+              <span className="k-u__group" inert={away || undefined} data-away={away || undefined}>
+                <SourcePicker />
+              </span>
+            </span>
+            <span
+              className="k-u__group"
+              data-ruled=""
+              inert={away || undefined}
+              data-away={away || undefined}
+            >
+              <MetricSwitch />
+              <RangeChoice page={page} used={used} />
+            </span>
+            <SyncButton away={away} />
+          </>
+        )}
+      </span>
+    </header>
+  )
+}
+
+/** A filter's button, as wide as its longest choice, so picking one never moves what follows. */
+function Picker<T extends string>({
+  icon,
+  label,
+  value,
+  choices,
+  onChange,
+}: {
+  icon: Parameters<typeof Icon>[0]['icon']
+  /** What the filter chooses, for those who cannot see its icon. */
+  label: string
+  value: T
+  choices: readonly (Omit<MenuItem, 'checked' | 'onSelect'> & { value: T })[]
+  onChange: (value: T) => void
+}) {
+  const current = choices.find((choice) => choice.value === value)
+  return (
+    <Dropdown
+      align="start"
+      items={choices.map(({ value: choice, ...item }) => ({
+        ...item,
+        checked: choice === value,
+        onSelect: () => onChange(choice),
+      }))}
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          className="ui-as-tool ui-as-tool--label k-u-pick"
+          aria-label={current ? `${label}: ${current.label}` : label}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={toggle}
+        >
+          <Icon icon={icon} size={14} />
+          <span aria-hidden className="k-u-pick__value">
+            {choices.map((choice) => (
+              <span
+                key={choice.value}
+                className="k-u-pick__opt"
+                data-on={choice.value === value || undefined}
+              >
+                {choice.logo}
+                {choice.label}
+              </span>
+            ))}
+          </span>
+          <Icon icon={ArrowDown01Icon} size={13} />
+        </button>
+      )}
+    />
+  )
+}
+
+/** The agents with usage, once there are two or more; with one, All is the only choice. */
+function AgentPicker({ page }: { page: PageData | null }) {
+  const { t } = useTranslation('usage')
+  const agent = useUsageStore((s) => s.filters.agent)
+  const agents = page?.summary.agents ?? []
+  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
+  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
+  if (choices.length <= 1) return null
+  return (
+    <Picker<AgentFilter>
+      icon={FilterIcon}
+      label={t('page.agents')}
+      value={agent}
+      choices={[
+        { value: 'all', label: t('page.allAgents') },
+        ...choices.map((id, i) => ({
+          value: id,
+          label: usageAgentName(id),
+          logo: <AgentMark agent={id} size={16} />,
+          divider: i === 0,
+        })),
+      ]}
+      onChange={(next) => setUsageFilters({ agent: next })}
+    />
+  )
+}
+
+/** Which computers the page counts, once another is added: this one, another, or all of them. */
+function ComputerPicker() {
+  const { t } = useTranslation('usage')
+  const names = useNamesHosts()
+  const hosts = useOtherHosts()
+  const filter = useViewStore((s) => s.hostFilter)
+  const hostName = useHostName()
+  // The web client is one host's, which it never switches.
+  if (!names || isWeb) return null
+  const value =
+    chosenHost(
+      filter,
+      hosts.map((host) => host.id),
+    ) ?? ALL_HOSTS
+  return (
+    <Picker<string>
+      icon={ComputerIcon}
+      label={t('page.computer')}
+      value={value}
+      choices={[
+        { value: THIS_COMPUTER, label: hostName(null) },
+        ...hosts.map((host) => ({ value: host.id, label: host.name })),
+        { value: ALL_HOSTS, label: t('page.allHosts'), icon: Layers01Icon, divider: true },
+      ]}
+      onChange={(next) => {
+        const choice = next === ALL_HOSTS ? null : next
+        const host = hosts.find((h) => h.id === choice)
+        switchHost(choice, host?.connection.state === 'connecting')
+      }}
+    />
+  )
+}
+
+/** The logs and Kettu's record, or Kettu's record alone, once the logs are counted. */
+function SourcePicker() {
+  const { t } = useTranslation('usage')
+  const { useUsageStore: useStatusStore } = useHostScope()
+  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? false)
+  const scope = useUsageStore((s) => s.filters.scope)
+  if (!fromComputer) return null
+  return (
+    <Picker<UsageScope>
+      icon={DatabaseIcon}
+      label={t('page.scope')}
+      value={scope}
+      choices={[
+        {
+          value: 'computer',
+          label: t('page.scopes.computer'),
+          description: t('page.scopeNotes.computer'),
+        },
+        {
+          value: 'kettu',
+          label: t('page.scopes.kettu'),
+          description: t('page.scopeNotes.kettu'),
+        },
+      ]}
+      onChange={(next) => setUsageFilters({ scope: next })}
+    />
+  )
+}
+
+function MetricSwitch() {
+  const { t } = useTranslation('usage')
+  const metric = useUsageStore((s) => s.filters.metric)
+  const scope = useUsageStore((s) => s.filters.scope)
+  return (
+    <SegmentedControl<Metric>
+      aria-label={t('page.metric')}
+      variant="tray"
+      size="md"
+      value={metric}
+      onChange={(next) => setUsageFilters({ metric: next })}
+      options={[
+        { value: 'tokens', label: t('metrics.tokens') },
+        { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
+        { value: 'cost', label: t('metrics.cost') },
+      ]}
+    />
+  )
+}
+
+/** The ranges by length, then a calendar for any other, which names the range it holds. */
+function RangeChoice({ page, used }: { page: PageData | null; used: ReadonlySet<number> }) {
+  const { t } = useTranslation('usage')
   const range = useUsageStore((s) => s.filters.range)
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
@@ -247,212 +445,68 @@ function Head({
     [today, firstDay, t],
   )
   return (
-    <header className="k-u__head app-region-drag" data-cornered={cornered || undefined}>
-      <span className="k-u__lead">
-        {cornered && <CornerControlsSpace />}
-        <span aria-hidden className="k-u__title">
-          {t('page.title')}
-        </span>
-        {host && <span className="k-u__host">{host}</span>}
-      </span>
-      {!bare && (
-        <AwayContent away={away}>
-          <span className="k-u__actions">
-            {waiting && <Spinner className="k-u__wait" />}
-            <DateRangePicker
-              className="k-u__range"
-              align="end"
-              compare={false}
-              locale={currentLocale()}
-              weekStartsOn={firstDay === 0 ? 0 : 1}
-              today={new Date(today)}
-              max={new Date(today)}
-              min={first === null ? undefined : new Date(dayOf(first))}
-              presets={choices}
-              value={shown}
-              marked={(day) => used.has(day.getTime())}
-              labels={{
-                choose: t('picker.label'),
-                presets: t('picker.presetsLabel'),
-                custom: t('picker.custom'),
-                previousMonth: t('picker.previousMonth'),
-                nextMonth: t('picker.nextMonth'),
-                pickEnd: (start) => t('picker.pickEnd', { start }),
-                days: (n) => t('picker.days', { count: n }),
-                cancel: t('picker.cancel'),
-                apply: t('picker.apply'),
-              }}
-              onChange={(chosen) =>
-                setUsageFilters({
-                  range: {
-                    kind: 'custom',
-                    from: dayOf(chosen.start.getTime()),
-                    to: dayOf(chosen.end.getTime()),
-                  },
-                })
-              }
-            />
-            <SegmentedControl<RangeKind>
-              aria-label={t('page.range')}
-              variant="tray"
-              size="lg"
-              value={(custom ? '' : range.kind) as RangeKind}
-              onChange={(kind) => setUsageFilters({ range: { kind } })}
-              options={RANGE_KINDS.map((kind) => ({
-                value: kind,
-                label: (
-                  <>
-                    <span aria-hidden>{t(`page.rangesShort.${kind}`)}</span>
-                    <span className="sr-only">{t(`page.ranges.${kind}`)}</span>
-                  </>
-                ),
-              }))}
-            />
-          </span>
-        </AwayContent>
-      )}
-    </header>
-  )
-}
-
-/** The hosts the page counts, once another host is added: one's name, or All hosts. */
-function useHostText(): string | null {
-  const { t } = useTranslation('usage')
-  const names = useNamesHosts()
-  const host = useWindowHost()
-  const hostName = useHostName()
-  if (!names) return null
-  return host.kind === 'all' ? t('page.allHosts') : hostName(host.hostId)
-}
-
-/** A filter's button, as wide as its longest choice, so picking one never moves what follows. */
-function Picker<T extends string>({
-  label,
-  value,
-  choices,
-  onChange,
-}: {
-  label: string
-  value: T
-  choices: readonly (Omit<MenuItem, 'checked' | 'onSelect'> & { value: T })[]
-  onChange: (value: T) => void
-}) {
-  return (
-    <Dropdown
-      align="start"
-      items={choices.map(({ value: choice, ...item }) => ({
-        ...item,
-        checked: choice === value,
-        onSelect: () => onChange(choice),
-      }))}
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          className="ui-as-tool ui-as-tool--label k-u-pick"
-          aria-label={label}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          onClick={toggle}
-        >
-          <span className="k-u-pick__label">{label}</span>
-          <span className="k-u-pick__value">
-            {choices.map((choice) => (
-              <span
-                key={choice.value}
-                className="k-u-pick__opt"
-                data-on={choice.value === value || undefined}
-                aria-hidden={choice.value !== value || undefined}
-              >
-                {choice.logo}
-                {choice.label}
-              </span>
-            ))}
-          </span>
-          <Icon icon={ArrowDown01Icon} size={13} />
-        </button>
-      )}
-    />
-  )
-}
-
-/** What is counted: the agents and the source, the metric, then the sync state at the end. */
-function Filters({ page }: { page: PageData | null }) {
-  const { t } = useTranslation('usage')
-  const onHost = useHostContext()
-  const all = useWindowHost().kind === 'all'
-  const { useUsageStore: useStatusStore } = useHostScope()
-  const filters = useUsageStore((s) => s.filters)
-  // null until the status arrives, when the sync state shows nothing either.
-  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? null)
-  const { agent, scope, metric } = filters
-  const agents = page?.summary.agents ?? []
-  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
-  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
-  // This computer is "This Mac" on a Mac, and the host's name on another host or in a browser.
-  const computer = all
-    ? t('page.allHosts')
-    : t('page.scopes.computer', onHost.context ? onHost : isMac ? { context: 'mac' } : {})
-  return (
-    <div className="k-u__filters">
-      {/* With usage from one agent only, All is the only choice. */}
-      {choices.length > 1 && (
-        <Picker<AgentFilter>
-          label={t('page.agents')}
-          value={agent}
-          choices={[
-            { value: 'all', label: t('page.allAgents') },
-            ...choices.map((id, i) => ({
-              value: id,
-              label: usageAgentName(id),
-              logo: <AgentMark agent={id} size={16} />,
-              divider: i === 0,
-            })),
-          ]}
-          onChange={(next) => setUsageFilters({ agent: next })}
-        />
-      )}
-      {fromComputer && (
-        <Picker<UsageScope>
-          label={t('page.scope')}
-          value={scope}
-          choices={[
-            {
-              value: 'computer',
-              label: computer,
-              icon: ComputerIcon,
-              description: t('page.scopeNotes.computer'),
-            },
-            {
-              value: 'kettu',
-              label: t('page.scopes.kettu'),
-              description: t('page.scopeNotes.kettu'),
-            },
-          ]}
-          onChange={(next) => setUsageFilters({ scope: next })}
-        />
-      )}
-      <SegmentedControl<Metric>
-        aria-label={t('page.metric')}
+    <>
+      <SegmentedControl<RangeKind>
+        aria-label={t('page.range')}
         variant="tray"
         size="md"
-        value={metric}
-        onChange={(next) => setUsageFilters({ metric: next })}
-        options={[
-          { value: 'tokens', label: t('metrics.tokens') },
-          { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
-          { value: 'cost', label: t('metrics.cost') },
-        ]}
+        value={(custom ? '' : range.kind) as RangeKind}
+        onChange={(kind) => setUsageFilters({ range: { kind } })}
+        options={RANGE_KINDS.map((kind) => ({
+          value: kind,
+          label: (
+            <>
+              <span aria-hidden>{t(`page.rangesShort.${kind}`)}</span>
+              <span className="sr-only">{t(`page.ranges.${kind}`)}</span>
+            </>
+          ),
+        }))}
       />
-      <SyncState />
-    </div>
+      <DateRangePicker
+        className={custom ? 'k-u__cal k-u__cal--custom' : 'k-u__cal'}
+        align="end"
+        compare={false}
+        locale={currentLocale()}
+        weekStartsOn={firstDay === 0 ? 0 : 1}
+        today={new Date(today)}
+        max={new Date(today)}
+        min={first === null ? undefined : new Date(dayOf(first))}
+        presets={choices}
+        value={shown}
+        marked={(day) => used.has(day.getTime())}
+        labels={{
+          choose: t('picker.label'),
+          presets: t('picker.presetsLabel'),
+          custom: t('picker.custom'),
+          previousMonth: t('picker.previousMonth'),
+          nextMonth: t('picker.nextMonth'),
+          pickEnd: (start) => t('picker.pickEnd', { start }),
+          days: (n) => t('picker.days', { count: n }),
+          cancel: t('picker.cancel'),
+          apply: t('picker.apply'),
+        }}
+        onChange={(chosen) =>
+          setUsageFilters({
+            range: {
+              kind: 'custom',
+              from: dayOf(chosen.start.getTime()),
+              to: dayOf(chosen.end.getTime()),
+            },
+          })
+        }
+      />
+    </>
   )
 }
 
-/** When the logs were last read, and Sync; or where the figures come from. */
-function SyncState() {
+/**
+ * Sync: reads the agents' logs now, the last read in its tooltip and a failure on it. Kettu's
+ * record alone has nothing to read, so it shows none then.
+ */
+function SyncButton({ away }: { away: boolean }) {
   const { t } = useTranslation('usage')
   const { hostId, useUsageStore: useStatusStore } = useHostScope()
-  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? null)
+  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? false)
   const synced = useStatusStore(
     (s) =>
       s.status?.logs.reduce<number | null>(
@@ -467,37 +521,54 @@ function SyncState() {
   const now = useNow()
   const refresh = useRefresh({ busy: reading })
   const [failed, setFailed] = useState<string | null>(null)
-  if (fromComputer === null) return null
-  if (!fromComputer) return <span className="k-u__sync">{t('page.record')}</span>
+  if (!fromComputer) return null
   const scanning = refresh.phase === 'turning'
+  const state =
+    failed && !scanning
+      ? t('page.syncFailed')
+      : scanning
+        ? t('page.syncing')
+        : synced !== null
+          ? t('page.synced', { ago: longAgo(synced, now) })
+          : null
   return (
-    <span className="k-u__sync">
-      {failed && !scanning ? (
-        <Tooltip>
-          <TooltipTrigger render={<span role="alert" />}>{t('page.syncFailed')}</TooltipTrigger>
-          <TooltipContent className="max-w-80">{failed}</TooltipContent>
-        </Tooltip>
-      ) : scanning ? (
-        t('page.syncing')
-      ) : synced !== null ? (
-        t('page.synced', { ago: longAgo(synced, now) })
-      ) : null}
-      <Button
-        size="md"
-        variant="secondary"
-        className={scanning ? 'k-u-spin' : undefined}
-        aria-busy={scanning}
-        disabled={scanning}
-        icon={<Icon icon={RefreshIcon} size={14} />}
-        onClick={() => {
-          setFailed(null)
-          void refresh
-            .run(() => syncUsage(hostId))
-            .catch((e: unknown) => setFailed(errorMessage(e)))
-        }}
-      >
-        {t('page.syncAction')}
-      </Button>
+    <span
+      className="k-u__group"
+      data-ruled=""
+      inert={away || undefined}
+      data-away={away || undefined}
+    >
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className="ui-as-tool k-u__sync"
+              aria-label={state ? `${t('page.sync')}: ${state}` : t('page.sync')}
+              aria-busy={scanning || undefined}
+              data-turning={scanning || undefined}
+              data-failed={(failed && !scanning) || undefined}
+              disabled={scanning}
+              onClick={() => {
+                setFailed(null)
+                void refresh
+                  .run(() => syncUsage(hostId))
+                  .catch((e: unknown) => setFailed(errorMessage(e)))
+              }}
+            />
+          }
+        >
+          <Icon icon={RefreshIcon} size={15} />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-80 flex-col items-start">
+          <b>{t('page.sync')}</b>
+          {state && <span>{state}</span>}
+          {failed && !scanning && <span>{failed}</span>}
+        </TooltipContent>
+      </Tooltip>
+      <span role="status" className="sr-only">
+        {failed && !scanning ? t('page.syncFailed') : ''}
+      </span>
     </span>
   )
 }
@@ -600,29 +671,28 @@ function ImportProgress({ alone }: { alone: boolean }) {
   )
 }
 
+/** The grid's wells, empty, while the first figures are read. */
 function LoadingState() {
   const { t } = useTranslation('usage')
-  const card = (height: number) => (
-    <div className="k-u-card" style={{ height }}>
-      <span className="k-u-bone" style={{ width: 120 }} />
+  const well = (span: number, height: number) => (
+    <div className={`k-u-card k-u-span-${span} k-u-bones`} style={{ height }}>
+      <span className="k-u-bone" style={{ width: 96 }} />
+      <span className="k-u-bone" style={{ width: '40%' }} />
     </div>
   )
   return (
-    <div aria-busy className="k-u-loading">
+    <div aria-busy className="k-u__body">
       <span role="status" className="sr-only">
         {t('page.loading')}
       </span>
-      <div className="k-u-figs">
-        {card(96)}
-        {card(96)}
-        {card(96)}
-        {card(96)}
-      </div>
-      <div className="k-u-row">
-        {card(232)}
-        {card(232)}
-      </div>
-      {card(280)}
+      {well(3, 112)}
+      {well(3, 112)}
+      {well(3, 112)}
+      {well(3, 112)}
+      {well(8, 300)}
+      {well(4, 300)}
+      {well(8, 236)}
+      {well(4, 236)}
     </div>
   )
 }
@@ -679,23 +749,20 @@ function Dashboard({
   return (
     <>
       <Head page={page} used={used} away={away} waiting={waiting} />
-      {away && (
-        <div className="k-u__away">
-          <WindowHostAway read />
-        </div>
-      )}
-      <AwayContent away={away}>
-        <Filters page={page} />
-        <div className="k-u__content">
-          {notice}
-          <PlanLimits used={page?.used ?? NO_USED} />
-          {page ? (
-            <Body page={page} allDays={allDays} waiting={waiting} />
-          ) : (
-            loading && <LoadingState />
-          )}
-        </div>
-      </AwayContent>
+      <div className="k-u__content">
+        {away && <WindowHostAway read />}
+        {notice}
+        <AwayContent away={away}>
+          <div className="k-u__stack">
+            <PlanLimits used={page?.used ?? NO_USED} />
+            {page ? (
+              <Body page={page} allDays={allDays} waiting={waiting} />
+            ) : (
+              loading && <LoadingState />
+            )}
+          </div>
+        </AwayContent>
+      </div>
     </>
   )
 }
@@ -720,7 +787,7 @@ function useWaiting(page: PageData | null): boolean {
   return other && late === filters
 }
 
-/** The figures and charts, dimmed while those of a newly chosen range are read. */
+/** The figures and charts on the grid, dimmed while those of a newly chosen range are read. */
 function Body({
   page,
   allDays,
@@ -752,77 +819,63 @@ function Body({
   // arrives.
   const day = useClock(dayOf)
   useEffect(() => usageDayTurned(day), [day])
-  const facts = useMemo(() => figures(days, range, metric, scope), [days, range, metric, scope])
-  // Where the tokens come from counts tokens, whatever the metric.
-  const tokenFacts = useMemo(() => figures(days, range), [days, range])
-  const requestFacts = useMemo(() => figures(days, range, 'requests', scope), [days, range, scope])
+  // In tokens whatever the metric: the kinds of token and the cost.
+  const facts = useMemo(() => figures(days, range), [days, range])
   // Re-renders as an hour begins; a range of days never does.
   const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
   const main = useMemo(
     () => periods(hours, days, range, page.firstDay, metric, scope),
     [hours, days, range, page.firstDay, metric, scope],
   )
-  const other = kind === 'requests' || kind === 'turns' ? 'tokens' : 'requests'
-  const side = useMemo(
-    () => periods(hours, days, range, page.firstDay, other, scope),
-    [hours, days, range, page.firstDay, other, scope],
-  )
-  const past = (bars: TrendBar[]) => (hours ? bars.filter((bar) => bar.from < begun) : bars)
+  // For today, each hour's daily average over the days the hours of the day cover.
+  const hourAverage = useMemo(() => {
+    if (!oneDay(range)) return null
+    const spanDays = Math.max(1, Math.round((page.clock.to - page.clock.from) / DAY_MS))
+    return hourValues(summary.clock, agent, metric, scope).map((value) => value / spanDays)
+  }, [range, page.clock, summary.clock, agent, metric, scope])
   const rangeText = useRangeText()
-  const rangeLabel = rangeText(range.from, range.to)
 
   return (
     <div className="k-u__body" aria-busy={waiting || undefined} data-busy={waiting || undefined}>
-      <Figures
-        facts={facts}
-        requestFacts={requestFacts}
+      <FigureCards
+        page={page}
+        days={days}
         hours={hours}
         begun={begun}
-        kind={kind}
-        metric={metric}
+        agent={agent}
         scope={scope}
-        rangeLabel={rangeLabel}
-        bars={past(main.bars).map((bar) => bar.total)}
-        sideBars={past(side.bars).map((bar) => bar.total)}
       />
-      <div className="k-u-row">
-        <Sources
-          kind={kind}
-          facts={facts}
-          tokenFacts={tokenFacts}
-          agent={agent}
-          rangeLabel={rangeLabel}
-          asOf={summary.pricesAsOf}
-        />
-        <Breakdown
-          summary={summary}
-          agent={agent}
-          metric={metric}
-          scope={scope}
-          kind={kind}
-          rangeLabel={rangeLabel}
-        />
-      </div>
-      <OverTime
+      <TrendCard
+        className="k-u-span-8"
         unit={main.unit}
         bars={main.bars}
         begun={hours ? begun : null}
         zoned={hours?.zoned ?? false}
         kind={kind}
-        total={facts.total}
-        rangeLabel={rangeLabel}
-        tokensUsed={days.some((d) => d.total > 0)}
+        hourAverage={hourAverage}
+        tokensUsed={facts.tokens > 0}
+        today={page.today}
+        firstDay={page.firstDay}
       />
-      <div className="k-u-row k-u-row--tod">
-        <TimeOfDay
-          page={page}
-          agent={agent}
-          metric={metric}
-          scope={scope}
-          rangeLabel={rangeLabel}
-        />
-        <Activity days={days} page={page} metric={metric} scope={scope} />
-      </div>
+      <BreakdownCard
+        className="k-u-span-4"
+        summary={summary}
+        facts={facts}
+        agent={agent}
+        metric={metric}
+        scope={scope}
+        kind={kind}
+      />
+      <Activity className="k-u-span-8" days={days} page={page} metric={metric} scope={scope} />
+      <TimeOfDay
+        className="k-u-span-4"
+        page={page}
+        agent={agent}
+        metric={metric}
+        scope={scope}
+        rangeLabel={rangeText(range.from, range.to)}
+      />
+      <Footnote page={page} agent={agent} unpriced={facts.parts.unpricedTokens} />
     </div>
   )
 }
@@ -841,184 +894,6 @@ function periods(
     : trend(days, range, firstDay, metric, scope)
 }
 
-/** A figure's small bars: the last seven periods, the one marked darker. */
-function MiniBars({ values, mark }: { values: readonly number[]; mark: 'last' | 'peak' }) {
-  const shown = values.slice(-7)
-  if (shown.length === 0) return null
-  const max = Math.max(...shown)
-  const on = mark === 'last' ? shown.length - 1 : max > 0 ? shown.indexOf(max) : -1
-  return (
-    <span className="k-u-minibars" aria-hidden="true">
-      {shown.map((value, i) => (
-        <i
-          key={i}
-          data-on={i === on || undefined}
-          style={{ height: `${max > 0 ? Math.max(8, (value / max) * 100) : 8}%` }}
-        />
-      ))}
-    </span>
-  )
-}
-
-/**
- * Four figures in a row, two to a row while the page is narrow: the range's total, its average,
- * its busiest day and its requests, or by the hour for one day. The number is compact, with the
- * exact value in its tooltip.
- */
-function Figures({
-  facts,
-  requestFacts,
-  hours,
-  begun,
-  kind,
-  metric,
-  scope,
-  rangeLabel,
-  bars,
-  sideBars,
-}: {
-  facts: ReturnType<typeof figures>
-  /** The range in requests, or turns under Kettu only, whatever the metric. */
-  requestFacts: ReturnType<typeof figures>
-  hours: HourTotals | null
-  /** The end of the hour under way, for a one-day range. */
-  begun: number
-  kind: MetricKind
-  metric: Metric
-  scope: UsageScope
-  rangeLabel: string
-  /** The metric's periods so far, and those of the last figure's measure. */
-  bars: readonly number[]
-  sideBars: readonly number[]
-}) {
-  const { t, i18n } = useTranslation('usage')
-  const hourly = useMemo(
-    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }, metric, scope),
-    [hours, begun, metric, scope],
-  )
-  const hourlyRequests = useMemo(
-    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }, 'requests', scope),
-    [hours, begun, scope],
-  )
-  const clock = new Intl.DateTimeFormat(i18n.language, {
-    hour: 'numeric',
-    minute: '2-digit',
-    ...(hours?.zoned ? { timeZoneName: 'short' } : {}),
-  })
-  const amount = (value: number): string =>
-    kind === 'cost'
-      ? usd(value)
-      : kind === 'tokens'
-        ? t('units.tokens', { value: count(value) })
-        : t(kind === 'requests' ? 'units.requests' : 'units.turns', { value: count(value) })
-  const shown = (value: number | null, priced = true): ReactNode =>
-    value === null || (kind === 'cost' && !priced) ? null : (
-      <FigureValue value={value} kind={kind} />
-    )
-  const current = hourly ?? facts
-  const average =
-    current.average === null || kind === 'cost' ? current.average : Math.round(current.average)
-  const peak = current.peak
-  const requestKind = metricKind('requests', scope)
-  const totalLabel = {
-    tokens: t('figures.total'),
-    cost: t('figures.cost'),
-    requests: t('figures.totalRequests'),
-    turns: t('figures.totalTurns'),
-  }[kind]
-  const cells: { label: string; value: ReactNode; note: string; bars: ReactNode }[] = [
-    {
-      label: totalLabel,
-      value: shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
-      note: t('figures.days', { range: rangeLabel, count: facts.days }),
-      bars: <MiniBars values={bars} mark="last" />,
-    },
-    hourly
-      ? {
-          label: t('figures.hourlyAverage'),
-          value: shown(average, hourly.priced),
-          note: t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
-          bars: <MiniBars values={bars} mark="last" />,
-        }
-      : {
-          label: t('figures.average'),
-          value: shown(average, facts.priced),
-          note: t('figures.active', { active: facts.activeDays, count: facts.days }),
-          bars: <MiniBars values={bars} mark="last" />,
-        },
-    hourly
-      ? {
-          label: t('figures.peakHour'),
-          value: peak ? clock.format(peak.day) : null,
-          note: peak ? amount(peak.total) : t('figures.none'),
-          bars: <MiniBars values={bars} mark="peak" />,
-        }
-      : {
-          label: t('figures.peak'),
-          value: peak ? dayText(peak.day) : null,
-          note: peak ? amount(peak.total) : t('figures.none'),
-          bars: <MiniBars values={bars} mark="peak" />,
-        },
-  ]
-  if (kind === 'requests' || kind === 'turns') {
-    // Requests lead the card already, so the last figure is the tokens they took.
-    const perRequest = tokensPerRequest(facts)
-    cells.push({
-      label: t('figures.total'),
-      value: facts.activeDays > 0 ? <Count value={facts.tokens} /> : null,
-      note:
-        perRequest === null
-          ? t('figures.none')
-          : t(kind === 'turns' ? 'figures.perTurn' : 'figures.perRequest', {
-              value: count(Math.round(perRequest)),
-            }),
-      bars: <MiniBars values={sideBars} mark="last" />,
-    })
-  } else {
-    const perPeriod = (hourlyRequests ?? requestFacts).average
-    cells.push({
-      label: t(`metrics.${requestKind}`),
-      value: requestFacts.total > 0 ? <Count value={requestFacts.total} /> : null,
-      note:
-        perPeriod === null || requestFacts.total <= 0
-          ? t('figures.none')
-          : t(
-              hourlyRequests
-                ? requestKind === 'turns'
-                  ? 'figures.turnsPerHour'
-                  : 'figures.requestsPerHour'
-                : requestKind === 'turns'
-                  ? 'figures.turnsPerDay'
-                  : 'figures.requestsPerDay',
-              { value: count(Math.round(perPeriod)) },
-            ),
-      bars: <MiniBars values={sideBars} mark="last" />,
-    })
-  }
-  return (
-    <section aria-label={t('figures.label')}>
-      <div className="k-u-figs">
-        {cells.map((cell, i) => (
-          <div
-            key={i}
-            className="k-u-card k-u-fig ui-as-rise"
-            style={{ '--i': i } as CSSProperties}
-          >
-            <span className="k-u-cap">{cell.label}</span>
-            <span className="k-u-fig__row">
-              <strong className="k-num" data-none={cell.value === null || undefined}>
-                {cell.value ?? '—'}
-              </strong>
-              {cell.bars}
-            </span>
-            <small>{cell.note}</small>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 /** The day the prices are from, "Nov 1, 2026". */
 function priceDate(asOf: string, language: string): string {
   const [year, month, day] = asOf.split('-').map(Number)
@@ -1029,322 +904,49 @@ function priceDate(asOf: string, language: string): string {
   }).format(new Date(year!, month! - 1, day!))
 }
 
-/** The kinds of tokens in the order a tie keeps, the cache's first. */
-const COMPOSITION = ['cacheRead', 'input', 'output', 'cacheWrite', 'reasoning'] as const
-/** The vendored card's shades, by rank. */
-const RANKED = [
-  'var(--ui-cbc-c1)',
-  'var(--ui-cbc-c2)',
-  'var(--ui-cbc-c3)',
-  'var(--ui-cbc-c4)',
-  'var(--ui-cbc-c5)',
-] as const
-const ranked = (i: number) => RANKED[Math.min(i, RANKED.length - 1)]!
+/** This computer's offset from UTC as the locale writes it, "GMT-8". */
+function zoneName(language: string, at: number): string {
+  const parts = new Intl.DateTimeFormat(language, { timeZoneName: 'shortOffset' }).formatToParts(at)
+  return parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
+}
 
 /**
- * What the range's tokens are made of, always in tokens whatever the metric, with how much the
- * prompt cache served and, at API prices, what it saved. Requests split into no kinds.
+ * What the numbers rest on: the price list and the tokens it has no price for, then where each
+ * agent's usage is counted from and the time zone the days and hours are in.
  */
-function Sources({
-  kind,
-  facts,
-  tokenFacts,
+function Footnote({
+  page,
   agent,
-  rangeLabel,
-  asOf,
+  unpriced,
 }: {
-  kind: MetricKind
-  facts: ReturnType<typeof figures>
-  tokenFacts: ReturnType<typeof figures>
+  page: PageData
   agent: AgentFilter
-  rangeLabel: string
-  asOf: string
+  unpriced: number
 }) {
   const { t, i18n } = useTranslation('usage')
-  if (kind === 'requests' || kind === 'turns') {
-    return (
-      <div className="k-u-card k-u-cb-empty">
-        <span className="k-u-cap">{t('cache.title')}</span>
-        <p>{t(`cache.noSplit.${kind}`)}</p>
-      </div>
-    )
+  const list = new Intl.ListFormat(i18n.language, { type: 'conjunction' })
+  const bySource = new Map<UsageSource, AgentId[]>()
+  for (const [id, source] of Object.entries(page.summary.sources) as [AgentId, UsageSource][]) {
+    if (agent !== 'all' && id !== agent) continue
+    bySource.set(source, [...(bySource.get(source) ?? []), id])
   }
-  const { parts } = tokenFacts
-  const total = COMPOSITION.reduce((sum, part) => sum + parts[part], 0)
-  const shares = new Map(tokenParts(parts, total).map((p) => [p.part, p]))
-  const items: BreakdownItem[] = COMPOSITION.filter((part) => shares.has(part))
-    .map((part) => ({ id: part, label: t(`parts.${part}`), value: parts[part] }))
-    .sort((a, b) => b.value - a.value)
-    .map((item, i) => ({ ...item, color: ranked(i) }))
-  const cache = fromCache(parts)
-  const saved = facts.priced ? facts.parts.cacheSaved : 0
-  const line =
-    cache.share === null
-      ? t('noUsage')
-      : cache.read === 0
-        ? t('cache.none')
-        : t('cache.fromCache', { share: percent(cache.share) })
-  const unpriced = unpricedTokens(facts)
-  return (
-    <CompactBreakdown
-      className="k-u-cb"
-      title={t('cache.title')}
-      items={items}
-      format={count}
-      totalLabel={
-        agent === 'all'
-          ? t('cache.totalAll', { range: rangeLabel })
-          : t('cache.totalOne', { range: rangeLabel, agent: usageAgentName(agent) })
-      }
-      footer={
-        <span className="k-u-cb__foot">
-          {kind === 'cost' ? (
-            <>
-              {t('cache.prices', { date: priceDate(asOf, i18n.language) })}
-              {unpriced !== null && ` · ${t('cache.unpriced', { tokens: tokens(unpriced) })}`}
-            </>
-          ) : saved > 0 && cache.read > 0 ? (
-            <Trans
-              t={t}
-              i18nKey="cache.savedLine"
-              values={{ line, cost: usd(saved) }}
-              components={{ b: <b /> }}
-            />
-          ) : (
-            line
-          )}
-        </span>
-      }
-    />
-  )
-}
-
-type Grouping = 'model' | 'project' | 'agent'
-
-/** The range by model, project or agent: the five largest, then the rest folded into one. */
-function Breakdown({
-  summary,
-  agent,
-  metric,
-  scope,
-  kind,
-  rangeLabel,
-}: {
-  summary: PageData['summary']
-  agent: AgentFilter
-  metric: Metric
-  scope: UsageScope
-  kind: MetricKind
-  rangeLabel: string
-}) {
-  const { t } = useTranslation('usage')
-  const color = useAgentColor()
-  const groupings: Grouping[] =
-    agent === 'all' ? ['model', 'project', 'agent'] : ['model', 'project']
-  const [chosen, setGrouping] = useState<Grouping>('model')
-  const grouping = groupings.includes(chosen) ? chosen : 'model'
-  const rows = useMemo(
-    () =>
-      grouping === 'model'
-        ? modelRows(summary, agent, metric, scope)
-        : grouping === 'project'
-          ? projectRows(summary, agent, basename, metric, scope)
-          : agentRows(summary, agent, metric, scope),
-    [grouping, summary, agent, metric, scope],
-  )
-  const folded = foldRows(rows)
-  const items: BreakdownItem[] = folded.rows.map((row, i) => ({
-    id: `${grouping}\n${row.key}`,
-    label:
-      grouping === 'agent'
-        ? usageAgentName(row.key as AgentId)
-        : grouping === 'project'
-          ? (row.name ?? t('breakdown.noProject'))
-          : (row.name ?? t('breakdown.unknownModel')),
-    value: row.value ?? 0,
-    color: grouping === 'agent' ? color(row.key as AgentId) : ranked(i),
-    // A project's name is its folder's; its path tells two of one name apart.
-    title: grouping === 'project' ? (row.path ?? undefined) : undefined,
-  }))
-  if (folded.rest) {
-    items.push({
-      id: `${grouping}\nrest`,
-      label: t(`breakdown.others.${grouping}`, { count: folded.rest.count }),
-      value: folded.rest.value ?? 0,
-      color: ranked(RANKED.length),
-      last: true,
-    })
-  }
-  return (
-    <CompactBreakdown
-      className="k-u-cb"
-      title={t('breakdown.title')}
-      periods={groupings.map((id) => ({ id, label: t(`breakdown.groups.${id}`) }))}
-      period={grouping}
-      onPeriodChange={(id) => setGrouping(id as Grouping)}
-      switchLabel={t('breakdown.groupBy')}
-      items={items}
-      format={kind === 'cost' ? usd : count}
-      totalLabel={t('breakdown.total', { metric: t(`metrics.${kind}`), range: rangeLabel })}
-      footer={null}
-    />
-  )
-}
-
-/** What the chart counts and by what unit. */
-const TREND_TITLE = {
-  tokens: {
-    hour: 'trend.hourly',
-    day: 'trend.daily',
-    week: 'trend.weekly',
-    month: 'trend.monthly',
-  },
-  requests: {
-    hour: 'trend.requestsHourly',
-    day: 'trend.requestsDaily',
-    week: 'trend.requestsWeekly',
-    month: 'trend.requestsMonthly',
-  },
-  turns: {
-    hour: 'trend.turnsHourly',
-    day: 'trend.turnsDaily',
-    week: 'trend.turnsWeekly',
-    month: 'trend.turnsMonthly',
-  },
-  cost: {
-    hour: 'trend.costHourly',
-    day: 'trend.costDaily',
-    week: 'trend.costWeekly',
-    month: 'trend.costMonthly',
-  },
-} as const satisfies Record<MetricKind, Record<TrendUnit, string>>
-
-/** The range over time, one line per agent; the hours still to come of today are left out. */
-function OverTime({
-  unit,
-  bars,
-  begun,
-  zoned,
-  kind,
-  total,
-  rangeLabel,
-  tokensUsed,
-}: {
-  unit: TrendUnit
-  bars: TrendBar[]
-  /** The end of the hour under way for a one-day range; null for a range of days. */
-  begun: number | null
-  zoned: boolean
-  kind: MetricKind
-  total: number
-  rangeLabel: string
-  tokensUsed: boolean
-}) {
-  const { t, i18n } = useTranslation('usage')
-  const color = useAgentColor()
-  const rangeText = useRangeText()
-  const hourText = useHourText(zoned)
-  const series = useMemo(
-    () =>
-      seriesOf(
-        bars,
-        sortAgentIds(new Set(bars.flatMap((bar) => Object.keys(bar.byAgent))) as Set<AgentId>),
-      ),
-    [bars],
-  )
-  const froms = useMemo(() => bars.map((bar) => bar.from), [bars])
-  const { labels, long } = useMemo(() => {
-    if (unit === 'hour') {
-      const time = new Intl.DateTimeFormat(i18n.language, { hour: 'numeric' })
-      return {
-        labels: froms.map((from) => time.format(from)),
-        long: bars.map((bar) => hourText(bar.from, bar.to)),
-      }
-    }
-    const date: Intl.DateTimeFormatOptions =
-      unit === 'month' ? { month: 'short' } : { month: 'short', day: 'numeric' }
-    const plain = new Intl.DateTimeFormat(i18n.language, date)
-    const dated = new Intl.DateTimeFormat(i18n.language, { ...date, year: 'numeric' })
-    const monthYear = new Intl.DateTimeFormat(i18n.language, { month: 'short', year: 'numeric' })
-    return {
-      labels: froms.map((from, i) =>
-        (namesYear(froms, i, i > 0 ? i - 1 : null) ? dated : plain).format(from),
-      ),
-      long: bars.map((bar) =>
-        unit === 'day'
-          ? dayText(bar.from)
-          : unit === 'month' && wholeMonth(bar)
-            ? monthYear.format(bar.from)
-            : rangeText(bar.from, bar.to),
-      ),
-    }
-  }, [unit, froms, bars, i18n.language, hourText, rangeText])
-  // What the legend hides, until the agents drawn change.
-  const drawn = series.join(' ')
-  const [legend, setLegend] = useState<{ drawn: string; hidden: readonly AgentId[] }>({
-    drawn,
-    hidden: [],
+  const sources = (['log', 'kettu'] as const).flatMap((source) => {
+    const ids = bySource.get(source)
+    if (!ids) return []
+    const agents = list.format(ids.map((id) => usageAgentName(id)))
+    return [t(source === 'log' ? 'foot.logs' : 'foot.kettu', { agents, count: ids.length })]
   })
-  const hidden = legend.drawn === drawn ? legend.hidden : []
-  const shown = shownSeries(series, hidden)
-  const later = (bar: TrendBar) => begun !== null && bar.from >= begun
-  const lines = shown.map((id) => ({
-    label: usageAgentName(id),
-    color: color(id),
-    values: bars.map((bar) => (later(bar) ? Number.NaN : (bar.byAgent[id] ?? 0))),
-  }))
-  const format = kind === 'cost' ? usd : count
-  const title = t(TREND_TITLE[kind][unit])
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   return (
-    <KpiChart
-      className="k-u-chart"
-      title={title}
-      value={format(total)}
-      format={format}
-      labels={labels}
-      tooltipLabels={long}
-      series={lines}
-      emptyText={kind === 'cost' && tokensUsed ? t('noCost') : t('noUsage')}
-      plotLabel={t('trend.plot', { title })}
-      footer={
-        <span className="k-u-trend-foot">
-          <span>
-            {series.length === 1
-              ? t('trend.footerOne', { agent: usageAgentName(series[0]!), range: rangeLabel })
-              : t('trend.footer', { range: rangeLabel })}
-          </span>
-          {series.length > 1 && (
-            <span role="group" aria-label={t('trend.legend')} className="k-u-legend">
-              {series.map((id) => {
-                const on = shown.includes(id)
-                const last = on && shown.length === 1
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={on}
-                    title={last ? t('trend.keepOne') : undefined}
-                    onClick={() =>
-                      setLegend({
-                        drawn,
-                        hidden: legendHidden(
-                          series,
-                          on ? shown.filter((other) => other !== id) : [...shown, id],
-                          hidden,
-                        ),
-                      })
-                    }
-                    className="k-u-legend__item"
-                  >
-                    <i style={{ background: color(id) }} />
-                    {usageAgentName(id)}
-                  </button>
-                )
-              })}
-            </span>
-          )}
-        </span>
-      }
-    />
+    <footer className="k-u-note k-u-span-12">
+      <Icon icon={InformationCircleIcon} size={13} />
+      <span>
+        {t('foot.prices', { date: priceDate(page.summary.pricesAsOf, i18n.language) })}
+        {unpriced > 0 && ` · ${t('foot.unpriced', { tokens: tokens(unpriced) })}`}
+      </span>
+      <span className="k-u-note__end" title={zone}>
+        {[...sources, t('foot.zone', { zone: zoneName(i18n.language, page.today) })].join(' · ')}
+      </span>
+    </footer>
   )
 }
