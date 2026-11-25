@@ -22,6 +22,7 @@ import codexReplay from './fixtures/replay-codex.json'
 import opencodeReplay from './fixtures/replay-opencode.json'
 import {
   CARRIED_DATA_LIMIT,
+  chunkTokens,
   contentRef,
   mapAuthStatus,
   mapReportedAuthStatus,
@@ -1729,6 +1730,45 @@ describe('extensions and helpers', () => {
       },
     }
     expect(mapModelUsage(codex)[0]?.tokens).toMatchObject({ total: 3120, input: 100 })
+  })
+
+  it("reads a model call's tokens from a chunk's _meta.usage, as Qwen Code sends them", () => {
+    // Qwen Code 0.28.4: one empty chunk per model call, its input holding the cache reads.
+    const chunk = (usage: unknown, sessionUpdate = 'agent_message_chunk') =>
+      ({
+        sessionUpdate,
+        content: { type: 'text', text: '' },
+        _meta: { usage, durationMs: 1800 },
+      }) as SessionUpdate
+    expect(
+      chunkTokens(
+        chunk({
+          inputTokens: 12800,
+          outputTokens: 150,
+          totalTokens: 12950,
+          thoughtTokens: 40,
+          cachedReadTokens: 12000,
+        }),
+      ),
+    ).toEqual({
+      total: 12950,
+      input: 800,
+      output: 150,
+      thought: 40,
+      cacheRead: 12000,
+      cacheWrite: null,
+    })
+    expect(chunkTokens(chunk({ inputTokens: 10, outputTokens: 2 }))).toBeNull()
+    expect(chunkTokens(chunk({ inputTokens: -1, outputTokens: 2, totalTokens: 1 }))).toBeNull()
+    expect(chunkTokens(chunk('12950'))).toBeNull()
+    expect(
+      chunkTokens(
+        chunk({ inputTokens: 10, outputTokens: 2, totalTokens: 12 }, 'agent_thought_chunk'),
+      ),
+    ).toBeNull()
+    expect(
+      chunkTokens({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi' } }),
+    ).toBeNull()
   })
 
   it('maps token totals and prompt content', () => {
