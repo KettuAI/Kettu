@@ -947,6 +947,14 @@
     "signInRow": "Sign-in",
     "signInRowHint": "The harness signs in itself, in a terminal; Kettu never sees the credentials.",
     "signInAgain": "Sign in again in terminal",
+    "signInEnds": {
+      "name": "Sign-in ends",
+      "days": "By {{latest}} (as early as {{earliest}}) · {{from}}–{{to}} days left",
+      "atMost_one": "By {{latest}} (as early as {{earliest}}) · at most {{count}} day left",
+      "atMost_other": "By {{latest}} (as early as {{earliest}}) · at most {{count}} days left",
+      "today": "By {{latest}} (as early as {{earliest}}) · today at the latest",
+      "ended": "Probably ended"
+    },
     "empty": {
       "title": "No agents yet",
       "description": "Add your first agent to get started. If its harness is not installed, Kettu helps you install it first.",

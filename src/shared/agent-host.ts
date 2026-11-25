@@ -172,6 +172,12 @@ export interface AgentAccount {
   email: string | null
   /** The subscription's multiple of the base plan, such as "5x" of Claude Max; absent when unknown. */
   tier?: string
+  /**
+   * The latest a stored subscription sign-in is expected to end, in ms; it can end up to 3 days
+   * sooner, and only signing in again moves it. Absent when unknown, for other kinds of sign-in
+   * and on older hosts.
+   */
+  signInEnds?: number
 }
 
 export interface PlanLimit {

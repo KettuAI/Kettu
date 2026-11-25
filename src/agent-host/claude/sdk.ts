@@ -312,6 +312,8 @@ export interface ResultMessage {
   total_cost_usd: number
   usage: ApiUsage
   modelUsage: Record<string, ModelUsage>
+  /** When the claude.ai sign-in the process sends ends at the latest, as an ISO 8601 instant. */
+  credential_expires_at?: string
   session_id: string
 }
 

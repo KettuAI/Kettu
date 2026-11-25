@@ -347,6 +347,15 @@
     "noticesName": "Notices: {{list}}",
     "listSeparator": ", "
   },
+  "signInEnds": {
+    "inDays_one": "{{name}} sign-in ends in {{count}} day",
+    "inDays_other": "{{name}} sign-in ends in {{count}} days",
+    "anyDay": "{{name}} sign-in may end any day now",
+    "ended": "{{name}} sign-in probably ended",
+    "detail": "The sign-in ends by {{latest}}, as early as {{earliest}}. Signing in again renews it.",
+    "endedDetail": "The sign-in was due to end by {{latest}}, so it has probably ended. Sign in again to keep using it.",
+    "signIn": "Sign in again"
+  },
   "countdown": {
     "minutes": "{{count}}m",
     "hours": "{{count}}h",

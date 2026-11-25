@@ -176,7 +176,7 @@ import {
   userProgramFound,
   type LaunchSpec,
 } from './catalog'
-import { OAUTH_ACCOUNT_LABEL } from './claude/reports'
+import { mapAuthStatus, OAUTH_ACCOUNT_LABEL } from './claude/reports'
 import {
   AgentRequestError,
   type AgentConnection,
@@ -308,6 +308,8 @@ export interface AgentTimings {
   limitsBackgroundMs: number
   /** How long one read of the plan limits may take before later refreshes stop waiting for it. */
   limitsReadMs: number
+  /** How often Claude Code is asked when its sign-in ends while nothing else asks. */
+  signInEndMs: number
   /** How long the hidden `session/new` that reads an agent's options may take. */
   optionsMs: number
   /** How long a read of a per-session agent's own waits for its sessions that are opening. */
@@ -337,6 +339,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   limitsMs: 60_000,
   limitsBackgroundMs: 5 * 60_000,
   limitsReadMs: 90_000,
+  signInEndMs: 24 * 60 * 60_000,
   optionsMs: 30_000,
   openingWaitMs: 30_000,
   updateViewMs: 20_000,
@@ -556,6 +559,8 @@ class Slot {
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
+  signInEndRun: Promise<void> | null = null
+  signInEndReadAt = 0
   /** Why the last limits read failed; null once one succeeds. */
   limitsError: string | null = null
   /** Codex's reset credits as last read; null while it holds none or none were read. */
@@ -663,6 +668,15 @@ function programOf(def: AgentDefinition): AgentStatus['program'] {
     case 'node-script':
       return null
   }
+}
+
+/** Whether two subscription accounts are one sign-in, as far as their addresses tell. */
+function sameSignIn(before: AgentAccount | null, after: AgentAccount): boolean {
+  return (
+    before?.kind === 'account' &&
+    after.kind === 'account' &&
+    (before.email === null || after.email === null || before.email === after.email)
+  )
 }
 
 /**
@@ -803,6 +817,7 @@ export class AgentManager {
   private readManifest: HarnessManifest | null = null
   private manifestReadAt: number | null = null
   private limitsTimer: ReturnType<typeof setInterval> | null = null
+  private signInEndTimer: ReturnType<typeof setInterval> | null = null
   private stopped = false
   private readonly cliVersions: CliVersions
   /** The update command for each harness's user program, and what it was worked out for. */
@@ -1387,6 +1402,13 @@ export class AgentManager {
     this.emit(slot)
   }
 
+  /** The environment the agent's process starts in. */
+  private startEnv(slot: Slot): Env {
+    const base = this.deps.env.agentEnv(slot.id)
+    const launchEnv = this.deps.launchEnv?.(slot.id, base) ?? base
+    return slot.added && slot.def.addedEnv ? { ...launchEnv, ...slot.def.addedEnv } : launchEnv
+  }
+
   private async launch(slot: Slot, spec: LaunchSpec): Promise<AgentRuntime> {
     const { diagnostics } = this.deps
     const agentId = slot.id
@@ -1403,9 +1425,7 @@ export class AgentManager {
     slot.progress.clear()
     slot.intentionalStop = false
     slot.launchSpec = spec
-    const base = this.deps.env.agentEnv(agentId)
-    const launchEnv = this.deps.launchEnv?.(agentId, base) ?? base
-    const env = slot.added && slot.def.addedEnv ? { ...launchEnv, ...slot.def.addedEnv } : launchEnv
+    const env = this.startEnv(slot)
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
@@ -2443,6 +2463,26 @@ export class AgentManager {
       const message = (error as Error).message
       this.deps.diagnostics.log('warn', `could not remove ${folder}: ${message}`)
     })
+  }
+
+  /**
+   * Asks when each Claude Code agent's sign-in ends soon after the host starts, then once a day
+   * whether or not it is in use; each ask is a short `claude auth status`.
+   */
+  startSignInEndReads(): void {
+    if (this.signInEndTimer || this.stopped) return
+    const readDue = (): void => {
+      if (this.stopped) return
+      for (const slot of this.slots.values()) {
+        if (Date.now() - slot.signInEndReadAt >= this.timings.signInEndMs) {
+          void this.readSignInEnd(slot)
+        }
+      }
+    }
+    const first = setTimeout(readDue, SIGN_IN_FIRST_READ_MS)
+    first.unref?.()
+    this.signInEndTimer = setInterval(readDue, Math.min(this.timings.signInEndMs, HOUR_MS))
+    this.signInEndTimer.unref?.()
   }
 
   /**
@@ -3786,6 +3826,8 @@ export class AgentManager {
     this.registryTimer = null
     if (this.limitsTimer) clearInterval(this.limitsTimer)
     this.limitsTimer = null
+    if (this.signInEndTimer) clearInterval(this.signInEndTimer)
+    this.signInEndTimer = null
     for (const slot of this.slots.values()) {
       if (slot.resetsRetry) clearTimeout(slot.resetsRetry)
       slot.resetsRetry = null
@@ -3836,6 +3878,11 @@ export class AgentManager {
         }
       },
       account: (account) => this.setAccount(slot, account),
+      signInEnds: (at) => {
+        // A process that has not yet noticed a new sign-in still reports the old one's end.
+        const known = slot.account?.signInEnds
+        if (known === undefined || at > known) this.setSignInEnds(slot, at)
+      },
       modelProviders: (providers) => {
         if (JSON.stringify(providers) === JSON.stringify(slot.modelProviders)) return
         slot.modelProviders = providers
@@ -3882,6 +3929,11 @@ export class AgentManager {
     const same =
       before?.kind === named.kind && before.label === named.label && before.email === named.email
     slot.account = same && before.tier ? { ...named, tier: before.tier } : named
+    // A report without the end, such as a session's start, keeps the one read for the sign-in.
+    const ends = before?.signInEnds
+    if (named.signInEnds === undefined && ends !== undefined && sameSignIn(before, named)) {
+      slot.account = { ...slot.account, signInEnds: ends }
+    }
     // A gateway has no plan: windows kept from a sign-in before it would show as its limits.
     if (throughGateway(slot)) slot.limits.clear()
     slot.signIn = named.kind === 'none' ? 'required' : 'signed-in'
@@ -3919,7 +3971,77 @@ export class AgentManager {
       return
     slot.account = { kind: account.kind, label, email }
     if (tier) slot.account.tier = tier
+    if (account.signInEnds !== undefined) slot.account.signInEnds = account.signInEnds
     this.emit(slot)
+  }
+
+  /** Sets or clears when the agent's subscription sign-in ends; only a subscription has one. */
+  private setSignInEnds(slot: Slot, at: number | null): void {
+    const account = slot.account
+    if (account?.kind !== 'account' || (account.signInEnds ?? null) === at) return
+    const next: AgentAccount = { ...account }
+    if (at === null) delete next.signInEnds
+    else next.signInEnds = at
+    slot.account = next
+    this.emit(slot)
+  }
+
+  /**
+   * Asks Claude Code's own `auth status` when its stored sign-in ends, at most once a minute
+   * unless forced. Besides the end it only names an account none was reported for: whether the
+   * agent is signed in stays with its sessions and account reads. Never rejects.
+   */
+  private readSignInEnd(slot: Slot, force = false): Promise<void> {
+    if (slot.def.id !== 'claude-code' || !this.has(slot.id) || this.isDisabled(slot.id)) {
+      return Promise.resolve()
+    }
+    if (slot.signInEndRun) return slot.signInEndRun
+    if (!force && Date.now() - slot.signInEndReadAt < this.timings.limitsMs)
+      return Promise.resolve()
+    slot.signInEndRun = this.signInEndRead(slot)
+      .catch((error: unknown) => {
+        const message = (error as Error).message
+        this.deps.diagnostics.log('warn', `${slot.name}: its sign-in end was not read: ${message}`)
+      })
+      .finally(() => {
+        slot.signInEndRun = null
+      })
+    return slot.signInEndRun
+  }
+
+  private async signInEndRead(slot: Slot): Promise<void> {
+    const found = await this.harnessProgram(slot.id)
+    if (!found) return
+    const run = await (this.deps.runProgram ?? runProgram)({
+      program: found.program,
+      args: ['auth', 'status', '--json'],
+      cwd: os.homedir(),
+      env: this.startEnv(slot),
+      platform: this.deps.platform,
+      timeoutMs: SIGN_IN_STATUS_MS,
+    })
+    slot.signInEndReadAt = Date.now()
+    if (run.error || run.timedOut || run.aborted) {
+      throw new Error(run.error ?? `claude auth status ${run.timedOut ? 'timed out' : 'stopped'}`)
+    }
+    // Signed out, it exits with 1 and still writes its status.
+    const status = mapAuthStatus(run.stdout)
+    if (!status) return
+    const account = slot.account
+    if (status.kind !== 'account') {
+      this.setSignInEnds(slot, null)
+    } else if (
+      (account === null && slot.signIn !== 'required') ||
+      (account?.kind === 'account' &&
+        account.email !== null &&
+        status.email !== null &&
+        account.email !== status.email)
+    ) {
+      // No account was reported yet, or the stored sign-in is another one than was reported.
+      this.setAccount(slot, status)
+    } else {
+      this.setSignInEnds(slot, status.signInEnds ?? null)
+    }
   }
 
   /** The plan limits the agent reported last, one per window. */
@@ -4799,16 +4921,21 @@ export class AgentManager {
         await this.readModelProviders(slot)
       return
     }
+    // Beside the account's read, which can start the agent, since it needs neither.
+    const ends = this.readSignInEnd(slot, force)
     await this.detectAll()
-    if (!force && slot.signIn === 'required') return
-    if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
     try {
+      if (!force && slot.signIn === 'required') return
+      if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec))
+        return
       if (this.hasLimits(agentId)) await this.refreshLimits(agentId, { force })
       else await this.ensureReady(agentId)
     } catch (error) {
       // Still signed out: the notice stays, and opening the page is not an error.
       if (force && error instanceof HostError && error.code === 'auth_required') return
       throw error
+    } finally {
+      await ends
     }
   }
 
@@ -6098,6 +6225,11 @@ const SIGN_IN_CHECK_MS = 30_000
 const RESETS_GAP_MS = 5_000
 /** How soon a read that fell short of the credits' expiries is tried again. */
 const RESETS_RETRY_MS = 20_000
+/** How long `claude auth status` may take; it answers from the stored sign-in, without a request. */
+const SIGN_IN_STATUS_MS = 10_000
+/** How soon after the host starts its first ask of when Claude Code's sign-in ends runs. */
+const SIGN_IN_FIRST_READ_MS = 30_000
+const HOUR_MS = 60 * 60_000
 
 /** Waits for `promise`, which never rejects, for at most `ms`. */
 function settledWithin(promise: Promise<void>, ms: number): Promise<void> {

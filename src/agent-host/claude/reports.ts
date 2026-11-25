@@ -3,6 +3,7 @@
 
 import { isAbsolute, relative, sep } from 'node:path'
 import type { AgentAccount, ContextBreakdown, ContextList, PlanLimit } from '@shared/agent-host'
+import { instantOf } from '@shared/sign-in-end'
 import { t } from '../i18n'
 import { WINDOW_LABELS } from '../session-updates'
 import type { AccountInfo, ContextUsageAnswer, UsageAnswer, UsageWindow } from './sdk'
@@ -56,7 +57,9 @@ export const OAUTH_ACCOUNT_LABEL = 'Claude'
 
 /**
  * The account `claude auth status --json` names, which also tells when Claude Code is signed out:
- * no login, no key and no other provider. A login that names no plan still counts.
+ * no login, no key and no other provider. A login that names no plan still counts. A stored
+ * subscription sign-in carries when it ends, `loginExpiresAt` since Claude Code 2.1.318; without
+ * it the sign-in has no known end.
  */
 export function mapAuthStatus(stdout: string): AgentAccount | null {
   let status: unknown
@@ -67,6 +70,13 @@ export function mapAuthStatus(stdout: string): AgentAccount | null {
   }
   if (typeof status !== 'object' || status === null || Array.isArray(status)) return null
   const fields = status as Record<string, unknown>
+  const account = statusAccount(fields)
+  if (account?.kind !== 'account') return account
+  const ends = instantOf(fields.loginExpiresAt)
+  return ends === null ? account : { ...account, signInEnds: ends }
+}
+
+function statusAccount(fields: Record<string, unknown>): AgentAccount | null {
   if (typeof fields.loggedIn !== 'boolean') return null
   const text = (name: string): string | undefined =>
     typeof fields[name] === 'string' ? fields[name] : undefined

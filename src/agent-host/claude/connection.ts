@@ -12,6 +12,7 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
 import { canonicalClaudeModel } from '@shared/agents'
+import { instantOf } from '@shared/sign-in-end'
 import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@shared/thread'
 import {
   AgentRequestError,
@@ -1388,6 +1389,8 @@ export class ClaudeConnection implements AgentConnection {
 
   private result(session: Session, result: ResultMessage): void {
     const turn = session.turn
+    const ends = instantOf(result.credential_expires_at)
+    if (ends !== null) this.context.hooks.signInEnds?.(ends)
     const totals = result.modelUsage ?? {}
     // The first result after a resume carries the history's totals, so only its own usage counts.
     const spent =

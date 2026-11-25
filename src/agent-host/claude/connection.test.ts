@@ -144,6 +144,7 @@ async function setup(
   const spawned: HostedSpawnOptions[] = []
   const children: FakeChild[] = []
   const accounts: AgentAccount[] = []
+  const signInEnds: number[] = []
   const ignored: string[] = []
   const loaded: string[] = []
   const context: HostedContext = {
@@ -151,6 +152,7 @@ async function setup(
     hooks: {
       traffic: () => {},
       account: (account) => accounts.push(account),
+      signInEnds: (at) => signInEnds.push(at),
       ignored: (_id, what) => ignored.push(what),
       log: () => {},
     },
@@ -183,6 +185,7 @@ async function setup(
     spawned,
     children,
     accounts,
+    signInEnds,
     ignored,
     entry,
     init,
@@ -1684,6 +1687,24 @@ describe('a turn', () => {
       kind: 'agent_error',
       message: 'Credit balance is too low',
     })
+  })
+
+  it("passes on when a turn's result says the sign-in ends", async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.finish({ credential_expires_at: '2026-12-02T13:46:01.033Z' })
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(s.signInEnds).toEqual([Date.parse('2026-12-02T13:46:01.033Z')])
+    // A result without one, or with one that is not an instant, says nothing of it.
+    for (const result of [{}, { credential_expires_at: 'never' }]) {
+      s.sdk.script = (query) => {
+        query.running()
+        query.finish(result)
+      }
+      await s.connection.prompt(sessionId, [{ type: 'text', text: 'Again' }])
+    }
+    expect(s.signInEnds).toHaveLength(1)
   })
 
   it('steers a running turn, and leaves a message with no turn to Kettu', async () => {
