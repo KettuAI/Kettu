@@ -6,15 +6,14 @@
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { START_MODE_CHARS, harnessOf, isAgentId } from '@shared/agents'
 import { pluginStarter } from '@shared/plugins'
+import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
 import type { AgentId } from '@shared/thread'
 import { cutStart, historyPage, type RenderedTurn } from '../carried-context'
 import {
-  DAILY_LIMIT,
   LIST_DEFAULT,
   LIST_LIMIT,
   TEXT_CHARS,
   TITLE_CHARS,
-  WORKING_LIMIT,
   startLimit,
   toolAgentStatus,
   type ToolDelivery,
@@ -119,19 +118,22 @@ function whole(o: Args, key: string, min: number, max: number, fallback: number)
   return value
 }
 
-/** A plugin's own sessions run out at the same limits as an agent's. */
+/**
+ * A plugin's own sessions run out at an agent's default limits; the limits the user sets in
+ * Settings are for agents.
+ */
 function refuseOverLimit(pluginId: string, deps: PluginSessionsDeps): void {
   const starter = pluginStarter(pluginId)
-  const limit = startLimit(starter, deps.startedBy(starter), deps.now())
+  const limit = startLimit(starter, deps.startedBy(starter), deps.now(), DEFAULT_STARTED_LIMITS)
   if (limit?.kind === 'working') {
     throw new Error(
-      `This plugin has ${WORKING_LIMIT} sessions working, the most at once. ` +
+      `This plugin has ${limit.limit} sessions working, the most at once. ` +
         'It can start another when one of them ends.',
     )
   }
   if (limit?.kind === 'day') {
     throw new Error(
-      `This plugin started ${DAILY_LIMIT} sessions today, the most in a local day. ` +
+      `This plugin started ${limit.limit} sessions today, the most in a local day. ` +
         'It can start another after midnight.',
     )
   }

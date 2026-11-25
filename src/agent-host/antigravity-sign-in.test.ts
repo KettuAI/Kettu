@@ -63,6 +63,7 @@ function settings(program: string): HostSettings {
     startModes: DEFAULT_SETTINGS.startModes,
     idleSessions: DEFAULT_SETTINGS.idleSessions,
     workflow: DEFAULT_SETTINGS.workflow,
+    startedSessions: DEFAULT_SETTINGS.startedSessions,
     usage: { fromComputer: false },
     sessionTitles: true,
     promptSuggestions: true,

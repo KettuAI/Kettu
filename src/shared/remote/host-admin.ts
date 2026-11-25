@@ -59,6 +59,7 @@ export const HOST_SETTING_KEYS = {
   startModes: 'all',
   idleSessions: 'all',
   workflow: 'all',
+  startedSessions: 'all',
   updates: 'all',
   usage: ['fromComputer'],
   remote: 'all',
@@ -81,6 +82,7 @@ export interface HostSettingsPart {
   startModes: SettingsFile['startModes']
   idleSessions: SettingsFile['idleSessions']
   workflow: SettingsFile['workflow']
+  startedSessions: SettingsFile['startedSessions']
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   /**

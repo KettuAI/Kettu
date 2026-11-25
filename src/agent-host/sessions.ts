@@ -251,7 +251,6 @@ import type {
 } from '@shared/model-requests'
 import { missedCache, type IdleRelease } from './idle-release'
 import {
-  REPORT_LIMIT,
   reportText,
   type ToolChoices,
   type ToolDelivery,
@@ -934,6 +933,8 @@ const SEARCH_SESSIONS = 100
 const FIND_MESSAGES = 500
 // Requests whose answerer a session remembers, so a late answer hears where it was answered.
 const ANSWERS_KEPT = 50
+// Marks a session whose reports are paused until the user writes there.
+const PAUSED = -1
 
 /**
  * A new origin's request by who asks it, `owner` being '' for main and a device's port for a
@@ -1267,8 +1268,9 @@ function sessionPullRequests(
 export class SessionManager {
   private readonly records = new Map<string, SessionRecord>()
   private readonly live = new Map<string, Live>()
-  // Reports each session got since the user last wrote there; one past the limit once its notice
-  // is shown. In memory: a restart lets a few more through, which the limit tolerates.
+  // Reports each session got since the user last wrote there; PAUSED once its notice is shown, so
+  // a limit raised later lets none through before the user writes. In memory: a restart lets a
+  // few more through, which the limit tolerates.
   private readonly reportsSent = new Map<string, number>()
   private readonly watchers = new Map<string, Set<string>>()
   // Port id to the sessions it shows in front, every pane of a split view in view.
@@ -11997,10 +11999,12 @@ export class SessionManager {
   private async deliverReport(sessionId: string, text: string, from: FromSession): Promise<void> {
     if (!this.has(sessionId) || this.isArchived(this.recordOf(sessionId))) return
     const sent = this.reportsSent.get(sessionId) ?? 0
-    if (sent > REPORT_LIMIT) return
-    this.reportsSent.set(sessionId, sent + 1)
+    if (sent === PAUSED) return
+    // A limit lowered below what already went pauses at the next report.
+    const paused = sent >= this.deps.settings().startedSessions.reports
+    this.reportsSent.set(sessionId, paused ? PAUSED : sent + 1)
     const live = await this.revive(sessionId)
-    if (sent === REPORT_LIMIT) {
+    if (paused) {
       this.emit(live, [
         {
           op: 'entry.add',
@@ -12009,7 +12013,7 @@ export class SessionManager {
             id: this.nextId(live),
             severity: 'info',
             title: t('notice.reportsPaused.title'),
-            description: t('notice.reportsPaused.description', { count: REPORT_LIMIT }),
+            description: t('notice.reportsPaused.description', { count: sent }),
             cause: 'reports_paused',
             after: agentEntryBefore(live.thread),
           },

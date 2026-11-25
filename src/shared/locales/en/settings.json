@@ -1166,6 +1166,24 @@
         "body": "Twice in a row, a session resumed on this version read less than half of its context from the prompt cache. So idle sessions keep their agent until their cache expires, over the settings below, until Claude Code updates to another version. When memory is critical they are still released."
       }
     },
+    "started": {
+      "group": "Sessions agents start",
+      "note": "Higher limits let agents use more of your plan.",
+      "keywords": "agent started sessions sub-sessions limit concurrent daily reports start_session",
+      "invalid": "Enter a whole number from {{min}} to {{max}}.",
+      "working": {
+        "name": "Working at once",
+        "description": "How many of the sessions one session’s agent started may work at the same time."
+      },
+      "daily": {
+        "name": "Started per day",
+        "description": "How many sessions one session’s agent may start in a local day."
+      },
+      "reports": {
+        "name": "Reports per message",
+        "description": "How many times reports from started sessions may wake a session after you last wrote there."
+      }
+    },
     "workflow": {
       "group": "Workflows",
       "keywords": "Workflow suggest auto pick steps tasks flow",
@@ -2521,7 +2539,8 @@
       "discoverable": "Devices signed in to your Kettu account will be able to find this computer and ask to be added.",
       "relay": "Changes which relay your devices reach this computer through from other networks.",
       "proxy": "Agents, npx and updates will go through this proxy.",
-      "source": "Changes where Kettu downloads its updates from."
+      "source": "Changes where Kettu downloads its updates from.",
+      "startedLimits": "Agents will be able to start more sessions and use more of your plan."
     }
   },
   "fonts": {

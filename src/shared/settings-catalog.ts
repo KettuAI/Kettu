@@ -19,6 +19,7 @@ import {
   type SettingsFile,
   type SettingsPatch,
 } from './settings'
+import { STARTED_LIMIT_MAX, STARTED_LIMIT_MIN, type StartedLimitKey } from './started-sessions'
 import type { AgentId, HarnessId } from './thread'
 import { WORKING_STEP_LIMITS } from './workflow'
 
@@ -60,8 +61,11 @@ export type CatalogSection = SettingsSection | 'marketplace'
 export type SettingKind =
   'switch' | 'choice' | 'number' | 'text' | 'path' | 'secret' | 'list' | 'info' | 'action'
 
-/** `read`: agents never change it. `change`: as the session's mode allows. `ask`: always asks. */
-export type SettingAccess = 'read' | 'change' | 'ask'
+/**
+ * `read`: agents never change it. `change`: as the session's mode allows. `ask`: always asks.
+ * `raise`: a number that always asks when raised, and is lowered as the session's mode allows.
+ */
+export type SettingAccess = 'read' | 'change' | 'ask' | 'raise'
 
 /** `host`: on every host. `desktop`: the desktop app's own, its window's or its computer's. */
 export type SettingPart = 'host' | 'desktop'
@@ -132,7 +136,7 @@ export interface CatalogEntry {
   part: SettingPart
   kind: SettingKind
   access?: SettingAccess
-  /** For an always-asking row: what changing it opens up, said on the card. */
+  /** For a row that always asks, or asks when raised: what changing it opens up, on the card. */
   warning?: TextKey
   /** Values for its words' placeholders, such as a shortcut's keys, on the host's system. */
   params?(platform: Platform): Record<string, string>
@@ -294,6 +298,21 @@ function pick<S extends keyof SettingsPatch>(
     options,
     get: (file) => read(file),
     patch: (value) => ({ [section]: { [key]: value } }) as SettingsPatch,
+  }
+}
+
+/** A limit on the sessions agents start: raising one lets agents use more of the plan. */
+function startedLimit(
+  key: StartedLimitKey,
+): Pick<CatalogEntry, 'access' | 'warning' | 'kind' | 'min' | 'max' | 'get' | 'patch'> {
+  return {
+    access: 'raise',
+    warning: 'agentSettings.warning.startedLimits',
+    kind: 'number',
+    min: STARTED_LIMIT_MIN,
+    max: STARTED_LIMIT_MAX,
+    get: (file) => file.startedSessions[key],
+    patch: (value) => ({ startedSessions: { [key]: Number(value) } }),
   }
 }
 
@@ -1231,6 +1250,36 @@ const ENTRIES = {
     kind: 'info',
     on: () => false,
   },
+  'agents.started-working': {
+    section: 'agents',
+    row: 'started-working',
+    group: 'agents.started.group',
+    name: 'agents.started.working.name',
+    description: 'agents.started.working.description',
+    keywords: 'agents.started.keywords',
+    part: 'host',
+    ...startedLimit('working'),
+  },
+  'agents.started-daily': {
+    section: 'agents',
+    row: 'started-daily',
+    group: 'agents.started.group',
+    name: 'agents.started.daily.name',
+    description: 'agents.started.daily.description',
+    keywords: 'agents.started.keywords',
+    part: 'host',
+    ...startedLimit('daily'),
+  },
+  'agents.started-reports': {
+    section: 'agents',
+    row: 'started-reports',
+    group: 'agents.started.group',
+    name: 'agents.started.reports.name',
+    description: 'agents.started.reports.description',
+    keywords: 'agents.started.keywords',
+    part: 'host',
+    ...startedLimit('reports'),
+  },
   'agents.workflow-auto': {
     section: 'agents',
     row: 'workflow-auto',
@@ -1935,13 +1984,20 @@ export function isSettingId(value: unknown): value is SettingId {
 /** Whether agents may change a row at all, as the mode allows or always asking. */
 export function changeable(entry: CatalogEntry): boolean {
   return (
-    (entry.access === 'change' || entry.access === 'ask') &&
+    (entry.access === 'change' || entry.access === 'ask' || entry.access === 'raise') &&
     (entry.patch !== undefined || entry.store === 'plugin') &&
     (entry.kind === 'switch' ||
       entry.kind === 'choice' ||
       entry.kind === 'number' ||
       entry.kind === 'text')
   )
+}
+
+/** Whether changing a row from one value to another asks the user in every mode, Full access too. */
+export function asksAlways(entry: CatalogEntry, from: SettingScalar, to: SettingScalar): boolean {
+  if (entry.access === 'ask') return true
+  if (entry.access !== 'raise') return false
+  return typeof to === 'number' && (typeof from !== 'number' || to > from)
 }
 
 /** A row's search words, as one key or several. */

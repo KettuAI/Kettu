@@ -69,6 +69,7 @@ import { useIdleSessionRows } from './idle-sessions'
 import { IslandSwitch } from './island-row'
 import { usePluginChannelRows } from './plugin-channels'
 import { useIslandDescription } from './island-state'
+import { useStartedSessionRows } from './started-sessions'
 import { useWorkflowRows } from './workflow-settings'
 import {
   AgentListItem,
@@ -685,6 +686,7 @@ export function useAgentsSection(): SectionDef {
   const { useAgentsStore } = useHostScope()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const idleRows = useIdleSessionRows()
+  const startedRows = useStartedSessionRows()
   const workflowRows = useWorkflowRows()
   // The footer goes under the list, so the workflow groups after it keep their own notes.
   const list: GroupDef =
@@ -748,6 +750,7 @@ export function useAgentsSection(): SectionDef {
             },
           ] satisfies RowDef[])),
       ...idleRows,
+      ...startedRows,
       ...workflowRows,
     ],
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,

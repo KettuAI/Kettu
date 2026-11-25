@@ -3,6 +3,7 @@ import type { IdleSessionsSettings } from './idle-release'
 import type { LanguageSetting, Locale } from './locale'
 import type { MarketServer, MarketSkill } from './marketplace'
 import type { DirectAddress } from './remote/protocol'
+import { DEFAULT_STARTED_LIMITS, type StartedSessionLimits } from './started-sessions'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import { DEFAULT_WORKING_STEPS, type WorkingStepLimit } from './workflow'
@@ -125,6 +126,8 @@ export interface SettingsFile {
   idleSessions: IdleSessionsSettings
   // How many workflow step sessions work at once across every task.
   workflow: { maxWorkingSteps: WorkingStepLimit }
+  // How far a session's agent may go starting sessions through Kettu's session tools.
+  startedSessions: StartedSessionLimits
   // source: where updates come from; GitHub only never reaches Kettu's download service.
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
@@ -339,6 +342,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   startModes: {},
   idleSessions: { release: 'auto', outOfView: 5, inView: 30, limit: null },
   workflow: { maxWorkingSteps: DEFAULT_WORKING_STEPS },
+  startedSessions: { ...DEFAULT_STARTED_LIMITS },
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
@@ -431,6 +435,7 @@ export interface SettingsPatch {
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   idleSessions?: Partial<SettingsFile['idleSessions']>
   workflow?: Partial<SettingsFile['workflow']>
+  startedSessions?: Partial<SettingsFile['startedSessions']>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
@@ -465,6 +470,7 @@ export interface HostSettings {
   startModes: SettingsFile['startModes']
   idleSessions: SettingsFile['idleSessions']
   workflow: SettingsFile['workflow']
+  startedSessions: SettingsFile['startedSessions']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   promptSuggestions: boolean // ask the agent for a guess at the next message after each turn

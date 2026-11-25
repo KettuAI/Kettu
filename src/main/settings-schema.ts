@@ -54,6 +54,7 @@ import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shar
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { isRelayPin, ownRelayProblem } from '@shared/remote/own-relay'
+import { isStartedLimit, STARTED_LIMIT_MAX, STARTED_LIMIT_MIN } from '@shared/started-sessions'
 import { THEME_ID } from '@shared/themes'
 import { WORKING_STEP_LIMITS } from '@shared/workflow'
 import { isAbsolutePath } from '../agent-host/paths'
@@ -90,6 +91,11 @@ const oneOf =
 
 const isBoolean: Check = (value, path) =>
   typeof value === 'boolean' ? null : `"${path}" must be a boolean`
+
+const isStartedLimitValue: Check = (value, path) =>
+  isStartedLimit(value)
+    ? null
+    : `"${path}" must be a whole number from ${STARTED_LIMIT_MIN} to ${STARTED_LIMIT_MAX}`
 
 /** Detailed records may be turned on for a day at most; a time in the past means off. */
 export const VERBOSE_FOR_MS = 24 * 60 * 60 * 1000
@@ -278,6 +284,11 @@ const SECTION_FIELDS = {
     limit: oneOf(...IDLE_LIMITS),
   },
   workflow: { maxWorkingSteps: oneOf(...WORKING_STEP_LIMITS) },
+  startedSessions: {
+    working: isStartedLimitValue,
+    daily: isStartedLimitValue,
+    reports: isStartedLimitValue,
+  },
   computerUse: {
     enabled: isBoolean,
     allowedApps: isComputerApps,
@@ -1801,6 +1812,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     startModes: { ...settings.startModes },
     idleSessions: { ...settings.idleSessions },
     workflow: { ...settings.workflow },
+    startedSessions: { ...settings.startedSessions },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     promptSuggestions: settings.general.promptSuggestions,
@@ -1838,6 +1850,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'startModes',
   'idleSessions',
   'workflow',
+  'startedSessions',
   'usage',
   'computerUse',
   'cloud',
