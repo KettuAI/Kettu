@@ -23,8 +23,10 @@ import {
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
+import { compareVersions } from '@shared/market-publish'
 import {
   DOCX_TYPE,
+  MEDIA_DOCUMENT_NAME,
   OFFICE_PREVIEW_LIMIT,
   XLS_TYPE,
   XLSX_TYPE,
@@ -45,7 +47,9 @@ import {
   PaneIcon,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
-import { panelSession } from '@renderer/stores/view'
+import { useHostsStore } from '@renderer/stores/hosts'
+import { openSettings, openSettingsItem, panelSession } from '@renderer/stores/view'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { bytes, clock } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -428,22 +432,7 @@ function Body({
   }
   if (!content) return <Lines />
   if (content.kind === 'binary') {
-    return (
-      <Notice
-        title={t('preview.binaryTitle')}
-        description={t('preview.binaryDescription', { size: bytes(content.size) })}
-      >
-        {local && (
-          <button
-            type="button"
-            className="kp-btn"
-            onClick={() => openOutside(window.kettu.shell.showItem, projectPath, file.path)}
-          >
-            {t('preview.showIn', { name: fileManagerName() })}
-          </button>
-        )}
-      </Notice>
-    )
+    return <BinaryFile projectPath={projectPath} file={file} size={content.size} />
   }
   if (content.kind === 'too-large') {
     return (
@@ -506,6 +495,77 @@ function Body({
     <Suspense fallback={<Lines />}>
       <CodeEditor projectPath={projectPath} panel={panel} file={file} content={content} />
     </Suspense>
+  )
+}
+
+/** Hosts before this read PDF, Word and Excel files as binary, since they preview none. */
+const DOCUMENT_PREVIEWS_SINCE = '0.1.18'
+
+/** The host of a project on another computer, or the web client's, as far as its welcome said. */
+function useProjectHost(projectPath: string): { name: string; version: string | null } | null {
+  const hostId = hostOfPath(projectPath)
+  const other = useHostsStore((s) =>
+    hostId === null ? null : (s.status?.hosts?.find((h) => h.id === hostId) ?? null),
+  )
+  const web = useWebHostStore((s) => s.host)
+  if (hostId !== null) return other
+  return isWeb ? web : null
+}
+
+/**
+ * A file the host would not show. A document from a host too old to preview it says to update
+ * Kettu there, and opens its page in Settings; an agent's own files are never previewed anyway.
+ */
+function BinaryFile({
+  projectPath,
+  file,
+  size,
+}: {
+  projectPath: string
+  file: OpenFile
+  size: number
+}) {
+  const { t } = useTranslation('files')
+  const host = useProjectHost(projectPath)
+  const old =
+    host?.version != null &&
+    !file.agent &&
+    MEDIA_DOCUMENT_NAME.test(file.path) &&
+    compareVersions(host.version, DOCUMENT_PREVIEWS_SINCE) < 0
+  if (host && old) {
+    const hostId = hostOfPath(projectPath)
+    return (
+      <Notice
+        title={t('preview.oldHostTitle', { name: host.name })}
+        description={t('preview.oldHostDescription', { version: host.version })}
+      >
+        <button
+          type="button"
+          className="kp-btn"
+          onClick={() =>
+            hostId === null ? openSettings('hosts') : openSettingsItem('hosts', hostId)
+          }
+        >
+          {t('preview.oldHostOpen', { name: host.name })}
+        </button>
+      </Notice>
+    )
+  }
+  return (
+    <Notice
+      title={t('preview.binaryTitle')}
+      description={t('preview.binaryDescription', { size: bytes(size) })}
+    >
+      {isLocal(projectPath) && (
+        <button
+          type="button"
+          className="kp-btn"
+          onClick={() => openOutside(window.kettu.shell.showItem, projectPath, file.path)}
+        >
+          {t('preview.showIn', { name: fileManagerName() })}
+        </button>
+      )}
+    </Notice>
   )
 }
 
