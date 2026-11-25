@@ -13,8 +13,11 @@ export interface ProblemOptions {
   switchAccount(): void
 }
 
+/** Why the host cannot be used now: what the relay said, or the host's own `other_account`. */
+export type HostedProblem = RelayProblem | 'other_account'
+
 export interface ShownProblem {
-  problem: RelayProblem | null
+  problem: HostedProblem | null
   connected: boolean
 }
 
@@ -51,7 +54,7 @@ export function ProblemCard({
           <Button size="sm" variant="secondary" onClick={retry}>
             {t('hosted.problem.retry')}
           </Button>
-          {problem === 'wrong_account' && (
+          {(problem === 'wrong_account' || problem === 'other_account') && (
             <Button size="sm" variant="ghost" onClick={options.switchAccount}>
               {t('hosted.switchAccount')}
             </Button>

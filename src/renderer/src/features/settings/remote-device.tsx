@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Edit02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { DeviceActivity } from '@shared/remote/activity'
-import type { PairedDevice } from '@shared/remote/device'
+import { otherAccount, type PairedDevice } from '@shared/remote/device'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +26,7 @@ import { CONFIRM, ControlError, DangerButton, IconAction, Pill, Spin } from './c
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { ThisBrowserBadge } from './remote-section'
 import { changeDevice, deviceLine, nextDeviceName, whenAt } from './remote-text'
-import { GroupLabel, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
+import { GroupLabel, GroupNote, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
 
 const back = () => openSettingsItem('remote', null)
 
@@ -36,6 +36,9 @@ export function DevicePage({ id }: { id: string }) {
   const { t } = useTranslation('settings')
   const device = useRemoteStore((s) => s.status?.devices.find((entry) => entry.id === id) ?? null)
   const online = useRemoteStore((s) => s.status?.online.includes(id) ?? false)
+  const away = useRemoteStore(
+    (s) => device !== null && otherAccount(device, s.status?.account ?? null),
+  )
   if (!device) {
     return (
       <>
@@ -50,10 +53,19 @@ export function DevicePage({ id }: { id: string }) {
       </>
     )
   }
-  return <DevicePageBody device={device} online={online} />
+  return <DevicePageBody device={device} online={online} away={away} />
 }
 
-function DevicePageBody({ device, online }: { device: PairedDevice; online: boolean }) {
+function DevicePageBody({
+  device,
+  online,
+  away,
+}: {
+  device: PairedDevice
+  online: boolean
+  /** Its last connection named another account than the host's, so it cannot connect. */
+  away: boolean
+}) {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const now = useNow()
@@ -87,6 +99,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
         subtitle={<span className="k-name">{deviceLine(t, device)}</span>}
       >
         {online && <Pill tone="success">{t('remote.devices.online')}</Pill>}
+        {!online && away && <Pill tone="warning">{t('remote.devices.otherAccount')}</Pill>}
       </ItemPageHeader>
 
       <div className="k-groups">
@@ -95,6 +108,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
             <Fact name={t('remote.device.joined')}>{joined}</Fact>
             <Fact name={t('remote.device.lastConnected')}>{last}</Fact>
           </RowGroup>
+          {away && <GroupNote>{t('remote.device.otherAccount', onHost)}</GroupNote>}
         </section>
         <Activity device={device} events={events} />
         <section aria-label={t('remote.device.remove.name')} className="k-group">

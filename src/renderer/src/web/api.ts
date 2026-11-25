@@ -387,6 +387,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       pendingDiscovery: () => Promise.resolve(null),
       answerDiscovery: () => unsupported('answer devices of the account'),
       onDiscovery: never,
+      // Asked in the desktop app's own window, about itself.
+      offer: () => Promise.resolve(null),
+      answerOffer: () => unsupported('turn remote access on for the account'),
+      onOffer: never,
       renameDevice: (id, name) => admin('remote.renameDevice', { id, name }),
       removeDevice: (id) => admin('remote.removeDevice', { id }),
       activity: (id) => admin('remote.activity', { id }),

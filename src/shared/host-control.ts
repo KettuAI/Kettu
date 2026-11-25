@@ -574,6 +574,11 @@ export type MainToRemoteHost =
        * `remote-host:discoverable` says when it changes. Absent, as under the daemon, they do not.
        */
       discoverable?: boolean
+      /**
+       * The id of the Kettu account this computer is signed in to, null or absent for none, as in
+       * Local mode: hosts turn away devices of another account, and hellos name it.
+       */
+      account?: string | null
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -619,6 +624,8 @@ export type MainToRemoteHost =
   // which closes every relay socket; with it, once the main relay takes them, a relay token that
   // the relays get in its place. Never logged.
   | { type: 'remote-host:token'; token: string | null; relay?: string | null }
+  // The account this computer is signed in to changed, null once signed in to none.
+  | { type: 'remote-host:account'; account: string | null }
   // Retry on the relay: tries every relay now, a conflict included.
   | { type: 'remote-host:relay-retry' }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the

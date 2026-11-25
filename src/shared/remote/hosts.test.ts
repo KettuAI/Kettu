@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  foldedHost,
   parseIdentityFile,
   parseHostStatus,
   parseKnownHost,
@@ -156,5 +157,21 @@ describe('parseHostStatus', () => {
     for (const region of ['', 'x'.repeat(65), 'Tokyo\nHong Kong', 'Tokyo\u0085', 42]) {
       expect(connection({ state: 'online', relay, region })).toEqual({ state: 'online', relay })
     }
+  })
+})
+
+describe('foldedHost', () => {
+  it("folds a host of another account than this computer's, and one that turned it away", () => {
+    expect(foldedHost({ account: 'acc_b' }, 'acc_a')).toBe(true)
+    expect(foldedHost({ account: 'acc_a' }, 'acc_a')).toBe(false)
+    expect(foldedHost({ account: null }, 'acc_a')).toBe(false)
+    expect(foldedHost({}, 'acc_a')).toBe(false)
+    expect(foldedHost({ account: null, otherAccount: 'acc_a' }, 'acc_a')).toBe(true)
+    expect(foldedHost({ account: null, otherAccount: 'acc_a' }, 'acc_c')).toBe(false)
+  })
+
+  it('folds nothing while this computer is signed in to no account', () => {
+    expect(foldedHost({ account: 'acc_b' }, null)).toBe(false)
+    expect(foldedHost({ account: 'acc_b', otherAccount: 'acc_a' }, null)).toBe(false)
   })
 })

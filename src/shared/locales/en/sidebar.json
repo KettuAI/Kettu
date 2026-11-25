@@ -508,5 +508,17 @@
     "waitHint": "The agent starts once the files are copied and the command has finished.",
     "save": "Save",
     "forbidden": "Only the owner of this host can change these from here, unless they let paired devices use its terminal."
+  },
+  "remoteOffer": {
+    "text": "Your {{name}} is signed in to this account too. Let it use this computer?",
+    "detail": "Turns remote access on, so devices of this account can ask to use this computer",
+    "turnOn": "Turn on",
+    "notNow": "Not now",
+    "kind": {
+      "ios": "iPhone",
+      "web": "browser",
+      "desktop": "other computer",
+      "daemon": "other computer"
+    }
   }
 }

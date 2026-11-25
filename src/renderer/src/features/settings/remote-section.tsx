@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type KeyboardEvent, type ReactNode
 import { createPortal } from 'react-dom'
 import { Add01Icon, AlertCircleIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { PairedDevice } from '@shared/remote/device'
+import { otherAccount, type PairedDevice } from '@shared/remote/device'
 import type { RemoteStatus } from '@shared/remote/status'
 import {
   AlertDialog,
@@ -302,6 +302,8 @@ export function HostNameField({ label }: { label: string }) {
 export function DeviceRow({ device, online }: { device: PairedDevice; online: boolean }) {
   const { t } = useTranslation('settings')
   const now = useNow()
+  const { useRemoteStore } = useHostScope()
+  const away = useRemoteStore((s) => otherAccount(device, s.status?.account ?? null))
   const removal = online ? null : daysToRemoval(device, now)
   return (
     <ItemRow
@@ -318,6 +320,8 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
       right={
         online ? (
           <Pill tone="success">{t('remote.devices.online')}</Pill>
+        ) : away ? (
+          <Pill tone="warning">{t('remote.devices.otherAccount')}</Pill>
         ) : removal !== null ? (
           <Pill tone="warning">{t('remote.devices.removedIn', { count: removal })}</Pill>
         ) : (

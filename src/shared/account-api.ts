@@ -63,6 +63,42 @@ export interface Me {
   points: number | null
 }
 
+/** A client signed in to the account, as the account service lists them. */
+export interface AccountClient {
+  /** The sign-in's id at the service. */
+  id: string
+  kind: 'desktop' | 'daemon' | 'web' | 'ios'
+  name: string
+  /** The system it said it runs, as "macOS 26.1". */
+  os: string
+  /** When it last used its sign-in, in Unix milliseconds. */
+  lastUsedAt: number
+  /** It is the client that asked. */
+  current: boolean
+}
+
+/** The most signed-in clients read from one answer. */
+const MAX_CLIENTS = 200
+
+const CLIENT_KINDS: readonly string[] = ['desktop', 'daemon', 'web', 'ios']
+
+function clientOf(value: unknown): AccountClient | null {
+  const client = record(value)
+  if (!client || !isText(client.id) || !CLIENT_KINDS.includes(client.kind as string)) return null
+  const name = typeof client.name === 'string' ? client.name.slice(0, MAX_NAME) : ''
+  const os = typeof client.os === 'string' ? client.os.slice(0, MAX_FIELD) : ''
+  const lastUsedAt = typeof client.lastUsedAt === 'string' ? Date.parse(client.lastUsedAt) : NaN
+  if (!Number.isFinite(lastUsedAt)) return null
+  return {
+    id: client.id,
+    kind: client.kind as AccountClient['kind'],
+    name,
+    os,
+    lastUsedAt,
+    current: client.current === true,
+  }
+}
+
 export interface DeviceCode {
   deviceCode: string
   userCode: string
@@ -255,6 +291,20 @@ export class AccountApi {
       usage: usageOf(body?.usage),
       points: pointsOf(body?.points),
     }
+  }
+
+  /** The clients signed in to the account, most recently used first; the asking one is `current`. */
+  async clients(accessToken: string): Promise<AccountClient[]> {
+    const body = await this.request('/api/v1/me/clients', {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    const list = body?.clients
+    if (!Array.isArray(list)) throw this.unexpected('/api/v1/me/clients')
+    return list
+      .slice(0, MAX_CLIENTS)
+      .map(clientOf)
+      .filter((client): client is AccountClient => client !== null)
   }
 
   /** Submits a problem report; the id it was given, such as KR-7F3K2Q. */

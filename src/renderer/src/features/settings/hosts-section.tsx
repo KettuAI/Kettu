@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Add01Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
+import { Add01Icon, ComputerIcon, LaptopIcon, UserSwitchIcon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { HostStatus, HostsStatus } from '@shared/remote/hosts'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -131,6 +131,24 @@ export function HostRow({ host }: { host: HostStatus }) {
     >
       <ItemLine>{routeText(t, host)}</ItemLine>
     </ItemRow>
+  )
+}
+
+/**
+ * The known hosts of another Kettu account than the one signed in to, folded into one row: they
+ * stay kept, and come back once this computer signs in to that account again.
+ */
+export function OtherAccountHosts({ count }: { count: number }) {
+  const { t } = useTranslation('settings')
+  return (
+    <div className="ui-sg-row">
+      <Thing
+        mark={<DeviceTile icon={<Icon icon={UserSwitchIcon} size={16} />} />}
+        name={<span className="k-name">{t('hosts.otherAccount.title', { count })}</span>}
+      >
+        <small data-wrap="">{t('hosts.otherAccount.body', { count })}</small>
+      </Thing>
+    </div>
   )
 }
 

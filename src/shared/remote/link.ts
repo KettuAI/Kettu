@@ -66,7 +66,18 @@ const DROPS_UNKNOWN = 2
 /** The path the host takes the channel's WebSocket on. */
 export const CHANNEL_PATH = '/channel'
 
-export type LinkStop = 'removed' | 'update_client' | 'update_host'
+/** `other_account`: the host is signed in to another Kettu account than the one the hello named. */
+export type LinkStop = 'removed' | 'update_client' | 'update_host' | 'other_account'
+
+/** Whether a host's closing reason stops the link for good. */
+function stops(reason: ClosingReason | null): reason is LinkStop {
+  return (
+    reason === 'removed' ||
+    reason === 'update_client' ||
+    reason === 'update_host' ||
+    reason === 'other_account'
+  )
+}
 
 export type LinkState =
   | { kind: 'connecting' }
@@ -213,7 +224,12 @@ export function awaitWelcome(opened: Opened, timeoutMs: number | null): Promise<
 
 export type Answer = { welcome: Welcome; later: Later[] } | { closing: ClosingReason | null }
 
-export function hello(client: Hello['client'], device?: Hello['device']): Hello {
+/** `account`: the Kettu account the device is signed in to, which the host checks against its own. */
+export function hello(
+  client: Hello['client'],
+  device?: Hello['device'],
+  account?: string | null,
+): Hello {
   return {
     type: 'hello',
     protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
@@ -221,6 +237,7 @@ export function hello(client: Hello['client'], device?: Hello['device']): Hello 
     ...(device ? { device } : {}),
     // The web client shows the thread with the window's components.
     features: [IMAGE_REFS_FEATURE],
+    ...(account ? { account } : {}),
   }
 }
 
@@ -475,7 +492,7 @@ export class HostLink {
       return this.welcomed(opened, answer.welcome, answer.later, resume !== null, route)
     }
     const reason = answer.closing
-    if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
+    if (stops(reason)) {
       return this.end(reason)
     }
     this.expireKept()
@@ -585,7 +602,7 @@ export class HostLink {
     this.session = null
     this.acks.pause()
     const reason = session.closing
-    if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
+    if (stops(reason)) {
       return this.end(reason)
     }
     if (reason === null) this.times.failed(session.route.key)
@@ -773,7 +790,7 @@ export class HostLink {
     this.aside = null
     if (reason === null && aside?.open && this.resumeToken !== null) return void this.promote(aside)
     aside?.close()
-    if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
+    if (stops(reason)) {
       return this.end(reason)
     }
     this.dropped(reason, true)

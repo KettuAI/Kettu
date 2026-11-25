@@ -37,6 +37,7 @@ import {
   type PathRef,
 } from '@shared/remote/paths'
 import {
+  foldedHost,
   PAIR_HOST_TIMEOUT_MS,
   sameSshAddress,
   type HostConnection,
@@ -153,6 +154,8 @@ const REJOIN_MS = 10_000
 
 /** The longest wait between tries, which a host that needs an update also waits. */
 const MAX_RETRY_MS = 60_000
+/** How often a host that turned this computer away as another account's is tried again. */
+const TURNED_AWAY_MS = 10 * 60_000
 
 /** Host protocol messages kept for main's port while it is on its way; more are dropped. */
 const MAX_QUEUED = 1000
@@ -230,6 +233,11 @@ export interface HostClientOptions {
   client: Hello['client']
   /** This computer's name, which pairing suggests. */
   name(): string
+  /**
+   * The Kettu account this computer is signed in to, which its hellos name; null or absent for
+   * none. Hosts of another account are folded away and not connected.
+   */
+  account?(): string | null
   /** A port to main for a welcomed host's session, or null when there is none. */
   openMainPort?(hostId: string): Promise<PortChannel | null>
   /** The hosts or their connections changed. */
@@ -545,6 +553,46 @@ class HostLink {
 
   start(): void {
     if (this.host?.removed) return this.set({ state: 'stopped', reason: 'removed' })
+    if (this.folded()) {
+      this.set({ state: 'stopped', reason: 'other_account' })
+      // One that only turned this computer away may have signed back in since: asked quietly.
+      if (!this.anotherAccount()) this.schedule(0)
+      return
+    }
+    void this.connect()
+  }
+
+  /** Whether the host is folded away as another account's, which the list leaves out. */
+  private folded(): boolean {
+    const host = this.host
+    return host !== null && foldedHost(host, this.client.account())
+  }
+
+  /** Whether the host's account, from its last welcome, is another than this computer's. */
+  private anotherAccount(): boolean {
+    const current = this.client.account()
+    const account = this.host?.account
+    return current !== null && account !== undefined && account !== null && account !== current
+  }
+
+  /**
+   * This computer signed in to another account, or out: a host of another account stops being
+   * connected, and one of this account is tried again.
+   */
+  accountChanged(): void {
+    if (this.closed || this.host?.removed) return
+    if (this.folded()) {
+      if (this.stoppedFor('other_account')) return
+      this.cancel()
+      this.drop()
+      this.lose()
+      this.set({ state: 'stopped', reason: 'other_account' })
+      if (!this.anotherAccount()) this.schedule(TURNED_AWAY_MS)
+      return
+    }
+    if (!this.stoppedFor('other_account')) return
+    this.failures = 0
+    this.set({ state: 'connecting' })
     void this.connect()
   }
 
@@ -562,7 +610,7 @@ class HostLink {
   /** Tries now, as after the computer woke, unless the host said not to. */
   retry(): void {
     if (this.closed || this.session || this.trying) return
-    if (this.stoppedFor('removed', 'update_client')) return
+    if (this.stoppedFor('removed', 'update_client', 'other_account')) return
     this.failures = 0
     this.cancel()
     void this.connect()
@@ -576,7 +624,7 @@ class HostLink {
   async reconnectNow(): Promise<void> {
     this.askedPort = false
     if (this.closed || this.session) return
-    if (this.stoppedFor('removed', 'update_client')) return
+    if (this.stoppedFor('removed', 'update_client', 'other_account')) return
     this.failures = 0
     this.cancel()
     await this.connect()
@@ -670,6 +718,7 @@ class HostLink {
   private async connect(): Promise<void> {
     const host = this.host
     if (this.closed || this.session || this.trying || !host || host.removed) return
+    if (this.anotherAccount()) return this.set({ state: 'stopped', reason: 'other_account' })
     const { options } = this.client
     const trying = (this.trying = new AbortController())
     const hostKey = publicKeyBytes(host.publicKey)!
@@ -1093,7 +1142,16 @@ class HostLink {
       relay: welcome.relay,
       lastOnlineAt: (now ?? Date.now)(),
       removed: false,
+      account: welcome.account ?? null,
+      otherAccount: undefined,
     })
+    // A host of another account than the one this computer is signed in to is folded.
+    if (this.folded()) {
+      this.client.options.log('info', `Host ${this.id} is another account's; leaving it`)
+      this.drop()
+      this.lose()
+      return this.set({ state: 'stopped', reason: 'other_account' })
+    }
     this.failures = 0
     this.set(this.online(session.via, welcome.terminal))
     // The host read main's requests up to the one it names; the rest go again.
@@ -1247,6 +1305,14 @@ class HostLink {
       return this.set({ state: 'stopped', reason: 'removed' })
     }
     if (reason === 'update_client') return this.set({ state: 'stopped', reason })
+    if (reason === 'other_account') {
+      const current = this.client.account()
+      if (current !== null) hosts.update(this.id, { otherAccount: current })
+      this.lose()
+      this.set({ state: 'stopped', reason })
+      // It may sign back in to this computer's account; nothing else would say so.
+      return this.schedule(TURNED_AWAY_MS)
+    }
     if (reason === 'update_host') {
       this.set({ state: 'stopped', reason })
       return this.schedule(MAX_RETRY_MS)
@@ -1285,6 +1351,7 @@ class HostLink {
     this.expireKept()
     // A host that needs an update keeps saying so, and waits the longest, between its tries.
     if (this.stoppedFor('update_host')) return this.schedule(MAX_RETRY_MS)
+    if (this.stoppedFor('other_account')) return this.schedule(TURNED_AWAY_MS)
     this.set(relay ? { state: 'offline', relay } : { state: 'offline' })
     this.schedule(this.client.retryDelay(this.failures))
   }
@@ -1398,7 +1465,10 @@ class Pairing {
         hostRenamed: () => {},
         ended: ({ reason }) =>
           this.fail(
-            reason === 'rejected' || reason === 'update_client' || reason === 'update_host'
+            reason === 'rejected' ||
+              reason === 'update_client' ||
+              reason === 'update_host' ||
+              reason === 'other_account'
               ? reason
               : 'void',
           ),
@@ -1486,6 +1556,7 @@ function discoveryFailure(reason: ClosingReason | null): HostPairingFailure {
     case 'cooling_down':
     case 'update_client':
     case 'update_host':
+    case 'other_account':
       return reason
     case 'remote_off':
     case 'stopping':
@@ -2168,6 +2239,17 @@ export class HostClient {
     return this.options.hosts.list().map((host) => this.status(host))
   }
 
+  /** The Kettu account this computer is signed in to now, null for none. */
+  account(): string | null {
+    return this.options.account?.() ?? null
+  }
+
+  /** This computer signed in to another account, or out: each host is kept or folded for it. */
+  accountChanged(): void {
+    if (this.stopped) return
+    for (const link of this.links.values()) link.accountChanged()
+  }
+
   hello(model?: string): Hello {
     const hello: Hello = {
       type: 'hello',
@@ -2180,6 +2262,8 @@ export class HostClient {
         ...(this.options.relay?.regions ? [REGIONS_CHANNEL_FEATURE] : []),
       ],
     }
+    const account = this.account()
+    if (account !== null) hello.account = account
     if (model === undefined) return hello
     const name = normalizeDeviceName(this.options.name()) ?? 'Kettu'
     return { ...hello, device: { name, model: isDeviceModel(model) ? model : '' } }

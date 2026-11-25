@@ -3285,6 +3285,11 @@ li[data-row-exit='dust'] > * {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* A line that says what to do, such as on another computer, wraps rather than cut it off */
+:is(.kettu-settings, .kettu-sd) .k-lines > small[data-wrap] {
+  white-space: normal;
+  text-wrap: pretty;
+}
 :is(.kettu-settings, .kettu-sd) .k-end {
   display: flex;
   flex: none;

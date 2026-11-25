@@ -408,6 +408,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       cloud: () => true,
       changed: () => {
         relayToken?.update()
+        hosts?.accountChanged()
         hosts?.settingsChanged(new Set(['remote']))
         hosts?.marketAccountChanged()
       },
@@ -487,6 +488,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     relayUrl,
     pushUrl,
     signedIn,
+    accountId: () => {
+      const status = account?.status()
+      return status?.state === 'signed-in' ? status.account.id : null
+    },
     marketAccount,
     settingsCall: (call) =>
       answerSettingsCall(call, {

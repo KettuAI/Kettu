@@ -95,6 +95,7 @@ const onRemoteChanged = subscribe('remote:changed')
 const onIslandChanged = subscribe('island:changed')
 const onRemotePairing = subscribe('remote:pairing')
 const onRemoteDiscovery = subscribe('remote:discovery')
+const onRemoteOffer = subscribe('remote:offer')
 const onHostsChanged = subscribe('hosts:changed')
 const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
@@ -174,6 +175,9 @@ const api: KettuApi = {
     answerDiscovery: (requestId, add, name) =>
       invoke('remote:discovery-answer', requestId, add, name),
     onDiscovery: onRemoteDiscovery,
+    offer: () => invoke('remote:offer'),
+    answerOffer: (clientId, turnOn) => invoke('remote:answer-offer', clientId, turnOn),
+    onOffer: onRemoteOffer,
     renameDevice: (id, name) => invoke('remote:rename-device', id, name),
     removeDevice: (id) => invoke('remote:remove-device', id),
     activity: (id) => invoke('remote:activity', id),

@@ -93,9 +93,21 @@ import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
 import { BringSignInsRow, BroughtMoreRow, BroughtSiteRow } from './sign-ins-rows'
 import { HostPage } from './host-page'
 import { hostLine, platformName, webHostLine } from './host-text'
-import { AccountHostRow, AccountHostsActions, AccountHostsState } from './host-account'
+import {
+  AccountComputerRow,
+  AccountHostRow,
+  AccountHostsActions,
+  AccountHostsState,
+} from './host-account'
 import { useDiscoveredHosts } from './use-discovered'
-import { AddHostButton, HostRow, HostsLoading, HostsNote, SelfRow } from './hosts-section'
+import {
+  AddHostButton,
+  HostRow,
+  HostsLoading,
+  HostsNote,
+  OtherAccountHosts,
+  SelfRow,
+} from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import { DirectSwitch, DiscoverableSwitch } from './remote-relay'
@@ -1287,6 +1299,16 @@ function useDesktopHostsSection(): SectionDef {
       open: () => openSettingsItem('hosts', host.id),
     })),
   ]
+  const folded = status?.otherAccount ?? 0
+  if (folded > 0) {
+    rows.push({
+      id: 'hosts-other-account',
+      setting: 'hosts.hosts',
+      group: list,
+      layout: 'custom',
+      render: () => <OtherAccountHosts count={folded} />,
+    })
+  }
   if (status && hosts === null) {
     rows.push({
       id: 'hosts-loading',
@@ -1301,6 +1323,7 @@ function useDesktopHostsSection(): SectionDef {
     note: <GroupNote>{t('hosts.account.note')}</GroupNote>,
   })
   const found = discovered?.state === 'ok' ? discovered.hosts : []
+  const computers = discovered?.state === 'ok' ? (discovered.computers ?? []) : []
   // The account's computers are found through the relay, which a self-hosted computer never uses.
   if (!cloudOff) {
     rows.push(
@@ -1309,7 +1332,7 @@ function useDesktopHostsSection(): SectionDef {
         setting: 'hosts.account-hosts',
         group: account,
         layout: 'custom',
-        searchOnly: found.length > 0,
+        searchOnly: found.length + computers.length > 0,
         render: () => <AccountHostsState discovered={discovered} />,
       },
       ...found.map((host): RowDef => ({
@@ -1319,6 +1342,23 @@ function useDesktopHostsSection(): SectionDef {
         group: account,
         layout: 'custom',
         render: () => <AccountHostRow host={host} />,
+      })),
+      ...computers.map((computer): RowDef => ({
+        id: `account-${computer.state}-${computer.name}`,
+        setting: 'hosts.account-hosts',
+        item: {
+          name: computer.name,
+          description: t(
+            computer.state === 'added'
+              ? 'hosts.account.computer.added'
+              : computer.state === 'remote_off'
+                ? 'hosts.account.computer.remoteOff'
+                : 'hosts.state.offline',
+          ),
+        },
+        group: account,
+        layout: 'custom',
+        render: () => <AccountComputerRow computer={computer} />,
       })),
     )
   }

@@ -27,10 +27,21 @@ export interface PairedDevice {
   addedAt: number
   /** When a session last opened or ended; while one is open, when it opened. */
   lastConnectedAt: number | null
+  /**
+   * The Kettu account its last hello named, null when it named none; a device whose account is
+   * set and differs from the host's own cannot connect until the host signs in to it again.
+   */
+  account: string | null
 }
 
 /** What pairing learns of a device; the host derives its id and the times. */
-export type NewDevice = Pick<PairedDevice, 'publicKey' | 'name' | 'kind' | 'platform' | 'model'>
+export type NewDevice = Pick<PairedDevice, 'publicKey' | 'name' | 'kind' | 'platform' | 'model'> &
+  Partial<Pick<PairedDevice, 'account'>>
+
+/** Whether a device belongs to another account than the host's: both set, and not the same. */
+export function otherAccount(device: Pick<PairedDevice, 'account'>, host: string | null): boolean {
+  return device.account !== null && host !== null && device.account !== host
+}
 
 /** Main could not rename or remove a device, as when the device files could not be read. */
 export type DeviceChangeFailure = 'not_renamed' | 'not_removed'

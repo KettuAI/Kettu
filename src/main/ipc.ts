@@ -14,6 +14,7 @@ import {
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { addressKey, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID } from '@shared/remote/device'
+import { accountComputers, type DiscoveredHosts } from '@shared/remote/discovery'
 import {
   MAX_HOST_ADDRESSES,
   parseIdentityFile,
@@ -75,6 +76,7 @@ import type { QuitFlow } from './quit'
 import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
+import type { RemoteOffers } from './remote-offer'
 import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
@@ -112,6 +114,7 @@ export interface IpcDeps {
   sharing: Sharing
   marketKeys: MarketKeys
   remoteHost: RemoteHost
+  remoteOffers: RemoteOffers
   hostSessions: HostSessions
   hostMedia: HostMedia
   remoteStatus(): RemoteStatus
@@ -475,6 +478,7 @@ export function registerIpcHandlers({
   sharing,
   marketKeys,
   remoteHost,
+  remoteOffers,
   hostSessions,
   hostMedia,
   remoteStatus,
@@ -823,6 +827,14 @@ export function registerIpcHandlers({
     if (typeof add !== 'boolean') throw new Error('"remote:discovery-answer" takes whether to add')
     remoteHost.answerDiscovery(pairingCode(requestId), add, add ? deviceName(name) : '')
   })
+  handle('remote:offer', 0, () => remoteOffers.current)
+  handle('remote:answer-offer', 2, async (_, clientId, turnOn) => {
+    if (typeof clientId !== 'string' || typeof turnOn !== 'boolean') {
+      throw new Error('"remote:answer-offer" takes a client and whether to turn remote access on')
+    }
+    if (remoteOffers.answer(clientId) && turnOn)
+      await settings.update({ remote: { enabled: true } })
+  })
   handle('remote:rename-device', 2, async (_, id, name) =>
     (await remoteHost.renameDevice(deviceIdArg(id), deviceName(name))) ? null : 'not_renamed',
   )
@@ -888,10 +900,26 @@ export function registerIpcHandlers({
       : await dialog.showOpenDialog(options)
     return result.canceled ? null : parseIdentityFile(result.filePaths[0])
   })
-  // With Kettu's services off there is no relay to list the account's hosts.
-  handle('hosts:discover', 0, () =>
-    settings.get().cloud.enabled ? remoteHost.discover() : { state: 'signed_out' as const },
-  )
+  // With Kettu's services off there is no relay to list the account's hosts. The account
+  // service's clients tell why one the relay does not list cannot be connected.
+  handle('hosts:discover', 0, async (): Promise<DiscoveredHosts> => {
+    if (!settings.get().cloud.enabled) return { state: 'signed_out' }
+    const [discovered, clients] = await Promise.all([
+      remoteHost.discover(),
+      account.clients().catch(() => null),
+    ])
+    const status = account.status()
+    if (discovered.state !== 'ok' || !clients || status.state !== 'signed-in') return discovered
+    const computers = accountComputers({
+      listed: discovered.hosts,
+      // Folded hosts too: one of this account that turned this computer away is still added.
+      known: remoteHost.knownHosts.filter((host) => !host.removed),
+      clients,
+      account: status.account.id,
+      now: Date.now(),
+    })
+    return { ...discovered, computers }
+  })
   handle('hosts:pair-discovered', 1, async ({ event }, relayId): Promise<HostPairStart> => {
     if (!isRelayHostId(relayId)) return { kind: 'invalid' }
     const model = await computerModel()

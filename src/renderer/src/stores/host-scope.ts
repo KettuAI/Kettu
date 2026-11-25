@@ -376,6 +376,10 @@ function createScope(hostId: string): OtherScope {
     pendingDiscovery: () => Promise.resolve(null),
     answerDiscovery: () => Promise.reject(new Error('Answered on the host itself')),
     onDiscovery: () => () => {},
+    // Each desktop app asks about itself in its own window.
+    offer: () => Promise.resolve(null),
+    answerOffer: () => Promise.reject(new Error('Answered on the host itself')),
+    onOffer: () => () => {},
     renameDevice: (id, name) => admin('remote.renameDevice', { id, name }),
     removeDevice: (id) => admin('remote.removeDevice', { id }),
     activity: (id) => admin('remote.activity', { id }),

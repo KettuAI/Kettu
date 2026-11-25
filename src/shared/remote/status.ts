@@ -47,6 +47,11 @@ export interface RemoteStatus {
    * in use, so switching back can keep it; null for none, absent from older hosts.
    */
   ownRelayKeyEnd?: string | null
+  /**
+   * The Kettu account the host is signed in to, null for none: a device last seen with another
+   * cannot connect. Absent from older hosts.
+   */
+  account?: string | null
 }
 
 /**

@@ -18,6 +18,16 @@ export interface HostedHost {
   /** The host's name and this browser's name there, as the last welcome said. */
   name: string
   deviceName: string
+  /** The Kettu account the last welcome named, null for none; absent before accounts were kept. */
+  account?: string | null
+  /** The host turned this browser away as another account's, until its next welcome. */
+  otherAccount?: true
+}
+
+/** Whether a host is folded away as another account's than the one signed in to now. */
+export function foldedHosted(host: HostedHost, accountId: string): boolean {
+  if (host.otherAccount) return true
+  return host.account !== undefined && host.account !== null && host.account !== accountId
 }
 
 export interface AccountHosts {

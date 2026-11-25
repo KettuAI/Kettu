@@ -99,6 +99,11 @@ export interface Hello {
    * and keeps the connection it was on as its standby; `join` makes this connection the standby.
    */
   standby?: StandbyRequest
+  /**
+   * The id of the Kettu account the device is signed in to; absent while it is signed out or in
+   * Local mode. Reported, not proven: a host of another account closes with `other_account`.
+   */
+  account?: string
 }
 
 export type StandbyRequest = 'keep' | 'join'
@@ -167,6 +172,8 @@ export interface Welcome {
    * the host sent and the device did not receive follows the welcome.
    */
   resumed?: { request: number }
+  /** The id of the Kettu account the host is signed in to; absent while it is signed in to none. */
+  account?: string
 }
 
 /**
@@ -275,6 +282,8 @@ export type ClosingReason =
   | 'busy'
   /** The host of the account turned down too many devices in a row and takes none for a while. */
   | 'cooling_down'
+  /** The host is signed in to another Kettu account than the one the device's hello named. */
+  | 'other_account'
 
 /** The host's last message on a connection, saying why it ends. */
 export interface Closing {
@@ -299,13 +308,28 @@ function isClientField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_CLIENT_FIELD
 }
 
-/** A hello as the host reads it, or null when it is not one. */
+/** The longest account id a hello or a welcome may carry. */
+const MAX_ACCOUNT_ID = 128
+
+/** A Kettu account's id: 1 to 128 characters, none of them a control character. */
+export function isAccountId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_ACCOUNT_ID &&
+    // eslint-disable-next-line no-control-regex
+    !/[\u0000-\u001f\u007f-\u009f]/.test(value)
+  )
+}
+
+/** A hello as the host reads it, or null when it is not one, as with an account that is none. */
 export function parseHello(value: unknown): Hello | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, client, device, resume, features, standby } = value as Record<
+  const { type, protocol, client, device, resume, features, standby, account } = value as Record<
     string,
     unknown
   >
+  if (account !== undefined && !isAccountId(account)) return null
   if (type !== 'hello' || typeof protocol !== 'object' || protocol === null) return null
   const { min, max } = protocol as Record<string, unknown>
   if (!isVersion(min) || !isVersion(max) || min > max) return null
@@ -324,6 +348,7 @@ export function parseHello(value: unknown): Hello | null {
     const kept = features.slice(0, MAX_FEATURES).filter(isClientField)
     if (kept.length > 0) hello.features = kept
   }
+  if (account !== undefined) hello.account = account
   return hello
 }
 
@@ -361,6 +386,7 @@ const CLOSING_REASONS: readonly string[] = [
   'unavailable',
   'busy',
   'cooling_down',
+  'other_account',
 ]
 
 /** A closing as the device reads it, or null when the value is not one. */
@@ -401,8 +427,19 @@ export function parseAddresses(value: unknown): DirectAddress[] {
  */
 export function parseWelcome(value: unknown): Welcome | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, host, features, device, terminal, addresses, relay, resume, resumed } =
-    value as Record<string, unknown>
+  const {
+    type,
+    protocol,
+    host,
+    features,
+    device,
+    terminal,
+    addresses,
+    relay,
+    resume,
+    resumed,
+    account,
+  } = value as Record<string, unknown>
   if (type !== 'welcome' || !isVersion(protocol)) return null
   if (protocol < MIN_PROTOCOL_VERSION || protocol > PROTOCOL_VERSION) return null
   if (typeof host !== 'object' || host === null) return null
@@ -426,6 +463,8 @@ export function parseWelcome(value: unknown): Welcome | null {
   }
   const onRelay = parseHostRelay(relay)
   if (onRelay) welcome.relay = onRelay
+  // An account that is none reads as no account, as from a host before accounts.
+  if (isAccountId(account)) welcome.account = account
   if (protocol < RESUME_VERSION) return welcome
   if (typeof resume === 'string' && TOKEN.test(resume)) welcome.resume = resume
   const request = (resumed as { request?: unknown } | null | undefined)?.request
