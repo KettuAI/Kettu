@@ -15,6 +15,7 @@ import { hello, HostLink, type Dial, type LinkRoute } from '@shared/remote/link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
 import type { Paired } from '@shared/remote/pair'
+import { encodeRelayBytes } from '@shared/remote/relay'
 import { WebPush, type WebPushOptions } from './push'
 import type { WebSettings } from './settings'
 
@@ -85,6 +86,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     virtualFrames = createVirtualFrames(link)
   }
   const api = webApi(link, options.settings, {
+    id: encodeRelayBytes(options.hostKey),
     address: options.address,
     known,
     forget: async () => {

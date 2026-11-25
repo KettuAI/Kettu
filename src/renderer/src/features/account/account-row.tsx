@@ -3,6 +3,7 @@ import { Settings01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon, type AppShellProps } from '@renderer/components/affect/app-shell'
 import { routeName } from '@renderer/features/settings/host-text'
+import { InsecureMark } from '@renderer/features/sidebar/insecure-card'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { formatShortcut, isHosted, isWeb } from '@renderer/lib/platform'
 import { useAccountStore } from '@renderer/stores/account'
@@ -91,6 +92,7 @@ export function useAccountShell(): Pick<
     },
     userTools: (
       <>
+        <InsecureMark />
         <PlanRing />
         <RemoteButton />
       </>

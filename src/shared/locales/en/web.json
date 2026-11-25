@@ -31,6 +31,7 @@
   },
   "insecure": {
     "title": "This page is not protected on the network",
+    "show": "This page is not protected on the network. Show the notice",
     "body": "Your conversation stays encrypted, but someone on this network could change the page itself. On a network you do not trust, use an SSH tunnel or HTTPS, such as Tailscale’s. Notifications need one of those too."
   },
   "connection": {
