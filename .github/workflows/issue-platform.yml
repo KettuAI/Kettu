@@ -1,0 +1,57 @@
+name: Issue apps
+
+# An issue filed with a form says which apps it is about, and this adds those apps' labels. It only
+# adds, so a label triage took off stays off: an edit adds only the apps newly picked in it.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    name: Label the apps
+    # A title edit carries no body change and has nothing new to add.
+    if: github.event.action == 'opened' || github.event.changes.body
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    defaults:
+      run:
+        # With pipefail, so a gh command that fails in a pipe fails the step.
+        shell: bash
+    steps:
+      # The bodies reach the script through the environment, never the script text. The form
+      # renders the answer under its label as `### Which app ...`, the options comma-separated, and
+      # each option is matched by its English start, so the Chinese half can change freely.
+      - name: From the form's answer
+        env:
+          NUMBER: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.issue.body }}
+          OLD_BODY: ${{ github.event.changes.body.from }}
+        run: |
+          shopt -s nocasematch
+          apps() {
+            tr -d '\r' |
+              awk '/^### / { inside = (tolower($0) ~ /^### +which app/); next } inside' |
+              tr ',' '\n' |
+              while read -r option; do
+                case "$option" in
+                  desktop*) echo desktop ;;
+                  web*) echo web ;;
+                  iphone* | ipad*) echo ios ;;
+                  android*) echo android ;;
+                  daemon* | docker*) echo daemon ;;
+                  all*) printf '%s\n' desktop web ios android ;;
+                esac
+              done |
+              sort -u
+          }
+          new="$(printf '%s\n' "$BODY" | apps)"
+          old="$(printf '%s\n' "$OLD_BODY" | apps)"
+          labels="$(comm -23 <(printf '%s\n' "$new") <(printf '%s\n' "$old") | sed '/^$/d' | paste -sd, -)"
+          if [ -n "$labels" ]; then
+            gh issue edit "$NUMBER" --add-label "$labels"
+          fi
