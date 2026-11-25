@@ -82,6 +82,7 @@ const settings: SettingsFile = {
     ...DEFAULT_SETTINGS.remote,
     name: "Ann's MacBook",
     direct: { enabled: true, port: 60021, addresses: [{ host: 'home.example.com', port: 60021 }] },
+    ownRelay: { url: 'https://relay.ann-lee.dev', pin: null },
   },
 } as SettingsFile
 
@@ -176,6 +177,142 @@ describe('buildReportFiles', () => {
   })
 })
 
+describe('buildReportFiles and personal details', () => {
+  const EMAIL = 'ann.lee@example.com'
+  const at = (minutesAgo: number): number => NOW - minutesAgo * 60_000
+
+  function action(minutesAgo: number, message: string, data: unknown): string {
+    const time = new Date(at(minutesAgo)).toISOString()
+    return JSON.stringify({ time, level: 'info', process: 'main', source: 'action', message, data })
+  }
+
+  async function personalParts(extras: ReportExtra[]): Promise<ReportParts> {
+    const base = await parts(extras)
+    const agent = host.agents[0]!
+    base.host = {
+      ...host,
+      agents: [
+        {
+          ...agent,
+          status: {
+            id: 'claude-code',
+            name: 'Claude Code',
+            isDefault: true,
+            state: 'ready',
+            account: { kind: 'account', label: 'Claude Max', email: EMAIL, tier: '5x' },
+            detail: `Signed in as ${EMAIL.toUpperCase()}`,
+          },
+        },
+        {
+          ...agent,
+          status: {
+            id: 'claude-code~work',
+            name: 'Ann at Acme',
+            isDefault: false,
+            state: 'ready',
+            account: null,
+            providers: [
+              {
+                id: 'openai',
+                name: 'OpenAI',
+                accounts: [{ id: 'c1', label: EMAIL, method: 'oauth', needsAuth: false }],
+              },
+            ],
+          },
+        },
+      ],
+      log: [
+        { at: at(90), level: 'warn', message: 'host entry before the range' },
+        { at: at(5), level: 'error', message: `quota read failed for ${EMAIL}` },
+      ],
+    } as unknown as DiagnosticsBundle
+    await writeFile(
+      path.join(base.logDir!, 'main.log'),
+      [
+        action(5, 'settings.update', {
+          patch: {
+            remote: {
+              name: "Ann's MacBook",
+              direct: { addresses: [{ host: 'home.example.com', port: 60021 }] },
+            },
+            thread: { alwaysOpenIn: { 'bank.example.com': 'browser' } },
+            appearance: { theme: 'dark' },
+          },
+        }),
+        action(4, 'settings.update', {
+          patch: {
+            addedAgents: [{ id: 'claude-code~work', name: 'Ann at Acme', configDir: '/tmp/x' }],
+            proxy: { mode: 'custom', url: 'http://ann:pa55word@proxy.example.com:8080' },
+          },
+          by: 'agent',
+        }),
+        action(3, 'view.settings', {
+          section: 'memory',
+          item: 'p/notes/%2FUsers%2Fann%2Fwork%2Facme',
+        }),
+      ].join('\n'),
+    )
+    const written = new Date(at(3))
+    await utimes(path.join(base.logDir!, 'main.log'), written, written)
+    return base
+  }
+
+  /** The files whose bytes hold `needle`, binary ones included. */
+  function holding(files: Map<string, string | Uint8Array>, needle: string): string[] {
+    const wanted = needle.toLowerCase()
+    return [...files]
+      .filter(([, content]) => Buffer.from(content).toString('utf8').toLowerCase().includes(wanted))
+      .map(([name]) => name)
+  }
+
+  it('holds no email, home folder, personal setting value or entry outside the range', async () => {
+    for (const extras of [[], ['messages', 'verbose', 'dumps', 'screenshot']] as ReportExtra[][]) {
+      const files = await buildReportFiles(await personalParts(extras))
+      for (const leaked of [
+        EMAIL,
+        '/Users/ann',
+        '%2FUsers%2Fann',
+        "Ann's MacBook",
+        'Ann at Acme',
+        'home.example.com',
+        'bank.example.com',
+        'pa55word',
+        'host entry before the range',
+      ]) {
+        expect(holding(files, leaked), leaked).toEqual([])
+      }
+    }
+  })
+
+  it('keeps what a maintainer needs to tell what happened', async () => {
+    const files = await buildReportFiles(await personalParts([]))
+    const agents = JSON.parse(files.get('agents.json') as string)
+    expect(agents[0].status.account).toEqual({
+      kind: 'account',
+      label: 'Claude Max',
+      email: '<email>',
+      tier: '5x',
+    })
+    expect(agents[0].status.name).toBe('Claude Code')
+    expect(agents[1].status.id).toBe('claude-code~work')
+    expect(agents[1].status.providers[0].accounts[0].label).toBe('<email>')
+    const hostLog = JSON.parse(files.get('host-log.json') as string)
+    expect(hostLog).toEqual([
+      { at: at(5), level: 'error', message: 'quota read failed for <email>' },
+    ])
+    const main = (files.get('logs/main.log') as string)
+      .trimEnd()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    expect(main[0].data.patch.appearance).toEqual({ theme: 'dark' })
+    expect(main[0].data.patch.remote.name).toBe('<set>')
+    expect(main[0].data.patch.thread.alwaysOpenIn).toEqual({ count: 1 })
+    expect(main[1].data.patch.proxy.url).toBe('http://<redacted>@proxy.example.com:8080')
+    expect(main[1].data.by).toBe('agent')
+    expect(main[2].data.item).toBe('p/notes/~%2Fwork%2Facme')
+  })
+})
+
 describe('settingsForReport', () => {
   it('drops who the user is and where they go, and keeps how things are set up', () => {
     const shown = JSON.stringify(settingsForReport(settings))
@@ -183,6 +320,7 @@ describe('settingsForReport', () => {
       expect(shown).not.toContain(kept)
     }
     expect(shown).not.toContain('home.example.com')
+    expect(shown).not.toContain('ann-lee.dev')
     expect(shown).toContain('proxy.example.com:8080')
     expect(shown).toContain('/Users/ann/.acme')
   })

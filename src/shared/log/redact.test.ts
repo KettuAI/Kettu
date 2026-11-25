@@ -77,9 +77,19 @@ describe('createRedactor', () => {
     expect(redact('"/Users/ann"')).toBe('"~"')
   })
 
+  it('writes the home folder as ~ where a URL or an id encodes it', () => {
+    expect(redact('p/notes/%2FUsers%2Fann%2Fwork')).toBe('p/notes/~%2Fwork')
+    expect(redact('item=%2fUsers%2fann&x=1 and %2FUsers%2Fanna')).toBe(
+      'item=~&x=1 and %2FUsers%2Fanna',
+    )
+  })
+
   it('handles Windows homes in plain and JSON-escaped text', () => {
     const win = createRedactor({ home: 'C:\\Users\\Ann', platform: 'win32' })
     expect(win('c:\\users\\ann\\code')).toBe('~\\code')
     expect(win('{"cwd":"C:\\\\Users\\\\Ann\\\\code"}')).toBe('{"cwd":"~\\\\code"}')
+    expect(win('file:///C:/Users/Ann/code and C%3A%5CUsers%5CAnn%5Ccode')).toBe(
+      'file:///~/code and ~%5Ccode',
+    )
   })
 })

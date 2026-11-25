@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import JSZip from 'jszip'
-import type { DiagnosticsBundle, SessionSummary } from '../agent-host'
+import type { AgentDiagnostics, DiagnosticsBundle, SessionSummary } from '../agent-host'
 import type { DeviceReport } from '../remote/host-admin'
 import {
   rangeBounds,
@@ -48,33 +48,122 @@ function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`
 }
 
+/** What stands for a value the report leaves out. */
+const SET = '<set>'
+/** What stands for an email the report leaves out, so it still shows that one was there. */
+const EMAIL_MARK = '<email>'
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function count(value: unknown): unknown {
+  if (Array.isArray(value)) return { count: value.length }
+  return isObject(value) ? { count: Object.keys(value).length } : value
+}
+
 /**
- * The settings without what says who the user is or what they visit: the sites links open in,
- * this computer's name and own addresses, the agents' given names and a proxy's credentials.
- * Paths stay, as they show how things are set up.
+ * Settings without what says who the user is or what they visit: the sites links open in, this
+ * computer's name and own addresses, the own relay's address, the agents' given names and a
+ * proxy's credentials. Paths stay, as they show how things are set up. Takes the whole file or a
+ * patch of it, as a settings change in the log holds, and changes only the keys it has.
  */
-export function settingsForReport(file: SettingsFile): unknown {
-  const copy = structuredClone(file)
-  let proxy: unknown = copy.proxy
-  if (copy.proxy.mode === 'custom') {
-    const url = URL.parse(copy.proxy.url)
+export function settingsForReport(settings: SettingsFile | Record<string, unknown>): unknown {
+  const copy = structuredClone(settings) as Record<string, unknown>
+  const { thread, addedAgents, proxy, remote } = copy
+  if (isObject(thread) && 'alwaysOpenIn' in thread) {
+    copy['thread'] = { ...thread, alwaysOpenIn: count(thread['alwaysOpenIn']) }
+  }
+  if (Array.isArray(addedAgents)) {
+    copy['addedAgents'] = addedAgents.map((agent: unknown) =>
+      isObject(agent) && 'name' in agent ? { ...agent, name: SET } : agent,
+    )
+  }
+  if (isObject(proxy) && typeof proxy['url'] === 'string') {
+    const url = URL.parse(proxy['url'])
     const credentials = url && (url.username || url.password) ? '<redacted>@' : ''
-    proxy = { ...copy.proxy, url: url ? `${url.protocol}//${credentials}${url.host}` : '<set>' }
+    copy['proxy'] = { ...proxy, url: url ? `${url.protocol}//${credentials}${url.host}` : SET }
   }
+  if (isObject(remote)) {
+    const next = { ...remote }
+    if (typeof next['name'] === 'string') next['name'] = SET
+    if (isObject(next['direct']) && 'addresses' in next['direct']) {
+      next['direct'] = { ...next['direct'], addresses: count(next['direct']['addresses']) }
+    }
+    if (isObject(next['ownRelay']) && 'url' in next['ownRelay']) {
+      next['ownRelay'] = { ...next['ownRelay'], url: SET }
+    }
+    copy['remote'] = next
+  }
+  return copy
+}
+
+/**
+ * An agent's status and capabilities, its events and its adapter's files, without its account's
+ * email and, for an agent the user added, the name they gave it; the account's kind and plan stay.
+ */
+export function agentForReport(agent: AgentDiagnostics): unknown {
+  const { status } = agent
   return {
-    ...copy,
-    thread: {
-      ...copy.thread,
-      alwaysOpenIn: { count: Object.keys(copy.thread.alwaysOpenIn).length },
+    status: {
+      ...status,
+      name: status.isDefault ? status.name : SET,
+      account: status.account && {
+        ...status.account,
+        email: status.account.email === null ? null : EMAIL_MARK,
+      },
+      providers: status.providers?.map((provider) => ({
+        ...provider,
+        accounts: provider.accounts.map((account) =>
+          EMAIL.test(account.label) ? { ...account, label: EMAIL_MARK } : account,
+        ),
+      })),
     },
-    addedAgents: copy.addedAgents.map((agent) => ({ ...agent, name: '<set>' })),
-    proxy,
-    remote: {
-      ...copy.remote,
-      name: copy.remote.name === null ? null : '<set>',
-      direct: { ...copy.remote.direct, addresses: { count: copy.remote.direct.addresses.length } },
-    },
+    capabilities: agent.capabilities,
+    events: agent.events,
+    adapter: agent.adapter,
   }
+}
+
+/** The emails the agents' accounts report, which the bundle leaves out wherever they appear. */
+function accountEmails(host: DiagnosticsBundle | null): string[] {
+  const emails = new Set<string>()
+  for (const { status } of host?.agents ?? []) {
+    if (status.account?.email) emails.add(status.account.email)
+    for (const provider of status.providers ?? []) {
+      for (const account of provider.accounts) {
+        if (EMAIL.test(account.label)) emails.add(account.label)
+      }
+    }
+  }
+  return [...emails]
+}
+
+/** Masks each of `values` wherever it appears, in any case. */
+function valueMasker(values: string[], mark: string): (text: string) => string {
+  if (values.length === 0) return (text) => text
+  const pattern = new RegExp(
+    values.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+    'gi',
+  )
+  return (text) => text.replace(pattern, mark)
+}
+
+/** A log record as the bundle holds it: a settings change's personal values left out. */
+function recordForReport(line: string): string {
+  if (!line.includes('"settings.update"')) return line
+  let record: unknown
+  try {
+    record = JSON.parse(line)
+  } catch {
+    return line
+  }
+  if (!isObject(record) || record['source'] !== 'action' || record['message'] !== 'settings.update')
+    return line
+  const data = record['data']
+  if (!isObject(data) || !isObject(data['patch'])) return line
+  return JSON.stringify({ ...record, data: { ...data, patch: settingsForReport(data['patch']) } })
 }
 
 /** A session as the bundle lists it: with its title, project and branch only when chosen. */
@@ -167,7 +256,8 @@ export async function buildReportFiles(parts: ReportParts): Promise<Map<string, 
   const extras = new Set(request.extras)
   const { from, to } = rangeBounds(request.range, parts.now)
   const files = new Map<string, ReportContent>()
-  const text = (name: string, value: string): void => void files.set(name, redact(value))
+  const emails = valueMasker(accountEmails(host), EMAIL_MARK)
+  const text = (name: string, value: string): void => void files.set(name, redact(emails(value)))
 
   text(
     'report.json',
@@ -192,18 +282,8 @@ export async function buildReportFiles(parts: ReportParts): Promise<Map<string, 
   )
   if (parts.settings) text('settings.json', json(settingsForReport(parts.settings)))
   if (host) {
-    text(
-      'agents.json',
-      json(
-        host.agents.map((agent) => ({
-          status: agent.status,
-          capabilities: agent.capabilities,
-          events: agent.events,
-          adapter: agent.adapter,
-        })),
-      ),
-    )
-    text('host-log.json', json(host.log))
+    text('agents.json', json(host.agents.map(agentForReport)))
+    text('host-log.json', json(host.log.filter((entry) => entry.at >= from && entry.at <= to)))
     text(
       'sessions.json',
       json(host.sessions.map((session) => sessionForReport(session, extras.has('titles')))),
@@ -222,7 +302,7 @@ export async function buildReportFiles(parts: ReportParts): Promise<Map<string, 
     for (const [name, group] of await logFiles(parts.logDir)) {
       const verbose = name.startsWith(VERBOSE_PREFIX)
       if (verbose && !extras.has('verbose')) continue
-      const lines = await recordsInRange(group, from, to)
+      const lines = (await recordsInRange(group, from, to)).map(recordForReport)
       if (lines.length > 0) text(`logs/${name}.log`, `${lines.join('\n')}\n`)
     }
   }
