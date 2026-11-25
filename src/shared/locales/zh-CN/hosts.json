@@ -65,6 +65,7 @@
     "emulatorStart": "模拟器没能启动：{{reason}}",
     "emulatorBoot": "模拟器一直没能启动完成",
     "wentAway": "这个设备已经不在了",
+    "closedWhileStarting": "设备在启动完成前被关闭了",
     "shutdownPhysical": "只有模拟器能在这里关机",
     "notStreaming": "这个设备没有在传画面",
     "appearanceUnsupported": "这个设备的外观不能在这里设置",

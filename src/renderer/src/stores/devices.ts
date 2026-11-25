@@ -80,6 +80,8 @@ export async function openDevice(sessionId: string, deviceId: string): Promise<v
     const info = await window.kettu.devices.request('devices.open', { deviceId, sessionId })
     useDevicesStore.setState((s) => ({ selected: { ...s.selected, [sessionId]: info.id } }))
   } catch (error) {
+    // The user closed it themselves while it booted.
+    if ((error as { data?: { reason?: unknown } } | null)?.data?.reason === 'closed') return
     toast(refusal(error))
   } finally {
     useDevicesStore.setState((s) => {
