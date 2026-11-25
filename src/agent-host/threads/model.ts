@@ -54,7 +54,13 @@ export function storedSession(view: SessionView): StoredSession {
   const { title, config, commands, usage, subagent, sideChat } = view
   return {
     title,
-    config,
+    // 挂起的切换仅在进程运行期有效，落盘时剥离以免重开会话出现残留提示。
+    config: config.map((option) => {
+      if (!option.pending) return option
+      const copy = { ...option }
+      delete copy.pending
+      return copy
+    }),
     commands,
     usage,
     subagent,

@@ -55,6 +55,7 @@ import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { mentionSurfacesOf } from './mention-surfaces'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
+import { ModeSwitchStrip } from './mode-switch-strip'
 import { isSelect, onCycleKeys } from './options'
 import { hasMessage } from './drafts'
 import { HistoryHeader } from './history-header'
@@ -473,7 +474,8 @@ export function Composer({
   const cycle = (category: 'mode' | 'thought_level') => {
     const option = config.find((o) => o.category === category && o.type === 'select')
     if (!option?.choices?.length) return false
-    const reported = option.value === undefined ? undefined : String(option.value)
+    const reported =
+      option.pending?.value ?? (option.value === undefined ? undefined : String(option.value))
     const asked = stepped.current[option.id]
     const current = asked && asked.from === reported ? asked.to : reported
     const levels = category === 'mode' ? null : dialStops(option as SelectOption, current)
@@ -685,6 +687,19 @@ export function Composer({
                       summarize={pending.summarize}
                       onSummarize={(on) => updatePendingSwitch(sessionId, { summarize: on })}
                       {...(mustSwitch ? {} : { onUndo: () => setPendingSwitch(sessionId, null) })}
+                    />
+                  )}
+                </AnimatePresence>
+                <AnimatePresence initial={false}>
+                  {!pending && mode?.pending && (
+                    <ModeSwitchStrip
+                      key="mode-switch"
+                      pending={mode.pending}
+                      modeName={
+                        mode.choices.find((choice) => choice.value === mode.pending?.value)?.name ??
+                        mode.pending.value
+                      }
+                      onCancel={() => void set(mode.id, String(mode.value))}
                     />
                   )}
                 </AnimatePresence>

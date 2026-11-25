@@ -6834,9 +6834,9 @@ export class SessionManager {
    * Attaches a session that came back from its stored thread to its agent, shared by every caller
    * until it settles. The session keeps its status; the caller sets the next one.
    */
-  private connect(live: Live): Promise<AgentConnection> {
+  private connect(live: Live, targetMode?: string): Promise<AgentConnection> {
     if (live.connection) return Promise.resolve(live.connection)
-    live.attaching ??= this.attachStored(live).finally(() => {
+    live.attaching ??= this.attachStored(live, targetMode).finally(() => {
       live.attaching = null
       // A turn that ended while it attached, cancelled or held back, armed no release.
       this.refreshRelease(live)
@@ -6850,7 +6850,7 @@ export class SessionManager {
    * had, and only then does the session take its connection, so nothing else reaches the agent
    * first: a prompt waits for them, and a cancel ends a turn that was never sent.
    */
-  private async attachStored(live: Live): Promise<AgentConnection> {
+  private async attachStored(live: Live, targetMode?: string): Promise<AgentConnection> {
     const { record } = live
     const own = live.thread.session.config
     const runtime = await this.deps.agents.ensureReady(record.agentId)
@@ -6858,6 +6858,17 @@ export class SessionManager {
     const { connection } = runtime
     // A takeover's agent opens its own session at the values chosen for it, not the session's.
     const carry = record.carry
+    // 若已关闭的会话原本或即将处于完全访问模式，恢复时直接带上启动参数，避免先普通启动再二次重启。
+    const resumeMode =
+      !carry && targetMode !== undefined
+        ? targetMode
+        : own.find((option) => option.category === 'mode')?.value
+    const resumeFullAccess =
+      !carry &&
+      !live.startedMode &&
+      live.routineMode === null &&
+      typeof resumeMode === 'string' &&
+      isFullAccessMode(resumeMode)
     // A released session is marked closed on the connection; what the agent sends before the
     // session attaches waits for it instead of being dropped.
     if (record.acpSessionId !== '') connection.reopen(record.acpSessionId)
@@ -6878,7 +6889,8 @@ export class SessionManager {
         pathKey(record.projectPath, this.deps.platform),
       )
     } else if (caps.resumeSession) {
-      const attach = await this.attachOptions(live.id, record, runtime)
+      let attach = await this.attachOptions(live.id, record, runtime)
+      if (resumeFullAccess) attach = { ...attach, fullAccess: true }
       try {
         const setup = await connection.resumeSession(
           record.acpSessionId,
@@ -6917,9 +6929,17 @@ export class SessionManager {
       )
     }
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
+    const desiredOwn =
+      !carry && targetMode !== undefined
+        ? own.map((option) =>
+            option.category === 'mode' && option.type === 'select' && isValueOf(option, targetMode)
+              ? { ...option, value: targetMode }
+              : option,
+          )
+        : own
     const wanted = carry
       ? this.takeoverValues(record.agentId, config, carry)
-      : carryMode(own, config)
+      : carryMode(desiredOwn, config)
     const values = agentValues(wanted)
     config = await this.applyStartOptions(live, connection, values, {
       restore: !carry,
@@ -7049,8 +7069,8 @@ export class SessionManager {
   }
 
   /** Attaches a closed session for something only its agent can do, such as a setting or a fork. */
-  private async attachClosed(live: Live): Promise<AgentConnection> {
-    const connection = await this.connect(live)
+  private async attachClosed(live: Live, targetMode?: string): Promise<AgentConnection> {
+    const connection = await this.connect(live, targetMode)
     if (live.thread.session.status === 'closed') {
       this.update(live, { status: 'ready' })
       this.touch(live.id)
@@ -11015,7 +11035,8 @@ export class SessionManager {
       throw new HostError('busy', t('session.configBetweenTurns', { option: option.name }))
     }
     try {
-      const connection = await this.attachClosed(live)
+      const targetMode = option.category === 'mode' && typeof value === 'string' ? value : undefined
+      const connection = await this.attachClosed(live, targetMode)
       live.used = true
       if (optionId === SYNTHETIC_MODE_ID) {
         await connection.setMode(live.record.acpSessionId, value as string)

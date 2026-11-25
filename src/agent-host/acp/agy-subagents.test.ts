@@ -25,7 +25,7 @@ import type {
   SessionTarget,
 } from '../connection'
 import { newTurnScope, type MapperEffect } from '../session-updates'
-import type { AgyChild } from './agy-subagents'
+import { AgySubagents, type AgyChild } from './agy-subagents'
 import { AcpConnection, inProcessTransport } from './connection'
 
 const PARENT = 's-1'
@@ -467,5 +467,95 @@ describe("agy's sub-agents", () => {
     expect(subagentEffects(parent)).toEqual([])
     connection.close()
     await turn.catch(() => {})
+  })
+
+  it('settles a running child on a non-idle terminal status or when its row disappears', async () => {
+    const rows: AgyChild[] = [child(CHILD, PARENT, RUNNING)]
+    const settled: string[] = []
+    const states: string[] = []
+    const makeTarget = (): SessionTarget => ({
+      context: () => ({
+        thread: threadFromSnapshot({
+          session: {
+            id: `k-${PARENT}`,
+            agentId: 'antigravity',
+            projectPath: CWD,
+            acpSessionId: PARENT,
+            status: 'running',
+            title: null,
+            config: [],
+            commands: [],
+            usage: null,
+            error: null,
+            turnStartedAt: null,
+            turnStartUsed: null,
+            createdAt: 0,
+            updatedAt: 0,
+            parentId: null,
+            origin: 'user',
+            subagent: null,
+            routine: null,
+            queue: [],
+            queuePaused: false,
+          },
+          entries: [],
+          seq: 0,
+        }),
+        replaying: false,
+        cancelling: false,
+        scope: newTurnScope(),
+        now: 1,
+        nextId: () => 'e:1',
+        sessionIdFor: (id) => `k-${id}`,
+      }),
+      apply: (output) => {
+        for (const effect of output.effects) {
+          if (effect.kind === 'subagent' && effect.state) states.push(effect.state.kind)
+        }
+      },
+      requestPermission: async () => 'cancelled',
+      send: () => {},
+      startMode: () => null,
+    })
+    const parentTarget = makeTarget()
+    let prompting = true
+    const tracker = new AgySubagents(
+      async (parents) =>
+        rows.filter((row) => parents.includes(row.parentId)).map((row) => ({ ...row })),
+      {
+        target: (id) => (id === PARENT ? parentTarget : undefined),
+        prompting: (id) => id === PARENT && prompting,
+        load: async () => {},
+        settled: (id) => settled.push(id),
+        log: () => {},
+      },
+    )
+
+    tracker.noted(
+      PARENT,
+      { sessionUpdate: 'tool_call', ...START, status: 'in_progress' } as never,
+      false,
+    )
+    await vi.waitFor(() => expect(tracker.running(PARENT)).toBe(true), { timeout: 2_000 })
+
+    // 模拟子智能体进入非 IDLE 的终态（如 ERROR），必须解除 running 并触发 settled。
+    rows[0]!.status = 'CASCADE_RUN_STATUS_ERROR'
+    await vi.waitFor(() => expect(tracker.running(PARENT)).toBe(false), { timeout: 2_000 })
+    expect(settled).toEqual([PARENT])
+
+    // 再次进入运行态后，模拟子智能体记录从数据库中消失，也应解除 running 并触发 settled。
+    rows[0]!.status = RUNNING
+    tracker.noted(
+      PARENT,
+      { sessionUpdate: 'tool_call', ...AGAIN, status: 'in_progress' } as never,
+      false,
+    )
+    await vi.waitFor(() => expect(tracker.running(PARENT)).toBe(true), { timeout: 2_000 })
+    prompting = false
+    rows.length = 0
+    await vi.waitFor(() => expect(tracker.running(PARENT)).toBe(false), { timeout: 2_000 })
+    expect(settled).toEqual([PARENT, PARENT])
+    expect(states).toEqual(['running', 'idle', 'running', 'idle'])
+    tracker.stop()
   })
 })

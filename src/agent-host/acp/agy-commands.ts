@@ -12,6 +12,8 @@ import { commandEnding, fromAgy } from './agy-tools'
 interface Command {
   title: string
   command: string
+  /** 是否以 IsDaemon 启动的常驻后台进程。 */
+  daemon: boolean
   /** As agy last reported the call: `pending` while it waits for the user's permission. */
   call: acp.ToolCallStatus
   startedAt: number
@@ -21,12 +23,22 @@ interface Command {
   carried: boolean
 }
 
-function commandLine(update: acp.ToolCallUpdate): { line: string; title: string } | null {
+function commandLine(
+  update: acp.ToolCallUpdate,
+): { line: string; title: string; daemon: boolean } | null {
   const input = update.rawInput
   if (typeof input !== 'object' || input === null) return null
-  const { CommandLine: line, toolSummary: summary } = input as Record<string, unknown>
+  const {
+    CommandLine: line,
+    toolSummary: summary,
+    IsDaemon: daemon,
+  } = input as Record<string, unknown>
   if (typeof line !== 'string') return null
-  return { line, title: typeof summary === 'string' && summary.trim() ? summary : line }
+  return {
+    line,
+    title: typeof summary === 'string' && summary.trim() ? summary : line,
+    daemon: daemon === true,
+  }
 }
 
 function taskStatus(call: acp.ToolCallStatus): BackgroundTaskView['status'] {
@@ -49,6 +61,7 @@ export class AgyCommands {
       known = {
         title: named.title,
         command: named.line,
+        daemon: named.daemon,
         call: 'pending',
         startedAt: now,
         endedAt: null,
@@ -70,14 +83,13 @@ export class AgyCommands {
   }
 
   /**
-   * The turn ended: the commands that still run carry on past it, and the others are done with.
-   * True when what the session board lists changed.
+   * 回合结束：保留仍在运行的跨回合命令；若回合异常中止，不再把未标 IsDaemon 的普通命令误留为运行中后台任务。
    */
-  turnEnded(): boolean {
+  turnEnded(aborted = false): boolean {
     let changed = false
     for (const [id, command] of this.calls) {
       if (command.carried) continue
-      if (command.call === 'in_progress') {
+      if (command.call === 'in_progress' && (!aborted || command.daemon)) {
         command.carried = true
         changed = true
       } else {

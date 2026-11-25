@@ -79,7 +79,7 @@ const REPLACE_KILL_MS = 2_000
 /** How long the router waits for its children once its own input ends. */
 const STOP_MS = 1_500
 /** How long the program's `--help` may take, and how much of it is read. */
-const HELP_MS = 5_000
+const HELP_MS = 10_000
 const HELP_CHARS = 256 * 1024
 
 // cmd.exe quoting for a `.cmd` or `.bat` child, which Node.js refuses to spawn without a shell.
@@ -472,13 +472,15 @@ export class SessionRouter {
     return [this.sessionFlag]
   }
 
-  /** Whether the program's `--help` lists the session flag, read once. */
+  /** 检查程序 `--help` 是否列出目标参数；超时或执行出错不永久缓存失败，允许后续重试。 */
   private flagListed(): Promise<boolean> {
     const flag = this.sessionFlag
     if (flag === null) return Promise.resolve(false)
-    this.listed ??= new Promise((resolve) => {
+    if (this.listed) return this.listed
+    const check = new Promise<boolean>((resolve) => {
       const { command, args } = this.spawnWords(this.childCommand, [...this.childArgs, '--help'])
       let help = ''
+      let timedOut = false
       let proc: ChildProcess
       try {
         proc = spawn(command, args, {
@@ -488,6 +490,7 @@ export class SessionRouter {
           windowsHide: true,
         })
       } catch {
+        if (this.listed === check) this.listed = null
         resolve(false)
         return
       }
@@ -496,17 +499,27 @@ export class SessionRouter {
       }
       proc.stdout?.on('data', read)
       proc.stderr?.on('data', read)
-      const timer = setTimeout(() => proc.kill(), HELP_MS)
+      const timer = setTimeout(() => {
+        timedOut = true
+        proc.kill()
+      }, HELP_MS)
       proc.on('error', () => {
         clearTimeout(timer)
+        if (this.listed === check) this.listed = null
         resolve(false)
       })
-      proc.on('close', () => {
+      proc.on('close', (code) => {
         clearTimeout(timer)
-        resolve(listsFlag(help, flag))
+        const found = listsFlag(help, flag)
+        // 超时或非正常退出且未找到参数时清除缓存，避免高负载下一次超时永久关闭 Full access。
+        if (!found && (timedOut || code === null)) {
+          if (this.listed === check) this.listed = null
+        }
+        resolve(found)
       })
     })
-    return this.listed
+    this.listed = check
+    return check
   }
 
   /**

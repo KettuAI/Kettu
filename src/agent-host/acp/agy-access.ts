@@ -6,7 +6,7 @@
 // which full access holds, so the session's values are set again.
 
 import { ANTIGRAVITY_FULL_ACCESS } from '@shared/agents'
-import { isConfigValue, type ConfigOption } from '@shared/thread'
+import { isConfigValue, type ConfigOption, type PendingConfig } from '@shared/thread'
 import { t } from '../i18n'
 import { compareVersions } from '../versions'
 import { MODE_OPTION } from './agy-plan'
@@ -28,8 +28,12 @@ export function offersFullAccess(version: string | null, meta: unknown): boolean
   return typeof flag === 'string' && flag !== ''
 }
 
-/** The session's options with Full access after agy's modes, chosen while `full`. */
-export function withFullAccess(config: readonly ConfigOption[], full: boolean): ConfigOption[] {
+/** 构造带完全访问选项的配置列表，并同步附加或清除挂起切换状态。 */
+export function withFullAccess(
+  config: readonly ConfigOption[],
+  full: boolean,
+  pending: PendingConfig | null = null,
+): ConfigOption[] {
   return config.map((option) => {
     if (option.id !== MODE_OPTION || option.type !== 'select') return option
     const choices = (option.choices ?? []).filter((choice) => choice.value !== FULL_ACCESS)
@@ -38,7 +42,14 @@ export function withFullAccess(config: readonly ConfigOption[], full: boolean): 
       name: t('antigravity.mode.fullAccess.name'),
       description: t('antigravity.mode.fullAccess.description'),
     })
-    return { ...option, choices, ...(full ? { value: FULL_ACCESS } : {}) }
+    const next: ConfigOption = {
+      ...option,
+      choices,
+      ...(full ? { value: FULL_ACCESS } : {}),
+    }
+    if (pending) next.pending = pending
+    else delete next.pending
+    return next
   })
 }
 
