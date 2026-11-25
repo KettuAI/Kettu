@@ -32,6 +32,8 @@ export interface SessionInfo {
   time: { created: number; updated: number; busy?: number; idle?: number }
   title?: string
   location: { directory: string }
+  /** A revert staged to before `messageID`, which the next prompt or a commit carries out. */
+  revert?: { messageID: string }
 }
 
 export interface ModelInfo {

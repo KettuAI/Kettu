@@ -30,6 +30,8 @@ import {
   type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
+  type RewindPoint,
+  type RewoundSession,
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
@@ -165,6 +167,8 @@ type Deferred = (ctx: MapperContext) => MapperOutput | null
 interface Sent {
   turn: boolean
   answer: string | null
+  /** The id OpenCode gave the user message the prompt became, when it went as one. */
+  ref?: string
 }
 
 const TURN: Sent = { turn: true, answer: null }
@@ -550,6 +554,8 @@ export class OpenCodeConnection implements AgentConnection {
         ownTitles: 'sent',
         logout: false,
         steering: true,
+        rewind: true,
+        rewindFiles: true,
         mcpHttp: true,
         mcpSse: false,
         mcpStdio: true,
@@ -1035,6 +1041,62 @@ export class OpenCodeConnection implements AgentConnection {
     return messages[next]?.id ?? null
   }
 
+  // Edit from a message: OpenCode stages a revert to before the message, which takes back the
+  // files its turns changed since. Clearing it returns them, and a commit drops the messages.
+
+  /** Stages the revert as an edit goes back, so the files go back with the turns. */
+  async stageRewind(sessionId: string, _cwd: string, point: RewindPoint): Promise<void> {
+    await this.stage(sessionId, point, true)
+  }
+
+  /** Put back: the staged revert goes, and the files it took back return. */
+  async unstageRewind(sessionId: string): Promise<void> {
+    await this.call('DELETE', `/api/session/${sessionId}/revert`)
+  }
+
+  /**
+   * Commits the staged revert; the session keeps its id. One cleared elsewhere is staged again
+   * without the files, which are then left as they are.
+   */
+  async rewindSession(
+    sessionId: string,
+    _cwd: string,
+    point: RewindPoint,
+  ): Promise<RewoundSession> {
+    const info = await this.call<{ data?: SessionInfo }>('GET', `/api/session/${sessionId}`)
+    if (!info?.data?.revert) await this.stage(sessionId, point, false)
+    await this.call('POST', `/api/session/${sessionId}/revert/commit`)
+    return { sessionId }
+  }
+
+  /** Stages a revert to before the user message of the prompt `point` names. */
+  private async stage(sessionId: string, point: RewindPoint, files: boolean): Promise<void> {
+    const route = `/api/session/${sessionId}/revert/stage`
+    if (point.ref !== null) {
+      try {
+        await this.call('POST', route, { messageID: point.ref, files })
+        return
+      } catch (error) {
+        // A fork gives its copies new ids, so the message is found by its text instead.
+        const tag = ((error as AgentRequestError).data as { tag?: string } | undefined)?.tag
+        if (tag !== 'MessageNotFoundError') throw error
+      }
+    }
+    const messageID = await this.promptMessage(sessionId, point)
+    await this.call('POST', route, { messageID, files })
+  }
+
+  /** The nth user message holding the prompt's first line, for one whose id Kettu lacks. */
+  private async promptMessage(sessionId: string, point: RewindPoint): Promise<string> {
+    const line = point.text.trim()
+    const same = (await this.messages(sessionId)).filter(
+      (message) => message.type === 'user' && message.text.includes(line),
+    )
+    const found = same[point.occurrence - 1]
+    if (found) return found.id
+    throw new AgentRequestError('agent_error', t('rewind.noPoint'))
+  }
+
   async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (!session) return
@@ -1149,7 +1211,11 @@ export class OpenCodeConnection implements AgentConnection {
 
   // Turns.
 
-  async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
+  async prompt(
+    sessionId: string,
+    prompt: readonly PromptBlock[],
+    heard?: (ref: string) => void,
+  ): Promise<PromptResult> {
     const session = this.require(sessionId)
     if (session.turn && !session.turn.own) {
       throw new AgentRequestError('agent_error', 'A turn is already running')
@@ -1180,6 +1246,7 @@ export class OpenCodeConnection implements AgentConnection {
     } finally {
       session.sending = false
     }
+    if (sent.ref) heard?.(sent.ref)
     if (sent.answer !== null && !session.hidden) {
       const answer = sent.answer
       this.deliver(sessionId, (ctx) => session.mapper.say(ctx, answer))
@@ -1250,8 +1317,20 @@ export class OpenCodeConnection implements AgentConnection {
         ? { files: files.map((file) => ({ name: file.name, inline: file.source !== undefined })) }
         : {}),
     })
+    type Admitted = { data?: { id?: unknown } } | undefined
+    const refOf = (admitted: Admitted): Sent => {
+      const id = admitted?.data?.id
+      return typeof id === 'string' && MESSAGE_ID.test(id) ? { ...TURN, ref: id } : TURN
+    }
     try {
-      await this.call('POST', `${route}/prompt`, body(input.files, text), shown(input.files, text))
+      return refOf(
+        await this.call<Admitted>(
+          'POST',
+          `${route}/prompt`,
+          body(input.files, text),
+          shown(input.files, text),
+        ),
+      )
     } catch (error) {
       const linked = input.files.filter((file) => file.source === undefined)
       const unread = (error as AgentRequestError).data as { tag?: string } | undefined
@@ -1265,9 +1344,15 @@ export class OpenCodeConnection implements AgentConnection {
         text,
         linked.map((file) => localPath(file.uri) ?? file.uri),
       )
-      await this.call('POST', `${route}/prompt`, body(inline, named), shown(inline, named))
+      return refOf(
+        await this.call<Admitted>(
+          'POST',
+          `${route}/prompt`,
+          body(inline, named),
+          shown(inline, named),
+        ),
+      )
     }
-    return TURN
   }
 
   /**

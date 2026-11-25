@@ -610,6 +610,7 @@ export interface AgentStatus {
     forkAtMessage: boolean // `session/fork` up to a message, through the adapters' fork point
     steering: boolean // `_session/steering` into a running turn
     rewind?: boolean // cuts a session's conversation before a turn, for an edit from a message
+    rewindFiles?: boolean // that cut also takes back the files the agent changed since
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     context: boolean // what fills the context from its own report (`/context`)
     liveContext: boolean // what fills the context from its connection through a running turn

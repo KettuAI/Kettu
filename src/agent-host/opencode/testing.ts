@@ -1,5 +1,5 @@
 // What the OpenCode tests share: the events OpenCode 2.3.2's server sent, recorded with paths and
-// names replaced, and a thread that takes a mapper's output as a session does.
+// names replaced, a scripted server, and a thread that takes a mapper's output as a session does.
 
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -18,6 +18,7 @@ import {
   type MapperOutput,
 } from '../session-updates'
 import { sessionOf, type MessageInfo, type ServerEvent } from './protocol'
+import type { ServerApi } from './server'
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures')
 
@@ -153,5 +154,102 @@ export class TestThread implements SessionTarget {
   tool(callId: string): Extract<ThreadEntry, { kind: 'tool' }> | null {
     const entry = this.state.byId[`t:${callId}`]
     return entry?.kind === 'tool' ? entry : null
+  }
+}
+
+/** The model the scripted server names as the default. */
+export const MODEL = { id: 'deepseek-flash', providerID: 'deepseek' }
+
+export interface Sent {
+  method: string
+  path: string
+  body: unknown
+}
+
+export type Route = (sent: Sent) => unknown
+
+/** A scripted server: it answers by the first route that matches, and sends what a test pushes. */
+export class FakeServer {
+  readonly sent: Sent[] = []
+  streams = 0
+  private readonly routes: { method: string; path: RegExp; answer: Route }[] = []
+  private emit: ((event: ServerEvent) => void) | null = null
+  private end: (() => void) | null = null
+  private sessions = 0
+
+  constructor() {
+    this.on('GET', /^\/api\/model\/default/, () => ({ data: MODEL }))
+    this.on('GET', /^\/api\/model\?/, () => ({
+      data: [
+        {
+          ...MODEL,
+          name: 'DeepSeek Flash',
+          variants: [{ id: 'low' }, { id: 'high' }],
+          limit: { context: 1000 },
+          settings: { apiKey: 'sk-never-kept' },
+        },
+        { id: 'gpt', providerID: 'openai', name: 'GPT', variants: [{ id: 'high' }] },
+      ],
+    }))
+    this.on('GET', /^\/api\/agent\?/, () => ({
+      data: [
+        { id: 'build', name: 'Build', mode: 'primary' },
+        { id: 'plan', name: 'Plan', mode: 'primary', description: 'Read-only' },
+        { id: 'title', name: 'Title', mode: 'primary', hidden: true },
+        { id: 'explore', name: 'Explore', mode: 'subagent' },
+      ],
+    }))
+    this.on('GET', /^\/api\/command\?/, () => ({
+      data: [{ name: 'review', description: 'review' }],
+    }))
+    this.on('POST', /^\/api\/session$/, () => ({ data: this.info(`ses_${++this.sessions}`) }))
+    this.on('GET', /^\/api\/session\/active$/, () => ({ data: {} }))
+    this.on('GET', /^\/api\/session\/[^/]+$/, ({ path }) => ({
+      data: this.info(path.split('/')[3]!),
+    }))
+    this.on('GET', /\/instructions\/entries$/, () => ({ data: [] }))
+    this.on('GET', /\/(permission|form|inbox)$/, () => ({ data: [] }))
+    this.on('GET', /\/message\?/, () => ({ data: [], cursor: {} }))
+    this.on('POST', /\/interrupt$/, () => ({ interrupted: true }))
+  }
+
+  info(id: string): Record<string, unknown> {
+    return { id, time: { created: 1, updated: 2 }, location: { directory: CWD }, title: 'T' }
+  }
+
+  /** Answers a request, ahead of the routes set before. */
+  on(method: string, path: RegExp, answer: Route): void {
+    this.routes.unshift({ method, path, answer })
+  }
+
+  readonly api: ServerApi = {
+    request: async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+      const sent = { method, path, body }
+      this.sent.push(sent)
+      const route = this.routes.find((item) => item.method === method && item.path.test(path))
+      return (route ? route.answer(sent) : undefined) as T
+    },
+    events: (onEvent, signal) =>
+      new Promise<void>((resolve) => {
+        this.streams++
+        this.emit = onEvent
+        this.end = resolve
+        signal.addEventListener('abort', () => resolve(), { once: true })
+        queueMicrotask(() => onEvent({ type: 'server.connected', data: {} }))
+      }),
+  }
+
+  push(...events: ServerEvent[]): void {
+    for (const event of events) this.emit?.(event)
+  }
+
+  /** Ends the stream, as a server that dropped it does. */
+  drop(): void {
+    this.emit = null
+    this.end?.()
+  }
+
+  posts(path: RegExp): Sent[] {
+    return this.sent.filter((sent) => sent.method !== 'GET' && path.test(sent.path))
   }
 }
