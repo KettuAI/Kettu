@@ -130,6 +130,7 @@ export function PluginInstalledRow({ plugin }: { plugin: InstalledKettuPlugin })
     publisher(plugin),
     contents.version,
     t('plugin.row.items', { count }),
+    plugin.skipped?.length ? t('plugin.row.skipped', { count: plugin.skipped.length }) : null,
     t('listing.everyAgent'),
     plugin.enabled ? null : t('installed.off'),
   ].filter((fact): fact is string => !!fact)
@@ -550,6 +551,11 @@ export function PluginPage({ id, back }: { id: string; tab: MarketplaceTab; back
           <span>{t('plugin.row.updateError', { error: plugin.updateError })}</span>
         </p>
       )}
+      {plugin.skipped?.map((skill) => (
+        <p key={skill.name} className="k-mkt-stale" role="status" data-selectable="">
+          <span>{t('plugin.row.skippedSkill', { name: skill.name, from: skill.from })}</span>
+        </p>
+      ))}
       {plugin.development && (
         <p className="k-mkt-section-note k-plug-devnote">
           {t('plugin.row.devNote', {

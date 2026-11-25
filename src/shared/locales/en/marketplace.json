@@ -395,7 +395,8 @@
       "replaceTitle": "Replace {{name}}",
       "fromFolder": "A folder on this computer",
       "dev": "Dev",
-      "failed": "Couldn’t install it: {{error}}"
+      "failed": "Couldn’t install it: {{error}}",
+      "skipsSkill": "Skips the skill {{name}}: a skill of that name is already added, from {{from}}."
     },
     "holds": {
       "heading": "What it adds",
@@ -525,7 +526,10 @@
       "items_one": "{{count}} item",
       "items_other": "{{count}} items",
       "devNote": "Added from {{path}}. Changes show after Reload.",
-      "updateError": "Couldn’t check for an update: {{error}}"
+      "updateError": "Couldn’t check for an update: {{error}}",
+      "skipped_one": "{{count}} skill skipped",
+      "skipped_other": "{{count}} skills skipped",
+      "skippedSkill": "The skill {{name}} wasn’t added: a skill of that name is already added, from {{from}}. Agents get that one."
     },
     "menu": {
       "reload": "Reload",

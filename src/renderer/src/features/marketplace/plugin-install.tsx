@@ -407,6 +407,12 @@ export function PluginConsent({
             </p>
           )}
           <AddsLines contents={contents} />
+          {plan.skipped?.map((skill) => (
+            <p key={skill.name} className="k-plug-quiet" data-selectable="">
+              <Icon icon={Alert02Icon} size={13} />
+              {t('plugin.install.skipsSkill', { name: skill.name, from: skill.from })}
+            </p>
+          ))}
           <ConnectsLines contents={contents} />
           {contents.script && (
             <Group heading={t('plugin.script.heading')} icon={SCRIPT_ICON}>

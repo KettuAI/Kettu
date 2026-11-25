@@ -414,8 +414,17 @@ export interface PluginPlan {
   contents: PluginContents
   /** The installed plugin this would replace, when the source is installed already. */
   replaces: string | null
-  /** Why it cannot be installed as it is, such as a skill name already taken; Install stays off. */
+  /** Why Install stays off; null from hosts that skip a skill whose name is taken. */
   blocked: string | null
+  /** Its skills left out, since another skill has the name; absent from older hosts. */
+  skipped?: PluginSkippedSkill[]
+}
+
+/** A skill of a plugin left out, since a skill Kettu keeps from elsewhere has its name. */
+export interface PluginSkippedSkill {
+  name: string
+  /** Where the skill of that name came from, as the skills list shows it. */
+  from: string
 }
 
 /** A newer version that waits for the user, since it adds a script or asks for more. */
@@ -452,6 +461,8 @@ export interface InstalledKettuPlugin {
   held: PluginHeldUpdate | null
   /** Why the last check for an update failed; null when it did not. */
   updateError: string | null
+  /** Its skills left out, since another skill has the name; absent from older hosts. */
+  skipped?: PluginSkippedSkill[]
   /** What each declared setting but a secret holds now; absent from older hosts. */
   values?: Record<string, PluginSettingValue>
   /** The secrets that are set, by key, never their values; absent from older hosts. */
