@@ -819,6 +819,8 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
   const sent: { method: string; params: Record<string, unknown> }[] = []
   let turn: Promise<void> = Promise.resolve()
   let during: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
+  let resuming: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
+  let stopReason: 'end_turn' | 'cancelled' = 'end_turn'
   const values = { model: 'gemini', thought_level: 'high', mode: 'default' }
   const options = () => [
     {
@@ -856,12 +858,19 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
     .onRequest(methods.agent.session.new, (ctx) => {
       sent.push({ method: 'new', params: ctx.params as never })
       const meta = ctx.params._meta as Record<string, unknown> | undefined
-      if (refusesFlag && meta?.['sh.kettu/session-flag']) throw new Error('agy exited')
+      if (refusesFlag && meta?.['sh.kettu/session-flag']) {
+        throw new RequestError(-32603, 'agy exited')
+      }
       return { sessionId: 's-1', configOptions: options() }
     })
-    .onRequest(methods.agent.session.resume, (ctx) => {
+    .onRequest(methods.agent.session.resume, async (ctx) => {
       sent.push({ method: 'resume', params: ctx.params as never })
+      const meta = ctx.params._meta as Record<string, unknown> | undefined
+      if (refusesFlag && meta?.['sh.kettu/session-flag']) {
+        throw new RequestError(-32603, 'agy exited')
+      }
       Object.assign(values, { model: 'gemini', thought_level: 'high', mode: 'default' })
+      await resuming?.(ctx.client, ctx.params.sessionId)
       return { configOptions: options() }
     })
     .onRequest(methods.agent.session.setConfigOption, (ctx) => {
@@ -874,7 +883,7 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
       sent.push({ method: 'prompt', params: ctx.params as never })
       await during?.(ctx.client, ctx.params.sessionId)
       await turn
-      return { stopReason: 'end_turn' as const }
+      return { stopReason }
     })
   const connection = AcpConnection.connect(inProcessTransport(app), {
     traffic: () => {},
@@ -892,7 +901,21 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
   const send = (run: (client: AgentContext, sessionId: string) => Promise<void>) => {
     during = run
   }
-  return { connection, sent, hold, send, methods: () => sent.map((item) => item.method) }
+  const onResume = (run: (client: AgentContext, sessionId: string) => Promise<void>) => {
+    resuming = run
+  }
+  const setStopReason = (reason: 'end_turn' | 'cancelled') => {
+    stopReason = reason
+  }
+  return {
+    connection,
+    sent,
+    hold,
+    send,
+    onResume,
+    setStopReason,
+    methods: () => sent.map((item) => item.method),
+  }
 }
 
 const FULL = 'dangerously-skip-permissions'
@@ -1012,24 +1035,165 @@ describe("agy's full access", () => {
     await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
     config = await connection.setConfigOption(sessionId, 'mode', FULL)
     expect(valueOf(config, 'mode')).toBe('default')
+    expect(config.find((option) => option.id === 'mode')?.pending).toEqual({
+      value: FULL,
+      wait: 'turn',
+    })
     expect(agy.methods()).toEqual(['prompt'])
     release()
     await turn
     // The restart came before the turn's end reached the session.
     expect(agy.methods()).toEqual(['prompt', 'resume'])
-    expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL)
+    const settled = target.context().thread.session.config.find((option) => option.id === 'mode')!
+    expect(settled.value).toBe(FULL)
+    expect(settled.pending).toBeUndefined()
     sent.length = 0
 
     release = agy.hold()
     turn = connection.prompt(sessionId, [{ type: 'text', text: 'go on' }])
     await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
-    await connection.setConfigOption(sessionId, 'mode', 'accept-edits')
-    await connection.setConfigOption(sessionId, 'mode', FULL)
+    const leaving = await connection.setConfigOption(sessionId, 'mode', 'accept-edits')
+    expect(leaving.find((option) => option.id === 'mode')?.pending).toEqual({
+      value: 'accept-edits',
+      wait: 'turn',
+    })
+    const cancelled = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(cancelled.find((option) => option.id === 'mode')?.pending).toBeUndefined()
     release()
     await turn
     // Back to where it was: nothing restarts.
     expect(agy.methods()).toEqual(['prompt'])
     expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL)
+    connection.close()
+  })
+
+  it('cancels a pending full access switch without resending the current mode', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    await connection.setConfigOption(sessionId, 'mode', 'auto')
+    sent.length = 0
+
+    const release = agy.hold()
+    const turn = connection.prompt(sessionId, [{ type: 'text', text: 'work' }])
+    await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
+
+    const queued = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(queued.find((option) => option.id === 'mode')?.pending).toEqual({
+      value: FULL,
+      wait: 'turn',
+    })
+    const undone = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(undone.find((option) => option.id === 'mode')?.value).toBe('auto')
+    expect(undone.find((option) => option.id === 'mode')?.pending).toBeUndefined()
+    expect(agy.methods()).toEqual(['prompt'])
+
+    release()
+    await turn
+    expect(agy.methods()).toEqual(['prompt'])
+    connection.close()
+  })
+
+  it('resumes a session directly with full access when requested', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { config } = await connection.resumeSession('s-1', '/repo', { fullAccess: true })
+    expect(agy.methods()).toEqual(['resume'])
+    expect((sent[0]!.params._meta as Record<string, unknown>)['sh.kettu/session-flag']).toBe(true)
+    expect(valueOf(config, 'mode')).toBe(FULL)
+    connection.close()
+  })
+
+  it('keeps the previous mode with restarting state while agy pushes default during resume', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const thread = recording()
+    const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    thread.target.apply({
+      patches: [{ op: 'session.update', changes: { config: auto } }],
+      effects: [],
+    })
+    connection.register(sessionId, thread.target)
+
+    const seenDuringResume: { value: unknown; pending: unknown }[] = []
+    const origApply = thread.target.apply
+    thread.target.apply = (output) => {
+      origApply(output)
+      const mode = thread.target
+        .context()
+        .thread.session.config.find((option) => option.id === 'mode')
+      if (mode) seenDuringResume.push({ value: mode.value, pending: mode.pending })
+    }
+    agy.onResume(async (client, id) => {
+      // 复现 agy 1.5.16 真实行为：session/resume 返回前会推送一次临时的 default 模式更新。
+      await client.notify(
+        methods.client.session.update,
+        update(id, { sessionUpdate: 'config_option_update', configOptions: [agyModes('default')] }),
+      )
+    })
+
+    const switched = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(valueOf(switched, 'mode')).toBe(FULL)
+    expect(switched.find((option) => option.id === 'mode')?.pending).toBeUndefined()
+    // 整个重启过程中既向 UI 推送了 restarting，又没有被临时 default 覆盖掉原模式 auto。
+    expect(seenDuringResume).toEqual([
+      { value: 'auto', pending: { value: FULL, wait: 'restarting' } },
+      { value: 'auto', pending: { value: FULL, wait: 'restarting' } },
+    ])
+    connection.close()
+  })
+
+  it('clears pending state and rolls back cleanly when restarting for full access fails', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions', true)
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    target.apply({ patches: [{ op: 'session.update', changes: { config: auto } }], effects: [] })
+    connection.register(sessionId, target)
+
+    await expect(connection.setConfigOption(sessionId, 'mode', FULL)).rejects.toThrow(/agy exited/)
+    const mode = target.context().thread.session.config.find((option) => option.id === 'mode')!
+    expect(mode.value).toBe('auto')
+    expect(mode.pending).toBeUndefined()
+    connection.close()
+  })
+
+  it('does not block full access switch on a non-daemon command left open by a cancelled turn', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    target.apply({ patches: [{ op: 'session.update', changes: { config: auto } }], effects: [] })
+    connection.register(sessionId, target)
+    agy.setStopReason('cancelled')
+    agy.send(async (client, id) => {
+      // 普通非 IsDaemon 命令在回合被取消前仍为 in_progress。
+      await client.notify(
+        methods.client.session.update,
+        update(id, {
+          ...daemon('in_progress'),
+          toolCallId: 'call-normal',
+          rawInput: { CommandLine: 'sleep 30', WaitMsBeforeAsync: 5000, toolSummary: 'Sleep' },
+        }),
+      )
+    })
+
+    await connection.prompt(sessionId, text('run something'))
+    sent.length = 0
+
+    // 取消后的回合结束不应再被该普通命令当成常驻后台任务阻塞，直接进入 Full access。
+    const switched = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(valueOf(switched, 'mode')).toBe(FULL)
+    expect(switched.find((option) => option.id === 'mode')?.pending).toBeUndefined()
+    expect(agy.methods()).toEqual(['resume'])
     connection.close()
   })
 
@@ -1398,12 +1562,58 @@ describe("agy's commands that outlive their turn", () => {
 
     config = await connection.setConfigOption(sessionId, 'mode', FULL)
     expect(valueOf(config, 'mode')).toBe('default')
+    expect(config.find((option) => option.id === 'mode')?.pending).toEqual({
+      value: FULL,
+      wait: 'background',
+    })
     expect(agy.methods()).toEqual([])
     await client.notify(methods.client.session.update, update(sessionId, daemon('failed')))
     await vi.waitFor(() =>
       expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL),
     )
+    expect(
+      target.context().thread.session.config.find((option) => option.id === 'mode')?.pending,
+    ).toBeUndefined()
     expect(agy.methods()).toEqual(['resume'])
+    connection.close()
+  })
+
+  it('updates pending reason from turn to background when a daemon outlives the turn', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    let config = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    let client!: AgentContext
+    agy.send(async (agent, id) => {
+      client = agent
+      await agent.notify(methods.client.session.update, update(id, daemon('in_progress')))
+    })
+
+    const release = agy.hold()
+    const turn = connection.prompt(sessionId, text('serve it'))
+    await vi.waitFor(() => expect(client).toBeDefined())
+
+    config = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(config.find((option) => option.id === 'mode')?.pending).toEqual({
+      value: FULL,
+      wait: 'turn',
+    })
+
+    release()
+    await turn
+    // 回合已结束但常驻后台命令仍在跑，等待原因自动从 turn 更新为 background。
+    expect(
+      target.context().thread.session.config.find((option) => option.id === 'mode')?.pending,
+    ).toEqual({ value: FULL, wait: 'background' })
+
+    await client.notify(methods.client.session.update, update(sessionId, daemon('failed')))
+    await vi.waitFor(() =>
+      expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL),
+    )
     connection.close()
   })
 })

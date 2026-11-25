@@ -26,7 +26,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
 import type { ContextEstimates } from '@shared/context'
-import type { AgentId, ConfigOption, PermissionOption } from '@shared/thread'
+import type { AgentId, ConfigOption, PendingConfig, PermissionOption } from '@shared/thread'
 import {
   AgentRequestError,
   optionAnswer,
@@ -323,8 +323,10 @@ interface AgyAccess {
   full: boolean
   /** Its options as Kettu last showed them, Full access among them. */
   config: ConfigOption[]
-  /** The mode chosen while a turn ran that needs a restart, made once the turn ends. */
+  /** 等待当前回合或后台任务结束后切换到的目标模式。 */
   pending: string | null
+  /** 正在重启 agy 进程切换到的目标模式。 */
+  switching: string | null
   /** The restart under way, which the session's next requests wait for. */
   restarting: Promise<void> | null
 }
@@ -973,14 +975,28 @@ export class AcpConnection implements AgentConnection {
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
     const meta = this.meta(options)
-    const response = await this.call(() =>
-      this.connection.agent.request(methods.agent.session.resume, {
-        sessionId,
-        cwd,
-        mcpServers: mcpServers(options.mcpServers),
-        ...(meta ? { _meta: meta } : {}),
-      }),
-    )
+    const open = (flagged: boolean) => {
+      const sent = flagged ? { ...meta, [SESSION_FLAG_META]: true } : meta
+      return this.call(() =>
+        this.connection.agent.request(methods.agent.session.resume, {
+          sessionId,
+          cwd,
+          mcpServers: mcpServers(options.mcpServers),
+          ...(sent ? { _meta: sent } : {}),
+        }),
+      )
+    }
+    let full = this.fullAccess && options.fullAccess === true && !options.hidden
+    let response: Awaited<ReturnType<typeof open>>
+    try {
+      response = await open(full)
+    } catch (error) {
+      if (!full) throw error
+      // 带完全访问参数恢复失败时回退为普通恢复，由后续模式切换逻辑再处理。
+      this.hooks.log('warn', `agy did not resume with full access: ${(error as Error).message}`)
+      full = false
+      response = await open(false)
+    }
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, options)
     this.openedAgy(sessionId, cwd, options)
@@ -993,6 +1009,7 @@ export class AcpConnection implements AgentConnection {
         cwd,
         options,
         this.config(response.configOptions, response.modes),
+        full,
       ),
     }
   }
@@ -1084,9 +1101,10 @@ export class AcpConnection implements AgentConnection {
       this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
     }
     this.prompting.add(sessionId)
-    await this.agyMetrics?.preparePrompt(sessionId)
-    let answer: ChainAnswer
+    let answer: ChainAnswer | null = null
+    let failed = false
     try {
+      await this.agyMetrics?.preparePrompt(sessionId)
       const sent = this.sendPrompt(sessionId, prompt)
       if (this.agy && steersAgy(this.version)) {
         const chain = new PromptChain(sent)
@@ -1104,17 +1122,21 @@ export class AcpConnection implements AgentConnection {
           models: mapModelUsage(response._meta),
         }
       }
+    } catch (error) {
+      failed = true
+      throw error
     } finally {
       this.prompting.delete(sessionId)
-      this.carryCommands(sessionId)
+      const aborted = failed || answer?.response.stopReason === 'cancelled'
+      this.carryCommands(sessionId, aborted)
       this.subagents?.turnEnded(sessionId)
       await this.switchPending(sessionId)
     }
-    const { response } = answer
+    const { response, tokens, models } = answer!
     const result: PromptResult = {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
-      tokens: answer.tokens,
-      models: answer.models,
+      tokens,
+      models,
     }
     this.agyMetrics?.onPromptEnd(sessionId, result.stopReason)
     if (planning && result.stopReason === 'end_turn') await this.showPlan(sessionId)
@@ -1154,10 +1176,10 @@ export class AcpConnection implements AgentConnection {
   }
 
   /** The turn ended: the commands still running carry on, on the session board. */
-  private carryCommands(sessionId: string): void {
+  private carryCommands(sessionId: string, aborted = false): void {
     const commands = this.agyCommands.get(sessionId)
     const target = this.targets.get(sessionId)
-    if (!commands || !target || !commands.turnEnded()) return
+    if (!commands || !target || !commands.turnEnded(aborted)) return
     this.showCommands(target, commands)
   }
 
@@ -1383,7 +1405,7 @@ export class AcpConnection implements AgentConnection {
     }
     const config = await this.requestConfig(sessionId, optionId, value)
     if (!access) return config
-    access.config = withFullAccess(config, access.full)
+    access.config = withFullAccess(config, access.full, this.pendingState(sessionId, access))
     return access.config
   }
 
@@ -1405,6 +1427,18 @@ export class AcpConnection implements AgentConnection {
 
   // agy's full access.
 
+  /** 计算当前会话在完全访问切换上的挂起/重启状态。 */
+  private pendingState(sessionId: string, access: AgyAccess): PendingConfig | null {
+    if (access.switching !== null) return { value: access.switching, wait: 'restarting' }
+    if (access.pending !== null) {
+      return {
+        value: access.pending,
+        wait: this.prompting.has(sessionId) ? 'turn' : 'background',
+      }
+    }
+    return null
+  }
+
   /**
    * Notes an agy session that was just opened, its process started with the flag when `full`, and
    * returns its options with Full access among them.
@@ -1424,27 +1458,41 @@ export class AcpConnection implements AgentConnection {
       full,
       config: shown,
       pending: null,
+      switching: null,
       restarting: null,
     })
     return shown
   }
 
-  /** What a session update sets of agy's options, Full access among them and chosen while on. */
+  /** 将 agy 上报的配置更新合并上完全访问选项与挂起状态，避免覆盖正在切换中的 UI 显示。 */
   private withAccess(sessionId: string, out: MapperOutput): MapperOutput {
     const access = this.agyAccess.get(sessionId)
     if (!access) return out
+    const pending = this.pendingState(sessionId, access)
     for (const patch of out.patches) {
       if (patch.op !== 'session.update' || !patch.changes.config) continue
-      access.config = withFullAccess(patch.changes.config, access.full)
+      // 重启进程期间 agy 会在 session/resume 完成前推送 default 模式，保持重启前模式值与 restarting 提示。
+      if (access.switching !== null) {
+        const keptMode = currentMode(access.config)
+        const stabilized =
+          keptMode !== null && !access.full
+            ? patch.changes.config.map((option) =>
+                option.id === MODE_OPTION && option.type === 'select'
+                  ? { ...option, value: keptMode }
+                  : option,
+              )
+            : patch.changes.config
+        patch.changes.config = withFullAccess(stabilized, access.full, pending)
+        continue
+      }
+      access.config = withFullAccess(patch.changes.config, access.full, pending)
       patch.changes.config = access.config
     }
     return out
   }
 
   /**
-   * A mode chosen in a session that offers full access: entering or leaving it restarts the
-   * session's process, at once between turns and once the turn ends during one. Null for any
-   * other mode, which agy sets itself, and which replaces a restart still waiting.
+   * 处理支持完全访问的 agy 会话模式切换：空闲时立即重启进程，有回合或后台任务时挂起并返回待切换状态。
    */
   private async switchAccess(
     sessionId: string,
@@ -1453,12 +1501,27 @@ export class AcpConnection implements AgentConnection {
   ): Promise<ConfigOption[] | null> {
     const full = mode === FULL_ACCESS
     if (full === access.full) {
+      const hadPending = access.pending !== null
       access.pending = null
-      return full ? access.config : null
+      if (full) {
+        access.config = withFullAccess(access.config, true)
+        return access.config
+      }
+      // 取消之前挂起的完全访问切换（重新选中当前已生效模式）时直接清掉 pending，无需再发 RPC。
+      if (hadPending && currentMode(access.config) === mode) {
+        access.config = withFullAccess(access.config, false)
+        return access.config
+      }
+      return null
     }
-    // A restart would stop the turn, and the commands that outlived theirs.
+    // 重启会中断当前回合以及跨回合运行的后台命令或子智能体，挂起并向界面同步等待原因。
     if (this.prompting.has(sessionId) || this.runsCommands(sessionId)) {
       access.pending = mode
+      access.config = withFullAccess(
+        access.config,
+        access.full,
+        this.pendingState(sessionId, access),
+      )
       return access.config
     }
     access.pending = null
@@ -1466,13 +1529,24 @@ export class AcpConnection implements AgentConnection {
   }
 
   /**
-   * The switch chosen while the turn or a command ran, now that nothing does; a failure goes in
-   * the thread.
+   * 在回合或后台任务结束后执行挂起的模式切换；若仍被后台任务阻塞则刷新等待原因，失败时回滚并通知。
    */
   private async switchPending(sessionId: string): Promise<void> {
     const access = this.agyAccess.get(sessionId)
     const mode = access?.pending
-    if (!access || !mode || this.prompting.has(sessionId) || this.runsCommands(sessionId)) return
+    if (!access || !mode) return
+    if (this.prompting.has(sessionId) || this.runsCommands(sessionId)) {
+      const next = this.pendingState(sessionId, access)
+      const prev = access.config.find((option) => option.id === MODE_OPTION)?.pending
+      if (next && (prev?.wait !== next.wait || prev?.value !== next.value)) {
+        access.config = withFullAccess(access.config, access.full, next)
+        this.targets.get(sessionId)?.apply({
+          patches: [{ op: 'session.update', changes: { config: access.config } }],
+          effects: [],
+        })
+      }
+      return
+    }
     access.pending = null
     const full = mode === FULL_ACCESS
     if (full === access.full || this.isClosed) return
@@ -1488,7 +1562,10 @@ export class AcpConnection implements AgentConnection {
       const target = this.targets.get(sessionId)
       if (!target) return
       const ctx = target.context()
-      const out: MapperOutput = { patches: [], effects: [] }
+      const out: MapperOutput = {
+        patches: [{ op: 'session.update', changes: { config: access.config } }],
+        effects: [],
+      }
       addEntry(ctx, out, {
         kind: 'notice',
         id: ctx.nextId(),
@@ -1504,8 +1581,7 @@ export class AcpConnection implements AgentConnection {
   }
 
   /**
-   * Starts the session's process again, with agy's flag for full access or without it in `mode`,
-   * and sets the session's values again. A failure starts it again as it was before it throws.
+   * 重启 agy 进程以进入或退出完全访问并恢复其余配置；重启期间推送 restarting 提示，失败时回滚。
    */
   private async restartAgy(
     sessionId: string,
@@ -1513,20 +1589,49 @@ export class AcpConnection implements AgentConnection {
     full: boolean,
     mode: string,
   ): Promise<ConfigOption[]> {
-    const before = { full: access.full, config: access.config }
+    const before = { full: access.full, config: withFullAccess(access.config, access.full) }
     const was = currentMode(before.config)
-    const run = this.resumeAgy(sessionId, access, full, mode, before.config).catch(
-      async (error: unknown) => {
-        await this.resumeAgy(
-          sessionId,
-          access,
-          before.full,
-          was === null || was === FULL_ACCESS ? HELD_MODE : was,
-          before.config,
-        ).catch(() => {})
+    access.switching = mode
+    this.targets.get(sessionId)?.apply({
+      patches: [
+        {
+          op: 'session.update',
+          changes: {
+            config: withFullAccess(before.config, before.full, {
+              value: mode,
+              wait: 'restarting',
+            }),
+          },
+        },
+      ],
+      effects: [],
+    })
+    const run = this.resumeAgy(sessionId, access, full, mode, before.config)
+      .then((config) => {
+        access.switching = null
+        return config
+      })
+      .catch(async (error: unknown) => {
+        try {
+          access.config = await this.resumeAgy(
+            sessionId,
+            access,
+            before.full,
+            was === null || was === FULL_ACCESS ? HELD_MODE : was,
+            before.config,
+          )
+        } catch {
+          access.full = before.full
+          access.config = before.config
+        } finally {
+          access.switching = null
+        }
+        this.targets.get(sessionId)?.apply({
+          patches: [{ op: 'session.update', changes: { config: access.config } }],
+          effects: [],
+        })
         throw this.toError(error)
-      },
-    )
+      })
     const restarting = run.then(
       () => {},
       () => {},

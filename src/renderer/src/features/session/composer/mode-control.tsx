@@ -14,12 +14,26 @@ export function useModeControl(option: SelectOption | undefined, onSelect: Selec
   const { t } = useTranslation('composer')
   const [value, pick] = useSelectPick(option, onSelect)
   if (!option) return { approvalModes: [] as ComposerMode[] }
+  const pending = option.pending
+  const pendingHint = pending
+    ? pending.wait === 'restarting'
+      ? t('controls.modeSwitchingShort')
+      : pending.wait === 'background'
+        ? t('controls.modePendingBackgroundShort')
+        : t('controls.modePendingTurnShort')
+    : null
   const approvalModes: ComposerMode[] = option.choices.map((choice, index) => {
     const look = modeLook(choice.value)
+    const description =
+      pending && choice.value === pending.value && pendingHint
+        ? choice.description
+          ? `${pendingHint} · ${choice.description}`
+          : pendingHint
+        : (choice.description ?? '')
     return {
       id: choice.value,
       label: choice.name,
-      description: choice.description ?? '',
+      description,
       icon: <Glyph icon={MODE_GLYPH[look]} />,
       ...(look === 'full' ? { tone: 'alert' as const } : {}),
       ...(index < 9 ? { shortcut: String(index + 1) } : {}),

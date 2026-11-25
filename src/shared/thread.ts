@@ -293,6 +293,15 @@ export interface SubagentInfo {
   model?: string
 }
 
+/** 挂起的配置切换正在等待什么结束，或已在重启切换中。 */
+export type PendingConfigWait = 'turn' | 'background' | 'restarting'
+
+/** 配置选项计划切换到的目标值（仅内存态，不持久化）。 */
+export interface PendingConfig {
+  value: string
+  wait: PendingConfigWait
+}
+
 export interface ConfigOption {
   id: string
   name: string
@@ -317,6 +326,8 @@ export interface ConfigOption {
   defaultValue?: boolean | null
   /** Show the option's name beside the model while it is enabled. */
   indicator?: boolean
+  /** 目标切换已预约但尚未生效（例如需等当前回合或后台任务结束后重启进程）。 */
+  pending?: PendingConfig
 }
 
 export function booleanConfigValue(option: ConfigOption): boolean | undefined {

@@ -8,23 +8,37 @@ export type Select = (optionId: string, value: string | boolean) => Promise<bool
 const SETTLE_MS = 1500
 
 /**
- * A select option's value, showing the user's pick at once. The agent's new value arrives with the
- * session's next patch, after the request has settled, so the pick stands until that value lands,
- * the request fails or `SETTLE_MS` passes.
+ * 下拉选项当前显示值：点击后立即乐观展示所选值，待服务端真实值生效、确认挂起、请求失败或超时后再同步。
  */
 export function useSelectPick(
   option: ConfigOption | undefined,
   onSelect: Select,
 ): [string | undefined, (value: string) => void] {
   const actual = option === undefined ? undefined : String(option.value)
+  const serverPending = option?.pending?.value ?? null
   const [pending, setPending] = useState<string | null>(null)
+  const [seenPending, setSeenPending] = useState<string | null>(serverPending)
   if (pending !== null && pending === actual) setPending(null)
+  if (seenPending !== serverPending) {
+    setSeenPending(serverPending)
+    // 服务端已明确接受为挂起/重启态，清掉本地乐观态，由提示条展示目标模式、按钮继续显示当前实际模式。
+    if (pending !== null && pending === serverPending) setPending(null)
+  }
   const shown = pending ?? actual
   const pick = (value: string) => {
-    if (!option || value === shown) return
-    setPending(value)
+    // 若存在服务端挂起态，重新点击当前已生效模式用于取消挂起，不能被拦截。
+    if (!option || (value === shown && serverPending === null)) return
     const clear = () => setPending((p) => (p === value ? null : p))
+    // 再次点击已经在挂起中的同一目标值时，短暂同步一次以重置底层组件内部状态，无需重复发请求。
+    if (serverPending === value) {
+      setPending(value)
+      setTimeout(clear, 0)
+      return
+    }
+    const optimistic = value !== actual
+    if (optimistic) setPending(value)
     void onSelect(option.id, value).then((ok) => {
+      if (!optimistic) return
       if (ok) setTimeout(clear, SETTLE_MS)
       else clear()
     })

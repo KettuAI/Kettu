@@ -310,7 +310,23 @@ export class AgySubagents {
     this.reading = true
     try {
       const rows = await this.read(parents)
-      for (const row of rows ?? []) await this.see(row, false)
+      if (rows !== null) {
+        const seen = new Set(rows.map((row) => row.id))
+        for (const row of rows) await this.see(row, false)
+        // 若某个先前运行中的子智能体记录已从存储中消失，及时结束其运行态以免永久阻塞模式切换。
+        const queried = new Set(parents)
+        for (const [id, known] of this.known) {
+          if (!known.running || !queried.has(known.parentId) || seen.has(id)) continue
+          known.running = false
+          this.host.target(known.parentId)?.apply(
+            subagent(id, {
+              state: { kind: 'idle', stopReason: 'cancelled', error: null, tokens: null },
+            }),
+          )
+          const root = this.rootOf(id)
+          if (!this.running(root)) this.host.settled(root)
+        }
+      }
     } finally {
       this.reading = false
     }
@@ -343,11 +359,11 @@ export class AgySubagents {
 
   /** Shows a child the store has, or the change of its run since it was shown. */
   private async see(row: AgyChild, replay: boolean): Promise<void> {
-    const running = RUNNING.has(row.status)
-    // A child agy has not given a status yet is read again.
-    if (!running && row.status !== IDLE) return
+    const running = !row.killed && RUNNING.has(row.status)
     const known = this.known.get(row.id)
     if (known) {
+      // 已跟踪的子智能体只要不再处于运行态（无论是 IDLE、killed 还是其他非空终态），都应解除运行标记。
+      if (!running && row.status === '' && !row.killed) return
       if (known.running === running || replay) return
       known.running = running
       this.host
@@ -357,6 +373,8 @@ export class AgySubagents {
       if (!running && !this.running(this.rootOf(row.id))) this.host.settled(this.rootOf(row.id))
       return
     }
+    // A child agy has not given a status yet is read again.
+    if (!running && row.status !== IDLE) return
     const parent = this.host.target(row.parentId)
     if (!parent) return
     const call = this.startOf(row)

@@ -316,6 +316,32 @@ describe('the thread database', () => {
     expect(storedSession(view({})).context).toBeNull()
   })
 
+  it('strips transient pending mode switches from stored config options', () => {
+    const saved = storedSession(
+      view({
+        config: [
+          {
+            id: 'mode',
+            name: 'Mode',
+            category: 'mode',
+            type: 'select',
+            value: 'auto',
+            pending: { value: 'dangerously-skip-permissions', wait: 'turn' },
+          },
+        ],
+      }),
+    )
+    expect(saved.config).toEqual([
+      {
+        id: 'mode',
+        name: 'Mode',
+        category: 'mode',
+        type: 'select',
+        value: 'auto',
+      },
+    ])
+  })
+
   it('reads everything from a position with tail', () => {
     const db = open()
     db.write('s1', { head, entries: turns(3, 1) }) // 12 entries
