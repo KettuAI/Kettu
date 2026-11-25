@@ -554,6 +554,7 @@ export const Thread = memo(function Thread({
                       toolIds={item.toolIds}
                       endId={item.endId}
                       latest={item.latest}
+                      still={item.still ?? false}
                     />
                   ) : item.type === 'run' ? (
                     <RunGroup

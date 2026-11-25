@@ -93,7 +93,7 @@ function State({
     return (
       <span className="flex min-w-0 items-center gap-1.5">
         <BackgroundDots />
-        <span className="truncate tabular-nums">
+        <span className="truncate">
           <span className="font-medium text-secondary">{t('card.background')}</span>{' '}
           {backgroundText(t, status.background)}
         </span>

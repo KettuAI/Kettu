@@ -45,7 +45,7 @@ export const StillRunningLine = memo(function StillRunningLine({
     toggleBoard(sessionId, true)
   }
   return (
-    <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground tabular">
+    <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
       <HugeiconsIcon
         icon={DashboardSquare02Icon}
         strokeWidth={1.9}
