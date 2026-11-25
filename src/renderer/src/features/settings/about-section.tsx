@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { GithubIcon, NewTwitterIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { GithubIcon, NewTwitterIcon, Tick02Icon, WechatIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
@@ -32,6 +32,9 @@ const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
 const NEW_ISSUE_URL = `${SOURCE_URL}/issues/new/choose`
 const CONTACT_EMAIL = 'hello@kettu.sh'
 const X_URL = 'https://x.com/KettuAI'
+// The group's QR code expires weekly, so it lives on the website, replaced there without a release.
+const WECHAT_URL = 'https://www.kettu.sh/community/'
+const WECHAT_URL_ZH = 'https://www.kettu.sh/zh-CN/community/'
 
 /**
  * The top of the About page: its title, then a card with Kettu's icon, name, line, version and
@@ -331,6 +334,18 @@ export function FollowOnX() {
   return (
     <LinkButton href={X_URL} icon={<Icon icon={NewTwitterIcon} size={14} />}>
       {t('about.x.open')}
+    </LinkButton>
+  )
+}
+
+export function JoinWeChat() {
+  const { t, i18n } = useTranslation('settings')
+  return (
+    <LinkButton
+      href={i18n.language.startsWith('zh') ? WECHAT_URL_ZH : WECHAT_URL}
+      icon={<Icon icon={WechatIcon} size={14} />}
+    >
+      {t('about.wechat.open')}
     </LinkButton>
   )
 }

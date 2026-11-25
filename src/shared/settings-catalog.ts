@@ -1876,6 +1876,16 @@ const ENTRIES = {
     part: 'host',
     kind: 'action',
   },
+  'about.wechat': {
+    section: 'about',
+    row: 'wechat',
+    group: 'about.groups.contact',
+    name: 'about.wechat.name',
+    description: 'about.wechat.description',
+    keywords: 'about.wechat.keywords',
+    part: 'host',
+    kind: 'action',
+  },
   'about.github': {
     section: 'about',
     row: 'github',
