@@ -82,10 +82,10 @@
     "vsBefore_other": "<b>{{change}}</b> vs previous {{count}} days",
     "yesterdayUntil": "Yesterday until {{time}}",
     "tokensPer": {
-      "hour_one": "<b>{{value}}</b> an hour · used in {{active}} of {{count}} hour",
-      "hour_other": "<b>{{value}}</b> an hour · used in {{active}} of {{count}} hours",
-      "day_one": "<b>{{value}}</b> a day · used on {{active}} of {{count}} day",
-      "day_other": "<b>{{value}}</b> a day · used on {{active}} of {{count}} days"
+      "hour_one": "<b>{{value}}</b> an hour in {{active}} of {{count}} hour",
+      "hour_other": "<b>{{value}}</b> an hour in {{active}} of {{count}} hours",
+      "day_one": "<b>{{value}}</b> a day on {{active}} of {{count}} day",
+      "day_other": "<b>{{value}}</b> a day on {{active}} of {{count}} days"
     },
     "requestsPer": {
       "requests": {

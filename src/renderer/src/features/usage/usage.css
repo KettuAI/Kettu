@@ -1415,6 +1415,10 @@ button.k-u-legend__item:hover {
   .k-u-plans[data-cols='4'] {
     --cols: 2;
   }
+  /* Two to a row: the resets ahead take a row of their own rather than leave half of one blank */
+  .k-u-plans[data-cols='4'] > .k-u-resets:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 /* Too narrow for one line: the title, then the controls under it from the left, in as many rows as
    they need, with no rules to start a row */
@@ -1446,6 +1450,9 @@ button.k-u-legend__item:hover {
   }
   .k-u-plans[data-cols='3'] {
     --cols: 2;
+  }
+  .k-u-plans[data-cols='3'] > .k-u-resets:nth-child(odd) {
+    grid-column: 1 / -1;
   }
   .k-u__body > :is(.k-u-span-3, .k-u-span-4, .k-u-span-8) {
     grid-column: span 12;

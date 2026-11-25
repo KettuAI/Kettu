@@ -86,7 +86,7 @@ export function BreakdownCard({
   const grouping = groupings.includes(chosen) ? chosen : 'model'
   const [hover, setHover] = useState<{ key: string; at: DOMRect | null } | null>(null)
   const counted = kind === 'requests' || kind === 'turns'
-  const format = kind === 'cost' ? usd : count
+  const format = kind === 'cost' && grouping !== 'type' ? usd : count
 
   const { lines, all } = useMemo((): { lines: Line[]; all: number } => {
     if (grouping === 'type') {

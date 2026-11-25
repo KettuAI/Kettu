@@ -80,8 +80,8 @@
     "vsBefore_other": "比之前 {{count}} 天 <b>{{change}}</b>",
     "yesterdayUntil": "昨天截至 {{time}}",
     "tokensPer": {
-      "hour_other": "每小时 <b>{{value}}</b> · {{count}} 小时中有 {{active}} 小时有用量",
-      "day_other": "每天 <b>{{value}}</b> · {{count}} 天中有 {{active}} 天有用量"
+      "hour_other": "每小时 <b>{{value}}</b> · 用了 {{active}}/{{count}} 小时",
+      "day_other": "每天 <b>{{value}}</b> · 用了 {{active}}/{{count}} 天"
     },
     "requestsPer": {
       "requests": {
