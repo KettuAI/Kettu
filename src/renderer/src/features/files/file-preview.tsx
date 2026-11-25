@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -79,6 +80,7 @@ import {
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
+import { PreviewFileContext } from './file-refs'
 import { PathCopy, PreviewEditToggle } from './file-header'
 import { mentionPaths } from './mention-lines'
 import { copyPaths } from './operations'
@@ -483,6 +485,9 @@ function Body({
         key={`${projectPath}\0${panel}\0${file.path}`}
         viewKey={`${projectPath}\0${panel}\0${file.path}`}
         text={editedText(projectPath, file) ?? content.text}
+        // The agent's own folder is read without media, so its images stay text.
+        projectPath={file.agent ? null : projectPath}
+        path={file.path}
       />
     )
   }
@@ -495,8 +500,20 @@ function Body({
 
 const markdownScroll = new Map<string, number>()
 
-function RenderedMarkdown({ viewKey, text }: { viewKey: string; text: string }) {
+function RenderedMarkdown({
+  viewKey,
+  text,
+  projectPath,
+  path,
+}: {
+  viewKey: string
+  text: string
+  /** The project the file is in, whose images it shows; null for a file outside one. */
+  projectPath: string | null
+  path: string
+}) {
   const box = useRef<HTMLDivElement>(null)
+  const preview = useMemo(() => (projectPath ? { projectPath, path } : null), [projectPath, path])
   useLayoutEffect(() => {
     if (box.current) box.current.scrollTop = markdownScroll.get(viewKey) ?? 0
   }, [viewKey])
@@ -507,7 +524,9 @@ function RenderedMarkdown({ viewKey, text }: { viewKey: string; text: string }) 
       data-selectable=""
       onScroll={(event) => markdownScroll.set(viewKey, event.currentTarget.scrollTop)}
     >
-      <Markdown markdown={text} className="mx-auto max-w-[50em]" />
+      <PreviewFileContext value={preview}>
+        <Markdown markdown={text} className="mx-auto max-w-[50em]" />
+      </PreviewFileContext>
     </div>
   )
 }
