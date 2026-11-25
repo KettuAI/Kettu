@@ -2,7 +2,7 @@
 // The plugin's script only gives data, which the host checks; nothing here runs plugin code, and
 // a view that fails shows its own error without touching the window around it.
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Alert02Icon, ArrowLeft01Icon, ArrowReloadHorizontalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { PluginViewAction, PluginViewContent, PluginViewParams } from '@shared/plugin-views'
@@ -50,6 +50,8 @@ export interface PluginViewProps {
   params?: PluginViewParams
   /** Draws the context bar of a pane: what the view shows, Back and Refresh. On by default. */
   bar?: boolean
+  /** More tools at the end of the context bar, after Refresh. */
+  tools?: ReactNode
   className?: string
 }
 
@@ -66,6 +68,7 @@ function OpenView({
   viewId,
   params,
   bar = true,
+  tools,
   className,
 }: PluginViewProps & { params: PluginViewParams }) {
   const { t } = useTranslation(['plugin-views', 'common'])
@@ -118,6 +121,7 @@ function OpenView({
           >
             <Glyph icon={ArrowReloadHorizontalIcon} size={15} />
           </Button>
+          {tools}
         </div>
       )}
       <div className="kpv-scroll">

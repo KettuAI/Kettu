@@ -132,7 +132,7 @@
       "artifact": "Artifact",
       "plugins": "Plugins",
       "artifacts": "Artifacts",
-      "open": "Open",
+      "open": "Opened",
       "live": "In use",
       "off": {
         "terminal": "Off on this computer",

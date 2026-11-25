@@ -37,8 +37,9 @@ const GROUP = 'mt-1.25 border-t border-(--border-default) pt-1.25'
 
 /**
  * The list laid out as a menu card: an icon, a name and the picking letter in each row, with a
- * line between the groups, then the session's artifacts. A row that does not apply says why in
- * the letter's place, and a tab the row already holds says it is open.
+ * line between the groups, then the session's artifacts and the panes of the host's plugins. A
+ * row that does not apply says why in the letter's place, and a tab the row already holds says it
+ * is open.
  */
 export function SurfaceList({ panel, projectPath }: { panel: string; projectPath: string }) {
   const { t } = useTranslation('shell')
@@ -122,36 +123,9 @@ export function SurfaceList({ panel, projectPath }: { panel: string; projectPath
           ))}
         </div>
       ))}
-      {panes.length > 0 && (
-        <div role="group" aria-label={t('surfaces.list.plugins')} className={GROUP}>
-          <div className="px-2.25 pt-0.5 pb-1 text-hint text-(--text-tertiary)">
-            {t('surfaces.list.plugins')}
-          </div>
-          {panes.map((pane) => (
-            <button
-              key={`${pane.plugin.pluginId}/${pane.viewId}`}
-              type="button"
-              role="menuitem"
-              onClick={() => startPluginPane(panel, pane)}
-              className={cn(ROW, ROW_ON)}
-            >
-              <span className="grid shrink-0">
-                <PluginTile name={pane.plugin.name} icon={pane.plugin.icon} size={16} />
-              </span>
-              <span className="flex-1 truncate">{pane.label}</span>
-              <span
-                title={pane.pluginTitle}
-                className="min-w-0 shrink truncate text-small text-(--text-disabled)"
-              >
-                {pane.open ? t('surfaces.list.open') : pane.pluginTitle}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
       {artifacts.length > 0 && (
         <div role="group" aria-label={t('surfaces.list.artifacts')} className={GROUP}>
-          <div className="px-2.25 pt-0.5 pb-1 text-hint text-(--text-tertiary)">
+          <div className="px-2.25 pt-0.5 pb-1 text-left text-hint text-(--text-tertiary)">
             {t('surfaces.list.artifacts')}
           </div>
           {artifacts.map((artifact) => (
@@ -170,13 +144,40 @@ export function SurfaceList({ panel, projectPath }: { panel: string; projectPath
           ))}
         </div>
       )}
+      {panes.length > 0 && (
+        <div role="group" aria-label={t('surfaces.list.plugins')} className={GROUP}>
+          <div className="px-2.25 pt-0.5 pb-1 text-left text-hint text-(--text-tertiary)">
+            {t('surfaces.list.plugins')}
+          </div>
+          {panes.map((pane) => (
+            <button
+              key={`${pane.plugin.pluginId}/${pane.viewId}`}
+              type="button"
+              role="menuitem"
+              onClick={() => startPluginPane(panel, pane)}
+              className={cn(ROW, ROW_ON)}
+            >
+              <span className="grid shrink-0">
+                <PluginTile name={pane.plugin.name} icon={pane.plugin.icon} size={16} />
+              </span>
+              <span className="flex-1 truncate">{pane.label}</span>
+              {pane.open && (
+                <span className="shrink-0 text-small text-(--text-disabled)">
+                  {t('surfaces.list.open')}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 /**
  * The same rows as a dropdown's items, with the picking letters `runSessionMenuAccelerator` reads,
- * then the session's artifacts. `devices` replaces the Mobile device row with a submenu.
+ * then the session's artifacts and the plugins' panes. `devices` replaces the Mobile device row
+ * with a submenu.
  */
 export function SurfaceMenuItems({
   rows,
@@ -235,6 +236,20 @@ export function SurfaceMenuItems({
           </DropdownMenuGroup>
         </Fragment>
       ))}
+      {artifacts.length > 0 && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t('surfaces.list.artifacts')}</DropdownMenuLabel>
+            {artifacts.map((artifact) => (
+              <DropdownMenuItem key={artifact.id} onClick={() => onArtifact(artifact.id)}>
+                <PaneIcon icon={artifact.icon} size={16} />
+                <span className="truncate">{artifact.title}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </>
+      )}
       {panes.length > 0 && (
         <>
           <DropdownMenuSeparator />
@@ -247,23 +262,11 @@ export function SurfaceMenuItems({
               >
                 <PluginTile name={pane.plugin.name} icon={pane.plugin.icon} size={16} />
                 <span className="truncate">{pane.label}</span>
-                <span className="ml-auto pl-3 text-small text-(--text-disabled)">
-                  {pane.open ? t('surfaces.list.open') : pane.pluginTitle}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </>
-      )}
-      {artifacts.length > 0 && (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t('surfaces.list.artifacts')}</DropdownMenuLabel>
-            {artifacts.map((artifact) => (
-              <DropdownMenuItem key={artifact.id} onClick={() => onArtifact(artifact.id)}>
-                <PaneIcon icon={artifact.icon} size={16} />
-                <span className="truncate">{artifact.title}</span>
+                {pane.open && (
+                  <span className="ml-auto pl-3 text-small text-(--text-disabled)">
+                    {t('surfaces.list.open')}
+                  </span>
+                )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>

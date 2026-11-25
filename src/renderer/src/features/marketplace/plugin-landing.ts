@@ -9,6 +9,7 @@ import {
   openSettingsRow,
   useViewStore,
   type MarketplaceTab,
+  type SessionView,
 } from '@renderer/stores/view'
 import { itemKey } from './model'
 
@@ -41,18 +42,21 @@ function land(id: string, landing: PluginLanding): void {
   useLandings.setState((s) => ({ byId: { ...s.byId, [id]: landing } }))
 }
 
-function show(id: string, tab: MarketplaceTab): void {
-  openMarketplace({ item: itemKey({ kind: 'plugin', id }), tab })
+function show(id: string, tab: MarketplaceTab, from?: SessionView): void {
+  openMarketplace({ item: itemKey({ kind: 'plugin', id }), tab, from })
 }
 
-/** Opens a plugin's page; with `row`, at that row, and with `setup`, at its first missing setting. */
+/**
+ * Opens a plugin's page; with `row`, at that row, and with `setup`, at its first missing setting.
+ * Opened `from` a session, the page's Back returns to it.
+ */
 export function openPluginPage(
   id: string,
-  options: { tab?: MarketplaceTab; row?: string; setup?: boolean } = {},
+  options: { tab?: MarketplaceTab; row?: string; setup?: boolean; from?: SessionView } = {},
 ): void {
-  const { tab = 'installed', ...landing } = options
+  const { tab = 'installed', from, ...landing } = options
   if (landing.row || landing.setup) land(id, landing)
-  show(id, tab)
+  show(id, tab, from)
 }
 
 /**

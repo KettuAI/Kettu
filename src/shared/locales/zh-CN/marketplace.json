@@ -125,6 +125,7 @@
   },
   "listing": {
     "back": "市场",
+    "backToSession": "返回会话",
     "kind": "MCP 服务器",
     "official": "官方",
     "addedByYou": "由你添加",

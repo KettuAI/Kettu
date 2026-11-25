@@ -59,10 +59,14 @@ type PageView =
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
   // The Marketplace, opened from the sidebar: its directory on a tab, or with `item`, the listing
-  // of the server with that id, a step of the history of its own.
-  | { kind: 'marketplace'; item?: string; tab?: MarketplaceTab }
+  // of the server with that id, a step of the history of its own. `from` is the session whose
+  // side panel opened the listing, which its Back returns to.
+  | { kind: 'marketplace'; item?: string; tab?: MarketplaceTab; from?: SessionView }
   // A task's page, opened from its row in the sidebar: its timeline, or with `flow`, its flowchart.
   | { kind: 'task'; taskId: string; flow?: true }
+
+/** A session as a place to return to. */
+export type SessionView = Extract<PaneView, { kind: 'session' }>
 
 /** The Marketplace directory's tabs. */
 export type MarketplaceTab =
@@ -770,11 +774,16 @@ export function openRoutine(
 
 /**
  * The Marketplace: its directory on `tab`, All unless given, or the listing of `item`. A tab
- * changes the page shown in place, so Back leaves the Marketplace rather than its tabs.
+ * changes the page shown in place, so Back leaves the Marketplace rather than its tabs. A listing
+ * opened `from` a session returns there on its Back.
  */
-export function openMarketplace({ item, tab }: { item?: string; tab?: MarketplaceTab } = {}): void {
+export function openMarketplace({
+  item,
+  tab,
+  from,
+}: { item?: string; tab?: MarketplaceTab; from?: SessionView } = {}): void {
   useViewStore.setState((s) => ({
-    main: marketplaceView(item, tab),
+    main: { ...marketplaceView(item, tab), ...(item && from ? { from } : {}) },
     settings: { ...s.settings, open: false },
   }))
 }
