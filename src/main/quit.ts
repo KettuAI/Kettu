@@ -130,6 +130,8 @@ export class QuitFlow {
   watchWindow(window: BrowserWindow): void {
     // Coming back to a window ends a choice to keep running: closing it goes as the setting says.
     this.background = false
+    // A page that lost its process lost its edits with it.
+    window.webContents.on('render-process-gone', () => this.unsaved.delete(window.webContents.id))
     const confirmUnsaved = (event: Electron.Event): void => {
       if (this.unsaved.get(window.webContents.id)?.length) {
         event.preventDefault()
@@ -300,7 +302,7 @@ export class QuitFlow {
         },
       }
       this.pending = pending
-      if (!window || !webContents || webContents.isLoadingMainFrame()) {
+      if (!window || !webContents || webContents.isLoadingMainFrame() || webContents.isCrashed()) {
         void this.askNatively(pending)
         return
       }
