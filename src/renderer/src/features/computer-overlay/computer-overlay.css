@@ -101,7 +101,7 @@ html[data-overlay] body {
 }
 .kco-float__btn--solid,
 .kco-float__btn--solid:hover {
-  background: var(--text-primary);
+  background: var(--fill-ink);
   color: var(--bg-surface);
 }
 .kco-float__btn--solid:hover {

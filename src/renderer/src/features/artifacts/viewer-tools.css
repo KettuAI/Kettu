@@ -189,7 +189,7 @@
   height: 20px;
   border-radius: 50%;
   /* The pins on every kind's content take the same look: ink, a light number. */
-  background: var(--text-primary);
+  background: var(--fill-ink);
   font-size: 11px;
   font-weight: 600;
   color: var(--bg-surface);

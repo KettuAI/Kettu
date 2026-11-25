@@ -1138,8 +1138,7 @@
   line-height: 1.65;
   /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
-  /* affectUI's answer: the prose a step softer than the ink, which bold text keeps. */
-  color: color-mix(in srgb, var(--text-primary) 84%, var(--bg-app));
+  color: var(--prose-text);
   overflow-wrap: anywhere;
   user-select: text;
 
