@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -147,6 +147,7 @@ async function setup(
   const signInEnds: number[] = []
   const ignored: string[] = []
   const loaded: string[] = []
+  const settingsDir = path.join(dir, 'claude-settings')
   const context: HostedContext = {
     def: CLAUDE_CODE,
     hooks: {
@@ -165,6 +166,7 @@ async function setup(
       ...spec,
     },
     env: { PATH: '/usr/bin', HOME: '/home/ada', ...env },
+    claudeSettingsDir: settingsDir,
     spawn: (options) => {
       spawned.push(options)
       const child = new FakeChild()
@@ -190,6 +192,7 @@ async function setup(
     entry,
     init,
     loaded,
+    settingsDir,
   }
 }
 
@@ -322,7 +325,7 @@ describe('the Claude Agent SDK driver', () => {
       systemPrompt: { type: 'preset', preset: 'claude_code', append: 'Plan first.' },
       extraArgs: { 'replay-user-messages': null },
     })
-    expect(options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     expect(options.disallowedTools).toEqual(['EnterWorktree', 'ExitWorktree'])
     expect(options.env).toMatchObject({
       PATH: '/usr/bin',
@@ -647,7 +650,7 @@ describe('the Claude Agent SDK driver', () => {
     const repo = await repoWithServers()
     // Without the user's answers, none of them starts.
     await connection.newSession(repo, {})
-    expect(sdk.last.options.settings).toEqual({ disabledMcpjsonServers: ['db', 'web'] })
+    expect(sdk.last.flagSettings).toEqual({ disabledMcpjsonServers: ['db', 'web'] })
     const asked: DeclaredMcpServer[][] = []
     const gate: ProjectMcpGate = {
       hold: async (_cwd, servers) => {
@@ -663,12 +666,12 @@ describe('the Claude Agent SDK driver', () => {
         { name: 'web', target: 'https://example.com/mcp' },
       ],
     ])
-    expect(sdk.last.options.settings).toEqual({ disabledMcpjsonServers: ['web'] })
+    expect(sdk.last.flagSettings).toEqual({ disabledMcpjsonServers: ['web'] })
     // Kettu's own hidden sessions ask nobody.
     await connection.newSession(repo, { projectMcp: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toMatchObject({ disabledMcpjsonServers: ['db', 'web'] })
+    expect(sdk.last.flagSettings).toMatchObject({ disabledMcpjsonServers: ['db', 'web'] })
     await connection.newSession('/repo', { projectMcp: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     expect(asked).toHaveLength(1)
   })
 
@@ -687,7 +690,7 @@ describe('the Claude Agent SDK driver', () => {
     await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(sdk.queries).toHaveLength(2)
     expect(sdk.last.options.resume).toBe(sessionId)
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
   })
 
   const userHook = {
@@ -721,7 +724,7 @@ describe('the Claude Agent SDK driver', () => {
     sdk.sources = folderHooks
     // Without the user's answers, none of them runs.
     await connection.newSession('/repo', {})
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(sdk.last.flagSettings).toEqual({ disableAllHooks: true })
     const asked: FolderHooks[] = []
     let allowed = false
     const gate: ProjectHooksGate = {
@@ -732,7 +735,7 @@ describe('the Claude Agent SDK driver', () => {
       held: async () => !allowed,
     }
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(sdk.last.flagSettings).toEqual({ disableAllHooks: true })
     expect(asked.map((hooks) => hooks.hooks)).toEqual([
       [
         { event: 'SessionStart', target: './setup.sh' },
@@ -741,16 +744,16 @@ describe('the Claude Agent SDK driver', () => {
     ])
     allowed = true
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     // Kettu's own hidden sessions ask nobody and run none.
     await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toMatchObject({ disableAllHooks: true })
+    expect(sdk.last.flagSettings).toMatchObject({ disableAllHooks: true })
     expect(asked).toHaveLength(2)
     // The user's own hooks need no answer.
     sdk.sources = [userHook]
     allowed = false
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     expect(asked).toHaveLength(2)
   })
 
@@ -781,7 +784,7 @@ describe('the Claude Agent SDK driver', () => {
     sdk.sources = folderHelpers
     // Without the user's answers, none of them runs, though the folder declares no hook.
     await connection.newSession('/repo', {})
-    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    expect(sdk.last.flagSettings).toEqual(heldHelpers)
     const asked: FolderHooks[] = []
     let allowed = false
     const gate: ProjectHooksGate = {
@@ -792,7 +795,7 @@ describe('the Claude Agent SDK driver', () => {
       held: async () => !allowed,
     }
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    expect(sdk.last.flagSettings).toEqual(heldHelpers)
     expect(asked.map((hooks) => hooks.hooks)).toEqual([
       [
         { event: 'apiKeyHelper', target: './key.sh' },
@@ -803,20 +806,20 @@ describe('the Claude Agent SDK driver', () => {
     ])
     // A hidden session asks nobody, and runs them only once the user allowed them.
     await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    expect(sdk.last.flagSettings).toEqual(heldHelpers)
     await connection.newSession('/repo', { hidden: 'options' })
-    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    expect(sdk.last.flagSettings).toEqual(heldHelpers)
     allowed = true
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(sdk.last.flagSettings).toEqual({ disableAllHooks: true })
     expect(asked).toHaveLength(2)
     // The user's own helpers need no answer.
     sdk.sources = [folderHelpers[0]!]
     allowed = false
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     expect(asked).toHaveLength(2)
   })
 
@@ -848,7 +851,7 @@ describe('the Claude Agent SDK driver', () => {
       { event: 'SessionStart', target: './setup.sh' },
       { event: 'awsAuthRefresh', target: 'aws sso login' },
     ])
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true, awsAuthRefresh: '' })
+    expect(sdk.last.flagSettings).toEqual({ disableAllHooks: true, awsAuthRefresh: '' })
   })
 
   const folderEnv = [
@@ -888,7 +891,7 @@ describe('the Claude Agent SDK driver', () => {
     sdk.sources = folderEnv
     // Without the user's answers, none of the repository's values applies.
     await connection.newSession('/repo', {})
-    expect(sdk.last.options.settings).toEqual(heldEnv)
+    expect(sdk.last.flagSettings).toEqual(heldEnv)
     const asked: FolderHooks[] = []
     let allowed = false
     const gate: ProjectHooksGate = {
@@ -899,7 +902,7 @@ describe('the Claude Agent SDK driver', () => {
       held: async () => !allowed,
     }
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toEqual(heldEnv)
+    expect(sdk.last.flagSettings).toEqual(heldEnv)
     // The card names the variables, never their values.
     expect(asked.map((hooks) => hooks.hooks)).toEqual([
       [
@@ -913,18 +916,18 @@ describe('the Claude Agent SDK driver', () => {
     expect(JSON.stringify(asked)).not.toContain('sk-from-repo')
     // A hidden session asks nobody, and takes the repository's values only once they are allowed.
     await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toEqual(heldEnv)
+    expect(sdk.last.flagSettings).toEqual(heldEnv)
     allowed = true
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(sdk.last.flagSettings).toEqual({ disableAllHooks: true })
     expect(asked).toHaveLength(2)
     // The user's own env needs no answer.
     sdk.sources = [folderEnv[0]!]
     allowed = false
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
     expect(asked).toHaveLength(2)
   })
 
@@ -952,7 +955,7 @@ describe('the Claude Agent SDK driver', () => {
       { event: 'SessionStart', target: './setup.sh' },
       { event: 'env', target: 'ANTHROPIC_BASE_URL' },
     ])
-    expect(sdk.last.options.settings).toEqual({
+    expect(sdk.last.flagSettings).toEqual({
       disableAllHooks: true,
       env: { ANTHROPIC_BASE_URL: '' },
     })
@@ -964,12 +967,58 @@ describe('the Claude Agent SDK driver', () => {
     let allowed = false
     const gate: ProjectHooksGate = { hold: async () => !allowed, held: async () => !allowed }
     const { sessionId } = await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toEqual(heldEnv)
+    expect(sdk.last.flagSettings).toEqual(heldEnv)
     allowed = true
     await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(sdk.queries).toHaveLength(2)
     expect(sdk.last.options.resume).toBe(sessionId)
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
+  })
+
+  it("keeps the values of flag settings off Claude Code's command line", async () => {
+    const { sdk, connection, spawned, settingsDir } = await setup({
+      HTTPS_PROXY: 'http://proxy.corp:3128',
+    })
+    sdk.sources = folderEnv
+    const { sessionId } = await connection.newSession('/repo', {})
+    expect(sdk.last.flagSettings).toEqual(heldEnv)
+    const args = spawned.at(-1)!.args
+    for (const value of ['https://gateway.example.com', 'http://proxy.corp:3128']) {
+      expect(args.join(' ')).not.toContain(value)
+    }
+    const file = args[args.indexOf('--settings') + 1]!
+    expect(path.dirname(file)).toBe(settingsDir)
+    if (process.platform !== 'win32') {
+      expect((await stat(file)).mode & 0o777).toBe(0o600)
+      expect((await stat(settingsDir)).mode & 0o777).toBe(0o700)
+    }
+    // Kept while the process runs, which hands the path to the Claude Code processes it starts.
+    await connection.closeSession(sessionId)
+    await vi.waitFor(async () => expect(await readdir(settingsDir)).toEqual([]))
+  })
+
+  it("keeps the user's sign-in off the command line of a limits read", async () => {
+    const s = await setup()
+    s.sdk.settings = {
+      env: { ANTHROPIC_AUTH_TOKEN: 'fake-token-1234' },
+      apiKeyHelper: 'printf fake-key-5678',
+    }
+    await s.connection.newSession('/repo', { hidden: 'limits' })
+    const args = s.spawned.at(-1)!.args.join(' ')
+    expect(args).not.toContain('fake-token-1234')
+    expect(args).not.toContain('fake-key-5678')
+    expect(s.sdk.last.flagSettings).toMatchObject({
+      env: { ANTHROPIC_AUTH_TOKEN: 'fake-token-1234' },
+      apiKeyHelper: 'printf fake-key-5678',
+    })
+  })
+
+  it('removes the settings file of a query that fails to start', async () => {
+    const s = await setup()
+    s.sdk.settings = { env: { ANTHROPIC_AUTH_TOKEN: 'fake-token-1234' } }
+    s.sdk.initError = () => new Error('Claude Code did not start')
+    await expect(s.connection.newSession('/repo', { hidden: 'limits' })).rejects.toThrow()
+    await vi.waitFor(async () => expect(await readdir(s.settingsDir)).toEqual([]))
   })
 
   it('holds every hook while the settings cannot be read', async () => {
@@ -978,7 +1027,7 @@ describe('the Claude Agent SDK driver', () => {
     const gate: ProjectHooksGate = { hold: async () => false, held: async () => false }
     await connection.newSession('/repo', { projectHooks: gate })
     // Their helpers too, the user's own included, since none of them is known.
-    expect(sdk.last.options.settings).toEqual({
+    expect(sdk.last.flagSettings).toEqual({
       disableAllHooks: true,
       apiKeyHelper: '',
       awsAuthRefresh: '',
@@ -1000,7 +1049,7 @@ describe('the Claude Agent SDK driver', () => {
     await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(sdk.queries).toHaveLength(2)
     expect(sdk.last.options.resume).toBe(sessionId)
-    expect(sdk.last.options.settings).toBeUndefined()
+    expect(sdk.last.flagSettings).toBeUndefined()
   })
 })
 
@@ -2241,7 +2290,7 @@ describe('ultracode', () => {
     s.sdk.settings = { ultracode: true }
     const { config } = await s.connection.newSession('/repo')
     expect(option(config)).toMatchObject({ value: 'default', defaultValue: true })
-    expect(s.sdk.last.options.settings).toBeUndefined()
+    expect(s.sdk.last.flagSettings).toBeUndefined()
     expect(s.sdk.calls.find((call) => call.method === 'resolveSettings')?.args[0]).toEqual({
       cwd: '/repo',
       settingSources: ['user', 'project', 'local'],
@@ -3133,11 +3182,8 @@ describe('sessions', () => {
     const s = await setup()
     const { sessionId } = await s.connection.newSession('/repo', { hidden: 'titles' })
     const query = s.sdk.last
-    expect(query.options).toMatchObject({
-      persistSession: false,
-      settingSources: [],
-      settings: { disableAllHooks: true },
-    })
+    expect(query.options).toMatchObject({ persistSession: false, settingSources: [] })
+    expect(query.flagSettings).toEqual({ disableAllHooks: true })
     await s.connection.removeHidden(sessionId, () => {})
     expect(query.closed).toBe(true)
     expect(s.sdk.calls.map((call) => call.method)).not.toContain('deleteSession')
@@ -3154,7 +3200,7 @@ describe('sessions', () => {
     await s.connection.newSession('/repo', { hidden: 'limits' })
     const query = s.sdk.last
     expect(query.options.settingSources).toEqual([])
-    expect(query.options.settings).toEqual({
+    expect(query.flagSettings).toEqual({
       disableAllHooks: true,
       env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425', ANTHROPIC_AUTH_TOKEN: 'token' },
       apiKeyHelper: '/usr/local/bin/key',
@@ -3193,8 +3239,8 @@ describe('sessions', () => {
       strictMcpConfig: true,
       settingSources: [],
       persistSession: false,
-      settings: { disableAllHooks: true },
     })
+    expect(query.flagSettings).toEqual({ disableAllHooks: true })
     expect(query.options.mcpServers).toBeUndefined()
     expect(query.closed).toBe(true)
   })
@@ -3221,7 +3267,7 @@ describe('sessions', () => {
     )
     const query = s.sdk.last
     expect(query.options.settingSources).toEqual([])
-    expect(query.options.settings).toEqual({
+    expect(query.flagSettings).toEqual({
       disableAllHooks: true,
       env: { ANTHROPIC_BASE_URL: 'https://example.com', ANTHROPIC_AUTH_TOKEN: 'token' },
       apiKeyHelper: '/usr/local/bin/key',

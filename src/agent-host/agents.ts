@@ -395,6 +395,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   sessionRouterPath?: string | null
   /** The bundle of the process that runs Cline's SDK; null without one. */
   clineHostPath?: string | null
+  /** Where Claude Code's flag settings are written for its processes. */
+  claudeSettingsDir?: string
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
   /** Downloads and extracts a binary agent's release archive. */
@@ -1604,6 +1606,7 @@ export class AgentManager {
         kettuDir: path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id),
         nodeRuntime: this.deps.nodeRuntime,
         clineHostPath: this.deps.clineHostPath ?? null,
+        ...(this.deps.claudeSettingsDir ? { claudeSettingsDir: this.deps.claudeSettingsDir } : {}),
       })
     } catch (error) {
       slot.launched = null

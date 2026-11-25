@@ -92,6 +92,7 @@ import {
   QUESTIONS_SKIPPED,
 } from './permissions'
 import { findClaudeTranscript } from '../prompt-cache'
+import { removeFlagSettings, writeFlagSettings } from './flag-settings'
 import { folderHooks, heldEnv, heldHelpers } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
@@ -945,6 +946,22 @@ export class ClaudeConnection implements AgentConnection {
     }
   }
 
+  /** The flag settings in a file only the user can read, since inline they go on the command line. */
+  private async writeFlags(flags: FlagSettings): Promise<string> {
+    const dir = this.context.claudeSettingsDir
+    if (!dir) throw new AgentRequestError('agent_error', "No folder for Claude Code's settings")
+    return await writeFlagSettings(dir, flags)
+  }
+
+  private removeFlags(file: string): void {
+    removeFlagSettings(file).catch((error: unknown) =>
+      this.context.hooks.log(
+        'warn',
+        `Could not remove Claude Code's settings file: ${errorText(error)}`,
+      ),
+    )
+  }
+
   private async open(
     sessionId: string,
     cwd: string,
@@ -1072,10 +1089,14 @@ export class ClaudeConnection implements AgentConnection {
           ...(options.memory ? [options.memory.text] : []),
           ...(options.role ? [options.role] : []),
         ]
+    const cli = await this.runnableCli()
+    // Written last, so nothing that could still fail leaves it behind.
+    const settingsFile = Object.keys(flags).length > 0 ? await this.writeFlags(flags) : null
+    let spawned = false
     const queryOptions: QueryOptions = {
       cwd,
       env,
-      pathToClaudeCodeExecutable: await this.runnableCli(),
+      pathToClaudeCodeExecutable: cli,
       spawnClaudeCodeProcess: (spawn) => {
         const child = this.context.spawn({
           command: spawn.command,
@@ -1084,7 +1105,17 @@ export class ClaudeConnection implements AgentConnection {
           env: spawn.env as Env,
           signal: spawn.signal,
         })
+        spawned = true
         session.process = child
+        // Kept while the process runs, which hands the path on to the processes it starts.
+        if (settingsFile) {
+          const remove = (): void => this.removeFlags(settingsFile)
+          child.once('exit', remove)
+          // An error without a pid is a spawn that failed; with one, 'exit' still follows.
+          child.once('error', () => {
+            if (child.pid === undefined) remove()
+          })
+        }
         return child
       },
       includePartialMessages: true,
@@ -1136,7 +1167,7 @@ export class ClaudeConnection implements AgentConnection {
       },
       ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       ...(plugins.length > 0 ? { plugins } : {}),
-      ...(Object.keys(flags).length > 0 ? { settings: flags } : {}),
+      ...(settingsFile ? { settings: settingsFile } : {}),
       extraArgs: { 'replay-user-messages': null },
       ...(hidden ? { persistSession: false } : {}),
       ...(how.from
@@ -1150,7 +1181,13 @@ export class ClaudeConnection implements AgentConnection {
           ? { resume: sessionId }
           : { sessionId }),
     }
-    const query = sdk.query({ prompt: input, options: queryOptions })
+    let query: Query
+    try {
+      query = sdk.query({ prompt: input, options: queryOptions })
+    } catch (error) {
+      if (settingsFile && !spawned) this.removeFlags(settingsFile)
+      throw error
+    }
     session.query = query
     this.context.hooks.traffic('out', { method: 'query', sessionId, resume: how.resume })
     const reading = this.read(session, query)
@@ -1161,6 +1198,7 @@ export class ClaudeConnection implements AgentConnection {
       session.query = null
       input.close()
       query.close()
+      if (settingsFile && !spawned) this.removeFlags(settingsFile)
       void reading
       if (how.resume && missingSession(error)) {
         throw new AgentRequestError('agent_error', errorText(error), RESOURCE_NOT_FOUND)

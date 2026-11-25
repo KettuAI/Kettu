@@ -95,6 +95,7 @@ import type {
 } from '@shared/thread'
 import { AgentFiles } from './agent-files'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
+import { clearFlagSettings, flagSettingsFolder } from './claude/flag-settings'
 import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
@@ -1270,6 +1271,7 @@ export class AgentHost {
       adaptersDir,
       sessionRouterPath: options.sessionRouterPath ?? null,
       clineHostPath: options.clineHostPath ?? null,
+      claudeSettingsDir: flagSettingsFolder(options.userDataPath),
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.protocols ? { protocols: options.protocols } : {}),
       ...(options.drivers ? { drivers: options.drivers } : {}),
@@ -1831,6 +1833,10 @@ export class AgentHost {
       path.join(options.userDataPath, 'agents'),
       harnessesFolder(options),
       (message) => writeLog('warn', 'host', message),
+    )
+    // Before any agent starts: what a run before this one left is no process's any more.
+    await clearFlagSettings(flagSettingsFolder(options.userDataPath)).catch((error: unknown) =>
+      writeLog('warn', 'host', `Could not clear Claude Code's settings files: ${String(error)}`),
     )
     const host = new AgentHost(options)
     const [, , , remembered, updates, listing, manifest] = await Promise.all([

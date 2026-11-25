@@ -210,7 +210,11 @@ export interface QueryOptions {
   mcpServers?: Record<string, McpServerConfig>
   /** Plugin folders loaded for the session beside the user's own plugins. */
   plugins?: { type: 'local'; path: string }[]
-  settings?: FlagSettings
+  /**
+   * The path of a file of flag settings. The SDK writes settings given inline onto Claude Code's
+   * command line, which other accounts on the computer can read.
+   */
+  settings?: string
   extraArgs?: Record<string, string | null>
   persistSession?: boolean
   /** The id a new session gets. */

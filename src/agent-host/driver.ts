@@ -96,6 +96,8 @@ export interface HostedContext extends DriverContext {
   nodeRuntime?: NodeRuntime
   /** The bundle of the process that runs Cline's SDK; null or absent without one. */
   clineHostPath?: string | null
+  /** Where Claude Code's flag settings are written for its processes; a test may leave it out. */
+  claudeSettingsDir?: string
 }
 
 export interface HostedDriver extends StoredConfig {
