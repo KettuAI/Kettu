@@ -7,10 +7,10 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import http, { type IncomingMessage } from 'node:http'
+import https from 'node:https'
 import path from 'node:path'
-import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import {
@@ -20,12 +20,14 @@ import {
   removeTree,
   renameWithRetry,
 } from './adapter-install'
+import type { Env } from './find-command'
 import { staleInstalls } from './harness-versions'
 import { t } from './i18n'
 
 const MIB = 1024 * 1024
 /** How many bytes a download grows between two progress lines. */
 const REPORT_BYTES = 4 * MIB
+const MAX_REDIRECTS = 10
 
 export interface ArchiveInstallOptions {
   /** `<userData>/agents`. */
@@ -43,6 +45,8 @@ export interface ArchiveInstallOptions {
   /** The download is the program itself, so nothing is extracted. */
   bare?: true
   platform: Platform
+  /** The agents' environment, whose proxy variables the download takes, as npm and git do. */
+  env: Env
   timeoutMs: number
   signal?: AbortSignal
   onOutput?(text: string): void
@@ -130,26 +134,23 @@ async function download(
   options.onOutput?.(
     `${t('agent.binaryInstall.downloadStart', { name: downloadName(options.url) })}\n`,
   )
-  let response: Response
+  let response: IncomingMessage
   try {
-    response = await fetch(options.url, { signal, redirect: 'follow' })
+    response = await get(options.url, options.env, signal)
   } catch (error) {
     throw downloadFailure(options, timeout, error)
   }
-  if (!response.ok || !response.body) {
-    void response.body?.cancel()
+  const status = response.statusCode ?? 0
+  if (status < 200 || status >= 300) {
+    response.resume()
     throw new Error(
-      t('agent.binaryInstall.downloadFailed', {
-        url: options.url,
-        status: String(response.status),
-      }),
+      t('agent.binaryInstall.downloadFailed', { url: options.url, status: String(status) }),
     )
   }
   const hash = createHash('sha256')
   let bytes = 0
   let reported = 0
-  const source = Readable.fromWeb(response.body as WebReadableStream<Uint8Array>)
-  source.on('data', (chunk: Buffer) => {
+  response.on('data', (chunk: Buffer) => {
     hash.update(chunk)
     bytes += chunk.length
     if (bytes - reported < REPORT_BYTES) return
@@ -157,7 +158,7 @@ async function download(
     options.onOutput?.(`${t('agent.binaryInstall.downloading', { size: formatSize(bytes) })}\n`)
   })
   try {
-    await pipeline(source, createWriteStream(file, { mode: 0o600 }))
+    await pipeline(response, createWriteStream(file, { mode: 0o600 }))
   } catch (error) {
     throw downloadFailure(options, timeout, error)
   }
@@ -167,6 +168,30 @@ async function download(
     throw new Error(t('agent.binaryInstall.hashMismatch', { expected, actual: sha256 }))
   }
   return { sha256 }
+}
+
+/**
+ * GETs `url`, following redirects, through the proxy `env` names. The global fetch reads no proxy
+ * variables, and setting the process's proxy would send the host's local requests there too.
+ */
+function get(url: string, env: Env, signal: AbortSignal, redirects = 0): Promise<IncomingMessage> {
+  const target = new URL(url)
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+    return Promise.reject(new Error(`Unsupported protocol ${target.protocol}`))
+  }
+  const client = target.protocol === 'https:' ? https : http
+  const agent = new client.Agent({ proxyEnv: env })
+  return new Promise((resolve, reject) => {
+    const request = client.get(target, { agent, signal }, (response) => {
+      const status = response.statusCode ?? 0
+      const location = response.headers.location
+      if (status < 300 || status >= 400 || !location) return resolve(response)
+      response.resume()
+      if (redirects >= MAX_REDIRECTS) return reject(new Error('Too many redirects'))
+      resolve(get(new URL(location, target).href, env, signal, redirects + 1))
+    })
+    request.on('error', reject)
+  })
 }
 
 /** Why a download stopped: the user cancelled it, it ran past the limit, or the network failed. */
