@@ -209,6 +209,8 @@ export interface HostInfo extends AppInfo {
    * before it.
    */
   pinnedModels?: boolean
+  /** Listing a Windows host's drives, with `paths.drives`; absent from hosts before it. */
+  drives?: boolean
   /**
    * What the host's agent host keeps of its artifacts beyond the versions, as its requests and
    * fields name them; absent from hosts before any of them.

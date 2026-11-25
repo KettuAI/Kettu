@@ -1866,6 +1866,7 @@ export function createValidators(platform: Platform): Validators {
       }
       return { path: value }
     },
+    'paths.drives': none,
     'sessions.list': (params) => {
       const o = params === undefined || params === null ? {} : fields(params)
       return o.projectPath === undefined

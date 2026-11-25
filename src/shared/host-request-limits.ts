@@ -105,6 +105,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'projects.worktreeSettings': HOST_MS,
   'projects.setWorktreeSettings': HOST_MS,
   'paths.complete': HOST_MS,
+  'paths.drives': HOST_MS,
   'sessions.list': HOST_MS,
   'sessions.create': AGENT_MS,
   'sessions.prepare': AGENT_MS,

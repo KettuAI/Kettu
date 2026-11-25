@@ -169,6 +169,7 @@ export async function startDaemonAdmin({
       thumbnails: false,
       partThumbnails: false,
       pinnedModels: true,
+      drives: true,
       artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => void hosts.restart(which),

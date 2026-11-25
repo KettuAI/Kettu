@@ -578,6 +578,13 @@ describe('createValidators', () => {
     rejects(() => windows['sessions.create']({ agentId: 'codex', projectPath: 'app' }))
   })
 
+  it('takes nothing to list the drives, which the host finds alone', () => {
+    expect(windows['paths.drives'](undefined)).toBeUndefined()
+    expect(windows['paths.drives']({})).toBeUndefined()
+    rejects(() => windows['paths.drives']({ path: 'C:\\' }))
+    rejects(() => windows['paths.drives']({ letters: ['C', 'D'] }))
+  })
+
   it('requires an absolute project path and an explicit boolean for pinning', () => {
     const pin = posix['projects.pin']
     expect(pin({ path: '/repo', pinned: false })).toEqual({ path: '/repo', pinned: false })

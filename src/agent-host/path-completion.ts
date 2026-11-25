@@ -1,6 +1,6 @@
 // `paths.complete`: what a device typing a path on the host is offered, the entries of the folder
 // the typed path's last part is in that start with it. It only reads, and lists nothing where the
-// folder cannot be read.
+// folder cannot be read. `paths.drives`: the drives of a Windows host, to go up past a drive's root.
 
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -11,6 +11,9 @@ import { isAbsolutePath } from './paths'
 
 /** The most entries one completion lists. */
 export const MAX_COMPLETIONS = 200
+
+/** How long a drive may take to answer before it counts as not ready, as a lost network drive. */
+export const DRIVE_WAIT_MS = 2_000
 
 type Kind = PathCompletion['entries'][number]['kind']
 
@@ -100,4 +103,38 @@ export async function completePath(
       }
     : null
   return { folder, entries, exact }
+}
+
+/**
+ * The drives of a Windows host that answer now, by their roots (`C:\`), in letter order; one
+ * without its disc, a network drive that is not connected or one too slow to answer is left out.
+ * Other systems have one root and list none.
+ */
+export async function listDrives(
+  platform: Platform,
+  read: (path: string) => Promise<{ isDirectory(): boolean }> = stat,
+): Promise<string[]> {
+  if (platform !== 'win32') return []
+  const roots = Array.from({ length: 26 }, (_, i) => `${String.fromCharCode(65 + i)}:\\`)
+  const ready = await Promise.all(roots.map((root) => answers(read, root)))
+  return roots.filter((_, i) => ready[i])
+}
+
+async function answers(
+  read: (path: string) => Promise<{ isDirectory(): boolean }>,
+  root: string,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), DRIVE_WAIT_MS)
+  })
+  const found = read(root).then(
+    (info) => info.isDirectory(),
+    () => false,
+  )
+  try {
+    return await Promise.race([found, late])
+  } finally {
+    clearTimeout(timer)
+  }
 }
