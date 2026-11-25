@@ -31,7 +31,23 @@ export interface SdkModelInfo {
 export interface SdkMessage {
   role: string
   content: unknown
+  metadata?: { displayOnly?: boolean } & Record<string, unknown>
 }
+
+/** One pass of a compaction over a conversation; undefined when it folded nothing. */
+export type SdkCompactionPass = (input: {
+  agentId: string
+  conversationId: string
+  parentAgentId: null
+  iteration: number
+  messages: SdkMessage[]
+  apiMessages: SdkMessage[]
+  abortSignal: AbortSignal
+  systemPrompt: string
+  tools: unknown[]
+  model: { id: string; provider: string; info: SdkModelInfo }
+  emitStatusNotice?: (message: string, metadata?: Record<string, unknown>) => void
+}) => Promise<{ messages: SdkMessage[]; systemPrompt?: string } | undefined>
 
 export interface SdkToolPolicy {
   enabled?: boolean
@@ -101,6 +117,8 @@ export interface SdkCore {
   get(sessionId: string): Promise<SdkSessionRecord | undefined>
   readMessages(sessionId: string): Promise<SdkMessage[]>
   readSessionCompactionState(sessionId: string): Promise<unknown>
+  /** Keeps a compacted working context for the session; its stored messages stay as they are. */
+  updateSessionCompactionState(sessionId: string, state: unknown): Promise<{ updated: boolean }>
   subscribe(listener: (event: SdkSessionEvent) => void): () => void
   updateSessionModel(sessionId: string, modelId: string): Promise<void>
   updateSessionConnection(sessionId: string, updates: Record<string, unknown>): Promise<void>
@@ -152,6 +170,12 @@ export interface Sdk {
   buildWorkspaceMetadata(cwd: string): Promise<string>
   projectSessionCompactionState(state: unknown, messages: SdkMessage[]): SdkMessage[] | undefined
   createSessionCompactionState(input: Record<string, unknown>): unknown
+  /** Undefined when the config does not compact. */
+  createContextCompactionPrepareTurn(
+    config: Record<string, unknown>,
+    options: { mode: 'manual' },
+  ): SdkCompactionPass | undefined
+  toProviderConfig(settings: SdkProviderSettings): Record<string, unknown>
   loginAndSaveLocalProviderOAuthCredentials(
     manager: SdkProviderSettingsManager,
     providerId: string,

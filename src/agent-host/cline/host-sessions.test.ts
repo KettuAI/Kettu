@@ -6,6 +6,7 @@ import { Host, HostError, mcpToolName, type HostPeer } from './host-sessions'
 import { ERROR, METHOD, type OpenParams, type OpenResult, type TurnResult } from './protocol'
 import type {
   Sdk,
+  SdkCompactionPass,
   SdkCoreOptions,
   SdkMessage,
   SdkModelInfo,
@@ -29,6 +30,8 @@ class FakeCore {
   sent: { prompt: string; mode?: string; delivery?: string }[] = []
   approvals: Approval[] = []
   models: string[] = []
+  /** The working contexts a compaction kept for the session. */
+  compacted: unknown[] = []
   private listener: ((event: SdkSessionEvent) => void) | null = null
   messages: SdkMessage[] = []
 
@@ -100,6 +103,13 @@ class FakeCore {
   async readSessionCompactionState(): Promise<unknown> {
     return undefined
   }
+  async updateSessionCompactionState(
+    _sessionId: string,
+    state: unknown,
+  ): Promise<{ updated: boolean }> {
+    this.compacted.push(state)
+    return { updated: true }
+  }
   subscribe(listener: (event: SdkSessionEvent) => void): () => void {
     this.listener = listener
     return () => (this.listener = null)
@@ -120,6 +130,9 @@ interface World {
   script: Script
   cores: FakeCore[]
   down: string[]
+  /** What a compaction by hand was made with and given, and how it ends. */
+  compactions: { config: Record<string, unknown>; input?: Parameters<SdkCompactionPass>[0] }[]
+  compactEnds?: 'fails' | 'waits'
 }
 
 function world(overrides: Partial<World> = {}): World {
@@ -131,6 +144,7 @@ function world(overrides: Partial<World> = {}): World {
     script: {},
     cores: [],
     down: [],
+    compactions: [],
     ...overrides,
   }
 }
@@ -194,7 +208,33 @@ function fakeSdk(w: World): Sdk {
     buildWorkspaceMetadata: async () => '',
     readCompactionModeGlobally: () => w.compaction,
     projectSessionCompactionState: () => undefined,
-    createSessionCompactionState: () => undefined,
+    createSessionCompactionState: (input) => ({ kept: input }),
+    toProviderConfig: (settings) => ({ fromSettings: settings }),
+    // Like the SDK's, a pass says when it starts and ends; it is undefined for a config that
+    // does not compact.
+    createContextCompactionPrepareTurn: (config, options) => {
+      const made: World['compactions'][number] = { config: { ...config, options } }
+      w.compactions.push(made)
+      if ((config.compaction as { enabled?: boolean }).enabled !== true) return undefined
+      return async (input) => {
+        made.input = input
+        const notice = (phase: string) =>
+          input.emitStatusNotice?.(phase === 'started' ? 'compacting' : 'compacted', {
+            kind: 'manual_compaction',
+            reason: 'manual_compaction',
+            phase,
+          })
+        notice('started')
+        if (w.compactEnds === 'fails') throw new Error('401 unauthorized')
+        if (w.compactEnds === 'waits') {
+          await new Promise((_, reject) =>
+            input.abortSignal.addEventListener('abort', () => reject(new Error('aborted'))),
+          )
+        }
+        notice('completed')
+        return { messages: [{ role: 'user', content: 'summary' }] }
+      }
+    },
     loginAndSaveLocalProviderOAuthCredentials: async (_manager, id, openUrl) => {
       openUrl('https://sign-in.test/page')
       w.settings[id] = { provider: id, apiKey: 'token' }
@@ -238,9 +278,10 @@ function setup(
     }) as Promise<TurnResult>
   const set = (settings: Record<string, unknown>) =>
     host.serve(METHOD.set, { sessionId: 's1', settings })
+  const compact = () => host.serve(METHOD.compact, { sessionId: 's1' })
   /** The cores of sessions; the first core only reads the store. */
   const sessionCores = () => w.cores.filter((core) => core.options.capabilities)
-  return { host, w, asked, events, open, prompt, set, sessionCores }
+  return { host, w, asked, events, open, prompt, set, compact, sessionCores }
 }
 
 describe('Cline host sessions', () => {
@@ -452,6 +493,93 @@ describe('Cline host sessions', () => {
     const changed = (await set({ provider: 'cline' })) as { settings: { model: string } }
     expect(changed.settings).toMatchObject({ provider: 'cline', model: 'cline/default' })
     expect(sessionCores()[0]!.disposed).toBe('kettu_provider_change')
+  })
+
+  it('compacts the whole conversation by hand, as its CLI does, into the working context', async () => {
+    const { w, events, open, prompt, compact, sessionCores } = setup()
+    await open()
+    await prompt()
+    const [core] = sessionCores()
+    core!.messages.push({ role: 'assistant', content: 'shown', metadata: { displayOnly: true } })
+    events.length = 0
+    expect(await compact()).toEqual({ finishReason: 'completed', empty: false })
+    const [made] = w.compactions
+    expect(made!.config).toMatchObject({
+      providerConfig: { fromSettings: { provider: 'anthropic', model: 'model-a', apiKey: 'key' } },
+      providerId: 'anthropic',
+      modelId: 'model-a',
+      compaction: { enabled: true },
+      sessionId: 's1',
+      options: { mode: 'manual' },
+    })
+    expect(made!.input).toMatchObject({
+      messages: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'ok' },
+      ],
+      model: { id: 'model-a', provider: 'anthropic', info: { maxInputTokens: 258_400 } },
+    })
+    expect(made!.input!.messages).toHaveLength(2)
+    expect(events).toEqual(
+      ['started', 'completed'].map((phase) => ({
+        sessionId: 's1',
+        event: expect.objectContaining({
+          type: 'notice',
+          reason: 'manual_compaction',
+          metadata: expect.objectContaining({ phase }),
+        }),
+      })),
+    )
+    expect(core!.compacted).toEqual([
+      expect.objectContaining({
+        kept: expect.objectContaining({
+          sourceMessages: core!.messages,
+          compactedMessages: [{ role: 'user', content: 'summary' }],
+        }),
+      }),
+    ])
+    expect(sessionCores()).toHaveLength(1)
+  })
+
+  it('has nothing to compact before the first prompt, and refuses while Cline compacts not', async () => {
+    const fresh = setup()
+    await fresh.open()
+    expect(await fresh.compact()).toEqual({ finishReason: 'completed', empty: true })
+    expect(fresh.sessionCores()).toHaveLength(0)
+    const off = setup(world({ compaction: 'off' }))
+    await off.open()
+    await off.prompt()
+    await expect(off.compact()).rejects.toMatchObject({
+      code: ERROR.failed,
+      reason: 'compactionOff',
+    })
+    expect(off.w.compactions).toHaveLength(0)
+  })
+
+  it('stops a compaction the user stopped, and fails one the provider refused', async () => {
+    const stopped = setup(world({ compactEnds: 'waits' }))
+    await stopped.open()
+    await stopped.prompt()
+    const running = stopped.compact()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await expect(stopped.prompt()).rejects.toMatchObject({ code: ERROR.failed })
+    await stopped.host.serve(METHOD.cancel, { sessionId: 's1' })
+    expect(await running).toEqual({ finishReason: 'aborted', empty: false })
+    expect(stopped.sessionCores()[0]!.compacted).toEqual([])
+
+    const refused = setup(world({ compactEnds: 'fails' }))
+    await refused.open()
+    await refused.prompt()
+    await expect(refused.compact()).rejects.toMatchObject({ code: ERROR.authRequired })
+    expect(refused.events.at(-1)).toEqual({
+      sessionId: 's1',
+      event: {
+        type: 'error',
+        error: { message: '401 unauthorized' },
+        recoverable: false,
+        iteration: 0,
+      },
+    })
   })
 
   it('signs in through the page Cline hands over', async () => {

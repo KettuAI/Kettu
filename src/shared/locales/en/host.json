@@ -1132,7 +1132,12 @@
     "permission": {
       "allowAlways": "Always allow in this session"
     },
-    "signInFirst": "Sign in to Cline before starting a session"
+    "signInFirst": "Sign in to Cline before starting a session",
+    "compact": {
+      "command": "Compact the session’s context",
+      "nothing": "There’s nothing to compact yet.",
+      "off": "Context compaction is turned off in Cline’s own settings."
+    }
   },
   "question": {
     "other": "Something else…"

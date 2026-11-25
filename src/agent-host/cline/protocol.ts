@@ -180,6 +180,14 @@ export interface TurnResult {
   } | null
 }
 
+/** What a compaction the user asked for came to. */
+export interface CompactResult {
+  /** `aborted` when the user stopped it. */
+  finishReason: string
+  /** The session held no conversation to compact. */
+  empty: boolean
+}
+
 export interface SteerResult {
   /** False when no turn was running to take the message. */
   injected: boolean
@@ -242,6 +250,7 @@ export const METHOD = {
   open: 'session/open',
   prompt: 'session/prompt',
   steer: 'session/steer',
+  compact: 'session/compact',
   cancel: 'session/cancel',
   set: 'session/set',
   close: 'session/close',

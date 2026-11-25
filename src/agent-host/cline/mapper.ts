@@ -385,6 +385,13 @@ export class SessionMapper {
     return out
   }
 
+  /** A line of Kettu's own in the thread, such as what a command it ran found. */
+  inform(ctx: MapperContext, title: string): MapperOutput {
+    const out = output()
+    addEntry(ctx, out, { kind: 'notice', id: ctx.nextId(), severity: 'info', title })
+    return out
+  }
+
   /** The turn ended: a compaction it was stopped in did not happen. Null when none ran. */
   ended(ctx: MapperContext): MapperOutput | null {
     if (!this.compactionId) return null
