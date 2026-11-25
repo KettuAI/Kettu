@@ -140,7 +140,7 @@ Artifacts are not for the project's own files: write those in the project as usu
 ## Which kind
 
 - One page: \`create_artifact\` with \`title\` and \`html\`, the whole of ${ARTIFACT_ENTRY}.
-- A page with its own styles, scripts, images or data: \`create_artifact\` with \`files\`. Paths, limits and where scripts may load from are in ${ref('files')}.
+- A page with its own styles, scripts, images or data: \`create_artifact\` with \`files\`. A page loads only the artifact's own files by path, never the project's, so add each image or other file it shows as an entry with \`source\`, its path in your working directory. Paths, limits and where scripts may load from are in ${ref('files')}.
 - Several pages side by side, such as design options or the screens of a flow: a canvas, in ${ref('canvas')}.
 - A document or a slide deck, which Kettu shows in a viewer of its own and exports: \`list_artifact_types\`, \`read_artifact_type\` for the type's format, then \`create_artifact_from_type\`; a plugin's template is listed with them and starts from its own files.
 - A page that keeps data, reads the project's files or asks the user's agent a question: declare \`capabilities\` and use \`kettu.use\` with \`db\`, \`files\` or \`sample\`, in ${ref('runtime')}.
