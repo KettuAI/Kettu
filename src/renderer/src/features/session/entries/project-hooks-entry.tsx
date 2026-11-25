@@ -13,6 +13,25 @@ const ANSWER_TEXT = {
   timeout: 'projectHooks.answer.timeout',
 } as const satisfies Record<ProjectHooksAnswer, string>
 
+// What the card holds: commands, the env (rows named `env`), or both.
+const COPY = {
+  commands: {
+    action: 'access.action.projectHooks',
+    reason: 'projectHooks.where',
+    title: 'projectHooks.hooks',
+  },
+  env: {
+    action: 'access.action.projectEnv',
+    reason: 'projectHooks.whereEnv',
+    title: 'projectHooks.variables',
+  },
+  both: {
+    action: 'access.action.projectHooksEnv',
+    reason: 'projectHooks.whereBoth',
+    title: 'projectHooks.both',
+  },
+} as const
+
 // The card's scopes: these hooks, or all of the project's, later ones too.
 const DECISION = {
   session: 'use',
@@ -42,27 +61,36 @@ export const ProjectHooksEntry = memo(function ProjectHooksEntry({
   const entry = useEntry(sessionId, entryId, 'project_hooks')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  const env = entry.hooks.some((hook) => hook.event === 'env')
+  const commands = entry.hooks.some((hook) => hook.event !== 'env')
+  const copy = COPY[env ? (commands ? 'both' : 'env') : 'commands']
+  const words = env ? 'projectHooks.allow' : 'projectHooks.decision'
   return (
     <AccessCard
       sessionId={sessionId}
       entryId={entryId}
       agentName={agentName}
       className={animation}
-      action={t('access.action.projectHooks')}
+      action={t(copy.action)}
       target={[...new Set(entry.hooks.map((hook) => hook.event))].join(', ')}
       glyph={ComputerTerminal01Icon}
-      reason={t('projectHooks.where')}
+      reason={t(copy.reason)}
       preview={entry.hooks.map((hook, index) => ({
         id: String(index),
         label: hook.target ? `${hook.event} · ${hook.target}` : hook.event,
       }))}
-      previewTitle={t('projectHooks.hooks')}
+      previewTitle={t(copy.title)}
       answer={entry.decision === null ? null : SHOWN[entry.decision]}
       device={entry.device}
       words={{
-        allow: { session: t('projectHooks.decision.use'), always: t('projectHooks.decision.all') },
-        deny: t('projectHooks.decision.skip'),
-        answer: () => t(ANSWER_TEXT[entry.decision ?? 'skip']),
+        allow: { session: t(`${words}.use`), always: t(`${words}.all`) },
+        deny: t(`${words}.skip`),
+        answer: () =>
+          t(
+            env && entry.decision === 'skip'
+              ? 'projectHooks.answer.notAllowed'
+              : ANSWER_TEXT[entry.decision ?? 'skip'],
+          ),
       }}
       request={(decision) =>
         host('sessions.answerProjectHooks', {
