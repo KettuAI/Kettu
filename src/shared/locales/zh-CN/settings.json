@@ -432,7 +432,7 @@
         "missing": "这个版本没有带灵动岛。系统通知照旧。"
       }
     },
-    "footer": "只在没有 Kettu 窗口位于前台时显示。",
+    "footer": "只在没有 Kettu 窗口位于前台时显示。窗口在前台时，你没在看的会话结束一轮或需要你时，在窗口里提示。",
     "groups": {
       "preview": "预览",
       "when": "提醒我",
@@ -444,7 +444,7 @@
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "kettu · 运行 {{command}}",
     "previewTime": "现在",
-    "footerWeb": "只在这个页面不在前台时显示。"
+    "footerWeb": "只在这个页面不在前台时显示。页面在前台时，你没在看的会话结束一轮或需要你时，在页面里提示。"
   },
   "account": {
     "name": "Kettu 账号",

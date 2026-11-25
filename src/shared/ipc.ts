@@ -14,6 +14,7 @@ import type { ControlAgent, ControlOutcome } from './control'
 import type { DebugStatus } from './debug'
 import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
 import type { EditorApp, EditorList } from './editors'
+import type { AttentionNotice } from './attention'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { HostSessionChange } from './host-sessions'
 import type { Locale } from './locale'
@@ -567,6 +568,8 @@ export interface IpcEventContract {
   'app:confirm-quit': QuitRequest
   'debug:changed': DebugStatus
   'app:command': AppCommand
+  /** To the focused window: a session's turn ended, failed or waits, in place of a notification. */
+  'app:attention': AttentionNotice
   'report:recording-changed': ReportRecording | null
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
@@ -676,6 +679,8 @@ export interface KettuApi {
     setUnsaved(files: UnsavedFile[]): void
     closeWindow(): void
     onCommand(listener: (command: AppCommand) => void): () => void
+    /** A session's turn ended, failed or waits for the user while this window is in front. */
+    onAttention(listener: (notice: AttentionNotice) => void): () => void
     reportInteractive(): void
     /** App shortcuts typed in an artifact's frame, which the page itself never sees. */
     onShortcut(listener: (key: ForwardedKey) => void): () => void

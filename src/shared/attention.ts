@@ -94,6 +94,40 @@ export function pushedAttention(message: AttentionMessage): AttentionMessage | n
   }
 }
 
+/** A session's turn that ended, failed or waits for the user, as a window in front shows it. */
+export interface AttentionNotice {
+  sessionId: string
+  kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'
+  title: string
+  body: string
+}
+
+/**
+ * What a window in front shows of a well-formed attention message in place of a notification,
+ * titled `title` when another host's names it; null for what is not a session's turn.
+ */
+export function attentionNotice(
+  message: HostAttention,
+  title: string = message.title,
+): AttentionNotice | null {
+  if (!attentionTarget(message)) return null
+  switch (message.kind) {
+    case 'permission':
+    case 'turn-ended':
+    case 'error':
+    case 'routine-ended':
+      return isId(message.sessionId)
+        ? {
+            sessionId: message.sessionId,
+            kind: message.kind,
+            ...attentionText({ ...message, title }),
+          }
+        : null
+    default:
+      return null
+  }
+}
+
 /** The title and body as a notification shows them. */
 export function attentionText(message: HostAttention): { title: string; body: string } {
   return { title: clip(message.title, MAX_TITLE), body: clip(message.body, MAX_BODY) }

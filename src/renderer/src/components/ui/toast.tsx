@@ -140,6 +140,39 @@ export function progressToast(title: string) {
 }
 
 /**
+ * Says what happened out of view, such as a turn that ended in another session, with an action
+ * that goes there. Given the `id` of one still on screen, it changes that one in place and starts
+ * its time again; `onClose` runs once it goes.
+ */
+export function eventToast(
+  content: { title: string; description?: string; warning?: boolean },
+  action: { label: string; onClick: () => void },
+  options: { id?: ToastId; onClose?: () => void } = {},
+): ToastId {
+  const id = affectToast(content.title, {
+    ...(options.id !== undefined && { id: options.id }),
+    description: content.description,
+    icon: content.warning ? (
+      <HugeiconsIcon
+        icon={Alert02Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="size-3.75 text-warning"
+      />
+    ) : undefined,
+    action: actionOf(action),
+    duration: 6000,
+    onDismiss: (closed) => {
+      onDismiss(closed)
+      options.onClose?.()
+    },
+  })
+  open.add(id)
+  changed()
+  return id
+}
+
+/**
  * A warning that stays until it is closed or its action is chosen, such as the notice of an
  * unexpected quit; `onClose` runs either way, once.
  */

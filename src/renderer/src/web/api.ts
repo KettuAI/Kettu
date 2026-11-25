@@ -3,7 +3,12 @@
 // what a browser can do itself. What needs the desktop app's own window is never offered: the
 // page hides it, and a call that comes anyway is refused.
 
-import { pushedAttention } from '@shared/attention'
+import {
+  ATTENTION_SETTING,
+  attentionNotice,
+  pushedAttention,
+  type AttentionNotice,
+} from '@shared/attention'
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { HostToMain } from '@shared/host-control'
@@ -229,6 +234,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
 
   // What a notification's click opens, as main sends a window its menu's commands.
   const commands = new Set<(command: AppCommand) => void>()
+  const notices = new Set<(notice: AttentionNotice) => void>()
   const inFront = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
   followTabFront(inFront)
   const open = (command: AppCommand): void => {
@@ -248,6 +254,11 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         context.push?.active === true &&
         pushedAttention({ type: 'host:attention', ...attention } as AttentionMessage) !== null,
     })
+    // In front, a session's turn shows in the page in place of the browser's notification.
+    const notice = inFront() ? attentionNotice(attention) : null
+    if (notice && settings.current().notifications[ATTENTION_SETTING[notice.kind]]) {
+      for (const listener of notices) listener(notice)
+    }
   })
   context.push?.onOpen(open)
 
@@ -280,6 +291,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       onCommand: (listener) => {
         commands.add(listener)
         return () => commands.delete(listener)
+      },
+      onAttention: (listener) => {
+        notices.add(listener)
+        return () => notices.delete(listener)
       },
       reportInteractive: () => {},
       onShortcut: never,
