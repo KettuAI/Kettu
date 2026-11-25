@@ -210,7 +210,8 @@ export function GeneralSwitch({
   label: string
   disabled?: boolean
 }) {
-  const checked = useSettings().general[field]
+  // A host older than one of its keys leaves it out, and works as its default.
+  const checked = useSettings().general[field] ?? DEFAULT_SETTINGS.general[field]
   const [apply, error] = useApply()
   return (
     <>

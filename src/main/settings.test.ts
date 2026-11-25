@@ -292,6 +292,20 @@ describe('letting agents type passwords', () => {
   })
 })
 
+describe('continuing after a plan limit resets', () => {
+  it('is kept by the host, so a client changes the value its sessions follow', () => {
+    expect(splitSettingsPatch({ general: { continueAfterLimit: false } })).toEqual({
+      host: { general: { continueAfterLimit: false } },
+      client: null,
+    })
+    const host = mergeSettings(DEFAULT_SETTINGS, { general: { continueAfterLimit: false } })
+    expect(hostSettingsPart(host).general.continueAfterLimit).toBe(false)
+    const shown = withHostSettings(structuredClone(DEFAULT_SETTINGS), hostSettingsPart(host))
+    expect(shown.general.continueAfterLimit).toBe(false)
+    expect(hostSettings(host, 'en').continueAfterLimit).toBe(false)
+  })
+})
+
 describe('when idle sessions let their agent go', () => {
   it('releases by memory until the user picks, with Custom at 5 and 30 minutes and no limit', async () => {
     const store = await SettingsStore.load(dir)
