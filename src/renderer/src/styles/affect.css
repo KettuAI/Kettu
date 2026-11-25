@@ -737,6 +737,10 @@ li[data-row-exit='dust'] > * {
   width: auto;
   padding: 0 6px;
 }
+/* Wider than the sidebar's 260 px menu, so each card fits a window's name beside "100%". */
+.ui-as-user-menu .ui-as-user-pop.kettu-plan-ring__pop {
+  min-width: 280px;
+}
 .kettu-plan-pop {
   padding: 4px;
   border-radius: 12px;
