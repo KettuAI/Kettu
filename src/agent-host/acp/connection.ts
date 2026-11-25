@@ -26,7 +26,13 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
 import type { ContextEstimates } from '@shared/context'
-import type { AgentId, ConfigOption, PendingConfig, PermissionOption } from '@shared/thread'
+import type {
+  AgentId,
+  ConfigOption,
+  PendingConfig,
+  PermissionOption,
+  TokenTotals,
+} from '@shared/thread'
 import {
   AgentRequestError,
   optionAnswer,
@@ -54,6 +60,7 @@ import { t } from '../i18n'
 import { planRevision } from '../plan-revision'
 import {
   addEntry,
+  addTokenTotals,
   isStopReason,
   mergeConfig,
   type MapperContext,
@@ -67,6 +74,7 @@ import {
 } from '../vendor-usage/antigravity'
 import {
   KNOWN_UPDATES,
+  chunkTokens,
   mapAuthStatus,
   mapReportedAuthStatus,
   mapConfig,
@@ -421,6 +429,8 @@ export class AcpConnection implements AgentConnection {
   private readonly openAsks = new OpenAsks()
   /** Sessions with a prompt in flight. */
   private readonly prompting = new Set<string>()
+  /** The tokens of the model calls of each prompt in flight, as its message chunks carried them. */
+  private readonly chunkUsage = new Map<string, TokenTotals>()
   /** agy's plan files, by session. */
   private readonly agyPlans = new Map<string, AgyPlans>()
   /** The mode each agy session was in before it entered Plan mode, which a plan builds in. */
@@ -650,6 +660,7 @@ export class AcpConnection implements AgentConnection {
     if (this.muted.has(sessionId)) return
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
+    this.countChunk(sessionId, update, target)
     if (target) {
       this.notePlanWrite(sessionId, update)
       const replaying = target.context().replaying
@@ -685,6 +696,14 @@ export class AcpConnection implements AgentConnection {
       this.pending.set(sessionId, entry)
     }
     if (entry.updates.length < PENDING_UPDATES) entry.updates.push(update)
+  }
+
+  /** Adds a model call's tokens that a chunk of a turn in flight carries, never a replayed one's. */
+  private countChunk(sessionId: string, update: SessionUpdate, target?: SessionTarget): void {
+    if (!this.prompting.has(sessionId) || target?.context().replaying) return
+    const tokens = chunkTokens(update)
+    if (!tokens) return
+    this.chunkUsage.set(sessionId, addTokenTotals(this.chunkUsage.get(sessionId) ?? null, tokens))
   }
 
   private learnChild(sessionId: string, update: SessionUpdate): void {
@@ -1083,6 +1102,7 @@ export class AcpConnection implements AgentConnection {
     this.subagentParents.delete(sessionId)
     this.subagents?.forget(sessionId)
     this.agyMetrics?.forget(sessionId)
+    this.chunkUsage.delete(sessionId)
   }
 
   async listSessions(
@@ -1118,7 +1138,9 @@ export class AcpConnection implements AgentConnection {
       this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
     }
     this.prompting.add(sessionId)
+    this.chunkUsage.delete(sessionId)
     let answer: ChainAnswer | null = null
+    let chunked: TokenTotals | null
     let failed = false
     try {
       await this.agyMetrics?.preparePrompt(sessionId)
@@ -1144,6 +1166,8 @@ export class AcpConnection implements AgentConnection {
       throw error
     } finally {
       this.prompting.delete(sessionId)
+      chunked = this.chunkUsage.get(sessionId) ?? null
+      this.chunkUsage.delete(sessionId)
       const aborted = failed || answer?.response.stopReason === 'cancelled'
       this.carryCommands(sessionId, aborted)
       this.subagents?.turnEnded(sessionId)
@@ -1152,7 +1176,8 @@ export class AcpConnection implements AgentConnection {
     const { response, tokens, models } = answer!
     const result: PromptResult = {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
-      tokens,
+      // What the response reports wins, so a call is never counted from both.
+      tokens: tokens ?? (models.length === 0 ? chunked : null),
       models,
     }
     this.agyMetrics?.onPromptEnd(sessionId, result.stopReason)

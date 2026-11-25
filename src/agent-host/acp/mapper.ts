@@ -723,6 +723,30 @@ export function mapModelUsage(meta: unknown): ModelTokens[] {
   return models
 }
 
+/**
+ * The tokens of one model call that an agent attaches to an `agent_message_chunk` under
+ * `_meta.usage`, in ACP's usage fields. Qwen Code sends one such chunk per call, its own and its
+ * subagents', with an empty text and no id, and reports no usage on its prompt response.
+ */
+export function chunkTokens(update: acp.SessionUpdate): TokenTotals | null {
+  if (update.sessionUpdate !== 'agent_message_chunk') return null
+  const usage = (update._meta as { usage?: unknown } | null | undefined)?.usage
+  if (typeof usage !== 'object' || usage === null) return null
+  const fields = usage as Record<string, unknown>
+  const totalTokens = count(fields.totalTokens)
+  const inputTokens = count(fields.inputTokens)
+  const outputTokens = count(fields.outputTokens)
+  if (totalTokens === null || inputTokens === null || outputTokens === null) return null
+  return mapTokenTotals({
+    totalTokens,
+    inputTokens,
+    outputTokens,
+    thoughtTokens: count(fields.thoughtTokens),
+    cachedReadTokens: count(fields.cachedReadTokens),
+    cachedWriteTokens: count(fields.cachedWriteTokens),
+  })
+}
+
 type CompactionStatus = Extract<ThreadEntry, { kind: 'compaction' }>['status']
 
 const NOTICE_SEVERITIES: ReadonlySet<string> = new Set(['info', 'warning', 'error'])

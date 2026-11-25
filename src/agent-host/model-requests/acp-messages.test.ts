@@ -114,6 +114,49 @@ describe('AcpMessages', () => {
     ])
   })
 
+  it("sums the model calls a turn's chunks carry when its answer reports no usage", () => {
+    // Qwen Code 0.28.4: an empty chunk per model call, and a prompt answer without usage.
+    const store = new AcpMessages()
+    const usage = (u: object) => ({
+      jsonrpc: '2.0',
+      method: 'session/update',
+      params: {
+        sessionId: 's1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: '' },
+          _meta: { usage: u },
+        },
+      },
+    })
+    store.add('qwen', 'out', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'session/prompt',
+      params: { sessionId: 's1', prompt: [{ type: 'text', text: 'Go' }] },
+    })
+    store.add(
+      'qwen',
+      'in',
+      usage({ inputTokens: 12000, outputTokens: 300, totalTokens: 12300, cachedReadTokens: 10000 }),
+    )
+    store.add(
+      'qwen',
+      'in',
+      usage({ inputTokens: 12800, outputTokens: 150, totalTokens: 12950, cachedReadTokens: 12000 }),
+    )
+    store.add('qwen', 'in', { jsonrpc: '2.0', id: 1, result: { stopReason: 'end_turn' } })
+    const [turn] = acpTurns(store.of('qwen', 's1'))
+    expect(turn!.requests[0]!.tokens).toEqual({
+      input: 2800,
+      cacheRead: 22000,
+      cacheWrite: null,
+      cacheWrite1h: null,
+      output: 450,
+      reasoning: null,
+    })
+  })
+
   it('drops the oldest messages and the least recent sessions past their bounds', () => {
     const store = new AcpMessages()
     for (let i = 0; i < SESSION_MESSAGES + 5; i++) {
