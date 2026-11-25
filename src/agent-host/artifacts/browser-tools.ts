@@ -132,6 +132,21 @@ export const BROWSER_READ_TOOLS: readonly BrowserToolName[] = [
   'browser_network_requests',
 ]
 
+/** 仅在 Auto 模式下自动放行的本地浏览器调试工具（导航仅限本地开发服务，用户标签页另由 Kettu 授权卡把关）。 */
+export const BROWSER_AUTO_MODE_TOOLS: readonly BrowserToolName[] = [
+  'browser_navigate',
+  'browser_navigate_back',
+  'browser_reload',
+  'browser_click',
+  'browser_type',
+  'browser_press_key',
+  'browser_scroll',
+  'browser_select_option',
+  'browser_evaluate',
+  'browser_ask_user',
+  'browser_tabs',
+]
+
 const TAB = object(
   {
     index: { type: 'integer' },

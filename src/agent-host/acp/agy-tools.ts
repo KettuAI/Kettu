@@ -7,6 +7,7 @@
 
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
+import { unsafeCommand, type Shell } from '../command-safety'
 import type { McpServer } from '../connection'
 import { GUIDE_TOOL } from '../guide/guide'
 import { SERVICE_NAME } from '../service-name'
@@ -20,6 +21,7 @@ const NO_OUTPUT = 'No output from the command.'
 const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity-cli\/brain\//
 const OWN_PREFIX = `mcp_${SERVICE_NAME}_`
 const GATEWAY_NAME = `${OWN_PREFIX}${GATEWAY_TOOL}`
+const TERMINAL_RUN_NAME = `${OWN_PREFIX}terminal_run`
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -33,18 +35,30 @@ function toolName(update: acp.ToolCallUpdate): string | null {
   return typeof name === 'string' ? name : null
 }
 
+/** agy 会话按权限模式分层的 MCP 自动放行名单。 */
+export interface AgyAutoAllow {
+  /** 所有权限模式下均可直接放行的 MCP 工具名（如只读查询与 Kettu 内部管理类工具）。 */
+  readonly always: ReadonlySet<string>
+  /** 仅在 Auto 权限模式下自动放行的可回滚 MCP 工具名。 */
+  readonly onAuto: ReadonlySet<string>
+  /** 当前会话是否挂载了 Kettu 内置 MCP 服务（用于限定安全命令动态判定范围）。 */
+  readonly hasKettu: boolean
+}
+
 /**
- * agy's names for the tools a session's MCP servers run without asking, the set Claude Code's and
- * Codex's settings are given.
+ * 收集 agy 会话挂载的 MCP 服务器的自动放行名单（分为全模式放行与仅 Auto 模式放行）。
  */
-export function agyAutoAllowed(servers: readonly McpServer[] | undefined): ReadonlySet<string> {
-  return new Set(
-    (servers ?? []).flatMap((server) =>
-      server.type === 'stdio'
-        ? []
-        : (server.autoAllow ?? []).map((tool) => `mcp_${server.name}_${tool}`),
-    ),
-  )
+export function agyAutoAllowed(servers: readonly McpServer[] | undefined): AgyAutoAllow {
+  const always = new Set<string>()
+  const onAuto = new Set<string>()
+  let hasKettu = false
+  for (const server of servers ?? []) {
+    if (server.type === 'stdio') continue
+    if (server.name === SERVICE_NAME) hasKettu = true
+    for (const tool of server.autoAllow ?? []) always.add(`mcp_${server.name}_${tool}`)
+    for (const tool of server.autoModeAllow ?? []) onAuto.add(`mcp_${server.name}_${tool}`)
+  }
+  return { always, onAuto, hasKettu }
 }
 
 /**
@@ -77,20 +91,35 @@ function describesOnly(toolCall: acp.ToolCallUpdate): boolean {
   return typeof input?.tool === 'string' && input.arguments === undefined
 }
 
+/** 判断 terminal_run 在 Auto 模式下运行的命令是否属于可回滚的安全命令。 */
+function isSafeTerminalRun(toolCall: acp.ToolCallUpdate, shell: Shell): boolean {
+  const command = record(toolCall.rawInput)?.command
+  return typeof command === 'string' && command.trim() !== '' && !unsafeCommand(command, shell)
+}
+
 /**
- * The option that allows a call once, for a call of one of those tools, or of Kettu's gateway that
- * only describes a tool while Kettu's server is the session's; null for any other. A gateway call
- * that runs a tool is decided as that tool, after `throughGateway`.
+ * 判断 agy 的 MCP 工具调用是否可直接回复 allow_once：
+ * - 命中全模式白名单或仅查询 Kettu 网关工具说明时直接放行；
+ * - 处于 Auto 权限模式时，额外放行可回滚的 Kettu 内置工具与通过安全检查的 terminal_run；
+ * - 不可逆操作（删除、危险命令、桌面操控、第三方外部 MCP 等）返回 null 交由用户确认。
  */
 export function agyAllowOnce(
   toolCall: acp.ToolCallUpdate,
   options: readonly acp.PermissionOption[],
-  allowed: ReadonlySet<string> | undefined,
+  allowed: AgyAutoAllow | undefined,
+  autoMode = false,
+  shell: Shell = process.platform === 'win32' ? 'powershell' : 'posix',
 ): string | null {
   const name = toolName(toolCall)
-  if (name === null) return null
-  const lookup = describesOnly(toolCall) && allowed?.has(`${OWN_PREFIX}${GUIDE_TOOL}`) === true
-  if (!lookup && !allowed?.has(name)) return null
+  if (name === null || !allowed) return null
+  const lookup = describesOnly(toolCall) && allowed.always.has(`${OWN_PREFIX}${GUIDE_TOOL}`)
+  const allow =
+    lookup ||
+    allowed.always.has(name) ||
+    (autoMode &&
+      (allowed.onAuto.has(name) ||
+        (name === TERMINAL_RUN_NAME && allowed.hasKettu && isSafeTerminalRun(toolCall, shell))))
+  if (!allow) return null
   return options.find((option) => option.kind === 'allow_once')?.optionId ?? null
 }
 

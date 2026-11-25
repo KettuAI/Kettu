@@ -267,6 +267,34 @@ export function isDeviceToolName(name: string): name is DeviceToolName {
   return (DEVICE_TOOL_NAMES as readonly string[]).includes(name)
 }
 
+/** 仅列出和读取移动设备状态的工具，未授权设备仍由 Kettu 首次设备授权卡把关。 */
+export const DEVICE_READ_TOOLS: readonly DeviceToolName[] = [
+  'device_list',
+  'device_snapshot',
+  'device_screenshot',
+  'device_logs',
+]
+
+/** 仅在 Auto 模式下自动放行的设备调试交互工具（首次接入设备仍由 Kettu 授权卡把关）。 */
+export const DEVICE_AUTO_MODE_TOOLS: readonly DeviceToolName[] = [
+  'device_open',
+  'device_close',
+  'device_tap',
+  'device_fill',
+  'device_type',
+  'device_scroll',
+  'device_swipe',
+  'device_press_button',
+  'device_rotate',
+  'device_install_app',
+  'device_launch_app',
+  'device_terminate_app',
+  'device_open_url',
+  'device_set_appearance',
+  'device_set_location',
+  'device_set_permission',
+]
+
 export interface DeviceToolDeps {
   call(call: DeviceCall): Promise<DeviceCallAnswer>
   /** The session whose devices a call uses: a subagent's, the session it runs under. */

@@ -161,6 +161,9 @@ export const TERMINAL_READ_TOOLS: readonly TerminalToolName[] = [
   'terminal_rename',
 ]
 
+/** 仅在 Auto 模式下自动放行的非破坏性终端控制工具（运行与输入命令单独做安全判定）。 */
+export const TERMINAL_AUTO_MODE_TOOLS: readonly TerminalToolName[] = ['terminal_stop']
+
 export function isTerminalToolName(name: string): name is TerminalToolName {
   return (TERMINAL_TOOL_NAMES as readonly string[]).includes(name)
 }

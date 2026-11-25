@@ -117,6 +117,7 @@ import {
   inWholeFile,
   onAgyOwnFiles,
   throughGateway,
+  type AgyAutoAllow,
 } from './agy-tools'
 import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
@@ -407,8 +408,8 @@ export class AcpConnection implements AgentConnection {
   private removal: Removal | null = null
   /** Hidden sessions an agent keeps once prompted: open to read, never to prompt. */
   private readonly unprompted = new Set<string>()
-  /** agy's names for the tools each session's MCP servers run without asking. */
-  private readonly autoAllowed = new Map<string, ReadonlySet<string>>()
+  /** agy 会话各权限模式下自动放行的 MCP 工具集合。 */
+  private readonly autoAllowed = new Map<string, AgyAutoAllow>()
   /** The version the agent named in `initialize`. */
   private version: string | null = null
   /** How the agent names the MCP tools it calls, once `initialize` has answered. */
@@ -466,11 +467,12 @@ export class AcpConnection implements AgentConnection {
         // A call through Kettu's gateway asks and shows as the tool it runs.
         const asked = this.agy ? throughGateway(ctx.params.toolCall) : ctx.params.toolCall
         if (this.agy) {
-          // agy asks for every MCP tool; Kettu's own run without asking, as Claude Code's do.
+          // agy 对所有 MCP 工具都会请求授权；Kettu 按全模式白名单及 Auto 模式下可回滚规则自动放行。
           const optionId = agyAllowOnce(
             asked,
             ctx.params.options,
             this.autoAllowed.get(ctx.params.sessionId),
+            this.agyMode(ctx.params.sessionId) === 'auto',
           )
           if (optionId) return { outcome: { outcome: 'selected', optionId } }
         }
@@ -608,6 +610,21 @@ export class AcpConnection implements AgentConnection {
 
   private allowWithoutAsking(sessionId: string, options: SessionOptions): void {
     if (this.agy) this.autoAllowed.set(sessionId, agyAutoAllowed(options.mcpServers))
+  }
+
+  /** 读取 agy 会话（含子智能体继承自父会话）当前生效的权限模式值。 */
+  private agyMode(sessionId: string): string | null {
+    let id: string | undefined = sessionId
+    const seen = new Set<string>()
+    while (id && !seen.has(id)) {
+      seen.add(id)
+      const mode =
+        currentMode(this.targets.get(id)?.context().thread.session.config ?? []) ??
+        currentMode(this.agyAccess.get(id)?.config ?? [])
+      if (mode !== null) return mode
+      id = this.subagentParents.get(id)
+    }
+    return null
   }
 
   /** Whether the agent is agy, whose tool calls take a shape of their own. */

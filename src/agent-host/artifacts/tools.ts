@@ -711,6 +711,26 @@ TOOLS.push(
 
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name))
 
+/** 产物只读查询工具，不修改数据，可在所有权限模式下自动放行。 */
+export const ARTIFACT_READ_TOOLS: readonly string[] = [
+  'read_artifact',
+  'list_artifacts',
+  'list_artifact_versions',
+  'list_artifact_types',
+  'read_artifact_type',
+  'read_comments',
+]
+
+/** 产物可回滚编辑与评论协作工具，在 Auto 模式下自动放行（删除仍需确认）。 */
+export const ARTIFACT_AUTO_MODE_TOOLS: readonly string[] = [
+  'create_artifact',
+  'update_artifact',
+  'create_artifact_from_type',
+  'restore_artifact_version',
+  'reply_comment',
+  'resolve_comment',
+]
+
 export function isToolName(name: string): boolean {
   return TOOL_NAMES.has(name)
 }

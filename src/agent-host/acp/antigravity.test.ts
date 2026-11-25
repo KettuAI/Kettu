@@ -630,6 +630,97 @@ describe("agy's permission requests", () => {
     ])
     connection.close()
   })
+
+  it('auto-allows reversible Kettu MCP tools and safe terminal_run in Auto mode while asking for irreversible ones', async () => {
+    const OPTIONS = [
+      { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+      { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+    ]
+    const directCall = (toolCallId: string, name: string, rawInput: Record<string, unknown>) => ({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      name,
+      args: rawInput,
+      status: 'pending',
+      kind: 'other',
+      title: `Run ${name}`,
+      rawInput,
+    })
+
+    const calls = [
+      directCall('c-create', 'mcp_kettu_create_artifact', { title: 'Demo' }),
+      gatewayCall('c-update', 'update_artifact', { id: 'a1', title: 'Demo 2' }),
+      directCall('c-nav', 'mcp_kettu_browser_navigate', { url: 'http://localhost:5173' }),
+      gatewayCall('c-tap', 'device_tap', { deviceId: 'ios-sim:1', ref: '@e1' }),
+      gatewayCall('c-stop', 'terminal_stop', { terminalId: 't1' }),
+      gatewayCall('c-safe-cmd', 'terminal_run', { command: 'pnpm dev' }),
+      // 以下均为不可回滚或外部/高危操作，在 Auto 模式下仍必须询问用户。
+      gatewayCall('c-delete', 'delete_artifact', { id: 'a1' }),
+      gatewayCall('c-rm', 'terminal_run', { command: 'rm -rf /tmp/demo' }),
+      gatewayCall('c-push', 'terminal_run', { command: 'git push origin main' }),
+      gatewayCall('c-input', 'terminal_input', { terminalId: 't1', text: 'y', enter: true }),
+      gatewayCall('c-click', 'computer_click', { pid: 1, window_id: 1, x: 10, y: 10 }),
+      directCall('c-ext', 'mcp_github_push_files', { owner: 'a', repo: 'b' }),
+    ]
+
+    async function runInMode(mode: 'default' | 'auto') {
+      const { connection } = connect('1.5.16', async (client, sessionId) => {
+        for (const call of calls) {
+          await client.notify(methods.client.session.update, update(sessionId, call))
+          await client.request(methods.client.session.requestPermission, {
+            sessionId,
+            toolCall: call,
+            options: OPTIONS,
+          } as never)
+          await client.notify(
+            methods.client.session.update,
+            update(sessionId, { ...call, sessionUpdate: 'tool_call_update', status: 'completed' }),
+          )
+        }
+      })
+      await connection.initialize('1.0.0')
+      const { sessionId } = await connection.newSession('/tmp/agy-probe', {
+        mcpServers: [
+          {
+            type: 'http',
+            name: 'kettu',
+            url: 'http://127.0.0.1:1/mcp',
+            headers: [],
+            autoAllow: ['set_plan', 'read_kettu_guide'],
+            autoModeAllow: [
+              'create_artifact',
+              'update_artifact',
+              'browser_navigate',
+              'device_tap',
+              'terminal_stop',
+            ],
+          },
+          { type: 'http', name: 'github', url: 'http://127.0.0.1:2/mcp', headers: [] },
+        ],
+      })
+      const { target, asked } = threadTarget()
+      target.apply({
+        patches: [{ op: 'session.update', changes: { config: mapConfig([agyModes(mode)], null) } }],
+        effects: [],
+      })
+      connection.register(sessionId, target)
+      await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+      connection.close()
+      return asked
+    }
+
+    // Default 模式下所有写/执行/外部工具都应询问。
+    expect(await runInMode('default')).toEqual(calls.map((call) => call.toolCallId))
+    // Auto 模式下可回滚 Kettu 工具和安全 terminal_run 自动放行，不可逆与外部工具继续询问。
+    expect(await runInMode('auto')).toEqual([
+      'c-delete',
+      'c-rm',
+      'c-push',
+      'c-input',
+      'c-click',
+      'c-ext',
+    ])
+  })
 })
 
 /** A call of Kettu's gateway as agy 1.5.14 sends it, every update repeating its name and input. */
