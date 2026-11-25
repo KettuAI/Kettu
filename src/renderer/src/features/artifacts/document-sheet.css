@@ -51,7 +51,7 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--text-primary);
+  background: var(--fill-ink);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

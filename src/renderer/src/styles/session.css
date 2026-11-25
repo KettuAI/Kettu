@@ -338,7 +338,7 @@
   max-width: none;
   font-family: inherit;
   font-size: var(--prose-size);
-  --ui-ansc-ink: var(--thread-ink);
+  --ui-ansc-ink: var(--thread-prose);
   --ui-ansc-strong: var(--thread-ink);
   --ui-ansc-text: var(--thread-muted);
 }
@@ -384,7 +384,7 @@
   display: none;
 }
 .ks-answer .markdown {
-  color: var(--thread-ink);
+  color: var(--thread-prose);
 }
 /* The fox's caret after the last word while the message streams. */
 .ks-answer

@@ -38,7 +38,7 @@ function ResizableHandle({
       {/* A click leaves the handle focused, and the library then reports focus instead of
           hover, so hover is also read from :hover. */}
       {withHandle && (
-        <div className="z-10 flex h-12 w-1 shrink-0 rounded-full bg-muted-foreground opacity-0 transition-[opacity,background-color] duration-(--duration-fast) group-data-[separator=active]:bg-foreground group-data-[separator=active]:opacity-100 group-data-[separator=hover]:opacity-100 group-data-[separator=focus]:group-hover:opacity-100" />
+        <div className="z-10 flex h-12 w-1 shrink-0 rounded-full bg-muted-foreground opacity-0 transition-[opacity,background-color] duration-(--duration-fast) group-data-[separator=active]:bg-primary group-data-[separator=active]:opacity-100 group-data-[separator=hover]:opacity-100 group-data-[separator=focus]:group-hover:opacity-100" />
       )}
     </ResizablePrimitive.Separator>
   )

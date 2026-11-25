@@ -229,7 +229,7 @@
   display: block;
   width: 4px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--fill-ink) 28%, transparent);
 }
 
 @keyframes k-present-fade {

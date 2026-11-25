@@ -33,8 +33,8 @@
   --border-strong: rgb(0 0 0 / 16%);
   /* session: the thread and its header, in affectUI's stepped inks over the sheet. */
   --thread-ink: rgb(0 0 0 / 88%);
-  --thread-text: rgb(0 0 0 / 64%);
-  --thread-prose: rgb(0 0 0 / 78%);
+  --thread-text: var(--shell-row);
+  --thread-prose: var(--shell-row);
   --thread-quiet: rgb(0 0 0 / 58%);
   --thread-muted: rgb(0 0 0 / 52%);
   --thread-faint: rgb(0 0 0 / 42%);
@@ -65,7 +65,10 @@
   --hud-key-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 18%), 0 1px 0 rgb(0 0 0 / 25%);
   --hud-countdown: rgb(91 154 255 / 42%);
 
-  --text-primary: #1f1f1f;
+  /* The sidebar rows' color (--shell-row) as it shows on the page: every primary text. */
+  --text-primary: #383838;
+  /* A step darker: the ink fills (tooltips, badges) and the data grays mixed from it. */
+  --fill-ink: #1f1f1f;
   --text-secondary: #5c5c5c;
   --text-tertiary: #686868;
   --text-placeholder: #686868;
@@ -515,8 +518,8 @@
   --shell-line-soft: rgb(0 0 0 / 4%);
   --shell-strong: #000000;
   --shell-ink: rgb(0 0 0 / 88%);
-  --shell-text: rgb(0 0 0 / 64%);
-  /* A sidebar row and its icon: a step darker than the shell's text. */
+  --shell-text: var(--shell-row);
+  /* A sidebar row and its icon, and the primary text the other steps of text take. */
   --shell-row: rgb(0 0 0 / 78%);
   --shell-muted: rgb(0 0 0 / 52%);
   --shell-faint: rgb(0 0 0 / 42%);
@@ -626,7 +629,7 @@
      Picker), New session's list, and the meters' four levels by how much is used. */
   --composer-strong: #000000;
   --composer-ink: rgb(0 0 0 / 88%);
-  --composer-text: rgb(0 0 0 / 64%);
+  --composer-text: var(--shell-row);
   --composer-muted: rgb(0 0 0 / 52%);
   --composer-faint: rgb(0 0 0 / 42%);
   --composer-line: var(--border-subtle);
@@ -728,8 +731,8 @@
     --border-strong: rgb(255 255 255 / 18%);
     /* session: the thread and its header. */
     --thread-ink: rgb(255 255 255 / 90%);
-    --thread-text: rgb(255 255 255 / 66%);
-    --thread-prose: rgb(255 255 255 / 82%);
+    --thread-text: var(--shell-row);
+    --thread-prose: var(--shell-row);
     --thread-quiet: rgb(255 255 255 / 60%);
     --thread-muted: rgb(255 255 255 / 54%);
     --thread-faint: rgb(255 255 255 / 42%);
@@ -750,7 +753,8 @@
     --hud-bg: rgb(52 52 56 / 72%);
     --hud-edge: rgb(255 255 255 / 10%);
 
-    --text-primary: #e6e6e7;
+    --text-primary: #d0d0d0;
+    --fill-ink: #e6e6e7;
     --text-secondary: #ababad;
     --text-tertiary: #98989b;
     --text-placeholder: #98989b;
@@ -964,7 +968,7 @@
     --shell-line-soft: rgb(255 255 255 / 5%);
     --shell-strong: #ffffff;
     --shell-ink: rgb(255 255 255 / 90%);
-    --shell-text: rgb(255 255 255 / 66%);
+    --shell-text: var(--shell-row);
     --shell-row: rgb(255 255 255 / 80%);
     --shell-muted: rgb(255 255 255 / 54%);
     --shell-faint: rgb(255 255 255 / 42%);
@@ -1059,7 +1063,7 @@
     /* composer: the composer's tray, popovers and menus, New session's list. */
     --composer-strong: #ffffff;
     --composer-ink: rgb(255 255 255 / 90%);
-    --composer-text: rgb(255 255 255 / 66%);
+    --composer-text: var(--shell-row);
     --composer-muted: rgb(255 255 255 / 54%);
     --composer-faint: rgb(255 255 255 / 42%);
     --composer-line: var(--border-subtle);
@@ -1136,8 +1140,8 @@
   --border-strong: rgb(255 255 255 / 18%);
   /* session: the thread and its header. */
   --thread-ink: rgb(255 255 255 / 90%);
-  --thread-text: rgb(255 255 255 / 66%);
-  --thread-prose: rgb(255 255 255 / 82%);
+  --thread-text: var(--shell-row);
+  --thread-prose: var(--shell-row);
   --thread-quiet: rgb(255 255 255 / 60%);
   --thread-muted: rgb(255 255 255 / 54%);
   --thread-faint: rgb(255 255 255 / 42%);
@@ -1158,7 +1162,8 @@
   --hud-bg: rgb(52 52 56 / 72%);
   --hud-edge: rgb(255 255 255 / 10%);
 
-  --text-primary: #e6e6e7;
+  --text-primary: #d0d0d0;
+  --fill-ink: #e6e6e7;
   --text-secondary: #ababad;
   --text-tertiary: #98989b;
   --text-placeholder: #98989b;
@@ -1371,7 +1376,7 @@
   --shell-line-soft: rgb(255 255 255 / 5%);
   --shell-strong: #ffffff;
   --shell-ink: rgb(255 255 255 / 90%);
-  --shell-text: rgb(255 255 255 / 66%);
+  --shell-text: var(--shell-row);
   --shell-row: rgb(255 255 255 / 80%);
   --shell-muted: rgb(255 255 255 / 54%);
   --shell-faint: rgb(255 255 255 / 42%);
@@ -1466,7 +1471,7 @@
   /* composer: the composer's tray, popovers and menus, New session's list. */
   --composer-strong: #ffffff;
   --composer-ink: rgb(255 255 255 / 90%);
-  --composer-text: rgb(255 255 255 / 66%);
+  --composer-text: var(--shell-row);
   --composer-muted: rgb(255 255 255 / 54%);
   --composer-faint: rgb(255 255 255 / 42%);
   --composer-line: var(--border-subtle);
@@ -1528,6 +1533,9 @@
    drops, a phone's bezel, the terminal drawn in Settings and Ultracode's violet keep their values. */
 :root[data-installed-theme],
 [data-installed-theme] [data-theme] {
+  --fill-ink: var(--text-primary);
+  /* affectUI's answer: the prose a step softer than the ink, which bold text keeps. */
+  --prose-text: color-mix(in srgb, var(--text-primary) 84%, var(--bg-app));
   --thread-ink: var(--text-primary);
   --thread-text: var(--text-secondary);
   --thread-prose: var(--text-secondary);
@@ -1646,9 +1654,12 @@
   --artifact-fault-tint: color-mix(in srgb, var(--danger) 12%, transparent);
   --artifact-wait: var(--warning);
   --artifact-wait-halo: color-mix(in srgb, var(--warning) 20%, transparent);
-  --artifact-band: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  --artifact-band: color-mix(in srgb, var(--fill-ink) 9%, transparent);
   --artifact-band-duration: 1.6s;
   --artifact-pulse-duration: 1.6s;
+
+  /* Prose in Markdown: the primary text. */
+  --prose-text: var(--text-primary);
 
   /* shadcn/ui's names, so its components pick the palette up unchanged. */
   --background: var(--bg-app);
@@ -1657,7 +1668,7 @@
   --card-foreground: var(--text-primary);
   --popover: var(--bg-surface);
   --popover-foreground: var(--text-primary);
-  --primary: var(--text-primary);
+  --primary: var(--fill-ink);
   --secondary: var(--bg-subtle);
   --secondary-foreground: var(--text-primary);
   --muted: var(--bg-subtle);
@@ -1683,15 +1694,15 @@
   --chart-1: var(--text-disabled);
   --chart-2: var(--text-tertiary);
   --chart-3: var(--text-secondary);
-  --chart-4: var(--text-primary);
-  --chart-5: var(--text-primary);
+  --chart-4: var(--fill-ink);
+  --chart-5: var(--fill-ink);
 
   /* Neutral fills of controls. */
   --tile: var(--bg-subtle);
   --segment-track: var(--bg-subtle);
   --segment-thumb: var(--bg-surface);
   --pressed: var(--bg-selected);
-  --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--fill-ink) 5%);
   /* The edge of the queued card right behind the front one, halfway there. */
   --queue-back-near: color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%);
   /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
@@ -1733,7 +1744,7 @@
   /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque. */
   --heat-hue: var(--attention-dot);
   /* Shares by size, the largest furthest from the card, in the same orange; the rest in gray. */
-  --share-1: color-mix(in oklab, var(--heat-hue), var(--text-primary) 24%);
+  --share-1: color-mix(in oklab, var(--heat-hue), var(--fill-ink) 24%);
   --share-2: var(--heat-hue);
   --share-3: color-mix(in oklab, var(--heat-hue) 68%, var(--bg-surface));
   --share-4: color-mix(in oklab, var(--heat-hue) 44%, var(--bg-surface));
@@ -1742,23 +1753,23 @@
   /* The kinds of tokens: the cache's in the first chart color, the rest in grays of the text. */
   --part-cache-read: var(--context-1);
   --part-cache-write: color-mix(in srgb, var(--context-1) 55%, var(--bg-surface));
-  --part-input: color-mix(in oklab, var(--text-primary) 32%, var(--bg-surface));
-  --part-output: color-mix(in oklab, var(--text-primary) 66%, var(--bg-surface));
-  --part-reasoning: color-mix(in oklab, var(--text-primary) 48%, var(--bg-surface));
+  --part-input: color-mix(in oklab, var(--fill-ink) 32%, var(--bg-surface));
+  --part-output: color-mix(in oklab, var(--fill-ink) 66%, var(--bg-surface));
+  --part-reasoning: color-mix(in oklab, var(--fill-ink) 48%, var(--bg-surface));
   /* The Usage page: its wells, a figure's earlier bars, the weekends behind a chart of days, the
      busiest hours behind the time of day, and its other hours. */
   --usage-well: light-dark(
     color-mix(in srgb, var(--bg-subtle) 55%, var(--bg-surface)),
     var(--shell-card)
   );
-  --usage-ghost: color-mix(in srgb, var(--text-primary) 10%, var(--bg-surface));
-  --usage-weekend: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --usage-ghost: color-mix(in srgb, var(--fill-ink) 10%, var(--bg-surface));
+  --usage-weekend: color-mix(in srgb, var(--fill-ink) 2.5%, transparent);
   --usage-band: color-mix(in srgb, var(--heat-hue) 7%, transparent);
   --usage-hour: color-mix(in srgb, var(--heat-hue) 48%, var(--bg-surface));
   --heat-1: color-mix(in srgb, var(--heat-hue) var(--heat-step-1), var(--bg-surface));
   --heat-2: color-mix(in srgb, var(--heat-hue) var(--heat-step-2), var(--bg-surface));
   --heat-3: color-mix(in srgb, var(--heat-hue) var(--heat-step-3), var(--bg-surface));
-  --heat-4: color-mix(in srgb, var(--heat-hue), var(--text-primary) var(--heat-step-4));
+  --heat-4: color-mix(in srgb, var(--heat-hue), var(--fill-ink) var(--heat-step-4));
   /* A day outside the range keeps its step's lightness in gray. */
   --heat-out-1: oklch(from var(--heat-1) l 0 h);
   --heat-out-2: oklch(from var(--heat-2) l 0 h);

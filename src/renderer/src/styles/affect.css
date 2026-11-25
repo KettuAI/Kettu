@@ -1634,7 +1634,7 @@ li[data-row-exit='dust'] > * {
   color: var(--on-fill);
 }
 .kp-btn--danger:hover {
-  background: color-mix(in srgb, var(--danger) 90%, var(--text-primary));
+  background: color-mix(in srgb, var(--danger) 90%, var(--fill-ink));
 }
 .kp-link {
   display: inline-flex;
@@ -6897,6 +6897,25 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   [role='option']:is([data-selected], [aria-selected='true']) {
   font-weight: 500;
   color: var(--composer-ink);
+}
+
+/* The built-in theme's menus, palettes and segmented controls draw the text of their items in the
+   primary text, the sidebar rows' color, like the shell's own menus. An installed theme's rules
+   below come later and win. */
+.ui-cmc.ui-cmc {
+  --ui-cmc-ink: var(--shell-text);
+}
+.ui-pmc.ui-pmc {
+  --ui-pmc-ink: var(--shell-text);
+}
+.ui-mdpc.ui-mdpc {
+  --ui-mdpc-ink: var(--shell-text);
+}
+.ui-fmc.ui-fmc {
+  --ui-fmc-ink: var(--shell-text);
+}
+.ui-segc.ui-segc {
+  --ui-segc-text: var(--shell-text);
 }
 
 /* themes: under an installed theme (data-installed-theme on <html>, see tokens.css), affectUI's
