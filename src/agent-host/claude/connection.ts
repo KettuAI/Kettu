@@ -90,7 +90,7 @@ import {
   QUESTIONS_SKIPPED,
 } from './permissions'
 import { findClaudeTranscript } from '../prompt-cache'
-import { folderHooks } from './project-hooks'
+import { folderHooks, heldHelpers } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import { forkedUuids, rewindCut, RewindPointMissing, transcriptRecords } from './rewind'
@@ -909,27 +909,34 @@ export class ClaudeConnection implements AgentConnection {
   // Opening a query.
 
   /**
-   * Reads the settings a session starts with, and the hooks the folder's own declare; an
-   * unreadable file only leaves the defaults.
+   * Reads the settings a session starts with, the hooks and helpers the folder's own declare, and
+   * what stands in for those helpers while they are held; an unreadable file only leaves the
+   * defaults.
    */
   private async settings(
     cwd: string,
     sources: SettingSource[],
-  ): Promise<{ values: Record<string, unknown>; known: boolean; hooks: FolderHooks | null }> {
+  ): Promise<{
+    values: Record<string, unknown>
+    known: boolean
+    hooks: FolderHooks | null
+    helpers: Record<string, string>
+  }> {
     const sdk = this.requireSdk()
     try {
-      const { values, hooks } = await this.withConfigDir(async () => {
+      const { values, hooks, helpers } = await this.withConfigDir(async () => {
         const resolved = await sdk.resolveSettings({ cwd, settingSources: sources })
         // A mode a repository's own settings escalate to holds only once Claude Code trusts it.
         return {
           values: sdk.filterEscalatingDefaultMode(resolved),
           hooks: folderHooks(resolved.sources),
+          helpers: heldHelpers(resolved.sources),
         }
       })
-      return { values, known: true, hooks }
+      return { values, known: true, hooks, helpers }
     } catch (error) {
       this.context.hooks.log('warn', `Could not read Claude Code's settings: ${errorText(error)}`)
-      return { values: {}, known: false, hooks: null }
+      return { values: {}, known: false, hooks: null, helpers: heldHelpers(null) }
     }
   }
 
@@ -1005,9 +1012,12 @@ export class ClaudeConnection implements AgentConnection {
       version: undefined,
     }
     const flags: Record<string, unknown> = {}
-    // Through the SDK, Claude Code runs the hooks of a folder's own settings without asking.
-    session.hooksHeld = !hidden && (await this.hooksHeld(cwd, options, settings))
-    if (hidden || session.hooksHeld) flags.disableAllHooks = true
+    // Through the SDK, Claude Code runs the hooks and the helper commands of a folder's own
+    // settings without asking, the helpers as soon as it starts; a hidden session runs no hooks.
+    const held = await this.hooksHeld(cwd, options, settings, !hidden)
+    session.hooksHeld = !hidden && held
+    if (hidden || held) flags.disableAllHooks = true
+    if (held) Object.assign(flags, settings.helpers)
     // A page's question and a limits read take none of the user's settings but how they sign in,
     // which may be there: without it a gateway's token goes unseen and its limits read as a plan's.
     if (bare || hidden === 'limits') {
@@ -1649,20 +1659,21 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   /**
-   * Whether the hooks of `cwd`'s own settings may not run: all of them without a gate, and those
-   * of settings that could not be read, which may declare some.
+   * Whether the hooks and helpers of `cwd`'s own settings may not run: all of them without a gate,
+   * and those of settings that could not be read, which may declare some. Only `ask` asks the user.
    */
   private async hooksHeld(
     cwd: string,
     options: SessionOptions,
     settings: { known: boolean; hooks: FolderHooks | null },
+    ask: boolean,
   ): Promise<boolean> {
     if (!settings.known) return true
     if (!settings.hooks) return false
     const gate = options.projectHooks
     if (!gate) return true
     try {
-      return await gate.hold(cwd, settings.hooks)
+      return await (ask ? gate.hold(cwd, settings.hooks) : gate.held(cwd, settings.hooks))
     } catch (error) {
       this.context.hooks.log('warn', `Could not read the answers for ${cwd}: ${errorText(error)}`)
       return true

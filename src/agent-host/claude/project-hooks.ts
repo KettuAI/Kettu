@@ -6,27 +6,55 @@ import type { ResolvedSettings } from './sdk'
 const TARGET_CHARS = 300
 /** The setting sources that are the folder's own, which a cloned repository may bring. */
 const FOLDER_SOURCES = new Set(['project', 'local'])
+/**
+ * The settings whose command Claude Code runs by itself outside hooks, to get credentials or
+ * telemetry headers, from the moment a session starts.
+ */
+const HELPER_SETTINGS = [
+  'apiKeyHelper',
+  'awsAuthRefresh',
+  'awsCredentialExport',
+  'gcpAuthRefresh',
+  'otelHeadersHelper',
+] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function declares(settings: Record<string, unknown>, key: string): boolean {
+  const value = settings[key]
+  return value !== undefined && value !== null && value !== ''
+}
+
 /**
- * The hooks the folder's own settings declare, from the sources `resolveSettings` read, or null
- * when they declare none. The digest covers each hook in full, so changing or adding one changes it.
+ * The hooks and helper commands the folder's own settings declare, from the sources
+ * `resolveSettings` read, or null when they declare none. The digest covers each in full, so
+ * changing or adding one changes it.
  */
 export function folderHooks(sources: ResolvedSettings['sources']): FolderHooks | null {
-  const own = sources.flatMap((source) =>
-    FOLDER_SOURCES.has(source.source) &&
-    isRecord(source.settings.hooks) &&
-    Object.keys(source.settings.hooks).length > 0
-      ? [{ source: source.source, hooks: source.settings.hooks }]
-      : [],
-  )
+  const own = sources.flatMap((source) => {
+    if (!FOLDER_SOURCES.has(source.source)) return []
+    const { settings } = source
+    const hooks =
+      isRecord(settings.hooks) && Object.keys(settings.hooks).length > 0 ? settings.hooks : null
+    const helpers = HELPER_SETTINGS.filter((key) => declares(settings, key))
+    if (!hooks && helpers.length === 0) return []
+    // Hooks alone keep the shape their digest had before helpers counted, so kept answers hold.
+    return [
+      {
+        source: source.source,
+        ...(hooks ? { hooks } : {}),
+        ...(helpers.length > 0
+          ? { helpers: Object.fromEntries(helpers.map((key) => [key, settings[key]])) }
+          : {}),
+      },
+    ]
+  })
   if (own.length === 0) return null
   const hooks: DeclaredHook[] = []
   for (const source of own) {
-    for (const [event, groups] of Object.entries(source.hooks)) {
+    for (const [event, groups] of Object.entries(source.hooks ?? {})) {
       const listed = hooks.length
       for (const group of Array.isArray(groups) ? groups : []) {
         if (!isRecord(group) || !Array.isArray(group.hooks)) continue
@@ -41,16 +69,42 @@ export function folderHooks(sources: ResolvedSettings['sources']): FolderHooks |
       // A shape this reads no hook from still counts, as Claude Code may read one from it.
       if (hooks.length === listed) hooks.push({ event, target: '' })
     }
+    for (const [key, value] of Object.entries(source.helpers ?? {})) {
+      hooks.push({
+        event: key,
+        target: clip(typeof value === 'string' ? value : JSON.stringify(value)),
+      })
+    }
   }
   const digest = createHash('sha256').update(JSON.stringify(own)).digest('hex')
   return { hooks, digest }
 }
 
+/**
+ * The settings that stand in for the folder's helper commands while they are held: the user's own
+ * command, or none. With the settings unread (null), every helper gives way, the user's included.
+ */
+export function heldHelpers(sources: ResolvedSettings['sources'] | null): Record<string, string> {
+  if (!sources) return Object.fromEntries(HELPER_SETTINGS.map((key) => [key, '']))
+  const user = sources.find((source) => source.source === 'user')?.settings ?? {}
+  const held = HELPER_SETTINGS.filter((key) =>
+    sources.some((source) => FOLDER_SOURCES.has(source.source) && declares(source.settings, key)),
+  )
+  // An empty command is no helper to Claude Code, which then signs in as it would without one.
+  return Object.fromEntries(
+    held.map((key) => [key, typeof user[key] === 'string' ? (user[key] as string) : '']),
+  )
+}
+
 /** The command a hook runs or the URL it calls, as the user reads it before allowing it. */
 function target(hook: unknown): string {
   if (!isRecord(hook)) return ''
-  const text =
+  return clip(
     [hook.command, hook.url, hook.prompt].find((value) => typeof value === 'string') ??
-    (typeof hook.type === 'string' ? hook.type : '')
+      (typeof hook.type === 'string' ? hook.type : ''),
+  )
+}
+
+function clip(text: string): string {
   return text.length > TARGET_CHARS ? `${text.slice(0, TARGET_CHARS - 1)}…` : text
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -748,12 +749,117 @@ describe('the Claude Agent SDK driver', () => {
     expect(asked).toHaveLength(2)
   })
 
+  const folderHelpers = [
+    { source: 'user', settings: { apiKeyHelper: '/usr/local/bin/my-key' } },
+    {
+      source: 'project',
+      path: '/repo/.claude/settings.json',
+      settings: { apiKeyHelper: './key.sh', awsCredentialExport: './aws.sh' },
+    },
+    {
+      source: 'local',
+      path: '/repo/.claude/settings.local.json',
+      settings: { otelHeadersHelper: './headers.sh', gcpAuthRefresh: './gcp.sh' },
+    },
+  ]
+  // What stands in for them while they are held: the user's own helper, or none.
+  const heldHelpers = {
+    disableAllHooks: true,
+    apiKeyHelper: '/usr/local/bin/my-key',
+    awsCredentialExport: '',
+    otelHeadersHelper: '',
+    gcpAuthRefresh: '',
+  }
+
+  it("holds the helper commands of the folder's own settings with its hooks", async () => {
+    const { sdk, connection } = await setup()
+    sdk.sources = folderHelpers
+    // Without the user's answers, none of them runs, though the folder declares no hook.
+    await connection.newSession('/repo', {})
+    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    const asked: FolderHooks[] = []
+    let allowed = false
+    const gate: ProjectHooksGate = {
+      hold: async (_cwd, hooks) => {
+        asked.push(hooks)
+        return !allowed
+      },
+      held: async () => !allowed,
+    }
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    expect(asked.map((hooks) => hooks.hooks)).toEqual([
+      [
+        { event: 'apiKeyHelper', target: './key.sh' },
+        { event: 'awsCredentialExport', target: './aws.sh' },
+        { event: 'gcpAuthRefresh', target: './gcp.sh' },
+        { event: 'otelHeadersHelper', target: './headers.sh' },
+      ],
+    ])
+    // A hidden session asks nobody, and runs them only once the user allowed them.
+    await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
+    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    await connection.newSession('/repo', { hidden: 'options' })
+    expect(sdk.last.options.settings).toEqual(heldHelpers)
+    allowed = true
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toBeUndefined()
+    await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
+    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(asked).toHaveLength(2)
+    // The user's own helpers need no answer.
+    sdk.sources = [folderHelpers[0]!]
+    allowed = false
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toBeUndefined()
+    expect(asked).toHaveLength(2)
+  })
+
+  it('asks again when the folder adds a helper to hooks the user allowed', async () => {
+    const { sdk, connection } = await setup()
+    const asked: FolderHooks[] = []
+    const gate: ProjectHooksGate = {
+      hold: async (_cwd, hooks) => {
+        asked.push(hooks)
+        return true
+      },
+      held: async () => true,
+    }
+    const project = folderHooks[1]!
+    sdk.sources = [project]
+    await connection.newSession('/repo', { projectHooks: gate })
+    sdk.sources = [
+      { ...project, settings: { ...project.settings, awsAuthRefresh: 'aws sso login' } },
+    ]
+    await connection.newSession('/repo', { projectHooks: gate })
+    // Hooks alone keep the digest answers were kept by before helpers counted.
+    expect(asked[0]!.digest).toBe(
+      createHash('sha256')
+        .update(JSON.stringify([{ source: 'project', hooks: project.settings.hooks }]))
+        .digest('hex'),
+    )
+    expect(asked[1]!.digest).not.toBe(asked[0]!.digest)
+    expect(asked[1]!.hooks).toEqual([
+      { event: 'SessionStart', target: './setup.sh' },
+      { event: 'awsAuthRefresh', target: 'aws sso login' },
+    ])
+    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true, awsAuthRefresh: '' })
+  })
+
   it('holds every hook while the settings cannot be read', async () => {
     const { sdk, connection } = await setup()
     sdk.settingsError = new Error('unreadable')
     const gate: ProjectHooksGate = { hold: async () => false, held: async () => false }
     await connection.newSession('/repo', { projectHooks: gate })
-    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    // Their helpers too, the user's own included, since none of them is known.
+    expect(sdk.last.options.settings).toEqual({
+      disableAllHooks: true,
+      apiKeyHelper: '',
+      awsAuthRefresh: '',
+      awsCredentialExport: '',
+      gcpAuthRefresh: '',
+      otelHeadersHelper: '',
+    })
   })
 
   it('opens the query again before the next prompt once its held hooks are allowed', async () => {
