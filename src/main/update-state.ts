@@ -227,17 +227,47 @@ function plainText(html: string): string {
     })
 }
 
-/** A bullet as the dialog shows it: plain text, its first sentence, without issue links. */
-function highlight(item: string, chinese: boolean): string {
-  const text = plainText(item)
+/** Plain text of a bullet's HTML or Markdown, without issue links. */
+function inlineText(item: string): string {
+  return plainText(item)
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__)((?:(?!\1).)+?)\1/g, '$2')
+    .replace(/\*([^*\s](?:[^*]*[^*\s])?)\*/g, '$1')
     .replace(/`/g, '')
     .replace(/\s*\((?:#\d+(?:,\s*)?)+\)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+// A bullet that opens with a bold label and a colon, the colon inside the bold or after it.
+const MARKDOWN_LABEL = /^(\*\*|__)((?:(?!\1).)+?)(?:[:：]\1|\1\s*[:：])/
+const HTML_LABEL =
+  /^(?:<p\b[^>]*>\s*)?<(strong|b)\b[^>]*>((?:(?!<\/\1>)[\s\S])*?)(?:[:：]\s*<\/\1>|<\/\1>\s*[:：])/i
+
+// A cut falls next to a space or a CJK character, since CJK has no spaces between words.
+const CUTS_BETWEEN = /[\s\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/
+
+/**
+ * A bullet as the dialog shows it: its bold label alone when it has one, else its first sentence
+ * in plain text, cut short between words.
+ */
+function highlight(item: string, chinese: boolean): string {
+  const raw = item.trim()
+  const labelled = MARKDOWN_LABEL.exec(raw) ?? HTML_LABEL.exec(raw)
+  const label = labelled ? inlineText(labelled[2]) : ''
+  if (label) return label
+  const text = inlineText(raw)
   const end = chinese ? text.indexOf('。') + 1 : text.search(/[.!?](?:\s|$)/) + 1
   // A highlight is a list item, so it drops its full stop.
   const sentence = (end > 0 ? text.slice(0, end) : text).replace(/[.。]$/, '')
-  return sentence.length > MAX_HIGHLIGHT ? `${sentence.slice(0, MAX_HIGHLIGHT - 1)}…` : sentence
+  if (sentence.length <= MAX_HIGHLIGHT) return sentence
+  let cut = MAX_HIGHLIGHT - 1
+  while (cut > 0 && !CUTS_BETWEEN.test(sentence[cut - 1]) && !CUTS_BETWEEN.test(sentence[cut])) {
+    cut--
+  }
+  // One word longer than the limit is cut where it must be.
+  if (cut === 0) cut = MAX_HIGHLIGHT - 1
+  return `${sentence.slice(0, cut).replace(/[\s,;:，；：、]+$/, '')}…`
 }
 
 /**
