@@ -22,6 +22,7 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { loadOlder, loadThrough, useThreadsStore } from '@renderer/stores/threads'
 import { returnedTo } from '@renderer/stores/view'
 import { Entry } from './entries/entry'
@@ -38,6 +39,7 @@ import { ReplyToSelection } from './reply-selection'
 import { SubSessionStart } from './subagent/sub-session-start'
 import { itemAtTop, leaveThread, readingPosition, type ReadingPosition } from './reading-position'
 import { playEntrance } from './thread-entrance'
+import { StillRunningLine } from './still-running-line'
 import { TurnStatus } from './turn-status'
 import {
   buildItems,
@@ -302,6 +304,7 @@ const isRow = (item: Item): boolean =>
  */
 function spacing(item: Item, previous: Item): string {
   if (item.type === 'status') return ''
+  if (item.type === 'still') return 'pt-1.5'
   if (item.type === 'entry' && item.turnStart) return 'pt-[22px]'
   if (item.type === 'reply') return 'pt-1.5'
   if (isSent(previous) || (item.type === 'entry' && item.char === 's')) return 'pt-[22px]'
@@ -331,7 +334,11 @@ export const Thread = memo(function Thread({
     () => withoutHidden(allOrder ?? [], allSignature),
     [allOrder, allSignature],
   )
-  const items = useMemo(() => buildItems(order, signature, working), [order, signature, working])
+  const still = useSessionsStore((s) => !!s.byId[sessionId]?.stillRunning)
+  const items = useMemo(
+    () => buildItems(order, signature, working, still),
+    [order, signature, working, still],
+  )
   const statusLast = useMemo(() => items.at(-1)?.type === 'status', [items])
   const replies = useMemo(() => replyKeys(items), [items])
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
@@ -536,6 +543,8 @@ export const Thread = memo(function Thread({
                 >
                   {item.type === 'status' ? (
                     <TurnStatus sessionId={sessionId} afterSent={item.afterSent} />
+                  ) : item.type === 'still' ? (
+                    <StillRunningLine sessionId={sessionId} />
                   ) : item.type === 'reply' ? (
                     <ReplyFooter
                       replyKey={item.key}
@@ -545,6 +554,7 @@ export const Thread = memo(function Thread({
                       toolIds={item.toolIds}
                       endId={item.endId}
                       latest={item.latest}
+                      still={item.still ?? false}
                     />
                   ) : item.type === 'run' ? (
                     <RunGroup

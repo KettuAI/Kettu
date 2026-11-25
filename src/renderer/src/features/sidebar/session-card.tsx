@@ -4,7 +4,7 @@ import type { SessionOutputs, SessionSummary } from '@shared/agent-host'
 import type { KnownExpiry } from '@shared/prompt-cache'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useCacheLeft } from '@renderer/features/prompt-cache/cache-phase'
-import { TurnDots } from '@renderer/features/session/turn-dots'
+import { BackgroundDots, TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { countdown, duration, longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
@@ -12,7 +12,7 @@ import { agentName } from '@renderer/stores/agents'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { hostOfSession, sessionTitle } from '@renderer/stores/sessions'
 import { CardOutputs } from './card-outputs'
-import type { RowStatus } from './row-status'
+import { backgroundText, type RowStatus } from './row-status'
 import type { SessionCache } from './session-cache'
 import { useOutputs } from './use-outputs'
 
@@ -85,6 +85,17 @@ function State({
         <span className="mx-0.5 size-2 shrink-0 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]" />
         <span className="truncate font-medium text-secondary">
           {t('indicator.waiting', { count: status.waiting })}
+        </span>
+      </span>
+    )
+  }
+  if (status.background && !status.running) {
+    return (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <BackgroundDots />
+        <span className="truncate">
+          <span className="font-medium text-secondary">{t('card.background')}</span>{' '}
+          {backgroundText(t, status.background)}
         </span>
       </span>
     )

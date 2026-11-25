@@ -508,6 +508,10 @@ export class ClaudeConnection implements AgentConnection {
     return true
   }
 
+  get reportsBack(): boolean {
+    return true
+  }
+
   get hiddenSessions(): boolean {
     return true
   }

@@ -917,6 +917,20 @@ export interface SessionSummary {
   phase?: TurnPhase['phase'] | null
   // How its last turn ended; null while a turn runs and before any ended; absent from older hosts
   lastTurn?: LastTurn | null
+  // What runs on after its turn ended; null while a turn runs or nothing does; absent from older
+  // hosts
+  stillRunning?: StillRunning | null
+}
+
+/**
+ * What a session's agent still runs between turns, by its own reports: the background tasks the
+ * session board lists and the subagents at work. Agents that list no tasks count subagents alone.
+ */
+export interface StillRunning {
+  commands: number
+  subagents: number
+  /** The agent starts a turn of its own to report once that work ends. */
+  reportsBack: boolean
 }
 
 /**

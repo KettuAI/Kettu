@@ -33,6 +33,7 @@ import {
   type SideChatAgent,
   type LightAgent,
   type StartNotice,
+  type StillRunning,
 } from '@shared/agent-host'
 import { isFullAccessMode } from '@shared/agents'
 import { LOCALES } from '@shared/locale'
@@ -872,6 +873,8 @@ interface Live {
   background: boolean
   /** The agent sent its full list of background work, background subagents among it. */
   backgroundListed: boolean
+  /** What runs on after its turn as its last summary said, in JSON. */
+  stillShown: string
   /** Jobs the agent scheduled to wake the session later, such as cron and /loop wakeups. */
   scheduled: number
   /** Why it last kept its agent while idle, so a change of reason is logged once. */
@@ -1620,6 +1623,7 @@ export class SessionManager {
           : null,
       phase: live && status === 'running' ? turnPhase(live.thread).phase : null,
       lastTurn: record.lastTurn ?? null,
+      stillRunning: live ? this.stillRunning(live) : null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
@@ -1708,9 +1712,10 @@ export class SessionManager {
   private touch(sessionId: string): void {
     if (!this.has(sessionId)) return
     const summary = this.summary(sessionId)
+    const live = this.live.get(sessionId)
+    if (live) live.stillShown = JSON.stringify(summary.stillRunning ?? null)
     const json = JSON.stringify(summary)
     if (this.lastSummaries.get(sessionId) === json) return
-    const live = this.live.get(sessionId)
     if (live) this.flushPatches(live)
     this.lastSummaries.set(sessionId, json)
     this.updateBusy()
@@ -3835,6 +3840,7 @@ export class SessionManager {
       unansweredCancel: null,
       background: false,
       backgroundListed: false,
+      stillShown: 'null',
       scheduled: 0,
       held: null,
       agentTurn: false,
@@ -4403,6 +4409,7 @@ export class SessionManager {
         break
       case 'tasks':
         this.update(live, { background: effect.tasks })
+        this.showStillRunning(live)
         break
       case 'suggestion': {
         // One that comes once the next turn started, as a queued message, is about the last one.
@@ -6474,6 +6481,29 @@ export class SessionManager {
     return out
   }
 
+  /**
+   * What a top-level session runs on between turns, by its agent's reports, for its row and the
+   * end of its thread; null while a turn runs or nothing does.
+   */
+  private stillRunning(live: Live): StillRunning | null {
+    const { status } = live.thread.session
+    if (live.record.origin === 'subagent' || status !== 'ready' || live.turn || live.agentTurn) {
+      return null
+    }
+    let commands = 0
+    for (const task of live.thread.session.background ?? []) {
+      if (task.status === 'running') commands++
+    }
+    const subagents = this.workingSubagents(live).length
+    if (commands + subagents === 0) return null
+    return { commands, subagents, reportsBack: live.connection?.reportsBack === true }
+  }
+
+  /** Sends the session's summary again once what it runs on between turns changed. */
+  private showStillRunning(live: Live): void {
+    if (JSON.stringify(this.stillRunning(live)) !== live.stillShown) this.touch(live.id)
+  }
+
   /** What the session runs beside a turn, as `holdReason` counts it; null when nothing. */
   private backgroundWork(live: Live): BackgroundWork | null {
     const commands: string[] = []
@@ -6551,6 +6581,7 @@ export class SessionManager {
   private refreshRelease(from: Live): void {
     const live = this.rootOf(from)
     if (!live) return
+    this.showStillRunning(live)
     if (live.releaseTimer) {
       clearTimeout(live.releaseTimer)
       live.releaseTimer = null
@@ -10220,6 +10251,7 @@ export class SessionManager {
     live.backgroundListed = false
     live.scheduled = 0
     if (live.thread.session.background?.length) this.update(live, { background: [] })
+    this.showStillRunning(live)
   }
 
   /** The commands that ran on past their turn in their calls stop with the agent's session. */

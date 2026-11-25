@@ -318,6 +318,7 @@
     "error": "Error",
     "running": "Running",
     "starting": "Starting",
+    "background": "Still running in background: {{work}}",
     "unread": "Unread",
     "cacheExpiring_one": "Prompt cache expires in {{count}} minute",
     "cacheExpiring_other": "Prompt cache expires in {{count}} minutes",
@@ -458,7 +459,15 @@
     "moreReferences_other": "{{count}} more issues and pull requests",
     "moreArtifacts_one": "{{count}} more artifact",
     "moreArtifacts_other": "{{count}} more artifacts",
-    "artifactFacts": "v{{version}} · {{time}}"
+    "artifactFacts": "v{{version}} · {{time}}",
+    "background": "Background"
+  },
+  "stillRunning": {
+    "subagents_one": "{{count}} sub-agent",
+    "subagents_other": "{{count}} sub-agents",
+    "commands_one": "{{count}} command",
+    "commands_other": "{{count}} commands",
+    "both": "{{subagents}}, {{commands}}"
   },
   "subagents": {
     "title": "Sub-agents of this session",

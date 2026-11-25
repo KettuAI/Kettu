@@ -34,7 +34,7 @@ import {
 } from '@renderer/features/tasks/model'
 import { TaskCard } from '@renderer/features/tasks/task-card'
 import { badgeInUse } from './row-badges'
-import { rowStatus, type RowStatus } from './row-status'
+import { joinBackground, rowStatus, type RowStatus } from './row-status'
 import {
   CancelTaskDialog,
   DeleteTaskDialog,
@@ -378,6 +378,7 @@ function withOrigin(own: RowStatus, origin: RowStatus | null): RowStatus {
     waiting: own.waiting + origin.waiting,
     failed: own.failed || origin.failed,
     running: own.running || origin.running,
+    background: joinBackground([own.background, origin.background]),
     starting: own.starting || origin.starting,
     unread: own.unread || origin.unread,
   }

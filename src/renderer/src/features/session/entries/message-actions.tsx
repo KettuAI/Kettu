@@ -17,6 +17,7 @@ import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
+import { StillRunningLine } from '../still-running-line'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
 import { useEditable, useEditFrom } from './edit-from-here'
@@ -163,6 +164,7 @@ export const ReplyFooter = memo(
     toolIds,
     endId,
     latest,
+    still,
   }: {
     replyKey: string
     sessionId: string
@@ -171,6 +173,8 @@ export const ReplyFooter = memo(
     toolIds: string[]
     endId: string | null
     latest: boolean
+    /** What runs on after its turn shows under its end. */
+    still: boolean
   }) {
     const { t } = useTranslation('session')
     const lastId = agentIds.at(-1)!
@@ -253,6 +257,7 @@ export const ReplyFooter = memo(
             className={animation}
           />
         )}
+        {still && <StillRunningLine sessionId={sessionId} />}
         <div
           className={cn('ks-reply-foot', animation)}
           data-shown={hovered || forking ? '' : undefined}
@@ -294,6 +299,7 @@ export const ReplyFooter = memo(
     a.projectPath === b.projectPath &&
     a.endId === b.endId &&
     a.latest === b.latest &&
+    a.still === b.still &&
     sameIds(a.agentIds, b.agentIds) &&
     sameIds(a.toolIds, b.toolIds),
 )

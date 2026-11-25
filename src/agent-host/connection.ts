@@ -469,6 +469,8 @@ export interface AgentConnection {
    * the session's messages. Only a session created with it has the text; the host records which.
    */
   readonly systemPromptAppend?: boolean
+  /** Whether the agent starts a turn of its own to report once its background work ends. */
+  readonly reportsBack?: boolean
   readonly isClosed: boolean
   close(): void
 

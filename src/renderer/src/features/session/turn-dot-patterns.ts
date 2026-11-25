@@ -79,15 +79,19 @@ export const BY_PHASE: Record<RunningPhase, keyof typeof PATTERNS> = {
 /** The grid's cells by row, as [x, y]. */
 export const CELLS = [0, 1, 2].flatMap((y) => [0, 1, 2].map((x) => [x, y] as const))
 
-/** Each cell's style for the phase, in CELLS order: its animation, or none for a still dot. */
-export function turnDotStyles(phase: RunningPhase): (CSSProperties | undefined)[] {
+/**
+ * Each cell's style for the phase, in CELLS order: its animation, or none for a still dot. `slower`
+ * stretches the loop by that factor.
+ */
+export function turnDotStyles(phase: RunningPhase, slower = 1): (CSSProperties | undefined)[] {
   const pattern: Pattern = PATTERNS[BY_PHASE[phase]]
+  const ms = pattern.ms * slower
   return CELLS.map(([x, y]) => {
     const dot = pattern.dot(x, y)
     // A negative delay starts the dot partway into the loop, so every dot is in step at once.
-    const delay = Math.round((dot.at - 1) * pattern.ms)
+    const delay = Math.round((dot.at - 1) * ms)
     return dot.name
-      ? { animation: `${dot.name} ${pattern.ms}ms ${pattern.easing} ${delay}ms infinite` }
+      ? { animation: `${dot.name} ${ms}ms ${pattern.easing} ${delay}ms infinite` }
       : undefined
   })
 }

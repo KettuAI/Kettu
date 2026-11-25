@@ -844,6 +844,25 @@ const subagent: Scenario = async (turn) => {
     child,
   )
   await stream(turn, 'Looking for clock reads.', { sessionId: child, messageId: `child-${n}-1` })
+  const thenMs = turn.options.thenMs
+  if (thenMs !== null) {
+    // The subagent works on in the background after the turn and ends that long after it.
+    setTimeout(() => {
+      // The client may have gone by then.
+      void turn
+        .send({
+          sessionUpdate: 'subagent_update',
+          sessionId: child,
+          state: { state: 'idle', stopReason: childCancelled ? 'cancelled' : 'end_turn' },
+        })
+        .catch(() => {})
+    }, thenMs)
+    await stream(turn, 'The subagent works on in the background.', {
+      messageId: turn.messageId(),
+    })
+    await sendUsage(turn)
+    return 'end_turn'
+  }
   for (const [index, file] of ['src/clock.ts', 'src/auth/session.ts'].entries()) {
     const toolCallId = `child-read-${n}-${index}`
     await turn.send(

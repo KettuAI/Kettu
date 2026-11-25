@@ -262,7 +262,8 @@
   opacity: 0;
 }
 /* A turn cancelled before any reply: Edit stays in view after its end, in the primary blue. */
-.ks-user__edit {
+.ks-user__edit,
+.ks-still__open {
   height: 24px;
   margin-left: -4px;
   padding: 0 8px;
@@ -271,10 +272,12 @@
   color: var(--primary-foreground);
   transition: background-color 140ms ease;
 }
-.ks-user__edit:hover {
+.ks-user__edit:hover,
+.ks-still__open:hover {
   background: var(--primary-from);
 }
-.ks-user__edit:focus-visible {
+.ks-user__edit:focus-visible,
+.ks-still__open:focus-visible {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
