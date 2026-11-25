@@ -1,0 +1,38 @@
+{
+  "sessionId": "00000000-0000-0000-0000-000000000000",
+  "models": {
+    "availableModels": [
+      { "modelId": "gemini-4-neon-high", "name": "Gemini 4 Neon (High)" },
+      { "modelId": "gemini-4-carbon-medium", "name": "Gemini 4 Carbon (Medium)" }
+    ],
+    "currentModelId": "gemini-4-neon-high"
+  },
+  "modes": {
+    "currentModeId": "default",
+    "availableModes": [
+      {
+        "id": "default",
+        "name": "Default",
+        "description": "Ask before edits and commands, per your permission settings."
+      }
+    ]
+  },
+  "configOptions": [
+    {
+      "id": "model",
+      "name": "Model",
+      "category": "model",
+      "type": "select",
+      "currentValue": "gemini-4-neon",
+      "options": [
+        { "value": "gemini-4-neon", "name": "Gemini 4 Neon" },
+        { "value": "gemini-4-carbon", "name": "Gemini 4 Carbon" }
+      ]
+    }
+  ],
+  "_meta": {
+    "antigravity": {
+      "tier": { "name": "Google AI Pro", "id": "g1-pro-tier", "upgradeUri": "" }
+    }
+  }
+}
