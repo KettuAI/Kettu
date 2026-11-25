@@ -13,6 +13,7 @@ export type HostFeature = keyof Pick<
   | 'remoteReset'
   | 'thumbnails'
   | 'partThumbnails'
+  | 'pinnedModels'
   | 'ownRelay'
 >
 

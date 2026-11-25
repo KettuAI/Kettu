@@ -135,6 +135,7 @@ import {
 import { AutoCompactRows } from './auto-compact-rows'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { CodebuddySettingsRows } from './codebuddy-settings-rows'
+import { FavoriteModelsGroup } from './favorite-models'
 import { PlaceRow } from './places'
 import {
   DIALOG_FIELD,
@@ -1143,6 +1144,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         dshAccount ? null : (
           <UsageGroup status={status} reading={reading} running={running} />
         )}
+
+        <FavoriteModelsGroup key={status.id} status={status} />
 
         <ConfigurationGroup status={status} />
 

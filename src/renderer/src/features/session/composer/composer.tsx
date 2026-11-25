@@ -739,6 +739,7 @@ export function Composer({
           ) : (
             <ModelMenu
               agentId={session.agentId}
+              hostId={hostId}
               harness={agent?.harnessName ?? agentName}
               config={config}
               running={running}

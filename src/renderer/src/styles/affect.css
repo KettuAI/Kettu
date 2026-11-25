@@ -3065,6 +3065,11 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .k-sort-row[data-dragging] .k-sort-handle {
   cursor: grabbing;
 }
+/* A row that cannot be dragged keeps the handle's room, so the marks after it line up. */
+:is(.kettu-settings, .kettu-sd) .k-sort-gap {
+  flex: none;
+  width: 24px;
+}
 :is(.kettu-settings, .kettu-sd) .k-sort-restore {
   justify-content: flex-start;
   min-height: 48px;
@@ -6182,6 +6187,23 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
 }
 .kettu-model-picker .ui-mdpc__fly-group:first-child {
   padding-top: 2px;
+}
+/* More models' foot: where the models come from, and Customize… at its end. */
+.kettu-model-picker__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.kettu-model-picker__customize {
+  flex: none;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--ui-mdpc-text);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+.kettu-model-picker__customize:hover {
+  color: var(--ui-mdpc-ink);
 }
 /* The agent menu's Default tag after a model's name. */
 .kettu-model-tag {

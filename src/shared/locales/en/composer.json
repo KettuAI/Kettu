@@ -43,6 +43,7 @@
     "followsAgentOn": "Follows {{agent}} · on",
     "followsAgentOff": "Follows {{agent}} · off",
     "modelsFrom": "From {{source}}",
+    "customizeModels": "Customize…",
     "optionValue": "{{name}}: {{value}}",
     "permissionMode": "Permission mode",
     "modePendingTurn": "Switches to {{mode}} after this turn.",

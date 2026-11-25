@@ -1197,6 +1197,9 @@ export interface HostContract {
   'agents.options': { params: void; result: AgentOptions[] }
   // Pins a model to the top of the agent's model menu, or unpins it; a fifth pin is refused.
   'agents.pinModel': { params: { agentId: AgentId; model: string; pinned: boolean }; result: void }
+  // Sets the agent's pins in the order given, at most four, or clears them with none; older hosts
+  // lack it, as their info's `pinnedModels` says.
+  'agents.setPinnedModels': { params: { agentId: AgentId; models: string[] }; result: void }
   // The agents the lightweight tasks' model may be pinned to; older hosts lack it.
   'agents.lightAgents': { params: void; result: { agents: LightAgent[] } }
   // A draft of a problem report's description, written by the agent the report is about, else the
@@ -2276,6 +2279,7 @@ export const HOST_METHODS = [
   'agents.listSessions',
   'agents.options',
   'agents.pinModel',
+  'agents.setPinnedModels',
   'agents.lightAgents',
   'agents.draftReport',
   'mcp.status',

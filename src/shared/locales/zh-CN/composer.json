@@ -43,6 +43,7 @@
     "followsAgentOn": "跟随 {{agent}} · 开",
     "followsAgentOff": "跟随 {{agent}} · 关",
     "modelsFrom": "来自 {{source}}",
+    "customizeModels": "自定义…",
     "optionValue": "{{name}}：{{value}}",
     "permissionMode": "权限模式",
     "modePendingTurn": "本轮结束后将切换为{{mode}}。",

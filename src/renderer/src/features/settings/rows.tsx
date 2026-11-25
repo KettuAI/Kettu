@@ -104,10 +104,21 @@ export function GroupLabel({ group }: { group: GroupDef; first?: boolean }) {
       {group.count !== undefined && <span className="k-num">· {group.count}</span>}
     </h2>
   )
-  if (!group.actions) return <header className="ui-sg-head">{title}</header>
+  const description = group.description && <p>{group.description}</p>
+  if (!group.actions) {
+    return (
+      <header className="ui-sg-head">
+        {title}
+        {description}
+      </header>
+    )
+  }
   return (
     <header className="ui-sg-head ui-ss-head">
-      <span>{title}</span>
+      <span>
+        {title}
+        {description}
+      </span>
       <span className="k-head-actions">{group.actions}</span>
     </header>
   )

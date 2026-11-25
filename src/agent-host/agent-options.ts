@@ -225,6 +225,19 @@ export class AgentOptionsStore {
     this.put(withList(current, 'pinned', next))
   }
 
+  /**
+   * Sets the agent's pins to `models`, in their order, or clears them with none. Throws when the
+   * agent has no options kept, or when they are more than `MAX_PINNED_MODELS`.
+   */
+  setPinned(agentId: AgentId, models: readonly string[]): void {
+    const current = this.byAgent.get(agentId)
+    if (!current) throw notFound(t('agent.noModelsKept', { agent: agentId }))
+    if (models.length > MAX_PINNED_MODELS) {
+      throw new HostError('conflict', t('agent.pinsFull', { count: MAX_PINNED_MODELS }))
+    }
+    this.put(withList(current, 'pinned', [...new Set(models)]))
+  }
+
   /** A session of the agent with these options is used, so its model leads the recent ones. */
   used(agentId: AgentId, config: readonly ConfigOption[]): void {
     const current = this.byAgent.get(agentId)

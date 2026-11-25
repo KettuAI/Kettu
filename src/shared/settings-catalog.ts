@@ -1134,6 +1134,17 @@ const ENTRIES = {
     item: 'agent',
     on: isAgent,
   },
+  'agents.favorite-models': {
+    section: 'agents',
+    row: 'favorite-models',
+    name: 'agents.favorites.name',
+    description: 'agents.favorites.description',
+    keywords: 'agents.favorites.keywords',
+    part: 'host',
+    kind: 'list',
+    item: 'agent',
+    on: isAgent,
+  },
   'agents.auto-compact': {
     section: 'agents',
     row: 'auto-compact',
