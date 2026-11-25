@@ -653,6 +653,17 @@ describe('simulators the host booted', () => {
     expect(fake.shutdowns).toEqual([SIMULATOR.target])
   })
 
+  it('lists one as booting until its boot is up, though simctl calls it booted before', async () => {
+    const devices = manager()
+    const { opening, booted } = await openWhileBooting(devices)
+    expect(fake.devices.find((device) => device.id === SIMULATOR.id)!.state).toBe('booted')
+    await devices.list()
+    expect(devices.info(SIMULATOR.id)!.state).toBe('booting')
+
+    booted()
+    expect(await opening).toMatchObject({ state: 'booted', sessionId: 's1' })
+  })
+
   it('shuts one down when the session holding it ends while it boots', async () => {
     const devices = manager()
     const { opening, booted } = await openWhileBooting(devices)

@@ -107,6 +107,8 @@ export class DeviceManager {
   private readonly booting = new Set<DeviceId>()
   /** The simulator boots under way, which a second open of the same simulator waits on. */
   private readonly boots = new Map<DeviceId, Promise<void>>()
+  /** Simulators listed as booting until their boot is up, which simctl calls Booted before. */
+  private readonly unbooted = new Set<DeviceId>()
   /** Who uses each device a turn uses, by its id. */
   private readonly controls: SurfaceControls
   private readonly turns = new Map<DeviceId, DeviceTurn>()
@@ -305,10 +307,13 @@ export class DeviceManager {
     if (!boot) {
       this.booting.add(id)
       boot = (async () => {
-        const ours = await bootSimulator(xcrun, udid, env)
+        let ours = false
+        this.unbooted.add(id)
         try {
+          ours = await bootSimulator(xcrun, udid, env)
           await waitUntilBooted(xcrun, udid, env)
         } finally {
+          this.unbooted.delete(id)
           if (ours && this.leases.has(id)) {
             this.booted.set(id, id)
             this.saveLeases()
@@ -717,7 +722,9 @@ export class DeviceManager {
       tools.adb || tools.emulator ? listAndroid(tools, env).catch(warn('Android devices')) : [],
     ])
     const next = new Map<DeviceId, FoundDevice>()
-    for (const device of lists.flat()) next.set(device.id, device)
+    for (const device of lists.flat()) {
+      next.set(device.id, this.unbooted.has(device.id) ? { ...device, state: 'booting' } : device)
+    }
     this.found = next
     // One that went down is no longer ours: started again by the user, it stays on. An emulator
     // is down once its AVD is listed and its serial is not; adb lists an offline one as both.

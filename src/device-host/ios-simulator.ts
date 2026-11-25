@@ -21,6 +21,9 @@ import { freePort, nodeCommand, packageRoot } from './runtime'
 import { stopOrphanedServeSims } from './serve-sim-orphans'
 
 const START_TIMEOUT_MS = 60_000
+/** How long `simctl bootstatus` may take; a first boot migrates data for minutes, so gets longer. */
+const BOOT_WAIT_MS = 180_000
+const MIGRATING_BOOT_WAIT_MS = 600_000
 const INPUT_ADMITTED = 0x83
 const SCREEN_CONFIG = 0x82
 const PASTE = 0x12
@@ -104,7 +107,7 @@ export class IosSimulatorDriver implements DeviceDriver {
       this.child = null
       if (!this.stopped) this.end(t('devices.simulatorStopped', { code: code ?? 'signal' }))
     })
-    this.started = await new Promise<Started>((resolve, reject) => {
+    const started = new Promise<Started>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new DriverError('start_timeout', t('devices.simulatorStreamSlow'))),
         START_TIMEOUT_MS,
@@ -129,6 +132,13 @@ export class IosSimulatorDriver implements DeviceDriver {
         reject(new DriverError('start_failed', t('devices.simulatorStreamFailed')))
       })
     })
+    try {
+      this.started = await started
+    } catch (error) {
+      // One that never reported its address would run on beside the next try.
+      await this.stop()
+      throw error
+    }
     this.openInput()
     void this.readVideo()
   }
@@ -430,8 +440,40 @@ export async function bootSimulator(xcrun: string, udid: string, env: Env): Prom
 }
 
 /** Waits until a simulator that is booting is up. */
-export async function waitUntilBooted(xcrun: string, udid: string, env: Env): Promise<void> {
-  await run(xcrun, ['simctl', 'bootstatus', udid, '-b'], env, 180_000)
+export function waitUntilBooted(xcrun: string, udid: string, env: Env): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(xcrun, ['simctl', 'bootstatus', udid, '-b'], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    const begun = Date.now()
+    let migrating = false
+    let stderr = ''
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      // The step it waits on, on a line of its own under each status: "\tWaiting on Data Migration".
+      if (/^\tWaiting on Data Migration/i.test(line)) migrating = true
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-2_000)
+    })
+    const timer = setInterval(() => {
+      const limit = migrating ? MIGRATING_BOOT_WAIT_MS : BOOT_WAIT_MS
+      if (Date.now() - begun < limit) return
+      clearInterval(timer)
+      child.kill('SIGKILL')
+      reject(new Error(`simctl bootstatus did not finish within ${limit / 60_000} minutes`))
+    }, 1_000)
+    child.once('error', (error) => {
+      clearInterval(timer)
+      reject(error)
+    })
+    child.once('exit', (code, signal) => {
+      clearInterval(timer)
+      if (code === 0) resolve()
+      else reject(new Error(`simctl bootstatus failed (${code ?? signal}): ${stderr.trim()}`))
+    })
+  })
 }
 
 export async function shutdownSimulator(xcrun: string, udid: string, env: Env): Promise<void> {
