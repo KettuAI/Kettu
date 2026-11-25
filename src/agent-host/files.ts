@@ -2,17 +2,20 @@
 // is in a repository, and through a bounded walk of the folder when it is not.
 
 import { createHash, randomBytes } from 'node:crypto'
-import type { Stats } from 'node:fs'
+import { constants, type Stats } from 'node:fs'
 import {
+  copyFile,
   cp,
   lstat,
   mkdir,
   open,
   readdir,
+  readlink,
   realpath,
   rename,
   rm,
   stat,
+  symlink,
   unlink,
   type FileHandle,
 } from 'node:fs/promises'
@@ -139,6 +142,19 @@ export async function readBytes(handle: FileHandle, length: number): Promise<Buf
   return buffer.subarray(0, filled)
 }
 
+/** Writes `bytes` to a new file at `at`, which fails when anything is there, a link included. */
+async function writeNew(at: string, bytes: Uint8Array): Promise<void> {
+  const handle = await open(at, 'wx', 0o666)
+  try {
+    await handle.writeFile(bytes)
+  } catch (error) {
+    await handle.close().catch(() => {})
+    await unlink(at).catch(() => {})
+    throw error
+  }
+  await handle.close()
+}
+
 /** A line as a match shows it: without its line end and cut to `chars` characters. */
 function cutLine(line: string, chars: number): string {
   const text = line.endsWith('\r') ? line.slice(0, -1) : line
@@ -190,6 +206,15 @@ const isGone = (error: unknown): boolean => {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
   return code === 'ENOENT' || code === 'ENOTDIR'
 }
+
+const isTaken = (error: unknown): boolean =>
+  (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST'
+
+/** What `upload` puts in the project: bytes a window or device sent, or a path main granted. */
+export type UploadSource = { bytes: ArrayBuffer } | { path: string }
+
+/** Makes a new entry at a path where nothing may be, and leaves nothing there when it fails. */
+type MakeAt = (at: string) => Promise<void>
 
 export class FilesService {
   private readonly limits: FilesLimits
@@ -588,6 +613,111 @@ export class FilesService {
       copies.push(into === '' ? name : `${into}/${name}`)
     }
     return copies
+  }
+
+  /**
+   * Puts what the user dropped or chose at `relativePath`, in a folder that is there: bytes as a
+   * file, a granted file or folder copied, a folder's links as links and without its `.git`.
+   * Something there already is `conflict` unless `replace`: then a file replaces a file or a link
+   * itself, never what a link points to, and a folder goes into the folder there, its files
+   * replacing those of the same names.
+   */
+  async upload(
+    root: string,
+    relativePath: string,
+    source: UploadSource,
+    replace: boolean,
+  ): Promise<void> {
+    const relative = this.editable(relativePath)
+    const parent = await this.folder(root, folderOf(relative))
+    const name = nameOf(relative)
+    if ('bytes' in source) {
+      const bytes = new Uint8Array(source.bytes)
+      return this.putFile(parent, name, relative, replace, (at) => writeNew(at, bytes))
+    }
+    const from = source.path
+    const info = await stat(from).catch((error: unknown) => {
+      throw this.fsError(error, name)
+    })
+    if (info.isDirectory()) {
+      if (this.within(await realpath(from), this.paths.join(parent, name))) {
+        throw invalidParams(t('files.copyIntoItself', { path: name }))
+      }
+      return this.putFolder(from, parent, name, relative, replace)
+    }
+    if (!info.isFile()) throw invalidParams(t('files.notFileOrFolder', { path: name }))
+    return this.putFile(parent, name, relative, replace, (at) =>
+      copyFile(from, at, constants.COPYFILE_EXCL),
+    )
+  }
+
+  /**
+   * Makes the file `name` in `parent`, a real folder of the project, with `make`. A replacement is
+   * made beside it under a name of its own and renamed over what is there, so a link there is
+   * replaced itself.
+   */
+  private async putFile(
+    parent: string,
+    name: string,
+    relative: string,
+    replace: boolean,
+    make: MakeAt,
+  ): Promise<void> {
+    const target = this.paths.join(parent, name)
+    try {
+      return await make(target)
+    } catch (error) {
+      if (!isTaken(error)) throw error
+      if (!replace) throw this.taken(error, relative)
+    }
+    const there = await lstat(target).catch(() => null)
+    if (there?.isDirectory()) throw invalidParams(t('files.folderInTheWay', { path: relative }))
+    const temp = this.paths.join(parent, `.kettu-${randomBytes(6).toString('hex')}.tmp`)
+    await make(temp)
+    try {
+      await rename(temp, target)
+    } catch (error) {
+      await rm(temp, { force: true }).catch(() => {})
+      throw error
+    }
+  }
+
+  /**
+   * Copies the folder `from` to `name` in `parent`, a real folder of the project: a new folder, or
+   * with `replace` the folder there, never a link to one.
+   */
+  private async putFolder(
+    from: string,
+    parent: string,
+    name: string,
+    relative: string,
+    replace: boolean,
+  ): Promise<void> {
+    const target = this.paths.join(parent, name)
+    try {
+      await mkdir(target)
+    } catch (error) {
+      if (!isTaken(error)) throw error
+      if (!replace) throw this.taken(error, relative)
+      if (!(await lstat(target)).isDirectory()) {
+        throw invalidParams(t('files.fileInTheWay', { path: relative }))
+      }
+    }
+    for (const entry of await readdir(from, { withFileTypes: true })) {
+      if (entry.name === '.git') continue
+      const source = this.paths.join(from, entry.name)
+      const path = `${relative}/${entry.name}`
+      if (entry.isDirectory()) {
+        await this.putFolder(source, target, entry.name, path, true)
+      } else if (entry.isSymbolicLink()) {
+        const to = await readlink(source)
+        await this.putFile(target, entry.name, path, true, (at) => symlink(to, at))
+      } else if (entry.isFile()) {
+        await this.putFile(target, entry.name, path, true, (at) =>
+          copyFile(source, at, constants.COPYFILE_EXCL),
+        )
+      }
+    }
   }
 
   /** Moves each entry to the system's trash, or removes it for good; one already gone is skipped. */

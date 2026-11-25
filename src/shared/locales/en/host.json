@@ -568,6 +568,8 @@
     "notFolder": "{{path}} is not a folder",
     "notFile": "{{path}} is not a file",
     "outsideProject": "{{path}} is outside the project",
+    "folderInTheWay": "A folder is at {{path}}, so a file cannot replace it",
+    "fileInTheWay": "{{path}} is not a folder, so a folder cannot go into it",
     "tooManyCopies": "Too many copies of {{name}}",
     "notExist": "{{path}} does not exist"
   },

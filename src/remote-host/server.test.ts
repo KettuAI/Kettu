@@ -266,12 +266,20 @@ describe('a paired device', () => {
     await expect(
       device.port.request('attachments.add', { source: { grantId: 'grant' }, thumb: null }),
     ).rejects.toMatchObject({ code: 'forbidden' })
+    await expect(
+      device.port.request('files.upload', {
+        projectPath: t.agent.project,
+        path: 'a.png',
+        source: { grantId: 'grant' },
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
     expect(await device.port.request('projects.list', undefined)).toEqual([])
     const methods = t.forwarded.map((message) => (message as { method: string }).method)
     expect(methods).toEqual(['projects.list'])
     expect(t.logs).toEqual([
       `warn: Device ${t.phone.id} asked for media.open, which devices may not call`,
       `warn: Device ${t.phone.id} asked for attachments.add, which devices may not call`,
+      `warn: Device ${t.phone.id} asked for files.upload, which devices may not call`,
     ])
   })
 

@@ -1,8 +1,17 @@
-import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import {
   ArrowRight01Icon,
   CodeIcon,
   FileAddIcon,
+  FileUploadIcon,
   Folder01Icon,
   FolderAddIcon,
   MinusSignSquareIcon,
@@ -27,6 +36,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LineCounts } from '@renderer/features/git/rows'
+import { chooseFiles } from '@renderer/features/session/composer/attachments'
 import { MENTION_LIMIT } from '@renderer/features/session/composer/mentions'
 import {
   PaneBody,
@@ -57,6 +67,8 @@ import { FileTree, type TreeEdit } from './file-tree'
 import { openInEditor } from './open-in-editor'
 import { FileTypeIcon } from './file-type-icon'
 import { folderOf, nameOf, rankPaths, type PathMatch } from './paths'
+import { uploadInto, useUploadDrop, type Incoming } from './upload'
+import { ReplacePrompt } from './upload-prompt'
 import { VirtualRows } from './virtual-rows'
 
 const SEARCH_DELAY_MS = 250
@@ -123,6 +135,21 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
     setMode('all')
     setEdit({ kind: 'new', folder: '', type })
   }
+  // Chosen files go into the tree's chosen folder, or the project's when the tree is not shown.
+  const uploadRef = useRef<((incoming: Incoming[]) => void) | null>(null)
+  const uploadChosen = (files: File[]) => {
+    const incoming = files.map((file) => ({ file, folder: false }))
+    if (incoming.length === 0) return
+    if (uploadRef.current) return uploadRef.current(incoming)
+    stopSearching()
+    setMode('all')
+    void uploadInto(projectPath, panel, '', incoming)
+  }
+  // An empty folder shows no tree, so a drop anywhere on it goes into the project's folder.
+  const emptyDrop = useUploadDrop(
+    () => '',
+    (folder, incoming) => void uploadInto(projectPath, panel, folder, incoming),
+  )
 
   // The list follows the files while the pane shows; window focus refreshes it through the git
   // status it brings.
@@ -152,6 +179,7 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
         edit={edit}
         onEdit={setEdit}
         collapsed={collapsed}
+        uploadRef={uploadRef}
       />
     )
 
@@ -187,7 +215,7 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
                 )}
               </>
             )}
-            {(!bare || local) && (
+            {(!bare || local || (isWeb && listed)) && (
               <DropdownMenu>
                 <Tooltip>
                   <TooltipTrigger
@@ -208,6 +236,15 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
                   <TooltipContent>{t('panel.more')}</TooltipContent>
                 </Tooltip>
                 <DropdownMenuContent align="end" className="w-56">
+                  {/* The browser's picker opens while the click lasts. */}
+                  {isWeb && listed && (
+                    <DropdownMenuItem
+                      onClick={() => void chooseFiles().then((files) => uploadChosen(files))}
+                    >
+                      <PaneIcon icon={FileUploadIcon} size={16} />
+                      {t('upload.choose')}
+                    </DropdownMenuItem>
+                  )}
                   {!bare && (
                     <DropdownMenuItem
                       onClick={() => (searching ? stopSearching() : setSearching(true))}
@@ -286,11 +323,17 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
       </PaneContext>
       <div className="kp-body">
         {bare ? (
-          <PaneEmpty
-            icon={<PaneIcon icon={Folder01Icon} size={20} />}
-            title={t('panel.emptyTitle')}
-            text={t('panel.emptyDescription')}
-          />
+          <div
+            className="kp-tree flex-1"
+            data-drop={emptyDrop.over !== null || undefined}
+            {...emptyDrop.handlers}
+          >
+            <PaneEmpty
+              icon={<PaneIcon icon={Folder01Icon} size={20} />}
+              title={t('panel.emptyTitle')}
+              text={t('panel.emptyDescription')}
+            />
+          </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">{treeList}</div>
         )}
@@ -298,6 +341,7 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
           <ChangesFoot projectPath={projectPath} panel={panel} changes={changes} />
         )}
       </div>
+      <ReplacePrompt panel={panel} />
     </PaneBody>
   )
 }
@@ -484,6 +528,7 @@ function Browser({
   edit,
   onEdit,
   collapsed,
+  uploadRef,
 }: {
   projectPath: string
   panel: string
@@ -495,6 +540,7 @@ function Browser({
   edit: TreeEdit | null
   onEdit: (edit: TreeEdit | null) => void
   collapsed: number
+  uploadRef: RefObject<((incoming: Incoming[]) => void) | null>
 }) {
   const files = useFilesStore((s) => s.byProject[projectPath])
   if (!files) return <LoadingRows />
@@ -527,6 +573,7 @@ function Browser({
       edit={edit}
       onEdit={onEdit}
       collapsed={collapsed}
+      uploadRef={uploadRef}
     />
   )
 }

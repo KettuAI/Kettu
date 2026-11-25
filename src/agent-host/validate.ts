@@ -1036,10 +1036,11 @@ function thumbnail(o: Fields): string | null {
 }
 
 /** Bytes a renderer hands over, not empty and not too large. */
-function bytes(o: Fields, key: string, max: number): ArrayBuffer {
+/** Bytes up to `max`; empty only when `empty`, as an uploaded file may be. */
+function bytes(o: Fields, key: string, max: number, empty = false): ArrayBuffer {
   const value = o[key]
   if (!(value instanceof ArrayBuffer)) throw invalidParams(`${key} must be an ArrayBuffer`)
-  if (value.byteLength === 0) throw invalidParams(`${key} must not be empty`)
+  if (value.byteLength === 0 && !empty) throw invalidParams(`${key} must not be empty`)
   if (value.byteLength > max) throw invalidParams(`${key} is larger than ${max} bytes`)
   return value
 }
@@ -2592,6 +2593,20 @@ export function createValidators(platform: Platform): Validators {
         projectPath: absolutePath(o, 'projectPath', platform),
         paths: relativePaths(o, 'paths', platform),
         folder: relativeFolder(o, 'folder', platform),
+      }
+    },
+    'files.upload': (params) => {
+      const o = fields(params)
+      const source = fields(o.source)
+      const replace = optionalFlag(o, 'replace')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: relativePath(o, 'path', platform),
+        source:
+          source.grantId !== undefined
+            ? { grantId: string(source, 'grantId', ID_CHARS) }
+            : { bytes: bytes(source, 'bytes', ATTACHMENT_BYTES, true) },
+        ...(replace === undefined ? {} : { replace }),
       }
     },
     'files.delete': (params) => {

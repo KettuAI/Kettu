@@ -879,6 +879,36 @@ describe('createValidators', () => {
     rejects(() => copy({ projectPath: '/p', paths: ['a'], folder: '/tmp' }))
     rejects(() => copy({ projectPath: '/p', paths: 'a', folder: '' }))
 
+    const upload = posix['files.upload']
+    const data = new ArrayBuffer(3)
+    expect(upload({ projectPath: '/p', path: 'a/b.png', source: { bytes: data } })).toEqual({
+      projectPath: '/p',
+      path: 'a/b.png',
+      source: { bytes: data },
+    })
+    expect(
+      upload({
+        projectPath: '/p',
+        path: 'a',
+        source: { grantId: 'g', path: '/etc' },
+        replace: true,
+      }),
+    ).toEqual({ projectPath: '/p', path: 'a', source: { grantId: 'g' }, replace: true })
+    expect(upload({ projectPath: '/p', path: 'e', source: { bytes: new ArrayBuffer(0) } })).toEqual(
+      { projectPath: '/p', path: 'e', source: { bytes: new ArrayBuffer(0) } },
+    )
+    rejects(() => upload({ projectPath: '/p', path: '/etc/x', source: { bytes: data } }))
+    rejects(() => upload({ projectPath: '/p', path: 'a', source: { path: '/etc/passwd' } }))
+    rejects(() => upload({ projectPath: '/p', path: 'a', source: { bytes: 'abc' } }))
+    rejects(() => upload({ projectPath: '/p', path: 'a', source: { bytes: data }, replace: 1 }))
+    rejects(() =>
+      upload({
+        projectPath: '/p',
+        path: 'a',
+        source: { bytes: new ArrayBuffer(20 * 1024 * 1024 + 1) },
+      }),
+    )
+
     const remove = posix['files.delete']
     expect(remove({ projectPath: '/p', paths: ['a'] })).toEqual({ projectPath: '/p', paths: ['a'] })
     expect(remove({ projectPath: '/p', paths: ['a'], permanently: true })).toMatchObject({

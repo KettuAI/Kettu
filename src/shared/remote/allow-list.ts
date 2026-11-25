@@ -14,10 +14,11 @@ function hasGrant(params: unknown): boolean {
 }
 
 /**
- * Whether a device is refused this request: a host method that needs main, or an attachment from
- * a file main granted to a window. A method the host does not know is not this list's to refuse.
+ * Whether a device is refused this request: a host method that needs main, or an attachment or
+ * upload from a file main granted to a window. A method the host does not know is not this list's
+ * to refuse.
  */
 export function forbiddenToDevices(method: string, params: unknown): boolean {
   if (MAIN_ONLY.has(method)) return true
-  return method === 'attachments.add' && hasGrant(params)
+  return (method === 'attachments.add' || method === 'files.upload') && hasGrant(params)
 }

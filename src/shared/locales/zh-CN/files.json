@@ -188,5 +188,31 @@
     "unsavedGo": "{{names}} 里没保存的修改会丢失。",
     "moveToTrash": "移到{{trash}}",
     "deleteForGood": "永久删除"
+  },
+  "upload": {
+    "choose": "上传文件…",
+    "uploading": "正在上传 {{name}}…",
+    "uploadingOf": "正在上传第 {{current}} 个，共 {{total}} 个：{{name}}…",
+    "doneOne": "已把 {{name}} 上传到 {{place}}",
+    "done_other": "已上传 {{count}} 项到 {{place}}",
+    "partly_other": "上传了 {{count}} 项，共 {{total}} 项",
+    "failedOne": "没能上传 {{name}}",
+    "failed_other": "没能上传这 {{count}} 项",
+    "stopped_other": "上传已停止，传完了 {{count}} 项",
+    "none": "没有上传任何文件",
+    "why": "{{name}}：{{reason}}",
+    "moreFailed_other": "另有 {{count}} 项失败",
+    "skipped_other": "跳过了 {{count}} 项",
+    "noFolders": "这里只能上传文件，不能上传文件夹",
+    "tooLarge": "超过了 {{limit}}，一次上传最多这么大",
+    "unreadable": "没能读取这个文件",
+    "hostTooOld": "那台电脑上的 Kettu 版本太旧，还不能上传。请先在那台电脑上更新。",
+    "replaceTitle": "替换“{{name}}”？",
+    "replaceFile": "{{place}} 里已经有“{{name}}”了。替换会覆盖原来的那个。",
+    "replaceFolder": "{{place}} 里已经有文件夹“{{name}}”了。替换会把两个文件夹合在一起：同名的文件被覆盖，其余的都留着。",
+    "forTheRest": "后面的也这样处理",
+    "replace": "替换",
+    "skip": "跳过",
+    "stop": "停止上传"
   }
 }
