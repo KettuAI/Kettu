@@ -96,7 +96,8 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   const whatsNew = (version: string) => (
     <LinkButton href={releaseUrl(version)}>{t('about.updates.whatsNew')}</LinkButton>
   )
-  // While a check runs the button stays, busy, so the row does not change shape.
+  // While a check runs the button stays, busy, so the row does not change shape. It stays beside
+  // an update already found or downloaded too, since a newer release replaces it.
   const check = (
     <SetButton
       loading={refresh.phase === 'turning'}
@@ -164,6 +165,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
             : t('about.updates.readyWaitingSoon')
       action = (
         <>
+          {check}
           {whatsNew(state.version)}
           <SetButton variant="primary" onClick={restartToUpdate}>
             {t('about.updates.restart')}
@@ -178,6 +180,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       if (state.mode === 'link') detail = t('about.updates.downloadDetail')
       action = (
         <>
+          {check}
           {whatsNew(state.version)}
           <SetButton variant="primary" onClick={() => run(window.kettu.updates.download)}>
             {state.mode === 'link' ? t('about.updates.download') : t('about.updates.update')}
