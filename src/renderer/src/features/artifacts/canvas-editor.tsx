@@ -29,7 +29,6 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { AgentId } from '@shared/agents'
 import type { ArtifactDoing, ArtifactFocus } from '@shared/artifacts'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import type { PageKey } from '@shared/artifact-runtime/page-messages'
 import { strokePath } from '@shared/canvas-stroke'
 import {
@@ -47,8 +46,8 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { useHostHas } from '@renderer/lib/host-features'
 import { cameraGlide, openGlide } from '@renderer/lib/motion'
-import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { ArtifactIframe } from './artifact-iframe'
 import {
   cameraBeforeOpen,
   keepCameraBeforeOpen,
@@ -1280,16 +1279,13 @@ export const CanvasEditor = memo(function CanvasEditor({
                 )}
                 {showingBefore && compare && comparePage?.id === p.id && !focused && (
                   <div className="k-vt-before" data-unscaled="">
-                    <iframe
+                    <ArtifactIframe
                       src={framePageUrl(
                         url,
                         { version: compare.before, loadFrom: new Map() },
                         { group: 0, index: 1, file: p.file },
                       )}
                       title={t('compare.beforeTitle', { name: p.name, version: compare.before })}
-                      sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-                      allow=""
-                      referrerPolicy="no-referrer"
                       style={{ width: p.width, height: p.height }}
                     />
                     <span className="k-vt-before__tag">
@@ -1674,11 +1670,6 @@ function OpenedFrame({
   const { t } = useTranslation('artifacts')
   const { frame, ref: frameRef, onLoad } = useKeyedFrame(editor, index, origin, onKey)
   const [loaded, setLoaded] = useState(false)
-  const element = useRef<HTMLIFrameElement | null>(null)
-  const [mountedAt] = useState(reloads)
-  useEffect(() => {
-    if (reloads !== mountedAt && element.current) element.current.src = src
-  }, [reloads, mountedAt, src])
   const width = page.width * opened.z
   const height = page.height * opened.z
   return (
@@ -1690,20 +1681,13 @@ function OpenedFrame({
     >
       <div style={{ height: Math.max(opened.viewHeight, opened.y + height + opened.bottom) }}>
         <div className="k-ce-open__frame" style={{ top: opened.y, width, height }}>
-          <iframe
-            ref={(el) => {
-              element.current = el
-              frameRef(el)
-            }}
+          <ArtifactIframe
+            iframeRef={frameRef}
             src={src}
+            reloadSeq={reloads}
             title={page.name}
-            sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-            allow=""
-            referrerPolicy="no-referrer"
-            onLoad={() => {
-              setLoaded(true)
-              onLoad()
-            }}
+            onPortReady={onLoad}
+            onLoad={() => setLoaded(true)}
             style={{
               width: page.width,
               height: page.height,
@@ -1716,12 +1700,9 @@ function OpenedFrame({
           )}
           {before && (
             <div className="k-vt-before">
-              <iframe
+              <ArtifactIframe
                 src={before.src}
                 title={t('compare.beforeTitle', { name: page.name, version: before.version })}
-                sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-                allow=""
-                referrerPolicy="no-referrer"
                 style={{
                   width: page.width,
                   height: page.height,

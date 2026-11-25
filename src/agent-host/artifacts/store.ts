@@ -352,6 +352,12 @@ export class ArtifactStore {
     return run
   }
 
+  /** Whether the latest version declares capabilities that require a strict offline policy. */
+  async isStrict(id: string): Promise<boolean> {
+    const latest = await this.runtime('declaration', { id, project: null, version: null })
+    return isStrictDeclaration(latest.capabilities)
+  }
+
   /**
    * The files of a version, the latest by default, for main and the remote host to serve; with the
    * artifact's title, the key its thumbnail is kept under, and whether its pages load from their

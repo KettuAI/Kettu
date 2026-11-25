@@ -12,9 +12,19 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
 import { pageRuntime } from './tools/build/page-runtime'
+import { sandboxShim } from './tools/build/sandbox-shim'
+import { webSandbox } from './tools/build/web-sandbox'
 import { integrity } from './tools/build/integrity'
 import { pdfjsData } from './tools/build/pdfjs-data'
 import { agentMarkNotice, standaloneThirdPartyNotices } from './tools/build/third-party-notices'
+import { artifactFileType } from './src/shared/artifact-files'
+import {
+  ARTIFACT_PERMISSIONS_POLICY,
+  SANDBOX_FRAME_PATHS,
+  SANDBOX_SHELL_HTML,
+  SANDBOX_VIEWER_PREFIX,
+  sandboxFrameCsp,
+} from './src/shared/artifact-policy'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
 
@@ -95,6 +105,23 @@ export default defineConfig(({ mode }) => {
       // The daemon's package ships the web client too.
       standaloneThirdPartyNotices(source('.'), [], [agentMarkNotice(source('.'))]),
       pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
+      sandboxShim(source('src/renderer/src/web/sandbox-shim.ts')),
+      ...(hosted || relay
+        ? [
+            webSandbox({
+              viewersDir: source('out/viewers'),
+              frames: {
+                [SANDBOX_FRAME_PATHS.default]: sandboxFrameCsp('default'),
+                [SANDBOX_FRAME_PATHS.strict]: sandboxFrameCsp('strict'),
+                [SANDBOX_FRAME_PATHS.viewer]: sandboxFrameCsp('viewer'),
+              },
+              shellHtml: SANDBOX_SHELL_HTML,
+              permissionsPolicy: ARTIFACT_PERMISSIONS_POLICY,
+              viewerPrefix: SANDBOX_VIEWER_PREFIX,
+              mimeType: artifactFileType,
+            }),
+          ]
+        : []),
       pdfjsData(),
       ...(hosted || relay ? [integrity()] : []),
       ...(relay ? [relayPagePolicy()] : []),

@@ -217,17 +217,10 @@ async function showApp(
         keep({ ...kept, hosts: kept.hosts.map((h) => (h.relay.id === shown.relay.id ? shown : h)) })
         useWebHostStore.setState({ others: othersOf(kept, shown) })
       },
-      overrides: (_link, api) => {
+      virtualFrames: true,
+      overrides: () => {
         useWebHostStore.setState({ others: othersOf(kept, shown) })
-        return {
-          // The host serves an artifact's frame only on its direct port, which the relay does not
-          // reach, so the page shows its preview.
-          artifacts: {
-            ...api.artifacts,
-            open: async () => ({ failed: 'preview_only' }),
-            close: async () => {},
-          },
-        }
+        return {}
       },
       ready: () => {
         useWebHostStore.setState((state) => ({

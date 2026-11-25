@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import type { PageKey } from '@shared/artifact-runtime/page-messages'
 import { useHostHas } from '@renderer/lib/host-features'
-import { isWeb } from '@renderer/lib/platform'
+import { ArtifactIframe } from './artifact-iframe'
 import type { FrameSheet } from './canvas-sheets'
 import { useKeyedFrame } from './live-frame'
 import { PresentStage } from './present-stage'
@@ -78,17 +77,12 @@ export function PresentFrame({
   const { ref, onLoad } = useKeyedFrame(undefined, null, origin, onKey)
   const [loaded, setLoaded] = useState(false)
   return (
-    <iframe
-      ref={ref}
+    <ArtifactIframe
+      iframeRef={ref}
       src={src}
       title={title}
-      sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-      allow=""
-      referrerPolicy="no-referrer"
-      onLoad={() => {
-        setLoaded(true)
-        onLoad()
-      }}
+      onPortReady={onLoad}
+      onLoad={() => setLoaded(true)}
       style={{ opacity: loaded ? 1 : 0 }}
     />
   )

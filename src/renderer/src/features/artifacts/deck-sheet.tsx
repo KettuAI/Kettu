@@ -32,10 +32,9 @@ import {
   type DeckTrack,
 } from '@shared/artifact-runtime/deck-sheet'
 import { RUNTIME_VERSION } from '@shared/artifact-runtime/page-messages'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Kbd } from '@renderer/components/ui/kbd'
-import { isWeb } from '@renderer/lib/platform'
+import { ArtifactIframe } from './artifact-iframe'
 import {
   setDeckNotes,
   setDeckSlide,
@@ -268,12 +267,11 @@ export function DeckSheet({
   const link = useMemo(() => new FrameLink(origin, () => {}), [origin])
   const [loaded, setLoaded] = useState(false)
   const [linked, setLinked] = useState(false)
-  const [mountedAt] = useState(reloads)
-  useEffect(() => {
-    if (reloads === mountedAt || !frame.current) return
+  const [prevReloads, setPrevReloads] = useState(reloads)
+  if (reloads !== prevReloads) {
+    setPrevReloads(reloads)
     setLoaded(false)
-    frame.current.src = src
-  }, [reloads, mountedAt, src])
+  }
 
   // Pins: the open threads on the slide shown, numbered as their cards are.
   const numbered = useMemo(() => {
@@ -612,22 +610,18 @@ export function DeckSheet({
               data-writing={writesShown || undefined}
               style={{ left: place.x, top: place.y, width: shownW, height: shownH }}
             >
-              <iframe
-                ref={(el) => {
+              <ArtifactIframe
+                iframeRef={(el) => {
                   frame.current = el
                   link.attach(el)
                 }}
                 src={src}
+                reloadSeq={reloads}
                 title={slide ? slideName(slide) : title}
-                sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-                allow=""
-                referrerPolicy="no-referrer"
-                onLoad={() => {
-                  setLoaded(true)
-                  link.loaded()
-                }}
+                onPortReady={() => link.loaded()}
+                onLoad={() => setLoaded(true)}
                 className="adk-frame"
-                data-loaded={(loaded && ready) || undefined}
+                dataLoaded={loaded && ready}
               />
               {compare?.showingBefore && (
                 <span className="k-vt-before__tag" style={{ zIndex: 1 }}>

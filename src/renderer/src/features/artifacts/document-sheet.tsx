@@ -31,11 +31,10 @@ import {
   outlineHeadings,
 } from '@shared/artifact-runtime/document-sheet'
 import { RUNTIME_VERSION, snippet } from '@shared/artifact-runtime/page-messages'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { useDark } from '@renderer/hooks/use-dark'
-import { isWeb } from '@renderer/lib/platform'
 import { DOC_SIZES, setDocSize, stepDocSize, useDocSize } from '@renderer/stores/artifact-doc-size'
+import { ArtifactIframe } from './artifact-iframe'
 import {
   dropUnsaved,
   keepUnsaved,
@@ -215,14 +214,13 @@ export function DocumentSheet({
   const [src] = useState(() => `${framePageUrl(url, shown)}?theme=${dark ? 'dark' : 'light'}`)
   const frame = useRef<HTMLIFrameElement | null>(null)
   const link = useMemo(() => new FrameLink(origin, () => {}), [origin])
-  const [mountedAt] = useState(reloads)
-  useEffect(() => {
-    if (reloads === mountedAt || !frame.current) return
+  const [prevReloads, setPrevReloads] = useState(reloads)
+  if (reloads !== prevReloads) {
+    setPrevReloads(reloads)
     setEmbedded(false)
     setLayout(null)
     setLoaded(false)
-    frame.current.src = src
-  }, [reloads, mountedAt, src])
+  }
 
   // What changed, and Changes, which shows its earlier words in the text.
   const passages = useMemo(
@@ -554,22 +552,18 @@ export function DocumentSheet({
               className="ads-content"
               style={sheetHeight !== null ? { height: sheetHeight } : undefined}
             >
-              <iframe
-                ref={(el) => {
+              <ArtifactIframe
+                iframeRef={(el) => {
                   frame.current = el
                   link.attach(el)
                 }}
                 src={src}
+                reloadSeq={reloads}
                 title={title}
-                sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-                allow=""
-                referrerPolicy="no-referrer"
-                onLoad={() => {
-                  setLoaded(true)
-                  link.loaded()
-                }}
+                onPortReady={() => link.loaded()}
+                onLoad={() => setLoaded(true)}
                 className="ads-frame"
-                data-loaded={loaded || undefined}
+                dataLoaded={loaded}
               />
               {pins.map(({ thread, n }) => {
                 const place = placeOf(thread.anchor.offset!)
