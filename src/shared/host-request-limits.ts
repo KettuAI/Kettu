@@ -264,6 +264,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'attachments.remove': HOST_MS,
   'attachments.held': HOST_MS,
   'files.list': AGENT_MS,
+  'files.watch': HOST_MS,
+  'files.unwatch': HOST_MS,
   'files.listFolder': HOST_MS,
   'files.read': AGENT_MS,
   'files.search': AGENT_MS,

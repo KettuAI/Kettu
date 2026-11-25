@@ -5,6 +5,7 @@ import type { AgentId } from '@shared/agents'
 import type { FileContent, FolderList } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { insideAny, isWithin, movedPath } from '@renderer/features/files/paths'
 import { useGitStore } from './git'
@@ -342,18 +343,55 @@ export function ensureFreshFiles(projectPath: string): void {
   }
 }
 
+// A view that goes and comes back at once, as on switching sessions, keeps the host's watch, and
+// an unwatch never overtakes the watch after it.
+const UNWATCH_DELAY_MS = 1000
+const unwatching = new Map<string, ReturnType<typeof setTimeout>>()
+
+function watchOnHost(projectPath: string): void {
+  // A host from before `files.watch` refreshes on focus and git status alone.
+  void host('files.watch', { projectPath }).catch(() => {})
+}
+
 /**
  * Keeps the project's list current while a view shows it: read now if it is unknown or stale,
  * then again after each change on disk. Returns the call that stops watching.
  */
 export function watchFiles(projectPath: string): () => void {
-  watchers.set(projectPath, (watchers.get(projectPath) ?? 0) + 1)
+  const count = watchers.get(projectPath) ?? 0
+  watchers.set(projectPath, count + 1)
+  if (count === 0) {
+    const pending = unwatching.get(projectPath)
+    if (pending === undefined) watchOnHost(projectPath)
+    else clearTimeout(pending)
+    unwatching.delete(projectPath)
+  }
   if (!useFilesStore.getState().byProject[projectPath]) void loadFiles(projectPath)
   else if (staleLists.has(projectPath)) refreshFiles(projectPath)
   return () => {
     const count = (watchers.get(projectPath) ?? 1) - 1
-    if (count > 0) watchers.set(projectPath, count)
-    else watchers.delete(projectPath)
+    if (count > 0) {
+      watchers.set(projectPath, count)
+      return
+    }
+    watchers.delete(projectPath)
+    unwatching.set(
+      projectPath,
+      setTimeout(() => {
+        unwatching.delete(projectPath)
+        void host('files.unwatch', { projectPath }).catch(() => {})
+      }, UNWATCH_DELAY_MS),
+    )
+  }
+}
+
+/**
+ * Watches again after a host restarts, or a new connection to another host opens: this computer's
+ * projects for null, that host's for its id.
+ */
+export function rewatchFiles(hostId: string | null = null): void {
+  for (const projectPath of watchers.keys()) {
+    if (hostOfPath(projectPath) === hostId) watchOnHost(projectPath)
   }
 }
 
@@ -825,23 +863,35 @@ export function openDiff(projectPath: string, target: DiffTarget, options?: Open
   showOpenDiff(projectPath, target)
 }
 
-// A new git status means the working tree changed, after an agent's edit as after one of yours,
-// or the window came back into focus; a burst of them refreshes once. Only a list a view shows is
-// read again; the others wait until one shows them.
+// A burst of changes refreshes once. Only a list a view shows is read again; the others wait
+// until one shows them.
 const REFRESH_DELAY_MS = 300
+// The host already waits for a burst on disk to settle.
+const CHANGED_DELAY_MS = 50
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function refreshSoon(projectPath: string, delay: number): void {
+  if (!watchers.has(projectPath)) {
+    if (useFilesStore.getState().byProject[projectPath]) staleLists.add(projectPath)
+    return
+  }
+  clearTimeout(timers.get(projectPath))
+  timers.set(
+    projectPath,
+    setTimeout(() => refreshFiles(projectPath), delay),
+  )
+}
+
+/** The host saw the project's folder change on disk, in a repository or not. */
+export function filesChanged(projectPath: string): void {
+  refreshSoon(projectPath, CHANGED_DELAY_MS)
+}
+
+// A new git status means the working tree changed, after an agent's edit as after one of yours,
+// or the window came back into focus.
 useGitStore.subscribe((state, previous) => {
   for (const [projectPath, status] of Object.entries(state.status)) {
-    if (status === previous.status[projectPath]) continue
-    if (!watchers.has(projectPath)) {
-      if (useFilesStore.getState().byProject[projectPath]) staleLists.add(projectPath)
-      continue
-    }
-    clearTimeout(timers.get(projectPath))
-    timers.set(
-      projectPath,
-      setTimeout(() => refreshFiles(projectPath), REFRESH_DELAY_MS),
-    )
+    if (status !== previous.status[projectPath]) refreshSoon(projectPath, REFRESH_DELAY_MS)
   }
 })
 

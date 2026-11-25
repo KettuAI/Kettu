@@ -146,6 +146,7 @@ import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
 import { setLocale, t, tSettings, tSettingsEnglish } from './i18n'
 import { FilesService } from './files'
+import { FilesWatches } from './files-watch'
 import { HtmlPreviews } from './html-preview'
 import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
@@ -531,6 +532,8 @@ export class AgentHost {
   /** Runs git for the project's files, with the agent environment. */
   private readonly execRunner: ExecRunner
   private readonly files: FilesService
+  /** The projects whose folders ports watch for the Files pane. */
+  private readonly fileWatches: FilesWatches
   private readonly agentFiles: AgentFiles
   private readonly sessionFiles: SessionFiles
   /** Grants for the media a thread names and the Files pane opens, which main serves. */
@@ -745,6 +748,12 @@ export class AgentHost {
       media: (real, info) => this.media.grantFile(real, info, null, true),
       describeMedia: (real, info) => this.media.describe(real, info, true),
       trash: (paths) => this.trash(paths),
+    })
+    this.fileWatches = new FilesWatches({
+      platform,
+      changed: (portId, projectPath) =>
+        this.hub.send([portId], { type: 'files.changed', projectPath }),
+      log: (level, message) => writeLog(level, 'host', message),
     })
     this.agentFiles = new AgentFiles({
       platform,
@@ -2136,6 +2145,7 @@ export class AgentHost {
     this.artifacts.portClosed(portId)
     this.gitRetains.dropPort(portId)
     this.git?.releaseAll(portId)
+    this.fileWatches.dropPort(portId)
   }
 
   /** `host:settings`: binary overrides, the proxy and background fetch, applied live. */
@@ -3461,6 +3471,7 @@ export class AgentHost {
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
+      this.fileWatches.stop()
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
         this.agents.stopAll(),
@@ -4092,12 +4103,34 @@ export class AgentHost {
       'attachments.remove': ({ id }) => this.attachments.remove(id),
       'attachments.held': ({ ids }) => this.attachments.held(ids),
       'files.list': ({ projectPath }) =>
-        this.filesCall(projectPath, (root) => this.files.list(root)),
+        this.filesCall(projectPath, async (root) => {
+          const list = await this.files.list(root)
+          this.fileWatches.listed(root, list)
+          return list
+        }),
+      'files.watch': async ({ projectPath }, { portId }) => {
+        const root = await projects.resolveDirectory(projectPath)
+        this.assertOpenFolder(root)
+        if (this.hub.has(portId)) this.fileWatches.add(root, portId, projectPath)
+      },
+      'files.unwatch': async ({ projectPath }, { portId }) => {
+        // The folder may be gone by now, and its watch with it.
+        const root = await projects.resolveDirectory(projectPath).catch(() => projectPath)
+        this.fileWatches.remove(root, portId)
+      },
       'files.listFolder': ({ projectPath, path }) =>
-        this.filesCall(projectPath, (root) => this.files.listFolder(root, path)),
+        this.filesCall(projectPath, async (root) => {
+          const list = await this.files.listFolder(root, path)
+          this.fileWatches.read(root, path)
+          return list
+        }),
       'files.read': ({ projectPath, path, asText }, { device }) =>
-        // A device's media is read through its remote host, never main's media scheme.
-        this.filesCall(projectPath, (root) => this.files.read(root, path, asText, device !== null)),
+        this.filesCall(projectPath, async (root) => {
+          // A device's media is read through its remote host, never main's media scheme.
+          const content = await this.files.read(root, path, asText, device !== null)
+          this.fileWatches.opened(root, path)
+          return content
+        }),
       'files.search': ({ projectPath, query }) =>
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
       'files.agentFolder': ({ sessionId }) => this.agentFiles.folder(sessionId),

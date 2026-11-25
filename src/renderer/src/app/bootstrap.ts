@@ -45,6 +45,7 @@ import {
   receiveArtifactEvent,
 } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
+import { filesChanged, rewatchFiles } from '@renderer/stores/files'
 import {
   loadGitTools,
   receiveCurrentPr,
@@ -225,6 +226,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'environment.changed':
       useAgentsStore.setState({ environment: event.info })
       break
+    case 'files.changed':
+      filesChanged(event.projectPath)
+      return
     case 'git.tools':
       useGitStore.setState({ tools: event.tools })
       break
@@ -414,6 +418,7 @@ export function bootstrap(): Promise<unknown> {
     rewatchAll((sessionId) => sessionHost(sessionId) === null)
     showFront(true)
     rewatchGit(null)
+    rewatchFiles(null)
   })
   useViewStore.subscribe(() => showFront())
   followShownSession()
@@ -450,6 +455,7 @@ export function bootstrap(): Promise<unknown> {
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)
         rewatchGit(hostId)
+        rewatchFiles(hostId)
         if (waitingSessions.size > 0) closeUnlistedPanes(waitingSessions)
       },
       closed: (hostId) => {

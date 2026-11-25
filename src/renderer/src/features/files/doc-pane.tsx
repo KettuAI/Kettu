@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { PaneBody } from '@renderer/features/shell/panel-button'
-import { openDiff, showOpenFile, useFilesStore } from '@renderer/stores/files'
+import { openDiff, showOpenFile, useFilesStore, watchFiles } from '@renderer/stores/files'
 import { shownDoc, useViewStore, type DocTab } from '@renderer/stores/view'
 import { useFileChanges } from './changes'
 import { DiffPreview } from './diff-preview'
@@ -12,6 +12,8 @@ const BESIDE = { preview: true, fromPanel: true }
 /** What the panel's selected file or diff tab shows. */
 export default function DocPane({ projectPath, panel }: { projectPath: string; panel: string }) {
   const tab = useViewStore((s) => shownDoc(s, panel))
+  // The shown file or change is read again after each change on disk, as the tree is.
+  useEffect(() => watchFiles(projectPath), [projectPath])
   if (tab?.kind === 'file') {
     return <FileDoc key={tab.id} projectPath={projectPath} panel={panel} tab={tab} />
   }
