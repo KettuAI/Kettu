@@ -2,6 +2,8 @@
 // found in the block's source when editing starts, and the words typed into it replace that stretch
 // of source, so links, emphasis and code around them stay as they were.
 
+import { blockMarks } from '@shared/artifact-document'
+
 interface Run {
   node: Text
   /** Where the node's text lies in the block's source; null when it is not there as written. */
@@ -79,22 +81,33 @@ function hidden(source: string): [number, number][] {
 }
 
 /** Where `text` is written as words at or after `from`, or -1. */
-function find(source: string, text: string, from: number, spans: [number, number][]): number {
+function find(
+  source: string,
+  text: string,
+  from: number,
+  spans: [number, number][],
+  marks: [number, number][],
+): number {
   // A match that holds a span whole shows it as words, so the brackets were no link there.
   const inside = (at: number): boolean =>
     spans.some(
       ([start, end]) =>
         at < end && at + text.length > start && !(at <= start && at + text.length >= end),
-    )
+    ) || marks.some(([start, end]) => at < end && at + text.length > start)
   let at = source.indexOf(text, from)
   while (at >= 0 && inside(at)) at = source.indexOf(text, at + 1)
   return at
 }
 
-/** Finds the block's rendered words in its source, in order. */
-export function mapSource(root: Element, source: string): SourceMap {
+/**
+ * Finds the block's rendered words in its source, in order. A code block's source is all words: an
+ * indented one starts after its indent, where a line can read as a list item or a heading.
+ */
+export function mapSource(root: Element, source: string, codeBlock: boolean): SourceMap {
   const runs: Run[] = []
   const spans = hidden(source)
+  // Words the same as their item's or heading's mark are written after it, never on it.
+  const marks = codeBlock ? [] : blockMarks(source)
   let cursor = 0
   for (const node of textNodes(root)) {
     const text = node.data
@@ -103,7 +116,7 @@ export function mapSource(root: Element, source: string): SourceMap {
       runs.push({ node, from: null, to: cursor, text, code })
       continue
     }
-    const at = find(source, text, cursor, spans)
+    const at = find(source, text, cursor, spans, marks)
     if (at < 0) {
       runs.push({ node, from: null, to: cursor, text, code })
       continue

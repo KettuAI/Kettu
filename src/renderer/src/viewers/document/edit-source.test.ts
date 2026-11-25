@@ -32,9 +32,10 @@ function edit(
   source: string,
   parts: (string | { code: string })[],
   type: (nodes: FakeText[]) => void,
+  codeBlock = false,
 ): string | null {
   const { root, nodes } = block(...parts)
-  const map = mapSource(root, source)
+  const map = mapSource(root, source, codeBlock)
   type(nodes)
   return editedSource(root, map)
 }
@@ -131,5 +132,34 @@ describe('typing into a block with links', () => {
       }),
     ).toBe('Use arr[i][j] there.')
     expect(edit('a](b) c', ['a](b) c'], (nodes) => (nodes[0]!.data = 'a](b) d'))).toBe('a](b) d')
+  })
+})
+
+describe('typing into a list item, heading or quote', () => {
+  it('changes words that repeat their mark, not the mark', () => {
+    expect(edit('- **-** x', ['-', ' x'], (nodes) => (nodes[0]!.data = '+'))).toBe('- **+** x')
+    expect(edit('1. **1.** done', ['1.', ' done'], (nodes) => (nodes[0]!.data = '2.'))).toBe(
+      '1. **2.** done',
+    )
+    expect(edit('# **#** tag', ['#', ' tag'], (nodes) => (nodes[0]!.data = '#1'))).toBe(
+      '# **#1** tag',
+    )
+    expect(
+      edit('> - [ ] **[ ]** a\n> - **>** b', ['[ ]', ' a', '\n', '>', ' b'], (nodes) => {
+        nodes[3]!.data = '<'
+      }),
+    ).toBe('> - [ ] **[ ]** a\n> - **\\<** b')
+  })
+
+  it("changes a later item's words", () => {
+    expect(edit('- one\n- two', ['one', '\n', 'two'], (nodes) => (nodes[2]!.data = 'three'))).toBe(
+      '- one\n- three',
+    )
+  })
+
+  it('keeps what reads as a mark in a code block as words', () => {
+    expect(edit('- code', [{ code: '- code' }], (nodes) => (nodes[0]!.data = '+ code'), true)).toBe(
+      '+ code',
+    )
   })
 })

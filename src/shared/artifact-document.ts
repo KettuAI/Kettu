@@ -33,6 +33,22 @@ export function markdownBlocks(text: string): MarkdownBlock[] {
   return blocks
 }
 
+/**
+ * Where the marks that open a block or its lines lie: list bullets and numbers, heading hashes,
+ * quote marks and task boxes, none of which is shown as words.
+ */
+export function blockMarks(text: string): [number, number][] {
+  const marks: [number, number][] = []
+  markdown.parse(text).iterate({
+    enter(node) {
+      if (/^(?:ListMark|HeaderMark|QuoteMark|TaskMarker)$/.test(node.name)) {
+        marks.push([node.from, node.to])
+      }
+    },
+  })
+  return marks
+}
+
 /** The languages the Markdown's fenced code names, by its info's first word, lowercased. */
 export function fenceLanguages(text: string): string[] {
   const languages = new Set<string>()

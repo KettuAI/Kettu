@@ -451,7 +451,8 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     if (!editing) return
     const element = blockElement(editing.index)
     if (!element || edit.current.map) return
-    edit.current.map = mapSource(element, editing.typed ?? editing.saved)
+    const codeBlock = /Code/.test(parts[editing.index]?.kind ?? '')
+    edit.current.map = mapSource(element, editing.typed ?? editing.saved, codeBlock)
     // A block shown again as typed takes the keyboard once it is clicked.
     if (editing.typed === undefined) element.focus()
     const point = editing.point
@@ -461,7 +462,7 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
       selection?.removeAllRanges()
       selection?.addRange(range)
     }
-  }, [editing, blockElement])
+  }, [editing, blockElement, parts])
 
   const startEditing = (index: number, point: { x: number; y: number } | null): void => {
     const part = parts[index]
