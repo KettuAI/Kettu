@@ -265,6 +265,7 @@ const api: KettuApi = {
     chooseAgentBinary: (harnessId) => invoke('dialog:choose-agent-binary', harnessId),
     chooseAgentFolder: () => invoke('dialog:choose-agent-folder'),
     chooseShell: () => invoke('dialog:choose-shell'),
+    exportConversation: (title, markdown) => invoke('dialog:export-conversation', title, markdown),
   },
   debug: {
     get: () => invoke('debug:get'),

@@ -448,6 +448,11 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         askPath('shell', settings.current().terminal.shellPath ?? null, async (path) =>
           settings.takeHost(await admin('settings.setShellPath', { path })),
         ),
+      exportConversation: async (title, markdown) => {
+        const name = `${safeName(title, 'conversation')}.md`
+        downloadFile(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), name)
+        return true
+      },
     },
     // A browser opens no debugging ports of its own; the host's are on the host.
     debug: {

@@ -287,6 +287,8 @@ export interface IpcInvokeContract {
   // `trash`: move the folder Kettu made for the agent to the trash.
   'settings:remove-agent': { args: [agentId: AgentId, trash: boolean]; result: void }
   'dialog:choose-shell': { args: []; result: string | null }
+  // `title`: the session's, which names the file; the path written, false when cancelled.
+  'dialog:export-conversation': { args: [title: string, markdown: string]; result: string | false }
   // `defaultPath`: the folder the dialog opens in, the session's; an empty list when cancelled.
   'dialog:add-attachments': {
     args: [kind: 'files' | 'folder', defaultPath: string | null]
@@ -930,6 +932,11 @@ export interface KettuApi {
     /** Picks or creates a configuration folder for an agent to add, which `addAgent` accepts. */
     chooseAgentFolder(): Promise<string | null>
     chooseShell(): Promise<string | null>
+    /**
+     * Asks where to save a session's conversation as Markdown, named after its title. The path
+     * written, true where a browser saved it, or false when the user cancelled.
+     */
+    exportConversation(title: string, markdown: string): Promise<string | boolean>
   }
   /** Debug mode: this run's ports, and restarting into it or out of it. */
   debug: {

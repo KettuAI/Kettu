@@ -218,6 +218,28 @@
     "moreFor": "{{title}} 的更多操作",
     "deleteKeepsAppCopy": "{{agent}} 自己保留的那份，Kettu 删不掉。"
   },
+  "export": {
+    "menu": "导出对话…",
+    "exporting": "正在导出“{{title}}”…",
+    "exported": "已导出“{{title}}”",
+    "failed": "无法导出“{{title}}”：{{error}}",
+    "agent": "智能体：{{name}}",
+    "model": "模型：{{name}}",
+    "project": "项目：{{path}}",
+    "started": "开始时间：{{date}}",
+    "exportedAt": "导出时间：{{date}}",
+    "you": "你",
+    "fromKettu": "来自 Kettu",
+    "from": "来自 {{title}}",
+    "fromParent": "来自父会话",
+    "attachments": "附件",
+    "image": "图片 {{number}}",
+    "audio": "音频",
+    "video": "视频",
+    "subagent": "子智能体",
+    "startedSession": "已启动 {{title}}",
+    "startedSessionMissing": "已启动一个会话"
+  },
   "work": {
     "turn": "当前这一轮",
     "waiting_other": "{{count}} 个请求在等你回答",

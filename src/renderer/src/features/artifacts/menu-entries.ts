@@ -35,17 +35,34 @@ function canSaveFolders(): boolean {
   )
 }
 
+/** What an export's toast says while it runs, once it saved and when it failed. */
+export interface ExportText {
+  exporting: string
+  exported: string
+  failed: (error: string) => string
+}
+
+const artifactText = (title: string): ExportText => ({
+  exporting: i18n.t('artifacts:menu.exporting', { title }),
+  exported: i18n.t('artifacts:menu.exported', { title }),
+  failed: (error) => i18n.t('artifacts:menu.exportFailed', { title, error }),
+})
+
 /**
  * Saves a copy where the user chooses, saying how it went; `save` gives the path written, true
  * where there is none to show, or false when cancelled.
  */
-function exportWith(title: string, save: () => Promise<string | boolean>): void {
-  const shown = progressToast(i18n.t('artifacts:menu.exporting', { title }))
+export function exportWith(
+  title: string,
+  save: () => Promise<string | boolean>,
+  text: ExportText = artifactText(title),
+): void {
+  const shown = progressToast(text.exporting)
   save().then(
     (saved) => {
       if (saved === false) return shown.close()
       shown.done(
-        i18n.t('artifacts:menu.exported', { title }),
+        text.exported,
         typeof saved === 'string'
           ? {
               label: i18n.t('artifacts:menu.showIn', { name: fileManagerName() }),
@@ -60,9 +77,9 @@ function exportWith(title: string, save: () => Promise<string | boolean>): void 
       )
     },
     (error: unknown) =>
-      shown.failed(i18n.t('artifacts:menu.exportFailed', { title, error: errorMessage(error) }), {
+      shown.failed(text.failed(errorMessage(error)), {
         label: i18n.t('common:actions.retry'),
-        onClick: () => exportWith(title, save),
+        onClick: () => exportWith(title, save, text),
       }),
   )
 }

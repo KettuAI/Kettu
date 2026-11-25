@@ -88,6 +88,7 @@ import type { TerminalHost } from './terminal-host'
 import { saveCapture } from './device-captures'
 import type { DeviceHost } from './device-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
+import { exportConversationFile } from './conversation-export'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
 import { isComputerOverlay, isOverlay, isPanel } from './window'
@@ -581,6 +582,10 @@ export function registerIpcHandlers({
     if (path) settings.setShellPath(path)
     return path
   })
+
+  handle('dialog:export-conversation', 2, ({ window }, title, markdown) =>
+    exportConversationFile(window, title, markdown),
+  )
 
   handle('dialog:add-attachments', 2, async ({ window }, kind, defaultPath) => {
     if (kind !== 'files' && kind !== 'folder') throw new Error('kind must be files or folder')
