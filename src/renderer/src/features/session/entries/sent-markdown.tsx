@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ComponentProps, type ReactNode } from 'react'
 import type { Components, ExtraProps, StreamdownProps } from 'streamdown'
+import { schemelessGitHubUrl } from '@shared/git'
 import { findChips, splitLines, type Chip, type ChipContext } from '../composer/chips'
 import { Markdown } from '../markdown'
 import { Link } from '../markdown/markdown-impl'
@@ -22,11 +23,15 @@ interface ChipLinkOptions {
   chips: { chip: Chip; raw: string }[]
 }
 
-/** A link whose text is its address, as markdown reads a typed address; its text, else null. */
+/**
+ * A link whose text is its address, as markdown reads a typed address, or a GitHub link typed
+ * without `https://`, which the reply's plugins link; its text, else null.
+ */
 function bareLinkText(node: MdNode): string | null {
   const only = node.children?.[0]
   if (node.type !== 'link' || node.children?.length !== 1 || only?.type !== 'text') return null
-  return typeof only.value === 'string' && only.value === node.url ? only.value : null
+  if (typeof only.value !== 'string') return null
+  return only.value === node.url || schemelessGitHubUrl(only.value) === node.url ? only.value : null
 }
 
 // A typed address runs to the next space in markdown, over Chinese text and a second address too.

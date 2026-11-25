@@ -425,6 +425,10 @@ describe('the thread database', () => {
       artifact('w3', 'art_b', 'Sketch', 'delete'),
       reply('a1', 'Merged https://github.com/KettuAI/cloud/pull/7 and https://example.com/x.'),
       reply('a2', 'Also see https://github.com/KettuAI/Kettu/pull/30'),
+      reply(
+        'a3',
+        'And github.com/KettuAI/Kettu/issues/31, not gist.github.com/KettuAI/Kettu/issues/1',
+      ),
       { kind: 'turn_end', id: 'end1', stopReason: 'end_turn', durationMs: 9000 },
       user('u2'),
     ]
@@ -434,11 +438,12 @@ describe('the thread database', () => {
       outputs: {
         artifacts: [{ id: 'art_a', title: 'Plan v2' }],
         references: [
+          'https://github.com/KettuAI/Kettu/issues/31',
           'https://github.com/KettuAI/Kettu/pull/30',
           'https://github.com/KettuAI/cloud/pull/7',
           'https://github.com/KettuAI/Kettu/issues/12',
         ],
-        reply: 'Also see https://github.com/KettuAI/Kettu/pull/30',
+        reply: 'And github.com/KettuAI/Kettu/issues/31, not gist.github.com/KettuAI/Kettu/issues/1',
         turnMs: 9000,
         plan: [
           { content: 'Read', priority: 'medium', status: 'completed' },

@@ -1,6 +1,12 @@
-// A remark plugin for GitHub references written in prose: `owner/repo#12` and `#12`.
+// A remark plugin for GitHub references written in prose: `owner/repo#12`, `#12` and links to
+// pull requests and issues written without `https://`.
 
-import { githubIssueUrl, isRepositoryName } from '@shared/git'
+import {
+  githubIssueUrl,
+  isRepositoryName,
+  schemelessGitHubLinks,
+  schemelessGitHubUrl,
+} from '@shared/git'
 
 interface MdNode {
   type: string
@@ -17,26 +23,45 @@ const PREFIX = '#github-ref:'
 const SKIP = new Set(['link', 'linkReference', 'inlineCode', 'code', 'html', 'definition'])
 
 function split(text: string): MdNode[] | null {
-  const out: MdNode[] = []
-  let last = 0
+  const found = schemelessGitHubLinks(text)
   for (const match of text.matchAll(REFERENCE)) {
     const [whole, owner, repo, number] = match
     if (repo && !isRepositoryName(repo)) continue
-    const at = match.index
-    if (at > last) out.push({ type: 'text', value: text.slice(last, at) })
+    const from = match.index
+    const to = from + whole.length
+    if (found.some((link) => from < link.to && to > link.from)) continue
     // A bare number names an issue in the project's own repository, which only the link knows.
     const url = owner && repo ? githubIssueUrl(owner, repo, Number(number)) : PREFIX + number
-    out.push({ type: 'link', url, children: [{ type: 'text', value: whole }] })
-    last = at + whole.length
+    found.push({ from, to, url })
   }
-  if (out.length === 0) return null
+  if (found.length === 0) return null
+  const out: MdNode[] = []
+  let last = 0
+  for (const { from, to, url } of found.sort((a, b) => a.from - b.from)) {
+    if (from > last) out.push({ type: 'text', value: text.slice(last, from) })
+    out.push({ type: 'link', url, children: [{ type: 'text', value: text.slice(from, to) }] })
+    last = to
+  }
   if (last < text.length) out.push({ type: 'text', value: text.slice(last) })
   return out
+}
+
+/**
+ * The full address of a link to a pull request or issue written without `https://`: a Markdown
+ * link's target, or a `www.` address, which markdown links over `http://`.
+ */
+function linkTarget(node: MdNode): string | null {
+  const url = node.url ?? ''
+  const written = url.startsWith('http://') ? url.slice('http://'.length) : url
+  const only = node.children?.length === 1 ? node.children[0] : undefined
+  if (written !== url && (only?.type !== 'text' || only.value !== written)) return null
+  return schemelessGitHubUrl(written)
 }
 
 /** Turns the references in a reply's text into links, which the link component draws. */
 export function githubRefs() {
   const visit = (node: MdNode): void => {
+    if (node.type === 'link') node.url = linkTarget(node) ?? node.url
     if (!node.children || SKIP.has(node.type)) return
     node.children = node.children.flatMap((child) => {
       if (child.type === 'text' && child.value) return split(child.value) ?? [child]

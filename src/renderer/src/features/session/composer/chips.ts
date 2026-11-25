@@ -2,6 +2,7 @@
 // or project files and of the session's terminals, and links. Chips are only how the text looks;
 // the text is what is sent, with a ref for each terminal it mentions.
 
+import { schemelessGitHubLinks } from '@shared/git'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import { leadingCommand } from './slash'
 
@@ -136,7 +137,10 @@ export function trimLink(url: string): string {
   }
 }
 
-/** The links in the text, each without the punctuation that ends a sentence after it. */
+/**
+ * The links in the text, each without the punctuation that ends a sentence after it. A GitHub
+ * pull request or issue written without `https://` is one too, with the address it stands for.
+ */
 export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
   const links: Extract<Chip, { kind: 'link' }>[] = []
   for (const match of text.matchAll(URL_TEXT)) {
@@ -145,7 +149,12 @@ export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
     if (!parts) continue
     links.push({ kind: 'link', from: match.index, to: match.index + url.length, url, ...parts })
   }
-  return links
+  for (const { from, to, url } of schemelessGitHubLinks(text)) {
+    const parts = linkParts(url)
+    if (!parts || links.some((link) => from < link.to && to > link.from)) continue
+    links.push({ kind: 'link', from, to, url, ...parts })
+  }
+  return links.sort((a, b) => a.from - b.from)
 }
 
 /** Every chip in the text, in order: the leading command, the mentions and the links. */
