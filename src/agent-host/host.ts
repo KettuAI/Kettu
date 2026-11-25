@@ -649,6 +649,7 @@ export class AgentHost {
         setting: (pluginId, key) => this.plugins.settingValue(pluginId, key),
         secret: (pluginId, key) => this.pluginSecret(pluginId, key),
         storage: this.pluginStorage,
+        setStatus: (pluginId, value) => this.plugins.setStatus(pluginId, value),
       },
       channels: {
         answer: (pluginId, request, decision, from) =>
@@ -661,6 +662,7 @@ export class AgentHost {
   /** The tools of the plugins that are on, which Kettu's MCP service lists. */
   private readonly pluginTools = new PluginTools({
     installed: () => this.plugins.tools(),
+    agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
     client: this.pluginHost,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
@@ -3924,6 +3926,8 @@ export class AgentHost {
       'plugins.setSecret': ({ pluginId, key, value }) => this.setPluginSecret(pluginId, key, value),
       'plugins.setChannelKinds': ({ pluginId, channel, kinds }) =>
         this.plugins.setChannelKinds(pluginId, channel, kinds),
+      'plugins.setToolAgents': ({ pluginId, agents }) =>
+        this.plugins.setToolAgents(pluginId, agents),
       'plugins.reload': ({ pluginId }) => this.plugins.reload(pluginId),
       'plugins.checkUpdates': async ({ pluginId }) => ({
         plugins: await this.plugins.checkUpdates(pluginId),

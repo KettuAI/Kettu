@@ -12,6 +12,7 @@ import {
   type McpSpec,
   type McpValue,
 } from '@shared/marketplace'
+import type { InstalledKettuPlugin } from '@shared/plugins'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { TextField } from '@renderer/components/affect/text-field'
 import {
@@ -48,6 +49,7 @@ import {
   type AgentChoice,
 } from './actions'
 import { AgentPicker, InputLabel } from './install'
+import { setPluginToolAgents } from './plugin-actions'
 import { nameProblem, splitCommand } from './model'
 
 /** New values for a server's inputs: one typed replaces its value, Clear removes it. */
@@ -203,6 +205,31 @@ export function SkillAgentsDialog({
   )
 }
 
+/** Which agents a plugin's tools go to on Kettu's MCP service. */
+export function PluginToolAgentsDialog({
+  plugin,
+  name,
+  open,
+  onOpenChange,
+}: {
+  plugin: InstalledKettuPlugin
+  name: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const scope = useHostScope()
+  return (
+    <ChooseAgentsDialog
+      name={name}
+      value={plugin.toolAgents ?? 'all'}
+      open={open}
+      onOpenChange={onOpenChange}
+      save={(agents) => setPluginToolAgents(scope, plugin, agents)}
+      forTools
+    />
+  )
+}
+
 function ChooseAgentsDialog({
   name,
   value,
@@ -210,6 +237,7 @@ function ChooseAgentsDialog({
   onOpenChange,
   save,
   forSkills = false,
+  forTools = false,
 }: {
   name: string
   value: AgentChoice
@@ -217,6 +245,7 @@ function ChooseAgentsDialog({
   onOpenChange: (open: boolean) => void
   save: (agents: AgentChoice) => Promise<void>
   forSkills?: boolean
+  forTools?: boolean
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -228,6 +257,7 @@ function ChooseAgentsDialog({
             save={save}
             onDone={() => onOpenChange(false)}
             forSkills={forSkills}
+            forTools={forTools}
           />
         )}
       </SettingsDialogContent>
@@ -241,12 +271,14 @@ function AgentsForm({
   save,
   onDone,
   forSkills,
+  forTools,
 }: {
   name: string
   value: AgentChoice
   save: (agents: AgentChoice) => Promise<void>
   onDone: () => void
   forSkills: boolean
+  forTools: boolean
 }) {
   const { t } = useTranslation(['marketplace', 'common'])
   const [agents, setAgents] = useState<AgentChoice>(value)
@@ -264,7 +296,13 @@ function AgentsForm({
       }}
     >
       <SettingsDialogHeader title={t('dialogs.agents.title', { name })}>
-        {t(forSkills ? 'dialogs.agents.descriptionSkill' : 'dialogs.agents.description')}
+        {t(
+          forTools
+            ? 'dialogs.agents.descriptionTools'
+            : forSkills
+              ? 'dialogs.agents.descriptionSkill'
+              : 'dialogs.agents.description',
+        )}
       </SettingsDialogHeader>
       <SettingsDialogBody>
         <AgentPicker

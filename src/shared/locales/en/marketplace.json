@@ -244,7 +244,8 @@
       "title": "Agents for {{name}}",
       "description": "Their new sessions get the server; sessions already open keep what they started with.",
       "descriptionSkill": "Their new sessions get the skill; sessions already open keep what they started with.",
-      "save": "Save"
+      "save": "Save",
+      "descriptionTools": "Their sessions get its tools from their next turn."
     },
     "uninstall": {
       "title": "Uninstall {{name}}?",
@@ -489,7 +490,8 @@
       "updated": "{{name}} updated to {{version}}",
       "upToDate": "{{name}} is up to date",
       "rollBackFailed": "Couldn’t roll {{name}} back: {{error}}",
-      "rolledBack": "{{name}} rolled back to {{version}}"
+      "rolledBack": "{{name}} rolled back to {{version}}",
+      "installedSetup": "{{name}} installed. Set the {{what}} to start using it."
     },
     "tags": {
       "skill_one": "{{count}} skill",
@@ -522,14 +524,16 @@
       "asksForMore": "{{version}} asks for more",
       "asksForMoreNoVersion": "An update asks for more",
       "asksNote": "It needs permissions the installed version doesn’t have. Nothing changes until you update.",
-      "viewUpdate": "View update",
+      "viewUpdate": "Review update",
       "items_one": "{{count}} item",
       "items_other": "{{count}} items",
       "devNote": "Added from {{path}}. Changes show after Reload.",
       "updateError": "Couldn’t check for an update: {{error}}",
       "skipped_one": "{{count}} skill skipped",
       "skipped_other": "{{count}} skills skipped",
-      "skippedSkill": "The skill {{name}} wasn’t added: a skill of that name is already added, from {{from}}. Agents get that one."
+      "skippedSkill": "The skill {{name}} wasn’t added: a skill of that name is already added, from {{from}}. Agents get that one.",
+      "setUp": "Set up",
+      "setUpName": "Set up {{name}}"
     },
     "menu": {
       "reload": "Reload",
@@ -552,7 +556,54 @@
     "side": {
       "license": "License",
       "format": "Format",
-      "formatValue": "Agent Plugins, Kettu {{version}}"
+      "formatValue": "Agent Plugins, Kettu {{version}}",
+      "versionWaits": "{{version}} · {{next}} waits for you",
+      "scriptYes": "Yes, in a sandbox"
+    },
+    "state": {
+      "ready": "Ready",
+      "needsSetup": "Needs setup",
+      "off": "Off",
+      "error": "Error",
+      "needs": "Needs {{what}}"
+    },
+    "page": {
+      "required": "Required",
+      "settings": "Settings",
+      "missing": "Set the {{what}} to start using it.",
+      "notices": "Notices to send",
+      "noticesHint": "Notices of the kinds you switch on are sent here. Nothing goes until you pick one.",
+      "status": "Status",
+      "where": "Where it shows up",
+      "uninstall": "Uninstall…",
+      "crashed": "Its script was stopped after it crashed three times in a minute. Turn the plugin off and on again to start it."
+    },
+    "where": {
+      "sidePanel": "Side panel",
+      "mentions": "@ menu",
+      "mentionNote": "Mention one, and what it gives goes with your message",
+      "replies": "Replies",
+      "links": "Links drawn as references",
+      "linksNote": "{{hosts}}, with a card on hover",
+      "search": "Search",
+      "agentsPlace": "Agents",
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "agents_one": "{{count}} agent",
+      "agents_other": "{{count}} agents",
+      "noAgent": "No agent",
+      "chooseAgents": "Choose the agents that get {{name}}’s tools",
+      "openInSession": "Open in the last session"
+    },
+    "secret": {
+      "set": "Set",
+      "notSet": "Not set",
+      "setAction": "Set…",
+      "change": "Change…",
+      "clear": "Clear",
+      "save": "Save",
+      "cancel": "Cancel",
+      "placeholder": "Paste the secret"
     }
   },
   "skill": {

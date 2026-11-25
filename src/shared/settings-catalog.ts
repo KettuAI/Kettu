@@ -37,7 +37,6 @@ export const SETTINGS_SECTIONS = [
   'artifacts',
   'sharing',
   'remote',
-  'plugins',
   'hosts',
   'browser',
   'devices',
@@ -46,6 +45,12 @@ export const SETTINGS_SECTIONS = [
   'about',
 ] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
+
+/**
+ * Where a row is: a section of Settings, or `marketplace` for a plugin's settings, which are on the
+ * plugin's own page there.
+ */
+export type CatalogSection = SettingsSection | 'marketplace'
 
 /**
  * What a row's value is: one the tools may change (a switch, a choice, a number, a text), one they
@@ -116,7 +121,7 @@ export interface CatalogContext {
 }
 
 export interface CatalogEntry {
-  section: SettingsSection
+  section: CatalogSection
   /** The row's id on its page, which a search result scrolls to and flashes. */
   row: string
   /** The label of the group the row shows under, when it has one. */
@@ -191,10 +196,10 @@ function pluginSetting(
   rest: Pick<CatalogEntry, 'kind'> & Partial<CatalogEntry>,
 ): CatalogEntry {
   return {
-    section: 'plugins',
+    section: 'marketplace',
     row: 'setting',
     // Never read: `literal` gives the plugin's own words.
-    name: 'sections.plugins',
+    name: 'sections.marketplace',
     part: 'host',
     item: 'plugin',
     store: 'plugin',
@@ -718,6 +723,18 @@ const ENTRIES = {
     access: 'change',
     on: (ctx) => ctx.desktop && ctx.platform !== 'linux',
     ...flag('notifications', 'badge', (file) => file.notifications.badge),
+  },
+  // Which notices a plugin's channel gets is set on the plugin's page, so the list only points there.
+  'notifications.plugin-channels': {
+    section: 'notifications',
+    row: 'plugin-channels',
+    group: 'notifications.groups.alsoSent',
+    name: 'notifications.groups.alsoSent',
+    description: 'notifications.alsoSent.description',
+    keywords: 'notifications.alsoSent.keywords',
+    part: 'host',
+    kind: 'list',
+    on: (ctx) => ctx.plugins.length > 0,
   },
 
   // ---- Account

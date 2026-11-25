@@ -53,8 +53,9 @@ import {
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { BuiltinServerPage } from './builtin'
-import { FromPlugin, PluginPage } from './plugin-ui'
-import { usePluginItemOff } from './plugin-hooks'
+import { FromPlugin } from './plugin-ui'
+import { PluginHome } from './plugin-home'
+import { usePluginItemOff, usePluginOfListing } from './plugin-hooks'
 import { isPluginItem } from './plugin-model'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
@@ -85,7 +86,7 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   const previewId = previewIdOf(item)
   if (previewId) return <CommunityPreviewPage id={previewId} tab={tab} />
-  if (ref?.kind === 'plugin') return <PluginPage id={ref.id} tab={tab} back={back} />
+  if (ref?.kind === 'plugin') return <PluginHome id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'community') return <CommunityPage id={ref.id} tab={tab} back={back} />
@@ -97,10 +98,15 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   )
 }
 
-/** A listing of the Kettu Marketplace; once its workflow is in the library, that workflow's page. */
+/**
+ * A listing of the Kettu Marketplace; once its workflow is in the library, that workflow's page,
+ * and once its plugin is installed, the plugin's page in its place.
+ */
 function CommunityPage({ id, tab, back }: { id: string; tab: MarketplaceTab; back: () => void }) {
   const workflow = useListingWorkflow(id)
+  const plugin = usePluginOfListing(id)
   if (workflow) return <WorkflowListing id={workflow.id} tab={tab} back={back} />
+  if (plugin) return <PluginHome id={plugin.id} tab={tab} back={back} />
   return <CommunityListingPage id={id} tab={tab} back={back} />
 }
 

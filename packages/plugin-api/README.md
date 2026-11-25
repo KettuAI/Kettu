@@ -13,16 +13,16 @@ A manifest asks for permissions under `extensions["sh.kettu"].permissions`, and 
 only the calls of the permissions the user agreed to for the installed version. A call without its
 permission fails with an error that names it.
 
-| Permission                          | Risk    | Calls                                                                                                        |
-| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| none                                |         | `api.version`, `app.locale`, `app.colorMode`, `settings.get`, `settings.secret`, `storage.*`, `random.bytes` |
-| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`                                                       |
-| `sessions.summary`                  | normal  | `sessions.list`                                                                                              |
-| `sessions.content`                  | high    | `sessions.read`                                                                                              |
-| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                                            |
-| `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                                 |
-| `requests.answer`                   | high    | `requests.answer`; the commands and paths of the requests a channel tells it of                              |
-| `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources                    |
+| Permission                          | Risk    | Calls                                                                                                                      |
+| ----------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| none                                |         | `api.version`, `app.locale`, `app.colorMode`, `settings.get`, `settings.secret`, `storage.*`, `random.bytes`, `status.set` |
+| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`                                                                     |
+| `sessions.summary`                  | normal  | `sessions.list`                                                                                                            |
+| `sessions.content`                  | high    | `sessions.read`                                                                                                            |
+| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                                                          |
+| `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                                               |
+| `requests.answer`                   | high    | `requests.answer`; the commands and paths of the requests a channel tells it of                                            |
+| `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources                                  |
 
 ## Tools, settings and storage
 
@@ -33,10 +33,22 @@ for every agent, asks about a call as it does for any tool, and answers the agen
 when the script throws, crashes or runs past its time limit. Tools go when the plugin is turned
 off or removed.
 
-The settings a manifest declares under `settings` (switches, choices, short texts and secrets) get
-a page in Settings › Plugins and are listed for agents, who may change all but the secrets. A
-script reads them with `settings.get` and `settings.secret`, and hears of a change as
-`settings.changed`. A secret is kept in the system's key store and shown only as set or not set.
+The settings a manifest declares under `settings` (switches, choices, short texts and secrets) are
+drawn on the plugin's page in the Marketplace and listed for agents, who may change all but the
+secrets. A script reads them with `settings.get` and `settings.secret`, and hears of a change as
+`settings.changed`. A secret is kept in the system's key store and shown only as set or not set. A
+text or a secret the plugin cannot work without is marked `"required": true`: while one is empty,
+Kettu shows the plugin as needing setup and asks for it on the plugin's page.
+
+```json
+"settings": [{ "key": "token", "type": "secret", "title": "API token", "required": true }]
+```
+
+`status.set(text)` keeps one line about the plugin that the user sees under its name, such as
+who it is signed in as or that a key was refused: plain text of at most 120 characters, with line
+breaks and runs of spaces folded into one space; null or an empty text clears it. It needs no
+permission and is kept until the script sets another, the plugin's state that Kettu judges (ready,
+needs setup, off or stopped after crashing) never follows it.
 
 Each plugin also has a small storage of its own, read and written with `storage.get`,
 `storage.set`, `storage.delete` and `storage.keys`: at most 256 KB of JSON and 1,000 keys. It is
@@ -119,6 +131,10 @@ version adds is ignored.
 A view with `"pane": true` is also a pane: the side panel lists it under its title, with the plugin's
 icon, and opens it as a tab of the session's panel, drawn like any view. Opening one wakes the script
 as `view.data` does, and a pane of a plugin that is turned off or removed shows that view's error.
+
+A view with `"page": true` is drawn only on the plugin's own page in the Marketplace, never in a
+session: one for the plugin's state, a test or whether it is connected. A view is never both a pane
+and a page view. The plugin's page also lists its Search actions as buttons beside these views.
 
 A manifest may declare `actions` for Search, each with an `id`, a `title` by language of at most 60
 characters and optionally a `description` and an `icon`. Search lists them in a group of their own,

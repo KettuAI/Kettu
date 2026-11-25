@@ -1296,6 +1296,16 @@ function pluginChannelKinds(params: unknown): HostParams<'plugins.setChannelKind
   return { ...installedPlugin(params), channel, kinds: kinds as PluginNoticeKind[] }
 }
 
+/** The agents a plugin's tools go to: "all", or a list of agent ids. */
+function pluginToolAgents(params: unknown): HostParams<'plugins.setToolAgents'> {
+  const { agents } = fields(params)
+  if (agents === 'all') return { ...installedPlugin(params), agents }
+  if (!Array.isArray(agents) || agents.length > 64 || !agents.every(isAgentId)) {
+    throw invalidParams('agents must be "all" or a list of agents')
+  }
+  return { ...installedPlugin(params), agents: [...new Set(agents)] }
+}
+
 function pluginToken(params: unknown): { token: string } {
   const token = string(fields(params), 'token', ID_CHARS)
   if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
@@ -2215,6 +2225,7 @@ export function createValidators(platform: Platform): Validators {
       return { ...installedPlugin(params), key: pluginSettingKey(o), value }
     },
     'plugins.setChannelKinds': pluginChannelKinds,
+    'plugins.setToolAgents': pluginToolAgents,
     'plugins.reload': installedPlugin,
     'plugins.checkUpdates': (params) =>
       params === undefined || params === null || fields(params).pluginId === undefined

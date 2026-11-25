@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { PluginActionDecl, PluginViewDecl } from '@shared/plugin-views'
-import type { InstalledKettuPlugin, PluginTexts } from '@shared/plugins'
+import type { InstalledKettuPlugin, PluginSetting, PluginTexts } from '@shared/plugins'
 import { hostAt } from '@renderer/lib/host'
 
 /** What a plugin that is on shows outside its own page: panes for the side panel, actions for Search. */
@@ -19,9 +19,21 @@ export interface PluginSurface {
   actions: PluginActionDecl[]
 }
 
+/** A plugin's settings, which Search finds whether the plugin is on or not. */
+export interface PluginSettingsSurface {
+  pluginId: string
+  name: string
+  title: string
+  titles: PluginTexts
+  icon: string | null
+  settings: PluginSetting[]
+}
+
 interface HostSurfaces {
   /** The plugins of the host that give a pane or an action. */
   plugins: PluginSurface[]
+  /** The plugins of the host that declare settings. */
+  settings: PluginSettingsSurface[]
   /** Whether the host has answered once; false for a host not read yet, or one that failed. */
   loaded: boolean
 }
@@ -31,7 +43,7 @@ interface PluginSurfacesStore {
   byHost: Record<string, HostSurfaces>
 }
 
-const NOT_READ: HostSurfaces = { plugins: [], loaded: false }
+const NOT_READ: HostSurfaces = { plugins: [], settings: [], loaded: false }
 
 export const usePluginSurfacesStore = create<PluginSurfacesStore>()(() => ({ byHost: {} }))
 
@@ -60,6 +72,19 @@ export function surfacesOf(plugins: readonly InstalledKettuPlugin[]): PluginSurf
   })
 }
 
+function settingsOf(plugins: readonly InstalledKettuPlugin[]): PluginSettingsSurface[] {
+  return plugins
+    .filter((plugin) => plugin.contents.settings.length > 0)
+    .map(({ id, contents }) => ({
+      pluginId: id,
+      name: contents.name,
+      title: contents.title,
+      titles: contents.titles,
+      icon: contents.icon,
+      settings: contents.settings,
+    }))
+}
+
 const reading = new Map<string, Promise<void>>()
 
 /**
@@ -74,7 +99,10 @@ export function loadPluginSurfaces(hostId: string | null): Promise<void> {
     .then(
       ({ plugins }) => {
         usePluginSurfacesStore.setState((s) => ({
-          byHost: { ...s.byHost, [key]: { plugins: surfacesOf(plugins), loaded: true } },
+          byHost: {
+            ...s.byHost,
+            [key]: { plugins: surfacesOf(plugins), settings: settingsOf(plugins), loaded: true },
+          },
         }))
       },
       () => undefined,

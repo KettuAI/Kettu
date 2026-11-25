@@ -4,6 +4,7 @@
 // tool's name. A crash, a timeout or an error of the script is an error result, never a hang.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { AgentId } from '@shared/agents'
 import { PluginRequestError } from '@shared/plugin-host'
 import { pluginToolName, toolTrigger, type PluginToolSchema } from '@shared/plugins'
 import type { InstalledTool } from '../plugins/service'
@@ -15,6 +16,8 @@ export const TOOL_RESULT_CHARS = 100_000
 export interface PluginToolsDeps {
   /** The tools of the plugins that are on, in the order the plugins were installed. */
   installed(): InstalledTool[]
+  /** The agent a session runs; null for one Kettu does not know. */
+  agentOf?(sessionId: string): AgentId | null
   client: {
     activate(pluginId: string, trigger: string): Promise<void>
     call(pluginId: string, name: string, args: unknown[]): Promise<unknown>
@@ -129,19 +132,31 @@ export class PluginTools {
     return named
   }
 
-  /** The tools as `tools/list` shows them. */
-  listed(): Tool[] {
-    return [...this.named()].map(([name, tool]) => ({
-      name,
-      title: `${tool.plugin}: ${tool.name}`,
-      description: `${tool.description} (A tool of the plugin "${tool.plugin}".)`,
-      inputSchema: {
-        type: 'object',
-        properties: tool.inputSchema.properties,
-        ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {}),
-        additionalProperties: false,
-      },
-    }))
+  /**
+   * Whether a session's agent gets the tool. Without a session, as for the Marketplace's page, or
+   * for a session whose agent is not known, every tool some agent gets counts.
+   */
+  private goesTo(tool: InstalledTool, sessionId: string | null): boolean {
+    if (tool.agents === 'all') return true
+    const agent = sessionId === null ? null : (this.deps.agentOf?.(sessionId) ?? null)
+    return agent === null ? tool.agents.length > 0 : tool.agents.includes(agent)
+  }
+
+  /** The tools as `tools/list` shows them to a session, or to no session in particular. */
+  listed(sessionId: string | null = null): Tool[] {
+    return [...this.named()]
+      .filter(([, tool]) => this.goesTo(tool, sessionId))
+      .map(([name, tool]) => ({
+        name,
+        title: `${tool.plugin}: ${tool.name}`,
+        description: `${tool.description} (A tool of the plugin "${tool.plugin}".)`,
+        inputSchema: {
+          type: 'object',
+          properties: tool.inputSchema.properties,
+          ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {}),
+          additionalProperties: false,
+        },
+      }))
   }
 
   /** Whether a tool of this name is given by a plugin that is on. */
@@ -155,9 +170,16 @@ export class PluginTools {
     return tool !== undefined && 'error' in checkToolArguments(tool.inputSchema, input)
   }
 
-  async call(name: string, input: unknown): Promise<CallToolResult> {
+  async call(
+    name: string,
+    input: unknown,
+    sessionId: string | null = null,
+  ): Promise<CallToolResult> {
     const tool = this.named().get(name)
     if (!tool) return failed(`${name} is not available: its plugin is off or removed.`)
+    if (!this.goesTo(tool, sessionId)) {
+      return failed(`${name} is not available: the user does not give it to this agent.`)
+    }
     const checked = checkToolArguments(tool.inputSchema, input)
     if ('error' in checked) return failed(checked.error)
     try {

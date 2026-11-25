@@ -12,6 +12,7 @@ import { onAppEvent } from '@renderer/app/events'
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
 import { allPanes } from '@renderer/features/split/layout'
+import { openCatalogRow } from '@renderer/features/marketplace/plugin-landing'
 import {
   errorMessage,
   forgetSessionHost,
@@ -106,7 +107,6 @@ import {
   resetLayout,
   restoreLayout,
   savedLayout,
-  openSettingsRow,
   shownLayoutSessions,
   useViewStore,
 } from '@renderer/stores/view'
@@ -253,7 +253,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'settings.open':
       // A row of the desktop app's own comes only from this computer's host.
       useSettingsHostStore.setState({ hostId })
-      openSettingsRow(event.section, event.item, event.row)
+      openCatalogRow(event.section, event.item, event.row)
       break
   }
 }

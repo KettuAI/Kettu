@@ -126,6 +126,11 @@ export type SearchEntry = EntryBase &
     | { kind: 'routine'; routineId: string }
     | { kind: 'project'; path: string }
     | { kind: 'section'; section: SettingsSection }
+    | {
+        /** A plugin's setting, listed with Settings but on the plugin's page in the Marketplace. */
+        kind: 'section'
+        pluginSetting: { pluginId: string; row: string; plugin: SearchPlugin }
+      }
     | { kind: 'action'; action: SearchAction; shortcut: string | null }
     | {
         /** An action a plugin declares, which its script runs on the host that has it. */

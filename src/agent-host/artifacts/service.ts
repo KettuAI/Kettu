@@ -582,7 +582,7 @@ export class ArtifactService {
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),
       ...(this.deps.settings ? SETTINGS_TOOLS : []),
-      ...(this.deps.plugins?.listed() ?? []),
+      ...(this.deps.plugins?.listed(sessionId) ?? []),
     ]
   }
 
@@ -1006,7 +1006,9 @@ export class ArtifactService {
       }
     }
     // A plugin that was turned off since the agent listed its tools answers that it is off.
-    if (this.deps.plugins && isPluginToolName(name)) return this.deps.plugins.call(name, input)
+    if (this.deps.plugins && isPluginToolName(name)) {
+      return this.deps.plugins.call(name, input, caller.sessionId)
+    }
     if (isBrowserToolName(name)) {
       try {
         return await this.browserTools.call(caller, name, input)

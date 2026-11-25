@@ -118,7 +118,7 @@ import type {
   RoutinesProblem,
 } from './routines'
 import type { AgentColor } from './settings'
-import type { SettingsSection } from './settings-catalog'
+import type { CatalogSection } from './settings-catalog'
 import type { TurnPhase } from './turn-phase'
 import type {
   SessionTaskRef,
@@ -1425,6 +1425,11 @@ export interface HostContract {
     params: { pluginId: string; channel: string; kinds: PluginNoticeKind[] }
     result: InstalledKettuPlugin
   }
+  // Picks the agents the plugin's tools go to on Kettu's MCP service, in place of what it had.
+  'plugins.setToolAgents': {
+    params: { pluginId: string; agents: 'all' | AgentId[] }
+    result: InstalledKettuPlugin
+  }
   // Copies a development plugin's folder again, in place of the copy installed.
   'plugins.reload': { params: { pluginId: string }; result: InstalledKettuPlugin }
   // Looks for newer versions, of one plugin or all: a newer one is installed and the one before
@@ -2432,6 +2437,7 @@ export const HOST_METHODS = [
   'plugins.setSetting',
   'plugins.setSecret',
   'plugins.setChannelKinds',
+  'plugins.setToolAgents',
   'plugins.reload',
   'plugins.checkUpdates',
   'plugins.applyUpdate',
@@ -2623,7 +2629,7 @@ export type HostEvent =
   // The account, what it published or the drafts changed; Marketplace › Published reads again.
   | { type: 'market.publishedChanged' }
   // To the windows showing a session: its agent's open_settings, Settings at a row.
-  | { type: 'settings.open'; section: SettingsSection; item: string | null; row: string }
+  | { type: 'settings.open'; section: CatalogSection; item: string | null; row: string }
   | { type: 'plugins.changed' } // an installed plugin changed; a page showing them reads again
   | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.

@@ -92,7 +92,8 @@
     "indexing": "正在为对话建立索引（{{percent}}%），已建好的部分可以搜。",
     "hostsSlow": "还在等：{{hosts}}",
     "announce_other": "找到 {{count}} 个会话",
-    "pluginAction": "操作"
+    "pluginAction": "操作",
+    "pluginSetting": "{{plugin}} · 市场"
   },
   "project": {
     "missing": "未找到",

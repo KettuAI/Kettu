@@ -1390,6 +1390,7 @@
       "kettuField": "The sh.kettu entry has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "event": "The sh.kettu entry names an event this Kettu doesn’t know, {{event}}. It’s ignored.",
       "eventPermission": "The event {{event}} is left out: it needs the permission {{permission}}, which the plugin doesn’t ask for.",
+      "settingField": "The setting {{setting}} has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "viewField": "The view {{view}} has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "viewIcon": "The view {{view}} names an icon this Kettu doesn’t have. It’s left out.",
       "toolsPermission": "The tools are left out: they need the permission tools, which the plugin doesn’t ask for.",

@@ -32,6 +32,7 @@ import {
 } from '@renderer/components/affect/command-menu'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { VIEW_ICONS } from '@renderer/features/plugin-views/icons'
+import { openPluginPage } from '@renderer/features/marketplace/plugin-landing'
 import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
 import { runPluginAction } from '@renderer/features/plugin-views/run-action'
 import { Button } from '@renderer/components/ui/button'
@@ -152,7 +153,9 @@ function openEntry(entry: SearchEntry): void {
       newSession(entry.path)
       break
     case 'section':
-      openSettings(entry.section)
+      if ('pluginSetting' in entry) {
+        openPluginPage(entry.pluginSetting.pluginId, { row: entry.pluginSetting.row })
+      } else openSettings(entry.section)
       break
     case 'action':
       runAction(entry.action)
@@ -430,6 +433,10 @@ function commandOf(entry: SearchEntry): Command {
     case 'routine':
       return { ...base, icon: <Icon icon={Clock01Icon} size={16} /> }
     case 'section':
+      if ('pluginSetting' in entry) {
+        const { plugin } = entry.pluginSetting
+        return { ...base, logo: <PluginTile name={plugin.name} icon={plugin.icon} size={16} /> }
+      }
       return { ...base, icon: <Icon icon={Settings02Icon} size={16} /> }
     case 'action':
       return {

@@ -1,5 +1,6 @@
-// What a plugin's script may do with what is its own: its settings, its secrets and its storage.
-// No permission is needed for any of it, since it reaches nothing but the plugin's own data.
+// What a plugin's script may do with what is its own: its settings, its secrets, its storage and
+// the line it says about itself. No permission is needed for any of it, since it reaches nothing
+// but the plugin's own data.
 
 import { PLUGIN_STORAGE_LIMITS, type PluginSettingValue } from '@shared/plugins'
 import type { PluginApiCall } from './call'
@@ -11,6 +12,11 @@ export interface PluginOwnDeps {
   /** The value of a secret the plugin declares, or null while it is not set. */
   secret(pluginId: string, key: string): string | null
   storage: Pick<PluginStorage, 'get' | 'set' | 'delete' | 'keys'>
+  /**
+   * Keeps the line the script says about itself, or clears it with null; throws for one that is
+   * not a line of plain text within the limit.
+   */
+  setStatus(pluginId: string, value: unknown): void
 }
 
 function key(args: unknown[], what: string): string {
@@ -51,6 +57,13 @@ export function ownCalls(deps: PluginOwnDeps): Record<string, PluginApiCall> {
     'storage.keys': {
       permission: null,
       run: ({ pluginId }) => deps.storage.keys(pluginId),
+    },
+    'status.set': {
+      permission: null,
+      run: ({ pluginId }, [value]) => {
+        deps.setStatus(pluginId, value ?? null)
+        return null
+      },
     },
   }
 }

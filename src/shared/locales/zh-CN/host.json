@@ -1385,6 +1385,7 @@
       "kettuField": "sh.kettu 这一项里有这个 Kettu 不认识的字段 {{field}}，已忽略。",
       "event": "sh.kettu 这一项里有这个 Kettu 不认识的事件 {{event}}，已忽略。",
       "eventPermission": "没有带上事件 {{event}}：它需要权限 {{permission}}，而插件没有申请。",
+      "settingField": "设置 {{setting}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
       "viewField": "视图 {{view}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
       "viewIcon": "视图 {{view}} 用了一个这个 Kettu 没有的图标。已略去。",
       "toolsPermission": "没有带上工具：它们需要权限 tools，而插件没有申请。",

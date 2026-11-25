@@ -320,6 +320,7 @@ function apiDeps() {
       setting: vi.fn(() => 'on'),
       secret: vi.fn(() => null),
       storage: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), keys: vi.fn() },
+      setStatus: vi.fn(),
     },
     channels: { answer: vi.fn() },
     transport,
@@ -397,6 +398,7 @@ describe('the plugin API', () => {
         (id) => path.join(dir, id),
         () => {},
       ),
+      setStatus: () => {},
     }
     const { client, add } = setup(createPluginApi(deps))
     add('one', RELAY)
@@ -420,6 +422,26 @@ describe('the plugin API', () => {
     expect(await call('one', 'storage.get', 7)).toEqual({
       error: expect.stringContaining('storage key'),
     })
+  })
+
+  it('sets the plugin’s own status line without a permission, and says why one is refused', async () => {
+    const { deps } = apiDeps()
+    const lines: [string, unknown][] = []
+    deps.own.setStatus = (pluginId, value) => {
+      if (typeof value === 'string' && value.length > 120) throw new Error('Too long')
+      lines.push([pluginId, value])
+    }
+    const { client, add } = setup(createPluginApi(deps))
+    add('bare', RELAY)
+    await client.activate('bare', 'command:run')
+    const status = (...args: unknown[]) => client.call('bare', 'call', ['status.set', ...args])
+    expect(await status('Sends to #release')).toEqual({ ok: null })
+    expect(await status()).toEqual({ ok: null })
+    expect(await status('x'.repeat(121))).toEqual({ error: 'Too long' })
+    expect(lines).toEqual([
+      ['bare', 'Sends to #release'],
+      ['bare', null],
+    ])
   })
 
   it('gives random bytes as hex without a permission, up to its cap, and refuses any other length', async () => {

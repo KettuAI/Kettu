@@ -1,6 +1,7 @@
 // What the Marketplace does with Kettu's plugins: inspecting a package, installing what the user
 // confirmed, and changing an installed one. Each works on the host of the scope it is given.
 
+import type { AgentId } from '@shared/agents'
 import type { InstalledKettuPlugin, PluginPlan, PluginSource } from '@shared/plugins'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
@@ -38,7 +39,10 @@ export function discardPlan(scope: HostScope, token: string): void {
   })
 }
 
-/** Installs the package a plan named. Throws why it could not, which the consent shows. */
+/**
+ * Installs the package a plan named. Throws why it could not, which the consent shows; the page
+ * it lands on says it was installed.
+ */
 export async function installPlan(
   scope: HostScope,
   plan: PluginPlan,
@@ -46,11 +50,6 @@ export async function installPlan(
   const plugin = await scope.request('plugins.install', { token: plan.token })
   scope.useMarketplaceStore.getState().putPlugin(plugin)
   void scope.useMarketplaceStore.getState().loadCommunityInstalled(true)
-  toast(
-    t('plugin.toast.installed', { name: pluginTitle(plugin.contents, currentLocale()) }),
-    undefined,
-    { tone: 'success' },
-  )
   return plugin
 }
 
@@ -95,6 +94,20 @@ export function setPluginOn(
     scope,
     plugin,
     () => scope.request('plugins.setEnabled', { pluginId: plugin.id, enabled }),
+    'toast.changeFailed',
+  )
+}
+
+/** Picks the agents the plugin's tools go to; a failure shows as a toast. */
+export async function setPluginToolAgents(
+  scope: HostScope,
+  plugin: InstalledKettuPlugin,
+  agents: AgentId[] | 'all',
+): Promise<void> {
+  await change(
+    scope,
+    plugin,
+    () => scope.request('plugins.setToolAgents', { pluginId: plugin.id, agents }),
     'toast.changeFailed',
   )
 }

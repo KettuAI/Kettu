@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CommunityListing } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
 import type { MarketServer, MarketSkill } from '@shared/marketplace'
-import { pluginItemId } from '@shared/plugins'
+import { PLUGIN_STATUS_CHARS, pluginItemId, pluginState } from '@shared/plugins'
 import { applyListEdit } from '@shared/settings'
 import { usableWorkflow } from '@shared/workflow'
 import { MarketSkillsService, skillFolder, skillsCatalogFile } from '../marketplace/skills'
@@ -953,6 +953,38 @@ describe("a plugin's tools, settings and storage", () => {
     const reloaded = await h.plugins.reload(plugin.id)
     expect(reloaded.values?.mode).toBe('fast')
     expect(h.plugins.settingValue(plugin.id, 'mode')).toBe('fast')
+  })
+
+  it('keeps the one line its script sets, which never changes the state Kettu judges', async () => {
+    const h = await host()
+    const required = SETTINGS.map((item) =>
+      item.key === 'name' ? { ...item, required: true } : item,
+    )
+    const { plugin } = await installFolder(
+      h,
+      packageFiles(
+        { 'sh.kettu/main.js': 'exports.lookup = () => 1' },
+        { ...entry, settings: required },
+      ),
+    )
+    expect(pluginState(plugin)).toBe('needsSetup')
+    h.plugins.setStatus(plugin.id, 'Sends to\n\t #release')
+    const view = await h.plugins.view(plugin.id)
+    expect(view.status).toBe('Sends to #release')
+    expect(pluginState(view)).toBe('needsSetup')
+    expect(h.saved().plugins[plugin.id]?.status).toBe('Sends to #release')
+    // Counted in characters, so a line of 120 emoji is as long as one of 120 letters.
+    h.plugins.setStatus(plugin.id, '\u{1F98A}'.repeat(PLUGIN_STATUS_CHARS))
+    expect((await h.plugins.view(plugin.id)).status).toHaveLength(PLUGIN_STATUS_CHARS * 2)
+    for (const bad of ['x'.repeat(PLUGIN_STATUS_CHARS + 1), 42, { text: 'ok' }]) {
+      expect(() => h.plugins.setStatus(plugin.id, bad)).toThrow()
+    }
+    expect(() => h.plugins.setStatus('p000000000000', 'ok')).toThrow()
+    for (const cleared of [null, '', '  \n ']) {
+      h.plugins.setStatus(plugin.id, 'ok')
+      h.plugins.setStatus(plugin.id, cleared)
+      expect((await h.plugins.view(plugin.id)).status).toBeNull()
+    }
   })
 
   it('says which secrets are set by key, for the ones declared only, never their values', async () => {

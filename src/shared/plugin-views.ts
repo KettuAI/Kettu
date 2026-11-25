@@ -136,6 +136,11 @@ export interface PluginViewDecl {
   icon?: PluginViewIcon
   /** The view is a pane: the side panel lists it and opens it as a tab. */
   pane?: true
+  /**
+   * The view is drawn only on the plugin's own page, never in a session: its state, a test, or
+   * whether it is connected. Never with `pane`.
+   */
+  page?: true
 }
 
 /** What a manifest declares of an action Search lists; its script runs it. */

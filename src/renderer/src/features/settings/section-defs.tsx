@@ -67,6 +67,7 @@ import {
 } from './about-section'
 import { useIdleSessionRows } from './idle-sessions'
 import { IslandSwitch } from './island-row'
+import { usePluginChannelRows } from './plugin-channels'
 import { useIslandDescription } from './island-state'
 import { useWorkflowRows } from './workflow-settings'
 import {
@@ -440,6 +441,7 @@ export function useNotificationsSection(): SectionDef {
   const when = group('when', t('notifications.groups.when'))
   const how = group('how', t('notifications.groups.how'))
   const islandDescription = useIslandDescription()
+  const channelRows = usePluginChannelRows()
   const rows: RowDef[] = [
     {
       id: 'preview',
@@ -536,6 +538,7 @@ export function useNotificationsSection(): SectionDef {
       render: () => <NotificationSwitch field="badge" label={name} />,
     })
   }
+  rows.push(...channelRows)
   return {
     id: 'notifications',
     title: t('sections.notifications'),

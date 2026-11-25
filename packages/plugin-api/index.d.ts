@@ -84,6 +84,13 @@ export interface KettuCalls {
    */
   'random.bytes': { args: [length: number]; result: string }
   /**
+   * Keeps one line about the plugin that the user sees under its name, such as who it is signed in
+   * as or that a key was refused, until the next call sets another; null or an empty text clears
+   * it. Plain text of at most 120 characters, its line breaks and runs of spaces folded into one
+   * space; a longer one fails. The plugin's state that Kettu judges never follows it.
+   */
+  'status.set': { args: [text: string | null]; result: null }
+  /**
    * The plugin's own storage, kept on the host and removed with the plugin: a value is any JSON,
    * null for a key not set. All of it holds at most 256 KB of JSON and 1,000 keys of at most 128
    * characters, past which `storage.set` fails.

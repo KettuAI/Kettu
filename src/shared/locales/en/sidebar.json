@@ -97,7 +97,8 @@
     "hostsSlow": "Still waiting for: {{hosts}}",
     "announce_one": "{{count}} conversation found",
     "announce_other": "{{count}} conversations found",
-    "pluginAction": "Action"
+    "pluginAction": "Action",
+    "pluginSetting": "{{plugin}} · Marketplace"
   },
   "project": {
     "missing": "Missing",

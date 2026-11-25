@@ -22,7 +22,10 @@ import {
   type PermissionRisk,
   type PluginContents,
   type PluginServer,
+  type PluginSetting,
 } from '@shared/plugins'
+import { languageText } from '@renderer/features/plugin-views/plugin-text'
+import { currentLocale } from '@renderer/lib/i18n'
 
 /** The kinds of item a plugin holds, in the order its page lists them. */
 export const ITEM_KINDS = [
@@ -254,9 +257,35 @@ export function isGithubAddress(text: string): boolean {
   return url?.protocol === 'https:' && url.hostname === 'github.com' && url.pathname.length > 1
 }
 
-/** The key of the words that say what a plugin's script is doing. */
-export function scriptStateKey(plugin: InstalledKettuPlugin): string {
-  if (!plugin.enabled) return 'plugins.state.off'
-  if (!plugin.contents.script) return 'plugins.state.noScript'
-  return `plugins.state.${plugin.scriptState ?? 'idle'}`
+/** The row id a search result or an agent's open_settings names a plugin's setting by. */
+export function settingRow(key: string): string {
+  return `setting-${key}`
+}
+
+type Channel = NonNullable<PluginContents['channels']>[number]
+
+/** A channel's name and the line its plugin gives it, in the language shown. */
+export function channelText(channel: Channel): { title: string; description: string | null } {
+  const locale = currentLocale()
+  return {
+    title: languageText(channel.title, locale),
+    description: channel.description ? languageText(channel.description, locale) : null,
+  }
+}
+
+/** A setting's title inside a sentence: lowercased in English, unless it starts with an acronym. */
+function inSentence(title: string, locale: string): string {
+  if (!locale.startsWith('en')) return title
+  const [first = '', second = ''] = title
+  return second !== '' && second === second.toLowerCase()
+    ? first.toLowerCase() + title.slice(1)
+    : title
+}
+
+/** The missing settings as a sentence names them, such as "webhook address and keyword". */
+export function missingWords(settings: readonly PluginSetting[]): string {
+  const locale = currentLocale()
+  return new Intl.ListFormat(locale, { type: 'conjunction' }).format(
+    settings.map((setting) => inSentence(setting.title, locale)),
+  )
 }

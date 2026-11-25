@@ -189,6 +189,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'plugins.setSetting': HOST_MS,
   'plugins.setSecret': HOST_MS,
   'plugins.setChannelKinds': HOST_MS,
+  'plugins.setToolAgents': HOST_MS,
   'plugins.reload': NONE,
   'plugins.checkUpdates': NONE,
   'plugins.applyUpdate': NONE,
