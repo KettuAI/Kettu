@@ -153,5 +153,12 @@
     "news": "New activity",
     "closeOthers": "Close others",
     "closeRight": "Close to the right"
+  },
+  "turnNotice": {
+    "open": "Open",
+    "finished_one": "{{count}} session finished",
+    "finished_other": "{{count}} sessions finished",
+    "waiting_one": "{{count}} session needs a look",
+    "waiting_other": "{{count}} sessions need a look"
   }
 }

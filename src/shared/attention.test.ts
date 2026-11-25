@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attentionTarget, pushedAttention } from './attention'
+import { attentionNotice, attentionTarget, pushedAttention } from './attention'
 import type { HostAttention } from './remote/host-admin'
 
 const limit = (over: Record<string, unknown> = {}): HostAttention =>
@@ -39,5 +39,38 @@ describe('pushedAttention for a plan limit', () => {
   it('pushes none to devices, which take only sessions, routines and tasks', () => {
     const message = { type: 'host:attention', ...limit() } as Parameters<typeof pushedAttention>[0]
     expect(pushedAttention(message)).toBeNull()
+  })
+})
+
+describe('attentionNotice', () => {
+  const turn = (over: Record<string, unknown> = {}): HostAttention =>
+    ({
+      kind: 'turn-ended',
+      sessionId: 's1',
+      title: 'Fix the flaky test · done',
+      body: 'All four steps are done.',
+      ...over,
+    }) as HostAttention
+
+  it("shows a session's turn, titled as another host names it", () => {
+    expect(attentionNotice(turn())).toEqual({
+      sessionId: 's1',
+      kind: 'turn-ended',
+      title: 'Fix the flaky test · done',
+      body: 'All four steps are done.',
+    })
+    expect(attentionNotice(turn({ kind: 'error' }), 'Studio · Fix the flaky test')).toMatchObject({
+      kind: 'error',
+      title: 'Studio · Fix the flaky test',
+    })
+  })
+
+  it('leaves out what is not a session, and one another host sent malformed', () => {
+    expect(attentionNotice(limit({ sessionId: 's1' }))).toBeNull()
+    expect(
+      attentionNotice({ kind: 'task-ended', taskId: 't1', title: 'Task', body: 'Done' }),
+    ).toBeNull()
+    expect(attentionNotice(turn({ sessionId: '' }))).toBeNull()
+    expect(attentionNotice(turn({ body: 7 }))).toBeNull()
   })
 })

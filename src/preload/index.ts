@@ -83,6 +83,7 @@ const onUpdateChanged = subscribe('update:changed')
 const onDebugChanged = subscribe('debug:changed')
 const onRecordingChanged = subscribe('report:recording-changed')
 const onShortcut = subscribe('app:shortcut')
+const onAttention = subscribe('app:attention')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
 const onArtifactFrameFailed = subscribe('artifact:frame-failed')
@@ -140,6 +141,7 @@ const api: KettuApi = {
         commandListeners.delete(listener)
       }
     },
+    onAttention,
     reportInteractive: () => send('perf:interactive'),
     setUnsaved: (files) => send('app:set-unsaved', files),
     closeWindow: () => send('app:close-window'),

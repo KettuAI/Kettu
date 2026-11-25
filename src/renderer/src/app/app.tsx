@@ -44,6 +44,7 @@ import { prefersReducedMotion, useSettingsStore } from '@renderer/stores/setting
 import { showSearch, useViewStore } from '@renderer/stores/view'
 import { usePathRequest } from '@renderer/web/host-path-request'
 import { useKeyboardShortcuts } from './shortcuts'
+import { useAttentionNotices } from './attention-notices'
 import { useActionLog, useAppCommands } from './commands'
 import { QuitHint } from './quit-hint'
 
@@ -77,6 +78,7 @@ export function App() {
   if (pathAsked && !pathPicker) setPathPicker(true)
   useKeyboardShortcuts()
   useAppCommands()
+  useAttentionNotices()
   useActionLog()
   useReportNotices()
 

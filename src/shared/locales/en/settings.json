@@ -433,7 +433,7 @@
         "missing": "This build has no Dynamic Island. Notifications show as before."
       }
     },
-    "footer": "Shows only while no Kettu window is in front.",
+    "footer": "Shows only while no Kettu window is in front. While one is, a session you are not looking at says in the window when its turn ends or it needs you.",
     "groups": {
       "preview": "Preview",
       "when": "Notify me",
@@ -445,7 +445,7 @@
     "previewTitle": "Claude Code needs your approval",
     "previewBody": "kettu · run {{command}}",
     "previewTime": "now",
-    "footerWeb": "Shows only while this page is not in front."
+    "footerWeb": "Shows only while this page is not in front. While it is, a session you are not looking at says on the page when its turn ends or it needs you."
   },
   "account": {
     "name": "Kettu account",
