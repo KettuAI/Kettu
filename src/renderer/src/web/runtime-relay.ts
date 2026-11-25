@@ -19,7 +19,12 @@ let relays = 0
  * Relays the capability messages of the frame at `frameUrl` that arrive on `port`; the editor's
  * own messages on the same port are left to it. Returns the detach, which ends the frame's streams.
  */
-export function attachRuntimePort(link: HostLink, frameUrl: string, port: MessagePort): () => void {
+export function attachRuntimePort(
+  link: HostLink,
+  frameUrl: string,
+  port: MessagePort,
+  allowCapability?: (frameUrl: string, cap: string) => boolean,
+): () => void {
   const path = URL.parse(frameUrl)?.pathname ?? ''
   const relay = ++relays
   const streams = new Set<string>()
@@ -42,12 +47,30 @@ export function attachRuntimePort(link: HostLink, frameUrl: string, port: Messag
     ).catch(() => errorAnswer(messageHeader(message), 'failed', 'The host did not answer.'))
   const onMessage = (event: MessageEvent): void => {
     const message: unknown = event.data
-    const kind = (message as { kind?: unknown } | null)?.kind
+    const payload = (typeof message === 'object' && message !== null ? message : {}) as {
+      kind?: unknown
+      cap?: unknown
+    }
+    const kind = payload.kind
     if (!isCapabilityKind(kind)) return
-    const { id } = messageHeader(message)
+    const header = messageHeader(message)
+    const { id } = header
     if (kind === 'cancel') {
       const stream = `${relay}:${id}`
       if (streams.delete(stream)) void send(message, stream)
+      return
+    }
+    // Strict isolation guard: never relay host/project data capabilities from a lax frame.
+    if (
+      allowCapability &&
+      typeof payload.cap === 'string' &&
+      !allowCapability(frameUrl, payload.cap)
+    ) {
+      post(
+        kind === 'use'
+          ? { ...header, ok: true, value: null }
+          : errorAnswer(header, 'not_allowed', 'Reload in strict sandbox to use this capability.'),
+      )
       return
     }
     if (kind !== 'stream') {

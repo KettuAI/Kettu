@@ -10,10 +10,9 @@ import {
 import { CenterFocusIcon, Download04Icon, PlayIcon } from '@hugeicons/core-free-icons'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { glide } from '@renderer/lib/motion'
-import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { ArtifactIframe } from './artifact-iframe'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import {
   between,
@@ -750,20 +749,17 @@ export function CanvasFrame({
           <LightBand />
         </span>
       )}
-      <iframe
-        ref={(el) => {
+      <ArtifactIframe
+        iframeRef={(el) => {
           register(el)
           drivenRef(el)
         }}
         src={src}
         title={title}
         tabIndex={-1}
-        sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
+        onPortReady={() => driven.onLoad()}
         onLoad={() => {
           setLoaded(true)
-          driven.onLoad()
           onSettled()
         }}
         style={{ width, height }}
@@ -799,10 +795,8 @@ export function FocusedPage({
   onLeave: () => void
 }) {
   const area = useRef<HTMLDivElement>(null)
-  const frame = useRef<HTMLIFrameElement>(null)
   const [size, setSize] = useState<Size | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [mountedAt] = useState(reloads)
   const driven = useEditorFrame(editor, index)
   const mode = useEditorState(editor).mode
 
@@ -816,10 +810,6 @@ export function FocusedPage({
     el.focus({ preventScroll: true })
     return () => observer.disconnect()
   }, [])
-
-  useEffect(() => {
-    if (reloads !== mountedAt && frame.current) frame.current.src = src
-  }, [reloads, mountedAt, src])
 
   const scale = size
     ? Math.min(1, (size.width - 48) / page.width, (size.height - top - 48) / page.height)
@@ -850,20 +840,13 @@ export function FocusedPage({
           className="relative shrink-0 overflow-hidden bg-canvas shadow-(--elevation-page)"
           style={{ width: page.width * scale, height: page.height * scale }}
         >
-          <iframe
-            ref={(el) => {
-              frame.current = el
-              driven.ref(el)
-            }}
+          <ArtifactIframe
+            iframeRef={(el) => driven.ref(el)}
             src={src}
+            reloadSeq={reloads}
             title={name}
-            sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-            allow=""
-            referrerPolicy="no-referrer"
-            onLoad={() => {
-              setLoaded(true)
-              driven.onLoad()
-            }}
+            onPortReady={() => driven.onLoad()}
+            onLoad={() => setLoaded(true)}
             style={{ width: page.width, height: page.height, transform: `scale(${scale})` }}
             className={cn(
               'block origin-top-left border-0 opacity-0 transition-opacity duration-(--duration-fast)',

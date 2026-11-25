@@ -10,3 +10,9 @@ declare const __KETTU_ACCOUNT_URL__: string
 declare const __KETTU_RELAY_URL__: string
 /** The region list keys a development relay signs with; empty for the project's. */
 declare const __KETTU_REGION_KEYS__: string
+
+declare module 'virtual:kettu-sandbox-shim' {
+  /** Bundled IIFE source of the sandbox virtual filesystem bootstrap shim. */
+  const script: string
+  export default script
+}

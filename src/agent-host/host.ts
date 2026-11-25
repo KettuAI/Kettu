@@ -4103,7 +4103,10 @@ export class AgentHost {
           scratch: this.scratch.contains(artifact.project),
         })),
       'artifacts.read': async ({ id, version }) => {
-        const read = await artifacts.read(id, version === undefined ? {} : { version })
+        const [read, strict] = await Promise.all([
+          artifacts.read(id, version === undefined ? {} : { version }),
+          artifacts.isStrict(id),
+        ])
         return {
           title: read.artifact.title,
           version: read.version.version,
@@ -4114,6 +4117,7 @@ export class AgentHost {
               ? ''
               : await artifacts.entryText(read),
           type: read.type,
+          strict,
           seen: read.artifact.seen,
           files: read.files.map((file) => ({
             path: file.path,

@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { RUNTIME_VERSION, type DriveMessage } from '@shared/artifact-runtime/page-messages'
-import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Icon } from '@renderer/components/affect/app-shell'
-import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { ArtifactIframe } from './artifact-iframe'
 import { PickLayer } from './canvas-view'
 import { useEditorFrame, useEditorState, type ArtifactEditor } from './editor'
 import { OpeningCover } from './viewer-states'
@@ -53,8 +52,7 @@ export function PageFrame({
   const mode = useEditorState(editor).mode
   const [loaded, setLoaded] = useState(false)
   const [blocked, setBlocked] = useState<string | null>(null)
-  const [mountedAt] = useState(reloads)
-  const [firstSrc] = useState(src)
+  const [forcedReload, setForcedReload] = useState(0)
   const shownSrc = useRef(src)
   const origin = url.slice(0, -1)
 
@@ -65,7 +63,6 @@ export function PageFrame({
     shownSrc.current = src
     const keep: DriveMessage = { v: RUNTIME_VERSION, kind: 'keep-scroll' }
     element.contentWindow?.postMessage(keep, '*')
-    element.src = src
   }, [src])
 
   useEffect(() => {
@@ -80,34 +77,25 @@ export function PageFrame({
         if (event.origin !== origin) return
         setBlocked(event.url)
         // The page's own frame left for an error page; it comes back, though its state is gone.
-        if (event.reload && frame.current) frame.current.src = src
+        if (event.reload) setForcedReload((n) => n + 1)
       }),
-    [origin, src],
+    [origin],
   )
-
-  // Reloads in place: the frame keeps the old page until the new one commits.
-  useEffect(() => {
-    if (reloads !== mountedAt && frame.current) frame.current.src = src
-  }, [reloads, mountedAt, src])
 
   const blockedHost = blocked ? URL.parse(blocked)?.host : null
 
   return (
     <div className={cn('absolute inset-0', className)}>
-      <iframe
-        ref={(el) => {
+      <ArtifactIframe
+        iframeRef={(el) => {
           frame.current = el
           driven.ref(el)
         }}
-        src={firstSrc}
+        src={src}
+        reloadSeq={reloads + forcedReload}
         title={title}
-        sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
-        onLoad={() => {
-          setLoaded(true)
-          driven.onLoad()
-        }}
+        onPortReady={() => driven.onLoad()}
+        onLoad={() => setLoaded(true)}
         className={cn(
           'absolute inset-0 size-full border-0 opacity-0 transition-opacity duration-(--duration-fast)',
           loaded && 'opacity-100',

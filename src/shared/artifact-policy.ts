@@ -62,3 +62,78 @@ const POWERFUL_FEATURES = [
 export const ARTIFACT_PERMISSIONS_POLICY = POWERFUL_FEATURES.map((feature) => `${feature}=()`).join(
   ', ',
 )
+
+/** Sandbox shell modes: default web/canvas, strict capability isolation, and built-in viewer. */
+export type SandboxFrameMode = 'default' | 'strict' | 'viewer'
+
+/** Static sandbox shell paths for hosted and relay web clients (without .html suffix). */
+export const SANDBOX_FRAME_PATHS: Readonly<Record<SandboxFrameMode, string>> = {
+  default: '/_kettu/frame',
+  strict: '/_kettu/frame-strict',
+  viewer: '/_kettu/frame-viewer',
+}
+
+/** Static asset path prefix for built-in typed viewers (document and slides). */
+export const SANDBOX_VIEWER_PREFIX = '/_kettu/viewer/'
+
+const SANDBOX_DIRECTIVE =
+  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals'
+
+/**
+ * Isolated HTTP Content-Security-Policy for sandbox shell pages in hosted/relay web clients.
+ * Enforces an opaque origin without allow-same-origin and avoids inheriting the host page's CSP.
+ */
+export function sandboxFrameCsp(mode: SandboxFrameMode): string {
+  if (mode === 'viewer') {
+    return [
+      SANDBOX_DIRECTIVE,
+      "frame-ancestors 'self'",
+      "default-src 'none'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      'img-src data: blob:',
+      'media-src data: blob:',
+      'connect-src data: blob:',
+      "form-action 'none'",
+      "base-uri 'none'",
+    ].join('; ')
+  }
+  const cdns = mode === 'strict' ? '' : ` ${ARTIFACT_CDNS.join(' ')}`
+  return [
+    SANDBOX_DIRECTIVE,
+    "frame-ancestors 'self'",
+    "default-src 'none'",
+    `script-src 'unsafe-inline' 'unsafe-eval' blob: data:${cdns}`,
+    `style-src 'unsafe-inline' blob: data:${cdns}`,
+    `font-src data: blob:${cdns}`,
+    `img-src data: blob:${cdns}`,
+    'media-src data: blob:',
+    `connect-src data: blob:${cdns}`,
+    'worker-src blob:',
+    'frame-src blob: data:',
+    "form-action 'none'",
+    "base-uri 'none'",
+  ].join('; ')
+}
+
+/**
+ * Minimal static sandbox shell HTML that waits for the parent window to deliver assembled HTML
+ * and a read-only VFS MessagePort matching the URL fragment nonce.
+ */
+export const SANDBOX_SHELL_HTML = [
+  '<!doctype html>',
+  '<html lang="en">',
+  '<head><meta charset="utf-8"><script>',
+  '(()=>{const n=location.hash.slice(1);const f=e=>{',
+  'if(e.source!==parent||parent===window)return;',
+  'const d=e.data;if(!d||d.kettuSandbox!=="render"||d.nonce!==n)return;',
+  'removeEventListener("message",f);',
+  'window.__kettuVfsPort=e.ports[0]||null;',
+  'window.__kettuSandboxNonce=n;',
+  'document.open();document.write(d.html);document.close();',
+  '};addEventListener("message",f);',
+  'if(parent&&parent!==window)parent.postMessage({kettuSandbox:"ready",nonce:n},"*");',
+  '})();',
+  '</script></head><body></body></html>',
+].join('')

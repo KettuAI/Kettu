@@ -164,6 +164,8 @@ export interface ArtifactContent {
   html: string
   files: ArtifactFileInfo[]
   type?: ArtifactTypeInfo | null
+  /** Whether the latest version declares capabilities requiring strict offline isolation; omitted by older hosts. */
+  strict?: boolean
   /** As the summary's `seen`; absent from hosts that keep no such record. */
   seen?: number | null
 }
