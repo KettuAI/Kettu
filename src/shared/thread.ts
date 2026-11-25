@@ -1941,6 +1941,81 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.publishAsked === undefined || typeof value.publishAsked === 'number') &&
         (value.after === null || typeof value.after === 'string')
       )
+    case 'settings_change':
+      return (
+        isListOf(value.items, isSettingChangeItem) &&
+        typeof value.asked === 'boolean' &&
+        (value.expiresAt === null || typeof value.expiresAt === 'number') &&
+        (value.outcome === null || isSettingsChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'project_mcp':
+      return (
+        isListOf(
+          value.servers,
+          (item): item is DeclaredMcpServer =>
+            isRecord(item) && typeof item.name === 'string' && typeof item.target === 'string',
+        ) &&
+        (value.decision === null || isProjectAnswer(value.decision)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'project_hooks':
+      return (
+        isListOf(
+          value.hooks,
+          (item): item is DeclaredHook =>
+            isRecord(item) && typeof item.event === 'string' && typeof item.target === 'string',
+        ) &&
+        (value.decision === null || isProjectAnswer(value.decision)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    default:
+      return false
+  }
+}
+
+const isProjectAnswer = (value: unknown): value is ProjectMcpAnswer | ProjectHooksAnswer =>
+  value === 'use' || value === 'all' || value === 'skip' || value === 'timeout'
+
+const isSettingScalar = (value: unknown): value is SettingScalar =>
+  value === null ||
+  typeof value === 'string' ||
+  typeof value === 'number' ||
+  typeof value === 'boolean'
+
+const isSettingValue = (value: unknown): value is SettingChangeItem['from'] =>
+  isRecord(value) && isSettingScalar(value.value) && typeof value.text === 'string'
+
+function isSettingChangeItem(value: unknown): value is SettingChangeItem {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.place === 'string' &&
+    typeof value.name === 'string' &&
+    isSettingValue(value.from) &&
+    isSettingValue(value.to) &&
+    (value.warning === undefined || typeof value.warning === 'string') &&
+    // Lines written before name `plugins`, which is no section now.
+    typeof value.section === 'string' &&
+    (value.item === null || typeof value.item === 'string') &&
+    typeof value.row === 'string'
+  )
+}
+
+function isSettingsChangeOutcome(value: unknown): value is SettingsChangeOutcome {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'changed':
+      return (
+        (value.undone === undefined || value.undone === true) &&
+        (value.stale === undefined || value.stale === true)
+      )
+    case 'declined':
+    case 'expired':
+    case 'ended':
+      return true
+    case 'failed':
+      return typeof value.message === 'string'
     default:
       return false
   }

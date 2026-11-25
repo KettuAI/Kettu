@@ -962,6 +962,69 @@ describe('the thread database', () => {
     again.close()
   })
 
+  it("reads back Kettu's settings changes and a folder's held servers and hooks", () => {
+    const file = tempFile()
+    const db = open(file)
+    const row = {
+      id: 'appearance.color-mode',
+      place: 'Appearance › Theme',
+      name: 'Color mode',
+      from: { value: 'system', text: 'System' },
+      to: { value: 'dark', text: 'Dark' },
+      section: 'appearance',
+      item: null,
+      row: 'color-mode',
+    } as const
+    const own: ThreadEntry[] = [
+      {
+        kind: 'settings_change',
+        id: 'k1',
+        items: [row],
+        asked: true,
+        expiresAt: 1_700_000_000_000,
+        outcome: null,
+        after: 't0.0',
+      },
+      {
+        kind: 'settings_change',
+        id: 'k2',
+        items: [{ ...row, warning: 'Opens it up.' }],
+        asked: false,
+        expiresAt: null,
+        outcome: { kind: 'changed' },
+        after: 't0.0',
+      },
+      {
+        kind: 'project_mcp',
+        id: 'k3',
+        servers: [{ name: 'db', target: 'npx db-mcp' }],
+        decision: 'use',
+        after: null,
+      },
+      {
+        kind: 'project_hooks',
+        id: 'k4',
+        hooks: [{ event: 'PreToolUse', target: './check.sh' }],
+        decision: null,
+        after: null,
+      },
+    ]
+    const entries = [
+      ...turns(1, 1),
+      ...own.map((entry, i) => ({ pos: 4 + i, entry })),
+    ] satisfies PositionedEntry[]
+    db.write('s1', { head, entries })
+    db.close()
+
+    const again = open(file)
+    expect(again.page('s1', null)!.entries.slice(4)).toEqual(own)
+    expect(again.load('s1')!.entries.map(({ entry }) => entry)).toEqual(
+      entries.map(({ entry }) => entry),
+    )
+    expect(logs.filter((l) => l.level === 'error')).toEqual([])
+    again.close()
+  })
+
   it('moves a damaged file aside and starts empty', () => {
     const file = tempFile()
     open(file).close()
