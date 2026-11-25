@@ -204,7 +204,12 @@ export function PlanRing() {
         </TooltipTrigger>
         {!open && <TooltipContent side="top">{label}</TooltipContent>}
       </Tooltip>
-      <Popover open={open} onClose={() => setOpen(false)} side="top" className="ui-as-user-pop">
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        side="top"
+        className="ui-as-user-pop kettu-plan-ring__pop"
+      >
         {open && <PlanPopover currentKey={card.key} close={() => setOpen(false)} />}
       </Popover>
     </span>
