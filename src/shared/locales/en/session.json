@@ -57,6 +57,17 @@
     "refusal": "Declined",
     "withTime": "{{reason}} · {{time}}"
   },
+  "stillRunning": {
+    "line": "Still running: {{work}}",
+    "lineReports_one": "Still running: {{work}} · reports back when it finishes",
+    "lineReports_other": "Still running: {{work}} · reports back when they finish",
+    "subagents_one": "{{count}} sub-agent",
+    "subagents_other": "{{count}} sub-agents",
+    "commands_one": "{{count}} command",
+    "commands_other": "{{count}} commands",
+    "both": "{{subagents}} and {{commands}}",
+    "openBoard": "Open board"
+  },
   "tool": {
     "verb": {
       "read": "Read",

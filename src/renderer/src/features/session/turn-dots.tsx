@@ -25,3 +25,26 @@ export function TurnDots({ phase, className }: { phase: RunningPhase; className?
     </svg>
   )
 }
+
+/**
+ * Work that runs on after the turn: the running dots' walk round the edge at half its speed, in the
+ * secondary text color, so it never reads as a running turn.
+ */
+export function BackgroundDots({ className }: { className?: string }) {
+  const styles = turnDotStyles('working', 2)
+  return (
+    <svg
+      data-turn-dots
+      viewBox="0 0 12 12"
+      aria-hidden
+      className={cn(
+        'size-3 shrink-0 animate-in fill-current text-secondary animation-duration-(--duration-base) fade-in',
+        className,
+      )}
+    >
+      {CELLS.map(([x, y], i) => (
+        <circle key={`${x}${y}`} cx={2 + x * 4} cy={2 + y * 4} r={1.4} style={styles[i]} />
+      ))}
+    </svg>
+  )
+}

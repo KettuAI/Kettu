@@ -120,13 +120,21 @@ export type Item =
     }
   // The running turn's status, where the reply will start: right after a message you sent.
   | { key: string; type: 'status'; afterSent: boolean }
+  // What runs on after the last turn ended, under its end.
+  | { key: string; type: 'still' }
 
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
  * ends: the same rows with the same keys, and a turn ending only adds its reply footer. With
- * `live`, a turn is running and gets its reply footer only when it ends.
+ * `live`, a turn is running and gets its reply footer only when it ends; with `still` and none
+ * running, what runs on after the last turn closes the thread.
  */
-export function buildItems(order: string[], signature: string, live = false): Item[] {
+export function buildItems(
+  order: string[],
+  signature: string,
+  live = false,
+  still = false,
+): Item[] {
   const items: Item[] = []
   const { replacing, after } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
@@ -168,6 +176,7 @@ export function buildItems(order: string[], signature: string, live = false): It
     if (closing) items.push(closing)
   }
   if (live) items.push({ key: 'status', type: 'status', afterSent: sentItem(items.at(-1)) })
+  else if (still && items.length > 0) items.push({ key: 'still', type: 'still' })
   return items
 }
 
@@ -298,7 +307,7 @@ const agentHeights = new WeakMap<ThreadEntry, number>()
  */
 export function estimateOf(item: Item, byId: Record<string, ThreadEntry> | undefined): number {
   if (item.type === 'run') return 28
-  if (item.type === 'group' || item.type === 'status') return 24
+  if (item.type === 'group' || item.type === 'status' || item.type === 'still') return 24
   if (item.type === 'reply') {
     const files = byId ? changedFiles(item.toolIds, byId) : 0
     const end = item.endId ? byId?.[item.endId] : undefined

@@ -2,16 +2,16 @@ import { Alert02Icon } from '@hugeicons/core-free-icons'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { KnownExpiry } from '@shared/prompt-cache'
-import { TurnDots } from '@renderer/features/session/turn-dots'
+import { BackgroundDots, TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
 import { CacheRing } from './cache-status'
-import type { RowStatus } from './row-status'
+import { backgroundText, type RowStatus } from './row-status'
 
 /**
- * One status per row, by priority: waiting for you, error, running (the turn's nine dots),
- * starting, prompt cache expiring, unread (App Shell's blue dot). Its 16 px slot stays when there
- * is none, so a status appearing never moves the title.
+ * One status per row, by priority: waiting for you, error, running (the turn's nine dots), running
+ * on in the background, starting, prompt cache expiring, unread (App Shell's blue dot). Its 16 px
+ * slot stays when there is none, so a status appearing never moves the title.
  */
 export function SessionIndicator({
   status,
@@ -40,14 +40,23 @@ export function SessionIndicator({
         <Glyph icon={Alert02Icon} size={14} />
       </span>
     )
-  } else if (status.running || status.starting) {
+  } else if (status.running) {
     mark = (
-      <span
-        role="img"
-        aria-label={t(status.running ? 'indicator.running' : 'indicator.starting')}
-        className="grid"
-      >
-        <TurnDots phase={status.running ? 'working' : 'thinking'} />
+      <span role="img" aria-label={t('indicator.running')} className="grid">
+        <TurnDots phase="working" />
+      </span>
+    )
+  } else if (status.background) {
+    const label = t('indicator.background', { work: backgroundText(t, status.background) })
+    mark = (
+      <span role="img" aria-label={label} title={label} className="grid">
+        <BackgroundDots />
+      </span>
+    )
+  } else if (status.starting) {
+    mark = (
+      <span role="img" aria-label={t('indicator.starting')} className="grid">
+        <TurnDots phase="thinking" />
       </span>
     )
   } else if (expiring) {

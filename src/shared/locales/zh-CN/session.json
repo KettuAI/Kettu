@@ -47,6 +47,14 @@
     "refusal": "智能体拒绝了请求",
     "withTime": "{{reason}} · {{time}}"
   },
+  "stillRunning": {
+    "line": "后台还在跑 {{work}}",
+    "lineReports_other": "后台还在跑 {{work}} · 跑完会接着汇报",
+    "subagents_other": "{{count}} 个子智能体",
+    "commands_other": "{{count}} 条命令",
+    "both": "{{subagents}}和 {{commands}}",
+    "openBoard": "打开看板"
+  },
   "tool": {
     "verb": {
       "read": "读取",

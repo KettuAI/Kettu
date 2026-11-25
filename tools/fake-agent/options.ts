@@ -89,7 +89,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   'slow-start': { description: 'Explains how to start the agent slowly (set at launch)' },
   'all-updates': { description: 'Sends every session update variant once, plus an unknown one' },
-  subagent: { description: 'Runs a subagent in a child session with a permission request' },
+  subagent: {
+    description: 'Runs a subagent in a child session with a permission request',
+    hint: '--then <ms the subagent runs on after the turn>',
+  },
   plan: {
     description: 'A plan whose items progress while the agent works',
     hint: '--step <ms each step takes>',
@@ -190,7 +193,8 @@ export interface ScenarioOptions {
   unreadable: boolean
   stepMs: number // plan: how long each step's tool call runs
   holdMs: number // requests: open after its request; error: before it fails; not scaled
-  // requests: when it answers by itself after the turn; agy-daemon: when the server ends; not scaled
+  // requests: when it answers by itself after the turn; subagent: when the subagent, left running
+  // past the turn, ends; agy-daemon: when the server ends; not scaled
   thenMs: number | null
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead

@@ -58,6 +58,7 @@ export function taskRowStatus(
     waiting: live ? waits : 0,
     failed: live && task.error,
     running: live && task.running,
+    background: null,
     starting: live && sessions.some((s) => s?.status === 'starting'),
     unread: task.unread,
   }
@@ -66,6 +67,7 @@ export function taskRowStatus(
     waiting: own.waiting + sessions.reduce((n, s) => n + (s?.permissionCount ?? 0), 0),
     failed: own.failed || sessions.some(failed),
     running: own.running,
+    background: null,
     starting: own.starting,
     unread: own.unread || sessions.some((s) => s?.attention === 'unread'),
   }
@@ -85,6 +87,7 @@ export function stepRowStatus(
     waiting: asking,
     failed: step.state === 'error' || failed(summary),
     running: step.state === 'running' && summary?.status !== 'starting',
+    background: null,
     starting: summary?.status === 'starting',
     unread: summary?.attention === 'unread',
   }
