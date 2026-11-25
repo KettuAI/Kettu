@@ -44,6 +44,7 @@ import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { onHost } from '@renderer/lib/host-paths'
+import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -69,7 +70,8 @@ export function HostFolderDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="@container gap-0 overflow-hidden p-0 sm:max-w-[560px]">
+      {/* A zero minimum on the one column, so a long path never widens the dialog past its edge. */}
+      <DialogContent className="@container grid-cols-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[560px]">
         {hostId && <Browser key={hostId} hostId={hostId} onOpened={onOpened} />}
       </DialogContent>
     </Dialog>
@@ -133,8 +135,10 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
     setAttempt((n) => n + 1)
   }
 
+  const canOpen = !!path && !opening && !!completion
+
   const openProject = async () => {
-    if (!path || opening) return
+    if (!path || !canOpen) return
     setOpening(true)
     setFailed(null)
     try {
@@ -159,7 +163,7 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
             : Math.max(0, at - 1)
       setSelected(folders[next]!.path)
       document.getElementById(`${listId}-${next}`)?.scrollIntoView({ block: 'nearest' })
-    } else if (event.key === 'Enter' && selected) {
+    } else if (event.key === 'Enter' && selected && !event.metaKey && !event.ctrlKey) {
       event.preventDefault()
       go(selected)
     } else if (event.key === 'Backspace' && parent) {
@@ -168,10 +172,17 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
     }
   }
 
+  // Mod+Enter anywhere in the dialog opens what Open would: the selected folder, else the one shown.
+  const onDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || !isMod(event) || event.altKey || event.shiftKey) return
+    event.preventDefault()
+    void openProject()
+  }
+
   const activeIndex = folders.findIndex((f) => f.path === selected)
   const note = t('newSession.hostFolders.note', { host: name })
   return (
-    <>
+    <div className="contents" onKeyDown={onDialogKeyDown}>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(180px_100px_at_40px_36px,color-mix(in_srgb,var(--control-on)_13%,transparent),transparent)]"
@@ -340,15 +351,19 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
           </DialogClose>
           <Button
             size="dialog"
-            disabled={!path || opening || !completion}
+            disabled={!canOpen}
+            aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}
             onClick={() => void openProject()}
           >
             {opening && <Spinner data-icon="inline-start" />}
             {t('newSession.hostFolders.open')}
+            <Kbd className="h-4.5 min-w-4.5 rounded-sm bg-[color-mix(in_srgb,var(--primary-foreground)_14%,transparent)] px-1 text-key text-[color-mix(in_srgb,var(--primary-foreground)_70%,transparent)] shadow-none">
+              {formatShortcut('Mod+Enter')}
+            </Kbd>
           </Button>
         </div>
       </DialogFooter>
-    </>
+    </div>
   )
 }
 
@@ -368,7 +383,7 @@ function Target({ path, platform, dim }: { path: string; platform: Platform; dim
         <span className="size-4.5 shrink-0 [&_svg]:size-full!">
           <FolderClosedMark />
         </span>
-        <span className="min-w-0 truncate text-left direction-rtl">
+        <span className="min-w-0 truncate text-left [direction:rtl]">
           <bdo dir="ltr">
             {head}
             <b className="font-medium text-primary">{tail}</b>
