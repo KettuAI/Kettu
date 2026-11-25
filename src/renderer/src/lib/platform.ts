@@ -26,6 +26,14 @@ export const windowFrame: 'mac' | 'band' | 'none' = isWeb ? 'none' : isMac ? 'ma
  */
 export const hasBand = windowFrame === 'band'
 
+/**
+ * What a menu keeps clear of the window's edges: the window's own controls lie over the top 40 px
+ * (--title-bar), the traffic lights on macOS and the band on Windows and Linux, and the other edges
+ * keep Base UI's 5 px. A menu taller than the room left scrolls inside it.
+ */
+export const menuCollisionPadding =
+  windowFrame === 'none' ? undefined : { top: 40, right: 5, bottom: 5, left: 5 }
+
 /** The system of the host whose paths the page shows, which in the web client is another's. */
 export function hostPlatform(): Platform {
   return window.kettu.hostPlatform()

@@ -6,7 +6,7 @@ import { cn } from 'cn'
 import { ArrowDown01Icon, Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useOverlayRoot } from '@renderer/stores/overlays'
-import { windowFrame } from '@renderer/lib/platform'
+import { menuCollisionPadding } from '@renderer/lib/platform'
 import { GlideHighlight } from '@renderer/components/glide-highlight'
 
 import { Button } from '@renderer/components/ui/button'
@@ -16,10 +16,6 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@renderer/components/ui/input-group'
-
-// The window's own controls lie over the top 40 px (--title-bar): the traffic lights on macOS, the
-// band on Windows and Linux. A popup keeps out of it, and keeps Base UI's 5 px from the other edges.
-const CLEAR_OF_CONTROLS = { top: 40, right: 5, bottom: 5, left: 5 }
 
 function Combobox<Value, Multiple extends boolean | undefined = false, Item = Value>({
   open,
@@ -137,8 +133,8 @@ function ComboboxContent({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
-        collisionPadding={windowFrame === 'none' ? undefined : CLEAR_OF_CONTROLS}
-        className="isolate z-(--layer-menu) outline-none"
+        collisionPadding={menuCollisionPadding}
+        className="isolate z-(--layer-menu) outline-none app-region-no-drag"
       >
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
