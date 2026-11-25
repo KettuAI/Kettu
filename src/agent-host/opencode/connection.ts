@@ -6,6 +6,7 @@
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { carriedEffort } from '@shared/effort'
 import type {
   ConfigOption,
   FormField,
@@ -1463,9 +1464,10 @@ export class OpenCodeConnection implements AgentConnection {
       case CONFIG.model: {
         const model = findModel(offer.models, value)
         if (!model) throw new AgentRequestError('agent_error', t('agentRun.noModel', { value }))
-        // An effort the new model also has is kept; any other falls back to its default.
+        // An effort the new model lacks goes to the nearest lower one it has, else to its default.
         const variant = current?.variant
-        const kept = variant && model.variants?.some((item) => item.id === variant) ? variant : null
+        const variants = (model.variants ?? []).map((item) => item.id)
+        const kept = variant ? carriedEffort(variants, variant) : null
         const next: ModelRef = {
           id: model.id,
           providerID: model.providerID,

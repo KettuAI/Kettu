@@ -12,6 +12,7 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
 import { canonicalClaudeModel } from '@shared/agents'
+import { carriedEffort } from '@shared/effort'
 import { instantOf } from '@shared/sign-in-end'
 import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@shared/thread'
 import {
@@ -1941,10 +1942,24 @@ export class ClaudeConnection implements AgentConnection {
         if (typeof value !== 'string') break
         await query.setModel(value === DEFAULT_MODEL ? undefined : value)
         session.choices.model = value
-        // The effort and fast mode a model offers are its own.
-        const info = modelInfo(session.models, value)
-        if (!info?.supportedEffortLevels?.includes(session.choices.effort)) {
+        // The effort and fast mode a model offers are its own: a chosen effort it lacks goes to the
+        // nearest lower level it offers, else to its default.
+        const levels = modelInfo(session.models, value)?.supportedEffortLevels ?? []
+        const effort = session.choices.effort
+        if (effort !== DEFAULT_EFFORT && !levels.includes(effort)) {
+          const carried = carriedEffort(levels, effort)
           session.choices.effort = DEFAULT_EFFORT
+          if (carried !== null) {
+            try {
+              await this.applyFlags(session, { effortLevel: carried })
+              session.choices.effort = carried
+            } catch (error) {
+              this.context.hooks.log(
+                'warn',
+                `Could not carry effort ${effort}: ${errorText(error)}`,
+              )
+            }
+          }
         }
         session.config = buildConfig(
           session.models,

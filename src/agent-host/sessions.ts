@@ -38,6 +38,7 @@ import { isFullAccessMode } from '@shared/agents'
 import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
+import { carriedLevel } from '@shared/effort'
 import { canEditAt, promptLine, promptOccurrence, turnsFrom, usedAtEnd } from '@shared/rewind'
 import { firstLine, outlineText } from '@shared/outline'
 import { limitLevel, limitsForModel } from '@shared/plan-limits'
@@ -5753,13 +5754,14 @@ export class SessionManager {
 
   /**
    * Sets the values New session chose, in `startOrder`, each against the options as they stand
-   * after the one before. A value the session does not offer, or one the agent refuses, is
-   * logged and left at the agent's value, so the start itself never fails on it. With `restore`
-   * the values are ones a session already had, a fork's source's or its own as it attaches again:
-   * they are not the user's latest choice, and the model is sent again while an option is missing,
-   * since an agent can list an option only once a model is set. With `from`, the options are
-   * worked on apart from the session's and returned, for the caller to report once all are set;
-   * `stop` ends it before the next value.
+   * after the one before. A level the model then set lacks goes to the nearest lower one it
+   * offers, which is not remembered as the user's. A value the session does not offer, or one the
+   * agent refuses, is logged and left at the agent's value, so the start itself never fails on it.
+   * With `restore` the values are ones a session already had, a fork's source's or its own as it
+   * attaches again: they are not the user's latest choice, and the model is sent again while an
+   * option is missing, since an agent can list an option only once a model is set. With `from`,
+   * the options are worked on apart from the session's and returned, for the caller to report once
+   * all are set; `stop` ends it before the next value.
    */
   private async applyStartOptions(
     live: Live,
@@ -5786,9 +5788,15 @@ export class SessionManager {
     const current = (): ConfigOption[] => held ?? live.thread.session.config
     for (const id of startOrder(current(), Object.keys(options))) {
       if (stop?.()) break
-      const value = options[id]
       const config = current()
       const option = config.find((o) => o.id === id)
+      const asked = options[id]
+      const value =
+        option?.category === 'thought_level' &&
+        typeof asked === 'string' &&
+        !isValueOf(option, asked)
+          ? (carriedLevel(option, asked) ?? asked)
+          : asked
       const offerMissing =
         restore &&
         option?.category === 'model' &&
@@ -5815,8 +5823,9 @@ export class SessionManager {
         if (stop?.()) break
         if (held) held = next
         else this.update(live, { config: next })
-        if (!restore && remember) this.deps.options?.chose(agentId, option, value, next)
-        else if (!restore) this.deps.options?.seen(agentId, next)
+        if (!restore && remember && value === asked) {
+          this.deps.options?.chose(agentId, option, value, next)
+        } else if (!restore) this.deps.options?.seen(agentId, next)
       } catch (error) {
         this.deps.diagnostics.log(
           'warn',

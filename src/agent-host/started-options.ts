@@ -2,7 +2,8 @@
 // from the option cache, and the start values a pick becomes once checked against it.
 
 import type { AgentOptions } from '@shared/agent-host'
-import { isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
+import { carriedLevel } from '@shared/effort'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import { modelOption } from './workflow/host-agents'
 
 /** A model an agent offers; `efforts` is null when Kettu has not yet seen the ones it offers. */
@@ -73,8 +74,9 @@ function named(values: readonly string[], what: string, agentId: AgentId): strin
 
 /**
  * The start values of a session with `pick` over the `carried` ones, or what is wrong with it. A
- * carried effort stays on a picked model only when that model is known to offer it, so the first
- * message is never held for an effort the model lacks.
+ * carried effort goes on a picked model only as far as that model is known to offer it: itself,
+ * else the nearest lower level, else none, so the first message is never held for an effort the
+ * model lacks.
  */
 export function pickedValues(
   options: AgentOptions | null,
@@ -109,7 +111,10 @@ export function pickedValues(
     for (const id of levelIds) {
       const value = values[id]
       if (value === undefined) continue
-      if (!level || level.id !== id || !isConfigValue(level, value)) delete values[id]
+      const carried =
+        level?.id === id && typeof value === 'string' ? carriedLevel(level, value) : null
+      if (carried === null) delete values[id]
+      else values[id] = carried
     }
     return { values }
   }

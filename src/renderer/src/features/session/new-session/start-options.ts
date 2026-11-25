@@ -1,5 +1,6 @@
 import type { AgentOptions, AgentStatus, HarnessReason } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
+import { carriedLevel } from '@shared/effort'
 import { isConfigValue, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
 import { harnessReason, programHere, sharedReason } from '@renderer/features/agents/harness-problem'
 import { cliOutdated, listedInstalled, readiness } from '@renderer/features/agents/readiness'
@@ -107,6 +108,18 @@ function takes(option: ConfigOption, value: string | boolean): boolean {
   return isConfigValue(option, value)
 }
 
+/** The value the option holds for `value`: itself, or for a level the nearest lower one it offers. */
+function heldBy(
+  option: ConfigOption,
+  value: string | boolean | undefined,
+): string | boolean | null {
+  if (value === undefined) return null
+  if (takes(option, value)) return value
+  return option.category === 'thought_level' && typeof value === 'string'
+    ? carriedLevel(option, value)
+    : null
+}
+
 /** How a new session's options are worked out: with `startMode`, the agent's start mode is applied. */
 export interface StartFlags {
   startMode?: boolean
@@ -126,7 +139,8 @@ function startModeOf(entry: AgentOptions): { optionId: string; value: string } |
  * remembered from earlier sessions, then what New session set. With `startMode`, the mode is the
  * start mode the user chose for the agent, which only a pick of the mode overrides. A value the
  * option no longer takes is passed over. The level is the one the chosen model offered when last
- * seen, since an agent's levels can differ by model.
+ * seen, since an agent's levels can differ by model, and one it lacks moves to the nearest lower
+ * level it offers.
  */
 export function startConfig(
   entry: AgentOptions,
@@ -135,12 +149,11 @@ export function startConfig(
 ): ConfigOption[] {
   const start = startMode ? startModeOf(entry) : null
   const valueOf = (option: ConfigOption): string | boolean => {
-    const pick = picks[option.id]
-    if (pick !== undefined && takes(option, pick)) return pick
+    const pick = heldBy(option, picks[option.id])
+    if (pick !== null) return pick
     if (start?.optionId === option.id) return start.value
     const remembered = REMEMBERED.has(option.category) ? entry.remembered[option.id] : undefined
-    if (remembered !== undefined && takes(option, remembered)) return remembered
-    return option.value
+    return heldBy(option, remembered) ?? option.value
   }
   const model = entry.config.find((o) => o.category === 'model' && o.type === 'select')
   const modelValue = model ? valueOf(model) : null
@@ -156,7 +169,7 @@ export function startConfig(
 /**
  * The prepared session's options, as its agent reports them, with what New session set that the
  * agent has not answered yet. While a model is picked, the level is the one that model offered
- * when last seen.
+ * when last seen, and a picked level it lacks shows as the nearest lower one it offers.
  */
 export function preparedConfig(
   config: readonly ConfigOption[],
@@ -171,16 +184,49 @@ export function preparedConfig(
       option.category === 'thought_level' && typeof pickedModel === 'string'
         ? (levels[pickedModel] ?? option)
         : option
-    const pick = picks[base.id]
-    return pick !== undefined && takes(base, pick) ? { ...base, value: pick } : base
+    const pick = heldBy(base, picks[base.id])
+    return pick !== null ? { ...base, value: pick } : base
   })
+}
+
+/**
+ * New session's picks once `model` is picked: an effort picked before stays when the model offers
+ * it and moves to the nearest lower level it offers, and goes when it offers neither or its levels
+ * are not known, so the model's own default applies rather than a level it may lack.
+ */
+export function carryEffortPicks(
+  config: readonly ConfigOption[],
+  levels: Readonly<Record<string, ConfigOption>>,
+  picks: OptionValues,
+  model: string,
+): OptionValues {
+  const own = config.find((o) => o.category === 'model' && o.type === 'select')
+  const level =
+    levels[model] ??
+    (own?.value === model ? config.find((o) => o.category === 'thought_level') : undefined)
+  const ids = new Set(
+    [...config, ...Object.values(levels)]
+      .filter((o) => o.category === 'thought_level')
+      .map((o) => o.id),
+  )
+  const next = { ...picks }
+  for (const id of ids) {
+    const value = next[id]
+    if (value === undefined) continue
+    const carried =
+      level?.id === id && typeof value === 'string' ? carriedLevel(level, value) : null
+    if (carried === null) delete next[id]
+    else next[id] = carried
+  }
+  return next
 }
 
 /**
  * What `sessions.create` takes: the start values that differ from the agent's own defaults, or
  * every value for a provisional entry, whose values need not be the agent's defaults. With
  * `startMode`, a pick of the mode is sent even when it is the agent's own, since it overrides the
- * start mode the session would otherwise start in.
+ * start mode the session would otherwise start in. On another model than the agent's own, the
+ * level is always sent, since the agent's default level is its own model's.
  */
 export function startValues(
   entry: AgentOptions,
@@ -189,10 +235,16 @@ export function startValues(
 ): OptionValues {
   const defaults = new Map(entry.provisional ? [] : entry.config.map((o) => [o.id, o.value]))
   const start = flags.startMode ? startModeOf(entry) : null
+  const config = startConfig(entry, picks, flags)
+  const model = entry.config.find((o) => o.category === 'model' && o.type === 'select')
+  const ownModel = !model || config.find((o) => o.id === model.id)?.value === model.value
   const values: OptionValues = {}
-  for (const option of startConfig(entry, picks, flags)) {
+  for (const option of config) {
     const picked = start?.optionId === option.id && picks[option.id] === option.value
-    if (picked || defaults.get(option.id) !== option.value) values[option.id] = option.value
+    const level = option.category === 'thought_level' && !ownModel
+    if (picked || level || defaults.get(option.id) !== option.value) {
+      values[option.id] = option.value
+    }
   }
   return values
 }
