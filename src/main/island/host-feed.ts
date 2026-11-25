@@ -71,9 +71,15 @@ function taskState(value: unknown): IslandTaskState | null {
   const steps = Array.isArray(task.steps)
     ? task.steps.filter((step) => typeof step?.id === 'string' && typeof step.name === 'string')
     : []
+  const kinds = Array.isArray(task.needKinds) ? task.needKinds : null
   return {
     title: task.title,
-    needsYou: task.needsYou === true && task.status === 'running' && !task.archivedAt,
+    // An older host names no kinds, so any task that needs the user stays a request there.
+    asksYou:
+      task.needsYou === true &&
+      task.status === 'running' &&
+      !task.archivedAt &&
+      (kinds === null || kinds.some((kind) => kind === 'review' || kind === 'person')),
     steps: steps.map(({ id, name, state, sessionId }) => ({
       id,
       name,

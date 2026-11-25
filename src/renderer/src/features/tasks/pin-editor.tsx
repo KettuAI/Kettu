@@ -15,6 +15,7 @@ import {
 } from '@renderer/stores/agent-options'
 import type { AgentOptions } from '@shared/agent-host'
 import { useTasksStore } from '@renderer/stores/tasks'
+import { agentName } from '@renderer/stores/agents'
 import { canDoSteps } from './model'
 import { runsSteps } from '@renderer/features/session/new-session/workflow-picks'
 
@@ -79,6 +80,7 @@ export function PinEditor({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notYet, setNotYet] = useState<string | null>(null)
 
   const send = async (pick: StepPick | null) => {
     if (pick && !canDoSteps(pick.agentId)) {
@@ -87,9 +89,15 @@ export function PinEditor({
     }
     setBusy(true)
     setError(null)
+    setNotYet(null)
     try {
       const next = await host('tasks.pin', { taskId: view.id, stepId, pick })
       useTasksStore.getState().receive(next, useTasksStore.getState().hosts[view.id] ?? null)
+      // A pin kept for someone who cannot take the step yet stays open here, under the card's why.
+      if (pick && next.needs.some((need) => need.kind === 'blocked' && need.stepId === stepId)) {
+        setNotYet(t('pin.notYet', { agent: agentName(pick.agentId, hostId) }))
+        return
+      }
       onDone()
     } catch (reason) {
       setError(errorMessage(reason))
@@ -111,6 +119,7 @@ export function PinEditor({
             onChoose={(id, model) => {
               setAgentId(id)
               setError(null)
+              setNotYet(null)
               const entry = entryOf(id)
               const next = { ...(picksOf(useAgentOptionsStore.getState(), hostId, id) ?? {}) }
               const option = modelOption(entry)
@@ -142,6 +151,11 @@ export function PinEditor({
           {t('pin.confirm')}
         </Button>
       </div>
+      {notYet && (
+        <p role="status" className="text-hint text-warning">
+          {notYet}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-hint text-danger">
           {error}

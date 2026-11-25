@@ -55,7 +55,7 @@ function stepState(task: TaskRecord, stepId: string): StepState {
     case 'starting':
     case 'working':
     case 'picking':
-      return round.asking ? 'needs_you' : 'running'
+      return round.asking || round.limited ? 'needs_you' : 'running'
     case 'reviewing':
     case 'person':
       return 'needs_you'
@@ -84,6 +84,8 @@ export function needsOf(task: TaskRecord): TaskNeed[] {
         reason: round.stuck.reason,
         detail: round.stuck.detail,
       })
+    } else if (WORKING.has(round.state) && round.limited) {
+      needs.push({ kind: 'blocked', stepId: round.stepId, reason: { ...round.limited } })
     } else if (WORKING.has(round.state) && round.asking && round.sessionId) {
       needs.push({
         kind: 'asking',
@@ -143,8 +145,11 @@ export function summaryOf(task: TaskRecord): TaskSummary {
     steps,
     at: started.length > 0 ? Math.max(...started) + 1 : null,
     needsYou: needs.length > 0,
+    needKinds: [...new Set(needs.map((need) => need.kind))],
     error: needs.some((need) => need.kind === 'stuck' || need.kind === 'end_merge'),
-    running: task.rounds.some((round) => WORKING.has(round.state) || round.state === 'queued'),
+    running: task.rounds.some(
+      (round) => (WORKING.has(round.state) && !round.limited) || round.state === 'queued',
+    ),
     branch: main?.worktree?.branch ?? null,
     worktreePath: main?.worktree?.path ?? null,
     agents,
@@ -293,12 +298,21 @@ export function viewOf(task: TaskRecord, pullRequests: readonly string[] = []): 
   }
 }
 
-/** Whether a step's agent may be pinned for this task: it has not started, or waits blocked. */
+/** A step's round whose work a used-up plan limit stopped, which someone pinned may take over. */
+export function heldWorking(round: RoundRecord): boolean {
+  return round.state === 'working' && !!round.limited
+}
+
+/**
+ * Whether a step's agent may be pinned for this task: it has not started, waits blocked, or its
+ * work waits for a plan limit.
+ */
 export function canPinStep(task: TaskRecord, stepId: string): boolean {
   const step = stepOf(task.workflow, stepId)
   if (step?.by !== 'agent') return false
-  const live = task.rounds.some((round) => round.stepId === stepId && LIVE.has(round.state))
-  return !live
+  return !task.rounds.some(
+    (round) => round.stepId === stepId && LIVE.has(round.state) && !heldWorking(round),
+  )
 }
 
 /**

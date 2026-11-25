@@ -128,8 +128,10 @@
   },
   "blocked": {
     "title": "{{step}} can’t start",
+    "heldTitle": "{{step}} is paused",
     "limit": "{{agent}} has reached its plan limit.",
     "limitAt": "{{agent}} has reached its plan limit. The step starts at {{time}} unless you pin someone else.",
+    "limitAtHeld": "{{agent}} has reached its plan limit. The step carries on at {{time}} unless you pin someone else.",
     "disabled": "{{agent}} is turned off.",
     "removed": "{{agent}} was removed.",
     "harness": "{{agent}} can’t do steps; only Claude Code and Codex can.",
@@ -167,7 +169,8 @@
     "change": "Change the pin…",
     "confirm": "Pin for this task",
     "auto": "Back to Auto",
-    "onlySteps": "Only Claude Code and Codex agents can do steps."
+    "onlySteps": "Only Claude Code and Codex agents can do steps.",
+    "notYet": "Pinned, but {{agent}} can’t take the step yet."
   },
   "flow": {
     "auto": "Auto",

@@ -268,7 +268,7 @@ import {
   type ModeRank,
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
-import type { TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
+import type { StepLimit, TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
 import {
   attachmentText,
   denialAnswer,
@@ -8414,6 +8414,7 @@ export class SessionManager {
     delete live.record.lastTurn
     this.clearContinueTimer(live.id)
     this.continueRetries.delete(live.id)
+    this.tellStepLimit(live.record)
     // The touch below sends the count without the suggestions the user talked past.
     this.deps.cards?.turnStarted(live.id)
     this.update(live, {
@@ -9122,6 +9123,7 @@ export class SessionManager {
     if (live) this.persist(live)
     else this.saveIndex()
     this.touch(sessionId)
+    this.tellStepLimit(record)
   }
 
   /**
@@ -9237,6 +9239,7 @@ export class SessionManager {
     this.touch(sessionId)
     this.continueRetries.delete(sessionId)
     this.scheduleContinue(sessionId, resetsAt + CONTINUE_AFTER_RESET_MS)
+    this.tellStepLimit(record)
   }
 
   /**
@@ -9253,6 +9256,7 @@ export class SessionManager {
     if (live) this.persist(live)
     else this.saveIndex()
     this.touch(sessionId)
+    this.tellStepLimit(record)
   }
 
   /** Drops the continuation planned for a session, as its Don't continue line asks. */
@@ -9274,6 +9278,7 @@ export class SessionManager {
       if (live) this.persist(live)
       else changed = true
       this.touch(record.id)
+      this.tellStepLimit(record)
     }
     if (changed) this.saveIndex()
   }
@@ -9519,8 +9524,17 @@ export class SessionManager {
   /** Tells the task engine a step's turn ended; true for a step's session, which stays quiet. */
   private reportStep(live: Live): boolean {
     if (live.record.origin !== 'task') return false
-    this.deps.task?.current?.turnEnded(live.id, { byUser: live.userTurn })
+    this.deps.task?.current?.turnEnded(live.id, {
+      byUser: live.userTurn,
+      limit: stepLimit(live.record),
+    })
     return true
+  }
+
+  /** Tells the task engine how a step session's last turn stands against a plan limit now. */
+  private tellStepLimit(record: SessionRecord): void {
+    if (record.origin !== 'task') return
+    this.deps.task?.current?.turnLimit(record.id, stepLimit(record))
   }
 
   /** The entries of a turn, after the user entry that opened it. */
@@ -13240,6 +13254,12 @@ export function forkCut(
       (e) => e.kind === 'agent' && entryMessageId(e.id) !== null && e.markdown === entry.markdown,
     ).length
   return { entries, point: { messageId, text: entry.markdown, occurrence } }
+}
+
+/** The plan limit that stopped a session's last turn, and when it carries on; null for none. */
+function stepLimit(record: SessionRecord): StepLimit | null {
+  const turn = record.lastTurn
+  return turn?.reason === 'limit' ? { continuesAt: turn.continuesAt ?? null } : null
 }
 
 function turnEndText(stopReason: StopReason): string {

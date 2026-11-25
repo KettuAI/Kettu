@@ -55,8 +55,15 @@ import {
   type RoleHint,
   type WorkflowAgent,
 } from './picks'
-import { againPrompt, notePrompt, reminderPrompt, resumePrompt, stepPrompt } from './prompts'
-import { canPinStep, LIVE, needsOf, summaryOf, viewOf, WORKING } from './views'
+import {
+  againPrompt,
+  carryOnPrompt,
+  notePrompt,
+  reminderPrompt,
+  resumePrompt,
+  stepPrompt,
+} from './prompts'
+import { canPinStep, heldWorking, LIVE, needsOf, summaryOf, viewOf, WORKING } from './views'
 
 /** Refused picks in a row before the task waits for the user. */
 export const MAX_PICK_REFUSALS = 3
@@ -83,7 +90,7 @@ export interface TaskSessions {
    * if `due`, asked when its turn comes, still says so.
    */
   send(sessionId: string, text: string, due?: () => boolean): Promise<void>
-  /** Stops the session's turn, if one runs. */
+  /** Stops the session's turn, if one runs, and its carry-on planned for a plan limit's reset. */
   cancel(sessionId: string): Promise<void>
   delete(sessionId: string): Promise<void>
   has(sessionId: string): boolean
@@ -197,12 +204,25 @@ export interface PickResult {
   next: CheckNext
 }
 
+/** A used-up plan limit stopped the session's last turn; it carries on at `continuesAt`, if ever. */
+export interface StepLimit {
+  continuesAt: number | null
+}
+
 /** How a step session's hooks reach the engine; set once it exists. */
 export interface TaskSessionHooks {
   /** The step's session exists, before anything is sent. */
   sessionCreated(sessionId: string, ref: SessionTaskRef): void
-  /** A turn of the session ended; `byUser` when the user's own message started it. */
-  turnEnded(sessionId: string, turn: { byUser: boolean }): void
+  /**
+   * A turn of the session ended; `byUser` when the user's own message started it, `limit` when a
+   * used-up plan limit stopped it.
+   */
+  turnEnded(sessionId: string, turn: { byUser: boolean; limit?: StepLimit | null }): void
+  /**
+   * What the session's last turn ended on changed after it ended: a plan limit turned out to stop
+   * it, its carry-on moved or was dropped, or, with null, another turn started.
+   */
+  turnLimit(sessionId: string, limit: StepLimit | null): void
   /** A request waits for the user in the session, or the last was answered. */
   waiting(sessionId: string, waiting: boolean): void
   sessionGone(sessionId: string): void
@@ -262,7 +282,12 @@ export class TaskEngine implements TaskSessionHooks {
             // Its session may not have been made before the restart; make it again.
             round.state = 'queued'
             changed = true
-          } else if ((round.state === 'working' || round.state === 'picking') && round.sessionId) {
+          } else if (
+            (round.state === 'working' || round.state === 'picking') &&
+            round.sessionId &&
+            !round.limited
+          ) {
+            // A step a plan limit holds goes on when its session carries on, or the user retries.
             round.reminded = false
             const owed =
               round.state === 'picking' && round.picks
@@ -805,7 +830,17 @@ export class TaskEngine implements TaskSessionHooks {
     return found !== null && (found.round.state === 'working' || found.round.state === 'starting')
   }
 
-  turnEnded(sessionId: string, turn: { byUser: boolean }): void {
+  turnEnded(sessionId: string, turn: { byUser: boolean; limit?: StepLimit | null }): void {
+    const limit = turn.limit
+    if (limit) {
+      // The step did not stop by itself: it waits for the limit, as a step that cannot start does.
+      void this.locked(() => {
+        const found = this.roundOfSession(sessionId)
+        if (!found || found.task.status !== 'running') return
+        if (this.hold(found.round, limit)) this.save(found.task)
+      })
+      return
+    }
     // A turn that answered the user's own message owes no report; only the agent's own turns do.
     if (turn.byUser) return
     void this.locked(() => {
@@ -832,6 +867,40 @@ export class TaskEngine implements TaskSessionHooks {
       this.save(task)
       this.pump()
     })
+  }
+
+  turnLimit(sessionId: string, limit: StepLimit | null): void {
+    void this.locked(() => {
+      const found = this.roundOfSession(sessionId)
+      if (!found || found.task.status !== 'running') return
+      const { task, round } = found
+      if (limit) {
+        if (this.hold(round, limit)) this.save(task)
+      } else if (round.limited) {
+        round.limited = null
+        this.save(task)
+      }
+    })
+  }
+
+  /**
+   * Holds a round whose session a used-up plan limit stopped, until it carries on; a round stuck
+   * by that same turn ending without its report is held instead. False when it cannot be.
+   */
+  private hold(round: RoundRecord, limit: StepLimit): boolean {
+    if (!round.by) return false
+    const stuckByTurn =
+      round.state === 'stuck' &&
+      (round.stuck?.reason === 'no_report' || round.stuck?.reason === 'no_pick')
+    if (round.state !== 'working' && round.state !== 'picking' && !stuckByTurn) return false
+    if (stuckByTurn) {
+      round.state = round.picks ? 'picking' : 'working'
+      round.stuck = null
+    }
+    // The turn after the limit owes its report anew, so a reminder still comes once.
+    round.reminded = false
+    round.limited = { kind: 'limit', agentId: round.by.agentId, resetsAt: limit.continuesAt }
+    return true
   }
 
   waiting(sessionId: string, waiting: boolean): void {
@@ -1423,8 +1492,17 @@ export class TaskEngine implements TaskSessionHooks {
         this.save(task)
         return this.view(task)
       }
+      const held = task.rounds.findLast(
+        (r) => r.stepId === stepId && WORKING.has(r.state) && r.limited,
+      )
       const round = task.rounds.findLast((r) => r.stepId === stepId && r.state === 'stuck')
-      if (round?.stuck) {
+      if (held) {
+        // It goes on in its session now; a limit still used up holds it again.
+        held.limited = null
+        held.retryNote = text
+        const message = [text, carryOnPrompt(held.state === 'picking')].filter(Boolean).join('\n\n')
+        if (held.sessionId) void this.message(held.sessionId, message)
+      } else if (round?.stuck) {
         const reason = round.stuck.reason
         round.stuck = null
         round.retryNote = text
@@ -1544,6 +1622,21 @@ export class TaskEngine implements TaskSessionHooks {
       if (!canPinStep(task, stepId)) throw new HostError('conflict', t('tasks.cannotPin'))
       if (pick) task.pins[stepId] = { ...pick }
       else delete task.pins[stepId]
+      const held = task.rounds.find((r) => r.stepId === stepId && heldWorking(r))
+      if (held && pick && !samePick(held.by, pick)) {
+        // Someone else takes over the step a plan limit holds: its session stops, carry-on too.
+        this.stopRound(held)
+        held.limited = null
+        task.waiting.push({
+          stepId,
+          since: this.now(),
+          arrivals: [held.lane],
+          sentBack: held.sentBack,
+          retryNote: held.retryNote,
+          blocked: null,
+          picker: null,
+        })
+      }
       const waiting = task.waiting.find((w) => w.stepId === stepId)
       if (waiting) waiting.blocked = null
       this.advance(task)
@@ -1679,4 +1772,8 @@ export class TaskEngine implements TaskSessionHooks {
 
 function firstLine(text: string): string {
   return text.trim().split('\n')[0]?.trim() || 'Task'
+}
+
+function samePick(a: StepPick | null, b: StepPick): boolean {
+  return a?.agentId === b.agentId && a.model === b.model && a.effort === b.effort
 }

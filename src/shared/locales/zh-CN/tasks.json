@@ -128,8 +128,10 @@
   },
   "blocked": {
     "title": "{{step}} 开不了工",
+    "heldTitle": "{{step}} 暂停了",
     "limit": "{{agent}} 的套餐额度用完了。",
     "limitAt": "{{agent}} 的套餐额度用完了。到 {{time}} 自动开始，除非你固定别的智能体。",
+    "limitAtHeld": "{{agent}} 的套餐额度用完了。到 {{time}} 自动接着做，除非你固定别的智能体。",
     "disabled": "{{agent}} 已关闭。",
     "removed": "{{agent}} 已被移除。",
     "harness": "{{agent}} 不能做步骤，只有 Claude Code 和 Codex 能做。",
@@ -167,7 +169,8 @@
     "change": "更改固定…",
     "confirm": "为这条需求固定",
     "auto": "改回 Auto",
-    "onlySteps": "只有 Claude Code 和 Codex 的智能体能做步骤。"
+    "onlySteps": "只有 Claude Code 和 Codex 的智能体能做步骤。",
+    "notYet": "已固定，但 {{agent}} 现在还接不了这一步。"
   },
   "flow": {
     "auto": "Auto",

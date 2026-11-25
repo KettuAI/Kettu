@@ -386,6 +386,8 @@ export interface TaskSummary {
   /** The step furthest along the workflow that started, 1-based, for step/total; null before any. */
   at: number | null
   needsYou: boolean
+  /** The kinds of what waits for the user on it; absent from an older host. */
+  needKinds?: TaskNeed['kind'][]
   error: boolean
   running: boolean
   /** The task's own branch and worktree; null outside Git. */

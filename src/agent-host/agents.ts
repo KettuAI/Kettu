@@ -661,6 +661,14 @@ function programOf(def: AgentDefinition): AgentStatus['program'] {
   }
 }
 
+/**
+ * The agent's models go through a gateway, which has no plan: a sign-in it keeps, such as Codex's
+ * ChatGPT one under a provider of the user's own, still answers for a plan that holds nothing back.
+ */
+function throughGateway(slot: Slot): boolean {
+  return slot.account?.kind === 'gateway'
+}
+
 /** A state detection gives a harness that cannot run, for the reason it found. */
 function unavailable(state: AgentState): boolean {
   return state === 'not-installed' || state === 'node-missing' || state === 'node-outdated'
@@ -3869,7 +3877,7 @@ export class AgentManager {
       before?.kind === named.kind && before.label === named.label && before.email === named.email
     slot.account = same && before.tier ? { ...named, tier: before.tier } : named
     // A gateway has no plan: windows kept from a sign-in before it would show as its limits.
-    if (named.kind === 'gateway') slot.limits.clear()
+    if (throughGateway(slot)) slot.limits.clear()
     slot.signIn = named.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
@@ -3915,7 +3923,7 @@ export class AgentManager {
 
   setLimit(agentId: AgentId, limit: PlanLimit): void {
     const slot = this.slots.get(agentId)
-    if (!slot) return
+    if (!slot || throughGateway(slot)) return
     const before = slot.limits.get(limit.window)
     // Claude Code often reports a window without its utilization; the use `/usage` read for the
     // same period still holds. `/usage` gives the reset to the minute, the events to the second.
@@ -4149,7 +4157,9 @@ export class AgentManager {
     const now = Date.now()
     slot.limitsReadAt = now
     slot.limitsError = null
-    const merged = mergeReadLimits([...slot.limits.values()], limits, now)
+    const merged = throughGateway(slot)
+      ? []
+      : mergeReadLimits([...slot.limits.values()], limits, now)
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
     this.emit(slot)
@@ -4482,7 +4492,8 @@ export class AgentManager {
 
   private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {
     slot.balances = usage.balances
-    if (usage.tier) {
+    const gateway = throughGateway(slot)
+    if (usage.tier && !gateway) {
       slot.account = slot.account
         ? { ...slot.account, label: usage.tier }
         : { kind: 'account', label: usage.tier, email: null }
@@ -4490,7 +4501,7 @@ export class AgentManager {
     slot.limitsReadAt = now
     slot.limitsError = null
     slot.limits = new Map(
-      mergeReadLimits([...slot.limits.values()], usage.limits, now).map((item) => [
+      (gateway ? [] : mergeReadLimits([...slot.limits.values()], usage.limits, now)).map((item) => [
         item.window,
         item,
       ]),
