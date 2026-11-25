@@ -12,13 +12,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A push to a draft and marking it ready a moment later start two runs in no fixed order, and
+  # the later one cancels the other and gives the commit its CI result. So a run whose event saw a
+  # draft asks whether the pull request is still one, and checks it when it is not.
+  draft:
+    name: Draft state
+    if: ${{ github.event.pull_request.draft }}
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
+    permissions:
+      pull-requests: read
+    outputs:
+      draft: ${{ steps.state.outputs.draft }}
+    steps:
+      - id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL: ${{ github.event.pull_request.number }}
+        run: echo "draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PULL" --jq .draft)" >> "$GITHUB_OUTPUT"
+
   # The name is the check the ruleset on main requires. A skipped job still reports a check, which
   # counts as passing, so a draft's skipped run must not be named CI, or a pull request marked ready
   # could merge before the run that marking it ready starts has reported. GitHub shows a skipped
   # job's name unevaluated; evaluated, it would read `CI (draft)`. Neither is CI.
   check:
-    name: ${{ github.event.pull_request.draft && 'CI (draft)' || 'CI' }}
-    if: ${{ !github.event.pull_request.draft }}
+    needs: draft
+    name: ${{ github.event.pull_request.draft && needs.draft.outputs.draft != 'false' && 'CI (draft)' || 'CI' }}
+    if: ${{ !cancelled() && (!github.event.pull_request.draft || needs.draft.outputs.draft == 'false') }}
     # The LINUX_RUNNER repository variable, when set, replaces GitHub's runner.
     runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
     steps:
@@ -26,24 +45,30 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
-      # Styles, docs and images have nothing to type-check or test, so the job passes without
+      # Docs and images have nothing to check and styles only lint, so the job passes without
       # running the rest. It still runs, since a skipped job would not report the CI check.
-      - name: Look for code changes
+      - name: Look for changes
         id: changes
         run: |
-          if git diff --name-only HEAD^1 HEAD | grep -qE '\.(ts|tsx|mts|cts|js|mjs|cjs|json|yaml|yml)$'; then
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          if grep -qE '\.(ts|tsx|mts|cts|js|mjs|cjs|json|yaml|yml)$' <<< "$changed"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "lint=true" >> "$GITHUB_OUTPUT"
+          elif grep -qE '\.(css|html|svg)$' <<< "$changed"; then
+            echo "lint=true" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.changes.outputs.code
+      - if: steps.changes.outputs.lint
         uses: pnpm/action-setup@v6
-      - if: steps.changes.outputs.code
+      - if: steps.changes.outputs.lint
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-      - if: steps.changes.outputs.code
+      - if: steps.changes.outputs.lint
         run: pnpm install --frozen-lockfile
       - if: steps.changes.outputs.code
         run: pnpm typecheck
+      - if: steps.changes.outputs.lint
+        run: pnpm lint
       - if: steps.changes.outputs.code
         run: pnpm test
