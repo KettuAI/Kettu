@@ -2,6 +2,12 @@
   "refresh": "刷新",
   "back": "返回",
   "retry": "重试",
+  "pluginSettings": "插件设置",
+  "setup": {
+    "title": "设置好 {{plugin}} 才能在这里看到 {{view}}",
+    "text": "{{plugin}} 需要 {{missing}}，在插件的页上填好就行。",
+    "action": "设置 {{plugin}}"
+  },
   "more": "更多操作",
   "moreFor": "更多操作：{{title}}",
   "empty": "这里还没有内容",

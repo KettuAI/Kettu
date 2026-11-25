@@ -1,7 +1,12 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { PluginActionDecl, PluginViewDecl } from '@shared/plugin-views'
-import type { InstalledKettuPlugin, PluginSetting, PluginTexts } from '@shared/plugins'
+import {
+  missingSettings,
+  type InstalledKettuPlugin,
+  type PluginSetting,
+  type PluginTexts,
+} from '@shared/plugins'
 import { hostAt } from '@renderer/lib/host'
 
 /** What a plugin that is on shows outside its own page: panes for the side panel, actions for Search. */
@@ -17,6 +22,8 @@ export interface PluginSurface {
   revision: string
   panes: PluginViewDecl[]
   actions: PluginActionDecl[]
+  /** The required settings still empty; while any is, its panes show how to set it up. */
+  missing: PluginSetting[]
 }
 
 /** A plugin's settings, which Search finds whether the plugin is on or not. */
@@ -67,6 +74,7 @@ export function surfacesOf(plugins: readonly InstalledKettuPlugin[]): PluginSurf
         revision: `${plugin.updatedAt}`,
         panes,
         actions,
+        missing: missingSettings(plugin),
       },
     ]
   })

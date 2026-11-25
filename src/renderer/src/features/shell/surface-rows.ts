@@ -14,7 +14,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { KIND_ICON } from '@renderer/features/artifacts/kinds'
-import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
+import { languageText } from '@renderer/features/plugin-views/plugin-text'
 import { artifactKind } from '@renderer/features/artifacts/model'
 import { threadArtifacts, type BoardArtifact } from '@renderer/features/board/board-model'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
@@ -219,13 +219,14 @@ export interface PluginPaneChoice {
   plugin: PluginSurface
   viewId: string
   label: string
-  /** The plugin's name, which tells panes of one name apart. */
-  pluginTitle: string
   /** A tab of the panel already shows it, which picking the row selects. */
   open: boolean
 }
 
-/** The panes of the plugins that are on, on the host the panel's session runs on. */
+/**
+ * The panes of the plugins that are on, on the host the panel's session runs on: only the views a
+ * plugin marks as panes, never the ones kept to its own page.
+ */
 export function usePluginPaneChoices(panel: string, projectPath: string): PluginPaneChoice[] {
   const { i18n } = useTranslation()
   const { plugins } = usePluginSurfaces(hostOfPath(projectPath))
@@ -237,7 +238,6 @@ export function usePluginPaneChoices(panel: string, projectPath: string): Plugin
           plugin,
           viewId: pane.id,
           label: languageText(pane.title, i18n.language) || pane.id,
-          pluginTitle: surfaceTitle(plugin, i18n.language),
           open: !!docs?.some((tab) => tab.id === pluginPaneId(plugin.pluginId, pane.id)),
         })),
       ),

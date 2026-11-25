@@ -8,7 +8,7 @@ import { css as generalCss } from '@renderer/components/affect/settings-general'
 import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { HostScopeContext } from '@renderer/stores/host-scope'
-import { returnedTo, type MarketplaceTab } from '@renderer/stores/view'
+import { returnedTo, type MarketplaceTab, type SessionView } from '@renderer/stores/view'
 import { useWindowHostAway, useWindowScope } from '@renderer/stores/window-host'
 import { Directory } from './directory'
 import { ListingPage } from './listing'
@@ -31,9 +31,11 @@ function rememberScroll(key: string, top: number): void {
 export default function MarketplacePage({
   item,
   tab,
+  from,
 }: {
   item: string | null
   tab: MarketplaceTab
+  from?: SessionView
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const scope = useWindowScope()
@@ -94,7 +96,7 @@ export default function MarketplacePage({
           </style>
           <div aria-hidden className="k-mkt-drag app-region-drag" />
           {item ? (
-            <ListingPage key={`${scope.hostId}|${item}`} item={item} tab={tab} />
+            <ListingPage key={`${scope.hostId}|${item}`} item={item} tab={tab} from={from} />
           ) : (
             <Directory key={scope.hostId ?? 'local'} tab={tab} />
           )}

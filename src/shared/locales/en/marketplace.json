@@ -126,6 +126,7 @@
   },
   "listing": {
     "back": "Marketplace",
+    "backToSession": "Back to the session",
     "kind": "MCP server",
     "official": "Official",
     "addedByYou": "Added by you",

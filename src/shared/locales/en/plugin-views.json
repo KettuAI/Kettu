@@ -2,6 +2,12 @@
   "refresh": "Refresh",
   "back": "Back",
   "retry": "Try again",
+  "pluginSettings": "Plugin settings",
+  "setup": {
+    "title": "Set up {{plugin}} to see {{view}} here",
+    "text": "{{plugin}} needs {{missing}}, set once on the plugin’s page.",
+    "action": "Set up {{plugin}}"
+  },
   "more": "More actions",
   "moreFor": "More actions for {{title}}",
   "empty": "Nothing here yet",
