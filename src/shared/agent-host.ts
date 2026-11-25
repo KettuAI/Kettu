@@ -1349,6 +1349,9 @@ export interface HostContract {
   // The entries of a folder on the host that start as `path`'s last part does, for a path being
   // typed: absolute, or `~` for the home folder. It only reads; a folder it cannot read lists none.
   'paths.complete': { params: { path: string }; result: PathCompletion }
+  // A Windows host's drives that answer now, by their roots (`C:\`), to go up past a drive's root;
+  // other systems list none. Older hosts lack it, as their info's `drives` says.
+  'paths.drives': { params: void; result: string[] }
   'sessions.list': { params: { projectPath?: string }; result: SessionSummary[] }
   'sessions.create': {
     // projectPath null: No project, in a new scratch folder.
@@ -2331,6 +2334,7 @@ export const HOST_METHODS = [
   'projects.worktreeSettings',
   'projects.setWorktreeSettings',
   'paths.complete',
+  'paths.drives',
   'sessions.list',
   'sessions.create',
   'sessions.prepare',

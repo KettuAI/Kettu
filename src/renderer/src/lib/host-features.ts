@@ -14,6 +14,7 @@ export type HostFeature = keyof Pick<
   | 'thumbnails'
   | 'partThumbnails'
   | 'pinnedModels'
+  | 'drives'
   | 'ownRelay'
 >
 

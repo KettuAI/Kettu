@@ -1155,6 +1155,7 @@ async function start(): Promise<void> {
       thumbnails: true,
       partThumbnails: true,
       pinnedModels: true,
+      drives: true,
       artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),

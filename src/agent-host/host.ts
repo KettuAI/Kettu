@@ -187,7 +187,7 @@ import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
 import { GitRetains } from './git/retains'
 import type { SkillsListResponse } from './codex/protocol'
-import { completePath } from './path-completion'
+import { completePath, listDrives } from './path-completion'
 import { pathKey } from './paths'
 import { PluginChannels } from './plugin-runtime/channels'
 import { PluginHostClient } from './plugin-runtime/client'
@@ -3772,6 +3772,7 @@ export class AgentHost {
         projects.setWorktreeSettings(projects.match(path).path, settings),
       'paths.complete': ({ path }) =>
         completePath(path, this.options.platform, this.options.homeDir ?? os.homedir()),
+      'paths.drives': () => listDrives(this.options.platform),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
       'sessions.create': async (params, { portId, device }) => {
         // A worktree is made with git, which is found as the agents find it.

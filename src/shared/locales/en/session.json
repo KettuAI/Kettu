@@ -776,7 +776,10 @@
       "repo": "Git repository",
       "note": "Only folders are listed, with paths as {{host}} writes them.",
       "opens": "Opens",
-      "open": "Open"
+      "open": "Open",
+      "thisPc": "This PC",
+      "drives": "Drives",
+      "noDrives": "No drives found."
     },
     "role": {
       "group": "Roles",

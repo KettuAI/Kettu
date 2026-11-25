@@ -752,7 +752,10 @@
       "repo": "Git 仓库",
       "note": "只列文件夹。路径按 {{host}} 的格式。",
       "opens": "将打开",
-      "open": "打开"
+      "open": "打开",
+      "thisPc": "此电脑",
+      "drives": "驱动器",
+      "noDrives": "没有找到驱动器。"
     },
     "role": {
       "group": "角色",
