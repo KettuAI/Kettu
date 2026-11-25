@@ -65,6 +65,7 @@
     "emulatorStart": "The emulator did not start: {{reason}}",
     "emulatorBoot": "The emulator did not finish booting",
     "wentAway": "The device went away",
+    "closedWhileStarting": "The device was closed before it finished starting",
     "shutdownPhysical": "Only simulators and emulators shut down from here",
     "notStreaming": "The device is not streaming",
     "appearanceUnsupported": "The appearance of this device cannot be set from here",

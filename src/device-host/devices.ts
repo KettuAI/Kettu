@@ -38,7 +38,12 @@ import {
 } from './discovery'
 import { DriverError, type DeviceDriver } from './driver'
 import { IosDeviceDriver } from './ios-device'
-import { bootSimulator, IosSimulatorDriver, shutdownSimulator } from './ios-simulator'
+import {
+  bootSimulator,
+  IosSimulatorDriver,
+  shutdownSimulator,
+  waitUntilBooted,
+} from './ios-simulator'
 import { FrameFanout } from './stream'
 
 /** A device nobody watches keeps capturing this long, for a pane that comes straight back. */
@@ -100,6 +105,8 @@ export class DeviceManager {
   private readonly booted = new Map<DeviceId, DeviceId>()
   /** Devices this host is booting, which a listing from before the boot must not forget. */
   private readonly booting = new Set<DeviceId>()
+  /** The simulator boots under way, which a second open of the same simulator waits on. */
+  private readonly boots = new Map<DeviceId, Promise<void>>()
   /** Who uses each device a turn uses, by its id. */
   private readonly controls: SurfaceControls
   private readonly turns = new Map<DeviceId, DeviceTurn>()
@@ -240,22 +247,19 @@ export class DeviceManager {
     const env = await this.deps.env()
     if (found.kind === 'simulator' && found.state !== 'booted' && tools.xcrun) {
       this.setState(id, 'booting')
-      this.booting.add(id)
       try {
-        if (await bootSimulator(tools.xcrun, found.target, env)) {
-          this.booted.set(id, id)
-          this.saveLeases()
-        }
-        // Waits for a listing that began before the boot, too, while it cannot forget the boot.
-        await this.list()
+        await this.bootOnce(id, tools.xcrun, found.target, env)
       } catch (error) {
         this.setState(id, 'shutdown')
         throw new DeviceError(
           'unavailable',
           t('devices.simulatorBoot', { reason: reasonOf(error) }),
         )
-      } finally {
-        this.booting.delete(id)
+      }
+      if (this.leases.get(id) !== sessionId) {
+        throw new DeviceError('unavailable', t('devices.closedWhileStarting'), {
+          reason: 'closed',
+        })
       }
     } else if (found.kind === 'emulator' && found.state === 'shutdown') {
       if (!tools.emulator || !tools.adb)
@@ -289,6 +293,38 @@ export class DeviceManager {
     const info = this.info(id)
     if (!info) throw new DeviceError('not_found', t('devices.wentAway'))
     return info
+  }
+
+  /**
+   * Boots a simulator once however many open it meanwhile. It is this host's once `simctl boot`
+   * started it, even if the wait for it fails; if no session holds it when the boot ends, its tab
+   * closed or its session ended meanwhile, it shuts down again.
+   */
+  private bootOnce(id: DeviceId, xcrun: string, udid: string, env: Env): Promise<void> {
+    let boot = this.boots.get(id)
+    if (!boot) {
+      this.booting.add(id)
+      boot = (async () => {
+        const ours = await bootSimulator(xcrun, udid, env)
+        try {
+          await waitUntilBooted(xcrun, udid, env)
+        } finally {
+          if (ours && this.leases.has(id)) {
+            this.booted.set(id, id)
+            this.saveLeases()
+          } else if (ours) {
+            await shutdownSimulator(xcrun, udid, env)
+          }
+        }
+        // Waits for a listing that began before the boot, too, while it cannot forget the boot.
+        await this.list()
+      })().finally(() => {
+        this.booting.delete(id)
+        this.boots.delete(id)
+      })
+      this.boots.set(id, boot)
+    }
+    return boot
   }
 
   /**

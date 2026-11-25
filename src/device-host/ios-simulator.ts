@@ -18,6 +18,7 @@ import { run } from './discovery'
 import { framePlan, type FramePlan } from './frame'
 import { FRAME_TAG, FrameReader, frameJson, taggedJson } from './framing'
 import { freePort, nodeCommand, packageRoot } from './runtime'
+import { stopOrphanedServeSims } from './serve-sim-orphans'
 
 const START_TIMEOUT_MS = 60_000
 const INPUT_ADMITTED = 0x83
@@ -72,12 +73,16 @@ export class IosSimulatorDriver implements DeviceDriver {
 
   async start(events: DriverEvents): Promise<void> {
     this.events = events
+    const script = serveSimScript()
+    await stopOrphanedServeSims(script, this.udid, this.env, this.log)
     const port = await freePort()
+    // Stopped while it looked for orphans: a serve-sim started now would have nobody to stop it.
+    if (this.stopped) return
     const node = nodeCommand(this.env as NodeJS.ProcessEnv)
     const child = spawn(
       node.file,
       [
-        serveSimScript(),
+        script,
         this.udid,
         '--require-token',
         '-q',
@@ -413,7 +418,7 @@ export class IosSimulatorDriver implements DeviceDriver {
   }
 }
 
-/** Boots the simulator and waits until it is up; false when it was booted already. */
+/** Starts booting the simulator; false when it was booted already. */
 export async function bootSimulator(xcrun: string, udid: string, env: Env): Promise<boolean> {
   let booted = true
   await run(xcrun, ['simctl', 'boot', udid], env, 120_000).catch((error: { stderr?: string }) => {
@@ -421,8 +426,12 @@ export async function bootSimulator(xcrun: string, udid: string, env: Env): Prom
     if (!/current state: Booted/i.test(error.stderr ?? '')) throw error
     booted = false
   })
-  await run(xcrun, ['simctl', 'bootstatus', udid, '-b'], env, 180_000)
   return booted
+}
+
+/** Waits until a simulator that is booting is up. */
+export async function waitUntilBooted(xcrun: string, udid: string, env: Env): Promise<void> {
+  await run(xcrun, ['simctl', 'bootstatus', udid, '-b'], env, 180_000)
 }
 
 export async function shutdownSimulator(xcrun: string, udid: string, env: Env): Promise<void> {
