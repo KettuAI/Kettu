@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { GithubIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { GithubIcon, NewTwitterIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
@@ -14,13 +14,24 @@ import { useNow } from '@renderer/lib/use-now'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, restartToUpdate, useUpdatesStore } from '@renderer/stores/updates'
 import { AboutStarButton } from '@renderer/features/github-star/star-prompts'
-import { ControlError, LinkButton, SetButton, SettingSelect, Skel, Spin } from './controls'
+import {
+  ControlError,
+  CopyAction,
+  LinkButton,
+  SetButton,
+  SettingSelect,
+  Skel,
+  Spin,
+} from './controls'
 import { FlashMark, PageHeader, RowText } from './rows'
 import { useApply } from './use-apply'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
 
 const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
+const NEW_ISSUE_URL = `${SOURCE_URL}/issues/new/choose`
+const CONTACT_EMAIL = 'hello@kettu.sh'
+const X_URL = 'https://x.com/KettuAI'
 
 /**
  * The top of the About page: its title, then a card with Kettu's icon, name, line, version and
@@ -293,5 +304,33 @@ export function DownloadSource() {
         className="k-select--wide"
       />
     </>
+  )
+}
+
+export function NewIssue() {
+  const { t } = useTranslation('settings')
+  return (
+    <LinkButton href={NEW_ISSUE_URL} icon={<Icon icon={GithubIcon} size={14} />}>
+      {t('about.issues.open')}
+    </LinkButton>
+  )
+}
+
+/** The address, selectable, since the app opens no mail links. */
+export function ContactEmailText() {
+  return <span data-selectable="">{CONTACT_EMAIL}</span>
+}
+
+export function CopyContactEmail() {
+  const { t } = useTranslation('settings')
+  return <CopyAction text={CONTACT_EMAIL} label={t('about.email.copy')} />
+}
+
+export function FollowOnX() {
+  const { t } = useTranslation('settings')
+  return (
+    <LinkButton href={X_URL} icon={<Icon icon={NewTwitterIcon} size={14} />}>
+      {t('about.x.open')}
+    </LinkButton>
   )
 }
