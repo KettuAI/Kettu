@@ -3,146 +3,75 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./assets/lockup-horizontal-dark.svg">
-    <img src="./assets/lockup-horizontal.svg" alt="Kettu" width="300">
+    <img src="./assets/lockup-horizontal.svg" alt="Kettu" width="280">
   </picture>
 </h1>
 
-[![版本](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
-[![下载量](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#安装)
-[![Agent](https://img.shields.io/badge/Agent-48-0f766e?style=flat-square&labelColor=3f3f46)](#支持的-agent)
-[![许可证](https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
-[![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
+<p>
+  <a href="https://github.com/KettuAI/Kettu/releases/latest"><img src="https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=3f3f46&color=fa5615" alt="最新版本"></a>
+  <a href="https://github.com/KettuAI/Kettu/releases"><img src="https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=3f3f46&color=15803d" alt="总下载量"></a>
+  <a href="#安装"><img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46" alt="支持平台"></a>
+  <a href="#支持的-agent"><img src="https://img.shields.io/badge/Agent-48-0f766e?style=flat-square&labelColor=3f3f46" alt="支持 48 款 Agent"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=3f3f46&color=71717a" alt="开源许可证"></a>
+  <a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46" alt="LINUX DO"></a>
+</p>
 
 <h3>颜值也是生产力。</h3>
 
-你所有的编码 Agent，并排在一个好看又顺手的窗口里。
+<p>
+  把 <b>Claude Code</b>、<b>Codex</b>、<b>OpenCode</b>、<b>Pi</b> 等 48 款编码 Agent 放进同一个精致顺手的工作台——<br>
+  在桌面并排高效协作，在手机与浏览器里随时随地接力。
+</p>
 
-[**下载**](https://github.com/KettuAI/Kettu/releases/latest) · [官网](https://www.kettu.sh/zh-CN/) · [文档](https://www.kettu.sh/zh-CN/docs/) · [路线图](./ROADMAP.zh-CN.md) · [反馈](https://github.com/KettuAI/Kettu/issues/new/choose) · [English](./README.md)
+<p>
+  <a href="#安装"><b>立即下载</b></a> ·
+  <a href="https://app.kettu.sh">网页版</a> ·
+  <a href="https://www.kettu.sh/zh-CN/">官网</a> ·
+  <a href="https://www.kettu.sh/zh-CN/docs/">文档</a> ·
+  <a href="https://github.com/KettuAI/relay">自建中继</a> ·
+  <a href="./ROADMAP.zh-CN.md">路线图</a> ·
+  <a href="https://www.kettu.sh/zh-CN/community/">交流群</a> ·
+  <a href="./README.md">English</a>
+</p>
 
 </div>
 
-<img src="./assets/picture-cover.webp" alt="Kettu 界面：两个 Claude Code 会话并排，一个请求编辑文件并显示 diff，另一个用带选项的卡片提问">
-
-> [!NOTE]
-> Kettu 还是早期预览版。桌面应用的样子已经定下来，细节还在快速变化，欢迎[反馈问题](https://github.com/KettuAI/Kettu/issues)。
-
-## 功能
-
-<p>
-  <img src="./assets/picture-sessions.webp" width="49%" alt="两个会话并排在一个窗口里，侧边栏标出哪些会话在等你">
-  <img src="./assets/picture-control.webp" width="49%" alt="授权卡片显示 Claude Code 想编辑的文件的 diff，有拒绝、允许一次和始终允许">
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/hero-dark.webp">
+    <img src="./assets/hero-light.webp" width="100%" alt="Kettu 并排运行 Claude Code 与 Codex：左侧展示语法高亮的文件修改 Diff 并等待一键审批，右侧展示结构化多步提问卡片">
+  </picture>
 </p>
 
-<p>
-  <img src="./assets/picture-artifacts.webp" width="49%" alt="会话旁边是 Agent 做的每周习惯报告页面">
-  <img src="./assets/picture-workflows.webp" width="49%" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
-</p>
+<a id="安装"></a>
 
-<p>
-  <img src="./assets/picture-marketplace.webp" width="49%" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
-  <img src="./assets/picture-dark.webp" width="49%" alt="深色模式下并排的同样两个会话">
-</p>
+## 下载与安装
 
-### Agent 与会话
+Kettu 开源免费。本机与局域网内的全部功能**无需注册账号**即可直接使用。
 
-- **48 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。暂时不用的可以关掉，会话不会丢。
-- **并排**：多个会话同时跑，窗口最多分成九格。侧边栏标出哪个在干活、哪个在等你、哪个做完了。
-- **一键授权**：Agent 要运行命令或改文件时，先看清它碰哪些文件，再按一个键允许或拒绝。
-- **问题卡片**：Agent 的多个问题在一张卡片里逐个回答，一起发出。
-- **计划**：Agent 的计划和进度显示在顶栏。
-- **换 Agent**：两轮之间把会话交给另一个 Agent，之前的对话一起带过去。
-- **子 Agent**：显示在父会话下面，它的请求也在那里回答。
-- **排队和插话**：Agent 干活时，下一条消息可以排队，也可以中途插话。
-- **回复选中的段落**：选中回复里的一段，只针对这段回复。
-- **附件**：粘贴图片，附加文件和文件夹，用 `@` 引用项目文件。
-- **分叉**：从任意一条回复分出新会话，Agent 还在干活时也行。
-- **Pull Request 和 Issue**：回复里的 GitHub 链接显示当前状态，会话的 Pull Request 显示在侧边栏。
-- **通知**：会话需要你时提醒你。
-- **交接**：一个会话可以把活交给另一个 Agent，比如让 Codex 审查 Claude Code 写的代码，再拿回结果。
-- **工作流**：让一个任务按流程一步步走，比如调研、设计、实现和审查，每一步一个 Agent 会话，在该你看的地方停下来。
-- **总览**：一个页面看全所有会话和任务的状态、进行到哪一步、有什么等你看。
-- **用量**：按天、模型和项目统计 token 和费用，每个账号的套餐额度画成圆环。
+| 平台              | 架构与环境要求                                                                        | 获取方式                                                                                                                                                                                                                                        |
+| :---------------- | :------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macOS**         | Apple 芯片 & Intel · 已签名并通过 Apple 公证的 `.dmg`                                 | [**前往官网下载**](https://www.kettu.sh/zh-CN/download/) · [GitHub Releases](https://github.com/KettuAI/Kettu/releases/latest)                                                                                                                  |
+| **Windows**       | x64 & Arm64 · `setup.exe` _（暂未签名，SmartScreen 提示时点「更多信息 → 仍要运行」）_ | [**前往官网下载**](https://www.kettu.sh/zh-CN/download/) · [GitHub Releases](https://github.com/KettuAI/Kettu/releases/latest)                                                                                                                  |
+| **Linux**         | x64 & Arm64 · `.AppImage` _（需 `libfuse2`，Ubuntu 24.04+ 为 `libfuse2t64`）_         | [**x64 `.AppImage`**](https://download.kettu.sh/latest/download/Kettu-x86_64.AppImage) · [**Arm64 `.AppImage`**](https://download.kettu.sh/latest/download/Kettu-arm64.AppImage) · [Releases](https://github.com/KettuAI/Kettu/releases/latest) |
+| **iPhone & iPad** | 原生 SwiftUI 应用 · 需 iOS 18+，配合电脑端 Kettu 使用                                 | [**加入 TestFlight 公开测试**](https://testflight.apple.com/join/zsbFyAPQ)                                                                                                                                                                      |
+| **Android**       | 原生 Kotlin 应用，支持应用内在线更新 · 需 Android 8.0+                                | [**直接下载 `Kettu.apk`**](https://download.kettu.sh/android/latest/download/Kettu.apk)                                                                                                                                                         |
+| **Web 客户端**    | 任意现代浏览器 · 跨网络端到端加密连回你的电脑                                         | [**打开 `app.kettu.sh`**](https://app.kettu.sh)                                                                                                                                                                                                 |
 
-### 工作台
+<details>
+<summary><b>远程开发机 Daemon、Docker 与开源自建中继部署</b></summary>
 
-- **Diff**：Agent 改了哪些文件、改了什么，一目了然。
-- **文件**：用标签页查看、预览和编辑项目文件。
-- **终端**：每个会话都有自己的终端。
-- **Git**：分支、改动和 Pull Request 的检查状态。
-- **Worktree**：会话可以在自己的 Git worktree 里干活，由 Kettu 创建和清理。
-- **内置浏览器**：Agent 能打开页面、点击、输入和截图，你随时可以接手。
-- **Artifacts**：Agent 做的网页、文档、幻灯片和画布。画布上的画框可以排版、标注后交给 Agent，也可以留言、自己编辑，或导出成 Word 和 PowerPoint。
-- **发布到 Kettu**：给 Artifact 一个 kettu.page 上的页面，可以只有自己能看、凭访问码看或公开。
-- **Computer use**：打开之后，Agent 能操作你电脑上的应用。
-- **Routines**：按时让 Agent 干活，每次运行都留成会话。
-- **Marketplace**：在一个地方发现、安装和管理给 Agent 用的插件、Skills、MCP 服务器和工作流。
-- **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
+<br>
 
-### 移动设备
-
-- **就在会话旁边**：iOS 模拟器、Android 模拟器，以及 iPhone 和 Android 真机，各自装在带实体按键的外框里。
-- **你和 Agent 都能操作**：你可以直接在屏幕上点按、滑动和输入，也可以让 Agent 打开应用和网页、点按、输入、切换浅色和深色、截图，你随时可以接手。
-- **为开发应用准备**：Agent 能安装你的构建、启动它并读取日志。
-
-### 随处可用
-
-<img src="./assets/picture-ios.webp" alt="两台 iPhone 上的 Kettu：需要你处理的排在最前的会话列表，和一个请求编辑文件的会话">
-
-- **任何浏览器、任何网络**：打开 [app.kettu.sh](https://app.kettu.sh)，经 Kettu 的中继连回你的电脑，不用 VPN，也不用开端口。
-- **你自己的网络**：手机、平板或浏览器扫码配对，经 Wi-Fi、VPN 或 SSH 转发继续你的会话，不用账号。
-- **另一台电脑**：在另一台电脑的 Kettu 里用这台电脑上的会话。
-- **开发机**：填 SSH 地址就能加进来，Kettu 会在那边自己装好。
-- **端到端加密**：中间经过的任何一方都读不到你的会话，中继也一样。
-
-### iPhone 和 iPad
-
-- **会话装进口袋**：每台电脑上的会话都在一个列表里，需要你处理的排在最前面。正在 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。
-- **随时随地回应**：允许或拒绝一条命令，回答 Agent 的问题，批准它的计划，回复，或者新建会话。
-- **通知**：会话需要你时提醒你，在锁屏上就能回应。
-- **Artifacts、Routines 和用量**：打开 Agent 做的东西，运行一个 Routine，查看套餐额度。
-
-### Android
-
-- **在 Android 上用 Kettu**：[下载应用](https://download.kettu.sh/android/latest/download/Kettu.apk)，全屏打开 app.kettu.sh，有自己的图标，登录你的 Kettu 账号就能用。
-
-### 外观
-
-- 跟着系统切换、整个窗口一起平滑过渡的浅色和深色模式，主题库里的主题或你自己的主题，简体中文和英文，macOS 毛玻璃侧边栏。
-
-### 即将推出
-
-- **原生 Android 应用**：排在 iPhone 和 iPad 应用之后。
-
-## 隐私
-
-- 会话、代码和文件都留在你自己的电脑上，Kettu 不收集它们，也不收集你的使用情况。
-- 不保留 Agent 的登录凭据。
-- Kettu 账号是可选的。你自己电脑上和自己网络里的一切不登录也能用；登录后多出中继、app.kettu.sh、发布到 kettu.page 和问题报告。
-- 问题报告只在你发送时才离开你的电脑。
-- Kettu 的下载服务会记录每次下载和检查更新的版本、系统、地区和 IP 地址，用来统计下载量。不想经过它，就在「设置 › 关于 › 下载来源」里选「仅 GitHub」。
-
-## 安装
-
-从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载：
-
-- **macOS**（Apple 芯片和 Intel）：对应芯片的 `.dmg`
-- **Windows**（x64 和 Arm）：`setup.exe`。还没有签名，SmartScreen 提示时点「更多信息」，再点「仍要运行」。
-- **Linux**（x64 和 Arm）：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
-
-在 iPhone 或 iPad 上：加入 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。需要 iOS 18 或更高版本，电脑上需要有 Kettu。
-
-在 Android 手机或平板上：下载 [Kettu.apk](https://download.kettu.sh/android/latest/download/Kettu.apk)，系统询问时允许安装。需要 Android 8.0 或更高版本并装有 Chrome，电脑上需要有 Kettu。
-
-在浏览器里：[app.kettu.sh](https://app.kettu.sh)，登录和你电脑上的 Kettu 同一个 Kettu 账号。
-
-服务器或开发机（[文档](https://www.kettu.sh/zh-CN/docs/devices/daemon/)）：
+**Linux / macOS 服务器或无头开发机**（[查看文档](https://www.kettu.sh/zh-CN/docs/devices/daemon/)）：
 
 ```sh
 curl -fsSL https://kettu.sh/install | sh
 ```
 
-也可以用 Docker（amd64 和 Arm）：Kettu 的数据放在 `kettu` 卷里，你的项目放在 `/workspace`：
+_（你也可以直接在桌面端「设置 › 主机」中填入 SSH 地址，Kettu 会自动在远端完成部署并接入。）_
+
+**Docker 部署**（支持 `amd64` 与 `arm64`，主机配对身份保存在 `kettu` 卷，代码挂载于 `/workspace`）：
 
 ```sh
 docker run -d --name kettu -p 4567:4567 -v kettu:/home/node -v ~/code:/workspace ghcr.io/kettuai/kettu
@@ -150,15 +79,84 @@ docker exec kettu kettu direct add <服务器地址>:4567
 docker exec -it kettu kettu pair
 ```
 
-容器只知道自己的地址，所以用 `direct add` 把服务器的地址告诉设备。`kettu pair` 会显示添加设备的配对码。请保留 `kettu` 卷：设备配对的主机身份就存在里面。更新时拉取新镜像，再重新运行容器。
+**私有化自建中继**（[`KettuAI/relay`](https://github.com/KettuAI/relay) —— 在你自己的服务器上运行端到端加密中继与网页版，无需 Kettu 账号）：
+
+```sh
+curl -fsSL https://kettu.sh/relay/install | sudo sh -s -- --domain relay.example.com
+```
+
+</details>
+
+## 核心体验
+
+### 多 Agent 并排调度，一切尽在掌控
+
+- **直接复用你本机的 Agent**：原生接入 Claude Code、Codex、OpenCode、Pi、Cline、DeepSeek、Google Antigravity 等 48 款编码 Agent，沿用你已有的安装、订阅账号与配置；暂不使用的 Agent 可随时关闭而不丢失历史会话。
+- **最多九分屏与 Git Worktree 隔离**：多个会话并行推进，Kettu 可自动为各会话创建和清理独立 Git Worktree，避免改动互相冲突；侧边栏实时标出哪个会话正在运行、哪个在等你拍板、哪个已经完成。
+- **跨 Agent 无缝交接与中途引导**：两轮对话之间可将上下文完整移交另一个 Agent（例如让 Claude Code 编写实现，再交给 Codex 做审查），支持从任意回复分叉（Fork）、运行中消息排队或即时插话。
+- **清晰透明的审批与提问卡片**：修改文件前先看语法高亮 Diff，高风险命令明确标注，按一个键即可允许或拒绝；Agent 的多项提问收纳在同一张结构化选项卡片中逐步作答，执行计划常驻顶栏实时更新。
+
+### 就在会话旁的一体化研发工作台
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/workbench-dark.webp">
+    <img src="./assets/workbench-light.webp" width="100%" alt="Kettu 会话旁侧的统一单行胶囊标签栏，集中打开 Artifact 页面、项目文件树、代码 Diff 与 Git 状态">
+  </picture>
+</p>
+
+- **统一单行侧边面板**：文件树、代码 Diff、Git 分支与检查、每会话独立终端、后台任务面板（Board）、旁路问答（Side Chat）与 Artifacts 全部收纳在会话右侧的一排清爽标签页里，即点即开。
+- **Artifacts 预览、批注与发布**：Agent 生成的网页、文档、幻灯片与画布直接在会话旁实时渲染。你可以圈选元素留言给 Agent、直接动手编辑、导出为 Word 或 PowerPoint，或一键发布到 `kettu.page`（支持仅自己可见、访问码保护或公开访问）。
+- **代码、PDF 与 Office 原生预览**：多标签页阅读和编辑项目源码，直接预览 PDF、Word 与 Excel 文件；对话回复中的 GitHub PR 与 Issue 链接会实时同步最新状态。
+- **内置浏览器、移动设备联调与电脑操控**：Agent 可驱动内置浏览器打开本地服务测试截图，也可直接操控同屏展示的 iOS 模拟器、Android 模拟器、手机真机乃至桌面应用（Computer Use），而你随时可以一键接管。
+
+### 多阶段可视化工作流、跨 Agent 插件市场与额度洞察
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/workflows-dark.webp">
+    <img src="./assets/workflows-light.webp" width="100%" alt="Kettu 可视化工作流流程图：按调研、设计、计划、开发、Codex 交叉代码审查与发布自动推进任务">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/marketplace-dark.webp">
+    <img src="./assets/marketplace-light.webp" width="100%" alt="Kettu Marketplace 插件市场：展示带真实图标的 Linear、飞书/Lark、ntfy、Sentry 官方沙箱插件及 Skills、MCP 服务器与工作流">
+  </picture>
+</p>
+
+- **Workflows 多 Agent 流水线**：按可视化流程图一步步推进调研、设计、计划、开发与异构 Agent 交叉代码审查，在需要人工把关的节点自动停下等你审阅，并在 **总览（Overview）** 页集中掌控全部任务进度。
+- **装一次、所有 Agent 通用的插件体系**：内置 **Marketplace** 汇集运行在独立 WebAssembly 沙箱中的 Kettu 插件（如 Linear、飞书 / Lark 通知、Sentry、ntfy 等）、Skills、工作流以及一键 OAuth 授权连接的 MCP 服务器——安装一次，即可赋能你使用的全部 Agent。
+- **Routines 定时运行与套餐额度圆环**：按时间表自动运行巡检或日报任务；在 **用量（Usage）** 页以紧凑网格与同心圆环实时查看各账号的 5 小时 / 周套餐余量、Token 消耗与费用趋势。
+
+### 离开电脑也能随时接力，全程端到端加密
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/mobile-dark.webp">
+    <img src="./assets/mobile-light.webp" width="100%" alt="原生运行在 iOS 与 Android 上的 Kettu：多电脑聚合会话收件箱、会话内代码 Diff 审批与移动端提问卡片">
+  </picture>
+</p>
+
+- **原生 iOS 与原生 Android 应用**：将名下所有电脑与开发机的会话装进口袋，待你处理的请求自动置顶；支持锁屏通知提醒，随时随地审批命令、回答问题、查阅 Artifacts 或发起新任务。
+- **任意浏览器、局域网直连或 SSH**：打开 [`app.kettu.sh`](https://app.kettu.sh) 无需公网端口或 VPN 即可连回电脑；也支持在同一局域网 / Tailscale / SSH 转发下免账号扫码直连，或在多台电脑的 Kettu 之间互连。
+- **支持私有化自建中继**：团队有内网合规要求或希望完全自主可控？只需一条命令即可在自有服务器上部署开源的 [`kettu-relay`](https://github.com/KettuAI/relay)（单个 Go 程序或 Docker 镜像，同时托管网页版客户端）。
+- **本地优先与隐私保护**：会话、代码、文件与 Agent 凭据始终留在你自己的电脑上，Kettu 不收集任何对话内容或使用行为；所有远程连接均采用端到端加密，无论官方还是自建中继都只转发无法解密的密文。_（下载服务仅记录下载与更新检查的版本、系统、地区和 IP 以统计下载量；如需关闭，可在「设置 › 关于 › 下载来源」切换为「仅 GitHub」。）_
+
+<a id="支持的-agent"></a>
 
 ## 支持的 Agent
 
+Kettu 通过官方原生 SDK 或专属服务接口深度驱动 Claude Code、Codex、OpenCode、Pi、Cline 与 DeepSeek Harness，并通过 Agent Client Protocol (ACP) 完整支持其余 42 款编码 Agent。
+
 <details>
-<summary><b>全部 48 个 Agent</b></summary>
+<summary><b>查看全部 48 款支持的 Agent</b></summary>
+
+<br>
 
 |                                                                     |                                                                             |                                                       |                                                                                     |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| :------------------------------------------------------------------ | :-------------------------------------------------------------------------- | :---------------------------------------------------- | :---------------------------------------------------------------------------------- |
 | [Claude Code](https://github.com/anthropics/claude-code)            | [Codex](https://github.com/openai/codex)                                    | [OpenCode](https://opencode.ai)                       | [Pi](https://pi.dev)                                                                |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | [fast-agent](https://fast-agent.ai)                                         | [Minion Code](https://github.com/femto/minion-code)   | [Auggie CLI](https://github.com/augmentcode/auggie)                                 |
 | [Codebuddy Code](https://www.codebuddy.cn/cli/)                     | [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | [DimCode](https://dimagent.cn/)                       | [Dirac](https://dirac.run)                                                          |
@@ -174,12 +172,24 @@ docker exec -it kettu kettu pair
 
 </details>
 
-缺了你在用的 Agent？[告诉我们](https://github.com/KettuAI/Kettu/issues/new/choose)。
+缺少你常用的 Agent？欢迎[提 Issue 告诉我们](https://github.com/KettuAI/Kettu/issues/new/choose)。
 
-## 反馈
+## 开源生态
 
-欢迎提 [Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，用什么语言都行；也可以在应用里用「帮助 › 报告问题…」发一份报告。安全问题请按 [SECURITY.md](./SECURITY.md) 报告。想自己构建，请看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+| 仓库                                                          | 说明                                                                 |
+| :------------------------------------------------------------ | :------------------------------------------------------------------- |
+| [**KettuAI/Kettu**](https://github.com/KettuAI/Kettu)         | 桌面工作台（macOS、Windows、Linux）、服务端无头 Daemon 与 Web 客户端 |
+| [**KettuAI/relay**](https://github.com/KettuAI/relay)         | 轻量级 Go 自建中继服务（`kettu-relay`），用于端到端加密远程连接      |
+| [**KettuAI/plugins**](https://github.com/KettuAI/plugins)     | 发布于 Kettu Marketplace（`@kettu-labs`）的官方沙箱插件源码          |
+| [**KettuAI/workflows**](https://github.com/KettuAI/workflows) | 发布于 Kettu Marketplace 的官方多 Agent 工作流模板                   |
+| [**KettuAI/themes**](https://github.com/KettuAI/themes)       | 官方与社区配色主题库                                                 |
+
+## 社区与参与贡献
+
+- **问题反馈**：欢迎用任意语言提交 [Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，或在应用内通过「帮助 › 报告问题…」直接发送诊断报告。
+- **用户交流群**：访问 [kettu.sh/zh-CN/community](https://www.kettu.sh/zh-CN/community/) 获取最新微信交流群二维码。
+- **源码构建与安全报告**：从源码构建请参阅 [CONTRIBUTING.md](./CONTRIBUTING.md)，安全漏洞请按 [SECURITY.md](./SECURITY.md) 私密上报。
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE)。插件 API 的类型和示例在 [`packages/plugin-api`](./packages/plugin-api)，用 [MIT 许可证](./packages/plugin-api/LICENSE)，插件可以直接复制。
+采用 [AGPL-3.0](./LICENSE) 开源许可（含 [LICENSE-EXCEPTION](./LICENSE-EXCEPTION) 中的 affectUI 附加授权说明）。[`packages/plugin-api`](./packages/plugin-api) 下的插件类型定义与示例采用 [MIT 许可证](./packages/plugin-api/LICENSE)，方便插件开发者直接引用。
