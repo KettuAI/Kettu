@@ -28,6 +28,7 @@ import {
   type FileMatch,
   type FileSearch,
   type FileWritten,
+  type FolderList,
 } from '@shared/files'
 import type { MediaFile, MediaGrant } from '@shared/media'
 import type { Platform } from '@shared/platform'
@@ -201,16 +202,26 @@ export class FilesService {
 
   /** The files under `root`, relative and sorted. `root` is a canonical project path. */
   async list(root: string): Promise<FileList> {
-    const [listed, deleted, untracked] = await Promise.all([
+    const [listed, deleted, untracked, excluded] = await Promise.all([
       this.git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']),
       this.git(root, ['ls-files', '-z', '--deleted']),
       // Untracked folders, each once as `name/` however much it holds, where empty ones may be.
       this.git(root, ['ls-files', '-z', '--others', '--directory', '--exclude-standard']),
+      // An ignored folder once as `name/`, which git does not go into.
+      this.git(root, [
+        'ls-files',
+        '-z',
+        '--others',
+        '--ignored',
+        '--directory',
+        '--exclude-standard',
+      ]),
     ])
     const files = gitOutput('git ls-files', listed)
     const gone = gitOutput('git ls-files --deleted', deleted)
     const folders = gitOutput('git ls-files --directory', untracked)
-    if (files === null || gone === null || folders === null) {
+    const ignored = gitOutput('git ls-files --ignored', excluded)
+    if (files === null || gone === null || folders === null || ignored === null) {
       return this.walk(root, this.limits.list)
     }
     const missing = new Set(gone.split('\0'))
@@ -221,8 +232,51 @@ export class FilesService {
     // A folder whose tracked files are all gone from disk is no untracked folder to git.
     const emptied = this.foldersWithout(gone.split('\0'), paths)
     const empty = await this.emptyFolders(root, [...folders.split('\0'), ...emptied])
-    if (paths.length <= this.limits.list) return { paths, folders: empty, truncated: false }
-    return { paths: paths.slice(0, this.limits.list), folders: empty, truncated: true }
+    const truncated = paths.length > this.limits.list
+    const kept = truncated ? paths.slice(0, this.limits.list) : paths
+    // Git names the project's own folder when it ignores all of it, so nothing else is listed.
+    if (ignored.split('\0').includes('./')) {
+      const top = await this.realRoot(root)
+      const own = await this.children(top, top, '')
+      return {
+        paths: kept,
+        folders: empty,
+        ignored: own.files,
+        ignoredFolders: own.folders,
+        truncated: truncated || own.truncated,
+      }
+    }
+    const left = this.ignoredEntries(ignored, this.limits.list - kept.length)
+    return {
+      paths: kept,
+      folders: empty,
+      ignored: left.files,
+      ignoredFolders: left.folders,
+      truncated: truncated || left.truncated,
+    }
+  }
+
+  /**
+   * The ignored files and folders in `git ls-files --ignored --directory` output, at most `limit`
+   * of them. Git also names, as `name/`, an untracked folder it went into because only ignored
+   * entries are in it; that folder is no ignored one, and what it holds follows it in the output.
+   */
+  private ignoredEntries(
+    output: string,
+    limit: number,
+  ): { files: string[]; folders: string[]; truncated: boolean } {
+    const entries = sortedUnique(output.split('\0').filter((entry) => entry !== ''))
+    const files: string[] = []
+    const folders: string[] = []
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!
+      const folder = entry.endsWith('/')
+      if (folder && entries[i + 1]?.startsWith(entry)) continue
+      if (files.length + folders.length >= limit) return { files, folders, truncated: true }
+      if (folder) folders.push(entry.slice(0, -1))
+      else files.push(entry)
+    }
+    return { files, folders, truncated: false }
   }
 
   /**
@@ -299,6 +353,61 @@ export class FilesService {
       for (const line of result.stdout.split('\n')) ignored.add(line.replace(/\/$/, ''))
     }
     return sortedUnique(found.filter((folder) => !ignored.has(folder)))
+  }
+
+  /**
+   * The files and folders directly in a folder of the project, sorted, leaving out `.git`. A link
+   * to a file is a file; a link to a folder is a folder only while it stays in the project.
+   */
+  async listFolder(root: string, relativePath: string): Promise<FolderList> {
+    const relative = this.editable(relativePath)
+    return this.children(await this.realRoot(root), await this.folder(root, relative), relative)
+  }
+
+  /**
+   * What `listFolder` gives for the folder at the real path `real`, '' being the project's own;
+   * `top` is the project's real path.
+   */
+  private async children(top: string, real: string, relative: string): Promise<FolderList> {
+    let entries
+    try {
+      entries = await readdir(real, { withFileTypes: true })
+    } catch (error) {
+      throw this.fsError(error, relative)
+    }
+    entries.sort((a, b) => byCodeUnit(a.name, b.name))
+    const files: string[] = []
+    const folders: string[] = []
+    for (const entry of entries) {
+      if (entry.name === '.git') continue
+      const kind = entry.isSymbolicLink()
+        ? await this.linkKind(top, this.paths.join(real, entry.name))
+        : entry.isDirectory()
+          ? 'folder'
+          : entry.isFile()
+            ? 'file'
+            : null
+      if (kind === null) continue
+      if (files.length + folders.length >= this.limits.list) {
+        return { files, folders, truncated: true }
+      }
+      const path = relative === '' ? entry.name : `${relative}/${entry.name}`
+      if (kind === 'folder') folders.push(path)
+      else files.push(path)
+    }
+    return { files, folders, truncated: false }
+  }
+
+  /** What a link leads to: a file, a folder in the project at `top`, or nothing to list. */
+  private async linkKind(top: string, link: string): Promise<'file' | 'folder' | null> {
+    try {
+      const info = await stat(link)
+      if (info.isFile()) return 'file'
+      if (!info.isDirectory()) return null
+      return this.within(top, await realpath(link)) ? 'folder' : null
+    } catch {
+      return null
+    }
   }
 
   /**

@@ -11,6 +11,7 @@
     "allFiles": "All files",
     "findFile": "Find file",
     "openInEditor": "Open in editor",
+    "showIgnored": "Show ignored files",
     "close": "Close panel",
     "title": "Files",
     "more": "More"
@@ -174,6 +175,9 @@
     "nameTaken": "“{{name}}” already exists here. Choose another name.",
     "taken": "Something with that name is already there.",
     "failed": "Couldn't change the files: {{message}}",
+    "readFailed": "Couldn't read {{name}}: {{message}}",
+    "readTruncated_one": "Showing the first item in {{name}}.",
+    "readTruncated_other": "Showing the first {{count, number}} items in {{name}}.",
     "trash": {
       "mac": "Trash",
       "windows": "Recycle Bin",

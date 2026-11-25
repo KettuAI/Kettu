@@ -2528,6 +2528,13 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'files.list': project,
+    'files.listFolder': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: relativePath(o, 'path', platform),
+      }
+    },
     'files.read': (params) => {
       const o = fields(params)
       const asText = optionalFlag(o, 'asText')

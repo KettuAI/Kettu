@@ -11,6 +11,7 @@
     "allFiles": "所有文件",
     "findFile": "查找文件",
     "openInEditor": "在编辑器中打开",
+    "showIgnored": "显示被忽略的文件",
     "close": "关闭面板",
     "title": "文件",
     "more": "更多"
@@ -171,6 +172,8 @@
     "nameTaken": "这里已经有“{{name}}”了，换个名字吧。",
     "taken": "那里已经有同名的文件或文件夹。",
     "failed": "没能修改文件：{{message}}",
+    "readFailed": "没能读取 {{name}}：{{message}}",
+    "readTruncated_other": "只显示 {{name}} 里的前 {{count, number}} 项。",
     "trash": {
       "mac": "废纸篓",
       "windows": "回收站",

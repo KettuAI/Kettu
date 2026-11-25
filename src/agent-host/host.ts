@@ -4067,6 +4067,8 @@ export class AgentHost {
       'attachments.held': ({ ids }) => this.attachments.held(ids),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),
+      'files.listFolder': ({ projectPath, path }) =>
+        this.filesCall(projectPath, (root) => this.files.listFolder(root, path)),
       'files.read': ({ projectPath, path, asText }, { device }) =>
         // A device's media is read through its remote host, never main's media scheme.
         this.filesCall(projectPath, (root) => this.files.read(root, path, asText, device !== null)),

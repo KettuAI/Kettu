@@ -731,6 +731,18 @@ describe('createValidators', () => {
     expect(posix['files.list']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
     rejects(() => posix['files.list']({ projectPath: 'p' }))
 
+    const listFolder = posix['files.listFolder']
+    expect(listFolder({ projectPath: '/p', path: 'dist', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: 'dist',
+    })
+    rejects(() => listFolder({ projectPath: '/p' }))
+    rejects(() => listFolder({ projectPath: '/p', path: '' }))
+    rejects(() => listFolder({ projectPath: '/p', path: '/etc' }))
+    rejects(() => listFolder({ projectPath: '/p', path: 'a\0b' }))
+    rejects(() => listFolder({ projectPath: 'p', path: 'dist' }))
+    rejects(() => windows['files.listFolder']({ projectPath: 'C:\\p', path: 'C:\\Windows' }))
+
     const read = posix['files.read']
     expect(read({ projectPath: '/p', path: 'src/a.ts', extra: 1 })).toEqual({
       projectPath: '/p',

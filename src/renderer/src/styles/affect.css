@@ -2436,6 +2436,10 @@ li[data-row-exit='dust'] > * {
 .kp-node[aria-current][data-chosen] {
   background: var(--bg-selected);
 }
+/* Ignored by git. */
+.kp-node[data-ignored] .kp-node__name {
+  color: var(--text-disabled);
+}
 /* Cut and waiting to be pasted. */
 .kp-node[data-cut] > :not(.kp-node__chev) {
   opacity: 0.5;
