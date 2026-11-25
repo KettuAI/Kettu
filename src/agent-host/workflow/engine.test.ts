@@ -778,6 +778,102 @@ describe('the task engine', () => {
     expect(h.sent.at(-1)!.text).toContain('Please finish')
   })
 
+  it('holds a step a used-up plan limit stopped, without a reminder, until its session goes on', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    const before = h.sent.length
+    const held = { kind: 'limit', agentId: 'claude-code', resetsAt: 5_000 }
+    h.engine.turnEnded(session, { byUser: false, limit: { continuesAt: 5_000 } })
+    h.engine.turnEnded(session, { byUser: false, limit: { continuesAt: 5_000 } })
+    await h.settle()
+    expect(h.sent).toHaveLength(before)
+    const view = h.engine.get(task.id)
+    expect(view.rounds[0]).toMatchObject({ state: 'working', stuck: null })
+    expect(view.needs).toEqual([{ kind: 'blocked', stepId: 'split', reason: held }])
+    expect(h.engine.list()[0]).toMatchObject({ needsYou: true, error: false, running: false })
+    expect(h.events.attention).toEqual(['Add an export button:needs-you'])
+
+    // The session's carry-on waits for a later window, then is turned off: the time follows it.
+    h.engine.turnLimit(session, { continuesAt: 9_000 })
+    await h.settle()
+    expect(h.engine.get(task.id).needs).toEqual([
+      { kind: 'blocked', stepId: 'split', reason: { ...held, resetsAt: 9_000 } },
+    ])
+    h.engine.turnLimit(session, { continuesAt: null })
+    await h.settle()
+    expect(h.engine.get(task.id).needs).toEqual([
+      { kind: 'blocked', stepId: 'split', reason: { ...held, resetsAt: null } },
+    ])
+
+    // A restart leaves the held step to its session's own carry-on.
+    const restarted = await harness({
+      workflows: { parallel: PARALLEL },
+      stored: [...h.store.values()],
+    })
+    expect(restarted.sent).toEqual([])
+    expect(restarted.engine.get(task.id).needs).toHaveLength(1)
+
+    // Its session goes on: the step works again and owes its report as before.
+    h.engine.turnLimit(session, null)
+    await h.settle()
+    expect(h.engine.get(task.id).needs).toEqual([])
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    expect(h.sent.at(-1)!.text).toContain('report_step')
+    expect((await h.engine.report(session, done)).accepted).toBe(true)
+  })
+
+  it('takes a step stuck by a turn that a plan limit turns out to have stopped for a held one', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    h.engine.turnEnded(session, { byUser: false })
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    expect(h.engine.get(task.id).rounds[0]!.stuck?.reason).toBe('no_report')
+    h.engine.turnLimit(session, { continuesAt: 5_000 })
+    await h.settle()
+    const view = h.engine.get(task.id)
+    expect(view.rounds[0]).toMatchObject({ state: 'working', stuck: null })
+    expect(view.needs).toEqual([
+      {
+        kind: 'blocked',
+        stepId: 'split',
+        reason: { kind: 'limit', agentId: 'claude-code', resetsAt: 5_000 },
+      },
+    ])
+  })
+
+  it('retries a held step in its session, or starts it again with someone pinned', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    h.engine.turnEnded(session, { byUser: false, limit: { continuesAt: null } })
+    await h.settle()
+    await h.engine.retry(task.id, 'split', 'Try again now')
+    expect(h.sent.at(-1)).toMatchObject({ sessionId: session })
+    expect(h.sent.at(-1)!.text).toContain('Try again now')
+    expect(h.engine.get(task.id).needs).toEqual([])
+
+    h.engine.turnEnded(session, { byUser: false, limit: { continuesAt: 5_000 } })
+    await h.settle()
+    const view = await h.engine.pinStep(task.id, 'split', {
+      agentId: 'codex',
+      model: 'gpt',
+      effort: null,
+    })
+    await h.settle()
+    // Its session stops, carry-on included, and the pinned agent starts the step afresh.
+    expect(h.cancelled).toContain(session)
+    expect(view.needs).toEqual([])
+    const rounds = h.engine.get(task.id).rounds.filter((r) => r.stepId === 'split')
+    expect(rounds.map((r) => r.state)).toEqual(['stopped', 'working'])
+    expect(rounds[1]).toMatchObject({ by: { agentId: 'codex', model: 'gpt' } })
+    expect(h.created.at(-1)).toMatchObject({ agentId: 'codex' })
+    expect(rounds[1]!.sessionId).not.toBe(session)
+  })
+
   it('drops a reminder still queued once its step reported or picked', async () => {
     const h = await harness({ workflows: { parallel: PARALLEL } })
     const task = await h.start('parallel')

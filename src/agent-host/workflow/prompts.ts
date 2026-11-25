@@ -169,6 +169,13 @@ export function reminderPrompt(picking: boolean): string {
     : `Your step is not reported yet. If it is done, call \`${REPORT_TOOL}\` now with an outcome and what the step hands in; if it is not, finish it first. Kettu stops the task for the user if this turn also ends without a report.`
 }
 
+/** Sent when the user retries a step whose turn a used-up plan limit stopped. */
+export function carryOnPrompt(picking: boolean): string {
+  return picking
+    ? reminderPrompt(true)
+    : `Carry on with the step from where you stopped, then call \`${REPORT_TOOL}\`.`
+}
+
 /**
  * Sent to a step that was working when the host restarted; `owed` are the steps it still picks
  * for, when its report was accepted already.

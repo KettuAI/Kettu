@@ -69,7 +69,11 @@ export interface HostState {
 /** What the island keeps of a task. */
 export interface IslandTaskState {
   title: string
-  needsYou: boolean
+  /**
+   * It waits for the user's answer in Kettu: a document to review or a step of their own. A step
+   * that is stuck or waits for a plan limit is no request.
+   */
+  asksYou: boolean
   steps: { id: string; name: string; state: StepState; sessionId: string | null }[]
   updatedAt: number
 }
@@ -617,7 +621,7 @@ function taskRequests(state: HostState): { request: IslandRequest; taskId: strin
   if (state.host?.offline) return []
   const out: { request: IslandRequest; taskId: string; at: number }[] = []
   for (const [taskId, task] of state.tasks) {
-    if (!task.needsYou) continue
+    if (!task.asksYou) continue
     const step = task.steps.find((s) => s.state === 'needs_you')
     const asking = step?.sessionId ? state.sessions.get(step.sessionId) : undefined
     if (asking && needsYou(asking)) continue

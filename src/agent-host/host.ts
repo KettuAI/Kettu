@@ -1616,7 +1616,10 @@ export class AgentHost {
       sessions: {
         createStep: (params) => this.sessions.createStep(params),
         send: (sessionId, text, due) => this.sessions.sendFromKettu(sessionId, text, due),
-        cancel: (sessionId) => this.sessions.cancel(sessionId),
+        cancel: async (sessionId) => {
+          await this.sessions.cancelContinue(sessionId).catch(() => {})
+          await this.sessions.cancel(sessionId)
+        },
         delete: (sessionId) => this.sessions.delete(sessionId),
         has: (sessionId) => this.sessions.has(sessionId),
       },

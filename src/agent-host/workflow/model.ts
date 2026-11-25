@@ -82,6 +82,11 @@ export interface RoundRecord {
   picks: { needed: string[]; made: string[]; refusals: number } | null
   /** The step's review that its pick may share an agent and model with, as the only choice. */
   reviewShared: boolean
+  /**
+   * A used-up plan limit stopped its session's last turn, and when the session carries on; absent
+   * from a round stored before.
+   */
+  limited?: Extract<BlockedReason, { kind: 'limit' }> | null
 }
 
 /** A step activated by an arrow that has not started: at a join, for a pick, or blocked. */
@@ -308,7 +313,10 @@ function isRound(value: unknown): value is RoundRecord {
         isStringList(picks.needed) &&
         isStringList(picks.made) &&
         Number.isSafeInteger(picks.refusals))) &&
-    typeof value.reviewShared === 'boolean'
+    typeof value.reviewShared === 'boolean' &&
+    (value.limited === undefined ||
+      value.limited === null ||
+      (isBlocked(value.limited) && value.limited.kind === 'limit'))
   )
 }
 

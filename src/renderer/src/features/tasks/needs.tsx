@@ -23,7 +23,15 @@ import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { openSession } from '@renderer/stores/view'
-import { blockedText, needKey, nextAfter, outcomeTitle, stepTitle, stuckText } from './model'
+import {
+  blockedText,
+  heldRound,
+  needKey,
+  nextAfter,
+  outcomeTitle,
+  stepTitle,
+  stuckText,
+} from './model'
 import { PinEditor } from './pin-editor'
 import { DocumentChip } from './timeline'
 
@@ -255,7 +263,10 @@ function AskingCard({
   )
 }
 
-/** A step that cannot start, in words; Retry, or pin someone else for it. */
+/**
+ * A step that cannot start, or whose work a used-up plan limit stopped, in words; Retry, or pin
+ * someone else for it.
+ */
 function BlockedCard({
   view,
   need,
@@ -268,13 +279,17 @@ function BlockedCard({
   const [pinning, setPinning] = useState(false)
   const hostId = hostOfPath(view.projectPath)
   const step = stepTitle(view.workflow, need.stepId)
-  const canPin = view.workflow.steps.find((s) => s.id === need.stepId)?.by === 'agent'
+  const held = heldRound(view, need.stepId)
+  // A step that reported and only picks who goes next is not taken over.
+  const canPin =
+    view.workflow.steps.find((s) => s.id === need.stepId)?.by === 'agent' &&
+    held?.state !== 'picking'
   return (
     <Card
       icon={Alert02Icon}
       tone="warning"
-      title={t('blocked.title', { step })}
-      body={blockedText(need.reason, hostId, now)}
+      title={t(held ? 'blocked.heldTitle' : 'blocked.title', { step })}
+      body={blockedText(need.reason, hostId, now, held !== undefined)}
     >
       {pinning ? (
         <PinEditor view={view} stepId={need.stepId} onDone={() => setPinning(false)} />
