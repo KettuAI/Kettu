@@ -234,6 +234,7 @@ import type { OpenCodeSessions } from './model-requests/opencode'
 import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
+import { proxyFetch, type Fetch } from './proxy-fetch'
 import { formatCommand } from './quote'
 import {
   fetchRegistry,
@@ -795,6 +796,8 @@ export class AgentManager {
   private readonly cliCommandKeys = new Map<Harness, string>()
   /** npm's configuration for the install window, by the keys asked, until the next redetect. */
   private readonly npmConfigs = new Map<string, Promise<NpmConfig | null>>()
+  /** The host's requests to the internet, through the agents' proxy as it is at each one. */
+  private readonly net: Fetch
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -806,6 +809,7 @@ export class AgentManager {
 
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
+    this.net = proxyFetch(() => deps.env.agentEnv(), deps.platform)
     this.bundled = deps.bundled ?? BUNDLED
     const bundledManifest = this.bundled.manifest
       ? verifyManifest(this.bundled.manifest, 0, this.manifestKeys)
@@ -2533,6 +2537,7 @@ export class AgentManager {
   private readRegistry(signal?: AbortSignal): Promise<RegistryAgents> {
     return (this.deps.fetchRegistry ?? fetchRegistry)({
       timeoutMs: this.timings.updateViewMs,
+      fetch: this.net,
       ...(signal ? { signal } : {}),
     })
   }
@@ -2588,6 +2593,7 @@ export class AgentManager {
     try {
       body = await (this.deps.fetchManifest ?? fetchManifest)({
         timeoutMs: this.timings.updateViewMs,
+        fetch: this.net,
         ...(signal ? { signal } : {}),
         ...(this.deps.userAgent ? { userAgent: this.deps.userAgent } : {}),
       })
@@ -4947,13 +4953,13 @@ export class AgentManager {
       const key = await readDshKey(env)
       if (key) {
         read = {
-          usage: await readProviderUsage({ providerId: 'deepseek', key, now }),
+          usage: await readProviderUsage({ providerId: 'deepseek', key, now, fetch: this.net }),
           expired: false,
         }
       }
     } else if (route === 'deepseek-account') {
       const token = await readDshAccountToken(env)
-      if (token) read = await readAccountBalance({ token, now })
+      if (token) read = await readAccountBalance({ token, now, fetch: this.net })
     }
     const previous = slot.balanceRoute === route ? slot.balance : null
     // A failed read keeps the last balance of the same route, marked as old by its time; an

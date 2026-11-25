@@ -205,6 +205,7 @@ import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
+import { proxyFetch } from './proxy-fetch'
 import { claudeModelRequests } from './model-requests/claude'
 import { clineModelRequests } from './model-requests/cline'
 import { antigravityModelRequests } from './model-requests/antigravity'
@@ -724,6 +725,7 @@ export class AgentHost {
     this.env.setProxy(options.settings.proxy)
     this.env.setConfigFolders(configFolders(catalog, options.settings))
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
+    const net = proxyFetch(() => this.env.agentEnv(), platform)
     this.media = new MediaService({
       platform,
       homeDir: options.homeDir ?? os.homedir(),
@@ -827,6 +829,7 @@ export class AgentHost {
     this.marketCatalog = new MarketCatalogService({
       file: catalogFile(options.userDataPath, log),
       log,
+      fetch: net,
     })
     this.marketConnections = new MarketConnectionsService({
       log,
@@ -835,12 +838,14 @@ export class AgentHost {
       keep: (serverId, state) => this.keepSignIn(serverId, state),
       changed: (serverId, connection, loginId, error) =>
         this.connectionChanged(serverId, connection, loginId, error),
+      fetch: net,
     })
     this.mcpProxy = new McpProxy({
       servers: () => this.settings.marketplace.mcp,
       headers: (server) => serverHeaders(server, this.marketKeys),
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
+      fetch: net,
     })
     const home = options.homeDir ?? os.homedir()
     this.ownPlugins = new OwnPluginsService({
@@ -878,6 +883,7 @@ export class AgentHost {
           isExecutable: (file) => isExecutableFile(file, platform),
         }),
       servers: () => this.settings.marketplace.mcp,
+      fetch: net,
     })
     void this.marketBundles.sweep()
     this.marketSkills = new MarketSkillsService({
@@ -896,6 +902,7 @@ export class AgentHost {
       kettu: (id) => this.marketCommunity.download(id, 'skill'),
       ownSkills: () => this.artifactService.guideFlags,
       kettuOn: (agentId) => !this.settings.mcp.kettu.off.includes(agentId),
+      fetch: net,
     })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
@@ -1003,6 +1010,7 @@ export class AgentHost {
       log,
       changed: () => this.broadcast({ type: 'workflows.changed' }),
       pluginOn: (pluginId) => this.plugins.on(pluginId),
+      fetch: net,
     })
     this.pluginThemes = new PluginThemeIndex({
       file: path.join(options.userDataPath, PLUGIN_THEMES_FILE),
@@ -1050,6 +1058,7 @@ export class AgentHost {
         this.hub.broadcast({ type: 'plugins.changed' })
         void this.pluginThemes.sync()
       },
+      fetch: net,
     })
     this.roles = new RolesService({
       userDataPath: options.userDataPath,

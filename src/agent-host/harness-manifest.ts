@@ -9,6 +9,7 @@ import valid from 'semver/functions/valid'
 import validRange from 'semver/ranges/valid'
 import { verifySignature } from '../main/update-sources'
 import KEYS from '../main/update-keys.json'
+import type { Fetch } from './proxy-fetch'
 import { readLimited } from './registry'
 
 export const MANIFEST_URL = 'https://download.kettu.sh/harnesses.json'
@@ -220,6 +221,8 @@ export interface ManifestFetchOptions {
   userAgent?: string
   /** The manifest's address; the service's own by default. */
   url?: string
+  /** The host's fetch, through the agents' proxy; the platform's by default. */
+  fetch?: Fetch
 }
 
 /** Reads the manifest's body; rejects with a reason in English, for the diagnostics. */
@@ -229,7 +232,7 @@ export async function fetchManifest(options: ManifestFetchOptions): Promise<stri
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await (options.fetch ?? fetch)(url, {
       signal,
       redirect: 'error',
       ...(options.userAgent ? { headers: { 'User-Agent': options.userAgent } } : {}),

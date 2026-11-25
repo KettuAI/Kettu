@@ -6,6 +6,7 @@ import type { Platform } from '@shared/platform'
 import { archiveKey, type ArchiveEntry } from './binary-install'
 import type { AgentDefinition } from './catalog'
 import { t } from './i18n'
+import type { Fetch } from './proxy-fetch'
 
 /** The listing, at the address the registry's documentation gives clients. */
 export const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json'
@@ -199,6 +200,8 @@ export interface RegistryFetchOptions {
   signal?: AbortSignal
   /** The listing's address; the registry's own by default. */
   url?: string
+  /** The host's fetch, through the agents' proxy; the platform's by default. */
+  fetch?: Fetch
 }
 
 /** The body, refused once it grows past `maxBytes`, what a listing can be by default. */
@@ -239,7 +242,7 @@ export async function fetchRegistry(options: RegistryFetchOptions): Promise<Regi
   }
   let response: Response
   try {
-    response = await fetch(url, { signal, redirect: 'follow' })
+    response = await (options.fetch ?? fetch)(url, { signal, redirect: 'follow' })
   } catch {
     throw failure()
   }
