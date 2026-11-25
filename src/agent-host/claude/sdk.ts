@@ -162,6 +162,12 @@ export interface McpSetServersResult {
   errors: Record<string, string>
 }
 
+/** A server the query runs or connects to; `pending` while it is still connecting. */
+export interface McpServerStatus {
+  name: string
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+}
+
 /** The settings layer a query adds on top of the files. */
 export interface FlagSettings {
   disableAllHooks?: boolean
@@ -453,6 +459,7 @@ export interface Query extends AsyncIterable<SdkMessage> {
    * over the control channel; the settings files' servers stay.
    */
   setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult>
+  mcpServerStatus(): Promise<McpServerStatus[]>
   close(): void
   /** Present in the SDK Kettu pins, though not in its published types. */
   generateSessionTitle?(description: string, options: { persist: boolean }): Promise<string | null>

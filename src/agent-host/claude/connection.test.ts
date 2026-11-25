@@ -582,6 +582,48 @@ describe('the Claude Agent SDK driver', () => {
     expect(sdk.last.calls.some((call) => call.method === 'setMcpServers')).toBe(false)
   })
 
+  it("reads a closed session's context once the query's MCP servers have connected", async () => {
+    const { sdk, connection } = await setup()
+    let connected!: () => void
+    sdk.connecting = new Promise((resolve) => (connected = resolve))
+    sdk.mcpStatus = [
+      [
+        { name: 'kettu', status: 'connected' },
+        { name: 'playwright', status: 'pending' },
+      ],
+      [
+        { name: 'kettu', status: 'connected' },
+        { name: 'playwright', status: 'connected' },
+      ],
+    ]
+    const reading = connection.readContext!('closed', '/repo', {
+      mcpServers: [
+        {
+          type: 'http',
+          name: 'kettu',
+          url: 'http://127.0.0.1:9/mcp',
+          headers: [{ name: 'Authorization', value: 'Bearer k' }],
+          secret: true,
+        },
+        { type: 'stdio', name: 'playwright', command: 'npx', args: [], env: [] },
+      ],
+    })
+    await settle()
+    const query = sdk.last
+    expect(query.options.resume).toBe('closed')
+    const methods = (): string[] => query.calls.map((call) => call.method)
+    expect(methods()).toContain('setMcpServers')
+    expect(methods()).not.toContain('getContextUsage')
+    connected()
+    expect(await reading).toMatchObject({ used: 10_000 })
+    // Asked again while a server was still connecting, and read only once none was.
+    expect(methods().filter((method) => method === 'mcpServerStatus')).toHaveLength(2)
+    expect(methods().indexOf('getContextUsage')).toBeGreaterThan(
+      methods().lastIndexOf('mcpServerStatus'),
+    )
+    expect(query.inputs).toHaveLength(0)
+  })
+
   async function repoWithServers(): Promise<string> {
     const repo = await mkdtemp(path.join(os.tmpdir(), 'kettu-claude-repo-'))
     dirs.push(repo)

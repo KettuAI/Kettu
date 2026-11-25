@@ -10,6 +10,7 @@ import type {
   FlagSettings,
   InitializeAnswer,
   McpServerConfig,
+  McpServerStatus,
   McpSetServersResult,
   PermissionMode,
   Query,
@@ -202,7 +203,14 @@ export class FakeQuery implements Query {
 
   async setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult> {
     this.record('setMcpServers', servers)
+    await this.sdk.connecting
     return { added: Object.keys(servers), removed: [], errors: {} }
+  }
+
+  async mcpServerStatus(): Promise<McpServerStatus[]> {
+    this.record('mcpServerStatus')
+    const statuses = this.sdk.mcpStatus
+    return (statuses.length > 1 ? statuses.shift() : statuses[0]) ?? []
   }
 
   async generateSessionTitle(description: string, options: { persist: boolean }) {
@@ -267,6 +275,10 @@ export class FakeClaudeSdk implements ClaudeSdk {
   taskOutput = { output: '', total_bytes: 0, truncated: false }
   /** What a query's `askSideQuestion` answers; undefined for an SDK without it. */
   sideAnswer: { response: string; synthetic: boolean } | null | undefined = undefined
+  /** What `setMcpServers` waits on before it answers, as while the servers connect. */
+  connecting: Promise<void> | null = null
+  /** The answers of `mcpServerStatus` in turn, the last one repeated. */
+  mcpStatus: McpServerStatus[][] = []
   context: ContextUsageAnswer = {
     categories: [
       { name: 'System prompt', tokens: 3000 },
