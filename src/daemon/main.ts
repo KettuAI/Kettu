@@ -881,14 +881,16 @@ async function requests(
 ): Promise<number> {
   try {
     const pending = await callControl(socket, 'requests.get', undefined)
-    if (command.kind === 'requests' || pending?.request.state !== 'confirm') {
+    const request = pending?.event.request
+    // Once the owner said add, only the device is left to answer.
+    if (command.kind === 'requests' || !pending || request?.state !== 'confirm' || pending.added) {
       out(requestReport(pending, Date.now()))
-      return command.kind === 'requests' || pending ? 0 : 1
+      return command.kind === 'requests' ? 0 : 1
     }
     const add = command.kind === 'requests-add'
-    const name = add ? (command.name ?? pending.request.device.name) : ''
+    const name = add ? (command.name ?? request.device.name) : ''
     const answer = await callControl(socket, 'requests.answer', {
-      requestId: pending.requestId,
+      requestId: pending.event.requestId,
       add,
       name,
     })
@@ -897,10 +899,10 @@ async function requests(
     }
     out(
       add
-        ? pending.request.deviceConfirmed
+        ? request.deviceConfirmed
           ? `Adding ${name}.\n`
           : `${name} is added once its user confirms the code.\n`
-        : `Turned down ${pending.request.device.name}.\n`,
+        : `Turned down ${request.device.name}.\n`,
     )
     return 0
   } catch (error) {

@@ -190,6 +190,15 @@ describe('the reverse grant', () => {
     expect(parseReverseHost({ ...host, version: undefined })).toBeNull()
   })
 
+  it("keeps the pin of the owner's own relay only as a pairing code would carry it", () => {
+    const pin = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc'
+    const pinned = { ...host, relays: ['https://203.0.113.7:8443'], pin }
+    expect(parseReverseHost(pinned)).toEqual(pinned)
+    expect(parseReverseHost({ ...pinned, pin: pin.slice(4) })).toBeNull()
+    expect(parseReverseHost({ ...pinned, pin: 7 })).toBeNull()
+    expect(parseReverseHost({ ...pinned, relays: ['http://203.0.113.7:8443'] })).toBeNull()
+  })
+
   it("takes the answering computer's device key, name and platform, and nothing else", () => {
     const grant = { deviceKey: host.publicKey, name: 'Laptop', platform: 'macOS 26' }
     expect(parseReverseGrant(grant)).toEqual(grant)

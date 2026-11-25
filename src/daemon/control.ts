@@ -103,8 +103,14 @@ export interface ControlCalls {
   'host.socket': { params: { host: HostName }; result: { path: string } }
   'devices.list': { params: undefined; result: DeviceSummary[] }
   'devices.remove': { params: { id: string }; result: null }
-  /** The request of a device of the account that waits now, if any. */
-  'requests.get': { params: undefined; result: DiscoveryRequestEvent | null }
+  /**
+   * The request of a device of the account that waits now, if any; `added` once the owner said
+   * add and only its device's confirmation is left.
+   */
+  'requests.get': {
+    params: undefined
+    result: { event: DiscoveryRequestEvent; added: boolean } | null
+  }
   /** Answers it; `gone` when it was answered elsewhere first, or ended. */
   'requests.answer': {
     params: { requestId: number; add: boolean; name: string }

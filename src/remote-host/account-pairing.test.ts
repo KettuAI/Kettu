@@ -14,7 +14,13 @@ import {
 import { FakeRelays } from '@shared/remote/fake-relay'
 import type { HostPairingState } from '@shared/remote/hosts'
 import { generateKeyPair } from '@shared/remote/noise'
-import { hostProfile, importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
+import {
+  encodeRelayBytes,
+  hostProfile,
+  importRelayKey,
+  newRelaySeed,
+  relayHostId,
+} from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import { ActivityLog } from './activity'
@@ -46,8 +52,14 @@ function tempDir(): string {
 
 const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64')
 
-/** `reverse`: the host is a desktop app, whose own client takes the laptop's host. */
-async function setup(laptopToken = 'laptop-token', options: { reverse?: boolean } = {}) {
+/**
+ * `reverse`: the host is a desktop app, whose own client takes the laptop's host. `laptopRelay`:
+ * the relay the laptop's own host serves through, the Kettu relay unless given.
+ */
+async function setup(
+  laptopToken = 'laptop-token',
+  options: { reverse?: boolean; laptopRelay?: { urls: string[]; pin?: string } } = {},
+) {
   const relays = new FakeRelays()
   relays.accounts.set('host-token', 'account')
   relays.accounts.set('laptop-token', 'account')
@@ -128,7 +140,8 @@ async function setup(laptopToken = 'laptop-token', options: { reverse?: boolean 
     publicKey: base64((await generateKeyPair()).publicKey),
     name: 'Laptop',
     platform: 'darwin',
-    relays: [MAIN],
+    relays: options.laptopRelay?.urls ?? [MAIN],
+    ...(options.laptopRelay?.pin ? { pin: options.laptopRelay.pin } : {}),
     version: '1.0.0',
   }
   const grants: ReverseGrant[] = []
@@ -275,5 +288,23 @@ describe('pairing with a host of the account through the relay', () => {
     expect(t.states.at(-1)).toMatchObject({ state: 'added', reverse: 'unsupported' })
     expect(t.grants).toEqual([])
     expect(t.studioHosts.list()).toEqual([])
+  })
+
+  it("keeps the pin of this computer's own relay at an IP address for the host it lets in", async () => {
+    const pin = encodeRelayBytes(new Uint8Array(32).fill(7))
+    const own = 'https://203.0.113.7:8443'
+    const t = await setup('laptop-token', { reverse: true, laptopRelay: { urls: [own], pin } })
+    t.client.pairDiscovered(1, t.relayId, null, 'MacBook Air')
+    await expect.poll(() => t.states.at(-1)?.state, POLL).toBe('compare')
+    t.client.matchPairing(1, true, true)
+    t.discovery.answer(1, true, 'Laptop')
+    await expect.poll(() => t.states.at(-1)?.state, POLL).toBe('added')
+    expect(t.states.at(-1)).toMatchObject({ state: 'added', reverse: 'added' })
+    expect(t.studioHosts.list()).toEqual([
+      expect.objectContaining({
+        publicKey: t.laptopHost.publicKey,
+        relay: { id: t.laptopHost.relayId, urls: [own], pin },
+      }),
+    ])
   })
 })

@@ -209,6 +209,8 @@ export class Hosts {
   private nextRequest = 1
   /** The discovery request the owner is asked about now. */
   private discoveryRequest: DiscoveryRequestEvent | null = null
+  /** The request the owner said add to, which waits for its device to confirm the code. */
+  private ownerAdded: number | null = null
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly attentionListeners = new Set<(message: Attention) => void>()
@@ -633,6 +635,11 @@ export class Hosts {
     return this.discoveryRequest
   }
 
+  /** Whether the owner already said add to the request that waits, so only its device is left. */
+  discoveryAdded(): boolean {
+    return this.ownerAdded !== null && this.ownerAdded === this.discoveryRequest?.requestId
+  }
+
   /**
    * An answer to that request, from the CLI or, under `by`, a paired device: true when it was the
    * first and counted.
@@ -652,7 +659,9 @@ export class Hosts {
       name,
       by,
     }))
-    return answer?.type === 'remote-host:discovery-answer' && answer.counted === true
+    const counted = answer?.type === 'remote-host:discovery-answer' && answer.counted === true
+    if (counted && add) this.ownerAdded = discoveryId
+    return counted
   }
 
   /** Whether devices of the account find this computer on the relay, as the setting is now. */
@@ -675,6 +684,7 @@ export class Hosts {
   private discoveryGone(): void {
     const request = this.discoveryRequest
     this.discoveryRequest = null
+    this.ownerAdded = null
     if (!request) return
     const { requestId } = request
     this.options.discoveryChanged?.({ requestId, request: { state: 'closed', reason: 'stopped' } })
@@ -1090,7 +1100,10 @@ export class Hosts {
         const event = parseDiscoveryEvent(message.event)
         if (!event) break
         if (event.request.state === 'confirm') this.discoveryRequest = event
-        else if (this.discoveryRequest?.requestId === event.requestId) this.discoveryRequest = null
+        else if (this.discoveryRequest?.requestId === event.requestId) {
+          this.discoveryRequest = null
+          this.ownerAdded = null
+        }
         this.options.discoveryChanged?.(event)
         break
       }

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { askRemoveDevice } from '@renderer/features/settings/device-remove'
 import { recordAction, watchNavigation } from '@renderer/lib/action-log'
 import { confirmDebugRestart } from '@renderer/stores/debug'
 import { showQuitHint } from '@renderer/stores/quit-hint'
@@ -42,6 +43,9 @@ export function useAppCommands(): void {
           case 'open-settings':
             openSettings((command.section as SettingsSection | undefined) ?? null)
             if (command.section === 'about') void checkForUpdates()
+            break
+          case 'remove-device':
+            askRemoveDevice(null, command.deviceId)
             break
           case 'toggle-sidebar':
             toggleSidebar()

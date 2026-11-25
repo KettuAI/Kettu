@@ -925,12 +925,9 @@ async function start(): Promise<void> {
     },
     deviceJoined: (device, via) => {
       hostAdmin?.deviceJoined(device, via)
-      notifyJoined(device, hostName(), settings.get(), {
-        remove: () => void remoteHost.removeDevice(device.id),
-        open: () => {
-          void showMainWindow()
-          sendCommand({ kind: 'open-settings', section: 'remote' })
-        },
+      notifyJoined(device, hostName(), settings.get(), () => {
+        void showMainWindow()
+        sendCommand({ kind: 'remove-device', deviceId: device.id })
       })
     },
     relayTokenReady: () => relayToken.ready(),

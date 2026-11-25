@@ -26,6 +26,7 @@ import { isWeb } from '@renderer/lib/platform'
 import { useSeconds } from '@renderer/lib/use-now'
 import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { SetButton, Spin } from './controls'
+import { askRemoveDevice } from './device-remove'
 import { PairCode } from './host-account'
 import { onHostRequests } from './host-requests'
 import { closeRequest } from './pair-close'
@@ -161,24 +162,9 @@ export function DiscoveryRequestDialog() {
       toast(t(`remote.discovery.ended.${reason}`, { name }), undefined, { tone: 'info' })
     }
     const joined = (hostId: string | null, device: JoinedDevice, host: string): void => {
-      const remove = (): void => {
-        const removing =
-          hostId === null
-            ? window.kettu.remote.removeDevice(device.id)
-            : window.kettu.hosts.request(hostId, 'remote.removeDevice', { id: device.id })
-        removing.then(
-          (result) =>
-            toast(
-              result === 'not_removed'
-                ? t('remote.joined.notRemoved', { name: device.name })
-                : t('remote.joined.removed', { name: device.name }),
-            ),
-          (error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }),
-        )
-      }
       toast(
         t('remote.joined.toast', { name: device.name, host }),
-        { label: t('remote.joined.remove'), onClick: remove },
+        { label: t('remote.joined.remove'), onClick: () => askRemoveDevice(hostId, device.id) },
         { duration: 10_000 },
       )
     }
