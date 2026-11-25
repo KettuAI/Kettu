@@ -91,7 +91,7 @@ import {
   QUESTIONS_SKIPPED,
 } from './permissions'
 import { findClaudeTranscript } from '../prompt-cache'
-import { folderHooks, heldHelpers } from './project-hooks'
+import { folderHooks, heldEnv, heldHelpers } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import { forkedUuids, rewindCut, RewindPointMissing, transcriptRecords } from './rewind'
@@ -115,6 +115,7 @@ import type {
   PromptSuggestionMessage,
   Query,
   QueryOptions,
+  ResolvedSettings,
   ResultMessage,
   SdkMessage,
   SettingSource,
@@ -910,8 +911,8 @@ export class ClaudeConnection implements AgentConnection {
   // Opening a query.
 
   /**
-   * Reads the settings a session starts with, the hooks and helpers the folder's own declare, and
-   * what stands in for those helpers while they are held; an unreadable file only leaves the
+   * Reads the settings a session starts with, the hooks, helpers and env the folder's own declare,
+   * and what stands in for those helpers while they are held; an unreadable file only leaves the
    * defaults.
    */
   private async settings(
@@ -922,22 +923,24 @@ export class ClaudeConnection implements AgentConnection {
     known: boolean
     hooks: FolderHooks | null
     helpers: Record<string, string>
+    sources: ResolvedSettings['sources'] | null
   }> {
     const sdk = this.requireSdk()
     try {
-      const { values, hooks, helpers } = await this.withConfigDir(async () => {
+      const { values, hooks, helpers, read } = await this.withConfigDir(async () => {
         const resolved = await sdk.resolveSettings({ cwd, settingSources: sources })
         // A mode a repository's own settings escalate to holds only once Claude Code trusts it.
         return {
           values: sdk.filterEscalatingDefaultMode(resolved),
           hooks: folderHooks(resolved.sources),
           helpers: heldHelpers(resolved.sources),
+          read: resolved.sources,
         }
       })
-      return { values, known: true, hooks, helpers }
+      return { values, known: true, hooks, helpers, sources: read }
     } catch (error) {
       this.context.hooks.log('warn', `Could not read Claude Code's settings: ${errorText(error)}`)
-      return { values: {}, known: false, hooks: null, helpers: heldHelpers(null) }
+      return { values: {}, known: false, hooks: null, helpers: heldHelpers(null), sources: null }
     }
   }
 
@@ -1012,13 +1015,35 @@ export class ClaudeConnection implements AgentConnection {
       process: null,
       version: undefined,
     }
+    const env: QueryOptions['env'] = {
+      ...this.env,
+      CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
+      // Without it Claude Code sends no summary of its tool calls.
+      CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '1',
+      // Kettu's memory stands in for Claude Code's own, which would load and write beside it.
+      ...(options.memory ? { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' } : {}),
+    }
     const flags: Record<string, unknown> = {}
     // Through the SDK, Claude Code runs the hooks and the helper commands of a folder's own
-    // settings without asking, the helpers as soon as it starts; a hidden session runs no hooks.
+    // settings without asking, the helpers as soon as it starts, and takes its env, which may send
+    // requests and sign-ins elsewhere; a hidden session runs no hooks.
     const held = await this.hooksHeld(cwd, options, settings, !hidden)
     session.hooksHeld = !hidden && held
     if (hidden || held) flags.disableAllHooks = true
-    if (held) Object.assign(flags, settings.helpers)
+    if (held) {
+      Object.assign(flags, settings.helpers)
+      const withheld = heldEnv(settings.sources, env)
+      if (Object.keys(withheld).length > 0) {
+        flags.env = withheld
+        // The window Kettu shows follows the env the session runs with.
+        const values = settings.values.env
+        const own = typeof values === 'object' && values !== null ? values : {}
+        session.compact = compactWindows(
+          { ...settings.values, env: { ...own, ...withheld } },
+          this.env,
+        )
+      }
+    }
     // A page's question and a limits read take none of the user's settings but how they sign in,
     // which may be there: without it a gateway's token goes unseen and its limits read as a plan's.
     if (bare || hidden === 'limits') {
@@ -1048,14 +1073,7 @@ export class ClaudeConnection implements AgentConnection {
         ]
     const queryOptions: QueryOptions = {
       cwd,
-      env: {
-        ...this.env,
-        CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
-        // Without it Claude Code sends no summary of its tool calls.
-        CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '1',
-        // Kettu's memory stands in for Claude Code's own, which would load and write beside it.
-        ...(options.memory ? { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' } : {}),
-      },
+      env,
       pathToClaudeCodeExecutable: await this.runnableCli(),
       spawnClaudeCodeProcess: (spawn) => {
         const child = this.context.spawn({

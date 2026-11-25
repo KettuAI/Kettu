@@ -335,16 +335,26 @@
   },
   "projectHooks": {
     "where": "This project’s .claude settings run these commands by themselves, such as when a session starts, on this computer as you. Until you allow them, this session runs no such commands, your own included.",
+    "whereEnv": "This project’s .claude settings set these environment variables for its sessions, which can send requests and your sign-in elsewhere. Until you allow them, each keeps the value it has without this project, or is left empty.",
+    "whereBoth": "This project’s .claude settings run these commands by themselves, such as when a session starts, on this computer as you, and set these environment variables, which can send requests and your sign-in elsewhere. Until you allow them, this session runs no such commands, your own included, and each variable keeps the value it has without this project, or is left empty.",
     "hooks": "Commands",
+    "variables": "Environment variables",
+    "both": "Commands and environment variables",
     "decision": {
       "use": "Run",
       "all": "Always run",
       "skip": "Don’t run"
     },
+    "allow": {
+      "use": "Allow",
+      "all": "Always allow",
+      "skip": "Don’t allow"
+    },
     "answer": {
       "use": "Allowed",
       "all": "All of this project’s allowed",
       "skip": "Not run",
+      "notAllowed": "Not allowed",
       "timeout": "Not answered"
     }
   },
@@ -1276,7 +1286,9 @@
       "terminalRename": "rename your terminal",
       "app": "use an app",
       "projectMcp": "start MCP servers",
-      "projectHooks": "run commands this project sets to run automatically"
+      "projectHooks": "run commands this project sets to run automatically",
+      "projectEnv": "use environment variables this project sets",
+      "projectHooksEnv": "run commands and use environment variables this project sets"
     }
   },
   "worktree": {

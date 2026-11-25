@@ -744,7 +744,10 @@ export type ProjectHooksDecision = 'use' | 'all' | 'skip'
 /** `timeout` when the session left memory before an answer came. */
 export type ProjectHooksAnswer = ProjectHooksDecision | 'timeout'
 
-/** A hook a folder's own settings declare: the event it runs on and the command or URL it runs. */
+/**
+ * A hook a folder's own settings declare: the event it runs on and the command or URL it runs; or
+ * `env` and the names, never the values, of the variables they set.
+ */
 export interface DeclaredHook {
   event: string
   target: string
