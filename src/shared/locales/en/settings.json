@@ -1261,6 +1261,12 @@
       "keywords": "x twitter follow news contact",
       "open": "Follow"
     },
+    "wechat": {
+      "name": "WeChat group",
+      "description": "Talk with other users and the team, mostly in Chinese.",
+      "keywords": "wechat weixin group chat community qr code contact",
+      "open": "Join"
+    },
     "groups": {
       "updates": "Updates",
       "contact": "Contact us"

@@ -60,6 +60,7 @@ import {
   CopyContactEmail,
   DownloadSource,
   FollowOnX,
+  JoinWeChat,
   NewIssue,
   NoUpdates,
   UpdateRow,
@@ -1127,6 +1128,7 @@ export function useAboutSection(): SectionDef {
         render: () => <CopyContactEmail />,
       },
       { id: 'x', setting: 'about.x', group: contact, render: () => <FollowOnX /> },
+      { id: 'wechat', setting: 'about.wechat', group: contact, render: () => <JoinWeChat /> },
       {
         id: 'github',
         setting: 'about.github',

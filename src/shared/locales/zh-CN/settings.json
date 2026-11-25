@@ -1250,6 +1250,12 @@
       "keywords": "推特 关注 动态 联系 x twitter follow",
       "open": "关注"
     },
+    "wechat": {
+      "name": "微信群",
+      "description": "和其他用户、团队交流使用体验和反馈。",
+      "keywords": "微信 微信群 群聊 社区 交流 二维码 wechat weixin group community",
+      "open": "加入"
+    },
     "groups": {
       "updates": "更新",
       "contact": "联系我们"
