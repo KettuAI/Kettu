@@ -4,6 +4,7 @@
 import { useTranslation } from 'react-i18next'
 import { missingSettings, pluginState, type InstalledKettuPlugin } from '@shared/plugins'
 import { missingWords } from './plugin-model'
+import './plugin-state.css'
 
 /** The state as a dot and its words: green Ready, amber Needs setup, red Error, gray Off. */
 export function PluginStateMark({

@@ -477,7 +477,7 @@
       "upToDate": "{{name}} 已是最新版本",
       "rollBackFailed": "无法回退 {{name}}：{{error}}",
       "rolledBack": "{{name}} 已回退到 {{version}}",
-      "installedSetup": "已安装 {{name}}。填好{{what}}就能用了。"
+      "installedSetup": "已安装 {{name}}。填好 {{what}} 就能用了。"
     },
     "tags": {
       "skill_other": "{{count}} 个技能",
@@ -542,12 +542,12 @@
       "needsSetup": "需要设置",
       "off": "已关",
       "error": "出错",
-      "needs": "需要{{what}}"
+      "needs": "需要 {{what}}"
     },
     "page": {
       "required": "必填",
       "settings": "设置",
-      "missing": "填好{{what}}就能用了。",
+      "missing": "填好 {{what}} 就能用了。",
       "notices": "要发的通知",
       "noticesHint": "打开的几类通知会发到这里。不选的话什么都不会发。",
       "status": "状态",

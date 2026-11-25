@@ -282,43 +282,6 @@
   margin-top: 14px;
 }
 
-/* The state Kettu judges a plugin in: a dot and its words, in an Installed row and a page's head */
-.k-plug-state {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.k-plug-state::before {
-  content: '';
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-.k-plug-state[data-state='ready']::before {
-  background: var(--tone-green);
-}
-.k-plug-state[data-state='needsSetup'] {
-  color: var(--tone-amber);
-}
-.k-plug-state[data-state='needsSetup']::before {
-  background: var(--tone-amber-dot);
-}
-.k-plug-state[data-state='error'] {
-  color: var(--danger);
-}
-.k-plug-state[data-state='error']::before {
-  background: var(--danger);
-}
-.k-mkt-head__act .k-plug-state {
-  margin-right: 4px;
-}
-
 /* The line the script sets, under the page's head, or why its script was stopped */
 .k-plug-status {
   display: flex;

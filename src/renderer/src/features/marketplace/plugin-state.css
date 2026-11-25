@@ -1,0 +1,36 @@
+/* The state Kettu judges a plugin in: a dot and its words, wherever a plugin is listed */
+.k-plug-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.k-plug-state::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.k-plug-state[data-state='ready']::before {
+  background: var(--tone-green);
+}
+.k-plug-state[data-state='needsSetup'] {
+  color: var(--tone-amber);
+}
+.k-plug-state[data-state='needsSetup']::before {
+  background: var(--tone-amber-dot);
+}
+.k-plug-state[data-state='error'] {
+  color: var(--danger);
+}
+.k-plug-state[data-state='error']::before {
+  background: var(--danger);
+}
+.k-mkt-head__act .k-plug-state {
+  margin-right: 4px;
+}
