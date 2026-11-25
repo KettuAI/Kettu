@@ -37,7 +37,10 @@ export interface DiffProps {
   className?: string
 }
 
-/** One file's change in unified style, highlighted off the main thread. */
+/**
+ * One file's change, highlighted off the main thread: unified, or side by side when that was chosen
+ * and there is room.
+ */
 export function Diff(props: DiffProps) {
   return (
     <Suspense fallback={<div className="h-16" />}>

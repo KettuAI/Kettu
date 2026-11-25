@@ -21,11 +21,13 @@ export function useParsedDiff(
 
 /**
  * Scrolls the diff to the next or the previous run of changed lines from the top of its view,
- * which wraps around at either end. Returns which run it went to, from 1, and how many there are.
+ * which wraps around at either end; `from` is the run the last step went to. Returns which run it
+ * went to, from 1, and how many there are.
  */
 export function stepChange(
   scroller: RefObject<HTMLElement | null>,
   direction: 1 | -1,
+  from: number | null,
 ): { current: number; total: number } | null {
   const box = scroller.current
   const rows = box
@@ -38,12 +40,21 @@ export function stepChange(
     (row) => !row.previousElementSibling?.matches('[data-line-type^="change-"]'),
   )
   const top = box.getBoundingClientRect().top
-  const offsets = starts.map((row) => row.getBoundingClientRect().top - top)
+  const stops = starts
+    .map((row) => ({ row, offset: Math.round(row.getBoundingClientRect().top - top) }))
+    .sort((a, b) => a.offset - b.offset)
+    // Side by side, a run that changes lines starts in both columns at one height: one stop.
+    .filter((stop, i, all) => i === 0 || stop.offset !== all[i - 1]!.offset)
+  // At the end of the scroll a run low in the view never reaches the top, so it would be found
+  // again: step on from the last run gone to instead.
+  const atEnd = box.scrollTop >= box.scrollHeight - box.clientHeight - 1
   let index =
-    direction === 1
-      ? offsets.findIndex((offset) => offset > 2)
-      : offsets.findLastIndex((offset) => offset < -2)
-  if (index < 0) index = direction === 1 ? 0 : starts.length - 1
-  starts[index]?.scrollIntoView({ block: 'start' })
-  return { current: index + 1, total: starts.length }
+    atEnd && from !== null && from <= stops.length
+      ? (from - 1 + direction + stops.length) % stops.length
+      : direction === 1
+        ? stops.findIndex((stop) => stop.offset > 2)
+        : stops.findLastIndex((stop) => stop.offset < -2)
+  if (index < 0) index = direction === 1 ? 0 : stops.length - 1
+  stops[index]?.row.scrollIntoView({ block: 'start' })
+  return { current: index + 1, total: stops.length }
 }
