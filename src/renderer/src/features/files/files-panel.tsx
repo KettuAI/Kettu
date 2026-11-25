@@ -8,6 +8,7 @@ import {
   MinusSignSquareIcon,
   MoreHorizontalIcon,
   Search01Icon,
+  ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { FileSearch } from '@shared/files'
@@ -15,8 +16,10 @@ import type { ChangeStatus } from '@shared/git'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
@@ -36,7 +39,14 @@ import {
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
-import { diffId, openDiff, openFile, useFilesStore, watchFiles } from '@renderer/stores/files'
+import {
+  diffId,
+  openDiff,
+  openFile,
+  setHideIgnored,
+  useFilesStore,
+  watchFiles,
+} from '@renderer/stores/files'
 import { useViewStore } from '@renderer/stores/view'
 import { openGitPane } from '@renderer/features/git/pane/open-pane'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
@@ -96,12 +106,15 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
   // A name typed in the tree for a new file or folder or a rename, and Collapse all's count.
   const [edit, setEdit] = useState<TreeEdit | null>(null)
   const [collapsed, setCollapsed] = useState(0)
+  const hideIgnored = useFilesStore((s) => s.hideIgnored)
   // A folder with no files yet, as a new scratch session's, has nothing to list or open, so the
   // pane says so once, in its middle, instead of in each half, until a file is being made.
   const bare =
     useFilesStore((s) => {
       const files = s.byProject[projectPath]
-      return !!files && !files.error && files.paths.length === 0 && files.folders.length === 0
+      if (!files || files.error) return false
+      const { paths, folders, ignored, ignoredFolders } = files
+      return paths.length + folders.length + ignored.length + ignoredFolders.length === 0
     }) && edit === null
   const listed = useFilesStore((s) => !!s.byProject[projectPath] && !s.byProject[projectPath].error)
   // New file and New folder go into the project's folder, in the tree, shown for them.
@@ -215,6 +228,18 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
                       <PaneIcon icon={CodeIcon} size={16} />
                       {t('panel.openInEditor')}
                     </DropdownMenuItem>
+                  )}
+                  {isRepo && mode === 'all' && !bare && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={!hideIgnored}
+                        onCheckedChange={(shown) => setHideIgnored(!shown)}
+                      >
+                        <PaneIcon icon={ViewIcon} size={16} />
+                        {t('panel.showIgnored')}
+                      </DropdownMenuCheckboxItem>
+                    </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

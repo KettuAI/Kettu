@@ -21,7 +21,14 @@ import type {
 import type { ComputerAppDecision } from './computer-use'
 import type { ControlOutcome, SurfaceAccessDecision } from './control'
 import type { ContextBreakdown, ContextEstimates } from './context'
-import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
+import type {
+  DeviceFileContent,
+  FileContent,
+  FileList,
+  FileSearch,
+  FileWritten,
+  FolderList,
+} from './files'
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type { HostLoad, HostLoadWatch } from './host-load'
 import type { IdleReleaseState } from './idle-release'
@@ -1874,6 +1881,8 @@ export interface HostContract {
   // The ids of these the host still holds, for the drafts that name them; each is kept from now.
   'attachments.held': { params: { ids: string[] }; result: string[] }
   'files.list': { params: { projectPath: string }; result: FileList }
+  // A folder's direct children, for an ignored folder that `files.list` leaves unread.
+  'files.listFolder': { params: { projectPath: string; path: string }; result: FolderList }
   // `asText` reads a media file as any other file, as an SVG's source.
   'files.read': {
     params: { projectPath: string; path: string; asText?: boolean }
@@ -2463,6 +2472,7 @@ export const HOST_METHODS = [
   'attachments.remove',
   'attachments.held',
   'files.list',
+  'files.listFolder',
   'files.read',
   'files.search',
   'files.agentFolder',

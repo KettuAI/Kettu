@@ -101,6 +101,12 @@ export interface Folder {
   files: string[]
 }
 
+const byName = (a: string, b: string) => {
+  const x = nameOf(a).toLowerCase()
+  const y = nameOf(b).toLowerCase()
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
 /**
  * Each folder's direct children, folders and files apart, keyed by the folder's path ('' is the
  * root). `empty` names folders with nothing in them, which no file path gives.
@@ -125,16 +131,65 @@ export function indexFolders(
     folder(slash < 0 ? '' : path.slice(0, slash)).files.push(path)
   }
   for (const path of empty) if (path !== '') folder(path)
-  const byName = (a: string, b: string) => {
-    const x = nameOf(a).toLowerCase()
-    const y = nameOf(b).toLowerCase()
-    return x < y ? -1 : x > y ? 1 : 0
-  }
   for (const entry of index.values()) {
     entry.folders.sort(byName)
     entry.files.sort(byName)
   }
   return index
+}
+
+/** Whether `path` lies inside one of `folders`, below it. */
+export function insideAny(path: string, folders: ReadonlySet<string>): boolean {
+  for (let folder = folderOf(path); folder !== ''; folder = folderOf(folder)) {
+    if (folders.has(folder)) return true
+  }
+  return false
+}
+
+/**
+ * The folders of `index` that hold none of the files and empty folders git does not ignore, so
+ * that all in them is ignored.
+ */
+export function ignoredOnly(
+  index: ReadonlyMap<string, Folder>,
+  files: readonly string[],
+  empty: readonly string[],
+): string[] {
+  const holding = new Set<string>()
+  // A folder already counted has every folder above it counted too.
+  const hold = (from: string) => {
+    for (let folder = from; folder !== '' && !holding.has(folder); folder = folderOf(folder)) {
+      holding.add(folder)
+    }
+  }
+  for (const path of files) hold(folderOf(path))
+  for (const folder of empty) hold(folder)
+  return [...index.keys()].filter((folder) => folder !== '' && !holding.has(folder))
+}
+
+/**
+ * The index with the insides of folders read one at a time, which the list left empty; a read
+ * folder's own folders come in empty until they are read too. Only folders `unread` names take
+ * their read.
+ */
+export function withReads(
+  index: ReadonlyMap<string, Folder>,
+  reads: readonly (readonly [string, Folder])[],
+  unread: (folder: string) => boolean,
+): Map<string, Folder> {
+  const out = new Map(index)
+  // A folder before the folders in it, which its read brings into the index.
+  const ordered = [...reads].sort(([a], [b]) => a.length - b.length)
+  for (const [folder, read] of ordered) {
+    if (!out.has(folder) || !unread(folder)) continue
+    out.set(folder, {
+      folders: [...read.folders].sort(byName),
+      files: [...read.files].sort(byName),
+    })
+    for (const inner of read.folders)
+      if (!out.has(inner)) out.set(inner, { folders: [], files: [] })
+  }
+  return out
 }
 
 export interface TreeRow {

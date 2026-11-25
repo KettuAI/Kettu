@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import type { EditorState, Text } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import type { AgentId } from '@shared/agents'
-import type { FileContent } from '@shared/files'
+import type { FileContent, FolderList } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
-import { isWithin, movedPath } from '@renderer/features/files/paths'
+import { readJson, writeJson } from '@renderer/lib/storage'
+import { insideAny, isWithin, movedPath } from '@renderer/features/files/paths'
 import { useGitStore } from './git'
 import {
   changeDocs,
@@ -25,11 +26,19 @@ export interface ProjectFiles {
   paths: string[]
   /** Folders with nothing in them, which no path in `paths` names. */
   folders: string[]
+  /** Files git ignores, outside `ignoredFolders`; in no other list of the project. */
+  ignored: string[]
+  /** Folders git ignores as a whole, read with `readIgnoredFolder` only once opened. */
+  ignoredFolders: string[]
   /** The same paths, for telling whether a reference in a reply names a file. */
   known: ReadonlySet<string>
   truncated: boolean
   error: string | null
 }
+
+/** What was read of a folder git ignores, or one in it, whose insides the list leaves unread. */
+export type FolderRead =
+  { status: 'loading' } | ({ status: 'read' } & FolderList) | { status: 'failed'; error: string }
 
 /** Files and folders cut or copied in a project's tree, for pasting in the same project. */
 export interface FileClipboard {
@@ -104,7 +113,13 @@ interface FilesStore {
   /** By `agentFolderKey`, the folder a session's agent keeps its own files in, null for none. */
   agentFolders: Record<string, string | null>
   clipboard: FileClipboard | null
+  /** By project, then by folder, what was read of the ignored folders opened in its trees. */
+  folderReads: Record<string, Record<string, FolderRead>>
+  /** The tree leaves out what git ignores, on this device. */
+  hideIgnored: boolean
 }
+
+const HIDE_IGNORED_KEY = 'files-hide-ignored'
 
 export const useFilesStore = create<FilesStore>()(() => ({
   byProject: {},
@@ -115,7 +130,14 @@ export const useFilesStore = create<FilesStore>()(() => ({
   diffs: {},
   agentFolders: {},
   clipboard: null,
+  folderReads: {},
+  hideIgnored: readJson<unknown>(HIDE_IGNORED_KEY, false) === true,
 }))
+
+export function setHideIgnored(hide: boolean): void {
+  useFilesStore.setState({ hideIgnored: hide })
+  writeJson(HIDE_IGNORED_KEY, hide)
+}
 
 /** A session's agent folder is asked for again when the session moves to another agent. */
 export const agentFolderKey = (sessionId: string, agentId: AgentId): string =>
@@ -184,13 +206,29 @@ export function loadFiles(projectPath: string): Promise<void> {
   if (running) return running
   staleLists.delete(projectPath)
   const request = host('files.list', { projectPath })
-    .then(({ paths, folders = [], truncated }): ProjectFiles => {
+    .then(({ paths, folders = [], ignored = [], ignoredFolders = [], truncated }): ProjectFiles => {
       // An unchanged list keeps its arrays, so nothing that indexes them works again.
       const before = useFilesStore.getState().byProject[projectPath]
-      if (before && !before.error && before.truncated === truncated) {
-        if (samePaths(before.paths, paths) && samePaths(before.folders, folders)) return before
+      if (
+        before &&
+        !before.error &&
+        before.truncated === truncated &&
+        samePaths(before.paths, paths) &&
+        samePaths(before.folders, folders) &&
+        samePaths(before.ignored, ignored) &&
+        samePaths(before.ignoredFolders, ignoredFolders)
+      ) {
+        return before
       }
-      return { paths, folders, known: new Set(paths), truncated, error: null }
+      return {
+        paths,
+        folders,
+        ignored,
+        ignoredFolders,
+        known: new Set(paths),
+        truncated,
+        error: null,
+      }
     })
     .catch((error: unknown) => {
       // A failed refresh keeps the list it had.
@@ -198,18 +236,98 @@ export function loadFiles(projectPath: string): Promise<void> {
       return {
         paths: before?.paths ?? [],
         folders: before?.folders ?? [],
+        ignored: before?.ignored ?? [],
+        ignoredFolders: before?.ignoredFolders ?? [],
         known: before?.known ?? new Set<string>(),
         truncated: before?.truncated ?? false,
         error: errorMessage(error),
       }
     })
     .then((files) => {
-      if (useFilesStore.getState().byProject[projectPath] === files) return
-      useFilesStore.setState((s) => ({ byProject: { ...s.byProject, [projectPath]: files } }))
+      if (useFilesStore.getState().byProject[projectPath] !== files) {
+        useFilesStore.setState((s) => ({ byProject: { ...s.byProject, [projectPath]: files } }))
+      }
+      return files.error ? undefined : readFoldersAgain(projectPath, files.ignoredFolders)
     })
     .finally(() => inFlight.delete(projectPath))
   inFlight.set(projectPath, request)
   return request
+}
+
+const readingFolders = new Map<string, Promise<FolderRead>>()
+
+function setFolderRead(projectPath: string, folder: string, read: FolderRead | null): void {
+  useFilesStore.setState((s) => {
+    const reads = { ...s.folderReads[projectPath] }
+    if (read) reads[folder] = read
+    else delete reads[folder]
+    return { folderReads: { ...s.folderReads, [projectPath]: reads } }
+  })
+}
+
+/**
+ * Reads the files and folders directly in `folder`, inside a folder git ignores, which the list
+ * leaves unread; one request at a time per folder.
+ */
+export function readIgnoredFolder(projectPath: string, folder: string): Promise<FolderRead> {
+  const key = `${projectPath}\0${folder}`
+  const running = readingFolders.get(key)
+  if (running) return running
+  setFolderRead(projectPath, folder, { status: 'loading' })
+  const request = host('files.listFolder', { projectPath, path: folder })
+    .then(
+      (list): FolderRead => ({ status: 'read', ...list }),
+      (error: unknown): FolderRead => ({ status: 'failed', error: errorMessage(error) }),
+    )
+    .then((read) => {
+      setFolderRead(projectPath, folder, read)
+      return read
+    })
+    .finally(() => readingFolders.delete(key))
+  readingFolders.set(key, request)
+  return request
+}
+
+const sameRead = (read: FolderRead | undefined, list: FolderList): boolean =>
+  read?.status === 'read' &&
+  read.truncated === list.truncated &&
+  samePaths(read.files, list.files) &&
+  samePaths(read.folders, list.folders)
+
+/**
+ * Reads again the folders read before that are still in an ignored folder of the new list, and
+ * forgets the others, which the list itself now names or which are gone. What cannot be read
+ * again for another reason keeps what it showed.
+ */
+async function readFoldersAgain(projectPath: string, ignoredFolders: string[]): Promise<void> {
+  const reads = useFilesStore.getState().folderReads[projectPath]
+  if (!reads) return
+  const roots = new Set(ignoredFolders)
+  const inIgnored = (folder: string) => roots.has(folder) || insideAny(folder, roots)
+  const again = Object.keys(reads).filter(
+    (folder) => inIgnored(folder) && reads[folder]!.status === 'read',
+  )
+  const results = await Promise.all(
+    again.map((folder) =>
+      host('files.listFolder', { projectPath, path: folder }).then(
+        (list) => ({ folder, list, gone: false }),
+        (error: unknown) => ({ folder, list: null, gone: errorCode(error) === 'not_found' }),
+      ),
+    ),
+  )
+  // All at once, so a folder and the folders gone from it change together.
+  useFilesStore.setState((s) => {
+    const before = s.folderReads[projectPath] ?? {}
+    const next = Object.fromEntries(Object.entries(before).filter(([folder]) => inIgnored(folder)))
+    for (const { folder, list, gone } of results) {
+      if (list && !sameRead(next[folder], list)) next[folder] = { status: 'read', ...list }
+      else if (gone) delete next[folder]
+    }
+    const same =
+      Object.keys(next).length === Object.keys(before).length &&
+      Object.entries(next).every(([folder, read]) => before[folder] === read)
+    return same ? s : { folderReads: { ...s.folderReads, [projectPath]: next } }
+  })
 }
 
 /** Lists the project's files unless they are already known. */

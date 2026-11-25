@@ -42,10 +42,18 @@ import {
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import { toast } from '@renderer/components/ui/toast'
-import { PaneIcon } from '@renderer/features/shell/panel-button'
+import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 import { errorMessage } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { fileManagerName, formatShortcut, isMac, isMod } from '@renderer/lib/platform'
-import { openFile, unsavedUnder, useFilesStore, type ProjectFiles } from '@renderer/stores/files'
+import {
+  openFile,
+  readIgnoredFolder,
+  unsavedUnder,
+  useFilesStore,
+  type FolderRead,
+  type ProjectFiles,
+} from '@renderer/stores/files'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { panelSession } from '@renderer/stores/view'
 import { ChangeBadge } from './change-badge'
@@ -69,13 +77,17 @@ import {
 import {
   folderOf,
   foldersAbove,
+  ignoredOnly,
   indexFolders,
+  insideAny,
   isWithin,
   joinPath,
   movedPath,
   nameOf,
   outermost,
   treeRows,
+  withReads,
+  type Folder,
   type TreeRow,
 } from './paths'
 import { VirtualRows, type RowKey } from './virtual-rows'
@@ -104,16 +116,77 @@ const sensors = [
   }),
 ]
 
-// A list's folders and files, worked out once while the list lives.
-const folderIndexes = new WeakMap<ProjectFiles, ReturnType<typeof indexFolders>>()
+interface TreeIndex {
+  folders: Map<string, Folder>
+  /** The rows the tree dims: what git ignores, and the folders that hold nothing else. */
+  ignored: ReadonlySet<string>
+  /** Folders git ignores as a whole, whose insides are read once they are opened. */
+  unread: ReadonlySet<string>
+}
 
-function folderIndex(files: ProjectFiles): ReturnType<typeof indexFolders> {
-  let index = folderIndexes.get(files)
-  if (!index) {
-    index = indexFolders(files.paths, files.folders)
-    folderIndexes.set(files, index)
+// A list's folders and files, worked out once while the list lives, with what git ignores or not.
+const treeIndexes = new WeakMap<ProjectFiles, { shown?: TreeIndex; hidden?: TreeIndex }>()
+const NO_READS: Record<string, FolderRead> = {}
+
+/** Whether a folder is in an ignored one, so that the list leaves what is in it unread. */
+const isUnread = (index: TreeIndex, folder: string): boolean =>
+  index.unread.has(folder) || insideAny(folder, index.unread)
+
+// The index with what was read of ignored folders, worked out again only when a read changes.
+const openedIndexes = new WeakMap<
+  TreeIndex,
+  { reads: Record<string, FolderRead>; folders: Map<string, Folder> }
+>()
+
+function withOpened(index: TreeIndex, reads: Record<string, FolderRead>): Map<string, Folder> {
+  if (index.unread.size === 0) return index.folders
+  const cached = openedIndexes.get(index)
+  if (cached?.reads === reads) return cached.folders
+  const opened = Object.entries(reads).flatMap(([folder, read]) =>
+    read.status === 'read' ? [[folder, read] as const] : [],
+  )
+  const folders =
+    opened.length === 0
+      ? index.folders
+      : withReads(index.folders, opened, (folder) => isUnread(index, folder))
+  openedIndexes.set(index, { reads, folders })
+  return folders
+}
+
+function treeIndex(files: ProjectFiles, hideIgnored: boolean): TreeIndex {
+  let cached = treeIndexes.get(files)
+  if (!cached) {
+    cached = {}
+    treeIndexes.set(files, cached)
   }
+  const key = hideIgnored ? 'hidden' : 'shown'
+  const known = cached[key]
+  if (known) return known
+  const ignoring = !hideIgnored && files.ignored.length + files.ignoredFolders.length > 0
+  const folders = ignoring
+    ? indexFolders([...files.paths, ...files.ignored], [...files.folders, ...files.ignoredFolders])
+    : indexFolders(files.paths, files.folders)
+  const index: TreeIndex = ignoring
+    ? {
+        folders,
+        ignored: new Set([...files.ignored, ...ignoredOnly(folders, files.paths, files.folders)]),
+        unread: new Set(files.ignoredFolders),
+      }
+    : { folders, ignored: NO_PATHS, unread: NO_PATHS }
+  cached[key] = index
   return index
+}
+
+/** Reads an ignored folder the tree opened, telling when it could not be read whole. */
+async function readFolder(projectPath: string, folder: string): Promise<void> {
+  const read = await readIgnoredFolder(projectPath, folder)
+  const name = nameOf(folder)
+  if (read.status === 'failed') {
+    toast(i18n.t('files:tree.readFailed', { name, message: read.error }))
+  } else if (read.status === 'read' && read.truncated) {
+    const count = read.files.length + read.folders.length
+    toast(i18n.t('files:tree.readTruncated', { name, count }))
+  }
 }
 
 /** Where a new row goes among `rows`: a folder first under its parent, a file after the folders. */
@@ -183,8 +256,13 @@ export function FileTree({
   collapsed: number
 }) {
   const { t } = useTranslation(['files', 'common', 'composer'])
-  const index = folderIndex(files)
+  const hideIgnored = useFilesStore((s) => s.hideIgnored)
+  const reads = useFilesStore((s) => s.folderReads[projectPath] ?? NO_READS)
+  const base = treeIndex(files, hideIgnored)
+  const unread = (folder: string) => isUnread(base, folder)
+  const index = withOpened(base, reads)
   const isFolder = (path: string) => index.has(path)
+  const dimmed = (path: string) => base.ignored.has(path) || insideAny(path, base.unread)
   const [expanded, setExpanded] = useState(() => columnOf(columnKey).expanded)
   const [selected, setSelected] = useState(() => columnOf(columnKey).selected)
   const [anchor, setAnchor] = useState(() => columnOf(columnKey).anchor)
@@ -217,6 +295,19 @@ export function FileTree({
     () => saveColumn(columnKey, { expanded, revealed, selected, anchor }),
     [columnKey, expanded, revealed, selected, anchor],
   )
+  // An ignored folder is read when it shows open, its folders above it open too.
+  const toRead = [...expanded].filter(
+    (folder) =>
+      reads[folder] === undefined &&
+      index.has(folder) &&
+      unread(folder) &&
+      foldersAbove(folder).every((above) => expanded.has(above)),
+  )
+  const toReadKey = toRead.join('\0')
+  useEffect(() => {
+    if (toReadKey === '') return
+    for (const folder of toReadKey.split('\0')) void readFolder(projectPath, folder)
+  }, [projectPath, toReadKey])
   const clipboard = useFilesStore((s) =>
     s.clipboard?.projectPath === projectPath ? s.clipboard : null,
   )
@@ -242,6 +333,8 @@ export function FileTree({
 
   const toggle = (folder: string, open = !expanded.has(folder)) => {
     if (open === expanded.has(folder)) return
+    // A folder that could not be read is read again each time it opens.
+    if (open && reads[folder]?.status === 'failed') void readFolder(projectPath, folder)
     const next = new Set(expanded)
     if (open) next.add(folder)
     else next.delete(folder)
@@ -417,7 +510,11 @@ export function FileTree({
     const own = edit?.kind === 'rename' ? edit.path : null
     // Only a change of case names the row itself, which the host renames.
     if (own !== null && target.path.toLowerCase() === own.toLowerCase()) return null
-    if (files.known.has(target.path) || index.has(target.path)) {
+    const taken =
+      files.known.has(target.path) ||
+      index.has(target.path) ||
+      !!index.get(folderOf(target.path))?.files.includes(target.path)
+    if (taken) {
       return t('tree.nameTaken', { name: nameOf(target.path) })
     }
     return null
@@ -617,6 +714,8 @@ export function FileTree({
                     row={row}
                     tabIndex={tabIndex}
                     open={expanded.has(row.path)}
+                    ignored={dimmed(row.path)}
+                    loading={row.folder && reads[row.path]?.status === 'loading'}
                     current={row.path === openPath}
                     chosen={selected.has(row.path)}
                     cut={[...cut].some((path) => isWithin(row.path, path))}
@@ -740,6 +839,8 @@ function TreeItem({
   row,
   tabIndex,
   open,
+  ignored,
+  loading,
   current,
   chosen,
   cut,
@@ -752,6 +853,10 @@ function TreeItem({
   row: Line
   tabIndex: number | undefined
   open: boolean
+  /** Git ignores it, so it shows dimmed. */
+  ignored: boolean
+  /** An ignored folder being read for the first time. */
+  loading: boolean
   current: boolean
   chosen: boolean
   cut: boolean
@@ -787,6 +892,8 @@ function TreeItem({
       data-chosen={chosen || undefined}
       data-cut={cut || undefined}
       data-drop={drop || undefined}
+      data-ignored={ignored || undefined}
+      aria-busy={loading || undefined}
       style={{ paddingLeft: 8 + row.depth * 14 }}
       className={row.folder ? 'kp-node kp-node--dir' : 'kp-node'}
     >
@@ -795,6 +902,7 @@ function TreeItem({
       <span className="kp-node__name">
         <span>{nameOf(row.path)}</span>
       </span>
+      {loading && <PaneSpinner />}
       {change && <ChangeBadge status={change} />}
     </button>
   )

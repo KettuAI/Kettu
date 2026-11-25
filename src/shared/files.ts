@@ -7,7 +7,22 @@ export interface FileList {
   paths: string[]
   /** Folders with nothing in them on disk, which no path in `paths` names. */
   folders: string[]
+  /**
+   * Files git ignores, outside the folders of `ignoredFolders`. Absent outside a repository, and
+   * from a host that lists none.
+   */
+  ignored?: string[]
+  /** Folders git ignores as a whole, whose insides are read with `files.listFolder` when opened. */
+  ignoredFolders?: string[]
   /** The project holds more files than FILE_LIST_LIMIT; the list stops there. */
+  truncated: boolean
+}
+
+/** A folder's own files and folders, by their paths from the project's root. */
+export interface FolderList {
+  files: string[]
+  folders: string[]
+  /** The folder holds more than FILE_LIST_LIMIT entries; the list stops there. */
   truncated: boolean
 }
 
