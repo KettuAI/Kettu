@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { Platform } from '@shared/platform'
 import type { InstalledAdapter } from './adapter-install'
 import { CLAUDE_CODE } from './agents/claude-code'
+import { CLINE } from './agents/cline'
 import { DEEPAGENTS } from './agents/deepagents'
 import { DEEPSEEK } from './agents/deepseek'
 import { KIMI } from './agents/kimi'
@@ -210,6 +211,24 @@ describe('without a program of the user', () => {
     )
     expect(found).toMatchObject({ spec: { args: [copy.entry] } })
     expect(found).not.toHaveProperty('cli')
+  })
+
+  it('starts Cline with its own updater off, as Kettu keeps its version', async () => {
+    const copy = kettuCopy(CLINE, '3.0.74')
+    const found = await detectAgent(
+      CLINE,
+      context(CLINE, { installs: [copy], versions: { wanted: '3.0.74' } }),
+    )
+    // The SDK's process starts from the same launch, and a terminal sign-in from its display.
+    expect(found).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/bin/node',
+        args: [copy.entry, '--acp'],
+        env: { CLINE_NO_AUTO_UPDATE: '1' },
+        display: { env: { CLINE_NO_AUTO_UPDATE: '1' } },
+      },
+    })
   })
 })
 
