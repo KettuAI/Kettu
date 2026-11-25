@@ -105,8 +105,11 @@ export class DeviceManager {
   private readonly booted = new Map<DeviceId, DeviceId>()
   /** Devices this host is booting, which a listing from before the boot must not forget. */
   private readonly booting = new Set<DeviceId>()
-  /** The simulator boots under way, which a second open of the same simulator waits on. */
-  private readonly boots = new Map<DeviceId, Promise<void>>()
+  /**
+   * The boots under way, by the id a device is listed under while shut down, which a second open
+   * of the same device waits on; each gives the id the device is listed under once up.
+   */
+  private readonly boots = new Map<DeviceId, Promise<DeviceId>>()
   /** Simulators listed as booting until their boot is up, which simctl calls Booted before. */
   private readonly unbooted = new Set<DeviceId>()
   /** Who uses each device a turn uses, by its id. */
@@ -250,7 +253,7 @@ export class DeviceManager {
     if (found.kind === 'simulator' && found.state !== 'booted' && tools.xcrun) {
       this.setState(id, 'booting')
       try {
-        await this.bootOnce(id, tools.xcrun, found.target, env)
+        await this.bootSimulatorOnce(id, tools.xcrun, found.target, env)
       } catch (error) {
         this.setState(id, 'shutdown')
         throw new DeviceError(
@@ -263,31 +266,24 @@ export class DeviceManager {
           reason: 'closed',
         })
       }
-    } else if (found.kind === 'emulator' && found.state === 'shutdown') {
+    } else if (found.kind === 'emulator' && (found.state === 'shutdown' || this.boots.has(id))) {
       if (!tools.emulator || !tools.adb)
         throw new DeviceError('unavailable', t('devices.emulatorMissing'))
       this.setState(id, 'booting')
-      const serial = await bootEmulator(tools.emulator, tools.adb, found.target, env).catch(
+      const avd = id
+      id = await this.bootEmulatorOnce(avd, tools.emulator, tools.adb, found.target, env).catch(
         (error: unknown) => {
-          this.setState(id, 'shutdown')
+          this.setState(avd, 'shutdown')
           throw new DeviceError(
             'unavailable',
             t('devices.emulatorStart', { reason: reasonOf(error) }),
           )
         },
       )
-      // The running emulator is listed by its serial; the lease moves with it.
-      this.leases.delete(id)
-      const avd = id
-      id = `android:${serial}`
-      this.leases.set(id, sessionId)
-      this.booted.set(id, avd)
-      this.saveLeases()
-      this.booting.add(id)
-      try {
-        await this.list()
-      } finally {
-        this.booting.delete(id)
+      if (this.leases.get(id) !== sessionId) {
+        throw new DeviceError('unavailable', t('devices.closedWhileStarting'), {
+          reason: 'closed',
+        })
       }
     } else {
       await this.list()
@@ -297,39 +293,84 @@ export class DeviceManager {
     return info
   }
 
-  /**
-   * Boots a simulator once however many open it meanwhile. It is this host's once `simctl boot`
-   * started it, even if the wait for it fails; if no session holds it when the boot ends, its tab
-   * closed or its session ended meanwhile, it shuts down again.
-   */
-  private bootOnce(id: DeviceId, xcrun: string, udid: string, env: Env): Promise<void> {
-    let boot = this.boots.get(id)
-    if (!boot) {
+  /** Runs a device's boot once however many open it meanwhile. */
+  private bootOnce(id: DeviceId, boot: () => Promise<DeviceId>): Promise<DeviceId> {
+    let running = this.boots.get(id)
+    if (!running) {
       this.booting.add(id)
-      boot = (async () => {
-        let ours = false
-        this.unbooted.add(id)
-        try {
-          ours = await bootSimulator(xcrun, udid, env)
-          await waitUntilBooted(xcrun, udid, env)
-        } finally {
-          this.unbooted.delete(id)
-          if (ours && this.leases.has(id)) {
-            this.booted.set(id, id)
-            this.saveLeases()
-          } else if (ours) {
-            await shutdownSimulator(xcrun, udid, env)
-          }
-        }
-        // Waits for a listing that began before the boot, too, while it cannot forget the boot.
-        await this.list()
-      })().finally(() => {
+      running = boot().finally(() => {
         this.booting.delete(id)
         this.boots.delete(id)
       })
-      this.boots.set(id, boot)
+      this.boots.set(id, running)
     }
-    return boot
+    return running
+  }
+
+  /**
+   * Boots a simulator. It is this host's once `simctl boot` started it, even if the wait for it
+   * fails; if no session holds it when the boot ends, its tab closed or its session ended
+   * meanwhile, it shuts down again.
+   */
+  private bootSimulatorOnce(
+    id: DeviceId,
+    xcrun: string,
+    udid: string,
+    env: Env,
+  ): Promise<DeviceId> {
+    return this.bootOnce(id, async () => {
+      let ours = false
+      this.unbooted.add(id)
+      try {
+        ours = await bootSimulator(xcrun, udid, env)
+        await waitUntilBooted(xcrun, udid, env)
+      } finally {
+        this.unbooted.delete(id)
+        if (ours && this.leases.has(id)) {
+          this.booted.set(id, id)
+          this.saveLeases()
+        } else if (ours) {
+          await shutdownSimulator(xcrun, udid, env)
+        }
+      }
+      // Waits for a listing that began before the boot, too, while it cannot forget the boot.
+      await this.list()
+      return id
+    })
+  }
+
+  /**
+   * Starts an emulator from its AVD; it is listed by its serial once up, so the AVD's lease moves
+   * there. If no session holds the AVD when the boot ends, its tab closed or its session ended
+   * meanwhile, the emulator is shut down again.
+   */
+  private bootEmulatorOnce(
+    avd: DeviceId,
+    emulator: string,
+    adb: string,
+    name: string,
+    env: Env,
+  ): Promise<DeviceId> {
+    return this.bootOnce(avd, async () => {
+      const serial = await bootEmulator(emulator, adb, name, env)
+      const id: DeviceId = `android:${serial}`
+      const holder = this.leases.get(avd)
+      if (holder) {
+        this.leases.delete(avd)
+        this.leases.set(id, holder)
+        this.booted.set(id, avd)
+        this.saveLeases()
+      } else {
+        await run(adb, ['-s', serial, 'emu', 'kill'], env).catch(() => undefined)
+      }
+      this.booting.add(id)
+      try {
+        await this.list()
+      } finally {
+        this.booting.delete(id)
+      }
+      return id
+    })
   }
 
   /**
