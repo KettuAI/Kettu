@@ -299,12 +299,21 @@ export class AndroidDriver implements DeviceDriver {
   }
 }
 
-/** Starts an AVD without a window of its own, and resolves with its serial once it has booted. */
+const BOOT_TIMEOUT_MS = 240_000
+const BOOT_POLL_MS = 2_000
+/** How long an emulator that did not come up gets to exit after each way of stopping it. */
+const STOP_GRACE_MS = 5_000
+
+/**
+ * Starts an AVD without a window of its own, and resolves with its serial once it has booted. One
+ * that does not come up within `timeoutMs` is stopped again before this rejects.
+ */
 export async function bootEmulator(
   emulator: string,
   adb: string,
   avd: string,
   env: Env,
+  timeoutMs = BOOT_TIMEOUT_MS,
 ): Promise<string> {
   const before = new Set(parseAdbDevices(await run(adb, ['devices'], env)).map((row) => row.serial))
   const child = spawn(
@@ -318,21 +327,77 @@ export async function bootEmulator(
     },
   )
   child.unref()
-  const deadline = Date.now() + 240_000
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 2_000))
-    const rows = parseAdbDevices(await run(adb, ['devices'], env).catch(() => ''))
-    for (const row of rows) {
-      if (before.has(row.serial) || !row.serial.startsWith('emulator-') || row.state !== 'device')
-        continue
-      const booted = await run(
-        adb,
-        ['-s', row.serial, 'shell', 'getprop sys.boot_completed'],
-        env,
-        5_000,
-      ).catch(() => '')
-      if (booted.trim() === '1') return row.serial
+  const launch = { exited: false, error: null as Error | null }
+  child.once('error', (error) => {
+    launch.exited = true
+    launch.error = error
+  })
+  child.once('exit', () => {
+    launch.exited = true
+  })
+  // Emulators adb lists after this one started, which may also be the user's.
+  const appeared = new Set<string>()
+  try {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(BOOT_POLL_MS, deadline - Date.now())),
+      )
+      if (launch.error) throw launch.error
+      const rows = parseAdbDevices(await run(adb, ['devices'], env).catch(() => ''))
+      for (const row of rows) {
+        if (before.has(row.serial) || !row.serial.startsWith('emulator-')) continue
+        appeared.add(row.serial)
+        if (row.state !== 'device') continue
+        const booted = await run(
+          adb,
+          ['-s', row.serial, 'shell', 'getprop sys.boot_completed'],
+          env,
+          5_000,
+        ).catch(() => '')
+        if (booted.trim() === '1') return row.serial
+      }
     }
+    throw new Error(t('devices.emulatorBoot'))
+  } catch (error) {
+    if (!launch.exited) await stopLaunched(child, adb, avd, appeared, env)
+    throw error
   }
-  throw new Error(t('devices.emulatorBoot'))
+}
+
+/**
+ * Stops an emulator `bootEmulator` started, while its process still runs: through the console of
+ * the listed emulator running its AVD, which an AVD runs only once, then by signals.
+ */
+async function stopLaunched(
+  child: ChildProcess,
+  adb: string,
+  avd: string,
+  serials: Set<string>,
+  env: Env,
+): Promise<void> {
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+  let killed = false
+  for (const serial of serials) {
+    // The console answers with the AVD's name, then OK.
+    const name = await run(adb, ['-s', serial, 'emu', 'avd', 'name'], env, 5_000).catch(() => '')
+    if (name.split(/\r?\n/)[0]?.trim() !== avd) continue
+    await run(adb, ['-s', serial, 'emu', 'kill'], env, 5_000).catch(() => undefined)
+    killed = true
+  }
+  if (killed && (await exitsWithin(exited, STOP_GRACE_MS))) return
+  child.kill('SIGTERM')
+  if (await exitsWithin(exited, STOP_GRACE_MS)) return
+  child.kill('SIGKILL')
+  await exitsWithin(exited, STOP_GRACE_MS)
+}
+
+function exitsWithin(exited: Promise<void>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms)
+    void exited.then(() => {
+      clearTimeout(timer)
+      resolve(true)
+    })
+  })
 }
