@@ -248,7 +248,7 @@ describe('what an agent reads before it searches its tools', () => {
   })
 
   // Claude Code defers MCP tools behind a search, so an entry tool it does not list goes unused.
-  it('lists the plan tool and the entries to artifacts, sessions, workflows and the browser from the start', async () => {
+  it('lists the plan tool, the entries to artifacts, sessions, workflows and the browser, and the memory tools from the start', async () => {
     const service = await everythingOn()
     const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
     const loaded = tools
@@ -258,10 +258,14 @@ describe('what an agent reads before it searches its tools', () => {
       [
         'browser_navigate',
         'create_artifact',
+        'forget_memory',
         'list_workflows',
+        'read_memory',
+        'remember',
         'set_plan',
         'start_session',
         'suggest_workflow',
+        'update_memory',
       ].sort(),
     )
   })

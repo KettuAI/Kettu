@@ -72,6 +72,10 @@ const BODY = {
   description: 'The fact in Markdown, with why it holds and how to apply it.',
 }
 
+// Claude Code defers MCP tools behind a search, and the memory text names these, so an agent calls
+// them without their schema unless they are listed from the start.
+const LISTED = { 'anthropic/alwaysLoad': true }
+
 export const MEMORY_TOOLS: Tool[] = [
   {
     name: LIST_MEMORIES_TOOL,
@@ -107,6 +111,7 @@ export const MEMORY_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
+    _meta: LISTED,
   },
   {
     name: REMEMBER_TOOL,
@@ -131,6 +136,7 @@ export const MEMORY_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: LISTED,
   },
   {
     name: UPDATE_MEMORY_TOOL,
@@ -148,6 +154,7 @@ export const MEMORY_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: LISTED,
   },
   {
     name: FORGET_MEMORY_TOOL,
@@ -164,6 +171,7 @@ export const MEMORY_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: LISTED,
   },
 ]
 
