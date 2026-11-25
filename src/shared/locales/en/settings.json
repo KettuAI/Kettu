@@ -1724,7 +1724,6 @@
       "connectAll": "Connect all",
       "connectAllLabel": "Connect to all {{count}} computers",
       "reverse": "Also let {{name}} use this computer",
-      "reverseAll": "Also let them use this computer",
       "reverseAdded": "{{name}} can use this computer too.",
       "reverseFailed": "Could not let {{name}} use this computer. You can still add it in Settings › Remote access.",
       "reverseUnsupported": "{{name}} runs Kettu without a window, so it cannot use other computers.",
@@ -1734,13 +1733,21 @@
         "check": "Check that every computer, or another device of yours that uses them, shows this code.",
         "each": "Or check each computer on its own",
         "matched": "Codes match. Add this computer on each of them, or on another device of yours that uses them.",
-        "added": "Connected to {{count}} computers",
+        "added_one": "Connected to {{count}} computer",
+        "added_other": "Connected to {{count}} computers",
+        "partial": "Connected to {{added}} of {{count}} computers",
+        "none": "No computer was added",
         "state": {
           "connecting": "Connecting…",
-          "compare": "Check the code",
           "matched": "Waiting to be added…",
           "added": "Added",
           "failed": "Not added"
+        },
+        "failed": {
+          "void": "It expired or was closed there",
+          "rejected": "Turned down there",
+          "unreachable": "Could not reach it",
+          "other": "It could not be reached through the relay"
         }
       }
     },

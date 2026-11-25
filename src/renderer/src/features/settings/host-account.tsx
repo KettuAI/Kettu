@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { currentLocale } from '@renderer/lib/i18n'
 import {
   groupCodeOf,
   newPairGroup,
@@ -765,7 +766,9 @@ export function AccountPairAllFlow({
     const { pairId, step } = entry
     if (pairId === null || step.kind !== 'compare' || step.matched) return
     update(entry.host.relayId, { state: 'compare', code: step.code, matched: true })
-    window.kettu.hosts.matchPairing(pairId, true, offerReverse && reverse).catch(() => {
+    // A daemon has no client to keep this computer with, so it is not asked.
+    const asked = offerReverse && reverse && entry.host.kind !== 'daemon'
+    window.kettu.hosts.matchPairing(pairId, true, asked).catch(() => {
       update(entry.host.relayId, { state: 'failed', reason: 'unreachable' })
     })
   }
@@ -793,7 +796,11 @@ export function AccountPairAllFlow({
         title={
           active
             ? t('hosts.account.pairAll.title', { count: hosts.length })
-            : t('hosts.account.pairAll.added', { count: added })
+            : added === hosts.length
+              ? t('hosts.account.pairAll.added', { count: added })
+              : added === 0
+                ? t('hosts.account.pairAll.none')
+                : t('hosts.account.pairAll.partial', { added, count: hosts.length })
         }
       />
       <SettingsDialogBody>
@@ -811,10 +818,12 @@ export function AccountPairAllFlow({
             </div>
           </>
         )}
-        <section aria-labelledby="pair-all-each" className="kettu-sd__field">
-          <h3 id="pair-all-each" className="kettu-sd__label">
-            {t('hosts.account.pairAll.each')}
-          </h3>
+        <section aria-labelledby={active ? 'pair-all-each' : undefined} className="kettu-sd__field">
+          {active && (
+            <h3 id="pair-all-each" className="kettu-sd__label">
+              {t('hosts.account.pairAll.each')}
+            </h3>
+          )}
           <ul className="kettu-sd__list kettu-sd__account">
             {batch.map((entry) => (
               <BatchRow key={entry.host.relayId} entry={entry} onMatch={() => matchOne(entry)} />
@@ -823,7 +832,11 @@ export function AccountPairAllFlow({
         </section>
         {offerReverse && active && (
           <ReverseOption
-            label={t('hosts.account.reverseAll')}
+            label={t('hosts.account.reverse', {
+              name: new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
+                hosts.filter((host) => host.kind !== 'daemon').map((host) => host.name),
+              ),
+            })}
             checked={reverse}
             disabled={matchedAny}
             onChange={setReverse}
@@ -873,17 +886,23 @@ function BatchRow({ entry, onMatch }: { entry: BatchHost; onMatch: () => void })
   const line =
     step.kind === 'compare'
       ? `${step.code.slice(0, 3)} ${step.code.slice(3)}`
-      : step.kind === 'added' && step.reverse
-        ? reverseLine(t, step.reverse, host.name)
-        : t(`hosts.account.pairAll.state.${step.kind}`)
+      : step.kind === 'added'
+        ? step.reverse && reverseLine(t, step.reverse, host.name)
+        : step.kind === 'failed'
+          ? t(
+              `hosts.account.pairAll.failed.${OWN_TEXT.has(step.reason) ? (step.reason as 'void') : 'other'}`,
+            )
+          : t('hosts.account.pairAll.state.connecting')
   return (
     <li className="kettu-sd__row">
       <DeviceTile icon={<HostIcon platform={host.platform} />} />
       <span className="ui-sg-label">
         <b className="k-name">{host.name}</b>
-        <small className={step.kind === 'compare' ? 'kettu-sd__each-code' : undefined}>
-          {line}
-        </small>
+        {line && (
+          <small className={step.kind === 'compare' ? 'kettu-sd__each-code' : undefined}>
+            {line}
+          </small>
+        )}
       </span>
       {step.kind === 'compare' && !step.matched ? (
         <SetButton

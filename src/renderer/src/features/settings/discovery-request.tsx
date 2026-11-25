@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { currentLocale } from '@renderer/lib/i18n'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import {
   groupCodeOf,
@@ -343,7 +344,10 @@ function DiscoveryConfirm({
   }
   const named = hosts.filter((host): host is string => host !== null)
   const body = group
-    ? t('remote.discovery.groupBody', { name: device.name, hosts: named.join(', ') })
+    ? t('remote.discovery.groupBody', {
+        name: device.name,
+        hosts: new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(named),
+      })
     : named[0]
       ? t('remote.discovery.bodyOn', { name: device.name, host: named[0] })
       : t('remote.discovery.body', { name: device.name })

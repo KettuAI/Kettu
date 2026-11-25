@@ -113,6 +113,8 @@ function validAnswer(value: unknown): { requestId: string; optionId: string } | 
 }
 
 let discovery: { requestId: number; notification: Notification } | null = null
+/** The request last notified, which its later events do not notify again. */
+let notifiedRequest: number | null = null
 
 /**
  * A device of the account asks to be added: an OS notification while no window is focused, whose
@@ -130,9 +132,11 @@ export function notifyDiscovery(
     }
     return
   }
-  // The same request again, now that its device confirmed the code, is no new notice.
-  if (discovery?.requestId === event.requestId) return
+  // The same request again, now that its device confirmed the code, is no new notice, even when
+  // the first one was dismissed or failed.
+  if (notifiedRequest === event.requestId) return
   if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return
+  notifiedRequest = event.requestId
   discovery?.notification.close()
   const notification = new Notification({
     title: t('notifications.discoveryTitle'),

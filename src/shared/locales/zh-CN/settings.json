@@ -1709,7 +1709,6 @@
       "connectAll": "全部连接",
       "connectAllLabel": "连接全部 {{count}} 台电脑",
       "reverse": "也让 {{name}} 用这台电脑",
-      "reverseAll": "也让它们用这台电脑",
       "reverseAdded": "{{name}} 也能用这台电脑了。",
       "reverseFailed": "没能让 {{name}} 用这台电脑。还想这样的话，在设置 › 远程访问里添加它。",
       "reverseUnsupported": "{{name}} 上的 Kettu 没有窗口，用不了别的电脑。",
@@ -1719,13 +1718,20 @@
         "check": "确认每台电脑，或你的另一台能用它们的设备上，显示的是这个验证码。",
         "each": "或逐台核对",
         "matched": "验证码一致。在每台电脑上，或你的另一台能用它们的设备上添加这台电脑。",
-        "added": "已连接 {{count}} 台电脑",
+        "added_other": "已连接 {{count}} 台电脑",
+        "partial": "已连接 {{count}} 台中的 {{added}} 台电脑",
+        "none": "没有添加任何电脑",
         "state": {
           "connecting": "正在连接…",
-          "compare": "核对验证码",
           "matched": "等待添加…",
           "added": "已添加",
           "failed": "没有添加"
+        },
+        "failed": {
+          "void": "已过期，或在那边被关闭",
+          "rejected": "在那边被拒绝了",
+          "unreachable": "连不上它",
+          "other": "无法通过中继连上它"
         }
       }
     },
