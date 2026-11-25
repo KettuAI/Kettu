@@ -5208,6 +5208,10 @@ export class AgentManager {
         this.emit(slot)
         this.hooks.signedIn(slot.id)
         void this.readSignInMethod(slot)
+        // The plan and limits shown were read under the method agy refused.
+        this.refreshLimits(slot.id, { force: true }).catch((error: unknown) => {
+          log('warn', `the plan limits read failed: ${agentError(error).message}`)
+        })
         return
       }
       log('info', 'refused a session and holds no Google sign-in')

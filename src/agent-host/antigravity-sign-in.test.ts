@@ -6,13 +6,18 @@ import { access, chmod, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
+import type { SessionSummary } from '@shared/agent-host'
 import { AgentManager } from './agents'
 import { ANTIGRAVITY } from './agents/antigravity'
 import type { LaunchSpec } from './catalog'
-import type { AgentConnection, AgentInit } from './connection'
+import { AgentRequestError, type AgentConnection, type AgentInit } from './connection'
 import { Diagnostics } from './diagnostics'
 import type { ProcessDriver } from './driver'
+import type { Projects } from './projects'
+import type { ScratchFolders } from './scratch'
+import { SessionManager, type SessionEvents } from './sessions'
 import { EnvironmentService } from './shell-env'
+import { returnedFile, sessionsFile } from './storage'
 import { FakeAppServer, FakeRpcError } from './testing/fake-app-server'
 import { tempFolder } from './testing/temp'
 import sessionNew from './vendor-usage/fixtures/agy-session-new.json'
@@ -92,9 +97,10 @@ function running(transport: unknown = {}) {
 
 /**
  * A manager whose only harness is Antigravity's default agent. Its scratch agy holds a Google
- * sign-in when `holds`, and refuses the session otherwise.
+ * sign-in when `holds`, and refuses the session otherwise; signing the running agy in with it
+ * hands over a page to open when `opensPage`. The running agy refuses its first session.
  */
-async function manager(holds: boolean) {
+async function manager(holds: boolean, { opensPage = false } = {}) {
   const root = await tempFolder('kettu-agy-sign-in-')
   const program = path.join(root, process.platform === 'win32' ? 'agy.cmd' : 'agy')
   await writeFile(program, '')
@@ -103,12 +109,34 @@ async function manager(holds: boolean) {
   const nodeRuntime = { command: process.execPath, env: {} }
   const authenticated: string[] = []
   const checks: { spec: LaunchSpec; server: FakeAppServer }[] = []
+  const opened: string[] = []
   const connection = {
     closed: new Promise<void>(() => {}),
+    isClosed: false,
     initialize: async () => INIT,
-    authenticate: async (methodId: string) => {
+    authenticate: async (
+      methodId: string,
+      options: { openLink(url: string): void; signal?: AbortSignal },
+    ) => {
       authenticated.push(methodId)
+      if (!opensPage) return
+      options.openLink('https://accounts.google.com/o/oauth2/auth')
+      await new Promise<never>((_, reject) => {
+        const cancel = () => reject(new Error('The sign-in was cancelled'))
+        if (options.signal?.aborted) cancel()
+        else options.signal?.addEventListener('abort', cancel)
+      })
     },
+    newSession: async (cwd: string) => {
+      opened.push(cwd)
+      if (opened.length === 1) {
+        throw new AgentRequestError('auth_required', 'Authentication required', -32000)
+      }
+      return { sessionId: `agy-${opened.length}`, config: [] }
+    },
+    setConfigOption: async () => [],
+    register: () => {},
+    unregister: () => {},
     close: () => {},
   } as unknown as AgentConnection
   const driver: ProcessDriver = { kind: 'process', connect: () => connection }
@@ -164,7 +192,39 @@ async function manager(holds: boolean) {
   }
   const signIn = async () =>
     (await agents.list()).find((status) => status.id === 'antigravity')?.signIn
-  return { agents, authenticated, checks, signedIn, signIn, root }
+  return { agents, authenticated, checks, opened, signedIn, signIn, root, program }
+}
+
+/** New session's window over `agents`, with the prepared sessions' summaries it is sent. */
+async function newSession({ agents, root, program }: Awaited<ReturnType<typeof manager>>) {
+  const summaries: SessionSummary[] = []
+  const events = new Proxy({} as SessionEvents, {
+    get: (_, name) =>
+      name === 'summary' ? (summary: SessionSummary) => summaries.push(summary) : () => {},
+  })
+  const sessions = new SessionManager({
+    platform: process.platform === 'win32' ? 'win32' : process.platform,
+    agents,
+    projects: {
+      list: () => [],
+      find: () => null,
+      resolveDirectory: async (folder: string) => folder,
+      add: async () => {},
+    } as unknown as Projects,
+    scratch: { contains: () => false } as unknown as ScratchFolders,
+    file: sessionsFile(root, () => {}),
+    returned: returnedFile(root, () => {}),
+    portOpen: () => true,
+    threads: null,
+    reportsDir: path.join(root, 'reports'),
+    diagnostics: new Diagnostics(),
+    git: () => null,
+    events,
+    settings: () => settings(program),
+  })
+  await sessions.load()
+  const ready = () => summaries.filter((s) => s.prepared && s.status === 'ready')
+  return { sessions, ready }
 }
 
 describe('Google Antigravity refusing a session though agy holds a Google sign-in', () => {
@@ -197,6 +257,45 @@ describe('Google Antigravity refusing a session though agy holds a Google sign-i
     await vi.waitFor(async () => expect(await signIn()).toBe('required'))
     expect(checks).toHaveLength(1)
     expect(authenticated).toEqual([])
+  })
+
+  it('opens New session again and reads the plan limits once it signed agy in', async () => {
+    const setup = await manager(true)
+    const { agents, opened, root } = setup
+    const { sessions, ready } = await newSession(setup)
+    const limits = vi.spyOn(agents, 'refreshLimits').mockResolvedValue()
+
+    await expect(
+      sessions.prepare({ agentId: 'antigravity', projectPath: root }, 'window'),
+    ).rejects.toMatchObject({ code: 'auth_required' })
+
+    await vi.waitFor(() => expect(ready()).toHaveLength(1))
+    expect(opened).toEqual([root, root])
+    expect(limits.mock.calls).toEqual([['antigravity', { force: true }]])
+    // The window's next ask takes the one opened for it.
+    const again = await sessions.prepare({ agentId: 'antigravity', projectPath: root }, 'window')
+    expect(again.id).toBe(ready()[0]!.id)
+    expect(opened).toHaveLength(2)
+  })
+
+  it.each([
+    ['agy holds no Google sign-in', false, false],
+    ['signing in would open a page', true, true],
+  ])('opens nothing again and reads no limits when %s', async (_, holds, opensPage) => {
+    const setup = await manager(holds, { opensPage })
+    const { agents, checks, opened, root, signIn } = setup
+    const { sessions, ready } = await newSession(setup)
+    const limits = vi.spyOn(agents, 'refreshLimits').mockResolvedValue()
+
+    await expect(
+      sessions.prepare({ agentId: 'antigravity', projectPath: root }, 'window'),
+    ).rejects.toMatchObject({ code: 'auth_required' })
+
+    await vi.waitFor(async () => expect(await signIn()).toBe('required'))
+    expect(checks).toHaveLength(1)
+    expect(opened).toHaveLength(1)
+    expect(ready()).toEqual([])
+    expect(limits).not.toHaveBeenCalled()
   })
 
   it('checks once for each agy process', async () => {
