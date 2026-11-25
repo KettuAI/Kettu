@@ -542,6 +542,20 @@ describe('sessions', () => {
     expect(failure).toMatchObject({ kind: 'agent_error', code: -32002 })
   })
 
+  it('says a thread another Codex program holds is open there, not Codex’s own words', async () => {
+    const { server, connection } = await connect()
+    // Codex 0.172.0's answer while another process holds the thread's writer lock.
+    server.on('thread/resume', () => {
+      throw new FakeRpcError(-32600, 'thread thread-9 already has an active writer')
+    })
+    const failure = await connection.resumeSession('thread-9', '/project').catch((e) => e)
+    expect(failure).toBeInstanceOf(AgentRequestError)
+    // Not a thread Codex lacks: that would start a new one in its place.
+    expect(failure).toMatchObject({ kind: 'agent_error', code: -32600 })
+    expect(failure.message).toContain('open in another Codex program')
+    expect(failure.message).not.toContain('active writer')
+  })
+
   it('sends the session’s settings with every turn, after a resume as well', async () => {
     const { server, connection } = await connect()
     server.on('thread/resume', (params) =>
