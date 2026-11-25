@@ -130,7 +130,7 @@ Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 - **Windows** (x64 and Arm): the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
 - **Linux** (x64 and Arm): the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
 
-On an iPhone or iPad: join the [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ). It needs iOS 26 or later, and Kettu on a computer.
+On an iPhone or iPad: join the [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ). It needs iOS 18 or later, and Kettu on a computer.
 
 On an Android phone or tablet: download [Kettu.apk](https://download.kettu.sh/android/latest/download/Kettu.apk) and allow the install when Android asks. It needs Android 8.0 or later with Chrome, and Kettu on a computer.
 

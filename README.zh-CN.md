@@ -130,7 +130,7 @@
 - **Windows**（x64 和 Arm）：`setup.exe`。还没有签名，SmartScreen 提示时点「更多信息」，再点「仍要运行」。
 - **Linux**（x64 和 Arm）：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
 
-在 iPhone 或 iPad 上：加入 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。需要 iOS 26 或更高版本，电脑上需要有 Kettu。
+在 iPhone 或 iPad 上：加入 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。需要 iOS 18 或更高版本，电脑上需要有 Kettu。
 
 在 Android 手机或平板上：下载 [Kettu.apk](https://download.kettu.sh/android/latest/download/Kettu.apk)，系统询问时允许安装。需要 Android 8.0 或更高版本并装有 Chrome，电脑上需要有 Kettu。
 
