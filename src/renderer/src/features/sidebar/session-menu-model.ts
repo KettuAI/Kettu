@@ -21,6 +21,7 @@ export type SessionMenuItem =
   | 'openTerminal'
   | 'copyResume'
   | 'copySessionId'
+  | 'exportConversation'
   | 'showInParent'
   | 'removeWorktree'
   | 'leave'
@@ -46,6 +47,7 @@ export const ACCELERATORS: Partial<Record<SessionMenuItem, string>> = {
   fork: 'F',
   showInFolder: 'Alt+Mod+R',
   openTerminal: 'Ctrl+`',
+  exportConversation: 'E',
   archive: 'A',
   delete: 'Backspace',
 }
@@ -138,7 +140,7 @@ export function sessionMenuGroups(
           state,
           ['rename', ...(topLevel ? (['pin'] as const) : []), ...forks],
           ['openInEditor', 'showInFolder', 'openTerminal'],
-          ['copyResume', 'copySessionId'],
+          ['copyResume', 'copySessionId', 'exportConversation'],
           ending,
         ]
       : [
@@ -152,6 +154,7 @@ export function sessionMenuGroups(
               : []),
             'copyResume',
             'showInFolder',
+            'exportConversation',
           ],
           ending,
         ]

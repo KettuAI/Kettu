@@ -9,6 +9,7 @@ import {
   ComputerTerminal01Icon,
   Copy01Icon,
   Delete02Icon,
+  Download04Icon,
   FolderOpenIcon,
   GitBranchIcon,
   Layout2ColumnIcon,
@@ -65,6 +66,8 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
+import { modelName } from '@renderer/features/session/conversation-markdown'
+import { exportConversation } from '@renderer/features/session/export-conversation'
 import { Glyph, MenuGlyph } from '@renderer/features/shell/glyph'
 import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -513,6 +516,14 @@ export function SessionMenuItems({
             {t('row.copySessionId')}
           </DropdownMenuItem>
         )
+      case 'exportConversation':
+        return (
+          <DropdownMenuItem key={name} {...props} onClick={() => exportConversation(summary)}>
+            <MenuGlyph icon={Download04Icon} />
+            {t('export.menu')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
       case 'showInParent':
         return (
           <DropdownMenuItem
@@ -651,12 +662,6 @@ export function SessionMenuHeader({
       <DropdownMenuSeparator />
     </>
   )
-}
-
-function modelName(session: SessionView | undefined): string | null {
-  const option = session?.config.find((o) => o.category === 'model' && o.type === 'select')
-  if (!option) return null
-  return option.choices?.find((choice) => choice.value === option.value)?.name ?? null
 }
 
 /**

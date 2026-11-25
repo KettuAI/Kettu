@@ -55,6 +55,7 @@
     "addFolder": "Add Folder",
     "installTheme": "Install Theme",
     "exportTheme": "Export Theme",
+    "exportConversation": "Export Conversation",
     "chooseAgentFolder": "Choose Agent Folder",
     "chooseEditor": "Choose Editor",
     "chooseSshKey": "Choose SSH Key File"

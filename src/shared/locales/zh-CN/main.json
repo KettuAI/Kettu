@@ -55,6 +55,7 @@
     "addFolder": "添加文件夹",
     "installTheme": "安装主题",
     "exportTheme": "导出主题",
+    "exportConversation": "导出对话",
     "chooseAgentFolder": "选择智能体的配置目录",
     "chooseEditor": "选择编辑器",
     "chooseSshKey": "选择 SSH 密钥文件"

@@ -237,6 +237,28 @@
     "moreFor": "More for {{title}}",
     "deleteKeepsAppCopy": "{{agent}} keeps its own copy, which Kettu can’t delete."
   },
+  "export": {
+    "menu": "Export conversation…",
+    "exporting": "Exporting “{{title}}”…",
+    "exported": "Exported “{{title}}”",
+    "failed": "Could not export “{{title}}”: {{error}}",
+    "agent": "Agent: {{name}}",
+    "model": "Model: {{name}}",
+    "project": "Project: {{path}}",
+    "started": "Started: {{date}}",
+    "exportedAt": "Exported: {{date}}",
+    "you": "You",
+    "fromKettu": "From Kettu",
+    "from": "From {{title}}",
+    "fromParent": "From the parent session",
+    "attachments": "Attachments",
+    "image": "Image {{number}}",
+    "audio": "Audio",
+    "video": "Video",
+    "subagent": "Sub-agent",
+    "startedSession": "Started {{title}}",
+    "startedSessionMissing": "Started a session"
+  },
   "work": {
     "turn": "Current turn",
     "waiting_one": "{{count}} request waiting",
