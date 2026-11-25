@@ -59,3 +59,10 @@ export function planReset(at: number, now = Date.now()): string {
     ? i18n.t('planReset.in', { time: countdown(left) })
     : i18n.t('planReset.at', { time: resetTime(at, now) })
 }
+
+/** 紧凑重置时间（不带“Resets”词头）：24 小时内显示剩余倒计时，否则显示重置时刻；已过期返回 null */
+export function planResetShort(at: number, now = Date.now()): string | null {
+  const left = at - now
+  if (left <= 0) return null
+  return left < DAY ? countdown(left) : resetTime(at, now)
+}

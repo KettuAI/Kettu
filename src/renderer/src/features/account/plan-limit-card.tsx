@@ -74,7 +74,7 @@ export function PlanLimitCard({
       >
         <CardFace card={card} />
       </HoverCardTrigger>
-      <HoverCardContent side="right" align="start" sideOffset={6} className="w-68">
+      <HoverCardContent side="right" align="start" sideOffset={6} className="w-76">
         <div className="mb-2.5 flex min-w-0 items-center gap-1.5">
           <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
           <span className="min-w-0 truncate text-small font-semibold text-primary">

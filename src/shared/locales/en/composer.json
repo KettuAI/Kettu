@@ -148,7 +148,14 @@
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}",
       "planOf": "Plan · {{plan}}",
-      "title": "Plan limits"
+      "title": "Plan limits",
+      "allModels": "All models",
+      "modelWeekly": "Model weekly",
+      "modelWindow": "Model · {{window}}",
+      "current": "Current",
+      "models_one": "{{count}} model",
+      "models_other": "{{count}} models",
+      "toggleView": "Switch to {{view}}"
     },
     "cache": {
       "title": "Prompt cache",

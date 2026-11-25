@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown01Icon, ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  RefreshIcon,
+  Timer02Icon,
+} from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
 import {
@@ -27,14 +32,13 @@ import {
   type ContextPart as ContextWindowPart,
 } from '@renderer/components/affect/context-window'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { joinPlanTier } from '@renderer/features/account/model'
 import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
+import { planResetShort, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
   clockTime,
@@ -43,18 +47,22 @@ import {
   limitLabel,
   limitShort,
   money,
+  planAmount,
   tokens,
+  windowLabel,
 } from '@renderer/lib/format'
 import { errorMessage, host, sessionHost } from '@renderer/lib/host'
 import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
 import { toggleSidePane } from '@renderer/stores/view'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
 import { readsModelRequests } from '@renderer/features/requests/support'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { groupPlanLimits, type PlanLimitGroup, type PlanLimitItem } from './plan-limit-groups'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -414,7 +422,7 @@ export function ContextButton({
               <Glyph icon={ArrowRight01Icon} size={13} />
             </button>
           )}
-          {subscribed && <PlanLimits limits={limits} account={account} />}
+          {subscribed && <PlanLimits limits={limits} holding={holding} account={account} />}
         </div>
       </PopoverContent>
     </Popover>
@@ -729,59 +737,211 @@ function Total({ label, value }: { label: string; value: number | null }) {
   )
 }
 
-/** The plan's limits under the context: the tier as a chip, then each window with its bar. */
-function PlanLimits({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
-  const { t } = useTranslation(['composer', 'common'])
+/** 根据条目在组内的展示模式生成紧凑且不重复的窗名 */
+function itemLabel(item: PlanLimitItem): string {
+  if (item.labelMode === 'scope' && item.parts.scope) return item.parts.scope
+  if (item.labelMode === 'window' && item.parts.kind) {
+    return windowLabel({ kind: item.parts.kind, count: item.parts.count, scope: null })
+  }
+  return limitLabel(item.limit)
+}
+
+/**
+ * 分组双轨卡片列表：按模型组/服务商聚合，组名独占顶行彻底避免折行，组内窗口左右双列并排对照。
+ * 同时供上下文弹窗（PlanLimits）与侧边栏账号悬浮卡（PlanPart）复用。
+ */
+function PlanLimitGroups({
+  limits,
+  holding,
+}: {
+  limits: PlanLimit[]
+  /** 当前会话所选模型对应的受限窗口；传入时会将对应组标为当前并置顶 */
+  holding?: PlanLimit[]
+}) {
+  const { t } = useTranslation(['composer', 'common', 'usage'])
   const now = useNow()
   const view = useLimitView()
-  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
+  const groups = groupPlanLimits(limits, holding)
+  if (groups.length === 0) return null
+
+  const headingOf = (group: PlanLimitGroup): string | null => {
+    if (group.kind === 'solo') return null
+    if (group.kind === 'group') return group.title
+    if (group.kind === 'all') return t('usage.limits.allModels')
+    if (group.windowKind === 'seven_day') return t('usage.limits.modelWeekly')
+    if (group.windowKind) {
+      return t('usage.limits.modelWindow', {
+        window: windowLabel({ kind: group.windowKind, count: null, scope: null }),
+      })
+    }
+    return null
+  }
+
   return (
-    <div className="kettu-ctx__plan">
-      <div className="kettu-ctx__plan-head">
-        <span>
-          {t('usage.limits.title')}
-          <span className="font-normal opacity-70">
-            {' · '}
-            {t(view === 'left' ? 'common:planView.left' : 'common:planView.used')}
-          </span>
-        </span>
-        {plan && <span className="kettu-ctx__tier">{plan}</span>}
-      </div>
-      {limits.map((limit) => {
-        const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
+    <div className="kettu-plan-groups">
+      {groups.map((group) => {
+        const heading = headingOf(group)
+        const modelsTip = group.models.length > 0 ? group.models.join(' · ') : null
+        const single = group.items.length === 1
         return (
-          <div key={limit.window} className="kettu-limit" data-level={METER[usageTone(limit)]}>
-            <div className="kettu-limit__row">
-              <span className="kettu-limit__label">{limitLabel(limit)}</span>
-              {limit.resetsAt && (
-                <Tooltip>
-                  <TooltipTrigger render={<span className="kettu-limit__reset" />}>
-                    {planReset(limit.resetsAt, now)}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              <span className="kettu-limit__value tabular">
-                {limit.usedPercent === null ? '—' : `${shown}%`}
-              </span>
-            </div>
-            <div
-              className="kettu-limit__bar"
-              role="meter"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={shown}
-              aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
-                limit: limitLabel(limit),
+          <div
+            key={group.id}
+            className="kettu-plan-group"
+            data-current={group.current ? '' : undefined}
+            data-solo={group.kind === 'solo' ? '' : undefined}
+          >
+            {heading && (
+              <div className="kettu-plan-group__head">
+                <span className="kettu-plan-group__name" title={heading}>
+                  {heading}
+                </span>
+                {group.current ? (
+                  modelsTip ? (
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="kettu-plan-group__badge" />}>
+                        {t('usage.limits.current')}
+                      </TooltipTrigger>
+                      <TooltipContent>{modelsTip}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="kettu-plan-group__badge">{t('usage.limits.current')}</span>
+                  )
+                ) : (
+                  modelsTip && (
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="kettu-plan-group__models" />}>
+                        {t('usage.limits.models', { count: group.models.length })}
+                      </TooltipTrigger>
+                      <TooltipContent>{modelsTip}</TooltipContent>
+                    </Tooltip>
+                  )
+                )}
+              </div>
+            )}
+            <div className="kettu-plan-group__grid" data-single={single ? '' : undefined}>
+              {group.items.map((item) => {
+                const { limit } = item
+                const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
+                const fill = limit.usedPercent === null ? 0 : Math.min(100, Math.max(0, shown))
+                const reset = limit.resetsAt ? planResetShort(limit.resetsAt, now) : null
+                const unit =
+                  limit.amount?.unit === 'credits'
+                    ? t('usage:limits.units.credits')
+                    : limit.amount?.unit === 'requests'
+                      ? t('usage:limits.units.premiumRequests')
+                      : limit.amount?.unit
+                const amountText = limit.amount
+                  ? planAmount(
+                      limit.amount.used,
+                      limit.amount.total,
+                      limit.amount.unit,
+                      unit ?? limit.amount.unit,
+                    )
+                  : null
+                return (
+                  <div
+                    key={limit.window}
+                    className="kettu-limit"
+                    data-level={METER[usageTone(limit)]}
+                  >
+                    <div className="kettu-limit__row">
+                      <span className="kettu-limit__label" title={limitLabel(limit)}>
+                        {itemLabel(item)}
+                      </span>
+                      <span className="kettu-limit__value tabular">
+                        {limit.usedPercent === null ? '—' : `${shown}%`}
+                      </span>
+                    </div>
+                    <div
+                      className="kettu-limit__bar"
+                      role="meter"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={fill}
+                      aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
+                        limit: limitLabel(limit),
+                      })}
+                    >
+                      <span
+                        data-tiny={fill > 0 && fill <= 3 ? '' : undefined}
+                        style={{ width: `${fill}%` }}
+                      />
+                    </div>
+                    {(reset || amountText) && (
+                      <div className="kettu-limit__meta">
+                        {reset && limit.resetsAt && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span className="kettu-limit__reset tabular" />}
+                            >
+                              <Glyph icon={RefreshIcon} size={10} />
+                              <span>{reset}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {amountText && (
+                          <span className="kettu-limit__amount tabular" title={amountText}>
+                            {amountText}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
               })}
-            >
-              <span style={{ width: `${Math.min(100, Math.max(0, shown))}%` }} />
             </div>
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** 上下文弹窗底部的套餐限额区块：标题、可点击切换的已用/剩余口径、套餐芯片与分组双轨卡片 */
+function PlanLimits({
+  limits,
+  holding,
+  account,
+}: {
+  limits: PlanLimit[]
+  holding: PlanLimit[]
+  account: AgentAccount | null
+}) {
+  const { t } = useTranslation(['composer', 'common'])
+  const view = useLimitView()
+  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
+  const nextView = view === 'left' ? 'used' : 'left'
+  const nextLabel = t(nextView === 'left' ? 'common:planView.left' : 'common:planView.used')
+  return (
+    <div className="kettu-ctx__plan">
+      <div className="kettu-ctx__plan-head">
+        <span className="kettu-ctx__plan-title">
+          <span>{t('usage.limits.title')}</span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="kettu-ctx__plan-view"
+                  aria-label={t('usage.limits.toggleView', { view: nextLabel })}
+                  onClick={() =>
+                    void useSettingsStore.getState().update({ usage: { limits: nextView } })
+                  }
+                />
+              }
+            >
+              {'· '}
+              {t(view === 'left' ? 'common:planView.left' : 'common:planView.used')}
+            </TooltipTrigger>
+            <TooltipContent>{t('usage.limits.toggleView', { view: nextLabel })}</TooltipContent>
+          </Tooltip>
+        </span>
+        {plan && <span className="kettu-ctx__tier">{plan}</span>}
+      </div>
+      <PlanLimitGroups limits={limits} holding={holding} />
     </div>
   )
 }
@@ -970,7 +1130,7 @@ function EstimateList({
   )
 }
 
-/** The plan and its windows: a bar for each, in the limit colors. */
+/** 侧边栏账号悬浮卡中的套餐与限额详情，复用统一的分组双轨卡片布局 */
 export function PlanPart({
   limits,
   account,
@@ -978,51 +1138,22 @@ export function PlanPart({
   limits: PlanLimit[]
   account: AgentAccount | null
 }) {
-  const { t } = useTranslation('composer')
-  const now = useNow()
+  const { t } = useTranslation(['composer', 'common'])
   const view = useLimitView()
   const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   return (
-    <div className="flex flex-col text-hint">
-      <div className="text-small font-medium text-tertiary">
-        {plan ? t('usage.limits.planOf', { plan }) : t('usage.limits.plan')}
+    <div className="flex flex-col gap-2 text-hint">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-small font-medium text-tertiary">
+          {t('usage.limits.title')}
+          <span className="font-normal opacity-80">
+            {' · '}
+            {t(view === 'left' ? 'common:planView.left' : 'common:planView.used')}
+          </span>
+        </span>
+        {plan && <span className="kettu-ctx__tier">{plan}</span>}
       </div>
-      {limits.map((limit) => {
-        const level = limitLevel(limit)
-        const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
-        return (
-          <div key={limit.window} className="mt-2 flex flex-col gap-1.25">
-            <div className="flex text-secondary tabular">
-              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{limitLabel(limit)}</span>
-              <span className="text-primary">{limit.usedPercent === null ? '—' : `${shown}%`}</span>
-              {limit.resetsAt ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span className="min-w-21 shrink-0 pl-3 text-right whitespace-nowrap text-tertiary" />
-                    }
-                  >
-                    {planReset(limit.resetsAt, now)}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="min-w-21 shrink-0" />
-              )}
-            </div>
-            <Progress
-              value={limit.usedPercent === null ? 0 : shown}
-              tone={`limit-${level}`}
-              aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
-                limit: limitLabel(limit),
-              })}
-              className="**:data-[slot=progress-track]:bg-border-soft"
-            />
-          </div>
-        )
-      })}
+      <PlanLimitGroups limits={limits} />
     </div>
   )
 }
