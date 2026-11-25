@@ -3759,6 +3759,7 @@ export class SessionManager {
       apply: (output) => this.applyOutput(live, output),
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
       send: (text, options) => this.sendForUser(live, text, options),
+      requeue: (texts) => this.requeue(live, texts),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
       readAgentFile: (file) => this.deps.agentFile?.(record.id, file) ?? Promise.resolve(null),
       readProjectFile: (file) => this.deps.projectFile?.(record.id, file) ?? Promise.resolve(null),
@@ -11238,6 +11239,23 @@ export class SessionManager {
         `Session ${live.id} kept a message queued: ${String(error)}`,
       )
     })
+  }
+
+  /**
+   * Messages the agent took back unsent from its own queue, as on a stop: they wait at the front
+   * of the session's queue, paused, as the queue does after a stop, so none goes out unseen.
+   */
+  private requeue(live: Live, texts: readonly string[]): void {
+    if (this.live.get(live.id) !== live || texts.length === 0) return
+    const at = this.now()
+    const items: QueuedPrompt[] = texts.map((text) => ({
+      id: randomUUID(),
+      content: [{ type: 'text', text }],
+      at,
+    }))
+    this.update(live, { queue: [...items, ...live.thread.session.queue], queuePaused: true })
+    this.persist(live)
+    this.touch(live.id)
   }
 
   // Config options.
