@@ -8,6 +8,7 @@ import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import type { StartMode } from './login-item'
+import { revivePage, watchPage } from './page-recovery'
 import { loadRenderer, rendererPage } from './renderer'
 import { windowColors, type WindowColors } from './themes'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
@@ -252,6 +253,7 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
   })
 
   options.state.track(window)
+  watchPage(window, start !== 'hidden')
   // Set on every load: webPreferences.zoomFactor would come back on a reload after the user
   // chose 100%. Set here, it applies before the page's first script runs.
   window.webContents.on('did-navigate', () => window.webContents.setZoomFactor(zoom))
@@ -333,6 +335,7 @@ function tell(window: BrowserWindow, command: AppCommand): void {
 /** Brings the main window forward, creating it if every window was closed. */
 export function showMainWindow(): BrowserWindow {
   const window = currentWindow() ?? createMainWindow()
+  if (revivePage(window)) return window
   if (window.isMinimized()) window.restore()
   window.show()
   window.focus()

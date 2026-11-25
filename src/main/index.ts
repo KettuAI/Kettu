@@ -47,7 +47,7 @@ import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
 import { startSignIns } from './browser/signins'
-import { asksForDebug, isDebugRun, lockData, startDebugMode } from './debug-mode'
+import { asksForDebug, isDebugRun, lockData, prepareRelaunch, startDebugMode } from './debug-mode'
 import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
@@ -65,6 +65,7 @@ import {
   registerSignInIpc,
   registerTrayIpc,
 } from './ipc'
+import { configurePageRecovery } from './page-recovery'
 import { Reports } from './report'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
@@ -1091,6 +1092,11 @@ async function start(): Promise<void> {
       }),
   })
   const quitFlow = quit
+  configurePageRecovery({
+    restart: () => quitFlow.restart(() => prepareRelaunch(isDebugRun())),
+    quit: () => app.quit(),
+    quitting: () => quitFlow.quitting,
+  })
   checkForUpdates = () => void updater.check()
   const agentFolders = new AgentFolders(
     settings,

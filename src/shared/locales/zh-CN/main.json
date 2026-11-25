@@ -88,6 +88,12 @@
     "keepRunning": "继续运行",
     "keepsRunning": "Kettu 可以在后台让它们继续运行，再次打开 Kettu 时就能看到。"
   },
+  "pageGone": {
+    "title": "{{name}} 的窗口没能加载",
+    "detail": "窗口的页面连续两次停止运行。重启 {{name}} 通常就能解决。",
+    "restart": "重启 {{name}}",
+    "quit": "退出"
+  },
   "notifications": {
     "testTitle": "Kettu",
     "testBody": "通知已开启。智能体需要你时，会这样提醒你。",

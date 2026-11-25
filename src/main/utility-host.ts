@@ -316,10 +316,18 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
   private handOff(webContents: WebContents): void {
     const { channel, connectMessage } = this.config
     if (webContents.isDestroyed() || !this.child || !channel || !connectMessage) return
+    // A page that lost its process asks again once it loads again.
+    if (webContents.isCrashed()) return
     const windowId = BrowserWindow.fromWebContents(webContents)?.id ?? -1
     const { port1, port2 } = new MessageChannelMain()
+    try {
+      webContents.postMessage(`${channel}:port`, null, [port2])
+    } catch (error) {
+      // The frame can go before the page's gone event; that page asks again too.
+      this.log.warn(`Could not hand a port to a page that is going away: ${String(error)}`)
+      return
+    }
     this.child.postMessage(connectMessage(windowId), [port1])
-    webContents.postMessage(`${channel}:port`, null, [port2])
   }
 
   private resetClients(failed: boolean): void {

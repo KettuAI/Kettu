@@ -91,6 +91,12 @@
     "keepRunning": "Keep running",
     "keepsRunning": "Kettu can keep them running in the background. You’ll see them when you open Kettu again."
   },
+  "pageGone": {
+    "title": "{{name}}’s window could not load",
+    "detail": "Its page stopped working twice in a row. Restarting {{name}} usually fixes this.",
+    "restart": "Restart {{name}}",
+    "quit": "Quit"
+  },
   "notifications": {
     "testTitle": "Kettu",
     "testBody": "Notifications are on. This is how an agent that needs you will reach you.",
