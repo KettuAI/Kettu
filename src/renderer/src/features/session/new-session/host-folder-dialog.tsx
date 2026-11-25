@@ -1,7 +1,7 @@
 // Open project on another host: a browser of that host's folders, which lists only folders and
 // marks Git repositories. The chosen folder becomes a project on that host; nothing is copied here.
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
@@ -68,17 +68,30 @@ export function HostFolderDialog({
   /** The project added on the host, by the path the window names it with. */
   onOpened: (projectPath: string) => void
 }) {
+  // The dialog opens on the folder list, so the arrows work at once.
+  const list = useRef<HTMLDivElement>(null)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* A zero minimum on the one column, so a long path never widens the dialog past its edge. */}
-      <DialogContent className="@container grid-cols-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[560px]">
-        {hostId && <Browser key={hostId} hostId={hostId} onOpened={onOpened} />}
+      <DialogContent
+        initialFocus={list}
+        className="@container grid-cols-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+      >
+        {hostId && <Browser key={hostId} hostId={hostId} list={list} onOpened={onOpened} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string) => void }) {
+function Browser({
+  hostId,
+  list,
+  onOpened,
+}: {
+  hostId: string
+  list: RefObject<HTMLDivElement | null>
+  onOpened: (path: string) => void
+}) {
   const { t } = useTranslation(['session', 'common'])
   const host = useOtherHost(hostId)
   const platform = host?.platform ?? 'linux'
@@ -91,7 +104,6 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
   const [selected, setSelected] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
-  const list = useRef<HTMLDivElement>(null)
   const trail = useRef<HTMLElement>(null)
 
   useEffect(() => {

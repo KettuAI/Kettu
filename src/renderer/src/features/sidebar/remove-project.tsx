@@ -13,8 +13,10 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useHostLabel } from './host-label'
 import { isRunning } from './session-menu-model'
 
 /**
@@ -31,6 +33,8 @@ export function RemoveProjectDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
+  const hostId = hostOfPath(project.path)
+  const hostName = useHostLabel(hostId)
   // A sub-agent is part of its session, so it is not counted on its own.
   const [sessions, running] = useSessionsStore(
     useShallow((s) => {
@@ -60,7 +64,10 @@ export function RemoveProjectDialog({
               ? t('project.remove.sessions', { count: sessions })
               : t('project.remove.noSessions'),
             running > 0 && t('project.remove.running', { count: running }),
-            !project.missing && t('project.remove.folderStays'),
+            !project.missing &&
+              (hostId === null
+                ? t('project.remove.folderStays')
+                : t('project.remove.folderStaysOn', { host: hostName })),
           ]
             .filter(Boolean)
             .join(t('project.remove.separator'))}

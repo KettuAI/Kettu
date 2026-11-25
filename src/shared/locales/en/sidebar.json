@@ -126,6 +126,7 @@
       "running_one": "The one running now stops.",
       "running_other": "The {{count}} running now stop.",
       "folderStays": "The folder and its files stay on this computer.",
+      "folderStaysOn": "The folder and its files stay on {{host}}.",
       "separator": " ",
       "confirm": "Remove"
     }

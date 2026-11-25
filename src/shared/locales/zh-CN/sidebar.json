@@ -119,6 +119,7 @@
       "noSessions": "它在 Kettu 里没有会话。",
       "running_other": "正在运行的 {{count}} 个会先停下。",
       "folderStays": "文件夹和里面的文件会留在这台电脑上。",
+      "folderStaysOn": "文件夹和里面的文件会留在 {{host}} 上。",
       "separator": "",
       "confirm": "移除"
     }
