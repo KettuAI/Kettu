@@ -327,8 +327,24 @@ describe('start_session model and effort', () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  it('drops a carried effort the named model lacks, so its first message is not held', async () => {
+  it('moves a carried effort the named model lacks to the nearest lower level it offers', async () => {
     const { tools: t, start } = starting({ carried: { model: 'gpt-big', effort: 'xhigh' } })
+    await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
+    expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-mini', effort: 'medium' })
+  })
+
+  it('drops a carried effort the named model has nothing at or below, so its first message is not held', async () => {
+    const lean: AgentOptions = {
+      ...CODEX_OPTIONS,
+      levels: {
+        ...CODEX_OPTIONS.levels,
+        'gpt-mini': select('effort', 'thought_level', 'high', ['high', 'xhigh']),
+      },
+    }
+    const { tools: t, start } = starting({
+      cached: lean,
+      carried: { model: 'gpt-big', effort: 'low' },
+    })
     await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
     expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-mini' })
   })

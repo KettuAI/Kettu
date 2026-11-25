@@ -2,6 +2,7 @@
 // codex-acp offered, so sessions, their stored choices and Routines' modes carry over. Codex has
 // no session settings of its own between turns: every turn sends them.
 
+import { carriedEffort } from '@shared/effort'
 import type { ConfigOption } from '@shared/thread'
 import { t } from '../i18n'
 import type {
@@ -114,13 +115,15 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-/** The effort a model runs `wanted` at: the same when it supports it, else its default. */
+/**
+ * The effort a model runs `wanted` at: the same when it supports it, else the nearest lower one it
+ * supports, else its default.
+ */
 export function effortFor(model: Model | undefined, wanted: string | null): string | null {
   if (!model) return wanted
-  if (wanted && model.supportedReasoningEfforts.some((e) => e.reasoningEffort === wanted)) {
-    return wanted
-  }
-  return model.defaultReasoningEffort ?? null
+  const supported = model.supportedReasoningEfforts.map((e) => e.reasoningEffort)
+  const carried = wanted ? carriedEffort(supported, wanted) : null
+  return carried ?? model.defaultReasoningEffort ?? null
 }
 
 const FAMILY_ID = /^gpt-(\d+(?:\.\d+)*)-([a-z]+)$/i

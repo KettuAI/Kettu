@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { carriedEffort } from '@shared/effort'
 import type { ConfigOption, QuestionAnswer, StopReason, TokenTotals } from '@shared/thread'
 import {
   AgentRequestError,
@@ -574,8 +575,9 @@ export class DshConnection implements AgentConnection {
   private settle(session: Session): ModelChoice | null {
     const listed = this.models.find((choice) => choice.value === session.model)
     if (listed) {
-      if (session.effort === null || !listed.efforts.includes(session.effort))
-        session.effort = listed.effort
+      // A level the model lacks goes to the nearest lower one it has, else to its own.
+      const carried = session.effort === null ? null : carriedEffort(listed.efforts, session.effort)
+      session.effort = carried ?? listed.effort
       return listed
     }
     const start = startChoice(this.models, this.routes)
