@@ -1079,7 +1079,7 @@ export class BrowserViews {
     this.place(tab)
     this.setVisible(tab, this.isShown(tab))
     this.wire(tab, view)
-    // The page has its size before its first navigation, so it never lays out at another.
+    // A popup's page has its frame already; a new page takes its size once its renderer made it.
     tab.told = null
     this.size(tab)
     this.deps.created?.(tab.id, view.webContents)
@@ -1184,9 +1184,10 @@ export class BrowserViews {
   /**
    * Tells a page how large to lay out and how small to draw in its view, when either changed or
    * `again` asks, and a page that fills the frame again to lay out at its view. It goes through
-   * the page's debugger, whose overrides every later navigation of the page keeps.
+   * the page's debugger, whose overrides every later navigation of the page keeps. `afresh` clears
+   * them first, since Chromium does not send a size it was told already again.
    */
-  private size(tab: Tab, again = false): void {
+  private size(tab: Tab, again: boolean | 'afresh' = false): void {
     const contents = this.contentsOf(tab)
     if (!contents?.debugger.isAttached()) return
     const viewport = this.viewportOf(tab)
@@ -1201,6 +1202,7 @@ export class BrowserViews {
       const { scale } = this.fitOf(tab)
       if (!again && told?.scale === scale && samePageSize(told.size, viewport)) return
       tab.told = { size: viewport, scale }
+      if (again === 'afresh') commands.push(['Emulation.clearDeviceMetricsOverride', {}])
       commands.push(['Emulation.setDeviceMetricsOverride', metricsOf(viewport, scale)])
       if (deviceOf(told?.size) !== deviceOf(viewport)) commands.push(...deviceCommands(viewport))
     }
@@ -1366,6 +1368,14 @@ export class BrowserViews {
       // A navigation held for the user's answer settles when the answer comes.
       if (tab.asking) return
       this.endNavigation(tab, { ok: true, url: contents.getURL(), title: contents.getTitle() })
+    })
+    // Chromium sends the size only to a frame its renderer has made, and sends it again only when a
+    // navigation moves to another frame, so a new page's first frame is told here, before its
+    // document lays out.
+    contents.on('frame-created', (_event, { frame }) => {
+      if (tab.view?.webContents === contents && frame === contents.mainFrame) {
+        this.size(tab, 'afresh')
+      }
     })
     contents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame) return
