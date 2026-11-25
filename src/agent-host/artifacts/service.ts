@@ -63,6 +63,13 @@ import {
   SETTINGS_TOOLS,
   type SettingsTools,
 } from '../settings/tools'
+import {
+  isRoutineToolName,
+  ROUTINE_ASKING_TOOLS,
+  ROUTINE_TOOL_NAMES,
+  ROUTINE_TOOLS,
+  type RoutineTools,
+} from '../routines/tools'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -178,6 +185,7 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [REPORT_TOOLS, 'reports'],
       [WORKFLOW_TOOLS, 'workflows'],
       [SETTINGS_TOOLS, 'settings'],
+      [ROUTINE_TOOLS, 'routines'],
     ] as const
   )
     .flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const))
@@ -194,9 +202,15 @@ const TOPIC_GROUPS: Partial<Record<GuideTopic, McpToolGroup>> = {
   computer: 'computer',
   marketplace: 'marketplace',
   settings: 'settings',
+  routines: 'routines',
 }
 /** The tools that wait for the user's answer in the session before they act. */
-const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST, CHANGE_SETTINGS])
+const ASKING_TOOLS: ReadonlySet<string> = new Set([
+  MARKET_PUBLISH,
+  MARKET_UNLIST,
+  CHANGE_SETTINGS,
+  ...ROUTINE_ASKING_TOOLS,
+])
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -272,6 +286,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   market?: MarketTools
   /** Kettu's settings tools; without them the service lists none. */
   settings?: SettingsTools
+  /** The Routine tools of the host's Routines; without them the service lists none. */
+  routines?: RoutineTools
   /** The tools the plugins that are on give agents; without it the service lists none. */
   plugins?: PluginTools
   /** The skills behind the skill tools, which only an agent that loads no skill folders gets. */
@@ -340,6 +356,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
         ...WORKFLOW_TOOL_NAMES,
         ...MARKET_AUTO_ALLOW,
         ...SETTINGS_TOOL_NAMES,
+        ...ROUTINE_TOOL_NAMES,
       ],
       // 仅在 Auto 权限模式下自动放行的可回滚内置工具（不可逆删除、高危终端命令、桌面点击/键入与插件工具仍需确认）。
       autoModeAllow: [
@@ -582,6 +599,7 @@ export class ArtifactService {
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),
       ...(this.deps.settings ? SETTINGS_TOOLS : []),
+      ...(this.deps.routines ? ROUTINE_TOOLS : []),
       ...(this.deps.plugins?.listed(sessionId) ?? []),
     ]
   }
@@ -1000,6 +1018,15 @@ export class ArtifactService {
     if (settings && isSettingsToolName(name)) {
       try {
         return await settings.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    const routines = this.deps.routines
+    if (routines && isRoutineToolName(name)) {
+      try {
+        return await routines.call(caller, name, input)
       } catch (error) {
         this.deps.log('error', `${name} failed: ${(error as Error).message}`)
         throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

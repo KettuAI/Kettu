@@ -107,6 +107,10 @@
         "noChange": "找不到这次设置更改",
         "noUndo": "这次更改不能撤销"
       },
+      "routine": {
+        "gone": "这张定时任务卡片已不再等待回答",
+        "answered": "这张定时任务卡片已经回答过了"
+      },
       "step": {
         "gone": "这一步已不再等待回答",
         "answered": "这一步已经回答过了"
@@ -243,7 +247,11 @@
     "withChanges_other": "{{text}}改动了 {{count}} 个文件。",
     "marketPublish": "想把 {{name}} 发布到 Kettu 市场",
     "marketUnlist": "想把 {{name}} 从 Kettu 市场下架",
-    "settingsChange_other": "想修改 {{count}} 项设置"
+    "settingsChange_other": "想修改 {{count}} 项设置",
+    "routineCreate": "想新建定时任务「{{name}}」",
+    "routineUpdate": "想修改定时任务「{{name}}」",
+    "routineDelete": "想删除定时任务「{{name}}」",
+    "routineRun": "想立即运行定时任务「{{name}}」"
   },
   "routines": {
     "busy": "此定时任务已经有一个运行正在工作",

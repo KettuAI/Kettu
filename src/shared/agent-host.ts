@@ -763,6 +763,7 @@ export type McpToolGroup =
   | 'reports'
   | 'workflows'
   | 'settings'
+  | 'routines'
   | 'plugins'
 
 export interface McpToolSummary {
@@ -1399,6 +1400,12 @@ export interface HostContract {
   'routines.delete': { params: { routineId: string }; result: void }
   // `busy` while the routine already has an active run.
   'routines.runNow': { params: { routineId: string }; result: RoutineRun }
+  // Any window's or device's answer to a card an agent's Routine tool shows: do it or not; the
+  // first counts.
+  'routines.answerChange': {
+    params: { sessionId: string; entryId: string; decision: 'confirm' | 'decline' }
+    result: void
+  }
   // Drops a queued run, or stops a working one as Stop does.
   'routines.cancelRun': { params: { runId: string }; result: void }
   'routines.runs': {
@@ -2439,6 +2446,7 @@ export const HOST_METHODS = [
   'routines.update',
   'routines.delete',
   'routines.runNow',
+  'routines.answerChange',
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',

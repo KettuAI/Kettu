@@ -630,6 +630,53 @@ describe('isThreadEntry', () => {
       written: null,
       after: 'm:1',
     },
+    {
+      kind: 'routine_change',
+      id: 'e:19',
+      action: 'create',
+      routineId: null,
+      routine: {
+        name: 'Weekly check',
+        prompt: 'Check the dependencies',
+        schedule: { kind: 'weekly', days: [1], time: '09:00' },
+        projectPath: '/tmp/project',
+        agentId: 'claude-code',
+        model: 'Opus',
+        effort: null,
+        scope: { level: 'read', web: false },
+        timeLimitMinutes: 60,
+        enabled: true,
+      },
+      before: null,
+      sessions: null,
+      expiresAt: 1_700_000_000_000,
+      outcome: null,
+      after: null,
+    },
+    {
+      kind: 'routine_change',
+      id: 'e:20',
+      action: 'delete',
+      routineId: 'r-0123456789ab',
+      routine: {
+        name: 'Later',
+        prompt: 'Read the logs',
+        schedule: { kind: 'once', at: '2026-11-27T09:00' },
+        projectPath: null,
+        agentId: 'codex',
+        model: null,
+        effort: null,
+        scope: { level: 'commands', web: true },
+        timeLimitMinutes: 15,
+        enabled: false,
+      },
+      before: null,
+      sessions: 3,
+      expiresAt: 1_700_000_000_000,
+      outcome: { kind: 'done', routineId: 'r-0123456789ab' },
+      device: { id: 'phone', name: 'Phone' },
+      after: 'm:1',
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -658,6 +705,12 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...delivery, written: { agentId: 1 } })).toBe(false)
     const artifact = valid.find((entry) => entry.kind === 'artifact')!
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
+    const routine = valid.find((entry) => entry.kind === 'routine_change')!
+    expect(isThreadEntry({ ...routine, action: 'pause' })).toBe(false)
+    expect(isThreadEntry({ ...routine, outcome: { kind: 'done' } })).toBe(false)
+    expect(
+      isThreadEntry({ ...routine, routine: { ...routine.routine, timeLimitMinutes: 7 } }),
+    ).toBe(false)
     expect(isThreadEntry({ ...artifact, writes: undefined })).toBe(false)
     expect(isThreadEntry({ ...artifact, after: 1 })).toBe(false)
     const origin = valid.find((entry) => entry.kind === 'browser_origin')!

@@ -171,6 +171,7 @@ import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
 import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
+import { ROUTINE_WAIT_MS, RoutineTools } from './routines/tools'
 import {
   SETTINGS_WAIT_MS,
   SettingsTools,
@@ -608,6 +609,7 @@ export class AgentHost {
   private nextSettingsCall = 1
   /** The settings tools of Kettu's MCP service. */
   private readonly settingsTools: SettingsTools
+  private readonly routineTools: RoutineTools
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -833,6 +835,30 @@ export class AgentHost {
       open: (sessionId, target) => this.openSettings(sessionId, target),
       words: tSettings,
       english: tSettingsEnglish,
+    })
+    this.routineTools = new RoutineTools({
+      list: () => this.routines.list(),
+      create: (draft) => this.routines.create(draft),
+      update: (routineId, changes) => this.routines.update(routineId, changes),
+      delete: (routineId) => this.routines.delete(routineId),
+      runNow: (routineId) => this.routines.runNow(routineId),
+      agents: () => this.agents.statuses(),
+      agentOptions: (agentId) => this.agentOptions.get(agentId),
+      readOptions: (agentId) => this.agents.readFirstOptions(agentId),
+      sessionAgent: (sessionId) => this.sessions.sessionAgent(sessionId),
+      sessionProject: (sessionId) => {
+        const projectPath = this.sessions.sessionProject(sessionId)
+        return projectPath === null ? null : (this.projects.find(projectPath)?.path ?? null)
+      },
+      project: async (value) => {
+        const found = this.projects.find(value)
+        if (found) return found.path
+        const canonical = await this.projects.resolveDirectory(value).catch(() => null)
+        return canonical === null ? null : (this.projects.find(canonical)?.path ?? null)
+      },
+      ask: (sessionId, ask) => this.sessions.routineAsked(sessionId, ask, ROUTINE_WAIT_MS),
+      settle: (sessionId, entryId, outcome) =>
+        this.sessions.routineSettled(sessionId, entryId, outcome),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -1184,6 +1210,7 @@ export class AgentHost {
       ...(this.computer ? { computer: this.computer } : {}),
       market: this.marketTools,
       settings: this.settingsTools,
+      routines: this.routineTools,
       plugins: this.pluginTools,
       skills: {
         of: (sessionId) => {
@@ -1430,6 +1457,7 @@ export class AgentHost {
           this.browserTurnEnded(sessionId)
           this.marketTools.turnEnded(sessionId)
           this.settingsTools.turnEnded(sessionId)
+          this.routineTools.turnEnded(sessionId)
           if (this.deviceTurns.delete(sessionId)) {
             this.options.send({ type: 'host:device-turn-ended', sessionId })
           }
@@ -3919,6 +3947,8 @@ export class AgentHost {
       'routines.update': ({ routineId, changes }) => routines.update(routineId, changes),
       'routines.delete': ({ routineId }) => routines.delete(routineId),
       'routines.runNow': ({ routineId }) => routines.runNow(routineId),
+      'routines.answerChange': ({ sessionId, entryId, decision }, { device }) =>
+        this.sessions.answerRoutine(sessionId, entryId, decision, fromDevice(device)),
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),

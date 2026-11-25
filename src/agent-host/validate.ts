@@ -2183,6 +2183,17 @@ export function createValidators(platform: Platform): Validators {
     },
     'routines.delete': (params) => ({ routineId: routineId(fields(params)) }),
     'routines.runNow': (params) => ({ routineId: routineId(fields(params)) }),
+    'routines.answerChange': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'confirm' && o.decision !== 'decline') {
+        throw invalidParams('decision must be confirm or decline')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
     'routines.cancelRun': (params) => ({ runId: string(fields(params), 'runId', ID_CHARS) }),
     'routines.runs': (params) => {
       const o = fields(params)

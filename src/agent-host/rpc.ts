@@ -76,6 +76,7 @@ const LIVE_METHODS: ReadonlySet<string> = new Set<HostMethod>([
   'sessions.cancel',
   'permissions.respond',
   'settings.answerChange',
+  'routines.answerChange',
   'sessions.answerReport',
   'sessions.answerMemory',
   'sessions.answerProjectMcp',

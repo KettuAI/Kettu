@@ -129,6 +129,9 @@ import {
   type SettingsChangeEntry,
   type TaskDeliveryEntry,
   type SettingsChangeOutcome,
+  type RoutineAction,
+  type RoutineChangeEntry,
+  type RoutineChangeOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -160,6 +163,7 @@ import { allowOnceOption, changedFiles, replySummary, requestText } from './atte
 import { riskyRequest } from './command-safety'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
+import type { RoutineAnswer, RoutineAsk } from './routines/tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
@@ -222,7 +226,7 @@ import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
-import { listOf, t } from './i18n'
+import { listOf, t, type HostKey } from './i18n'
 import type { CommandNeeds } from './commands/format'
 import type { CommandExpansion } from './commands/service'
 import { roleBlock } from './roles/format'
@@ -994,6 +998,14 @@ function resentOnResume(
   return resent
 }
 
+/** What a Routine card's notification says the agent wants, by the card's action. */
+const ROUTINE_ATTENTION = {
+  create: 'attention.routineCreate',
+  update: 'attention.routineUpdate',
+  delete: 'attention.routineDelete',
+  run: 'attention.routineRun',
+} as const satisfies Record<RoutineAction, HostKey>
+
 /** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
 function waitingCount(live: Live): number {
   return (
@@ -1290,6 +1302,8 @@ export class SessionManager {
   private readonly marketAnswering = new Set<string>()
   /** Settings cards that wait for the user, by entry id. */
   private readonly settingsWaits = new Map<string, (answer: SettingsAnswer) => void>()
+  /** Routine cards that wait for the user, by entry id. */
+  private readonly routineWaits = new Map<string, (answer: RoutineAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
@@ -2644,6 +2658,118 @@ export class SessionManager {
         }
       }
       this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
+  }
+
+  /**
+   * An agent wants to create, change, delete or run a Routine: a card in the thread that waits for
+   * the user as a permission request does, in every mode, and settles with their answer,
+   * `expired` after `waitMs`, or `ended` with the turn. A Routine's own run waits for it too.
+   */
+  routineAsked(
+    sessionId: string,
+    ask: RoutineAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<RoutineAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: RoutineChangeEntry = {
+      kind: 'routine_change',
+      id: this.nextId(live),
+      ...ask,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`routine:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    const body = t(ROUTINE_ATTENTION[ask.action], { name: ask.routine.name })
+    if (live.record.origin === 'routine' && !live.routineTurnEnded) {
+      this.deps.routine?.current?.waiting(live.id, true, body)
+    } else {
+      this.deps.events.attention(live.id, 'permission', this.titleOf(live), body, { id: entry.id })
+    }
+    const answer = new Promise<RoutineAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleRoutine(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.routineWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /** A window's or a device's answer to a Routine card; the first one counts. */
+  answerRoutine(
+    sessionId: string,
+    entryId: string,
+    decision: 'confirm' | 'decline',
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'routine_change') throw notFound(t('session.waiting.routine.gone'))
+    if (entry.outcome !== null || !this.routineWaits.has(entryId)) {
+      throw new HostError('not_found', t('session.waiting.routine.answered'), {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleRoutine(sessionId, entryId, { decision }, device)
+  }
+
+  /** What became of a Routine card the user approved. */
+  routineSettled(sessionId: string, entryId: string, outcome: RoutineChangeOutcome): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'routine_change') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  private settleRoutine(
+    sessionId: string,
+    entryId: string,
+    answer: RoutineAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.routineWaits.get(entryId)
+    this.routineWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`routine:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'routine_change' && entry.outcome === null) {
+        // Confirm is settled by what doing it gives; the card holds until then.
+        if (answer.decision !== 'confirm') {
+          const outcome: RoutineChangeOutcome = {
+            kind: answer.decision === 'decline' ? 'declined' : answer.decision,
+          }
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: entryId,
+              changes: { outcome, ...(device ? { device } : {}) },
+            },
+          ])
+        } else if (device) {
+          this.emit(live, [{ op: 'entry.update', id: entryId, changes: { device } }])
+        }
+      }
+      this.stopWaiting(live)
+      if (live.record.origin === 'routine' && waitingCount(live) === 0) {
+        this.deps.routine?.current?.waiting(live.id, false)
+      }
       this.touch(live.id)
       this.updateBadge()
     }
@@ -11130,6 +11256,11 @@ export class SessionManager {
       // A settings card ends with its turn, changing nothing.
       if (requestId.startsWith('settings:')) {
         this.settleSettings(live.id, entryId, { decision: 'ended' })
+        continue
+      }
+      // So does a Routine card.
+      if (requestId.startsWith('routine:')) {
+        this.settleRoutine(live.id, entryId, { decision: 'ended' })
         continue
       }
       live.origins.delete(requestId)

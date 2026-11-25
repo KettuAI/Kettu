@@ -1146,6 +1146,7 @@
       "reports": "问题报告",
       "workflows": "工作流",
       "settings": "设置",
+      "routines": "定时任务",
       "plugins": "插件"
     },
     "new": "新",

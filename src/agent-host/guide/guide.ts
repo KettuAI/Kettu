@@ -136,6 +136,7 @@ export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false)
         ]
       : ["use Kettu's browser, a phone device or a terminal", ['browser', 'devices', 'terminals']],
     ['find or change a Kettu setting', ['settings']],
+    ['set up or change something that runs on a schedule', ['routines']],
   ]
   const clauses = uses.map(([what, topics]) => `${what} (${topics.map(name).join(', ')})`)
   const list = `${clauses.slice(0, -1).join(', ')}, or ${clauses.at(-1)}`
@@ -219,6 +220,9 @@ export function serviceInstructions(flags: GuideFlags): string {
     'Settings: find_settings, open_settings and change_settings find, show and change ' +
       "Kettu's own settings, only when the user asks; a change waits for the user's card unless " +
       'this session is in Full access. Topic settings.',
+    "Routines: list_routines lists Kettu's Routines, prompts that run on a schedule; " +
+      'create_routine, update_routine, delete_routine and run_routine act on them only when the ' +
+      "user asks, each waiting for the user's card in every mode. Topic routines.",
     `Problems: ${REPORT_TOOL} drafts a report for the Kettu team, only for problems with Kettu ` +
       "itself, never for bugs in the user's project, your model provider's limits or your own " +
       'mistakes; the user sends it.',
@@ -237,7 +241,7 @@ export function guideTool(flags: GuideFlags): Tool {
       '(handing work to another session or agent); workflows; browser; devices; terminals' +
       (flags.computer ? '; computer (the user’s desktop apps)' : '') +
       (flags.market ? '; marketplace (publishing)' : '') +
-      "; settings (Kettu's own settings).",
+      "; settings (Kettu's own settings); routines (prompts that run on a schedule).",
     inputSchema: {
       type: 'object',
       properties: {

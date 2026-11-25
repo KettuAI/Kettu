@@ -219,6 +219,7 @@ describe("Kettu's own skills", () => {
     'kettu-devices',
     'kettu-terminals',
     'kettu-settings',
+    'kettu-routines',
   ]
 
   function withOwn(

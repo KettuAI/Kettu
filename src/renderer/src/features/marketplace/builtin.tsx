@@ -15,6 +15,7 @@ import {
   Settings02Icon,
   SmartPhone01Icon,
   Store01Icon,
+  TimeScheduleIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -46,6 +47,7 @@ const GROUPS: { id: McpToolGroup; icon: IconSvgElement }[] = [
   { id: 'reports', icon: Flag01Icon },
   { id: 'workflows', icon: Flowchart01Icon },
   { id: 'settings', icon: Settings02Icon },
+  { id: 'routines', icon: TimeScheduleIcon },
   { id: 'plugins', icon: PlugSocketIcon },
 ]
 
