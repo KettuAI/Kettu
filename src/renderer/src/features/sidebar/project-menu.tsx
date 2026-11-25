@@ -30,17 +30,18 @@ import { openProjectTerminal } from './project-menu-model'
 /**
  * A project's actions. A context menu is a Base UI menu, so the same items serve the project
  * row's context menu and its More button. A project whose folder is gone keeps only what needs
- * no folder, Remove included.
+ * no folder, Remove included. Another host's project has only Pin and Remove, which wait for
+ * that host while it is `away`.
  */
 export function ProjectMenuItems({
   project,
-  pinDisabled,
+  away,
   onPin,
   onImport,
   onRemove,
 }: {
   project: Project
-  pinDisabled: boolean
+  away: boolean
   onPin: (pinned: boolean) => Promise<void>
   onImport: () => void
   onRemove: () => void
@@ -55,12 +56,28 @@ export function ProjectMenuItems({
   const git = useGitStore((s) => s.status[project.path]?.repo !== null)
   const pinned = project.pinnedAt != null
   const pinItem = project.pinnedAt !== undefined && (
-    <DropdownMenuItem disabled={pinDisabled} onClick={() => void onPin(!pinned)}>
+    <DropdownMenuItem disabled={away} onClick={() => void onPin(!pinned)}>
       <MenuGlyph icon={pinned ? PinOffIcon : PinIcon} />
       {t(pinned ? 'project.menu.unpin' : 'project.menu.pin')}
     </DropdownMenuItem>
   )
-  if (!local) return <DropdownMenuGroup>{pinItem}</DropdownMenuGroup>
+  const removeItem = (
+    <DropdownMenuItem variant="destructive" disabled={away} onClick={onRemove}>
+      <Glyph icon={FolderMinusIcon} size={15} />
+      {t('project.menu.remove')}
+    </DropdownMenuItem>
+  )
+  if (!local) {
+    return (
+      <>
+        {pinItem && <DropdownMenuGroup>{pinItem}</DropdownMenuGroup>}
+        <DropdownMenuGroup>
+          {pinItem && <DropdownMenuSeparator />}
+          {removeItem}
+        </DropdownMenuGroup>
+      </>
+    )
+  }
 
   return (
     <>
@@ -112,10 +129,7 @@ export function ProjectMenuItems({
       </DropdownMenuGroup>
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={onRemove}>
-          <Glyph icon={FolderMinusIcon} size={15} />
-          {t('project.menu.remove')}
-        </DropdownMenuItem>
+        {removeItem}
       </DropdownMenuGroup>
     </>
   )

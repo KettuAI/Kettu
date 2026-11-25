@@ -433,9 +433,9 @@ function ProjectGroup({
   const limited = limitRows(rows, allShown, (row) => rowInSight(row, shownId))
   // Importing reads the agents' own lists, which only this computer's do.
   const local = hostId === null
-  // A host that cannot pin a group leaves its pin out.
+  // A host that cannot pin a group leaves its pin out; a project can always be removed.
   const canPin = project ? project.pinnedAt !== undefined : noProject !== undefined
-  const hasMenu = local || canPin
+  const hasMenu = local || !!project || canPin
 
   const toggle = () => toggleGroup(key)
   const groupStop = stop?.kind === 'group' && stop.key === key
@@ -516,7 +516,7 @@ function ProjectGroup({
   const menuItems = !hasMenu ? null : project ? (
     <ProjectMenuItems
       project={project}
-      pinDisabled={away}
+      away={away}
       onPin={pin}
       onImport={() => onImport(project)}
       onRemove={() => setRemoving(true)}
