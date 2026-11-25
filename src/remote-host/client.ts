@@ -36,6 +36,7 @@ import {
   type Pong,
 } from '@shared/remote/keepalive'
 import {
+  CompareTimer,
   MOVE_RATIO,
   PathTimes,
   PROBE_TIMEOUT_MS,
@@ -531,8 +532,7 @@ class HostLink {
   private standbys = false
   private comparing: Promise<boolean> | null = null
   private joining = false
-  private compareTimer: ReturnType<typeof setTimeout> | null = null
-  private compareAt = 0
+  private readonly compares = new CompareTimer(() => void this.compare())
   private joinTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
@@ -718,9 +718,8 @@ class HostLink {
   close(): void {
     this.closed = true
     this.cancel()
-    if (this.compareTimer) clearTimeout(this.compareTimer)
+    this.compares.stop()
     if (this.joinTimer) clearTimeout(this.joinTimer)
-    this.compareTimer = null
     this.joinTimer = null
     this.drop()
     this.lose()
@@ -801,7 +800,9 @@ class HostLink {
       options.keepalive,
       (ms) => {
         // A ping far slower than before: another path may do better now.
-        if (this.times.sample(key, ms) && this.session === session) this.compareSoon(0)
+        if (this.times.sample(key, ms) && this.session === session && !this.closed) {
+          this.compares.slow()
+        }
       },
     )
     return session
@@ -809,13 +810,7 @@ class HostLink {
 
   /** Compares the paths after `delay`, once, however often it is asked meanwhile, the soonest. */
   private compareSoon(delay: number): void {
-    if (this.closed || (this.compareTimer && this.compareAt <= Date.now() + delay)) return
-    if (this.compareTimer) clearTimeout(this.compareTimer)
-    this.compareAt = Date.now() + delay
-    this.compareTimer = setTimeout(() => {
-      this.compareTimer = null
-      void this.compare()
-    }, delay)
+    if (!this.closed) this.compares.soon(delay)
   }
 
   /** One comparison at a time: one asked while another runs gets false. */
@@ -842,6 +837,7 @@ class HostLink {
     if (candidates.length === 0 && !standby) return false
     const { options } = this.client
     const hostKey = publicKeyBytes(host.publicKey)!
+    this.compares.started()
     const probed = await probe(
       candidates,
       (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),

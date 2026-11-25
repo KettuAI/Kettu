@@ -23,7 +23,7 @@ import {
   type Pong,
 } from './keepalive'
 import type { KeyPair } from './noise'
-import { PathTimes, PROBE_TIMEOUT_MS, rankPaths, shouldMove } from './paths'
+import { CompareTimer, PathTimes, PROBE_TIMEOUT_MS, rankPaths, shouldMove } from './paths'
 import { bytesOf, isBinary } from './places'
 import {
   IMAGE_REFS_FEATURE,
@@ -293,8 +293,7 @@ export class HostLink {
   /** Moving the session to another route, or taking it over on a connection kept aside. */
   private taking = false
   private comparing: Promise<boolean> | null = null
-  private compareTimer: ReturnType<typeof setTimeout> | null = null
-  private compareAt = 0
+  private readonly compares = new CompareTimer(() => void this.compare())
   /** The connection a move left, until its move is welcomed or it takes the session back. */
   private aside: Aside | null = null
 
@@ -335,7 +334,7 @@ export class HostLink {
   stop(): void {
     this.stopped = true
     if (this.timer) clearTimeout(this.timer)
-    if (this.compareTimer) clearTimeout(this.compareTimer)
+    this.compares.stop()
     this.acks.pause()
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.session?.channel.close()
@@ -627,13 +626,7 @@ export class HostLink {
 
   /** Compares the routes after `delay`, once, however often it is asked meanwhile, the soonest. */
   private compareSoon(delay: number): void {
-    if (this.stopped || (this.compareTimer && this.compareAt <= Date.now() + delay)) return
-    if (this.compareTimer) clearTimeout(this.compareTimer)
-    this.compareAt = Date.now() + delay
-    this.compareTimer = setTimeout(() => {
-      this.compareTimer = null
-      void this.compare()
-    }, delay)
+    if (!this.stopped) this.compares.soon(delay)
   }
 
   /** One comparison at a time: one asked while another runs gets false. */
@@ -656,6 +649,7 @@ export class HostLink {
     if (!resumable(session) || this.resumeToken === null) return false
     const others = this.routes().filter((route) => route.key !== session.route.key)
     if (others.length === 0) return false
+    this.compares.started()
     const probed = await Promise.all(others.map((route) => this.probe(route)))
     const opened = probed.flatMap(({ opened, ...route }) => (opened ? [{ ...route, opened }] : []))
     for (const path of probed) {
@@ -902,8 +896,8 @@ export class HostLink {
       if (own === 'ping') void session.channel.send({ type: 'pong' } satisfies Pong).catch(() => {})
       if (own === 'pong' && session.pingedAt !== null) {
         // A ping far slower than before: another route may do better now.
-        if (this.times.sample(session.route.key, Date.now() - session.pingedAt)) {
-          this.compareSoon(0)
+        if (this.times.sample(session.route.key, Date.now() - session.pingedAt) && !this.stopped) {
+          this.compares.slow()
         }
         session.pingedAt = null
       }
