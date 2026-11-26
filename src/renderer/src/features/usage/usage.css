@@ -403,6 +403,12 @@
 .k-u-plan:focus-visible {
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+.k-u-plan__head {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
 .k-u-plan header {
   display: flex;
   align-items: center;
@@ -419,6 +425,32 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--strong);
+}
+.k-u-plan__host {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--text);
+}
+.k-u-plan__host > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-u-plan__host-icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
 }
 .k-u-tier {
   flex: none;
@@ -729,6 +761,19 @@
   color: var(--text);
   outline: none;
 }
+.k-u-resets__row[data-host] {
+  height: auto;
+  min-height: 36px;
+  align-items: start;
+  padding: 3px 0;
+}
+.k-u-resets__row[data-host] .k-u-resets__pin {
+  margin-top: 5px;
+}
+.k-u-resets__row[data-host] > b,
+.k-u-resets__row[data-host] .k-u-resets__pct {
+  line-height: 18px;
+}
 .k-u-resets__row > b {
   font-weight: 500;
   white-space: nowrap;
@@ -752,9 +797,30 @@
   overflow: hidden;
   white-space: nowrap;
 }
+.k-u-resets__who--stacked {
+  align-items: flex-start;
+}
+.k-u-resets__who--stacked > :first-child {
+  margin-top: 2px;
+}
 .k-u-resets__who > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.k-u-resets__stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.k-u-resets__stack > span {
+  overflow: hidden;
+  line-height: 18px;
+  text-overflow: ellipsis;
+}
+.k-u-resets__sub {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--muted);
 }
 .k-u-resets__pct {
   font-weight: 500;

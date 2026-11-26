@@ -175,6 +175,7 @@
     "notReported_other": "{{name}} 不提供套餐用量。",
     "notYet": "还没有报告套餐用量。",
     "accounts_other": "{{count}} 个账号",
+    "perHost": "按电脑分别读取",
     "reading": "正在读取套餐用量",
     "failed": "读取失败",
     "neverRead": "读不到套餐用量。",

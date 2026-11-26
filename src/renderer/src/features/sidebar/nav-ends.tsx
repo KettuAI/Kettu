@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { Alert02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { PlanLimit } from '@shared/agent-host'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { strongestSignal } from '@renderer/features/routines/model'
@@ -12,13 +11,12 @@ import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel, limitPercent } from '@renderer/lib/plan-limit'
 import { formatShortcut } from '@renderer/lib/platform'
-import { accountAgents, type AccountAgent } from '@renderer/lib/plan-readings'
+import { accountAgents, tightestAccountOf } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
 import { usePlanReadings } from '@renderer/stores/agents'
-import { useShownHostAgents } from '@renderer/stores/window-host'
-import { tightestLimit } from '@shared/session-groups'
+import { useActiveHostId, useShownHostAgents } from '@renderer/stores/window-host'
 import { costText } from './usage-row'
 
 // What the sidebar menu's rows end with: New session's shortcut, and the Routines and Usage marks.
@@ -99,27 +97,13 @@ export function TodayCost() {
   )
 }
 
-/** Across the accounts, a reached window first, then the fullest. */
-function tightestOf(
-  accounts: readonly AccountAgent[],
-  now: number,
-): { account: AccountAgent; limit: PlanLimit } | null {
-  let best: { account: AccountAgent; limit: PlanLimit } | null = null
-  for (const account of accounts) {
-    const limit = tightestLimit(account.limits, now)
-    if (!limit || limit.usedPercent === null) continue
-    const rank = (l: PlanLimit) => (l.state === 'reached' ? 1000 : 0) + (l.usedPercent ?? 0)
-    if (!best || rank(limit) > rank(best.limit)) best = { account, limit }
-  }
-  return best
-}
-
 /** The tightest limit of the window's hosts' accounts, each at its newest reading. */
 export function TightestLimit() {
   const { t } = useTranslation('usage')
   const view = useLimitView()
+  const activeHost = useActiveHostId()
   const accounts = accountAgents(useShownHostAgents(), usePlanReadings())
-  const tightest = tightestOf(accounts, useNow())
+  const tightest = tightestAccountOf(accounts, useNow(), activeHost)
   if (!tightest) return null
   const {
     account: { agent, hostId, name },

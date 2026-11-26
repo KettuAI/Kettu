@@ -2,6 +2,7 @@
 // agents, and every view shows the newest of those readings.
 
 import type { AgentStatus, PlanLimit, PlanResets, ResetsError } from '@shared/agent-host'
+import { tightestLimit } from '@shared/session-groups'
 import type { AgentId } from '@shared/thread'
 
 /** What picking an account's newest plan limit reading inspects on each agent. */
@@ -121,6 +122,11 @@ export interface AccountAgent {
   resets: CardResets | null
   /** The agent's name, or the account's email when its agents go by different names. */
   name: string
+  /**
+   * True when multiple shown hosts report unidentified entries for the same harness and a compact
+   * surface focused onto this host's entry.
+   */
+  hostScoped?: boolean
 }
 
 /**
@@ -160,6 +166,96 @@ export function accountAgents(
     if (email && names.get(entry.key)!.size > 1) entry.name = email
   }
   return found
+}
+
+/**
+ * Focuses unidentified multi-host entries for compact surfaces (such as the sidebar ring, popover,
+ * and tightest-limit hint) when showing several hosts side by side.
+ *
+ * Identified accounts (`accountKey !== null`) remain merged across hosts as-is. For any harness
+ * whose unidentified (`accountKey === null`) entries appear on multiple hosts, keeps only the
+ * entries of one host—`activeHostId` when present, else this computer (`null`) when present, else
+ * the host with the newest limit reading (earliest in order on a tie)—and marks them `hostScoped`.
+ * Never merges or guesses account identity across hosts.
+ */
+export function focusUnidentifiedAccounts(
+  accounts: readonly AccountAgent[],
+  activeHostId: string | null | undefined,
+): AccountAgent[] {
+  const groups = new Map<string, AccountAgent[]>()
+  for (const entry of accounts) {
+    if (accountKey(entry.agent) !== null) continue
+    const list = groups.get(entry.agent.harnessId)
+    if (list) list.push(entry)
+    else groups.set(entry.agent.harnessId, [entry])
+  }
+  const focusedHost = new Map<string, string | null>()
+  for (const [harnessId, entries] of groups) {
+    const hosts: (string | null)[] = []
+    for (const entry of entries) {
+      if (!hosts.includes(entry.hostId)) hosts.push(entry.hostId)
+    }
+    if (hosts.length <= 1) continue
+    let chosen: string | null
+    if (activeHostId !== undefined && hosts.includes(activeHostId)) {
+      chosen = activeHostId
+    } else if (hosts.includes(null)) {
+      chosen = null
+    } else {
+      chosen = hosts[0]!
+      let newest = -1
+      for (const hostId of hosts) {
+        const readAt = entries
+          .filter((entry) => entry.hostId === hostId)
+          .reduce((best, entry) => Math.max(best, readAtOf(entry.limits) ?? -1), -1)
+        if (readAt > newest) {
+          newest = readAt
+          chosen = hostId
+        }
+      }
+    }
+    focusedHost.set(harnessId, chosen)
+  }
+  if (focusedHost.size === 0) return [...accounts]
+  const out: AccountAgent[] = []
+  for (const entry of accounts) {
+    if (accountKey(entry.agent) !== null) {
+      out.push(entry)
+      continue
+    }
+    const target = focusedHost.get(entry.agent.harnessId)
+    if (target === undefined) {
+      out.push(entry)
+    } else if (entry.hostId === target) {
+      out.push({ ...entry, hostScoped: true })
+    }
+  }
+  return out
+}
+
+/**
+ * Picks the tightest limit across accounts (a reached window first, then the highest percentage),
+ * first focusing unidentified multi-host harnesses onto `activeHostId` (or fallback) so an
+ * inactive host's unnamed card does not override the ambient sidebar hint.
+ */
+export function tightestAccountOf(
+  accounts: readonly AccountAgent[],
+  now: number,
+  activeHostId: string | null | undefined,
+): { account: AccountAgent; limit: PlanLimit } | null {
+  const withLimits = accounts.filter((account) => {
+    const limit = tightestLimit(account.limits, now)
+    return limit !== null && limit.usedPercent !== null
+  })
+  const focused = focusUnidentifiedAccounts(withLimits, activeHostId)
+  let best: { account: AccountAgent; limit: PlanLimit } | null = null
+  for (const account of focused) {
+    const limit = tightestLimit(account.limits, now)
+    if (!limit || limit.usedPercent === null) continue
+    const rank = (l: PlanLimit) => (l.state === 'reached' ? 1000 : 0) + (l.usedPercent ?? 0)
+    if (!best || rank(limit) > rank(best.limit)) best = { account, limit }
+  }
+  return best
 }
 
 /** A computer's agent a refresh can read a card's limits through. */

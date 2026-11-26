@@ -6,7 +6,9 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
+import { useHostInfo } from '@renderer/features/session/composer/host-info'
 import { PlanPart } from '@renderer/features/session/composer/usage'
+import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
@@ -94,6 +96,10 @@ export function PlanLimitCard({
 function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common', 'usage'])
   const view = useLimitView()
+  const windowHost = useWindowHost()
+  const hostName = useHostName()
+  const hostInfo = useHostInfo(card.hostId)
+  const scopedHost = windowHost.kind === 'all' && card.hostScoped ? hostName(card.hostId) : null
   const count = card.windows.length
   const groups = hasModelGroups(card)
   const amounts = card.windows.flatMap((window) => {
@@ -118,6 +124,12 @@ function CardFace({ card }: { card: PlanCard }) {
           </span>
         )}
       </span>
+      {scopedHost && (
+        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-badge leading-3.5 text-tertiary">
+          <HostIcon platform={hostInfo.platform} className="size-2.75 shrink-0" />
+          <span className="min-w-0 truncate">{scopedHost}</span>
+        </span>
+      )}
       <span className="mt-1.75 flex min-w-0 items-center gap-2.25">
         <span className="relative flex shrink-0">
           {count > 0 ? (
