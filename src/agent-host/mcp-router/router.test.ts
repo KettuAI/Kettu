@@ -11,6 +11,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketServer } from '@shared/marketplace'
+import type { Platform } from '@shared/platform'
 import { ArtifactService, type ArtifactServiceDeps } from '../artifacts/service'
 import { McpProxy } from '../marketplace/proxy'
 import { Answers } from './answers'
@@ -124,6 +125,7 @@ async function setup(
     appVersion: '0.0.0',
     home: dir,
     log: () => {},
+    processes: { platform: process.platform as Platform },
   })
   closers.push(() => router.close())
   const service = new ArtifactService({

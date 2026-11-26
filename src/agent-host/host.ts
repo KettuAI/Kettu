@@ -364,7 +364,10 @@ export interface HostOptions {
   sessionRouterPath?: string | null
   /** The bundle of the process that runs Cline's SDK; without it Cline runs over ACP. */
   clineHostPath?: string | null
-  /** The MCP bridge, which stdio-only agents reach the library's servers by; without it they get commands. */
+  /**
+   * The MCP bridge, which stdio-only agents reach the library's servers by; without it they get
+   * commands.
+   */
   mcpBridgePath?: string | null
   settings: HostSettings
   baseEnv: Env
@@ -925,6 +928,13 @@ export class AgentHost {
     })
     const home = options.homeDir ?? os.homedir()
     this.mcpAnswers = new Answers(answersFile(options.userDataPath, log))
+    this.trees = new AgentTrees({
+      file: agentProcessesFile(options.userDataPath, log),
+      control: options.processControl ?? processControl(platform),
+      graceMs: STOP_TIMINGS.termMs,
+      ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
+      log,
+    })
     this.mcpRouter = new McpRouter({
       servers: () => this.settings.marketplace.mcp,
       command: (server) =>
@@ -939,6 +949,7 @@ export class AgentHost {
       home,
       log,
       fetch: net,
+      processes: { platform, trees: this.trees },
     })
     this.ownPlugins = new OwnPluginsService({
       platform,
@@ -996,13 +1007,6 @@ export class AgentHost {
       ownSkills: () => this.artifactService.guideFlags,
       kettuOn: (agentId) => !this.settings.mcp.kettu.off.includes(agentId),
       fetch: net,
-    })
-    this.trees = new AgentTrees({
-      file: agentProcessesFile(options.userDataPath, log),
-      control: options.processControl ?? processControl(platform),
-      graceMs: STOP_TIMINGS.termMs,
-      ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
-      log,
     })
     this.attachments = new Attachments({ userDataPath: options.userDataPath, log })
     const contentDir = path.join(options.userDataPath, 'artifacts', 'content')
@@ -2781,7 +2785,10 @@ export class AgentHost {
     if (server) this.sessions.libraryChanged((agentId) => serverFor(server, agentId))
   }
 
-  /** The bridge where main or the daemon said it is; a build without one hands commands as before. */
+  /**
+   * The bridge where main or the daemon said it is; a build without one hands commands as
+   * before.
+   */
   private async findBridge(file: string | null): Promise<void> {
     if (file && (await isExecutableFile(file, this.options.platform))) {
       this.mcpBridge = file
@@ -3630,6 +3637,8 @@ export class AgentHost {
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
         this.agents.stopAll(),
+        // Before the trees close, so the reaps of what its servers left are waited for.
+        this.mcpRouter.close(),
         this.git?.dispose().catch((error: unknown) => {
           this.diagnostics.log(
             'warn',
@@ -3638,7 +3647,7 @@ export class AgentHost {
         }),
       ])
       await Promise.all([
-        this.mcpRouter.close().then(() => this.artifactService.stop()),
+        this.artifactService.stop(),
         this.htmlPreviews.stop(),
         this.computer?.shutdown(),
         this.projects.flush(),

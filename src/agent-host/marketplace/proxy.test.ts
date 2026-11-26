@@ -2,6 +2,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { MarketServer } from '@shared/marketplace'
+import type { Platform } from '@shared/platform'
 import { ArtifactService, type ArtifactServiceDeps } from '../artifacts/service'
 import { Answers } from '../mcp-router/answers'
 import { McpRouter, serverPath } from '../mcp-router/router'
@@ -100,6 +101,7 @@ async function setup(options: {
     appVersion: '0.0.0',
     home: '/',
     log: () => {},
+    processes: { platform: process.platform as Platform },
   })
   const service = new ArtifactService({
     log: () => {},

@@ -17,6 +17,7 @@ import { runOf, type MarketServer } from '@shared/marketplace'
 import type { LogFn } from '../storage'
 import type { McpProxy } from '../marketplace/proxy'
 import { Answers, specDigest } from './answers'
+import { startCommand, type CommandDeps } from './command'
 import { Instance, Link, type Sharing, type Upstream } from './engine'
 import {
   isRecord,
@@ -88,20 +89,20 @@ export interface RouterDeps {
   home: string
   log: LogFn
   fetch?: typeof fetch
+  /** How command servers are started and stopped, their trees recorded with the agents'. */
+  processes: Omit<CommandDeps, 'quitting'>
 }
 
 type Sdk = Awaited<ReturnType<typeof loadSdk>>
 
 function loadSdk() {
   return Promise.all([
-    import('@modelcontextprotocol/sdk/client/stdio.js'),
     import('@modelcontextprotocol/sdk/client/sse.js'),
     import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
     import('@modelcontextprotocol/sdk/server/streamableHttp.js'),
     import('@modelcontextprotocol/sdk/inMemory.js'),
     import('@modelcontextprotocol/sdk/client/index.js'),
-  ]).then(([stdio, sse, http, server, memory, client]) => ({
-    StdioClientTransport: stdio.StdioClientTransport,
+  ]).then(([sse, http, server, memory, client]) => ({
     SSEClientTransport: sse.SSEClientTransport,
     StreamableHTTPClientTransport: http.StreamableHTTPClientTransport,
     StreamableHTTPServerTransport: server.StreamableHTTPServerTransport,
@@ -162,6 +163,7 @@ export class McpRouter {
   private readonly stateless = new Map<string, { transport: StatelessTransport; link: Link }>()
   private readonly clients = new Map<string, Promise<Client>>()
   private nextLink = 1
+  private closing = false
 
   constructor(private readonly deps: RouterDeps) {}
 
@@ -389,17 +391,14 @@ export class McpRouter {
       if (typeof command === 'string') throw new Error(command)
       const where = await stat(folder).catch(() => null)
       if (!where?.isDirectory()) throw new Error(`The folder ${folder} does not exist`)
-      const transport = new sdk.StdioClientTransport({
-        command: command.command,
-        args: command.args,
-        env: command.env,
-        cwd: folder,
-        stderr: 'pipe',
-      })
       let tail = ''
-      transport.stderr?.on('data', (chunk: Buffer | string) => {
-        tail = (tail + chunk.toString()).slice(-STDERR_BYTES)
-      })
+      const transport = await startCommand(
+        server.name,
+        command,
+        folder,
+        { ...this.deps.processes, quitting: () => this.closing },
+        (text) => (tail = (tail + text).slice(-STDERR_BYTES)),
+      )
       return { transport, stderr: () => tail }
     }
     const url = new URL(server.spec.url)
@@ -532,6 +531,7 @@ export class McpRouter {
 
   /** Every process stops, as the host shuts down. */
   async close(): Promise<void> {
+    this.closing = true
     for (const linked of [...this.links]) linked.link.close()
     await Promise.all([...this.instances.values()].map((instance) => instance.stop('removed')))
     this.instances.clear()
@@ -555,7 +555,10 @@ function sharingOf(server: MarketServer): Sharing {
   return mode === 'folder' ? 'folder' : mode === 'all' ? 'all' : 'session'
 }
 
-/** The stateless protocol's `Mcp-Method` and `Mcp-Name` for a request to a server that speaks it. */
+/**
+ * The stateless protocol's `Mcp-Method` and `Mcp-Name` for a request to a server that speaks
+ * it.
+ */
 export function routingHeaders(headers: Headers, payload: unknown): void {
   if (typeof payload !== 'string' || !payload.includes(MODERN_VERSION)) return
   let message: Message | null
