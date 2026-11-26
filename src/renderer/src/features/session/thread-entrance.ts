@@ -22,11 +22,38 @@ function within(el: Element, top: number, bottom: number): boolean {
   return box.bottom > top && box.top < bottom && box.height > 0
 }
 
+function visibleItems(
+  viewport: HTMLElement,
+  content: HTMLElement,
+  top: number,
+  bottom: number,
+): HTMLElement[] {
+  const items: HTMLElement[] = []
+  const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+  const fromEnd = maxScroll > 0 && viewport.scrollTop > maxScroll * 0.5
+  let seen = false
+  for (
+    let node = fromEnd ? content.lastElementChild : content.firstElementChild;
+    node;
+    node = fromEnd ? node.previousElementSibling : node.nextElementSibling
+  ) {
+    if (!(node instanceof HTMLElement) || !node.dataset.messageId) continue
+    const box = node.getBoundingClientRect()
+    if (box.bottom > top && box.top < bottom && box.height > 0) {
+      seen = true
+      items.push(node)
+    } else if (seen) {
+      // Stop as soon as we exit the visible band so off-screen content-visibility items are untouched.
+      break
+    }
+  }
+  return fromEnd ? items.reverse() : items
+}
+
 function rise(viewport: HTMLElement, content: HTMLElement): void {
   const { top, bottom } = viewport.getBoundingClientRect()
   const blocks: HTMLElement[] = []
-  for (const item of content.querySelectorAll<HTMLElement>(':scope > [data-message-id]')) {
-    if (!within(item, top, bottom)) continue
+  for (const item of visibleItems(viewport, content, top, bottom)) {
     const prose = [...item.querySelectorAll<HTMLElement>(PROSE)]
     if (prose.length === 0) blocks.push(item)
     else blocks.push(...prose.filter((el) => within(el, top, bottom)))

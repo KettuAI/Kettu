@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { Download01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -14,25 +14,66 @@ import { numericColumns, proseColumns, tableSize } from './table-columns'
 
 type Overflow = { left: boolean; right: boolean }
 
-/** Which sides of a scrolled box hide content, so they fade. */
+const tableMeasures = new Map<Element, () => void>()
+let sharedTableObserver: ResizeObserver | null = null
+
+function observeTable(targets: Element[], onResize: () => void): () => void {
+  sharedTableObserver ??= new ResizeObserver((entries) => {
+    const callbacks = new Set<() => void>()
+    for (const entry of entries) {
+      const cb = tableMeasures.get(entry.target)
+      if (cb) callbacks.add(cb)
+    }
+    for (const cb of callbacks) cb()
+  })
+  for (const target of targets) {
+    tableMeasures.set(target, onResize)
+    sharedTableObserver.observe(target)
+  }
+  return () => {
+    for (const target of targets) {
+      sharedTableObserver?.unobserve(target)
+      tableMeasures.delete(target)
+    }
+    if (tableMeasures.size === 0 && sharedTableObserver) {
+      sharedTableObserver.disconnect()
+      sharedTableObserver = null
+    }
+  }
+}
+
+/**
+ * Which sides of a scrolled box hide content, so they fade. Defers initial measurement to the
+ * shared ResizeObserver callback (which runs after layout before paint) instead of reading
+ * scrollWidth synchronously inside useLayoutEffect, preventing layout thrashing when many tables
+ * mount in one commit.
+ */
 function useOverflow(ref: React.RefObject<HTMLElement | null>): Overflow {
   const [overflow, setOverflow] = useState<Overflow>({ left: false, right: false })
-  useLayoutEffect(() => {
+  useEffect(() => {
     const el = ref.current
     if (!el) return
+    let frame = 0
     const measure = () => {
       const max = el.scrollWidth - el.clientWidth
       const next = { left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 }
       setOverflow((o) => (o.left === next.left && o.right === next.right ? o : next))
     }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    if (el.firstElementChild) observer.observe(el.firstElementChild)
-    el.addEventListener('scroll', measure, { passive: true })
+    const onScroll = () => {
+      if (frame !== 0) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    }
+    const targets: Element[] = [el]
+    if (el.firstElementChild) targets.push(el.firstElementChild)
+    const stopObserving = observeTable(targets, measure)
+    el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      observer.disconnect()
-      el.removeEventListener('scroll', measure)
+      if (frame !== 0) cancelAnimationFrame(frame)
+      stopObserving()
+      el.removeEventListener('scroll', onScroll)
     }
   }, [ref])
   return overflow
@@ -56,13 +97,19 @@ export function MarkdownTable({ node, children, className }: ComponentProps<'tab
   useLayoutEffect(() => {
     const el = table.current
     if (!el) return
+    const numericSet = new Set(numeric)
+    const proseSet = new Set(prose)
     for (const row of el.rows) {
-      for (const [i, cell] of [...row.cells].entries()) {
-        cell.toggleAttribute('data-numeric', numeric.includes(i))
-        cell.toggleAttribute('data-prose', prose.includes(i))
+      const cells = row.cells
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i]!
+        const isNum = numericSet.has(i)
+        if (cell.hasAttribute('data-numeric') !== isNum) cell.toggleAttribute('data-numeric', isNum)
+        const isProse = proseSet.has(i)
+        if (cell.hasAttribute('data-prose') !== isProse) cell.toggleAttribute('data-prose', isProse)
       }
     }
-  })
+  }, [numeric, prose, children])
 
   const data = () => (table.current ? extractTableDataFromElement(table.current) : null)
   return (

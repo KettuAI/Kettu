@@ -29,6 +29,38 @@ export function leaveThread(sessionId: string, position: ReadingPosition | null)
 }
 
 /**
+ * Finds the top-most message item crossing the viewport's top edge via hit testing so leaving a
+ * long thread never walks off-screen `content-visibility: auto` items with getBoundingClientRect.
+ */
+function hitTopItem(content: HTMLElement, box: DOMRect): HTMLElement | null {
+  if (typeof document === 'undefined' || typeof document.elementsFromPoint !== 'function') {
+    return null
+  }
+  const x = box.left + box.width / 2
+  const maxY = box.bottom - 1
+  for (const dy of [8, 28, 64, 120]) {
+    const y = box.top + dy
+    if (y >= maxY) break
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (!(hit instanceof HTMLElement)) continue
+      const item = hit.closest<HTMLElement>('[data-message-id]')
+      if (item && item.parentElement === content) {
+        // Walk up a couple siblings in case the sample landed past a small item at the very top edge.
+        let current = item
+        for (let step = 0; step < 4; step++) {
+          const prev = current.previousElementSibling
+          if (!(prev instanceof HTMLElement) || !prev.dataset.messageId) break
+          if (prev.getBoundingClientRect().bottom <= box.top) break
+          current = prev
+        }
+        return current
+      }
+    }
+  }
+  return null
+}
+
+/**
  * The item at the top of the viewport and its offset, or null when the thread shows its end or
  * follows it, which MessageScroller marks by leaving `end` out of `data-scrollable`.
  */
@@ -37,11 +69,19 @@ export function itemAtTop(
   content: HTMLElement,
 ): { item: string; offset: number } | null {
   if (!viewport.getAttribute('data-scrollable')?.split(' ').includes('end')) return null
-  const top = viewport.getBoundingClientRect().top
+  const box = viewport.getBoundingClientRect()
+  const hit = hitTopItem(content, box)
+  if (hit && hit.dataset.messageId) {
+    const itemBox = hit.getBoundingClientRect()
+    if (itemBox.bottom > box.top) {
+      return { item: hit.dataset.messageId, offset: itemBox.top - box.top }
+    }
+  }
+  const top = box.top
   for (const child of content.children) {
     if (!(child instanceof HTMLElement) || !child.dataset.messageId) continue
-    const box = child.getBoundingClientRect()
-    if (box.bottom > top) return { item: child.dataset.messageId, offset: box.top - top }
+    const itemBox = child.getBoundingClientRect()
+    if (itemBox.bottom > top) return { item: child.dataset.messageId, offset: itemBox.top - top }
   }
   return null
 }

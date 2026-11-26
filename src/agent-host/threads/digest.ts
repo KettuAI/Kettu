@@ -1,14 +1,38 @@
 // A device that draws tool calls folded gets their long outputs and inputs as digests in the pages
 // it reads, which are most of their bytes; `sessions.entry` reads an entry whole when it opens one.
 
+import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
 import type {
   DigestedThreadEntry,
   DigestedToolEntry,
   ThreadEntry,
   ToolContent,
   ToolContentDigest,
+  ToolEntry,
   ToolInputDigest,
 } from '@shared/thread'
+
+// Workflow card calls read their own rawInput and content inline instead of unfolding a ToolBody.
+const WORKFLOW_CARD_TOOLS = new Set([
+  'suggest_workflow',
+  'create_workflow',
+  'report_step',
+  'pick_step_agents',
+])
+
+function isInlineCardTool(entry: ToolEntry): boolean {
+  if (
+    entry.permission !== null ||
+    entry.planVersion !== undefined ||
+    entry.question !== undefined ||
+    entry.elicitation !== undefined
+  ) {
+    return true
+  }
+  const call = mcpCallOf(entry.title)
+  const name = call ? (call.server === KETTU_SERVER ? call.tool : null) : entry.title.trim()
+  return name !== null && WORKFLOW_CARD_TOOLS.has(name)
+}
 
 /** An input this long or shorter, in UTF-8 bytes, stays whole: nearly every command. */
 export const DIGEST_INPUT_BYTES = 2 * 1024
@@ -26,9 +50,9 @@ export function digestEntries<T extends { entries: ThreadEntry[] }>(
   return { ...page, entries: page.entries.map(digestEntry) }
 }
 
-/** A tool call that waits for an answer stays whole, since its card shows what it asks about. */
+/** A tool call rendered as an inline card or waiting for an answer stays whole. */
 export function digestEntry(entry: ThreadEntry): DigestedThreadEntry {
-  if (entry.kind !== 'tool' || entry.permission !== null) return entry
+  if (entry.kind !== 'tool' || isInlineCardTool(entry)) return entry
   let content: (ToolContent | ToolContentDigest)[] | null = null
   entry.content.forEach((item, index) => {
     const digest = digestContent(item)

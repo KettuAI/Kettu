@@ -309,12 +309,15 @@ function imagesFor(device: PortDevice | null): ImageMode {
   return device && !device.imageRefs ? 'inline' : 'refs'
 }
 
-/** A page as a device reads it: with long tool outputs and inputs as digests, when it said so. */
+/**
+ * A desktop window, and a paired device that negotiated `TOOL_DIGESTS_FEATURE`, read long folded
+ * tool outputs and inputs as digests and fetch the full entry on demand via `sessions.entry`.
+ */
 function digestsFor<T extends { entries: ThreadEntry[] }>(
   device: PortDevice | null,
   page: T,
 ): T | (Omit<T, 'entries'> & { entries: DigestedThreadEntry[] }) {
-  return device?.toolDigests ? digestEntries(page) : page
+  return !device || device.toolDigests ? digestEntries(page) : page
 }
 
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
