@@ -68,6 +68,8 @@ export interface AgyEvalContext {
   readonly homeDir?: string
   readonly tempDirs?: readonly string[]
   readonly agentHome?: string
+  /** Non-default agy app_data_dir (e.g. 'antigravity' for imported IDE sessions). */
+  readonly agyAppDataDir?: string
 }
 
 const OWN_PREFIX = `mcp_${SERVICE_NAME}_`
@@ -699,7 +701,7 @@ function isInSafeWriteArea(rawPath: string, ctx: AgyEvalContext): boolean {
   }
   if (isInTempDir(norm, ctx.cwd, platform, home, ctx.tempDirs)) return true
   const brainBase = normalizePath(
-    path.join(ctx.agentHome ?? home, '.gemini', 'antigravity-cli', 'brain'),
+    path.join(ctx.agentHome ?? home, '.gemini', ctx.agyAppDataDir ?? 'antigravity-cli', 'brain'),
     null,
     platform,
     home,

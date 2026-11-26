@@ -11,7 +11,7 @@ import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
 import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
-import type { StoredThread } from './threads/model'
+import { EMPTY_SESSION, type StoredThread } from './threads/model'
 import type { ThreadStore } from './threads/store'
 import type { WorktreeInspection } from './worktrees/api'
 import type { WorktreeManager } from './worktrees/manager'
@@ -832,5 +832,247 @@ describe('preparing and adopting sub-sessions under a worktree parent', () => {
     expect(child.worktree?.state).toBe('ready')
     expect(agent.newSession.mock.calls.at(-1)?.[0]).toBe(wtPath)
     await sessions.flush()
+  })
+})
+
+describe('empty-replay guard and recovery of cached empty imported threads', () => {
+  function agyConnection(
+    onLoad: (sessionId: string, target: { apply: (out: unknown) => void }) => Promise<void>,
+  ) {
+    const targets = new Map<string, { apply: (out: unknown) => void }>()
+    const loadSession = vi.fn(async (sessionId: string) => {
+      const target = targets.get(sessionId)
+      if (target) await onLoad(sessionId, target)
+      return { config: [] }
+    })
+    const agents = {
+      name: () => 'Google Antigravity',
+      signedIn: () => {},
+      status: () => ({ capabilities: null, limits: [] }),
+      refreshLimits: async () => {},
+      ensureReady: async () => ({
+        agentId: 'antigravity',
+        kettu: false,
+        init: {
+          name: 'Antigravity',
+          version: '1.5.18',
+          capabilities: {
+            loadSession: true,
+            listSessions: true,
+            resumeSession: true,
+            closeSession: true,
+            deleteSession: false,
+            forkSession: false,
+            forkAtMessage: false,
+            ownTitles: null,
+            logout: false,
+            steering: false,
+            mcpHttp: true,
+            mcpSse: false,
+            mcpStdio: true,
+            prompt: { image: false, audio: false, embeddedContext: false },
+          },
+          authMethods: [],
+          raw: null,
+        },
+        connection: {
+          closed: new Promise<void>(() => {}),
+          isClosed: false,
+          close: () => {},
+          register: (id: string, target: { apply: (out: unknown) => void }) => {
+            targets.set(id, target)
+          },
+          unregister: (id: string) => {
+            targets.delete(id)
+          },
+          reopen: () => {},
+          listSessions: async () => ({
+            sessions: [{ sessionId: 'ide-1', title: 'IDE Chat', updatedAt: null, cwd: '/repo' }],
+            nextCursor: null,
+          }),
+          loadSession,
+          resumeSession: async () => ({ config: [] }),
+          prompt: async (id: string) => {
+            targets.get(id)?.apply({
+              patches: [
+                {
+                  op: 'entry.add',
+                  entry: {
+                    kind: 'agent',
+                    id: 'a:1',
+                    content: [{ type: 'text', text: 'Reply after empty replay' }],
+                    streaming: false,
+                  },
+                },
+              ],
+              effects: [],
+            })
+            return { stopReason: 'end_turn', tokens: null, models: [] }
+          },
+        },
+      }),
+    }
+    return { agents, loadSession }
+  }
+
+  it('does not cache a 0-entry replay to threads.db, and caches once entries later arrive', async () => {
+    const writes: unknown[] = []
+    const threads: Partial<ThreadStore> = {
+      page: vi.fn(async () => null),
+      load: vi.fn(async () => null),
+      origins: vi.fn(async () => []),
+      write: vi.fn(async (_id, change) => {
+        writes.push(change)
+      }),
+    }
+    const { agents, loadSession } = agyConnection(async (_id, target) => {
+      // Simulate agy emitting only a session_info_update (title) and 0 message entries.
+      target.apply({
+        patches: [{ op: 'session.update', changes: { title: 'IDE Chat' } }],
+        effects: [],
+      })
+    })
+    const { sessions } = manager({}, { agents, threads })
+    await sessions.load()
+
+    const imported = await sessions.importSession({
+      agentId: 'antigravity',
+      projectPath: '/repo',
+      acpSessionId: 'ide-1',
+    })
+    await vi.waitFor(async () =>
+      expect((await index())?.sessions[0]).toMatchObject({
+        id: imported.id,
+        acpSessionId: 'ide-1',
+        imported: true,
+      }),
+    )
+
+    const snapshot = await sessions.open(imported.id)
+    expect(loadSession).toHaveBeenCalledTimes(1)
+    expect(snapshot.entries).toEqual([])
+    expect(writes).toEqual([])
+
+    // Sending a prompt adds entries and lifts the empty-replay guard so the thread persists normally.
+    await sessions.prompt(imported.id, [{ type: 'text', text: 'Hello' }])
+    await vi.waitFor(() => expect(writes.length).toBeGreaterThan(0))
+    await sessions.flush()
+  })
+
+  it('re-loads previously cached empty Antigravity imported threads on open and caches the recovered history', async () => {
+    const record: SessionRecord = {
+      id: 'legacy-ide-session',
+      agentId: 'antigravity',
+      acpSessionId: 'ide-1',
+      projectPath: '/repo',
+      title: null,
+      createdAt: 1,
+      updatedAt: 2,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: null,
+    }
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [record] })
+    await store.flush()
+
+    const writes: { entries: unknown[] }[] = []
+    const threads: Partial<ThreadStore> = {
+      // Simulate an empty cached thread persisted by an older Kettu version (next_pos = 0, entries = []).
+      page: vi.fn(async () => ({
+        head: { agentId: 'antigravity' as const, acpSessionId: 'ide-1' },
+        session: EMPTY_SESSION,
+        entries: [],
+        from: 0,
+        older: null,
+        plan: null,
+      })),
+      load: vi.fn(async () => ({
+        head: { agentId: 'antigravity' as const, acpSessionId: 'ide-1' },
+        session: EMPTY_SESSION,
+        entries: [],
+        setAside: [],
+      })),
+      origins: vi.fn(async () => []),
+      write: vi.fn(async (_id, change) => {
+        writes.push({ entries: change.entries })
+      }),
+    }
+    const { agents, loadSession } = agyConnection(async (_id, target) => {
+      target.apply({
+        patches: [
+          {
+            op: 'entry.add',
+            entry: { kind: 'user', id: 'u:1', content: [{ type: 'text', text: 'From IDE' }] },
+          },
+          {
+            op: 'entry.add',
+            entry: {
+              kind: 'agent',
+              id: 'a:1',
+              content: [{ type: 'text', text: 'Recovered reply' }],
+              streaming: false,
+            },
+          },
+        ],
+        effects: [],
+      })
+    })
+    const { sessions } = manager({}, { agents, threads })
+    await sessions.load()
+
+    const snapshot = await sessions.open(record.id)
+    expect(loadSession).toHaveBeenCalledTimes(1)
+    expect(snapshot.entries).toHaveLength(2)
+    expect(writes).toHaveLength(1)
+    expect(writes[0]!.entries).toHaveLength(2)
+  })
+
+  it('does not re-load a rewound session whose entries were moved to set_aside', async () => {
+    const record: SessionRecord = {
+      id: 'rewound-1',
+      agentId: 'antigravity',
+      acpSessionId: 'ide-1',
+      projectPath: '/repo',
+      title: 'Edited',
+      createdAt: 1,
+      updatedAt: 2,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: null,
+      imported: true,
+      rewound: {
+        entryId: 'u:1',
+        turns: 1,
+        draft: [{ type: 'text', text: 'Edited prompt' }],
+        used: null,
+        point: { ref: null, text: 'Old prompt', occurrence: 1 },
+      },
+    }
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [record] })
+    await store.flush()
+
+    const threads: Partial<ThreadStore> = {
+      page: vi.fn(async () => ({
+        head: { agentId: 'antigravity' as const, acpSessionId: 'ide-1' },
+        session: { ...EMPTY_SESSION, title: 'Edited' },
+        entries: [],
+        from: 2,
+        older: null,
+        plan: null,
+      })),
+    }
+    const { agents, loadSession } = agyConnection(async () => {})
+    const { sessions } = manager({}, { agents, threads })
+    await sessions.load()
+
+    const snapshot = await sessions.open(record.id)
+    expect(loadSession).not.toHaveBeenCalled()
+    expect(snapshot.entries).toEqual([])
   })
 })

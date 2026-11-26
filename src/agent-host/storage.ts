@@ -391,6 +391,8 @@ export interface SessionRecord {
   memorySentAt?: string
   /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
   noRewind?: true
+  /** Brought into Kettu via `sessions.import`, so its history comes from the agent on first open. */
+  imported?: true
 }
 
 /** An edit from a message, until the next send cuts the agent's own session or Put back undoes it. */
@@ -1114,6 +1116,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         ? { memorySentAt: item.memorySentAt }
         : {}),
       ...(item.noRewind === true ? { noRewind: true as const } : {}),
+      ...(item.imported === true ? { imported: true as const } : {}),
     })
   }
   return {

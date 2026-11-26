@@ -23,6 +23,9 @@ describe('agentFolder', () => {
     expect(agentFolder('antigravity', 'ee66', 'C:\\Users\\me', 'win32')).toBe(
       'C:\\Users\\me\\.gemini\\antigravity-cli\\brain\\ee66',
     )
+    expect(agentFolder('antigravity', 'ee66', '/Users/me', 'darwin', 'antigravity')).toBe(
+      '/Users/me/.gemini/antigravity/brain/ee66',
+    )
   })
 
   it('is none for an agent that keeps no folder of its own', () => {
@@ -129,6 +132,25 @@ describe('AgentFiles', () => {
     // The same agy session id under the user's own home belongs to the default agent.
     expect(await code(service().read('work', path.join(mine, 'plan.md')))).toBe('forbidden')
     expect(await code(service().read('s1', path.join(folder, 'plan.md')))).toBe('forbidden')
+  })
+
+  it('resolves an imported IDE session brain folder under .gemini/antigravity/brain', async () => {
+    const ideConv = path.join(home, '.gemini', 'antigravity', 'conversations')
+    const ideBrain = path.join(home, '.gemini', 'antigravity', 'brain', 'ide-9')
+    await mkdir(ideConv, { recursive: true })
+    await mkdir(ideBrain, { recursive: true })
+    await writeFile(path.join(ideConv, 'ide-9.db'), 'db')
+    await writeFile(path.join(ideBrain, 'implementation_plan.md'), '# IDE Plan\n')
+    sessions.ide = { agentId: 'antigravity', agentSessionId: 'ide-9', configDir: null }
+
+    expect(service().folder('ide')).toBe(ideBrain)
+    expect(
+      await service().read('ide', path.join(ideBrain, 'implementation_plan.md')),
+    ).toMatchObject({
+      kind: 'text',
+      text: '# IDE Plan\n',
+      editable: false,
+    })
   })
 
   it("refuses another session's folder", async () => {

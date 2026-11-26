@@ -20,7 +20,7 @@ const BUILD_OPTIONS: Readonly<Record<string, string>> = {
   auto: 'exit-plan-auto',
 }
 
-const OWN_FILE = /(?:^|\/)\.gemini\/antigravity-cli\/brain\/([^/]+)\/[^/]+\.md$/
+const OWN_FILE = /(?:^|\/)\.gemini\/antigravity(?:-cli)?\/brain\/([^/]+)\/[^/]+\.md$/
 
 export function plansAgy(version: string | null): boolean {
   return version !== null && compareVersions(version, AGY_PLAN_VERSION) >= 0

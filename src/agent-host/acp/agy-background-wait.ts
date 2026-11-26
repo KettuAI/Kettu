@@ -115,10 +115,13 @@ export async function readLatestAgyTranscriptTail(file: string): Promise<AgyTran
   return found
 }
 
-/** Default tail reader pointing at `~/.gemini/antigravity-cli/brain/<sessionId>/...`. */
-export function agyTailReader(home = os.homedir()): AgyTailReader {
+/** Default tail reader pointing at `<home>/.gemini/<appDataDir>/brain/<sessionId>/...`. */
+export function agyTailReader(
+  home = os.homedir(),
+  appDataDirOf?: (sessionId: string) => string | undefined,
+): AgyTailReader {
   return async (sessionId) => {
-    const file = agyTranscriptFile(sessionId, home)
+    const file = agyTranscriptFile(sessionId, home, appDataDirOf?.(sessionId))
     if (!file) return null
     return readLatestAgyTranscriptTail(file).catch(() => null)
   }

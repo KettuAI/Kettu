@@ -93,12 +93,19 @@ function quoteCmd(arg: string): string {
 const FOLDER_PER_SESSION = '--folder-per-session'
 /** The router's flag naming the flag a session's child may start with. */
 const SESSION_FLAG = '--session-flag='
+/** The router's flag naming a value flag (`--flag <value>`) a session's child may start with. */
+const SESSION_ARG = '--session-arg='
 // Where `initialize`'s answer names the session flag the program lists, and where `session/new`,
 // `session/load` and `session/resume` ask for it, as `SESSION_FLAG_META` in the host's connection.
 const SESSION_FLAG_META = 'sh.kettu/session-flag'
+// Where `initialize`'s answer lists supported value flags, and where `session/new`, `session/load`
+// and `session/resume` pass per-session flag values (e.g. `{ '--app-data-dir': 'antigravity' }`).
+const SESSION_ARGS_META = 'sh.kettu/session-args'
 // Where `session/load` and `session/resume` name the session whose process runs the one they open,
 // as `PARENT_SESSION_META` in the host's agy sub-agents.
 const PARENT_SESSION_META = 'sh.kettu/parent-session'
+// Safe single-segment value for per-session value flags (no path traversal or shell metacharacters).
+const SAFE_SESSION_ARG_VALUE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 /** Takes the ask for the session flag out of a request: the request to pass on, and the ask. */
 function takeFlag(params: unknown): { params: unknown; flagged: boolean } {
@@ -112,6 +119,27 @@ function takeFlag(params: unknown): { params: unknown; flagged: boolean } {
   if (Object.keys(rest).length > 0) forward._meta = rest
   else delete forward._meta
   return { params: forward, flagged: asked === true }
+}
+
+/** Takes per-session value flags out of a request so internal metadata never reaches the adapter. */
+function takeSessionArgs(params: unknown): {
+  params: unknown
+  args: Record<string, unknown> | null
+  invalid: boolean
+} {
+  if (typeof params !== 'object' || params === null) return { params, args: null, invalid: false }
+  const meta = (params as { _meta?: unknown })._meta
+  if (typeof meta !== 'object' || meta === null || !(SESSION_ARGS_META in meta)) {
+    return { params, args: null, invalid: false }
+  }
+  const { [SESSION_ARGS_META]: asked, ...rest } = meta as Record<string, unknown>
+  const forward: Record<string, unknown> = { ...(params as Record<string, unknown>) }
+  if (Object.keys(rest).length > 0) forward._meta = rest
+  else delete forward._meta
+  if (typeof asked !== 'object' || asked === null || Array.isArray(asked)) {
+    return { params: forward, args: null, invalid: true }
+  }
+  return { params: forward, args: asked as Record<string, unknown>, invalid: false }
 }
 
 /** Takes the parent session out of a request: the request to pass on, and the parent, or null. */
@@ -173,15 +201,25 @@ function withClose(result: unknown): unknown {
   return response
 }
 
-/** Names the session flag in `initialize`'s answer, for a host that may ask for it. */
-function withFlag(result: unknown, flag: string | null): unknown {
-  if (flag === null || typeof result !== 'object' || result === null) return result
+/** Names supported session flags and value flags in `initialize`'s answer, for the host. */
+function withFlag(result: unknown, flag: string | null, sessionArgs: readonly string[]): unknown {
+  if (
+    (flag === null && sessionArgs.length === 0) ||
+    typeof result !== 'object' ||
+    result === null
+  ) {
+    return result
+  }
   const response = result as Record<string, unknown>
   const meta =
     typeof response._meta === 'object' && response._meta !== null
       ? (response._meta as Record<string, unknown>)
       : {}
-  response._meta = { ...meta, [SESSION_FLAG_META]: flag }
+  response._meta = {
+    ...meta,
+    ...(flag !== null ? { [SESSION_FLAG_META]: flag } : {}),
+    ...(sessionArgs.length > 0 ? { [SESSION_ARGS_META]: [...sessionArgs] } : {}),
+  }
   return response
 }
 
@@ -211,7 +249,10 @@ export class SessionRouter {
   private readonly folderPerSession: boolean
   /** The flag a session's child may start with, once the program's help lists it. */
   private readonly sessionFlag: string | null
-  private listed: Promise<boolean> | null = null
+  /** Value flags (`--flag <value>`) a session's child may start with, once help lists them. */
+  private readonly sessionArgs: readonly string[]
+  private readonly sessionArgSet: ReadonlySet<string>
+  private helpOutput: Promise<string | null> | null = null
   private readonly children = new Set<Child>()
   /** Each live session's child, by the session id it opened. */
   private readonly sessions = new Map<string, Child>()
@@ -228,12 +269,18 @@ export class SessionRouter {
   constructor(
     command: string,
     args: string[],
-    options: { folderPerSession?: boolean; sessionFlag?: string | null } = {},
+    options: {
+      folderPerSession?: boolean
+      sessionFlag?: string | null
+      sessionArgs?: readonly string[]
+    } = {},
   ) {
     this.childCommand = command
     this.childArgs = args
     this.folderPerSession = options.folderPerSession ?? false
     this.sessionFlag = options.sessionFlag ?? null
+    this.sessionArgs = options.sessionArgs ?? []
+    this.sessionArgSet = new Set(this.sessionArgs)
   }
 
   start(): void {
@@ -262,15 +309,18 @@ export class SessionRouter {
       if (method === 'initialize') {
         this.initializeParams = params
         this.control ??= this.spawnChild()
-        const [answer, listed] = await Promise.all([
+        const [answer, help] = await Promise.all([
           this.request(this.control, method, params),
-          this.flagListed(),
+          this.readHelp(),
         ])
         if (answer.error) return this.sendError(id, answer.error)
-        return this.sendResult(
-          id,
-          withFlag(withClose(answer.result), listed ? this.sessionFlag : null),
-        )
+        const listedFlag =
+          help !== null && this.sessionFlag !== null && listsFlag(help, this.sessionFlag)
+            ? this.sessionFlag
+            : null
+        const listedArgs =
+          help !== null ? this.sessionArgs.filter((flag) => listsFlag(help, flag)) : []
+        return this.sendResult(id, withFlag(withClose(answer.result), listedFlag, listedArgs))
       }
       if (method === 'session/new') return await this.newSession(id, params)
       if (method === 'session/load' || method === 'session/resume') {
@@ -334,8 +384,10 @@ export class SessionRouter {
     let child: Child | null = null
     try {
       const flag = takeFlag(params)
-      child = await this.startSessionChild(params, await this.flagFor(flag.flagged))
-      const answer = await this.request(child, 'session/new', flag.params)
+      const sessionArgs = takeSessionArgs(flag.params)
+      const extra = [...(await this.flagFor(flag.flagged)), ...(await this.argsFor(sessionArgs))]
+      child = await this.startSessionChild(params, extra)
+      const answer = await this.request(child, 'session/new', sessionArgs.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -370,13 +422,15 @@ export class SessionRouter {
     }
     const parented = takeParent(params)
     if (parented.parent !== null) {
-      return this.loadGuest(id, method, sessionId, parented.parent, parented.params)
+      const clean = takeSessionArgs(takeFlag(parented.params).params).params
+      return this.loadGuest(id, method, sessionId, parented.parent, clean)
     }
     let child: Child | null = null
     try {
       const flag = takeFlag(params)
+      const sessionArgs = takeSessionArgs(flag.params)
       // Refused before the session's process ends, so a refusal leaves the session as it was.
-      const extra = await this.flagFor(flag.flagged)
+      const extra = [...(await this.flagFor(flag.flagged)), ...(await this.argsFor(sessionArgs))]
       this.guests.delete(sessionId)
       const existing = this.sessions.get(sessionId)
       if (existing) {
@@ -385,7 +439,7 @@ export class SessionRouter {
         await this.endChildAndWait(existing, REPLACE_KILL_MS)
       }
       child = await this.startSessionChild(params, extra)
-      const answer = await this.request(child, method, flag.params)
+      const answer = await this.request(child, method, sessionArgs.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -464,7 +518,8 @@ export class SessionRouter {
   /** The session flag, as the words a child that asked for it adds; it throws when not listed. */
   private async flagFor(flagged: boolean): Promise<string[]> {
     if (!flagged) return []
-    if (this.sessionFlag === null || !(await this.flagListed())) {
+    const help = await this.readHelp()
+    if (this.sessionFlag === null || help === null || !listsFlag(help, this.sessionFlag)) {
       throw new RouterError('The agent has no session flag to start with', {
         reason: 'no_session_flag',
       })
@@ -472,12 +527,53 @@ export class SessionRouter {
     return [this.sessionFlag]
   }
 
-  /** 检查程序 `--help` 是否列出目标参数；超时或执行出错不永久缓存失败，允许后续重试。 */
-  private flagListed(): Promise<boolean> {
-    const flag = this.sessionFlag
-    if (flag === null) return Promise.resolve(false)
-    if (this.listed) return this.listed
-    const check = new Promise<boolean>((resolve) => {
+  /** Validated per-session value flags as CLI arguments; throws on unknown or unsafe entries. */
+  private async argsFor(request: {
+    args: Record<string, unknown> | null
+    invalid: boolean
+  }): Promise<string[]> {
+    if (request.invalid) {
+      throw new RouterError('Invalid per-session arguments', { reason: 'invalid_session_arg' })
+    }
+    if (!request.args) return []
+    const entries = Object.entries(request.args)
+    if (entries.length === 0) return []
+    const help = await this.readHelp()
+    const out: string[] = []
+    for (const [flag, value] of entries) {
+      if (!this.sessionArgSet.has(flag)) {
+        throw new RouterError(`The agent does not allow session argument ${flag}`, {
+          reason: 'invalid_session_arg',
+        })
+      }
+      if (
+        typeof value !== 'string' ||
+        value === '.' ||
+        value === '..' ||
+        !SAFE_SESSION_ARG_VALUE.test(value)
+      ) {
+        throw new RouterError(`Unsafe value for session argument ${flag}`, {
+          reason: 'invalid_session_arg',
+        })
+      }
+      if (help === null || !listsFlag(help, flag)) {
+        throw new RouterError(`The agent does not support session argument ${flag}`, {
+          reason: 'no_session_arg',
+        })
+      }
+      out.push(flag, value)
+    }
+    return out
+  }
+
+  /**
+   * Reads the program's `--help` output once when any session flag or value flag is configured.
+   * Timeouts and abnormal exits clear the cache so a transient slowdown can retry later.
+   */
+  private readHelp(): Promise<string | null> {
+    if (this.sessionFlag === null && this.sessionArgs.length === 0) return Promise.resolve(null)
+    if (this.helpOutput) return this.helpOutput
+    const check = new Promise<string | null>((resolve) => {
       const { command, args } = this.spawnWords(this.childCommand, [...this.childArgs, '--help'])
       let help = ''
       let timedOut = false
@@ -490,8 +586,8 @@ export class SessionRouter {
           windowsHide: true,
         })
       } catch {
-        if (this.listed === check) this.listed = null
-        resolve(false)
+        if (this.helpOutput === check) this.helpOutput = null
+        resolve(null)
         return
       }
       const read = (data: Buffer) => {
@@ -505,20 +601,23 @@ export class SessionRouter {
       }, HELP_MS)
       proc.on('error', () => {
         clearTimeout(timer)
-        if (this.listed === check) this.listed = null
-        resolve(false)
+        if (this.helpOutput === check) this.helpOutput = null
+        resolve(null)
       })
       proc.on('close', (code) => {
         clearTimeout(timer)
-        const found = listsFlag(help, flag)
-        // 超时或非正常退出且未找到参数时清除缓存，避免高负载下一次超时永久关闭 Full access。
-        if (!found && (timedOut || code === null)) {
-          if (this.listed === check) this.listed = null
+        const declared = [...(this.sessionFlag ? [this.sessionFlag] : []), ...this.sessionArgs]
+        const foundAny = declared.some((flag) => listsFlag(help, flag))
+        // Clear cache on timeout or signal exit when no declared flag appeared so later calls retry.
+        if (!foundAny && (timedOut || code === null)) {
+          if (this.helpOutput === check) this.helpOutput = null
+          resolve(null)
+          return
         }
-        resolve(found)
+        resolve(help)
       })
     })
-    this.listed = check
+    this.helpOutput = check
     return check
   }
 
@@ -757,22 +856,28 @@ function parse(line: string): RpcMessage | null {
 }
 
 // The host starts this file as
-// `<node> <router> [--folder-per-session] [--session-flag=<flag>] <command> <args>`; it is never
-// imported.
+// `<node> <router> [--folder-per-session] [--session-flag=<flag>] [--session-arg=<flag>...] <command> <args>`;
+// it is never imported.
 const words = process.argv.slice(2)
 let folderPerSession = false
 let sessionFlag: string | null = null
+const sessionArgs: string[] = []
+let emptySessionArg = false
 for (;;) {
   if (words[0] === FOLDER_PER_SESSION) folderPerSession = true
   else if (words[0]?.startsWith(SESSION_FLAG)) sessionFlag = words[0].slice(SESSION_FLAG.length)
-  else break
+  else if (words[0]?.startsWith(SESSION_ARG)) {
+    const arg = words[0].slice(SESSION_ARG.length)
+    if (arg === '') emptySessionArg = true
+    else sessionArgs.push(arg)
+  } else break
   words.shift()
 }
 const command = words[0]
-if (!command || sessionFlag === '') {
+if (!command || sessionFlag === '' || emptySessionArg) {
   process.stderr.write(
     `session-router: ${command ? 'an empty session flag' : 'no agent command line'}\n`,
   )
   process.exit(1)
 }
-new SessionRouter(command, words.slice(1), { folderPerSession, sessionFlag }).start()
+new SessionRouter(command, words.slice(1), { folderPerSession, sessionFlag, sessionArgs }).start()

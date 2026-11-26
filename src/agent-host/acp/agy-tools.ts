@@ -18,7 +18,7 @@ const RESULT =
   /^(?:Created At: [^\n]*\n)?(?:Completed At: [^\n]*\n)?(Command exited with code (-?\d+)\.|Command was terminated by signal or canceled\.)\n\n/
 const OUTPUT = 'Command output:\n'
 const NO_OUTPUT = 'No output from the command.'
-const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity-cli\/brain\//
+const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity(?:-cli)?\/brain\//
 const OWN_PREFIX = `mcp_${SERVICE_NAME}_`
 const GATEWAY_NAME = `${OWN_PREFIX}${GATEWAY_TOOL}`
 const TERMINAL_RUN_NAME = `${OWN_PREFIX}terminal_run`

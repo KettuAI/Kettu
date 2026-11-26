@@ -131,6 +131,14 @@ import {
   PARENT_SESSION_META,
   type AgyStore,
 } from './agy-subagents'
+import {
+  AGY_APP_DATA_DIR_FLAG,
+  DEFAULT_AGY_APP_DATA_DIR,
+  isSafeAgyAppDataDir,
+  offersSessionArg,
+  resolveAgyAppDataDir,
+  SESSION_ARGS_META,
+} from './agy-store'
 import { PromptChain, steersAgy, type ChainAnswer } from './agy-steering'
 import {
   agyAutoAllowed,
@@ -229,6 +237,8 @@ export interface AcpOptions {
   agyWaitSettleMs?: number
   /** Optional fallback quiet delay (ms) for agy background-wait detection, injectable for tests. */
   agyWaitFallbackMs?: number
+  /** Optional resolver for which agy `app_data_dir` owns a session, injectable for tests. */
+  agyAppDataDir?: (sessionId: string) => Promise<string | null>
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -473,6 +483,10 @@ export class AcpConnection implements AgentConnection {
   private readonly agyBuildModes = new Map<string, string>()
   /** agy offers full access, once `initialize` has answered. */
   private fullAccess = false
+  /** The session router accepts per-session `--app-data-dir` routing, once `initialize` answered. */
+  private agyAppDataDirRouting = false
+  /** Resolved `app_data_dir` for loaded/resumed agy sessions (e.g. `'antigravity'` for IDE). */
+  private readonly agyAppDataDirs = new Map<string, string>()
   /** agy takes a system prompt addition for a new session, once `initialize` has answered. */
   private appendsSystemPrompt = false
   /** agy 会话的托管模式与完全访问状态（按 sessionId 索引）。 */
@@ -538,6 +552,7 @@ export class AcpConnection implements AgentConnection {
             sessionGrants: agyGrants,
             userAskRules,
             agentHome: this.hooks.home,
+            agyAppDataDir: this.agyAppDataDirs.get(rootId),
           })
           if (agyDecision.action === 'allow' && allowOnceId !== null) {
             // 遵守 PLUG-7：即便命中自动放行，也必须先经过已安装插件的权限预检（插件可拒绝、不能批准）。
@@ -689,9 +704,12 @@ export class AcpConnection implements AgentConnection {
       })
     this.connection = app.connect(this.tap(transport.stream))
     if (this.agy) {
-      this.agyMetrics = new AgyMetrics(hooks.agyStepReader ?? agyStepReader(hooks.home), {
-        target: (id) => this.targets.get(id),
-      })
+      this.agyMetrics = new AgyMetrics(
+        hooks.agyStepReader ?? agyStepReader(hooks.home, (id) => this.agyAppDataDirOf(id)),
+        {
+          target: (id) => this.targets.get(id),
+        },
+      )
       // agy's print mode takes no `--gemini-dir`, so an added agent's runs with its folder as home.
       const platform = process.platform as Platform
       const estimator =
@@ -1054,19 +1072,27 @@ export class AcpConnection implements AgentConnection {
     }
     this.version = result.version
     this.fullAccess = this.agy && offersFullAccess(result.version, init._meta)
+    this.agyAppDataDirRouting = this.agy && offersSessionArg(init._meta, AGY_APP_DATA_DIR_FLAG)
     this.appendsSystemPrompt = this.agy && takesSystemPromptAppend(result.version, caps)
     this.naming = mcpNaming(init.agentInfo)
     this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities, result.version)
     this.subagents?.stop()
     this.subagents =
       this.agy && followsSubagents(result.version)
-        ? new AgySubagents(this.hooks.agyStore ?? agyStore(agyStoreFile(this.hooks.home)), {
-            target: (id) => this.targets.get(id),
-            prompting: (id) => this.prompting.has(id),
-            load: (childId, parentId, quiet) => this.loadSubagent(childId, parentId, quiet),
-            settled: (id) => void this.switchPending(id),
-            log: (level, message) => this.hooks.log(level, message),
-          })
+        ? new AgySubagents(
+            this.hooks.agyStore ??
+              agyStore(agyStoreFile(this.hooks.home), (parentId) => {
+                const dir = this.agyAppDataDirOf(parentId)
+                return dir ? agyStoreFile(this.hooks.home, dir) : undefined
+              }),
+            {
+              target: (id) => this.targets.get(id),
+              prompting: (id) => this.prompting.has(id),
+              load: (childId, parentId, quiet) => this.loadSubagent(childId, parentId, quiet),
+              settled: (id) => void this.switchPending(id),
+              log: (level, message) => this.hooks.log(level, message),
+            },
+          )
         : null
     if (this.subagents) {
       const subagents = this.subagents
@@ -1079,7 +1105,7 @@ export class AcpConnection implements AgentConnection {
             tailReader:
               this.hooks.agyTailReader !== undefined
                 ? this.hooks.agyTailReader
-                : agyTailReader(this.hooks.home),
+                : agyTailReader(this.hooks.home, (id) => this.agyAppDataDirOf(id)),
             settleMs: this.hooks.agyWaitSettleMs,
             fallbackMs: this.hooks.agyWaitFallbackMs,
             onWaitingChange: (sessionId, waiting) => {
@@ -1129,6 +1155,59 @@ export class AcpConnection implements AgentConnection {
 
   private meta(options: SessionOptions): Record<string, unknown> | undefined {
     return sessionMeta(this.hooks.agentId, options)
+  }
+
+  /** Resolved `app_data_dir` for a session (or its root parent for agy sub-agents), if non-default. */
+  private agyAppDataDirOf(sessionId: string): string | undefined {
+    return this.agyAppDataDirs.get(this.agyRootOf(sessionId))
+  }
+
+  /**
+   * Resolves which `app_data_dir` owns an existing agy session and returns router `_meta` for
+   * non-default stores (such as `'antigravity'` for imported IDE sessions). Never called for
+   * `session/new`, which must stay in the default `'antigravity-cli'` store.
+   */
+  private async agySessionArgsMeta(
+    sessionId: string,
+    useCached = false,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (!this.agy) return undefined
+    let dir: string | null | undefined = useCached ? this.agyAppDataDirs.get(sessionId) : undefined
+    if (dir === undefined) {
+      try {
+        dir = this.hooks.agyAppDataDir
+          ? await this.hooks.agyAppDataDir(sessionId)
+          : await resolveAgyAppDataDir(sessionId, this.hooks.home)
+      } catch (error) {
+        this.hooks.log(
+          'warn',
+          `Could not resolve agy app_data_dir for ${sessionId}: ${(error as Error).message}`,
+        )
+        dir = null
+      }
+      if (dir !== null && isSafeAgyAppDataDir(dir)) this.agyAppDataDirs.set(sessionId, dir)
+      else this.agyAppDataDirs.delete(sessionId)
+    }
+    if (
+      !this.agyAppDataDirRouting ||
+      !dir ||
+      dir === DEFAULT_AGY_APP_DATA_DIR ||
+      !isSafeAgyAppDataDir(dir)
+    ) {
+      return undefined
+    }
+    return { [SESSION_ARGS_META]: { [AGY_APP_DATA_DIR_FLAG]: dir } }
+  }
+
+  private mergeMeta(
+    ...parts: readonly (Record<string, unknown> | undefined)[]
+  ): Record<string, unknown> | undefined {
+    let out: Record<string, unknown> | undefined
+    for (const part of parts) {
+      if (!part) continue
+      out = out ? { ...out, ...part } : { ...part }
+    }
+    return out && Object.keys(out).length > 0 ? out : undefined
   }
 
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
@@ -1182,7 +1261,7 @@ export class AcpConnection implements AgentConnection {
     cwd: string,
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
-    const meta = this.meta(options)
+    const meta = this.mergeMeta(this.meta(options), await this.agySessionArgsMeta(sessionId))
     // The replay shows its sub-agents again, below.
     this.subagents?.forget(sessionId)
     const response = await this.call(() =>
@@ -1213,7 +1292,7 @@ export class AcpConnection implements AgentConnection {
     cwd: string,
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
-    const meta = this.meta(options)
+    const meta = this.mergeMeta(this.meta(options), await this.agySessionArgsMeta(sessionId))
     const open = (flagged: boolean) => {
       const sent = flagged ? { ...meta, [SESSION_FLAG_META]: true } : meta
       return this.call(() =>
@@ -1300,6 +1379,7 @@ export class AcpConnection implements AgentConnection {
   private forgetSession(sessionId: string): void {
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
+    this.agyAppDataDirs.delete(sessionId)
     this.agySessionGrants.delete(sessionId)
     this.agyCommands.delete(sessionId)
     this.agyOpened.delete(sessionId)
@@ -1961,12 +2041,16 @@ export class AcpConnection implements AgentConnection {
     mode: string,
     values: readonly ConfigOption[],
   ): Promise<ConfigOption[]> {
-    const meta = { ...this.meta(access.options), ...(full ? { [SESSION_FLAG_META]: true } : {}) }
+    const meta = this.mergeMeta(
+      this.meta(access.options),
+      await this.agySessionArgsMeta(sessionId, true),
+      full ? { [SESSION_FLAG_META]: true } : undefined,
+    )
     const response = await this.connection.agent.request(methods.agent.session.resume, {
       sessionId,
       cwd: access.cwd,
       mcpServers: mcpServers(access.options.mcpServers),
-      ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
+      ...(meta ? { _meta: meta } : {}),
     })
     const managedAuto = !full && mode === AUTO_MODE
     access.full = full
