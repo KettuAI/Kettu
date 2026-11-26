@@ -230,6 +230,7 @@ function ReportCard({
 
 const KNOWN_REPORT: ReadonlySet<string> = new Set([
   'step_open',
+  'answered',
   'outcome',
   'note',
   'document',

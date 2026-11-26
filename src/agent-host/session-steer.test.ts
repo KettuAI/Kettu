@@ -174,3 +174,216 @@ it("marks Kettu's own messages as Kettu's, queued, steered into the turn or sent
     ['Your step was sent back.', true],
   ])
 })
+
+it('withdraws leftover non-blocking requests and releases the waiting state', async () => {
+  const { server, host, window, id, started } = await (async () => {
+    const base = await runningSession()
+    base.server.notify('item/completed', {
+      ...base.started,
+      item: {
+        type: 'agentMessage',
+        id: 'call-withdraw',
+        text: 'Proceed?',
+        phase: 'final_answer',
+        delivery: 'async',
+        questions: [{ title: 'Proceed?', options: ['Yes', 'No'] }],
+      },
+    })
+    await base.window.untilEntry(
+      base.id,
+      (entry) => entry.kind === 'tool' && entry.permission !== null,
+    )
+    return base
+  })()
+
+  // Turn completes while the non-blocking question stays open and keeps the session waiting.
+  server.notify('turn/completed', {
+    threadId: started.threadId,
+    turn: turn(started.turnId!, 'completed'),
+  })
+  await window.untilStatus(id, 'ready')
+  expect(window.summary(id)?.permissionCount).toBe(1)
+
+  const ask = window.entries(id).find((entry) => entry.kind === 'tool' && entry.permission)
+  const requestId = ask?.kind === 'tool' ? ask.permission!.requestId : ''
+  host.host.sessions.withdrawPending(id)
+
+  await window.until(() => window.summary(id)?.permissionCount === 0)
+  const settled = window.entries(id).find((entry) => entry.id === ask?.id)
+  expect(settled).toMatchObject({ permission: null, permissionResult: 'withdrawn' })
+  // A late click on the withdrawn card is rejected and cannot wake the session.
+  await expect(
+    window.request('permissions.respond', {
+      sessionId: id,
+      requestId,
+      answers: [{ question: 0, choices: [0] }],
+    }),
+  ).rejects.toThrow()
+  expect(server.sent('turn/start').filter((p) => p.threadId === started.threadId)).toHaveLength(1)
+})
+
+const ONE_STEP_WORKFLOW = `format: 1
+name: One step
+steps:
+  - id: work
+    name: Work
+    prompt: Do the work.
+    outcomes:
+      - name: Done
+        end: done
+`
+
+/** Starts a single-step Codex workflow task whose first turn asks a non-blocking question. */
+async function workflowAsyncQuestion(itemId: string) {
+  const server = new FakeAppServer()
+  const turns: { threadId: string; turnId: string; text: string }[] = []
+  server.on('turn/start', (params, self) => {
+    const turnId = self.nextTurnId()
+    const input = params.input as { text?: string }[]
+    const text = input[0]?.text ?? ''
+    if (text.includes('Do the work.') || turns.some((t) => t.threadId === params.threadId)) {
+      turns.push({ threadId: params.threadId as string, turnId, text })
+    }
+    return { turn: turn(turnId) }
+  })
+  const host = await startTestHost({ fakeAppServer: server })
+  hosts.push(host)
+  const window = host.connect()
+  const entry = await window.request('workflows.add', {
+    kind: 'file',
+    name: 'one-step.yaml',
+    text: ONE_STEP_WORKFLOW,
+  })
+  await window.request('workflows.approve', { workflowId: entry.id, hash: entry.hash })
+  const task = await window.request('tasks.start', {
+    projectPath: host.project,
+    workflowId: entry.id,
+    text: 'Ship the fix',
+    pace: 'balanced',
+    agentId: 'codex',
+    options: {},
+  })
+  await vi.waitFor(() => expect(turns).toHaveLength(1))
+  const view = await window.request('tasks.get', { taskId: task.id })
+  const sessionId = view.rounds[0]!.sessionId!
+  await window.open(sessionId)
+
+  const first = turns[0]!
+  server.notify('item/completed', {
+    threadId: first.threadId,
+    turnId: first.turnId,
+    item: {
+      type: 'agentMessage',
+      id: itemId,
+      text: 'Which target?',
+      phase: 'final_answer',
+      delivery: 'async',
+      questions: [{ title: 'Which target?', options: ['Staging', 'Production'] }],
+    },
+  })
+  await window.untilEntry(sessionId, (e) => e.kind === 'tool' && e.permission !== null)
+  await vi.waitFor(async () =>
+    expect((await window.request('tasks.get', { taskId: task.id })).rounds[0]!.asking).toBe(true),
+  )
+  const ask = window.entries(sessionId).find((e) => e.kind === 'tool' && e.permission)
+  const requestId = ask?.kind === 'tool' ? ask.permission!.requestId : ''
+  return { server, host, window, taskId: task.id, sessionId, turns, requestId, askId: ask!.id }
+}
+
+it('gates report_step, pauses reminders while asking, and resumes cleanly on answer or skip', async () => {
+  // 1. Answering after turn end starts the reply turn with no spurious reminder and keeps
+  //    step-report tracking active for that reply turn.
+  const answered = await workflowAsyncQuestion('wf-q-answer')
+  const refused = await answered.host.host.tasks.report(answered.sessionId, {
+    outcome: 'Done',
+    note: 'Tried too early',
+    artifactId: null,
+  })
+  expect(refused.accepted).toBe(false)
+  expect(refused.checks).toContainEqual({
+    check: 'answered',
+    ok: false,
+    detail: expect.stringContaining('report_step'),
+  })
+
+  // Turn ends while waiting for the user's answer: no reminder sent, task shows asking.
+  answered.server.notify('turn/completed', {
+    threadId: answered.turns[0]!.threadId,
+    turn: turn(answered.turns[0]!.turnId, 'completed'),
+  })
+  await answered.window.untilStatus(answered.sessionId, 'ready')
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(answered.turns).toHaveLength(1)
+  expect((await answered.window.request('tasks.get', { taskId: answered.taskId })).needs).toEqual([
+    expect.objectContaining({ kind: 'asking', stepId: 'work', sessionId: answered.sessionId }),
+  ])
+
+  // User answers the async question: reply starts turn 2 without any spurious reminder.
+  await answered.window.request('permissions.respond', {
+    sessionId: answered.sessionId,
+    requestId: answered.requestId,
+    answers: [{ question: 0, choices: [0] }],
+  })
+  await vi.waitFor(() => expect(answered.turns).toHaveLength(2))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(answered.turns).toHaveLength(2)
+  expect(answered.turns[1]!.text).toContain('<send_user_message_question_reply>')
+  expect(answered.turns[1]!.text).toContain('"answer":"Staging"')
+
+  // If the reply turn ends without reporting, the engine still reminds (not treated as user chat).
+  answered.server.notify('turn/completed', {
+    threadId: answered.turns[1]!.threadId,
+    turn: turn(answered.turns[1]!.turnId, 'completed'),
+  })
+  await vi.waitFor(() => expect(answered.turns).toHaveLength(3))
+  expect(answered.turns[2]!.text).toContain('report_step')
+
+  const ok = await answered.host.host.tasks.report(answered.sessionId, {
+    outcome: 'Done',
+    note: 'Deployed to staging.',
+    artifactId: null,
+  })
+  expect(ok.accepted).toBe(true)
+  expect((await answered.window.request('tasks.get', { taskId: answered.taskId })).status).toBe(
+    'done',
+  )
+
+  // 2. Skipping an async question while idle wakes the step instead of hanging silently.
+  const skipped = await workflowAsyncQuestion('wf-q-skip')
+  skipped.server.notify('turn/completed', {
+    threadId: skipped.turns[0]!.threadId,
+    turn: turn(skipped.turns[0]!.turnId, 'completed'),
+  })
+  await skipped.window.untilStatus(skipped.sessionId, 'ready')
+  await skipped.window.request('permissions.respond', {
+    sessionId: skipped.sessionId,
+    requestId: skipped.requestId,
+    answers: [],
+  })
+  await vi.waitFor(() => expect(skipped.turns).toHaveLength(2))
+  expect(skipped.turns[1]!.text).toContain('report_step')
+
+  // 3. Cancelling a task while idle on an async question withdraws the card, releases waiting,
+  //    never fires a reminder, and rejects a late click.
+  const cancelled = await workflowAsyncQuestion('wf-q-cancel')
+  cancelled.server.notify('turn/completed', {
+    threadId: cancelled.turns[0]!.threadId,
+    turn: turn(cancelled.turns[0]!.turnId, 'completed'),
+  })
+  await cancelled.window.untilStatus(cancelled.sessionId, 'ready')
+  await cancelled.window.request('tasks.cancel', { taskId: cancelled.taskId })
+  await cancelled.window.until(
+    () => cancelled.window.summary(cancelled.sessionId)?.permissionCount === 0,
+  )
+  const card = cancelled.window.entries(cancelled.sessionId).find((e) => e.id === cancelled.askId)
+  expect(card).toMatchObject({ permission: null, permissionResult: 'withdrawn' })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(cancelled.turns).toHaveLength(1)
+  await expect(
+    cancelled.window.request('permissions.respond', {
+      sessionId: cancelled.sessionId,
+      requestId: cancelled.requestId,
+      answers: [{ question: 0, choices: [1] }],
+    }),
+  ).rejects.toThrow()
+})

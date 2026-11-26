@@ -1436,6 +1436,7 @@
       "lines": {
         "report": {
           "step_open": "这一步可以报告",
+          "answered": "没有等待用户回复的问题或请求",
           "outcome": "“{{outcome}}”是这一步的结果之一",
           "outcomePlain": "报告的是这一步的结果之一",
           "note": "要交的说明已经写好",

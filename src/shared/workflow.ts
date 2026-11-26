@@ -565,7 +565,15 @@ export interface SessionTaskRef {
 // The checks Kettu shows on a report's or a pick's card.
 
 export type ReportCheck =
-  'step_open' | 'outcome' | 'note' | 'document' | 'deliverables' | 'committed' | 'merged' | 'picks'
+  | 'step_open'
+  | 'answered'
+  | 'outcome'
+  | 'note'
+  | 'document'
+  | 'deliverables'
+  | 'committed'
+  | 'merged'
+  | 'picks'
 
 export type PickCheck =
   'step' | 'agent' | 'allowed' | 'model' | 'effort' | 'tools' | 'limit' | 'review'
