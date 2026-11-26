@@ -659,6 +659,14 @@
   -webkit-app-region: no-drag;
 }
 
+/* Suspend window drag regions while a click-outside overlay (context menu, dropdown, popover,
+   select, combobox) is open so clicking empty bar space reaches the DOM instead of starting a
+   native Electron window drag. */
+:root[data-overlay-open] .app-region-drag,
+:root[data-overlay-open] .before\:app-region-drag::before {
+  -webkit-app-region: no-drag;
+}
+
 @utility checkerboard {
   background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }

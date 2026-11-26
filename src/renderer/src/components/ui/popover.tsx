@@ -6,7 +6,7 @@ import { cn } from 'cn'
 import { useOverlayRoot } from '@renderer/stores/overlays'
 
 function Popover({ open, defaultOpen, onOpenChange, ...props }: PopoverPrimitive.Root.Props) {
-  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange, { dismissible: true })
   return (
     <PopoverPrimitive.Root
       data-slot="popover"
@@ -45,7 +45,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         collisionAvoidance={collisionAvoidance}
         anchor={anchor}
-        className="isolate z-(--layer-menu)"
+        className="isolate z-(--layer-menu) app-region-no-drag"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"

@@ -40,6 +40,9 @@
   height: 52px;
   -webkit-app-region: drag;
 }
+:root[data-overlay-open] .k-u__lead {
+  -webkit-app-region: no-drag;
+}
 .k-u__title {
   margin: 0;
   font-size: 14px;

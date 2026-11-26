@@ -53,6 +53,8 @@ export type DateRangePickerProps = {
   labels?: Partial<DateRangeLabels>;
   /** Kettu: days that get a faint dot under their number, such as days with usage */
   marked?: (day: Date) => boolean;
+  /** Kettu: called when the calendar popover opens or closes */
+  onOpenChange?: (open: boolean) => void;
   className?: string;
 };
 
@@ -198,6 +200,7 @@ export function DateRangePicker({
   locale = "en-US",
   labels: labelsProp,
   marked,
+  onOpenChange,
   className,
 }: DateRangePickerProps) {
   const formats = useMemo(() => formatsOf(locale), [locale]);
@@ -219,6 +222,9 @@ export function DateRangePicker({
   const appliedCompare = compare && appliedMode !== "off" ? compareRange(applied, appliedMode) : null;
 
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
   // The draft while the panel is open: end is null between the first and second click
   const [draft, setDraft] = useState<{ start: Date; end: Date | null }>(applied);
   const [hover, setHover] = useState<Date | null>(null);

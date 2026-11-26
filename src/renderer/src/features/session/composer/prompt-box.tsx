@@ -7,6 +7,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
@@ -319,6 +320,7 @@ export function PromptBox({
     onKeyDown(event)
     return event.defaultPrevented
   }
+  useOverlayPresence(open, { dismissible: true })
   // Base UI closes on a press outside the popup; a press in the box, its anchor, only moves the caret.
   const openChange = (next: boolean, details: Popover.Root.ChangeEventDetails) => {
     if (next) return
@@ -391,7 +393,7 @@ export function PromptBox({
             // Shorter over the box rather than flipped under it, where it would hide Send: New
             // session's box can sit high with little room above.
             collisionAvoidance={{ side: 'none' }}
-            className="isolate z-(--layer-menu) outline-none"
+            className="isolate z-(--layer-menu) outline-none app-region-no-drag"
           >
             <Popover.Popup
               ref={popup}

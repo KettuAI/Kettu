@@ -10,7 +10,7 @@ import { useOverlayRoot } from '@renderer/stores/overlays'
 import { GlideHighlight } from '@renderer/components/glide-highlight'
 
 function DropdownMenu({ open, defaultOpen, onOpenChange, ...props }: MenuPrimitive.Root.Props) {
-  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange, { dismissible: true })
   return (
     <MenuPrimitive.Root
       data-slot="dropdown-menu"

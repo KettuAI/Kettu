@@ -40,6 +40,7 @@ import { useClock, useNow } from '@renderer/lib/use-now'
 import { switchHost } from '@renderer/stores/host-switch'
 import { HostScopeContext, useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHosts } from '@renderer/stores/hosts'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { openReport } from '@renderer/stores/report'
 import {
   loadUsagePage,
@@ -284,31 +285,59 @@ function Picker<T extends string>({
         onSelect: () => onChange(choice),
       }))}
       trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          className="ui-as-tool ui-as-tool--label k-u-pick"
-          aria-label={current ? `${label}: ${current.label}` : label}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          onClick={toggle}
-        >
-          <Icon icon={icon} size={14} />
-          <span aria-hidden className="k-u-pick__value">
-            {choices.map((choice) => (
-              <span
-                key={choice.value}
-                className="k-u-pick__opt"
-                data-on={choice.value === value || undefined}
-              >
-                {choice.logo}
-                {choice.label}
-              </span>
-            ))}
-          </span>
-          <Icon icon={ArrowDown01Icon} size={13} />
-        </button>
+        <PickerTrigger
+          open={open}
+          toggle={toggle}
+          icon={icon}
+          ariaLabel={current ? `${label}: ${current.label}` : label}
+          value={value}
+          choices={choices}
+        />
       )}
     />
+  )
+}
+
+function PickerTrigger<T extends string>({
+  open,
+  toggle,
+  icon,
+  ariaLabel,
+  value,
+  choices,
+}: {
+  open: boolean
+  toggle: () => void
+  icon: Parameters<typeof Icon>[0]['icon']
+  ariaLabel: string
+  value: T
+  choices: readonly (Omit<MenuItem, 'checked' | 'onSelect'> & { value: T })[]
+}) {
+  useOverlayPresence(open, { dismissible: true })
+  return (
+    <button
+      type="button"
+      className="ui-as-tool ui-as-tool--label k-u-pick"
+      aria-label={ariaLabel}
+      aria-expanded={open}
+      aria-haspopup="menu"
+      onClick={toggle}
+    >
+      <Icon icon={icon} size={14} />
+      <span aria-hidden className="k-u-pick__value">
+        {choices.map((choice) => (
+          <span
+            key={choice.value}
+            className="k-u-pick__opt"
+            data-on={choice.value === value || undefined}
+          >
+            {choice.logo}
+            {choice.label}
+          </span>
+        ))}
+      </span>
+      <Icon icon={ArrowDown01Icon} size={13} />
+    </button>
   )
 }
 
@@ -424,6 +453,8 @@ function MetricSwitch() {
 /** The ranges by length, then a calendar for any other, which names the range it holds. */
 function RangeChoice({ page, used }: { page: PageData | null; used: ReadonlySet<number> }) {
   const { t } = useTranslation('usage')
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  useOverlayPresence(calendarOpen, { dismissible: true })
   const range = useUsageStore((s) => s.filters.range)
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
@@ -466,6 +497,7 @@ function RangeChoice({ page, used }: { page: PageData | null; used: ReadonlySet<
         className={custom ? 'k-u__cal k-u__cal--custom' : 'k-u__cal'}
         align="end"
         compare={false}
+        onOpenChange={setCalendarOpen}
         locale={currentLocale()}
         weekStartsOn={firstDay === 0 ? 0 : 1}
         today={new Date(today)}

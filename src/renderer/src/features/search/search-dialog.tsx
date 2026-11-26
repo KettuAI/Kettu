@@ -82,7 +82,7 @@ export function SearchDialog() {
   return (
     <Dialog open={open} onOpenChange={showSearch}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="kettu-search-scrim" />
+        <DialogPrimitive.Backdrop className="kettu-search-scrim app-region-no-drag" />
         <DialogPrimitive.Popup
           data-overlay-layer=""
           aria-label={t('nav.search')}

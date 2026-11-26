@@ -14,7 +14,7 @@ function Select<Value, Multiple extends boolean | undefined = false>({
   onOpenChange,
   ...props
 }: SelectPrimitive.Root.Props<Value, Multiple>) {
-  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange, { dismissible: true })
   return (
     <SelectPrimitive.Root open={open} defaultOpen={defaultOpen} onOpenChange={change} {...props} />
   )
@@ -98,7 +98,7 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-(--layer-menu)"
+        className="isolate z-(--layer-menu) app-region-no-drag"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"

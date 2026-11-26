@@ -135,6 +135,9 @@
   pointer-events: none;
   -webkit-app-region: drag;
 }
+:root[data-overlay-open] .kettu-frame.ui-as-app > .ui-as-main::before {
+  -webkit-app-region: no-drag;
+}
 /* Leaving the onboarding, whose stage drew this window: the main area grows into place and the
    sidebar slides in beside it. The main area settles last, which ends it. */
 [data-arriving] .kettu-frame.ui-as-app > .ui-as-main {
@@ -315,6 +318,9 @@
   height: 60px;
   pointer-events: none;
   -webkit-app-region: drag;
+}
+:root[data-overlay-open] .kettu-frame.ui-as-app::before {
+  -webkit-app-region: no-drag;
 }
 .kettu-frame > .ui-as-resizer {
   -webkit-app-region: no-drag;
