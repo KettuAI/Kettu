@@ -73,6 +73,7 @@ export const BY_PHASE: Record<RunningPhase, keyof typeof PATTERNS> = {
   edit: 'edit',
   writing: 'write',
   compacting: 'compact',
+  waiting_background: 'think',
   working: 'chase',
 }
 

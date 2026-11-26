@@ -71,6 +71,10 @@ const lastUserIds = new WeakMap<ThreadState, string | null>()
 export function writingId(state: ThreadState | null | undefined): string | null {
   if (!state) return null
   if (writingIds.has(state)) return writingIds.get(state)!
+  if (state.session.waitingBackground) {
+    writingIds.set(state, null)
+    return null
+  }
   let found: string | null = null
   for (let i = state.order.length - 1; i >= 0; i--) {
     const entry = state.byId[state.order[i]!]

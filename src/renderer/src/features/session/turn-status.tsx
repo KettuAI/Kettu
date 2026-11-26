@@ -10,7 +10,14 @@ import { TurnDots } from './turn-dots'
 import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
 
 /** Phases in which the agent thinks or writes rather than works in the app it uses. */
-const QUIET_PHASES = new Set(['thinking', 'writing', 'compacting', 'approval', 'question'])
+const QUIET_PHASES = new Set([
+  'thinking',
+  'writing',
+  'compacting',
+  'approval',
+  'question',
+  'waiting_background',
+])
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {

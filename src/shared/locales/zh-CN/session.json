@@ -965,6 +965,7 @@
       "compacting": "正在压缩上下文",
       "approval": "等待你的授权",
       "question": "等待你的回答",
+      "waiting_background": "等待后台任务",
       "working": "处理中"
     },
     "resume": "继续",

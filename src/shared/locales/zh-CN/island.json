@@ -98,7 +98,8 @@
     "question": "在问你：{{question}}",
     "thinking": "在想…",
     "writing": "在写回复…",
-    "compacting": "正在压缩上下文"
+    "compacting": "正在压缩上下文",
+    "waitingBackground": "等待后台任务"
   },
   "request": {
     "tool": {

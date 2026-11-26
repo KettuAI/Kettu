@@ -19,6 +19,7 @@ export interface TurnPhase {
     | 'compacting'
     | 'approval'
     | 'question'
+    | 'waiting_background'
     | 'working'
   count: number
 }
@@ -61,6 +62,9 @@ export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
   if (!state) return WORKING
   if (state.session.status === 'awaiting_permission') {
     return { phase: awaitsAnswer(state) ? 'question' : 'approval', count: 1 }
+  }
+  if (state.session.waitingBackground) {
+    return { phase: 'waiting_background', count: 1 }
   }
   const { order, byId } = state
   const running: ToolEntry[] = []

@@ -292,7 +292,10 @@ function mapMessageChunk(
 ): void {
   const byId = messageEntryId(ctx, kind, chunk.messageId)
   const last = lastEntry(ctx.thread)
-  const targetId = byId ?? (last?.kind === kind ? last.id : null)
+  // During a live turn, do not append to an already-finalized entry (e.g. after pausing to wait
+  // for background tasks); start a new streaming entry for the resumed reply instead.
+  const targetId =
+    byId ?? (last?.kind === kind && (ctx.replaying || last.streaming) ? last.id : null)
   const existing = targetId ? ctx.thread.byId[targetId] : undefined
   const isText = chunk.content.type === 'text'
   const text = chunk.content.type === 'text' ? chunk.content.text : ''
