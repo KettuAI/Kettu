@@ -197,7 +197,7 @@ const FAILURES: [FailureKind, RegExp][] = [
     /\[rejected\]|\[remote rejected\]|non-fast-forward|fetch first|updates were rejected/i,
   ],
   ['notFastForward', /not possible to fast-forward|diverging branches|have diverged/i],
-  ['localChanges', /would be overwritten by merge|commit your changes or stash them/i],
+  ['localChanges', /would be overwritten by (merge|checkout)|commit your changes or stash them/i],
   [
     'auth',
     /authentication failed|permission denied|could not read username|terminal prompts disabled|could not read from remote repository|403/i,
