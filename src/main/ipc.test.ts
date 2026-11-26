@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 // Each sender's window, a fresh one for any sender not listed.
 const windows = vi.hoisted(() => new WeakMap<object, object>())
+const ipcHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => unknown>())
+const ipcListeners = vi.hoisted(() => new Map<string, (...args: unknown[]) => unknown>())
 
 vi.mock('electron', () => ({
   app: {},
@@ -12,7 +14,14 @@ vi.mock('electron', () => ({
     getAllWindows: () => [],
   },
   dialog: {},
-  ipcMain: {},
+  ipcMain: {
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+      ipcHandlers.set(channel, handler)
+    },
+    on: (channel: string, listener: (...args: unknown[]) => unknown) => {
+      ipcListeners.set(channel, listener)
+    },
+  },
   nativeTheme: {},
   Notification: class {},
   screen: {},
@@ -21,7 +30,7 @@ vi.mock('electron', () => ({
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
-const { browserTabId, isTrusted, mayUse, whenSettled } = await import('./ipc')
+const { browserTabId, isTrusted, mayUse, registerTrayIpc, whenSettled } = await import('./ipc')
 const { watchSubframes } = await import('./subframes')
 const { markOverlay, markPanel } = await import('./window')
 
@@ -114,12 +123,20 @@ describe('mayUse', () => {
     const contents = new FakeContents()
     expect(mayUse(eventFrom(contents), 'settings:update')).toBe(true)
     contents.mainFrame.url = 'http://localhost:5173/tray.html'
-    for (const channel of ['settings:get', 'remote:status', 'agent-host:connect', 'tray:open']) {
+    for (const channel of [
+      'settings:get',
+      'remote:status',
+      'agent-host:connect',
+      'tray:open',
+      'tray:host-agents',
+    ]) {
       expect(mayUse(eventFrom(contents), channel)).toBe(true)
     }
     for (const channel of [
       'settings:update',
       'terminal-host:connect',
+      'host-sessions:connect',
+      'hosts:status',
       'app:get-info',
       'remote:discovery-answer',
       'hosts:pair-discovered',
@@ -131,7 +148,13 @@ describe('mayUse', () => {
   it("takes no channel from computer use's overlay page", () => {
     const contents = new FakeContents()
     contents.mainFrame.url = 'http://localhost:5173/computer-overlay.html#label'
-    for (const channel of ['settings:get', 'agent-host:connect', 'tray:open', 'app:get-info']) {
+    for (const channel of [
+      'settings:get',
+      'agent-host:connect',
+      'tray:open',
+      'tray:host-agents',
+      'app:get-info',
+    ]) {
       expect(mayUse(eventFrom(contents), channel)).toBe(false)
     }
   })
@@ -143,7 +166,42 @@ describe('mayUse', () => {
     markPanel(window as never)
     // history.pushState can give the panel's page the window page's URL.
     expect(mayUse(eventFrom(contents), 'tray:resize')).toBe(true)
+    expect(mayUse(eventFrom(contents), 'tray:host-agents')).toBe(true)
+    expect(mayUse(eventFrom(contents), 'host-sessions:connect')).toBe(false)
+    expect(mayUse(eventFrom(contents), 'hosts:status')).toBe(false)
     expect(mayUse(eventFrom(contents), 'settings:update')).toBe(false)
+  })
+})
+
+describe('registerTrayIpc', () => {
+  it('serves tray:host-agents only to the panel own webContents', async () => {
+    const panelContents = new FakeContents()
+    panelContents.mainFrame.url = 'http://localhost:5173/tray.html'
+    const panelWindow = {}
+    windows.set(panelContents, panelWindow)
+    markPanel(panelWindow as never)
+
+    const otherContents = new FakeContents()
+    const snapshot = vi.fn(() => [{ hostId: 'host-a', agents: [] }])
+    const panel = {
+      owns: (sender: WebContents) => sender === (panelContents as unknown as WebContents),
+      open: vi.fn(),
+      quit: vi.fn(),
+      hide: vi.fn(),
+      resize: vi.fn(),
+    }
+
+    registerTrayIpc(panel as never, { snapshot } as never)
+    const handler = ipcHandlers.get('tray:host-agents')
+    expect(handler).toBeTypeOf('function')
+
+    await expect(handler!(eventFrom(panelContents))).resolves.toEqual([
+      { hostId: 'host-a', agents: [] },
+    ])
+    expect(snapshot).toHaveBeenCalledTimes(1)
+
+    await expect(handler!(eventFrom(otherContents))).rejects.toThrow(/Rejected "tray:host-agents"/)
+    expect(snapshot).toHaveBeenCalledTimes(1)
   })
 })
 

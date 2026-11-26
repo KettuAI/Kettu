@@ -7,7 +7,14 @@ import { focusedPane } from '@renderer/features/split/layout'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
-import { openPluginPane, panelOf, sessionsShown, useViewStore } from '@renderer/stores/view'
+import { useProjectsStore } from '@renderer/stores/projects'
+import {
+  openPluginPane,
+  paneProjectPath,
+  panelOf,
+  sessionsShown,
+  useViewStore,
+} from '@renderer/stores/view'
 
 export interface PluginActionTarget {
   /** The host the plugin is on, null being this computer. */
@@ -24,10 +31,12 @@ function showPane(
   pane: { view: string; params?: PluginViewParams },
 ): boolean {
   const state = useViewStore.getState()
+  const projects = useProjectsStore.getState().projects
   const view = focusedPane(state.layout).view
-  const panel = panelOf(view)
-  if (!panel || view.projectPath === null || !sessionsShown(state.main)) return false
-  if (hostOfPath(view.projectPath) !== target.hostId) return false
+  const panel = panelOf(view, state.projectPath, projects)
+  const projectPath = paneProjectPath(view, state.projectPath, projects)
+  if (!panel || projectPath === null || !sessionsShown(state.main)) return false
+  if (hostOfPath(projectPath) !== target.hostId) return false
   openPluginPane(panel, { pluginId: target.pluginId, viewId: pane.view, params: pane.params })
   return true
 }

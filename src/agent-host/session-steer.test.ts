@@ -387,3 +387,354 @@ it('gates report_step, pauses reminders while asking, and resumes cleanly on ans
     }),
   ).rejects.toThrow()
 })
+
+const REVIEWED_WORKFLOW = `format: 1
+name: Reviewed step
+steps:
+  - id: work
+    name: Work
+    you_review: true
+    prompt: Do the work.
+    outcomes:
+      - name: Done
+        end: done
+`
+
+/** Starts a Codex workflow task whose first round reports and awaits user review (ready to send back into round 2). */
+async function reviewedWorkflowStep() {
+  const server = new FakeAppServer()
+  const turns: { threadId: string; turnId: string; text: string }[] = []
+  server.on('turn/start', (params, self) => {
+    const turnId = self.nextTurnId()
+    const input = params.input as { text?: string }[]
+    const text = input[0]?.text ?? ''
+    if (text.includes('Do the work.') || turns.some((t) => t.threadId === params.threadId)) {
+      turns.push({ threadId: params.threadId as string, turnId, text })
+    }
+    return { turn: turn(turnId) }
+  })
+  const host = await startTestHost({ fakeAppServer: server })
+  hosts.push(host)
+  const window = host.connect()
+  const entry = await window.request('workflows.add', {
+    kind: 'file',
+    name: 'reviewed-step.yaml',
+    text: REVIEWED_WORKFLOW,
+  })
+  await window.request('workflows.approve', { workflowId: entry.id, hash: entry.hash })
+  const task = await window.request('tasks.start', {
+    projectPath: host.project,
+    workflowId: entry.id,
+    text: 'Ship the fix',
+    pace: 'balanced',
+    agentId: 'codex',
+    options: {},
+  })
+  await vi.waitFor(() => expect(turns).toHaveLength(1))
+  const view = await window.request('tasks.get', { taskId: task.id })
+  const round1 = view.rounds[0]!
+  const sessionId = round1.sessionId!
+  await window.open(sessionId)
+
+  // Step reports round 1 while keeping turn 1 open (e.g. before ending or calling clock.sleep).
+  const reported = await host.host.tasks.report(sessionId, {
+    outcome: 'Done',
+    note: 'First pass complete.',
+    artifactId: null,
+  })
+  expect(reported.accepted).toBe(true)
+  expect(reported.next).toEqual({ kind: 'review' })
+  return { server, host, window, taskId: task.id, round1Id: round1.id, sessionId, turns }
+}
+
+it('wakes a reused workflow step session blocked in native sleep instead of deadlocking in queue', async () => {
+  const native = await reviewedWorkflowStep()
+  native.server.notify('item/started', {
+    threadId: native.turns[0]!.threadId,
+    turnId: native.turns[0]!.turnId,
+    item: { type: 'sleep', id: 'sleep-1', durationMs: 300_000 },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  await native.window.request('tasks.review', {
+    taskId: native.taskId,
+    roundId: native.round1Id,
+    approve: false,
+    note: 'Please address the edge case.',
+  })
+
+  await vi.waitFor(() => expect(native.server.sent('turn/steer')).toHaveLength(1))
+  const nativeSteered = (native.server.sent('turn/steer')[0]!.input as { text?: string }[])[0]?.text
+  expect(nativeSteered).toContain('starts again (round 2)')
+  expect(nativeSteered).toContain('Please address the edge case.')
+  await vi.waitFor(() =>
+    expect(native.window.thread(native.sessionId).session.queue).toHaveLength(0),
+  )
+
+  const nativeView = await native.window.request('tasks.get', { taskId: native.taskId })
+  expect(nativeView.rounds[1]).toMatchObject({
+    n: 2,
+    state: 'working',
+    sessionId: native.sessionId,
+  })
+  expect(nativeView.steps[0]!.state).toBe('running')
+
+  const nativeR2 = await native.host.host.tasks.report(native.sessionId, {
+    outcome: 'Done',
+    note: 'Edge case fixed.',
+    artifactId: null,
+  })
+  expect(nativeR2.accepted).toBe(true)
+})
+
+it('wakes a reused workflow step session blocked in MCP clock.sleep instead of deadlocking in queue', async () => {
+  const mcp = await reviewedWorkflowStep()
+  mcp.server.notify('item/started', {
+    threadId: mcp.turns[0]!.threadId,
+    turnId: mcp.turns[0]!.turnId,
+    item: {
+      type: 'mcpToolCall',
+      id: 'mcp-clock-sleep',
+      server: 'clock',
+      tool: 'sleep',
+      status: 'inProgress',
+      arguments: { durationMs: 300_000 },
+      result: null,
+      error: null,
+    },
+  })
+  await mcp.window.untilEntry(
+    mcp.sessionId,
+    (e) => e.kind === 'tool' && e.status === 'in_progress' && /clock.*sleep/i.test(e.title),
+  )
+
+  await mcp.window.request('tasks.review', {
+    taskId: mcp.taskId,
+    roundId: mcp.round1Id,
+    approve: false,
+    note: 'Add a regression test.',
+  })
+
+  await vi.waitFor(() => expect(mcp.server.sent('turn/steer')).toHaveLength(1))
+  const mcpSteered = (mcp.server.sent('turn/steer')[0]!.input as { text?: string }[])[0]?.text
+  expect(mcpSteered).toContain('starts again (round 2)')
+  await vi.waitFor(() => expect(mcp.window.thread(mcp.sessionId).session.queue).toHaveLength(0))
+  const mcpView = await mcp.window.request('tasks.get', { taskId: mcp.taskId })
+  expect(mcpView.rounds[1]).toMatchObject({ n: 2, state: 'working', sessionId: mcp.sessionId })
+})
+
+it('delivers directly without steering when reusing an idle step session', async () => {
+  const idle = await reviewedWorkflowStep()
+  idle.server.notify('turn/completed', {
+    threadId: idle.turns[0]!.threadId,
+    turn: turn(idle.turns[0]!.turnId, 'completed'),
+  })
+  await idle.window.untilStatus(idle.sessionId, 'ready')
+
+  await idle.window.request('tasks.review', {
+    taskId: idle.taskId,
+    roundId: idle.round1Id,
+    approve: false,
+    note: 'Update docs too.',
+  })
+
+  await vi.waitFor(() => expect(idle.turns).toHaveLength(2))
+  expect(idle.turns[1]!.text).toContain('starts again (round 2)')
+  expect(idle.server.sent('turn/steer')).toHaveLength(0)
+  const view = await idle.window.request('tasks.get', { taskId: idle.taskId })
+  expect(view.rounds[1]).toMatchObject({ n: 2, state: 'working', sessionId: idle.sessionId })
+})
+
+it('queues without interrupting real non-sleep work, keeps round queued, and delivers cleanly on turn end', async () => {
+  const busy = await reviewedWorkflowStep()
+  busy.server.notify('item/started', {
+    threadId: busy.turns[0]!.threadId,
+    turnId: busy.turns[0]!.turnId,
+    item: {
+      type: 'commandExecution',
+      id: 'cmd-1',
+      command: 'pnpm test',
+      cwd: busy.host.project,
+      status: 'inProgress',
+      commandActions: [{ type: 'unknown', command: 'pnpm test' }],
+      aggregatedOutput: null,
+      exitCode: null,
+    },
+  })
+  await busy.window.untilEntry(
+    busy.sessionId,
+    (e) => e.kind === 'tool' && e.status === 'in_progress' && e.title === 'pnpm test',
+  )
+
+  await busy.window.request('tasks.review', {
+    taskId: busy.taskId,
+    roundId: busy.round1Id,
+    approve: false,
+    note: 'Refactor helper.',
+  })
+
+  await vi.waitFor(() => expect(busy.window.thread(busy.sessionId).session.queue).toHaveLength(1))
+  expect(busy.server.sent('turn/steer')).toHaveLength(0)
+  expect(busy.server.sent('turn/interrupt')).toHaveLength(0)
+
+  const queuedView = await busy.window.request('tasks.get', { taskId: busy.taskId })
+  expect(queuedView.rounds[1]).toMatchObject({
+    n: 2,
+    state: 'queued',
+    startedAt: null,
+    sessionId: busy.sessionId,
+  })
+  expect(queuedView.steps[0]!.state).toBe('waiting')
+
+  // Completing the prior turn drains round 2 cleanly with no spurious report reminder.
+  busy.server.notify('item/completed', {
+    threadId: busy.turns[0]!.threadId,
+    turnId: busy.turns[0]!.turnId,
+    item: {
+      type: 'commandExecution',
+      id: 'cmd-1',
+      command: 'pnpm test',
+      cwd: busy.host.project,
+      status: 'completed',
+      commandActions: [{ type: 'unknown', command: 'pnpm test' }],
+      aggregatedOutput: 'ok',
+      exitCode: 0,
+    },
+  })
+  busy.server.notify('turn/completed', {
+    threadId: busy.turns[0]!.threadId,
+    turn: turn(busy.turns[0]!.turnId, 'completed'),
+  })
+
+  await vi.waitFor(() => expect(busy.turns).toHaveLength(2))
+  expect(busy.turns[1]!.text).toContain('starts again (round 2)')
+  await vi.waitFor(() => expect(busy.window.thread(busy.sessionId).session.queue).toHaveLength(0))
+  await vi.waitFor(async () =>
+    expect(
+      (await busy.window.request('tasks.get', { taskId: busy.taskId })).rounds[1],
+    ).toMatchObject({ n: 2, state: 'working' }),
+  )
+})
+
+it('wakes a queued reused round when non-sleep work finishes and the turn enters clock.sleep', async () => {
+  const delayed = await reviewedWorkflowStep()
+  delayed.server.notify('item/started', {
+    threadId: delayed.turns[0]!.threadId,
+    turnId: delayed.turns[0]!.turnId,
+    item: {
+      type: 'commandExecution',
+      id: 'cmd-2',
+      command: 'pnpm build',
+      cwd: delayed.host.project,
+      status: 'inProgress',
+      commandActions: [{ type: 'unknown', command: 'pnpm build' }],
+      aggregatedOutput: null,
+      exitCode: null,
+    },
+  })
+  await delayed.window.untilEntry(
+    delayed.sessionId,
+    (e) => e.kind === 'tool' && e.status === 'in_progress' && e.title === 'pnpm build',
+  )
+
+  await delayed.window.request('tasks.review', {
+    taskId: delayed.taskId,
+    roundId: delayed.round1Id,
+    approve: false,
+    note: 'Polish error message.',
+  })
+  await vi.waitFor(() =>
+    expect(delayed.window.thread(delayed.sessionId).session.queue).toHaveLength(1),
+  )
+  expect(delayed.server.sent('turn/steer')).toHaveLength(0)
+
+  // Non-sleep tool completes, then the agent enters sleep instead of ending the turn.
+  delayed.server.notify('item/completed', {
+    threadId: delayed.turns[0]!.threadId,
+    turnId: delayed.turns[0]!.turnId,
+    item: {
+      type: 'commandExecution',
+      id: 'cmd-2',
+      command: 'pnpm build',
+      cwd: delayed.host.project,
+      status: 'completed',
+      commandActions: [{ type: 'unknown', command: 'pnpm build' }],
+      aggregatedOutput: 'built',
+      exitCode: 0,
+    },
+  })
+  delayed.server.notify('item/started', {
+    threadId: delayed.turns[0]!.threadId,
+    turnId: delayed.turns[0]!.turnId,
+    item: { type: 'sleep', id: 'sleep-later', durationMs: 300_000 },
+  })
+
+  await vi.waitFor(() => expect(delayed.server.sent('turn/steer')).toHaveLength(1))
+  await vi.waitFor(() =>
+    expect(delayed.window.thread(delayed.sessionId).session.queue).toHaveLength(0),
+  )
+  await vi.waitFor(async () =>
+    expect(
+      (await delayed.window.request('tasks.get', { taskId: delayed.taskId })).rounds[1],
+    ).toMatchObject({ n: 2, state: 'working' }),
+  )
+})
+
+it('does not bypass an open blocking permission/question card even when sleep is active, then wakes once answered', async () => {
+  const gated = await reviewedWorkflowStep()
+  gated.server.notify('item/started', {
+    threadId: gated.turns[0]!.threadId,
+    turnId: gated.turns[0]!.turnId,
+    item: { type: 'sleep', id: 'sleep-gated', durationMs: 300_000 },
+  })
+  const asked = gated.server.request('item/tool/requestUserInput', {
+    threadId: gated.turns[0]!.threadId,
+    turnId: gated.turns[0]!.turnId,
+    itemId: 'ask-gated',
+    questions: [
+      {
+        id: 'q',
+        header: 'Confirm',
+        question: 'Proceed?',
+        isOther: false,
+        isSecret: false,
+        options: [
+          { label: 'Yes', description: '' },
+          { label: 'No', description: '' },
+        ],
+      },
+    ],
+  })
+  await gated.window.untilStatus(gated.sessionId, 'awaiting_permission')
+
+  await gated.window.request('tasks.review', {
+    taskId: gated.taskId,
+    roundId: gated.round1Id,
+    approve: false,
+    note: 'Retry step.',
+  })
+
+  await vi.waitFor(() => expect(gated.window.thread(gated.sessionId).session.queue).toHaveLength(1))
+  expect(gated.server.sent('turn/steer')).toHaveLength(0)
+  const queuedView = await gated.window.request('tasks.get', { taskId: gated.taskId })
+  expect(queuedView.rounds[1]).toMatchObject({ n: 2, state: 'queued', startedAt: null })
+  expect(queuedView.steps[0]!.state).toBe('waiting')
+
+  // Answering the blocking card returns the session to running (still in sleep), which then wakes round 2.
+  const ask = gated.window.entries(gated.sessionId).find((e) => e.kind === 'tool' && e.permission)
+  const requestId = ask?.kind === 'tool' ? ask.permission!.requestId : ''
+  await gated.window.request('permissions.respond', {
+    sessionId: gated.sessionId,
+    requestId,
+    answers: [{ question: 0, choices: [0] }],
+  })
+  await expect(asked.answer).resolves.toEqual({ answers: { q: { answers: ['Yes'] } } })
+
+  await vi.waitFor(() => expect(gated.server.sent('turn/steer')).toHaveLength(1))
+  await vi.waitFor(() => expect(gated.window.thread(gated.sessionId).session.queue).toHaveLength(0))
+  await vi.waitFor(async () =>
+    expect(
+      (await gated.window.request('tasks.get', { taskId: gated.taskId })).rounds[1],
+    ).toMatchObject({ n: 2, state: 'working' }),
+  )
+})

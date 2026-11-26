@@ -103,6 +103,8 @@ export type MapperEffect =
   // The agent finished its reply and is idle waiting for background work (sub-agents, background
   // commands, or scheduled timers) while keeping its prompt open.
   | { kind: 'waitingBackground'; waiting: boolean }
+  // The active turn entered or left an interruptible wait (such as clock.sleep or Sleep).
+  | { kind: 'interruptibleWait'; id: string; active: boolean }
   // The agent's guess at the user's next message, after a turn ended.
   | { kind: 'suggestion'; text: string }
   // The commands and monitors the agent has running or has ended since, replacing the last list.

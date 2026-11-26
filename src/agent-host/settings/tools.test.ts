@@ -117,6 +117,24 @@ describe('find_settings', () => {
     expect(text(zh)).toContain('颜色模式 (Color mode)')
   })
 
+  it('finds and toggles closeSidePanelWithLastTab in English and Chinese', async () => {
+    const { tools, file } = harness({ fullAccess: true })
+    const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'last tab' })
+    expect(text(en)).toContain('appearance.close-side-panel-with-last-tab')
+    expect(text(en)).toContain('value: Off')
+
+    setLocale('zh-CN')
+    const zh = await tools.call(CALLER, FIND_SETTINGS, { query: '收起侧边栏' })
+    expect(text(zh)).toContain('appearance.close-side-panel-with-last-tab')
+    expect(text(zh)).toContain('关闭最后一个标签页时收起侧边栏')
+
+    const toggled = await change(tools, [
+      { id: 'appearance.close-side-panel-with-last-tab', value: true },
+    ])
+    expect(toggled.isError).toBeUndefined()
+    expect(file().appearance.closeSidePanelWithLastTab).toBe(true)
+  })
+
   it('fills the placeholders of a row’s words', async () => {
     const { tools } = harness()
     const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'zoom' }))

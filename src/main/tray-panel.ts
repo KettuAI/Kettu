@@ -4,7 +4,7 @@
 import { join } from 'node:path'
 import { BrowserWindow, screen, type Rectangle, type WebContents } from 'electron'
 import type { Locale } from '@shared/locale'
-import { TRAY_PANEL_HEIGHT, type TrayTarget } from '@shared/tray'
+import { TRAY_PANEL_HEIGHT, type TrayHostAgents, type TrayTarget } from '@shared/tray'
 import { sendCommand } from './events'
 import { createLogger } from './log'
 import { loadRenderer, rendererPage } from './renderer'
@@ -67,6 +67,10 @@ export interface TrayPanelDeps {
   /** Brings the main window forward at `target`. */
   open(target: TrayTarget): void
   quit(): void
+  /** The panel came forward while its page was already up. */
+  onShown?(): void
+  /** The panel's window closed, so cross-host tracking can stop until the next open. */
+  onClosed?(): void
 }
 
 export class TrayPanel {
@@ -123,6 +127,13 @@ export class TrayPanel {
     if (this.pending || this.window?.isVisible()) this.place()
   }
 
+  /** Pushes other connected hosts' agents to the panel while its page exists. */
+  sendHostAgents(hosts: TrayHostAgents[]): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('tray:host-agents-changed', hosts)
+    }
+  }
+
   private show(): void {
     let window = this.window && !this.window.isDestroyed() ? this.window : null
     // A page that let the last opening run out may be dead, so it makes way for a fresh one.
@@ -137,7 +148,10 @@ export class TrayPanel {
       this.failed = true
       this.place()
     }, SIZE_WAIT_MS)
-    if (this.reported) window.webContents.send('tray:shown', null)
+    if (this.reported) {
+      window.webContents.send('tray:shown', null)
+      this.deps.onShown?.()
+    }
   }
 
   private stopWaiting(): void {
@@ -203,6 +217,7 @@ export class TrayPanel {
       if (this.window !== window) return
       this.window = null
       this.stopWaiting()
+      this.deps.onClosed?.()
     })
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     // Its own page may reload, as the dev server asks after some changes; it goes nowhere else.

@@ -93,6 +93,27 @@ describe('plugin tabs a restart brings back', () => {
     expect(state.sidePane[PANEL]).toBe('surfaces')
   })
 
+  it('collapses the side panel when every tab is gone and closeSidePanelWithLastTab is on', async () => {
+    const { useViewStore, dropGonePluginPanes } = await load({
+      sidePanes: { [PANEL]: 'plugin' },
+      sideDocs: { [PANEL]: [pane(GONE, 'issues')] },
+      sideDoc: { [PANEL]: `plugin:${GONE}/issues` },
+      sideOrder: { [PANEL]: [`plugin:${GONE}/issues`] },
+    })
+    const { useSettingsStore } = await import('./settings-store')
+    useSettingsStore.setState((s) => ({
+      settings: {
+        ...s.settings,
+        appearance: { ...s.settings.appearance, closeSidePanelWithLastTab: true },
+      },
+    }))
+    dropGonePluginPanes(PANEL, new Set())
+    const state = useViewStore.getState()
+    expect(state.sideDocs[PANEL]).toBeUndefined()
+    expect(state.sideDoc[PANEL]).toBeUndefined()
+    expect(state.sidePane[PANEL]).toBeUndefined()
+  })
+
   it('opens a pane once, and starts it over when it is opened with other parameters', async () => {
     const { useViewStore, openPluginPane } = await load({})
     openPluginPane(PANEL, { pluginId: KEPT, viewId: 'issues' })

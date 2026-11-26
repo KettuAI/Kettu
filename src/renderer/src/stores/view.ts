@@ -32,6 +32,7 @@ import { NARROW_WINDOW, PHONE_WINDOW } from '@renderer/features/shell/narrow'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 import type { SettingsSection } from '@shared/settings-catalog'
 
 type PageView =
@@ -502,15 +503,40 @@ export function panelSession(panel: string): string | null {
   return panel.startsWith(NEW_SESSION_PANEL) ? null : panel
 }
 
+/**
+ * The folder a pane's side panel works in: a session's project, a sub-session's parent project,
+ * or New session's chosen project (falling back to the selected or first project on its host).
+ * Null for New session with No project or without an existing project to work in.
+ */
+export function paneProjectPath(
+  view: PaneView,
+  selected: string | null = null,
+  projects?: readonly Project[],
+): string | null {
+  if (view.kind === 'session') return view.projectPath
+  if (view.noProject) return null
+  if (view.parentId) return view.projectPath
+  if (projects) {
+    const project = newSessionProject(view, selected, projects)
+    return project && !project.missing ? project.path : null
+  }
+  return view.projectPath
+}
+
 /** Whose side panel a pane's view has: its session's, or New session's in its project. */
-export function panelOf(view: PaneView): string | null {
+export function panelOf(
+  view: PaneView,
+  selected: string | null = null,
+  projects?: readonly Project[],
+): string | null {
   if (view.kind === 'session') return view.sessionId
-  return view.projectPath ? newSessionPanel(view.projectPath) : null
+  const path = paneProjectPath(view, selected, projects)
+  return path ? newSessionPanel(path) : null
 }
 
 /** The panel the side panel shows, the pane in focus's; null at New session with No project. */
-export function shownPanel(state: ViewStore): string | null {
-  return panelOf(focusedPane(state.layout).view)
+export function shownPanel(state: ViewStore, projects?: readonly Project[]): string | null {
+  return panelOf(focusedPane(state.layout).view, state.projectPath, projects)
 }
 
 export function shownSidePane(state: ViewStore): SidePane | undefined {
@@ -707,7 +733,7 @@ export function showCreatedSession(
   const { layout } = useViewStore.getState()
   const pane = findPane(layout, paneId)
   if (!pane || pane.view.kind !== 'new') return false
-  const from = panelOf(pane.view)
+  const from = panelOf(pane.view) ?? (pane.view.noProject ? null : newSessionPanel(projectPath))
   inPlace(() =>
     useViewStore.setState((s) => ({
       ...withLayout(
@@ -1187,6 +1213,37 @@ function closedPanel(
 }
 
 /**
+ * State update when a panel's last open tab closes: collapses the panel when
+ * `appearance.closeSidePanelWithLastTab` is on, otherwise falls back to `'surfaces'`.
+ */
+function emptySidePanelState(
+  s: ViewStore,
+  panel: string,
+): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sidePaneMaximized'> {
+  if (useSettingsStore.getState().settings.appearance.closeSidePanelWithLastTab) {
+    return {
+      sidePane: withPane(s.sidePane, panel, null),
+      sideLast: withPane(s.sideLast, panel, null),
+      sidePaneMaximized: shownPanel(s) === panel ? false : s.sidePaneMaximized,
+    }
+  }
+  return {
+    sidePane: withPane(s.sidePane, panel, 'surfaces'),
+    sideLast: s.sideLast,
+    sidePaneMaximized: s.sidePaneMaximized,
+  }
+}
+
+/**
+ * Handles a side panel whose last tab closed: collapses the panel when
+ * `appearance.closeSidePanelWithLastTab` is enabled, or shows `'surfaces'` otherwise.
+ * Leaves a panel that is already closed untouched.
+ */
+export function leaveEmptySidePanel(panel: string): void {
+  useViewStore.setState((s) => (s.sidePane[panel] ? emptySidePanelState(s, panel) : s))
+}
+
+/**
  * Shows a kind in a session's side panel, a one-per-session kind joining the row as its tab, or
  * closes the panel when it already shows that kind. The row and its tabs stay when it closes.
  */
@@ -1411,9 +1468,13 @@ export function closeDoc(panel: string, key: string): void {
         open.has(other),
     )
     const index = order.indexOf(key)
-    const next = index < 0 ? undefined : (order[index + 1] ?? order[index - 1])
-    const pane = (next?.slice(0, next.indexOf(':')) ?? 'surfaces') as SidePane
-    if (next && isDocKind(pane)) sideDoc[panel] = next
+    const fallback =
+      (left[0] ? docKey(left[0]) : undefined) ??
+      (s.sideTabs[panel]?.[0] ? `${s.sideTabs[panel][0]}:` : undefined)
+    const next = (index < 0 ? undefined : (order[index + 1] ?? order[index - 1])) ?? fallback
+    if (!next) return { sideDocs, sideDoc, ...emptySidePanelState(s, panel) }
+    const pane = next.slice(0, next.indexOf(':')) as SidePane
+    if (isDocKind(pane)) sideDoc[panel] = next
     return { sideDocs, sideDoc, sidePane: withPane(s.sidePane, panel, pane) }
   })
 }

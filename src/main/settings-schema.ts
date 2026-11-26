@@ -251,6 +251,7 @@ const SECTION_FIELDS = {
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
     sidebarHover: isBoolean,
+    closeSidePanelWithLastTab: isBoolean,
     sidebarOrder: isSidebarOrder,
     sidebarHidden: isSidebarPages,
     fonts: isUserFonts,

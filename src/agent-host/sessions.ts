@@ -256,6 +256,7 @@ import type {
   ModelRequestsPage,
 } from '@shared/model-requests'
 import { missedCache, type IdleRelease } from './idle-release'
+import { isSleepToolEntry } from './interruptible-wait'
 import {
   reportText,
   type ToolChoices,
@@ -274,7 +275,13 @@ import {
   type ModeRank,
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
-import type { StepLimit, TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
+import type {
+  StepLimit,
+  StepSendDelivery,
+  StepSendOptions,
+  TaskSessionHooksRef,
+  TaskStepStart,
+} from './workflow/engine'
 import {
   attachmentText,
   denialAnswer,
@@ -856,10 +863,14 @@ interface Live {
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
   /**
-   * What says each waiting prompt Kettu queued itself, such as a step's reminder, is still due when
-   * its turn comes, by item id.
+   * Lifecycle callbacks and due-checks for waiting prompts Kettu queued itself (such as workflow
+   * round handoffs or step reminders), keyed by queued item id.
    */
-  kettuQueued: Map<string, () => boolean>
+  kettuQueued: Map<string, KettuQueuedMeta>
+  /** Active interruptible waits (such as clock.sleep or Claude's Sleep) in the running turn. */
+  interruptibleWaits: Set<string>
+  /** Prevents concurrent interruptible-wait wakeups on the same session. */
+  wakingInterruptible: boolean
   /** The last turn began with the user's own message, which owes no step report. */
   userTurn: boolean
   /** The message that gave the session its first title, for a written title, and its tries. */
@@ -934,6 +945,13 @@ interface Live {
   cutAt: number | null
   /** The cut of the agent's own session for an edit, while it runs. */
   rewinding: Promise<void> | null
+}
+
+interface KettuQueuedMeta {
+  due?: () => boolean
+  wakeInterruptible?: boolean
+  onDelivered?: () => void
+  onDropped?: () => void
 }
 
 const TITLE_LENGTH = 60
@@ -3983,6 +4001,8 @@ export class SessionManager {
       heldFirst: null,
       queuedBy: new Map(),
       kettuQueued: new Map(),
+      interruptibleWaits: new Set(),
+      wakingInterruptible: false,
       userTurn: false,
       titlePrompt: null,
       titleWriting: false,
@@ -4464,6 +4484,9 @@ export class SessionManager {
       this.persist(live)
     }
     for (const effect of output.effects) this.applyEffect(live, effect)
+    if (!live.replaying && this.hasQueuedWake(live) && this.canWakeInterruptible(live)) {
+      void this.drainInterruptibleWait(live)
+    }
     if (
       !live.replaying &&
       output.patches.some(
@@ -4572,6 +4595,10 @@ export class SessionManager {
         break
       case 'waitingBackground':
         this.setWaitingBackground(live, effect.waiting)
+        break
+      case 'interruptibleWait':
+        if (effect.active) live.interruptibleWaits.add(effect.id)
+        else live.interruptibleWaits.delete(effect.id)
         break
       case 'tasks':
         this.update(live, { background: effect.tasks })
@@ -5282,29 +5309,50 @@ export class SessionManager {
   }
 
   /**
-   * Kettu's own message to a session, such as a step's reminder: sent now or queued. `due` is asked
-   * again when it would go out, and the message is dropped unsent once it says no.
+   * Kettu's own message to a session, such as a step's prompt or reminder: sent now or queued.
+   * `due` is asked again when it would go out, and the message is dropped unsent once it says no.
+   * When `options.wakeInterruptible` is set and the active turn is blocked only in an interruptible
+   * wait (such as clock.sleep), Kettu wakes/steers it immediately instead of deadlocking in queue.
    */
-  async sendFromKettu(sessionId: string, text: string, due?: () => boolean): Promise<void> {
+  async sendFromKettu(
+    sessionId: string,
+    text: string,
+    due?: () => boolean,
+    options?: StepSendOptions,
+  ): Promise<StepSendDelivery> {
     const content: UserContent[] = [{ type: 'text', text }]
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
-      if (due && !due()) return
+      if (due && !due()) return 'dropped'
       this.sendPrompt(live, content, undefined, undefined, undefined, undefined, true)
-      return
+      return 'sent'
     }
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
+    if (due && !due()) return 'dropped'
     const id = randomUUID()
-    if (due) live.kettuQueued.set(id, due)
+    const meta: KettuQueuedMeta = {
+      ...(due ? { due } : {}),
+      ...(options?.wakeInterruptible ? { wakeInterruptible: true } : {}),
+      ...(options?.onDelivered ? { onDelivered: options.onDelivered } : {}),
+      ...(options?.onDropped ? { onDropped: options.onDropped } : {}),
+    }
+    if (Object.keys(meta).length > 0) live.kettuQueued.set(id, meta)
     this.update(live, { queue: [...queue, { id, content, at: this.now(), kettu: true }] })
     this.persist(live)
     this.touch(live.id)
-    if (queue.length === 0 && !queuePaused && this.canAutoSteer(live)) {
-      void this.drainWaitingQueue(live)
+    this.dropStaleKettuPrefix(live)
+    const front = live.thread.session.queue[0]
+    if (front?.id !== id) return 'queued'
+    if (!live.thread.session.queuePaused && this.canAutoSteer(live)) {
+      return await this.wakeQueuedItem(live, id, true)
     }
+    if (options?.wakeInterruptible && this.canWakeInterruptible(live)) {
+      return await this.wakeQueuedItem(live, id, false)
+    }
+    return 'queued'
   }
 
   /**
@@ -8584,6 +8632,7 @@ export class SessionManager {
       this.keepOrigin(live, steered)
       this.commitAttachments(live, resolved)
       if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
+      live.interruptibleWaits.clear()
       if (live.thread.session.waitingBackground) this.update(live, { waitingBackground: false })
       this.persist(live)
       this.touch(live.id)
@@ -8605,10 +8654,13 @@ export class SessionManager {
     const { queue } = live.thread.session
     if (!queue.some((item) => item.id === itemId)) throw notFound(t('session.noQueued'))
     live.queuedBy.delete(itemId)
+    const meta = live.kettuQueued.get(itemId)
+    live.kettuQueued.delete(itemId)
     const rest = queue.filter((item) => item.id !== itemId)
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     this.persist(live)
     this.touch(live.id)
+    meta?.onDropped?.()
   }
 
   /**
@@ -8624,6 +8676,11 @@ export class SessionManager {
   private async steerItem(live: Live, itemId: string): Promise<boolean> {
     const item = live.thread.session.queue.find((i) => i.id === itemId)
     if (!item) throw notFound(t('session.noQueued'))
+    const queuedMeta = live.kettuQueued.get(itemId)
+    if (queuedMeta?.due && !queuedMeta.due()) {
+      this.removeQueuedItem(live, itemId, true)
+      return false
+    }
     if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
       throw new HostError(
         'restricted',
@@ -8660,19 +8717,25 @@ export class SessionManager {
     }
     this.emit(live, [{ op: 'entry.add', entry: steered }])
     this.keepOrigin(live, steered)
+    this.commitAttachments(live, resolved)
+    if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
+    live.queuedBy.delete(itemId)
+    const deliveredMeta = live.kettuQueued.get(itemId)
+    live.kettuQueued.delete(itemId)
+    live.interruptibleWaits.clear()
+    const rest = queue.filter((i) => i.id !== itemId)
+    this.update(live, {
+      queue: rest,
+      ...(rest.length === 0 ? { queuePaused: false } : {}),
+      ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
+    })
+    deliveredMeta?.onDelivered?.()
     if (item.approval || item.kettu) {
       live.userTurn = false
       if (live.record.origin === 'task') {
         this.deps.task?.current?.turnStarted(live.id, { byUser: false })
       }
     }
-    this.commitAttachments(live, resolved)
-    if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
-    live.queuedBy.delete(itemId)
-    this.update(live, {
-      queue: queue.filter((i) => i.id !== itemId),
-      ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
-    })
     this.persist(live)
     this.touch(live.id)
     this.skipQuestions(live)
@@ -8759,9 +8822,14 @@ export class SessionManager {
     }
     // Kettu's own messages that are no longer due, such as a reminder for a step that reported
     // meanwhile, are dropped as their turn comes.
-    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.() !== false)
+    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.due?.() !== false)
     const dropped = start === -1 ? queue : queue.slice(0, start)
-    for (const item of dropped) live.kettuQueued.delete(item.id)
+    for (const item of dropped) {
+      live.queuedBy.delete(item.id)
+      const meta = live.kettuQueued.get(item.id)
+      live.kettuQueued.delete(item.id)
+      meta?.onDropped?.()
+    }
     const [next, ...rest] = queue.slice(dropped.length)
     if (!next) {
       this.update(live, { queue: [], queuePaused: false })
@@ -8771,7 +8839,9 @@ export class SessionManager {
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
+    const meta = live.kettuQueued.get(next.id)
     live.kettuQueued.delete(next.id)
+    meta?.onDelivered?.()
     this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval, next.kettu)
   }
 
@@ -8823,6 +8893,7 @@ export class SessionManager {
     live.sender =
       portId === null ? null : { portId, device: this.deps.portDevice?.(portId) ?? null }
     live.scope = newTurnScope()
+    live.interruptibleWaits.clear()
     live.failure = null
     // A running turn has no ending, so a list never shows the last one's on it.
     delete live.record.lastTurn
@@ -9449,6 +9520,7 @@ export class SessionManager {
   private canAutoSteer(live: Live): boolean {
     return (
       !live.autoSteering &&
+      !live.wakingInterruptible &&
       live.thread.session.waitingBackground === true &&
       live.thread.session.status === 'running' &&
       live.turn !== null &&
@@ -9457,6 +9529,149 @@ export class SessionManager {
       this.blockingWaitingCount(live) === 0 &&
       this.deps.agents.status(live.record.agentId).capabilities.steering
     )
+  }
+
+  /**
+   * Whether the active turn currently has non-sleep tool calls or compaction in flight, which must
+   * not be interrupted to deliver a queued workflow handoff.
+   */
+  private hasActiveNonSleepWork(live: Live): boolean {
+    if (!live.turn || live.turn.ended) return false
+    const runningOn = callsRunningOn(live.thread.session)
+    for (const entry of this.turnEntries(live, live.turn)) {
+      if (entry.kind === 'compaction' && entry.status === 'in_progress') return true
+      if (
+        entry.kind === 'tool' &&
+        (entry.status === 'pending' || entry.status === 'in_progress') &&
+        !runningOn.has(entry.id) &&
+        !live.interruptibleWaits.has(entry.id) &&
+        !isSleepToolEntry(entry) &&
+        // An answered user-input question keeps `status: 'pending'` until turn end because Codex
+        // sends no item/completed for it; once settled it is no longer active tool work.
+        !(
+          entry.question !== undefined &&
+          entry.permission === null &&
+          entry.permissionResult !== null
+        )
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /** Whether the running turn is in an interruptible wait (sleep tool or background wait). */
+  private hasInterruptibleWait(live: Live): boolean {
+    if (live.thread.session.waitingBackground === true) return true
+    if (live.interruptibleWaits.size > 0) return true
+    if (!live.turn || live.turn.ended) return false
+    return this.turnEntries(live, live.turn).some((entry) => isSleepToolEntry(entry))
+  }
+
+  /**
+   * Whether a workflow handoff may wake the running turn now: the turn is active, no blocking user
+   * card is open, an interruptible wait is active, and no non-sleep work runs alongside it.
+   */
+  private canWakeInterruptible(live: Live): boolean {
+    return (
+      !live.autoSteering &&
+      !live.wakingInterruptible &&
+      live.thread.session.status === 'running' &&
+      live.turn !== null &&
+      !live.turn.ended &&
+      live.connection !== null &&
+      this.blockingWaitingCount(live) === 0 &&
+      this.hasInterruptibleWait(live) &&
+      !this.hasActiveNonSleepWork(live)
+    )
+  }
+
+  private hasQueuedWake(live: Live): boolean {
+    return live.thread.session.queue.some(
+      (item) => live.kettuQueued.get(item.id)?.wakeInterruptible === true,
+    )
+  }
+
+  /** Drops any leading Kettu-queued items whose `due` predicate has turned false. */
+  private dropStaleKettuPrefix(live: Live): void {
+    const { queue } = live.thread.session
+    if (queue.length === 0) return
+    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.due?.() !== false)
+    const dropped = start === -1 ? queue : queue.slice(0, start)
+    if (dropped.length === 0) return
+    for (const item of dropped) {
+      live.queuedBy.delete(item.id)
+      const meta = live.kettuQueued.get(item.id)
+      live.kettuQueued.delete(item.id)
+      meta?.onDropped?.()
+    }
+    const kept = queue.slice(dropped.length)
+    this.update(live, { queue: kept, ...(kept.length === 0 ? { queuePaused: false } : {}) })
+    this.persist(live)
+    if (kept.length === 0) this.touch(live.id)
+  }
+
+  /** Removes a single queued item and notifies its drop hook when requested. */
+  private removeQueuedItem(live: Live, itemId: string, notifyDrop: boolean): void {
+    const { queue } = live.thread.session
+    if (!queue.some((item) => item.id === itemId)) return
+    live.queuedBy.delete(itemId)
+    const meta = live.kettuQueued.get(itemId)
+    live.kettuQueued.delete(itemId)
+    const rest = queue.filter((item) => item.id !== itemId)
+    this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
+    this.persist(live)
+    this.touch(live.id)
+    if (notifyDrop) meta?.onDropped?.()
+  }
+
+  /**
+   * Delivers a queued Kettu prompt into a running turn that is blocked only in an interruptible
+   * wait: via steering when supported, otherwise by interrupting the sleep turn so `endTurn`
+   * immediately drains the prompt as the next turn.
+   */
+  private async wakeQueuedItem(
+    live: Live,
+    itemId: string,
+    steerOnly: boolean,
+  ): Promise<StepSendDelivery> {
+    const meta = live.kettuQueued.get(itemId)
+    if (meta?.due && !meta.due()) {
+      this.removeQueuedItem(live, itemId, true)
+      return 'dropped'
+    }
+    if (steerOnly) live.autoSteering = true
+    else live.wakingInterruptible = true
+    try {
+      const supportsSteering = this.deps.agents.status(live.record.agentId).capabilities.steering
+      if (supportsSteering) {
+        const steered = await this.steerItem(live, itemId)
+        if (steered) return 'steered'
+        if (meta?.due && !meta.due()) return 'dropped'
+        return live.thread.session.queue.some((item) => item.id === itemId) ? 'queued' : 'sent'
+      }
+      if (steerOnly) return 'queued'
+      await this.sendItemNow(live, itemId)
+      return live.thread.session.queue.some((item) => item.id === itemId) ? 'queued' : 'sent'
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id} kept Kettu message queued while waking interruptible wait: ${String(error)}`,
+      )
+      return live.thread.session.queue.some((item) => item.id === itemId) ? 'queued' : 'sent'
+    } finally {
+      if (steerOnly) live.autoSteering = false
+      else live.wakingInterruptible = false
+    }
+  }
+
+  /** Wakes an active interruptible wait when a workflow handoff prompt is waiting at the front. */
+  private async drainInterruptibleWait(live: Live): Promise<void> {
+    if (!this.canWakeInterruptible(live)) return
+    this.dropStaleKettuPrefix(live)
+    const next = live.thread.session.queue[0]
+    if (!next || live.kettuQueued.get(next.id)?.wakeInterruptible !== true) return
+    await this.wakeQueuedItem(live, next.id, false)
   }
 
   /** Updates whether this running turn is idle waiting on background tasks, sub-agents, or timers. */
@@ -9487,21 +9702,7 @@ export class SessionManager {
     const { queue, queuePaused } = live.thread.session
     if (queuePaused || queue.length === 0) return
     // Drop Kettu's own messages that are no longer due, mirroring drainQueue.
-    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.() !== false)
-    const dropped = start === -1 ? queue : queue.slice(0, start)
-    for (const item of dropped) {
-      live.kettuQueued.delete(item.id)
-      live.queuedBy.delete(item.id)
-    }
-    if (dropped.length > 0) {
-      const kept = queue.slice(dropped.length)
-      this.update(live, { queue: kept, ...(kept.length === 0 ? { queuePaused: false } : {}) })
-      this.persist(live)
-      if (kept.length === 0) {
-        this.touch(live.id)
-        return
-      }
-    }
+    this.dropStaleKettuPrefix(live)
     const next = live.thread.session.queue[0]
     if (!next) return
     live.autoSteering = true
@@ -9575,6 +9776,7 @@ export class SessionManager {
     // A turn ended by an error has no stop reason; its failure sets the ending.
     if (stopReason) live.record.lastTurn = { reason: stopReason, endedAt: this.now() }
     this.closeOpenEntries(live)
+    live.interruptibleWaits.clear()
     if (live.thread.session.waitingBackground) this.update(live, { waitingBackground: false })
     live.activity.clear()
     this.clearPermissions(live, 'cancelled', true)
@@ -11665,7 +11867,11 @@ export class SessionManager {
   private stopWaiting(live: Live): void {
     if (this.blockingWaitingCount(live) > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
-    this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
+    const nextStatus: SessionStatus = live.turn || live.childRunning ? 'running' : 'ready'
+    this.update(live, { status: nextStatus })
+    if (nextStatus === 'running' && this.hasQueuedWake(live) && this.canWakeInterruptible(live)) {
+      void this.drainInterruptibleWait(live)
+    }
   }
 
   respond(
@@ -11755,6 +11961,20 @@ export class SessionManager {
       if (!pending.nonBlocking && !idle) continue
       this.settlePermission(live, requestId, 'withdrawn')
       pending.answer('cancelled')
+      changed = true
+    }
+    const { queue } = live.thread.session
+    const stale = queue.filter((item) => live.kettuQueued.get(item.id)?.due?.() === false)
+    if (stale.length > 0) {
+      const staleIds = new Set(stale.map((item) => item.id))
+      const kept = queue.filter((item) => !staleIds.has(item.id))
+      for (const item of stale) {
+        live.queuedBy.delete(item.id)
+        const meta = live.kettuQueued.get(item.id)
+        live.kettuQueued.delete(item.id)
+        meta?.onDropped?.()
+      }
+      this.update(live, { queue: kept, ...(kept.length === 0 ? { queuePaused: false } : {}) })
       changed = true
     }
     if (changed) {

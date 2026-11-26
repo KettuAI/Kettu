@@ -10,7 +10,13 @@ import {
   type TaskView,
 } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
-import { TaskEngine, type TaskEngineDeps, type TaskStepStart } from './engine'
+import {
+  TaskEngine,
+  type StepSendOptions,
+  type TaskEngineDeps,
+  type TaskSessions,
+  type TaskStepStart,
+} from './engine'
 import type { MergeResult, TaskGit } from './git'
 import { emptyWorkflowsFile, WorkflowLibrary } from './library'
 import { taskRecordOf, type TaskRecord } from './model'
@@ -220,6 +226,8 @@ async function harness(
     live?: string[]
     /** Holds a step's session start after it exists, until it settles. */
     starting?: () => Promise<void>
+    /** Overrides how `sessions.send` resolves for testing queued/steered round handoffs. */
+    send?: TaskSessions['send']
     comments?: string[]
     workingLimit?: () => number
     /** The files there on the host, for what a report hands over. */
@@ -253,7 +261,12 @@ async function harness(
     (options.stored ?? []).map((task) => [task.id, structuredClone(task)]),
   )
   const created: TaskStepStart[] = []
-  const sent: { sessionId: string; text: string; due?: () => boolean }[] = []
+  const sent: {
+    sessionId: string
+    text: string
+    due?: () => boolean
+    options?: StepSendOptions
+  }[] = []
   const cancelled: string[] = []
   const withdrawn: string[] = []
   const sessions = new Set<string>(options.live ?? [])
@@ -303,8 +316,9 @@ async function harness(
         await options.starting?.()
         return { id } as SessionSummary
       },
-      send: async (sessionId, text, due) => {
-        sent.push({ sessionId, text, due })
+      send: async (sessionId, text, due, sendOptions) => {
+        sent.push({ sessionId, text, due, options: sendOptions })
+        if (options.send) return await options.send(sessionId, text, due, sendOptions)
       },
       cancel: async (sessionId) => {
         cancelled.push(sessionId)
@@ -1474,5 +1488,124 @@ steps:
     })
     expect(second.engine.get(task.id).rounds[0]!.asking).toBe(false)
     expect((await second.engine.report(session, done)).accepted).toBe(true)
+  })
+
+  it('keeps a reused round queued until its start prompt is delivered, then marks it working', async () => {
+    const h = await harness({
+      workflows: { reviewed: REVIEWED },
+      send: async () => 'queued',
+    })
+    const task = await h.start('reviewed')
+    const design = h.sessionOf(task.id, 'design')
+    h.documents.add('art_q')
+    await h.engine.report(design, { outcome: null, note: null, artifactId: 'art_q' })
+    await h.engine.pick(design, [
+      { step: 'build', agent: 'codex', model: 'gpt', effort: null, reason: 'Plain work' },
+    ])
+    const r1 = h.engine.get(task.id).rounds[0]!
+    await h.engine.review(task.id, r1.id, false, 'Tighten the scope')
+    await h.settle()
+
+    // Round 2 reused the session and asked to wake interruptible waits, but dispatch stayed queued.
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0]!.text).toContain('starts again (round 2)')
+    expect(h.sent[0]!.options?.wakeInterruptible).toBe(true)
+    expect(h.sent[0]!.due?.()).toBe(true)
+
+    const queuedView = h.engine.get(task.id)
+    expect(queuedView.rounds[1]).toMatchObject({
+      n: 2,
+      state: 'queued',
+      startedAt: null,
+      sessionId: design,
+    })
+    expect(queuedView.steps.find((s) => s.id === 'design')?.state).toBe('waiting')
+    expect(h.engine.working(design)).toBe(false)
+
+    // While round 2's prompt is still undelivered, the prior turn ending does not remind or stick
+    // round 2, and a premature report is refused.
+    h.engine.turnEnded(design, { byUser: false })
+    await h.settle()
+    expect(h.sent).toHaveLength(1)
+    const premature = await h.engine.report(design, {
+      outcome: null,
+      note: null,
+      artifactId: 'art_q',
+    })
+    expect(premature.accepted).toBe(false)
+    expect(premature.checks).toContainEqual(
+      expect.objectContaining({ check: 'step_open', ok: false }),
+    )
+
+    // Re-running pump() does not re-launch a round whose prompt is already queued on its session.
+    h.engine.limitChanged()
+    await h.settle()
+    expect(h.sent).toHaveLength(1)
+
+    // Once the session actually delivers the queued round-start prompt, round 2 becomes working.
+    h.sent[0]!.options?.onDelivered?.()
+    await h.settle()
+    const runningView = h.engine.get(task.id)
+    expect(runningView.rounds[1]).toMatchObject({ n: 2, state: 'working', sessionId: design })
+    expect(runningView.rounds[1]!.startedAt).not.toBeNull()
+    expect(runningView.steps.find((s) => s.id === 'design')?.state).toBe('running')
+    expect(h.engine.working(design)).toBe(true)
+
+    const accepted = await h.engine.report(design, {
+      outcome: null,
+      note: null,
+      artifactId: 'art_q',
+    })
+    expect(accepted.accepted).toBe(true)
+  })
+
+  it('sticks a queued reused round if its queued prompt is removed, unless the task was cancelled', async () => {
+    // Case 1: Prompt manually dropped before delivery -> stuck(start_failed), not wedged in queued.
+    const dropped = await harness({
+      workflows: { reviewed: REVIEWED },
+      send: async () => 'queued',
+    })
+    const task1 = await dropped.start('reviewed')
+    const design1 = dropped.sessionOf(task1.id, 'design')
+    dropped.documents.add('art_d1')
+    await dropped.engine.report(design1, { outcome: null, note: null, artifactId: 'art_d1' })
+    await dropped.engine.pick(design1, [
+      { step: 'build', agent: 'codex', model: 'gpt', effort: null, reason: 'Plain work' },
+    ])
+    await dropped.engine.review(task1.id, dropped.engine.get(task1.id).rounds[0]!.id, false, 'Fix')
+    await dropped.settle()
+
+    dropped.sent[0]!.options?.onDropped?.()
+    await dropped.settle()
+    expect(dropped.engine.get(task1.id).rounds[1]).toMatchObject({
+      state: 'stuck',
+      stuck: { reason: 'start_failed' },
+    })
+
+    // Case 2: Task cancelled while round 2 is queued -> due() flips false and onDropped keeps stopped.
+    const cancelled = await harness({
+      workflows: { reviewed: REVIEWED },
+      send: async () => 'queued',
+    })
+    const task2 = await cancelled.start('reviewed')
+    const design2 = cancelled.sessionOf(task2.id, 'design')
+    cancelled.documents.add('art_d2')
+    await cancelled.engine.report(design2, { outcome: null, note: null, artifactId: 'art_d2' })
+    await cancelled.engine.pick(design2, [
+      { step: 'build', agent: 'codex', model: 'gpt', effort: null, reason: 'Plain work' },
+    ])
+    await cancelled.engine.review(
+      task2.id,
+      cancelled.engine.get(task2.id).rounds[0]!.id,
+      false,
+      'Fix',
+    )
+    await cancelled.settle()
+
+    await cancelled.engine.cancel(task2.id)
+    expect(cancelled.sent[0]!.due?.()).toBe(false)
+    cancelled.sent[0]!.options?.onDropped?.()
+    await cancelled.settle()
+    expect(cancelled.engine.get(task2.id).rounds[1]).toMatchObject({ state: 'stopped' })
   })
 })

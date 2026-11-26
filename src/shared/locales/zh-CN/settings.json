@@ -285,6 +285,11 @@
       "description": "收起侧边栏后，鼠标移到它的按钮上，侧边栏会浮在页面上方显示，鼠标移开后收回。",
       "keywords": "侧边栏 收起 展开 悬停 悬浮 sidebar hover"
     },
+    "closeSidePanelWithLastTab": {
+      "name": "关闭最后一个标签页时收起侧边栏",
+      "description": "关掉侧边栏最后一个标签页时直接收起侧边栏，不再停留在面板列表。",
+      "keywords": "侧边栏 侧边面板 右侧 面板 关闭 收起 折叠 最后一个 标签页 面板列表 side panel sidebar close collapse last tab"
+    },
     "sidebarPages": {
       "overview": "总览",
       "artifacts": "产物",

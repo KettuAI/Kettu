@@ -593,4 +593,65 @@ describe('other items', () => {
       { kind: 'user', id: 'm:u', content: [{ type: 'text', text: 'hi' }] },
     ])
   })
+
+  it('tracks interruptibleWait effects for native sleep, clock MCP sleep, and dynamic clock.sleep', () => {
+    const nativeSleep = { type: 'sleep', id: 'sl-1', durationMs: 60_000 }
+    const mcpSleep = {
+      type: 'mcpToolCall',
+      id: 'mcp-sleep',
+      server: 'clock',
+      tool: 'sleep',
+      status: 'inProgress',
+      arguments: { durationMs: 60_000 },
+      result: null,
+      error: null,
+    }
+    const dynamicSleep = {
+      type: 'dynamicToolCall',
+      id: 'dyn-sleep',
+      tool: 'clock.sleep',
+      arguments: { seconds: 30 },
+      status: 'inProgress',
+      contentItems: null,
+    }
+    const nonSleepMcp = {
+      type: 'mcpToolCall',
+      id: 'mcp-other',
+      server: 'kettu',
+      tool: 'report_step',
+      status: 'inProgress',
+      arguments: {},
+      result: null,
+      error: null,
+    }
+
+    const live = run([
+      started(nativeSleep),
+      completed(nativeSleep),
+      started(mcpSleep),
+      completed({ ...mcpSleep, status: 'completed' }),
+      started(dynamicSleep),
+      completed({ ...dynamicSleep, status: 'completed' }),
+      started(nonSleepMcp),
+      completed({ ...nonSleepMcp, status: 'completed' }),
+    ])
+    expect(live.effects.filter((e) => e.kind === 'ignored')).toEqual([])
+    expect(live.effects.filter((e) => e.kind === 'interruptibleWait')).toEqual([
+      { kind: 'interruptibleWait', id: 'sleep:sl-1', active: true },
+      { kind: 'interruptibleWait', id: 'sleep:sl-1', active: false },
+      { kind: 'interruptibleWait', id: 't:mcp-sleep', active: true },
+      { kind: 'interruptibleWait', id: 't:mcp-sleep', active: false },
+      { kind: 'interruptibleWait', id: 't:dyn-sleep', active: true },
+      { kind: 'interruptibleWait', id: 't:dyn-sleep', active: false },
+    ])
+
+    // Replayed sleep items do not emit live interruptibleWait effects.
+    const replayed = run(
+      [completed(nativeSleep), completed({ ...mcpSleep, status: 'completed' })],
+      {
+        replaying: true,
+      },
+    )
+    expect(replayed.effects.filter((e) => e.kind === 'interruptibleWait')).toEqual([])
+  })
 })

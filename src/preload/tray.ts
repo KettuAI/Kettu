@@ -24,6 +24,7 @@ function systemLocale(): Locale {
 }
 
 const onShown = subscribe('tray:shown')
+const onHostAgentsChanged = subscribe('tray:host-agents-changed')
 
 const api: TrayPanelApi = {
   platform: process.platform,
@@ -52,6 +53,8 @@ const api: TrayPanelApi = {
     hide: () => send('tray:hide'),
     resize: (height) => send('tray:resize', height),
     onShown: (listener) => onShown(() => listener()),
+    hostAgents: () => invoke('tray:host-agents'),
+    onHostAgentsChanged,
   },
 }
 

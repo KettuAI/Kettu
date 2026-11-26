@@ -12,6 +12,7 @@ import type {
 } from '@shared/thread'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { t } from '../i18n'
+import { isSleepToolName } from '../interruptible-wait'
 import {
   appendContent,
   attachmentCount,
@@ -674,6 +675,9 @@ export class ClaudeMapper {
       if (complete && this.isPlan(block.input)) return out
     }
     const id = `t:${block.id}`
+    if (!ctx.replaying && isSleepToolName(name)) {
+      out.effects.push({ kind: 'interruptibleWait', id, active: true })
+    }
     const view = toolView(name, complete ? block.input : {}, this.cwd)
     const existing = ctx.thread.byId[id]
     const raw = complete ? rawInputText(block.input) : undefined
@@ -778,6 +782,9 @@ export class ClaudeMapper {
       return out
     }
     const id = `t:${block.tool_use_id}`
+    if (!ctx.replaying && isSleepToolName(name)) {
+      out.effects.push({ kind: 'interruptibleWait', id, active: false })
+    }
     const entry = ctx.thread.byId[id]
     if (!entry && tool && block.is_error === true && isClaudeRowWhenFailed(name)) {
       // A memory write that failed wrote nothing, so its call shows as a failed row.

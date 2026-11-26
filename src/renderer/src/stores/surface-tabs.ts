@@ -1,5 +1,7 @@
 import {
+  docKey,
   isDocKind,
+  leaveEmptySidePanel,
   selectDoc,
   toggleSidePane,
   useViewStore,
@@ -96,19 +98,49 @@ export function moveSurfaceTab(
 }
 
 /**
+ * Decides what the side panel should show when `item` is closed from `items`:
+ * - `'keep'`: another tab stays selected (closing an unselected tab, or one side of a split
+ *   terminal whose other side remains open).
+ * - `{ select: T }`: hand the panel to the nearest unselected neighbor (after `item`, else before).
+ * - `'empty'`: `item` was the last open tab, so collapse the panel or fall back to `'surfaces'`.
+ */
+export function nextAfterClose<T extends { key: string; selected: boolean }>(
+  items: readonly T[],
+  item: T,
+): 'keep' | 'empty' | { select: T } {
+  if (!item.selected) return 'keep'
+  if (items.some((other) => other.key !== item.key && other.selected)) return 'keep'
+  const index = items.findIndex((other) => other.key === item.key)
+  const neighbor = [...items.slice(index + 1), ...items.slice(0, index).reverse()].find(
+    (other) => !other.selected,
+  )
+  return neighbor ? { select: neighbor } : 'empty'
+}
+
+/**
  * A kind's last tab went while the panel shows it: the panel shows the nearest tab of another
- * kind, after where that kind's tabs were or else before, and the side panel's list once the row
- * is empty. A panel showing something else is left as it is.
+ * kind, after where that kind's tabs were or else before, and collapses or shows the side panel's
+ * list once the row is empty. A panel showing something else is left as it is.
  */
 export function foldSurface(panel: string, kind: SurfaceKind): void {
   const view = useViewStore.getState()
   if (view.sidePane[panel] !== kind) return
   const order = view.sideOrder[panel] ?? []
   const last = order.findLastIndex((key) => kindOfKey(key) === kind)
+  const singleTabs = new Set<string>(view.sideTabs[panel] ?? [])
+  const docKeys = new Set((view.sideDocs[panel] ?? []).map(docKey))
   const others = order
     .map((key, index) => ({ key, kind: kindOfKey(key), index }))
-    .filter((other) => other.kind !== kind)
+    .filter((other) => {
+      if (other.kind === kind) return false
+      if (isDocKind(other.kind)) return docKeys.has(other.key)
+      if (isSurfaceKind(other.kind)) return true
+      return singleTabs.has(other.kind)
+    })
   const next = others.find((other) => other.index > last) ?? others.at(-1)
   if (next && isDocKind(next.kind)) selectDoc(panel, next.key)
-  else toggleSidePane(panel, next?.kind ?? 'surfaces', true)
+  else if (next) toggleSidePane(panel, next.kind, true)
+  else if (view.sideDocs[panel]?.[0]) selectDoc(panel, docKey(view.sideDocs[panel][0]))
+  else if (view.sideTabs[panel]?.[0]) toggleSidePane(panel, view.sideTabs[panel][0], true)
+  else leaveEmptySidePanel(panel)
 }
