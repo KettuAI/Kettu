@@ -145,7 +145,8 @@
       "loading": "正在读取技能和 MCP 定义",
       "readFailed": "暂时无法读取技能和 MCP 定义。",
       "disconnected": "会话连接后可查看定义的 token 估算。",
-      "note": "这是 Codex 可加载内容的大小，不是上面上下文的组成部分。"
+      "agentFallback": "该智能体",
+      "note": "这是 {{agent}} 可加载内容的大小，不是上面上下文的组成部分。"
     },
     "limits": {
       "plan": "套餐",

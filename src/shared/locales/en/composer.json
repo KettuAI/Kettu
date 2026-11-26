@@ -145,7 +145,8 @@
       "loading": "Reading skill and MCP definitions",
       "readFailed": "Couldn't read skill and MCP definitions.",
       "disconnected": "Definition estimates are available while the session is connected.",
-      "note": "Sizes of what Codex can load, not parts of the context above."
+      "agentFallback": "the agent",
+      "note": "Sizes of what {{agent}} can load, not parts of the context above."
     },
     "limits": {
       "plan": "Plan",

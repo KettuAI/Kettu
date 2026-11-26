@@ -826,6 +826,7 @@ export function Composer({
                 <ContextButton
                   sessionId={sessionId}
                   agentId={session.agentId}
+                  agentName={ownName}
                   idle={!running && !starting}
                   closed={status === 'closed'}
                   reports={agent?.capabilities.context ?? false}
