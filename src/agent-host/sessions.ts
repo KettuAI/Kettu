@@ -831,6 +831,8 @@ interface Live {
   fullNoticed: boolean
   /** A replay failed partway, so the thread is not stored until one completes. */
   partial: boolean
+  /** A replay resolved with zero entries, so an empty snapshot is not cached until entries arrive. */
+  emptyReplay: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
   blobs: Map<string, StoredBlob>
   /** The entries the host keeps while a replay rebuilds the thread, which the agent does not send. */
@@ -3141,6 +3143,7 @@ export class SessionManager {
       case 'entry.add':
         if (!live.positions.has(patch.entry.id)) live.positions.set(patch.entry.id, live.nextPos++)
         live.dirty.add(patch.entry.id)
+        live.emptyReplay = false
         break
       case 'entry.appendText':
       case 'entry.update':
@@ -3225,7 +3228,8 @@ export class SessionManager {
 
   private scheduleCheckpoint(live: Live): void {
     if (live.checkpointTimer || !this.deps.threads || this.stopped || live.replaying) return
-    if (!live.saved || live.partial || !this.hasChanges(live)) return
+    if (!live.saved || live.partial || (live.emptyReplay && live.thread.order.length === 0)) return
+    if (!this.hasChanges(live)) return
     const wait = Math.max(this.timings.checkpointMs, live.retryAt - this.now())
     live.checkpointTimer = setTimeout(() => {
       live.checkpointTimer = null
@@ -3246,8 +3250,16 @@ export class SessionManager {
       live.checkpointTimer = null
     }
     const store = this.deps.threads
-    if (!store || (this.stopped && !afterShutdown) || live.replaying || live.partial || !live.saved)
+    if (
+      !store ||
+      (this.stopped && !afterShutdown) ||
+      live.replaying ||
+      live.partial ||
+      (live.emptyReplay && live.thread.order.length === 0) ||
+      !live.saved
+    ) {
       return
+    }
     if (!live.record.acpSessionId || !this.hasChanges(live)) return
     if (!final && live.retryAt > this.now()) {
       this.scheduleCheckpoint(live)
@@ -3961,6 +3973,7 @@ export class SessionManager {
       retryAt: 0,
       fullNoticed: false,
       partial: false,
+      emptyReplay: false,
       blobs: new Map(),
       keeper: null,
       checkpointTimer: null,
@@ -6164,10 +6177,13 @@ export class SessionManager {
     const page = await this.readPage(record, (store) => store.page(sessionId, null, null, images))
     if (this.live.has(sessionId) || !this.has(sessionId)) return this.open(sessionId, images)
     if (page) {
-      // A program outside Kettu holds the session or wrote to it: it comes back through its revive.
-      if ((await this.outsideState(record)) === 'current') return this.storedSnapshot(record, page)
-      await this.revive(sessionId)
-      return this.snapshot(sessionId, undefined, images)
+      if (!isEmptyStoredThread(record, page.entries.length, page.from, page.older)) {
+        // A program outside Kettu holds the session or wrote to it: it comes back through its revive.
+        if ((await this.outsideState(record)) === 'current')
+          return this.storedSnapshot(record, page)
+        await this.revive(sessionId)
+        return this.snapshot(sessionId, undefined, images)
+      }
     }
     if (record.origin === 'subagent' && record.parentId) {
       // A subagent's thread comes back with its parent's load, which replays the children.
@@ -6334,6 +6350,7 @@ export class SessionManager {
   private prepareReplay(live: Live, connection: AgentConnection): void {
     live.replaying = true
     live.partial = false
+    live.emptyReplay = false
     live.scope = newTurnScope()
     this.emit(live, [{ op: 'thread.reset' }])
     for (const record of this.descendants(live.id, 'subagent')) {
@@ -6357,6 +6374,13 @@ export class SessionManager {
     live.partial = !ok
     this.restoreOrigins(live, kept)
     this.restoreKept(live)
+    if (ok && live.thread.order.length === 0) {
+      live.emptyReplay = true
+      this.deps.diagnostics.log(
+        'warn',
+        `Replay of ${live.record.agentId} session ${live.id} (${live.record.acpSessionId}) returned 0 entries; skipping empty thread cache`,
+      )
+    }
     for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
       if (!child) continue
@@ -7009,8 +7033,12 @@ export class SessionManager {
     const existing = this.live.get(sessionId)
     if (existing) return existing
     const record = this.recordOf(sessionId)
-    if (!threads[0]) {
-      // Nothing stored, or nothing readable: the agent's own history, as on a first open.
+    const stored = threads[0]
+    if (
+      !stored ||
+      isEmptyStoredThread(record, stored.entries.length, 0, null, stored.setAside.length)
+    ) {
+      // Nothing stored, an empty cached replay, or nothing readable: replay from the agent.
       const live = this.makeLive(record, true, 'starting')
       await this.runOpening(live)
       return live
@@ -13466,6 +13494,7 @@ export class SessionManager {
       ...(outside ? { outside } : {}),
       // Claude Code keeps the instructions it recorded outside Kettu, which have nothing of Kettu's.
       ...(claude ? { instructionsAhead: true as const } : {}),
+      imported: true,
     }
     this.stampConfig(record)
     this.records.set(record.id, record)
@@ -14011,6 +14040,29 @@ function unmetValues(
     })
   }
   return out
+}
+
+/**
+ * Whether a stored thread with 0 entries should be treated as an empty cached replay and re-loaded
+ * from the agent instead of rendering a permanently blank thread.
+ */
+function isEmptyStoredThread(
+  record: SessionRecord,
+  entriesCount: number,
+  nextPos: number,
+  older: number | null,
+  setAsideCount = 0,
+): boolean {
+  if (entriesCount > 0 || nextPos > 0 || older !== null || setAsideCount > 0) return false
+  if (record.origin !== 'user' || record.acpSessionId === '') return false
+  if (record.rewound || record.carry || record.queue?.length) return false
+  return (
+    record.imported === true ||
+    harnessOf(record.agentId) === 'antigravity' ||
+    record.titleSource === 'agent' ||
+    record.title !== null ||
+    record.instructionsAhead === true
+  )
 }
 
 /**

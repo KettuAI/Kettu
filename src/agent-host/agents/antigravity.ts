@@ -14,6 +14,7 @@ export const ANTIGRAVITY: AgentDefinition = {
     args: ['acp'],
     perSession: true,
     sessionFlag: '--dangerously-skip-permissions',
+    sessionArgs: ['--app-data-dir'],
   },
   install: {
     hint: 'detect.hint.antigravity',

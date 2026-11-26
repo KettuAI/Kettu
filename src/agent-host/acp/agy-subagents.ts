@@ -14,6 +14,7 @@ import type * as acp from '@agentclientprotocol/sdk/unstable'
 import type { SessionTarget } from '../connection'
 import { addEntry, toLf, type MapperOutput, type SubagentState } from '../session-updates'
 import { compareVersions } from '../versions'
+import { DEFAULT_AGY_APP_DATA_DIR, isSafeAgyAppDataDir } from './agy-store'
 
 export const AGY_SUBAGENTS_VERSION = '1.5.15'
 
@@ -66,8 +67,49 @@ const REPLAY_DEPTH = 4
 const DESCRIPTION_LIMIT = 200
 
 /** agy's conversation store, under the home folder (1.5.15). */
-export function agyStoreFile(home = os.homedir()): string {
-  return path.join(home, '.gemini', 'antigravity-cli', 'conversation_summaries.db')
+export function agyStoreFile(home = os.homedir(), appDataDir = DEFAULT_AGY_APP_DATA_DIR): string {
+  const dir = isSafeAgyAppDataDir(appDataDir) ? appDataDir : DEFAULT_AGY_APP_DATA_DIR
+  return path.join(home, '.gemini', dir, 'conversation_summaries.db')
+}
+
+async function readChildrenFromFile(
+  file: string,
+  parentIds: readonly string[],
+): Promise<AgyChild[]> {
+  try {
+    await stat(file)
+  } catch {
+    return []
+  }
+  const { DatabaseSync } = await import('node:sqlite')
+  const db = new DatabaseSync(file, { readOnly: true, timeout: 0 })
+  try {
+    const rows = db
+      .prepare(
+        `SELECT conversation_id, parent_conversation_id, status, killed, agent_name, title
+         FROM conversation_summaries
+         WHERE parent_conversation_id IN (${parentIds.map(() => '?').join(', ')})
+         ORDER BY rowid`,
+      )
+      .all(...parentIds)
+    return rows.flatMap((row): AgyChild[] => {
+      const id = row.conversation_id
+      const parentId = row.parent_conversation_id
+      if (typeof id !== 'string' || typeof parentId !== 'string' || id === '') return []
+      return [
+        {
+          id,
+          parentId,
+          status: typeof row.status === 'string' ? row.status : '',
+          killed: row.killed === 1 || row.killed === 1n,
+          agent: typeof row.agent_name === 'string' ? row.agent_name : '',
+          title: typeof row.title === 'string' ? row.title : '',
+        },
+      ]
+    })
+  } finally {
+    db.close()
+  }
 }
 
 /**
@@ -75,43 +117,28 @@ export function agyStoreFile(home = os.homedir()): string {
  * writes the database. A lookup in a table of one row per conversation takes about a millisecond,
  * so it runs in the host; a store agy holds locked fails at once and is read again later.
  */
-export function agyStore(file = agyStoreFile()): AgyStore {
+export function agyStore(
+  file = agyStoreFile(),
+  fileForParent?: (parentId: string) => string | undefined,
+): AgyStore {
   return async (parentIds) => {
     if (parentIds.length === 0) return []
-    try {
-      await stat(file)
-    } catch {
-      return []
+    if (!fileForParent) return readChildrenFromFile(file, parentIds)
+    const groups = new Map<string, string[]>()
+    for (const parentId of parentIds) {
+      const target = fileForParent(parentId) ?? file
+      let list = groups.get(target)
+      if (!list) {
+        list = []
+        groups.set(target, list)
+      }
+      list.push(parentId)
     }
-    const { DatabaseSync } = await import('node:sqlite')
-    const db = new DatabaseSync(file, { readOnly: true, timeout: 0 })
-    try {
-      const rows = db
-        .prepare(
-          `SELECT conversation_id, parent_conversation_id, status, killed, agent_name, title
-           FROM conversation_summaries
-           WHERE parent_conversation_id IN (${parentIds.map(() => '?').join(', ')})
-           ORDER BY rowid`,
-        )
-        .all(...parentIds)
-      return rows.flatMap((row): AgyChild[] => {
-        const id = row.conversation_id
-        const parentId = row.parent_conversation_id
-        if (typeof id !== 'string' || typeof parentId !== 'string' || id === '') return []
-        return [
-          {
-            id,
-            parentId,
-            status: typeof row.status === 'string' ? row.status : '',
-            killed: row.killed === 1 || row.killed === 1n,
-            agent: typeof row.agent_name === 'string' ? row.agent_name : '',
-            title: typeof row.title === 'string' ? row.title : '',
-          },
-        ]
-      })
-    } finally {
-      db.close()
+    const out: AgyChild[] = []
+    for (const [storeFile, ids] of groups) {
+      out.push(...(await readChildrenFromFile(storeFile, ids)))
     }
+    return out
   }
 }
 

@@ -57,7 +57,13 @@ afterEach(async () => {
 })
 
 async function startRouter(
-  options: { folderPerSession?: boolean; sessionFlag?: string; help?: string } = {},
+  options: {
+    folderPerSession?: boolean
+    sessionFlag?: string
+    sessionArgs?: readonly string[]
+    childArgs?: readonly string[]
+    help?: string
+  } = {},
 ) {
   const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-router-')))
   dirs.push(dir)
@@ -67,8 +73,11 @@ async function startRouter(
   const program = path.join(dir, 'program')
   await writeFile(program, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 })
   const words = options.folderPerSession
-    ? ['--folder-per-session', program, child]
-    : [process.execPath, child]
+    ? ['--folder-per-session', program, child, ...(options.childArgs ?? [])]
+    : [process.execPath, child, ...(options.childArgs ?? [])]
+  for (const arg of [...(options.sessionArgs ?? [])].reverse()) {
+    words.unshift(`--session-arg=${arg}`)
+  }
   if (options.sessionFlag) words.unshift(`--session-flag=${options.sessionFlag}`)
   const router = spawn(process.execPath, [ROUTER, ...words], {
     cwd: dir,
@@ -262,5 +271,134 @@ describe('the session router', () => {
     await request('initialize', { protocolVersion: 1 })
     const opened = await request('session/new', { cwd: '/repo', mcpServers: [] })
     expect(opened._meta.electron).toBe('1')
+  })
+
+  it('routes per-session --app-data-dir isolated per worker and composes with --gemini-dir and sessionFlag', async () => {
+    const help = [
+      'Usage: agy acp [flags]',
+      '  --app-data-dir                    Path where application data is stored',
+      '  --dangerously-skip-permissions    Auto-approve all tool permission requests',
+      '  --gemini-dir                      Path where Gemini files are stored',
+    ].join('\n')
+    const { request } = await startRouter({
+      sessionFlag: '--dangerously-skip-permissions',
+      sessionArgs: ['--app-data-dir'],
+      childArgs: ['--gemini-dir', '/work/.gemini'],
+      help,
+    })
+    const control = await request('initialize', { protocolVersion: 1 })
+    const initMeta = (control as unknown as { _meta: Record<string, unknown> })._meta
+    expect(initMeta['sh.kettu/session-flag']).toBe('--dangerously-skip-permissions')
+    expect(initMeta['sh.kettu/session-args']).toEqual(['--app-data-dir'])
+    expect(control._meta.args).toContain('--gemini-dir')
+    expect(control._meta.args).not.toContain('--app-data-dir')
+
+    // IDE session loads with --app-data-dir antigravity alongside --gemini-dir; internal _meta is stripped.
+    const ide = await request('session/load', {
+      sessionId: 'ide-1',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/session-args': { '--app-data-dir': 'antigravity' }, keep: 1 },
+    })
+    expect(ide._meta.args).toEqual(
+      expect.arrayContaining(['--gemini-dir', '/work/.gemini', '--app-data-dir', 'antigravity']),
+    )
+    expect(ide._meta.params).toEqual({
+      sessionId: 'ide-1',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { keep: 1 },
+    })
+
+    // CLI session gets its own worker without --app-data-dir (never reuses the IDE worker).
+    const cli = await request('session/load', {
+      sessionId: 'cli-1',
+      cwd: '/repo',
+      mcpServers: [],
+    })
+    expect(cli._meta.pid).not.toBe(ide._meta.pid)
+    expect(cli._meta.args).toEqual(expect.arrayContaining(['--gemini-dir', '/work/.gemini']))
+    expect(cli._meta.args).not.toContain('--app-data-dir')
+
+    // New sessions stay on default app_data_dir and get their own worker.
+    const fresh = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    expect(fresh._meta.pid).not.toBe(ide._meta.pid)
+    expect(fresh._meta.args).not.toContain('--app-data-dir')
+
+    // Resuming the IDE session with full access composes both flags cleanly on a replaced worker.
+    const resumed = await request('session/resume', {
+      sessionId: 'ide-1',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: {
+        'sh.kettu/session-flag': true,
+        'sh.kettu/session-args': { '--app-data-dir': 'antigravity' },
+      },
+    })
+    expect(resumed._meta.pid).not.toBe(ide._meta.pid)
+    expect(resumed._meta.args).toEqual(
+      expect.arrayContaining([
+        '--gemini-dir',
+        '/work/.gemini',
+        '--dangerously-skip-permissions',
+        '--app-data-dir',
+        'antigravity',
+      ]),
+    )
+    expect(resumed._meta.params).toEqual({
+      sessionId: 'ide-1',
+      cwd: '/repo',
+      mcpServers: [],
+    })
+
+    // A sub-agent guest runs inside its parent's IDE worker with internal _meta stripped.
+    const guest = await request('session/load', {
+      sessionId: 'ide-child',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: {
+        'sh.kettu/parent-session': 'ide-1',
+        'sh.kettu/session-args': { '--app-data-dir': 'antigravity' },
+      },
+    })
+    expect(guest._meta.pid).toBe(resumed._meta.pid)
+    expect(guest._meta.params).toEqual({ sessionId: 'ide-child', cwd: '/repo', mcpServers: [] })
+  })
+
+  it('rejects unsafe, unconfigured, or unlisted per-session value flags', async () => {
+    const { request } = await startRouter({
+      sessionArgs: ['--app-data-dir'],
+      help: 'Usage: agy acp\n  --app-data-dir   App data dir\n',
+    })
+    await request('initialize', { protocolVersion: 1 })
+
+    const traversal = await request('session/load', {
+      sessionId: 's1',
+      cwd: '/repo',
+      _meta: { 'sh.kettu/session-args': { '--app-data-dir': '../escape' } },
+    })
+    expect((traversal._meta as unknown as { error?: unknown }).error).toBeDefined()
+
+    const unknownFlag = await request('session/load', {
+      sessionId: 's2',
+      cwd: '/repo',
+      _meta: { 'sh.kettu/session-args': { '--other-flag': 'ok' } },
+    })
+    expect((unknownFlag._meta as unknown as { error?: unknown }).error).toBeDefined()
+
+    const unlisted = await startRouter({
+      sessionArgs: ['--app-data-dir'],
+      help: 'Usage: old-agy acp\n',
+    })
+    const init = await unlisted.request('initialize', { protocolVersion: 1 })
+    expect(
+      (init as unknown as { _meta: Record<string, unknown> })._meta['sh.kettu/session-args'],
+    ).toBeUndefined()
+    const rejected = await unlisted.request('session/load', {
+      sessionId: 's3',
+      cwd: '/repo',
+      _meta: { 'sh.kettu/session-args': { '--app-data-dir': 'antigravity' } },
+    })
+    expect((rejected._meta as unknown as { error?: unknown }).error).toBeDefined()
   })
 })

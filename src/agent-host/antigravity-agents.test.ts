@@ -24,7 +24,11 @@ interface Launch {
 }
 
 /** A manager whose only harness is Antigravity, run from `program`, with one added agent. */
-async function manager(program: string, folder: string) {
+async function manager(
+  program: string,
+  folder: string,
+  options: { sessionRouterPath?: string | null } = {},
+) {
   const root = await tempFolder('kettu-agy-agents-')
   const platform = process.platform === 'win32' ? 'win32' : process.platform
   const nodeRuntime = { command: process.execPath, env: {} }
@@ -85,6 +89,9 @@ async function manager(program: string, folder: string) {
     settings: () => settings,
     reportsDir: path.join(root, 'reports'),
     adaptersDir: root,
+    ...(options.sessionRouterPath !== undefined
+      ? { sessionRouterPath: options.sessionRouterPath }
+      : {}),
     drivers: { acp: noting },
     probeCli: async () => ({ version: '1.5.17' }),
     status: () => {},
@@ -115,5 +122,40 @@ describe('an added Google Antigravity agent', () => {
 
     expect(own?.spec.args).not.toContain('--gemini-dir')
     expect(own?.env[FILE_TOKEN]).toBeUndefined()
+  })
+
+  it('passes --session-arg=--app-data-dir to the session router alongside --gemini-dir for added accounts', async () => {
+    const dir = await tempFolder('kettu-agy-routed-')
+    const program = path.join(dir, process.platform === 'win32' ? 'agy.cmd' : 'agy')
+    await writeFile(program, '')
+    await chmod(program, 0o755)
+    const folder = path.join(dir, 'agents', 'antigravity~work')
+    const { agents, launches } = await manager(program, folder, {
+      sessionRouterPath: '/kettu/router.js',
+    })
+
+    await expect(agents.ensureReady('antigravity~work')).rejects.toThrow()
+    await expect(agents.ensureReady('antigravity')).rejects.toThrow()
+
+    expect(launches).toHaveLength(2)
+    const [added, own] = launches
+    expect(added?.spec.args).toEqual([
+      '/kettu/router.js',
+      '--folder-per-session',
+      '--session-flag=--dangerously-skip-permissions',
+      '--session-arg=--app-data-dir',
+      program,
+      'acp',
+      '--gemini-dir',
+      path.join(folder, '.gemini'),
+    ])
+    expect(own?.spec.args).toEqual([
+      '/kettu/router.js',
+      '--folder-per-session',
+      '--session-flag=--dangerously-skip-permissions',
+      '--session-arg=--app-data-dir',
+      program,
+      'acp',
+    ])
   })
 })

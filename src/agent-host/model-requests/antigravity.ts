@@ -18,6 +18,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import { agyFullTranscriptFile, agyTranscriptFile } from '../acp/agy-metrics'
+import { DEFAULT_AGY_APP_DATA_DIR, resolveAgyAppDataDir } from '../acp/agy-store'
 import { t } from '../i18n'
 import { eachLine, fileSource, openLog } from '../usage/lines'
 import { withoutKettu } from './acp-messages'
@@ -416,16 +417,28 @@ export function antigravityModelRequests(deps: {
   // An added agent's session was started in its own folder, which agy takes for its home.
   const home = (target: RequestsTarget) => target.configDir ?? deps.home ?? os.homedir()
 
-  const fileOf = async (target: RequestsTarget): Promise<string | null> => {
-    const file = agyTranscriptFile(target.acpSessionId, home(target))
-    if (!file) return null
-    return (await stat(file).catch(() => null))?.isFile() ? file : null
+  const resolveFile = async (
+    target: RequestsTarget,
+  ): Promise<{ file: string; appDataDir: string } | null> => {
+    const baseHome = home(target)
+    const defaultFile = agyTranscriptFile(target.acpSessionId, baseHome, DEFAULT_AGY_APP_DATA_DIR)
+    if (defaultFile && (await stat(defaultFile).catch(() => null))?.isFile()) {
+      return { file: defaultFile, appDataDir: DEFAULT_AGY_APP_DATA_DIR }
+    }
+    const appDataDir = await resolveAgyAppDataDir(target.acpSessionId, baseHome)
+    if (!appDataDir || appDataDir === DEFAULT_AGY_APP_DATA_DIR) return null
+    const altFile = agyTranscriptFile(target.acpSessionId, baseHome, appDataDir)
+    if (altFile && (await stat(altFile).catch(() => null))?.isFile()) {
+      return { file: altFile, appDataDir }
+    }
+    return null
   }
 
   return {
     async page(target, before) {
-      const file = await fileOf(target)
-      if (!file) return deps.fallback ? deps.fallback.page(target, before) : null
+      const resolved = await resolveFile(target)
+      if (!resolved) return deps.fallback ? deps.fallback.page(target, before) : null
+      const { file } = resolved
       const { size } = await stat(file)
       const end = before === null ? size : Math.min(size, Number(before))
       if (!Number.isSafeInteger(end) || end < 0) throw new Error('Not a page of this session')
@@ -439,8 +452,9 @@ export function antigravityModelRequests(deps: {
     },
 
     async summary(target) {
-      const file = await fileOf(target)
-      if (!file) return deps.fallback ? deps.fallback.summary(target) : null
+      const resolved = await resolveFile(target)
+      if (!resolved) return deps.fallback ? deps.fallback.summary(target) : null
+      const { file } = resolved
       const info = await stat(file)
       const known = summaries.get(file)
       if (known && known.size === info.size && known.mtimeMs === info.mtimeMs) return known.summary
@@ -452,14 +466,15 @@ export function antigravityModelRequests(deps: {
     },
 
     async raw(target, raw, full) {
-      // ACP 回退模式的 raw 句柄为 `start-end`（不含冒号），transcript 字节范围为 `start:end`。
+      // ACP fallback raw handles use `start-end` (without colon); transcript byte ranges use `start:end`.
       if (!raw.includes(':') && deps.fallback) return deps.fallback.raw(target, raw, full)
-      const file = await fileOf(target)
-      if (!file) throw new Error(t('modelRequest.noSessionFile'))
+      const resolved = await resolveFile(target)
+      if (!resolved) throw new Error(t('modelRequest.noSessionFile'))
+      const { file, appDataDir } = resolved
       const { size } = await stat(file)
       if (!full) return readRanges(fileSource(file, size), raw, false)
       const result = await readRanges(fileSource(file, size), raw, true)
-      const fullFile = agyFullTranscriptFile(target.acpSessionId, home(target))
+      const fullFile = agyFullTranscriptFile(target.acpSessionId, home(target), appDataDir)
       const hydrated = await hydrateFullRecords(result.records, fullFile)
       return foldAll(hydrated, true)
     },

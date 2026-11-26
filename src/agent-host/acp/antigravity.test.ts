@@ -2259,3 +2259,115 @@ describe("agy's waiting-on-background detection", () => {
     agy.connection.close()
   })
 })
+
+describe('agy per-session app_data_dir routing', () => {
+  function routedAgy(options: {
+    advertiseAppDataDir?: boolean
+    advertiseFullAccess?: boolean
+    resolveDir: (sessionId: string) => Promise<string | null>
+  }) {
+    const requests: { method: string; sessionId?: string; meta: unknown }[] = []
+    let next = 0
+    const app = agent({ name: 'agy-routed' })
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: 1,
+        agentCapabilities: {
+          loadSession: true,
+          sessionCapabilities: { resume: {}, close: {}, load: {}, list: {} },
+        },
+        agentInfo: { name: 'Antigravity ACP Server', version: '1.5.18' },
+        _meta: {
+          ...(options.advertiseFullAccess !== false
+            ? { 'sh.kettu/session-flag': '--dangerously-skip-permissions' }
+            : {}),
+          ...(options.advertiseAppDataDir !== false
+            ? { 'sh.kettu/session-args': ['--app-data-dir'] }
+            : {}),
+        },
+      }))
+      .onRequest(methods.agent.session.new, (ctx) => {
+        const sessionId = `new-${++next}`
+        requests.push({ method: 'new', sessionId, meta: ctx.params._meta })
+        return { sessionId, configOptions: [agyModes('default')] }
+      })
+      .onRequest(methods.agent.session.load, (ctx) => {
+        requests.push({ method: 'load', sessionId: ctx.params.sessionId, meta: ctx.params._meta })
+        return { configOptions: [agyModes('default')] }
+      })
+      .onRequest(methods.agent.session.resume, (ctx) => {
+        requests.push({ method: 'resume', sessionId: ctx.params.sessionId, meta: ctx.params._meta })
+        return { configOptions: [agyModes('default')] }
+      })
+      .onRequest(methods.agent.session.setConfigOption, (ctx) => ({
+        configOptions: [agyModes(String(ctx.params.value))],
+      }))
+    const connection = AcpConnection.connect(inProcessTransport(app), {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+      agentId: 'antigravity',
+      name: 'Google Antigravity',
+      agyAppDataDir: options.resolveDir,
+    })
+    return { connection, requests }
+  }
+
+  it('passes --app-data-dir antigravity on load, resume, and full-access restart for IDE sessions, never for CLI or new sessions', async () => {
+    const { connection, requests } = routedAgy({
+      resolveDir: async (id) => (id.startsWith('ide-') ? 'antigravity' : 'antigravity-cli'),
+    })
+    await connection.initialize('1.0.0')
+
+    // New sessions always stay on the default CLI store.
+    await connection.newSession('/repo')
+    expect(requests.at(-1)).toMatchObject({ method: 'new', meta: undefined })
+
+    // CLI session omits --app-data-dir.
+    await connection.loadSession('cli-1', '/repo')
+    expect(requests.at(-1)).toMatchObject({ method: 'load', sessionId: 'cli-1', meta: undefined })
+
+    // IDE session passes --app-data-dir antigravity on loadSession.
+    await connection.loadSession('ide-1', '/repo')
+    expect(requests.at(-1)).toMatchObject({
+      method: 'load',
+      sessionId: 'ide-1',
+      meta: { 'sh.kettu/session-args': { '--app-data-dir': 'antigravity' } },
+    })
+
+    // Switching the IDE session to full access restarts via session/resume and preserves --app-data-dir.
+    await connection.setConfigOption('ide-1', 'mode', 'dangerously-skip-permissions')
+    expect(requests.at(-1)).toMatchObject({
+      method: 'resume',
+      sessionId: 'ide-1',
+      meta: {
+        'sh.kettu/session-flag': true,
+        'sh.kettu/session-args': { '--app-data-dir': 'antigravity' },
+      },
+    })
+
+    // Explicit resumeSession with fullAccess also carries both flags for an IDE session.
+    await connection.resumeSession('ide-2', '/repo', { fullAccess: true })
+    expect(requests.at(-1)).toMatchObject({
+      method: 'resume',
+      sessionId: 'ide-2',
+      meta: {
+        'sh.kettu/session-flag': true,
+        'sh.kettu/session-args': { '--app-data-dir': 'antigravity' },
+      },
+    })
+
+    connection.close()
+  })
+
+  it('omits router session-args metadata when the router does not advertise --app-data-dir', async () => {
+    const { connection, requests } = routedAgy({
+      advertiseAppDataDir: false,
+      resolveDir: async () => 'antigravity',
+    })
+    await connection.initialize('1.0.0')
+    await connection.loadSession('ide-1', '/repo')
+    expect(requests.at(-1)).toMatchObject({ method: 'load', sessionId: 'ide-1', meta: undefined })
+    connection.close()
+  })
+})

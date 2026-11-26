@@ -12,6 +12,7 @@ import type { LastRequest } from '@shared/model-requests'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import type { SessionTarget } from '../connection'
 import { scanBackwards } from '../prompt-cache'
+import { DEFAULT_AGY_APP_DATA_DIR, isSafeAgyAppDataDir } from './agy-store'
 import { fromAgy } from './agy-tools'
 
 /** 仅允许合法的会话 ID 字符，避免构造 transcript 路径时发生路径穿越。 */
@@ -71,13 +72,18 @@ interface SessionState {
   generation: number
 }
 
-/** 返回 agy 会话 transcript.jsonl 的路径；会话 ID 非法时返回 null。 */
-export function agyTranscriptFile(sessionId: string, home = os.homedir()): string | null {
+/** Returns the path to an agy session's `transcript.jsonl`, or null for an unsafe session id. */
+export function agyTranscriptFile(
+  sessionId: string,
+  home = os.homedir(),
+  appDataDir = DEFAULT_AGY_APP_DATA_DIR,
+): string | null {
   if (!SESSION_ID.test(sessionId)) return null
+  const dir = isSafeAgyAppDataDir(appDataDir) ? appDataDir : DEFAULT_AGY_APP_DATA_DIR
   return path.join(
     home,
     '.gemini',
-    'antigravity-cli',
+    dir,
     'brain',
     sessionId,
     '.system_generated',
@@ -86,13 +92,18 @@ export function agyTranscriptFile(sessionId: string, home = os.homedir()): strin
   )
 }
 
-/** 返回 agy 会话未截断版本 transcript_full.jsonl 的路径；会话 ID 非法时返回 null。 */
-export function agyFullTranscriptFile(sessionId: string, home = os.homedir()): string | null {
+/** Returns the path to an agy session's `transcript_full.jsonl`, or null for an unsafe session id. */
+export function agyFullTranscriptFile(
+  sessionId: string,
+  home = os.homedir(),
+  appDataDir = DEFAULT_AGY_APP_DATA_DIR,
+): string | null {
   if (!SESSION_ID.test(sessionId)) return null
+  const dir = isSafeAgyAppDataDir(appDataDir) ? appDataDir : DEFAULT_AGY_APP_DATA_DIR
   return path.join(
     home,
     '.gemini',
-    'antigravity-cli',
+    dir,
     'brain',
     sessionId,
     '.system_generated',
@@ -164,10 +175,13 @@ export async function readLatestAgyStep(file: string): Promise<AgyStepUsage | nu
   return found
 }
 
-/** 默认的 agy 步骤读取器，从本机 `~/.gemini/antigravity-cli/brain` 读取。 */
-export function agyStepReader(home = os.homedir()): AgyStepReader {
+/** Default agy step reader pointing at `<home>/.gemini/<appDataDir>/brain/<sessionId>/...`. */
+export function agyStepReader(
+  home = os.homedir(),
+  appDataDirOf?: (sessionId: string) => string | undefined,
+): AgyStepReader {
   return async (sessionId) => {
-    const file = agyTranscriptFile(sessionId, home)
+    const file = agyTranscriptFile(sessionId, home, appDataDirOf?.(sessionId))
     if (!file) return null
     return readLatestAgyStep(file).catch(() => null)
   }
