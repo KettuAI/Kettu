@@ -4,27 +4,35 @@
 
 import type { AccountStatus, SignedOutReason } from '@shared/account'
 import type { KettuApi } from '@shared/ipc'
-import { generateKeyPair } from '@shared/remote/noise'
+import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import {
   BROWSER_PAIRING_PATH,
   parseBrowserPairingLink,
   type PairingPayload,
 } from '@shared/remote/pairing'
 import type { RelayProblem } from '@shared/remote/hosts'
-import { isOwnRelay } from '@shared/remote/relay'
+import { isOwnRelay, type HostRelay } from '@shared/remote/relay'
 import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
 import type { HostLink, LinkRoute } from '@shared/remote/link'
 import type { Paired, PairFailure, PairProgress } from '@shared/remote/pair'
-import type { PairingNotice } from '../pairing-page'
+import type { DiscoveryPairController, PairingNotice } from '../pairing-page'
 import type { WebSettings } from '../settings'
 import { keepStorage, loadDevice, saveDevice, type WebDevice } from '../storage'
 import { HostedAccount } from './account'
 import { accountUrl, regionListKeys, relayUrl } from './config'
 import { HOSTED_FEATURES, HostedRelay } from './relay-regions'
 import { clearBrowser } from './clear'
+import {
+  listAccountHosts,
+  pairDiscoveredHost,
+  shouldShowHostedPairing,
+  type DiscoveryPairFailure,
+  type DiscoveryPairProgress,
+  type HostedDiscoveredHost,
+} from './discovery'
 import { handPushToOthers } from './push-hosts'
 import {
   currentHost,
@@ -94,6 +102,13 @@ const PAIR_FAILURES: Record<RelayProblem, PairFailure> = {
   wrong_account: 'wrong_account',
   unreachable: 'unreachable',
   signed_out: 'unreachable',
+}
+
+const DISCOVERY_FAILURES: Record<RelayProblem, DiscoveryPairFailure> = {
+  host_offline: 'host_offline',
+  wrong_account: 'wrong_account',
+  unreachable: 'unreachable',
+  signed_out: 'signed_out',
 }
 
 /** A chunk an open page asks for after a newer build replaced it: the page loads again, once. */
@@ -167,8 +182,10 @@ export async function startHosted(base: HostedBase): Promise<void> {
     loadHosts(accountId).catch((): AccountHosts => ({ hosts: [], current: null })),
   ])
   const host = currentHost(hosts)
-  if (payload || !host || !device) return showPairing(base, account, device, hosts, payload)
-  return showApp(base, account, device, hosts, host, null)
+  if (shouldShowHostedPairing(location.pathname, host !== null, device !== null)) {
+    return showPairing(base, account, device, hosts, payload)
+  }
+  return showApp(base, account, device!, hosts, host!, null)
 }
 
 async function showSignIn(
@@ -222,6 +239,36 @@ async function showPairing(
   const accountId = account.accountId!
   const name = deviceName(base.browser)
   const page = createRoot(base.root)
+  let generatedKey: KeyPair | null = null
+  const deviceKey = async (): Promise<KeyPair> => {
+    if (device?.key) return device.key
+    generatedKey ??= await generateKeyPair()
+    return generatedKey
+  }
+  const finishPairing = async (
+    key: KeyPair,
+    hostKey: Uint8Array,
+    fallbackRelay: HostRelay,
+    paired: Paired,
+  ): Promise<true> => {
+    const added: HostedHost = {
+      hostKey,
+      relay: paired.welcome.relay ?? fallbackRelay,
+      name: paired.welcome.host.name,
+      deviceName: paired.welcome.device.name,
+      ...(paired.welcome.account !== undefined ? { account: paired.welcome.account } : {}),
+    }
+    const next = withHost(hosts, added)
+    const kept: WebDevice = { key, host: null }
+    await saveDevice(kept)
+    await saveHosts(accountId, next)
+    void keepStorage()
+    // The code is spent; the address alone opens the app from now on.
+    history.replaceState(null, '', '/')
+    page.unmount()
+    await showApp(base, account, kept, next, added, paired)
+    return true
+  }
   const onPair = async (
     code: PairingPayload,
     progress: (state: PairProgress) => void,
@@ -235,7 +282,7 @@ async function showPairing(
       progress({ state: 'failed', reason: 'own_relay' })
       return false
     }
-    const key = device?.key ?? (await generateKeyPair())
+    const key = await deviceKey()
     const paired = await pair(
       {
         dial: relayDial(
@@ -254,22 +301,74 @@ async function showPairing(
       progress,
     )
     if (!paired) return false
-    const added: HostedHost = {
-      hostKey: code.hostKey,
-      relay: paired.welcome.relay ?? code.relay,
-      name: paired.welcome.host.name,
-      deviceName: paired.welcome.device.name,
+    return finishPairing(key, code.hostKey, code.relay, paired)
+  }
+  const listHosts = (signal?: AbortSignal) => {
+    const relays = relaysOf(account)
+    return listAccountHosts({
+      main: relayUrl,
+      token: () => relays.token(),
+      allowed: (urls) => relays.allowed(urls),
+      paired: hosts.hosts,
+      accountId,
+      isSignedIn: () => account.status().state === 'signed-in',
+      onUnauthorized: () => void account.check(),
+      signal,
+    })
+  }
+  const pairHost = (
+    target: HostedDiscoveredHost,
+    progress: (state: DiscoveryPairProgress) => void,
+  ): DiscoveryPairController => {
+    let cancelled = false
+    let active: ReturnType<typeof pairDiscoveredHost> | null = null
+    const hostRelay: HostRelay = { id: target.relayId, urls: target.relays }
+    const relays = relaysOf(account)
+    const done = (async (): Promise<boolean> => {
+      progress({ state: 'connecting' })
+      const key = await deviceKey()
+      if (cancelled) return false
+      active = pairDiscoveredHost(
+        {
+          host: target,
+          dial: (signal) =>
+            relayDial(
+              hostRelay,
+              () => relays.token(),
+              () => {},
+              relays,
+              signal,
+            )(),
+          key,
+          client: base.client,
+          device: { name, model: base.browser.browser },
+          account: accountId,
+          features: HOSTED_FEATURES,
+          dialFailure: (error) => {
+            if (error instanceof RelayMiss) {
+              if (error.problem === 'wrong_account') void account.check()
+              return DISCOVERY_FAILURES[error.problem]
+            }
+            return null
+          },
+        },
+        progress,
+      )
+      const paired = await active.done
+      if (!paired || cancelled) {
+        paired?.opened.channel.close()
+        return false
+      }
+      return finishPairing(key, target.hostKey, hostRelay, paired)
+    })()
+    return {
+      confirm: () => active?.confirm(),
+      cancel: () => {
+        cancelled = true
+        active?.cancel()
+      },
+      done,
     }
-    const next = withHost(hosts, added)
-    const kept: WebDevice = { key, host: null }
-    await saveDevice(kept)
-    await saveHosts(accountId, next)
-    void keepStorage()
-    // The code is spent; the address alone opens the app from now on.
-    history.replaceState(null, '', '/')
-    page.unmount()
-    await showApp(base, account, kept, next, added, paired)
-    return true
   }
   const shown = device ? currentHost(hosts) : null
   page.render(
@@ -281,6 +380,7 @@ async function showPairing(
         email: account.status().state === 'signed-in' ? accountEmail(account) : '',
         onSwitchAccount: () => void switchAccount(account),
         onBack: shown ? () => location.replace('/') : null,
+        discovery: { list: listHosts, pair: pairHost },
       }}
       onPair={onPair}
     />,
