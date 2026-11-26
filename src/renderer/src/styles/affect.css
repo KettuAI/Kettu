@@ -5596,6 +5596,23 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   line-height: 1.5;
   color: var(--composer-muted);
 }
+.kettu-cache__rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--composer-line);
+  font-size: 12px;
+}
+.kettu-cache__rows dt {
+  color: var(--composer-muted);
+}
+.kettu-cache__rows dd {
+  margin: 0;
+  text-align: right;
+  color: var(--composer-ink);
+}
 .kettu-cache__foot {
   display: flex;
   justify-content: space-between;
