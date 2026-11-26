@@ -98,6 +98,11 @@ export interface SessionView {
    * oldest first. Absent for an agent that reports none.
    */
   background?: BackgroundTaskView[]
+  /**
+   * Ephemeral: the agent finished its reply and is idle waiting for background work (sub-agents,
+   * background commands, or scheduled timers) while its prompt stays open.
+   */
+  waitingBackground?: boolean
   /** Ephemeral: how fast the model writes, for an agent whose stream times its requests. */
   speed?: OutputSpeed
   /** Ephemeral: the main thread's latest request, for an agent whose stream counts its tokens. */

@@ -100,7 +100,8 @@
     "question": "Asks: {{question}}",
     "thinking": "Thinking…",
     "writing": "Writing a reply…",
-    "compacting": "Compacting the context"
+    "compacting": "Compacting the context",
+    "waitingBackground": "Waiting on background tasks"
   },
   "request": {
     "tool": {

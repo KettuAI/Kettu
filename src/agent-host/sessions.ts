@@ -885,6 +885,8 @@ interface Live {
   held: string | null
   /** The agent runs a turn of its own, which shows as the session's once no other turn runs. */
   agentTurn: boolean
+  /** Prevents concurrent auto-steering while the session is waiting on background work. */
+  autoSteering: boolean
   /** Set while it is a prepared session, not yet in the index. */
   prepared: Prepared | null
   /** A run's session: the mode it must start in, its scope, and its first turn's course. */
@@ -3166,10 +3168,16 @@ export class SessionManager {
 
   private update(live: Live, changes: Partial<SessionView>): void {
     if (changes.error) live.errorSeen = this.inFront(live.id)
-    this.emit(live, [{ op: 'session.update', changes }])
-    if ('status' in changes) this.refreshRelease(live)
+    const next =
+      changes.status === 'awaiting_permission' &&
+      live.thread.session.waitingBackground &&
+      !('waitingBackground' in changes)
+        ? { ...changes, waitingBackground: false }
+        : changes
+    this.emit(live, [{ op: 'session.update', changes: next }])
+    if ('status' in next) this.refreshRelease(live)
     // New session shows a prepared session through its summary, not its patches.
-    if (live.prepared && ('config' in changes || 'status' in changes)) this.touch(live.id)
+    if (live.prepared && ('config' in next || 'status' in next)) this.touch(live.id)
   }
 
   private scheduleFlush(live: Live): void {
@@ -3975,6 +3983,7 @@ export class SessionManager {
       scheduled: 0,
       held: null,
       agentTurn: false,
+      autoSteering: false,
       prepared: null,
       routineMode: null,
       routineScope: null,
@@ -4537,6 +4546,9 @@ export class SessionManager {
       case 'scheduled':
         live.scheduled = effect.jobs
         this.refreshRelease(live)
+        break
+      case 'waitingBackground':
+        this.setWaitingBackground(live, effect.waiting)
         break
       case 'tasks':
         this.update(live, { background: effect.tasks })
@@ -5265,6 +5277,9 @@ export class SessionManager {
     this.update(live, { queue: [...queue, { id, content, at: this.now(), kettu: true }] })
     this.persist(live)
     this.touch(live.id)
+    if (queue.length === 0 && !queuePaused && this.canAutoSteer(live)) {
+      void this.drainWaitingQueue(live)
+    }
   }
 
   /**
@@ -7989,6 +8004,7 @@ export class SessionManager {
       context: undefined,
       // The new agent says whether it reports background tasks once it attaches.
       background: undefined,
+      waitingBackground: undefined,
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
       lastRequest: undefined,
@@ -8434,11 +8450,72 @@ export class SessionManager {
       ...(device ? { device } : {}),
       ...(comments ? { comments } : {}),
     }
+    // While the agent is idle waiting on background work, steer the follow-up straight in instead
+    // of flashing it in the queue bar or trapping it behind a prompt held open by background tasks.
+    if (queue.length === 0 && !queuePaused && this.canAutoSteer(live)) {
+      return await this.tryAutoSteer(live, item, portId)
+    }
     if (portId !== undefined) live.queuedBy.set(item.id, portId)
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
     return { itemId: item.id }
+  }
+
+  /**
+   * Steers a new user follow-up directly into an open prompt that is idle waiting on background
+   * work, falling back to the front of the queue if the turn just ended or refused steering.
+   */
+  private async tryAutoSteer(
+    live: Live,
+    item: QueuedPrompt,
+    portId?: string,
+  ): Promise<{ itemId: string | null }> {
+    const queueAtFront = (): { itemId: string | null } => {
+      if (portId !== undefined) live.queuedBy.set(item.id, portId)
+      this.update(live, { queue: [item, ...live.thread.session.queue] })
+      this.persist(live)
+      this.touch(live.id)
+      if (canSend(live.thread.session.status) && !live.thread.session.queuePaused) {
+        this.drainQueue(live)
+        if (!live.thread.session.queue.some((queued) => queued.id === item.id)) {
+          return { itemId: null }
+        }
+      }
+      return { itemId: item.id }
+    }
+    if (!live.turn || live.turn.ended || !live.connection) return queueAtFront()
+    live.autoSteering = true
+    try {
+      const resolved = await this.resolveAttachments(live, item.content)
+      const outcome = await live.connection.steer(live.record.acpSessionId, resolved.wire)
+      if (outcome === 'promptRequired') return queueAtFront()
+      const steered: ThreadEntry = {
+        kind: 'user',
+        id: this.nextId(live),
+        content: resolved.shown,
+        at: this.now(),
+        steered: true,
+        ...(item.device ? { device: item.device } : {}),
+      }
+      this.emit(live, [{ op: 'entry.add', entry: steered }])
+      this.keepOrigin(live, steered)
+      this.commitAttachments(live, resolved)
+      if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
+      if (live.thread.session.waitingBackground) this.update(live, { waitingBackground: false })
+      this.persist(live)
+      this.touch(live.id)
+      this.skipQuestions(live)
+      return { itemId: null }
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id} kept a follow-up queued while waiting on background work: ${String(error)}`,
+      )
+      return queueAtFront()
+    } finally {
+      live.autoSteering = false
+    }
   }
 
   async unqueue(sessionId: string, itemId: string): Promise<void> {
@@ -8510,7 +8587,10 @@ export class SessionManager {
     this.commitAttachments(live, resolved)
     if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
     live.queuedBy.delete(itemId)
-    this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
+    this.update(live, {
+      queue: queue.filter((i) => i.id !== itemId),
+      ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
+    })
     this.persist(live)
     this.touch(live.id)
     this.skipQuestions(live)
@@ -8570,6 +8650,7 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
     this.drainQueue(live)
+    if (this.canAutoSteer(live)) void this.drainWaitingQueue(live)
     this.persist(live)
     this.touch(live.id)
   }
@@ -8678,6 +8759,7 @@ export class SessionManager {
       error: null,
       updatedAt: now,
       ...(live.thread.session.suggestion ? { suggestion: null } : {}),
+      ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
     })
     this.persist(live)
     this.touch(live.id)
@@ -9250,6 +9332,110 @@ export class SessionManager {
   }
 
   /**
+   * Ends streaming on open agent and thought entries without touching in-progress tool calls,
+   * used when an agent finishes speaking and pauses to wait for background tasks.
+   */
+  private closeStreamingEntries(live: Live): void {
+    const now = this.now()
+    const patches: Patch[] = []
+    for (const id of live.thread.order) {
+      const entry = live.thread.byId[id]
+      if ((entry?.kind === 'agent' || entry?.kind === 'thought') && entry.streaming) {
+        const startedAt = live.scope.thoughts.get(id)
+        patches.push({
+          op: 'entry.update',
+          id,
+          changes:
+            entry.kind === 'thought' && startedAt !== undefined
+              ? { streaming: false, durationMs: Math.max(0, now - startedAt) }
+              : { streaming: false },
+        })
+      }
+    }
+    live.scope.thoughts.clear()
+    if (patches.length > 0) this.emit(live, patches)
+  }
+
+  /** Number of pending requests currently blocking the running turn. */
+  private blockingWaitingCount(live: Live): number {
+    const nonBlocking =
+      [...live.permissions.values()].filter((p) => p.nonBlocking).length + live.lateCards.size
+    return Math.max(0, waitingCount(live) - nonBlocking)
+  }
+
+  /** Whether follow-up messages can be steered straight into an open prompt waiting on background work. */
+  private canAutoSteer(live: Live): boolean {
+    return (
+      !live.autoSteering &&
+      live.thread.session.waitingBackground === true &&
+      live.thread.session.status === 'running' &&
+      live.turn !== null &&
+      !live.turn.ended &&
+      live.connection !== null &&
+      this.blockingWaitingCount(live) === 0 &&
+      this.deps.agents.status(live.record.agentId).capabilities.steering
+    )
+  }
+
+  /** Updates whether this running turn is idle waiting on background tasks, sub-agents, or timers. */
+  private setWaitingBackground(live: Live, waiting: boolean): void {
+    if (waiting) {
+      if (
+        !live.turn ||
+        live.turn.ended ||
+        live.thread.session.status !== 'running' ||
+        this.blockingWaitingCount(live) > 0
+      ) {
+        return
+      }
+      this.closeStreamingEntries(live)
+    }
+    if ((live.thread.session.waitingBackground === true) === waiting) return
+    this.update(live, { waitingBackground: waiting })
+    this.touch(live.id)
+    if (waiting) void this.drainWaitingQueue(live)
+  }
+
+  /**
+   * Steers the oldest queued message into a turn that is idle waiting on background work so
+   * follow-ups are not trapped behind an open prompt.
+   */
+  private async drainWaitingQueue(live: Live): Promise<void> {
+    if (live.autoSteering || !this.canAutoSteer(live)) return
+    const { queue, queuePaused } = live.thread.session
+    if (queuePaused || queue.length === 0) return
+    // Drop Kettu's own messages that are no longer due, mirroring drainQueue.
+    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.() !== false)
+    const dropped = start === -1 ? queue : queue.slice(0, start)
+    for (const item of dropped) {
+      live.kettuQueued.delete(item.id)
+      live.queuedBy.delete(item.id)
+    }
+    if (dropped.length > 0) {
+      const kept = queue.slice(dropped.length)
+      this.update(live, { queue: kept, ...(kept.length === 0 ? { queuePaused: false } : {}) })
+      this.persist(live)
+      if (kept.length === 0) {
+        this.touch(live.id)
+        return
+      }
+    }
+    const next = live.thread.session.queue[0]
+    if (!next) return
+    live.autoSteering = true
+    try {
+      await this.steerItem(live, next.id)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id} kept queued message while waiting on background work: ${String(error)}`,
+      )
+    } finally {
+      live.autoSteering = false
+    }
+  }
+
+  /**
    * Ends streaming on the turn's messages, closes open thoughts and stops unfinished tools, but for
    * the calls of commands that run on past the turn.
    */
@@ -9307,6 +9493,7 @@ export class SessionManager {
     // A turn ended by an error has no stop reason; its failure sets the ending.
     if (stopReason) live.record.lastTurn = { reason: stopReason, endedAt: this.now() }
     this.closeOpenEntries(live)
+    if (live.thread.session.waitingBackground) this.update(live, { waitingBackground: false })
     live.activity.clear()
     this.clearPermissions(live, 'cancelled', true)
     const byAgent = live.archiveAfterTurn
@@ -10427,7 +10614,12 @@ export class SessionManager {
     live.background = false
     live.backgroundListed = false
     live.scheduled = 0
-    if (live.thread.session.background?.length) this.update(live, { background: [] })
+    if (live.thread.session.background?.length || live.thread.session.waitingBackground) {
+      this.update(live, {
+        ...(live.thread.session.background?.length ? { background: [] } : {}),
+        ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
+      })
+    }
     this.showStillRunning(live)
   }
 
@@ -11248,8 +11440,12 @@ export class SessionManager {
         },
       ])
       const status = live.thread.session.status
-      if (!request.nonBlocking && (status === 'running' || status === 'ready'))
-        this.update(live, { status: 'awaiting_permission' })
+      if (!request.nonBlocking && (status === 'running' || status === 'ready')) {
+        this.update(live, {
+          status: 'awaiting_permission',
+          ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
+        })
+      }
       this.touch(live.id)
       this.updateBadge()
       const entry = live.thread.byId[request.toolEntryId]
@@ -11385,9 +11581,7 @@ export class SessionManager {
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
-    const nonBlocking =
-      [...live.permissions.values()].filter((p) => p.nonBlocking).length + live.lateCards.size
-    if (waitingCount(live) - nonBlocking > 0) return
+    if (this.blockingWaitingCount(live) > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }
@@ -11547,7 +11741,12 @@ export class SessionManager {
     if (approval && live.record.origin === 'task') {
       this.deps.task?.current?.turnStarted(live.id, { byUser: false })
     }
-    if (!options?.now) return
+    if (!options?.now) {
+      if (queue.length === 0 && !live.thread.session.queuePaused && this.canAutoSteer(live)) {
+        void this.drainWaitingQueue(live)
+      }
+      return
+    }
     // A turn that cannot take it leaves the message in the queue, which goes when the turn ends.
     this.steerItem(live, item.id).catch((error: unknown) => {
       this.deps.diagnostics.log(
@@ -12237,15 +12436,23 @@ export class SessionManager {
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
-    if (!now || !working) return { delivered: 'queued' }
+    const autoSteer = !now && queue.length === 0 && !queuePaused && this.canAutoSteer(live)
+    if ((!now && !autoSteer) || !working) return { delivered: 'queued' }
     // Queued first, so a prompt that cannot go in now still goes once the turn ends.
+    if (autoSteer) live.autoSteering = true
     try {
-      const delivered = await this.sendItemNow(live, item.id)
+      const delivered = autoSteer
+        ? (await this.steerItem(live, item.id))
+          ? 'steered'
+          : 'queued'
+        : await this.sendItemNow(live, item.id)
       return delivered === 'queued' ? { delivered, reason: 'its turn was ending' } : { delivered }
     } catch (error) {
       const reason = (error as Error).message
       this.deps.diagnostics.log('warn', `Could not send a session's message now: ${reason}`)
       return { delivered: 'queued', reason }
+    } finally {
+      if (autoSteer) live.autoSteering = false
     }
   }
 
@@ -12317,6 +12524,9 @@ export class SessionManager {
     this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now(), from }] })
     this.persist(live)
     this.touch(live.id)
+    if (queue.length === 0 && !live.thread.session.queuePaused && this.canAutoSteer(live)) {
+      void this.drainWaitingQueue(live)
+    }
   }
 
   /** A message from the user does not bring an archived session back; restoring it does. */

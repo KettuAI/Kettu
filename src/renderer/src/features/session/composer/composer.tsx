@@ -196,6 +196,8 @@ export function Composer({
   const starting = status === 'starting'
   const running = status === 'running' || status === 'awaiting_permission'
   const awaiting = status === 'awaiting_permission'
+  // Agent finished replying and is only waiting on background work; follow-ups go straight in.
+  const waitingBackground = status === 'running' && session.waitingBackground === true && steering
   // A terminal that has the session open writes to it, so nothing is sent until it lets go.
   const heldOutside = session.heldOutside === true
   // A closed session attaches to its agent as the message goes.
@@ -325,7 +327,9 @@ export function Composer({
   const send = (now = { canSend, canQueue }) => {
     if (askBeside()) return
     if (pending && now.canSend) handOver()
-    else if (now.canSend || now.canQueue) queue(now.canQueue && steerDefault, now.canSend)
+    else if (now.canSend || now.canQueue) {
+      queue(now.canQueue && !waitingBackground && steerDefault, now.canSend || waitingBackground)
+    }
   }
   const blockedEnter = useBlockedEnter({
     reason: unsendable,
@@ -533,7 +537,7 @@ export function Composer({
       event.preventDefault()
       return
     }
-    if (running && steering && secondary) {
+    if (running && steering && !waitingBackground && secondary) {
       event.preventDefault()
       if (now.canQueue) queue(!steerDefault)
       return
@@ -566,19 +570,25 @@ export function Composer({
             )
           : !running && rejected
             ? t('prompt.placeholder.denied')
-            : running
+            : waitingBackground
               ? t(
-                  steerDefault
-                    ? phone
-                      ? 'prompt.placeholder.runningSteerTouch'
-                      : 'prompt.placeholder.runningSteer'
-                    : phone
-                      ? 'prompt.placeholder.runningTouch'
-                      : 'prompt.placeholder.runningQueue',
+                  phone
+                    ? 'prompt.placeholder.waitingBackgroundTouch'
+                    : 'prompt.placeholder.waitingBackground',
                 )
-              : taskRunning
-                ? t('prompt.placeholder.taskRunning')
-                : idleLine
+              : running
+                ? t(
+                    steerDefault
+                      ? phone
+                        ? 'prompt.placeholder.runningSteerTouch'
+                        : 'prompt.placeholder.runningSteer'
+                      : phone
+                        ? 'prompt.placeholder.runningTouch'
+                        : 'prompt.placeholder.runningQueue',
+                  )
+                : taskRunning
+                  ? t('prompt.placeholder.taskRunning')
+                  : idleLine
   // A phone has no Tab to take it with.
   const suggestion =
     placeholder === idleLine && idle && !phone ? (session.suggestion ?? null) : null
@@ -606,6 +616,8 @@ export function Composer({
   const sendControl =
     running && !holdsMessage ? (
       <StopButton onStop={cancel} />
+    ) : waitingBackground && canQueue ? (
+      <SendButton key="send" disabled={false} label={t('prompt.send')} onClick={() => send()} />
     ) : running && canQueue ? (
       <QueueButton
         steering={steering}

@@ -2026,3 +2026,236 @@ describe('agy 托管 Auto 模式、本会话总是允许与插件预检', () => 
     connection.close()
   })
 })
+
+describe("agy's waiting-on-background detection", () => {
+  function waitingAgy(version = '1.5.18') {
+    const prompts: string[] = []
+    let client: AgentContext | null = null
+    let running: ((reason: 'end_turn' | 'cancelled') => void) | null = null
+    const app = agent({ name: 'agy-bg-wait' })
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {} } },
+        agentInfo: { name: 'Antigravity ACP Server', version },
+        authMethods: [],
+      }))
+      .onRequest(methods.agent.session.new, () => ({ sessionId: 's-bg' }))
+      .onRequest(methods.agent.session.prompt, async (ctx) => {
+        const [block] = ctx.params.prompt
+        prompts.push(block?.type === 'text' ? block.text : '')
+        client = ctx.client
+        running?.('end_turn')
+        const stopReason = await new Promise<'end_turn' | 'cancelled'>((resolve) => {
+          running = resolve
+        })
+        return { stopReason }
+      })
+      .onNotification(methods.agent.session.cancel, () => {
+        running?.('cancelled')
+        running = null
+      })
+
+    const connection = AcpConnection.connect(inProcessTransport(app), {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+      agentId: 'antigravity',
+      name: 'Google Antigravity',
+      agyTailReader: async () => null,
+      agyWaitSettleMs: 15,
+      agyWaitFallbackMs: 2_000,
+    })
+
+    return {
+      connection,
+      prompts,
+      notify: (payload: Record<string, unknown>) =>
+        client!.notify(methods.client.session.update, update('s-bg', payload)),
+      askPermission: (toolCall: Record<string, unknown>) =>
+        client!.request(methods.client.session.requestPermission, {
+          sessionId: 's-bg',
+          toolCall,
+          options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+        } as never),
+      end: () => {
+        running?.('end_turn')
+        running = null
+      },
+    }
+  }
+
+  it('signals waitingBackground once a reply settles while background work holds session/prompt open, and starts a fresh entry on wakeup', async () => {
+    const agy = waitingAgy('1.5.18')
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const waitingChanges: boolean[] = []
+    const target: SessionTarget = {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'waitingBackground') {
+            waitingChanges.push(effect.waiting)
+            // Mirror Sessions.setWaitingBackground settling streaming entries.
+            if (effect.waiting) {
+              const settled = base
+                .entries()
+                .filter((entry) => entry.kind === 'agent' && entry.streaming)
+                .map((entry) => ({
+                  op: 'entry.update' as const,
+                  id: entry.id,
+                  changes: { streaming: false },
+                }))
+              if (settled.length > 0) base.target.apply({ patches: settled, effects: [] })
+            }
+          }
+        }
+      },
+    }
+    agy.connection.register(sessionId, target)
+
+    const turn = agy.connection.prompt(sessionId, text('run background work'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['run background work']))
+
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Started in the background.' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1000, size: 100_000 })
+
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true]))
+
+    // A later background wakeup clears waitingBackground and opens a separate agent entry.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Background task finished.' },
+    })
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true, false]))
+
+    agy.end()
+    await turn
+
+    const replies = base
+      .entries()
+      .filter((entry): entry is Extract<ThreadEntry, { kind: 'agent' }> => entry.kind === 'agent')
+    expect(replies.map((entry) => entry.markdown)).toEqual([
+      'Started in the background.',
+      'Background task finished.',
+    ])
+    agy.connection.close()
+  })
+
+  it('does not trigger waitingBackground during hidden tool steps or open permission cards, and clears immediately on steer', async () => {
+    const agy = waitingAgy('1.5.18')
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const waitingChanges: boolean[] = []
+    let releaseCard!: () => void
+    const target: SessionTarget = {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'waitingBackground') waitingChanges.push(effect.waiting)
+        }
+      },
+      requestPermission: async (request) => {
+        base.target.apply(request.output)
+        await new Promise<void>((resolve) => {
+          releaseCard = resolve
+        })
+        return { optionId: 'allow' }
+      },
+    }
+    agy.connection.register(sessionId, target)
+
+    const turn = agy.connection.prompt(sessionId, text('start'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['start']))
+
+    // Hidden internal tool call in the same step must count as a tool step and not enter waiting.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Thinking…' },
+    })
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'hidden-1',
+      name: 'mcp_kettu_suggest_next_message',
+      kind: 'other',
+      status: 'pending',
+      title: 'suggest_next_message',
+      rawInput: { message: 'continue' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1200, size: 100_000 })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(waitingChanges).toEqual([])
+
+    // An open permission card also suppresses waitingBackground.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Need permission.' },
+    })
+    const card = agy.askPermission({
+      toolCallId: 'perm-1',
+      name: 'run_command',
+      kind: 'execute',
+      status: 'pending',
+      title: 'Run shell',
+      rawInput: { CommandLine: 'echo hi' },
+    })
+    await vi.waitFor(() => expect(releaseCard).toBeDefined())
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1400, size: 100_000 })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(waitingChanges).toEqual([])
+    releaseCard()
+    await card
+
+    // Now finish with a plain reply (no tools) -> enters waitingBackground, then steer clears it.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Waiting on timer.' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1600, size: 100_000 })
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true]))
+
+    await expect(agy.connection.steer(sessionId, text('follow up'))).resolves.toBe('injected')
+    expect(waitingChanges).toEqual([true, false])
+
+    agy.end()
+    await turn
+    agy.connection.close()
+  })
+
+  it('does not enable background-wait detection before agy 1.5.15', async () => {
+    const agy = waitingAgy('1.5.14')
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const waitingChanges: boolean[] = []
+    agy.connection.register(sessionId, {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'waitingBackground') waitingChanges.push(effect.waiting)
+        }
+      },
+    })
+
+    const turn = agy.connection.prompt(sessionId, text('start'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['start']))
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Done.' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 900, size: 100_000 })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(waitingChanges).toEqual([])
+    agy.end()
+    await turn
+    agy.connection.close()
+  })
+})

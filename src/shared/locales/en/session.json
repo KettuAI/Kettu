@@ -999,6 +999,7 @@
       "compacting": "Compacting context",
       "approval": "Waiting for your approval",
       "question": "Waiting for your answer",
+      "waiting_background": "Waiting on background tasks",
       "working": "Working"
     },
     "resume": "Resume",

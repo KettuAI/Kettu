@@ -117,6 +117,7 @@ import {
   buildSessionGrantOption,
   evaluateAgyPermission,
 } from './agy-auto-policy'
+import { AgyBackgroundWait, agyTailReader, type AgyTailReader } from './agy-background-wait'
 import { AgyCommands } from './agy-commands'
 import { AgyContextEstimator } from './agy-context'
 import { AgyMetrics, agyStepReader, type AgyStepReader } from './agy-metrics'
@@ -222,6 +223,12 @@ export interface AcpOptions {
   agyStepReader?: AgyStepReader
   /** agy 上下文定义估算器，便于单元测试注入。 */
   agyContext?: AgyContextEstimator
+  /** Optional agy transcript tail reader for background-wait detection, injectable for tests. */
+  agyTailReader?: AgyTailReader | null
+  /** Optional settle delay (ms) for agy background-wait detection, injectable for tests. */
+  agyWaitSettleMs?: number
+  /** Optional fallback quiet delay (ms) for agy background-wait detection, injectable for tests. */
+  agyWaitFallbackMs?: number
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -488,6 +495,8 @@ export class AcpConnection implements AgentConnection {
   private readonly muted = new Set<string>()
   /** agy 会话的单步请求计时器，结合 transcript.jsonl 输出 TPS 与最近一次请求统计。 */
   private readonly agyMetrics: AgyMetrics | null = null
+  /** Detects when agy finished replying and is idle waiting on background work. */
+  private agyWait: AgyBackgroundWait | null = null
   /** 仅在 Antigravity 连接上挂载：估算当前会话可加载的 Skills 与 MCP 工具定义大小。 */
   readonly readContextEstimates?: (sessionId: string, cwd: string) => Promise<ContextEstimates>
 
@@ -580,21 +589,27 @@ export class AcpConnection implements AgentConnection {
           if (insertAt >= 0) options.splice(insertAt + 1, 0, sessionOption)
           else options.unshift(sessionOption)
         }
-        const answer = await target.requestPermission(
-          {
-            toolCallId: ctx.params.toolCall.toolCallId,
-            toolEntryId: entryId,
-            output,
-            options,
-            ...(agyDecision?.action === 'ask'
-              ? {
-                  risk: agyDecision.risk,
-                  ...(agyDecision.reason ? { reason: agyDecision.reason } : {}),
-                }
-              : {}),
-          },
-          ctx.signal,
-        )
+        this.agyWait?.onCardStart(ctx.params.sessionId)
+        let answer: PermissionAnswer
+        try {
+          answer = await target.requestPermission(
+            {
+              toolCallId: ctx.params.toolCall.toolCallId,
+              toolEntryId: entryId,
+              output,
+              options,
+              ...(agyDecision?.action === 'ask'
+                ? {
+                    risk: agyDecision.risk,
+                    ...(agyDecision.reason ? { reason: agyDecision.reason } : {}),
+                  }
+                : {}),
+            },
+            ctx.signal,
+          )
+        } finally {
+          this.agyWait?.onCardEnd(ctx.params.sessionId)
+        }
         const picked = optionAnswer(answer)
         if (picked === 'cancelled') return { outcome: { outcome: 'cancelled' } }
         // 用户点击 Kettu 合成的「本会话总是允许」时记住授权，并把原 allow_once ID 回传给 agy。
@@ -614,11 +629,16 @@ export class AcpConnection implements AgentConnection {
         const sessionId = (ctx.params as { sessionId?: unknown }).sessionId
         // agy's questions are shown in the question card, in the session they were asked in.
         const asked = typeof sessionId === 'string' ? this.targets.get(sessionId) : undefined
-        if (this.agy && asksQuestions(this.version) && asked) {
-          const answer = await this.openAsks.run(ctx.params, ctx.signal, (signal) =>
-            askInCard(ctx.params, asked, signal),
-          )
-          if (answer) return answer
+        if (this.agy && asksQuestions(this.version) && asked && typeof sessionId === 'string') {
+          this.agyWait?.onCardStart(sessionId)
+          try {
+            const answer = await this.openAsks.run(ctx.params, ctx.signal, (signal) =>
+              askInCard(ctx.params, asked, signal),
+            )
+            if (answer) return answer
+          } finally {
+            this.agyWait?.onCardEnd(sessionId)
+          }
         }
         // Otherwise only a sign-in's page is taken, on the client that asked for that sign-in.
         const page = requestUrlElicitation(ctx.params)
@@ -803,6 +823,7 @@ export class AcpConnection implements AgentConnection {
     if (target) {
       this.notePlanWrite(sessionId, update)
       const replaying = target.context().replaying
+      this.agyWait?.onUpdate(sessionId, update, replaying)
       target.apply(this.withAccess(sessionId, this.map(update, target.context())))
       this.noteCommand(sessionId, update, target)
       this.subagents?.noted(sessionId, update, replaying)
@@ -902,6 +923,7 @@ export class AcpConnection implements AgentConnection {
     this.agyBuildModes.delete(sessionId)
     this.agyCommands.delete(sessionId)
     this.agyMetrics?.forget(sessionId)
+    this.agyWait?.forget(sessionId)
     this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -927,6 +949,7 @@ export class AcpConnection implements AgentConnection {
 
   close(): void {
     this.agyMetrics?.stop()
+    this.agyWait?.stop()
     this.connection.close()
     this.transport.close()
   }
@@ -1048,6 +1071,28 @@ export class AcpConnection implements AgentConnection {
     if (this.subagents) {
       const subagents = this.subagents
       void this.connection.closed.then(() => subagents.stop())
+    }
+    this.agyWait?.stop()
+    this.agyWait =
+      this.agy && steersAgy(result.version)
+        ? new AgyBackgroundWait({
+            tailReader:
+              this.hooks.agyTailReader !== undefined
+                ? this.hooks.agyTailReader
+                : agyTailReader(this.hooks.home),
+            settleMs: this.hooks.agyWaitSettleMs,
+            fallbackMs: this.hooks.agyWaitFallbackMs,
+            onWaitingChange: (sessionId, waiting) => {
+              this.targets.get(sessionId)?.apply({
+                patches: [],
+                effects: [{ kind: 'waitingBackground', waiting }],
+              })
+            },
+          })
+        : null
+    if (this.agyWait) {
+      const wait = this.agyWait
+      void this.connection.closed.then(() => wait.stop())
     }
     return result
   }
@@ -1261,6 +1306,7 @@ export class AcpConnection implements AgentConnection {
     this.subagentParents.delete(sessionId)
     this.subagents?.forget(sessionId)
     this.agyMetrics?.forget(sessionId)
+    this.agyWait?.forget(sessionId)
     this.chunkUsage.delete(sessionId)
     this.gooseCalls.delete(sessionId)
   }
@@ -1298,6 +1344,10 @@ export class AcpConnection implements AgentConnection {
       this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
     }
     this.prompting.add(sessionId)
+    this.agyWait?.onPromptStart(
+      sessionId,
+      this.targets.get(sessionId)?.context().thread.session.usage?.used ?? null,
+    )
     this.chunkUsage.delete(sessionId)
     this.gooseCalls.delete(sessionId)
     let answer: ChainAnswer | null = null
@@ -1328,6 +1378,7 @@ export class AcpConnection implements AgentConnection {
       throw error
     } finally {
       this.prompting.delete(sessionId)
+      this.agyWait?.onPromptEnd(sessionId)
       chunked = this.chunkUsage.get(sessionId) ?? null
       this.chunkUsage.delete(sessionId)
       called = this.gooseCalls.get(sessionId)?.tokens ?? null
@@ -1564,7 +1615,11 @@ export class AcpConnection implements AgentConnection {
     if (this.agy && steersAgy(this.version)) {
       // agy takes the message as a prompt of its own, which ends the one before it.
       const chain = this.chains.get(sessionId)
-      return chain ? chain.steer(() => this.sendPrompt(sessionId, prompt)) : 'promptRequired'
+      if (!chain) return 'promptRequired'
+      const before = this.agyWait?.generationOf(sessionId)
+      const outcome = await chain.steer(() => this.sendPrompt(sessionId, prompt))
+      if (outcome === 'injected') this.agyWait?.onSteered(sessionId, before)
+      return outcome
     }
     const response = await this.call(() =>
       this.connection.agent.request<{ outcome?: unknown }>('_session/steering', {

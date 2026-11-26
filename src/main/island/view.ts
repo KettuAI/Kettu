@@ -440,6 +440,7 @@ const PHASES: Record<TurnPhase['phase'], IslandPhase | null> = {
   edit: 'edit',
   writing: 'write',
   compacting: 'compact',
+  waiting_background: 'think',
   working: 'execute',
   approval: null,
   question: null,
@@ -466,6 +467,7 @@ function phaseOf(summary: SessionSummary): IslandPhase {
 function runningLine(summary: SessionSummary): string {
   const phase = phaseOf(summary)
   if (phase === 'compact') return islandT('line.compacting')
+  if (summary.phase === 'waiting_background') return islandT('line.waitingBackground')
   if (summary.activity) return activityLine(summary.activity, summary.projectPath)
   if (phase === 'think') return islandT('line.thinking')
   if (phase === 'write') return islandT('line.writing')
