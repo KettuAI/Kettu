@@ -610,6 +610,7 @@ export interface AgentStatus {
   capabilities: {
     loadSession: boolean
     listSessions: boolean
+    listAllSessions?: boolean // lists sessions across every folder, for moved/worktree imports
     resumeSession: boolean
     closeSession: boolean
     deleteSession: boolean
@@ -1088,6 +1089,10 @@ export interface ImportableSession {
   title: string | null
   updatedAt: string | null
   imported: boolean // already in the session index
+  /** Original working directory the agent recorded for this session, when known. */
+  cwd?: string | null
+  /** Kettu project path this session is already imported under, when already in Kettu. */
+  importedProjectPath?: string | null
   /** Its prompt cache as its last request left it, for a Claude Code session used in the last hour. */
   cache?: PromptCache | null
   /** A Claude Code process outside Kettu, such as a terminal, still has it open. */
@@ -1213,7 +1218,7 @@ export interface HostContract {
   }
   'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.listSessions': {
-    params: { agentId: AgentId; projectPath: string; cursor?: string }
+    params: { agentId: AgentId; projectPath: string; cursor?: string; allFolders?: boolean }
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }

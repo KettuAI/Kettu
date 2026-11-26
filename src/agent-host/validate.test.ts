@@ -619,6 +619,12 @@ describe('createValidators', () => {
     expect(
       posix['agents.listSessions']({ agentId: 'codex', projectPath: '/p', cursor: '10' }),
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
+    expect(
+      posix['agents.listSessions']({ agentId: 'codex', projectPath: '/p', allFolders: true }),
+    ).toEqual({ agentId: 'codex', projectPath: '/p', allFolders: true })
+    expect(
+      posix['agents.listSessions']({ agentId: 'codex', projectPath: '/p', allFolders: 'yes' }),
+    ).toEqual({ agentId: 'codex', projectPath: '/p' })
   })
 
   it('takes only positions and records that a page of requests gave', () => {

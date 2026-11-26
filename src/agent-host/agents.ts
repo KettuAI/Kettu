@@ -6044,6 +6044,10 @@ export class AgentManager {
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,
+        ...(capabilities?.listAllSessions ||
+        (capabilities?.listSessions && slot.def.protocol === 'codex-app-server')
+          ? { listAllSessions: true }
+          : {}),
         resumeSession: capabilities?.resumeSession ?? false,
         closeSession: capabilities?.closeSession ?? false,
         deleteSession: capabilities?.deleteSession ?? false,

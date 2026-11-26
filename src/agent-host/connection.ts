@@ -157,6 +157,8 @@ export interface AgentInit {
   capabilities: {
     loadSession: boolean
     listSessions: boolean
+    /** Can list sessions across every folder when `listSessions` receives a null `cwd`. */
+    listAllSessions?: boolean
     resumeSession: boolean
     closeSession: boolean
     deleteSession: boolean
@@ -508,7 +510,7 @@ export interface AgentConnection {
   closeSession(sessionId: string): Promise<void>
   deleteSession(sessionId: string): Promise<void>
   listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }>
   /** A copy of a session under a new id, written from the original without opening it. */

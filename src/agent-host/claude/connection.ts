@@ -851,9 +851,10 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   async listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }> {
+    if (cwd === null) return { sessions: [], nextCursor: null }
     const sdk = this.requireSdk()
     const offset = Math.max(0, Number(cursor ?? 0) || 0)
     const infos = await this.withConfigDir(() =>

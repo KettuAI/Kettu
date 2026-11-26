@@ -680,6 +680,50 @@ describe('sessions', () => {
     })
   })
 
+  it('lists threads across all folders when cwd is null and preserves each original cwd', async () => {
+    const { server, connection, init } = await connect()
+    expect(init.capabilities.listAllSessions).toBe(true)
+    server.on('thread/list', () => ({
+      data: [
+        {
+          ...threadResponse('moved-1').thread,
+          cwd: '/old/moved-repo',
+          name: 'Legacy work',
+          updatedAt: 1_800_000_000,
+        },
+        {
+          ...threadResponse('wt-1').thread,
+          cwd: '/worktrees/feat-auth',
+          preview: 'Worktree session',
+          updatedAt: 1_800_000_060,
+        },
+      ],
+      nextCursor: null,
+    }))
+    expect(await connection.listSessions(null, null)).toEqual({
+      sessions: [
+        {
+          sessionId: 'moved-1',
+          title: 'Legacy work',
+          updatedAt: '2027-01-15T08:00:00.000Z',
+          cwd: '/old/moved-repo',
+        },
+        {
+          sessionId: 'wt-1',
+          title: 'Worktree session',
+          updatedAt: '2027-01-15T08:01:00.000Z',
+          cwd: '/worktrees/feat-auth',
+        },
+      ],
+      nextCursor: null,
+    })
+    expect(server.sent('thread/list')[0]).toEqual({
+      cwd: null,
+      cursor: null,
+      sourceKinds: ['cli', 'vscode', 'exec', 'appServer', 'unknown'],
+    })
+  })
+
   it('unsubscribes on close and deletes for good on delete', async () => {
     const { server, connection } = await connect()
     await connection.closeSession('thread-3')
@@ -1702,6 +1746,66 @@ describe('a replay', () => {
       threadId: 'thread-old',
       excludeTurns: true,
     })
+  })
+
+  it('replays legacy rollouts via thread/read when resuming a moved thread into a target project', async () => {
+    const { server, connection } = await connect()
+    server.on('thread/resume', (params) => {
+      const { threadId, cwd } = params as { threadId: string; cwd: string }
+      const base = threadResponse(threadId)
+      return {
+        ...base,
+        cwd,
+        thread: { ...base.thread, cwd, historyMode: 'legacy' },
+      }
+    })
+    server.on('thread/items/list', () => {
+      throw new FakeRpcError(-32601, 'thread/items/list is not supported yet')
+    })
+    server.on('thread/read', () => ({
+      thread: {
+        ...threadResponse('thread-moved').thread,
+        cwd: '/new/target-project',
+        historyMode: 'legacy',
+        turns: [
+          {
+            id: 'turn-1',
+            status: 'completed',
+            error: null,
+            items: [
+              {
+                type: 'userMessage',
+                id: 'u1',
+                content: [{ type: 'text', text: 'Inspect moved repo', text_elements: [] }],
+              },
+              {
+                type: 'agentMessage',
+                id: 'a1',
+                text: 'History preserved.',
+                phase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+    }))
+
+    const t = threadTarget()
+    t.state.replaying = true
+    connection.register('thread-moved', t.target)
+    await connection.loadSession('thread-moved', '/new/target-project')
+
+    expect(server.sent('thread/resume')[0]).toMatchObject({
+      threadId: 'thread-moved',
+      cwd: '/new/target-project',
+    })
+    expect(server.sent('thread/read')[0]).toEqual({
+      threadId: 'thread-moved',
+      includeTurns: true,
+    })
+    const [user, agent] = t.entries()
+    expect(user).toMatchObject({ kind: 'user', id: 'm:u1' })
+    expect(agent).toMatchObject({ kind: 'agent', markdown: 'History preserved.', streaming: false })
   })
 })
 

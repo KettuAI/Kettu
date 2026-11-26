@@ -587,9 +587,10 @@ export class PiConnection implements AgentConnection {
   }
 
   async listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }> {
+    if (cwd === null) return { sessions: [], nextCursor: null }
     const real = await realpath(cwd).catch(() => cwd)
     const all = await listSessionFiles(await this.piFolders(), real, this.dirOf(cwd, real))
     const offset = cursor ? Number.parseInt(cursor, 10) : 0

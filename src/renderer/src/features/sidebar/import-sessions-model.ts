@@ -3,7 +3,10 @@ import type { AgentId } from '@shared/thread'
 import { monthDay } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 
-/** One agent's sessions for the folder, as far as its pages have come. */
+/** Whether the dialog shows sessions matching the target project folder or every folder. */
+export type ImportScope = 'project' | 'all'
+
+/** One agent's sessions for a scope, as far as its pages have come. */
 export interface AgentList {
   sessions: ImportableSession[]
   nextCursor: string | null
@@ -12,6 +15,15 @@ export interface AgentList {
 }
 
 export type AgentLists = Partial<Record<AgentId, AgentList>>
+
+export interface ScopedAgentLists {
+  project: AgentLists
+  all: AgentLists
+}
+
+export function emptyScopedLists(): ScopedAgentLists {
+  return { project: {}, all: {} }
+}
 
 /** A listed session's key in the selection; two agents may use the same session id. */
 export function importKey(agentId: AgentId, acpSessionId: string): string {
@@ -23,12 +35,60 @@ export function listed(list: AgentList | undefined): list is AgentList {
   return !!list && !list.error && !(list.loading && list.sessions.length === 0)
 }
 
+/** Appends a page of sessions without duplicating any `acpSessionId` already shown. */
+export function appendSessions(
+  existing: readonly ImportableSession[],
+  incoming: readonly ImportableSession[],
+): ImportableSession[] {
+  if (existing.length === 0) return [...incoming]
+  const seen = new Set(existing.map((s) => s.acpSessionId))
+  const extra = incoming.filter((s) => !seen.has(s.acpSessionId))
+  return extra.length === 0 ? [...existing] : [...existing, ...extra]
+}
+
+/** Normalizes a folder path for equality checks across separators and trailing slashes. */
+function folderKey(value: string): string {
+  const trimmed = value.length > 1 ? value.replace(/[\\/]+$/, '') : value
+  // Windows drive and UNC paths are case-insensitive.
+  if (/^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith('\\\\')) {
+    return trimmed.replace(/\//g, '\\').toLowerCase()
+  }
+  return trimmed
+}
+
+/** Whether two folder paths refer to the same directory. */
+export function sameFolder(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  return folderKey(a) === folderKey(b)
+}
+
+/** Shortens POSIX home prefixes for compact display while keeping the path recognizable. */
+export function formatImportCwd(cwd: string): string {
+  const trimmed = cwd.length > 1 ? cwd.replace(/[\\/]+$/, '') : cwd
+  return trimmed.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~')
+}
+
+/** Filters listed sessions by title or original working directory (all space-separated terms). */
+export function filterImportSessions(
+  sessions: readonly ImportableSession[],
+  query: string,
+): ImportableSession[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return [...sessions]
+  return sessions.filter((s) => {
+    const haystack = [s.title ?? '', s.cwd ?? '', s.cwd ? formatImportCwd(s.cwd) : '']
+      .join('\n')
+      .toLowerCase()
+    return words.every((word) => haystack.includes(word))
+  })
+}
+
 /**
- * The keys of a list's sessions that are not in Kettu yet, in its order; one a terminal still has
- * open is left out, since it cannot be attached.
+ * The keys of the sessions that are not in Kettu yet, in order; one a terminal still has open is
+ * left out, since it cannot be attached.
  */
-export function importableKeys(agentId: AgentId, list: AgentList | undefined): string[] {
-  return (list?.sessions ?? [])
+export function importableKeys(agentId: AgentId, sessions: readonly ImportableSession[]): string[] {
+  return sessions
     .filter((s) => !s.imported && !s.held)
     .map((s) => importKey(agentId, s.acpSessionId))
 }
@@ -61,20 +121,39 @@ export interface SourceCount {
   empty: boolean
 }
 
+/** Count of selected sessions for an agent across both scopes, deduplicated by session id. */
+export function selectedCountForAgent(
+  agentId: AgentId,
+  scoped: ScopedAgentLists,
+  selected: ReadonlySet<string>,
+): number {
+  const seen = new Set<string>()
+  for (const scope of ['project', 'all'] as const) {
+    for (const s of scoped[scope][agentId]?.sessions ?? []) {
+      if (!s.imported && selected.has(importKey(agentId, s.acpSessionId))) {
+        seen.add(s.acpSessionId)
+      }
+    }
+  }
+  return seen.size
+}
+
 /** A source's counts, or null while its list is not known. */
 export function sourceCount(
   agentId: AgentId,
   list: AgentList | undefined,
   selected: ReadonlySet<string>,
+  selectedOverride?: number,
 ): SourceCount | null {
   if (!listed(list)) return null
-  const keys = importableKeys(agentId, list)
+  const keys = importableKeys(agentId, list.sessions)
   const more = list.nextCursor !== null || list.loading
+  const picked = selectedOverride ?? keys.filter((key) => selected.has(key)).length
   return {
-    importable: keys.length,
-    selected: keys.filter((key) => selected.has(key)).length,
+    importable: Math.max(keys.length, picked),
+    selected: picked,
     more,
-    empty: list.sessions.length === 0 && !more,
+    empty: list.sessions.length === 0 && !more && picked === 0,
   }
 }
 
@@ -97,35 +176,50 @@ export function withKeys(
   return next
 }
 
-/** The selected sessions still to import, in the tabs' order, then each list's. */
+/** The selected sessions still to import, in the tabs' order, deduplicated across scopes. */
 export function selectedSessions(
   agents: readonly AgentId[],
-  lists: AgentLists,
+  scoped: ScopedAgentLists,
   selected: ReadonlySet<string>,
 ): { agentId: AgentId; acpSessionId: string }[] {
-  return agents.flatMap((agentId) =>
-    (lists[agentId]?.sessions ?? [])
-      .filter((s) => !s.imported && selected.has(importKey(agentId, s.acpSessionId)))
-      .map((s) => ({ agentId, acpSessionId: s.acpSessionId })),
-  )
+  const out: { agentId: AgentId; acpSessionId: string }[] = []
+  const seen = new Set<string>()
+  for (const agentId of agents) {
+    for (const scope of ['project', 'all'] as const) {
+      for (const s of scoped[scope][agentId]?.sessions ?? []) {
+        const key = importKey(agentId, s.acpSessionId)
+        if (s.imported || !selected.has(key) || seen.has(key)) continue
+        seen.add(key)
+        out.push({ agentId, acpSessionId: s.acpSessionId })
+      }
+    }
+  }
+  return out
 }
 
-/** The lists with one session marked as imported. */
+/** Marks one session as imported across both scopes of `scoped`. */
 export function markImported(
-  lists: AgentLists,
+  scoped: ScopedAgentLists,
   agentId: AgentId,
   acpSessionId: string,
-): AgentLists {
-  const list = lists[agentId]
-  if (!list) return lists
+  importedProjectPath: string,
+): ScopedAgentLists {
+  const mark = (lists: AgentLists): AgentLists => {
+    const list = lists[agentId]
+    if (!list) return lists
+    return {
+      ...lists,
+      [agentId]: {
+        ...list,
+        sessions: list.sessions.map((s) =>
+          s.acpSessionId === acpSessionId ? { ...s, imported: true, importedProjectPath } : s,
+        ),
+      },
+    }
+  }
   return {
-    ...lists,
-    [agentId]: {
-      ...list,
-      sessions: list.sessions.map((s) =>
-        s.acpSessionId === acpSessionId ? { ...s, imported: true } : s,
-      ),
-    },
+    project: mark(scoped.project),
+    all: mark(scoped.all),
   }
 }
 

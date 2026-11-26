@@ -1352,7 +1352,10 @@ export class SessionManager {
   private readonly summaryFailedAt = new Map<string, number>()
   /** The last `seq` of sessions that are not live, so a reopened session continues it. */
   private readonly seqs = new Map<string, number>()
-  private readonly listed = new Map<string, { title: string | null; updatedAt: string | null }>()
+  private readonly listed = new Map<
+    string,
+    { title: string | null; updatedAt: string | null; cwd: string | null }
+  >()
   /** Sessions being brought back from their stored threads, by id. */
   private readonly reviving = new Map<string, Promise<Live>>()
   /** Idle sessions being let go, by id. */
@@ -13397,6 +13400,7 @@ export class SessionManager {
     agentId: AgentId,
     projectPath: string,
     cursor: string | null,
+    allFolders = false,
   ): Promise<{ sessions: ImportableSession[]; nextCursor: string | null }> {
     const canonical = await this.deps.projects.resolveDirectory(projectPath)
     const runtime = await this.deps.agents.ensureReady(agentId)
@@ -13406,28 +13410,35 @@ export class SessionManager {
         t('session.cannotList', { agent: this.deps.agents.name(agentId) }),
       )
     }
+    const listAll = allFolders && runtime.init.capabilities.listAllSessions === true
     let page
     try {
-      page = await runtime.connection.listSessions(canonical, cursor)
+      page = await runtime.connection.listSessions(listAll ? null : canonical, cursor)
     } catch (error) {
       throw agentError(error)
     }
     for (const item of page.sessions) this.remember(agentId, item)
-    const recent = await this.outsideStates(
-      agentId,
-      canonical,
-      page.sessions.filter((item) => this.isRecent(item.updatedAt)).map((item) => item.sessionId),
-    )
+    const recent = listAll
+      ? new Map<string, { cache: PromptCache | null; held: boolean; last: LastRequest | null }>()
+      : await this.outsideStates(
+          agentId,
+          canonical,
+          page.sessions
+            .filter((item) => this.isRecent(item.updatedAt))
+            .map((item) => item.sessionId),
+        )
     return {
       sessions: page.sessions.map((item) => {
         const state = recent.get(item.sessionId)
+        const existing = this.findByAcp(agentId, item.sessionId)
+        const earlier = existing === undefined && this.takenEarlier(agentId, item.sessionId)
         return {
           acpSessionId: item.sessionId,
           title: item.title,
           updatedAt: item.updatedAt,
-          imported:
-            this.findByAcp(agentId, item.sessionId) !== undefined ||
-            this.takenEarlier(agentId, item.sessionId),
+          imported: existing !== undefined || earlier,
+          ...(item.cwd ? { cwd: item.cwd } : {}),
+          ...(existing ? { importedProjectPath: existing.projectPath } : {}),
           ...(state ? { cache: state.cache, held: state.held } : {}),
         }
       }),
@@ -13473,11 +13484,15 @@ export class SessionManager {
     return states
   }
 
-  /** Keeps a listed session's title and time for its import. */
+  /** Keeps a listed session's title, time and original folder for its import. */
   private remember(agentId: AgentId, item: ListedSession): void {
     const key = `${agentId}\n${item.sessionId}`
     this.listed.delete(key)
-    this.listed.set(key, { title: item.title, updatedAt: item.updatedAt })
+    this.listed.set(key, {
+      title: item.title,
+      updatedAt: item.updatedAt,
+      cwd: item.cwd || null,
+    })
     if (this.listed.size > LISTED_SESSIONS) {
       this.listed.delete(this.listed.keys().next().value!)
     }
@@ -13494,12 +13509,66 @@ export class SessionManager {
     this.deps.agents.assertEnabled(params.agentId)
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)
-    if (existing && !params.fork) return this.summary(existing.id)
+    if (existing && !params.fork) {
+      let changed = false
+      const live = this.live.get(existing.id)
+      const targetChanged = !samePath(existing.projectPath, projectPath, this.deps.platform)
+      if (targetChanged) {
+        if (existing.origin === 'user' && existing.parentId === null && !existing.worktree) {
+          const status = live?.thread.session.status
+          if (status === 'running' || status === 'awaiting_permission') {
+            throw new HostError(
+              'busy',
+              t('session.busy', { status: t(`session.status.${status}`) }),
+            )
+          }
+          // Release any live connection tied to the old folder so the next open/turn uses the new cwd.
+          if (live) {
+            this.release(live, 'reimported')
+            await this.releasing.get(existing.id)
+          }
+          existing.projectPath = projectPath
+          const stillLive = this.live.get(existing.id)
+          if (stillLive) {
+            stillLive.record.projectPath = projectPath
+            this.update(stillLive, { projectPath })
+            this.checkpoint(stillLive)
+          }
+          changed = true
+        }
+      }
+      if (existing.archivedAt !== undefined && existing.parentId === null) {
+        delete existing.archivedAt
+        this.takeBackSubSessions(existing)
+        changed = true
+      }
+      const listed = this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
+      if (existing.title === null && listed?.title) {
+        existing.title = listed.title
+        existing.titleSource = 'agent'
+        const stillLive = this.live.get(existing.id)
+        if (stillLive) {
+          stillLive.record.title = listed.title
+          stillLive.record.titleSource = 'agent'
+          this.update(stillLive, { title: listed.title })
+        }
+        changed = true
+      }
+      if (changed) {
+        await this.deps.projects.add(existing.projectPath)
+        this.saveIndex()
+        this.writeIndexNow()
+        this.touch(existing.id)
+      }
+      return this.summary(existing.id)
+    }
     if (this.takenEarlier(params.agentId, params.acpSessionId) && !params.fork) {
       throw new HostError('busy', t('session.alreadyInSession'))
     }
     // A fork reads the session itself and fails when it is gone.
-    if (!params.fork) await this.assertListed(params.agentId, projectPath, params.acpSessionId)
+    const found = params.fork
+      ? null
+      : await this.assertListed(params.agentId, projectPath, params.acpSessionId)
     const claude = harnessOf(params.agentId) === 'claude-code'
     const configDir = this.deps.agents.runningConfig(params.agentId)?.chosen ?? null
     let acpSessionId = params.acpSessionId
@@ -13526,7 +13595,7 @@ export class SessionManager {
           .catch(() => null)
       : null
     await this.deps.projects.add(projectPath)
-    const listed = this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
+    const listed = found ?? this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
     const now = this.now()
     const updatedAt = listed?.updatedAt ? Date.parse(listed.updatedAt) : NaN
     const outside = last ? outsideValuesOf(last) : null
@@ -13558,12 +13627,15 @@ export class SessionManager {
     return this.summary(record.id)
   }
 
-  /** Fails unless the agent lists the session for the folder, reading every page it gives. */
+  /**
+   * Fails unless the agent lists the session. Agents that can list across folders accept sessions
+   * from moved or worktree paths as well as the target project folder.
+   */
   private async assertListed(
     agentId: AgentId,
     projectPath: string,
     acpSessionId: string,
-  ): Promise<void> {
+  ): Promise<ListedSession> {
     const runtime = await this.deps.agents.ensureReady(agentId)
     if (!runtime.init.capabilities.listSessions) {
       throw new HostError(
@@ -13571,16 +13643,41 @@ export class SessionManager {
         t('session.cannotList', { agent: this.deps.agents.name(agentId) }),
       )
     }
-    const asked = new Set<string | null>()
-    let cursor: string | null = null
-    try {
+    const search = async (cwd: string | null): Promise<ListedSession | null> => {
+      const asked = new Set<string | null>()
+      let cursor: string | null = null
       // A cursor the agent gives twice would never end.
       while (!asked.has(cursor)) {
         asked.add(cursor)
-        const page = await runtime.connection.listSessions(projectPath, cursor)
-        if (page.sessions.some((item) => item.sessionId === acpSessionId)) return
+        const page = await runtime.connection.listSessions(cwd, cursor)
+        const found = page.sessions.find((item) => item.sessionId === acpSessionId)
+        if (found) return found
         if (page.nextCursor === null) break
         cursor = page.nextCursor
+      }
+      return null
+    }
+    try {
+      const canListAll = runtime.init.capabilities.listAllSessions === true
+      const cachedCwd = this.listed.get(`${agentId}\n${acpSessionId}`)?.cwd ?? null
+      if (canListAll && cachedCwd && !samePath(cachedCwd, projectPath, this.deps.platform)) {
+        const fromOriginal = await search(cachedCwd)
+        if (fromOriginal) {
+          this.remember(agentId, fromOriginal)
+          return fromOriginal
+        }
+      }
+      const fromProject = await search(projectPath)
+      if (fromProject) {
+        this.remember(agentId, fromProject)
+        return fromProject
+      }
+      if (canListAll) {
+        const fromAny = await search(null)
+        if (fromAny) {
+          this.remember(agentId, fromAny)
+          return fromAny
+        }
       }
     } catch (error) {
       throw agentError(error)

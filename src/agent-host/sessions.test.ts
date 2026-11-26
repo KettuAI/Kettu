@@ -89,10 +89,15 @@ function lists(...pages: string[][]): Record<string, unknown> {
     ensureReady: async () => ({
       init: { capabilities: { listSessions: true } },
       connection: {
-        listSessions: async (_cwd: string, cursor: string | null) => {
+        listSessions: async (_cwd: string | null, cursor: string | null) => {
           const at = cursor === null ? 0 : Number(cursor)
           return {
-            sessions: pages[at].map((sessionId) => ({ sessionId, title: null, updatedAt: null })),
+            sessions: pages[at].map((sessionId) => ({
+              sessionId,
+              title: null,
+              updatedAt: null,
+              cwd: _cwd ?? '/repo',
+            })),
             nextCursor: at + 1 < pages.length ? String(at + 1) : null,
           }
         },
@@ -274,6 +279,290 @@ describe('importing a session from a terminal', () => {
     await vi.waitFor(async () =>
       expect((await index())?.sessions[0]).toMatchObject({ acpSessionId: 'copy-1' }),
     )
+  })
+})
+
+describe('cross-folder Codex session import into a target project', () => {
+  interface FakeCodexSession {
+    sessionId: string
+    title: string | null
+    updatedAt: string
+    cwd: string
+    history?: { user: string; reply: string }
+  }
+
+  function codexAgents(catalog: FakeCodexSession[]) {
+    const listCalls: { cwd: string | null; cursor: string | null }[] = []
+    const loadedCalls: { sessionId: string; cwd: string }[] = []
+    const promptedCalls: { sessionId: string; text: string }[] = []
+    const closedCalls: string[] = []
+    const targets = new Map<string, { apply: (out: unknown) => void }>()
+
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      listSessions: async (cwd: string | null, cursor: string | null) => {
+        listCalls.push({ cwd, cursor })
+        const filtered = cwd === null ? catalog : catalog.filter((item) => item.cwd === cwd)
+        return {
+          sessions: filtered.map(({ sessionId, title, updatedAt, cwd: itemCwd }) => ({
+            sessionId,
+            title,
+            updatedAt,
+            cwd: itemCwd,
+          })),
+          nextCursor: null,
+        }
+      },
+      register: (sessionId: string, target: { apply: (out: unknown) => void }) => {
+        targets.set(sessionId, target)
+      },
+      unregister: (sessionId: string) => {
+        targets.delete(sessionId)
+      },
+      reopen: () => {},
+      closeSession: async (sessionId: string) => {
+        closedCalls.push(sessionId)
+      },
+      loadSession: async (sessionId: string, cwd: string) => {
+        loadedCalls.push({ sessionId, cwd })
+        const item = catalog.find((s) => s.sessionId === sessionId)
+        const target = targets.get(sessionId)
+        if (item?.history && target) {
+          target.apply({
+            patches: [
+              {
+                op: 'entry.add',
+                entry: {
+                  kind: 'user',
+                  id: 'u-1',
+                  content: [{ type: 'text', text: item.history.user }],
+                },
+              },
+              {
+                op: 'entry.add',
+                entry: {
+                  kind: 'agent',
+                  id: 'a-1',
+                  markdown: item.history.reply,
+                  streaming: false,
+                },
+              },
+            ],
+            effects: [],
+          })
+        }
+        return { config: [] }
+      },
+      resumeSession: async (sessionId: string, cwd: string) => {
+        loadedCalls.push({ sessionId, cwd })
+        return { config: [] }
+      },
+      prompt: async (sessionId: string, blocks: readonly { type: string; text?: string }[]) => {
+        const text = blocks.map((b) => b.text ?? '').join('')
+        promptedCalls.push({ sessionId, text })
+        const target = targets.get(sessionId)
+        target?.apply({
+          patches: [
+            {
+              op: 'entry.add',
+              entry: { kind: 'agent', id: 'a-2', markdown: `Continued: ${text}`, streaming: false },
+            },
+          ],
+          effects: [],
+        })
+        return { stopReason: 'end_turn', tokens: null, models: [] }
+      },
+    }
+
+    const runtime = {
+      init: {
+        capabilities: {
+          listSessions: true,
+          listAllSessions: true,
+          loadSession: true,
+          resumeSession: true,
+          closeSession: true,
+          prompt: { image: true, audio: false, embeddedContext: true },
+        },
+      },
+      connection,
+    }
+
+    const agents = {
+      name: () => 'Codex',
+      signedIn: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    return { agents, listCalls, loadedCalls, promptedCalls, closedCalls }
+  }
+
+  const catalog: FakeCodexSession[] = [
+    {
+      sessionId: 'codex-exact',
+      title: 'Current project work',
+      updatedAt: '2026-11-26T09:00:00.000Z',
+      cwd: '/projects/current',
+    },
+    {
+      sessionId: 'codex-moved',
+      title: 'Migrated repo conversation',
+      updatedAt: '2026-11-26T08:00:00.000Z',
+      cwd: '/old/deleted-repo',
+      history: { user: 'Original question', reply: 'Original answer' },
+    },
+    {
+      sessionId: 'codex-worktree',
+      title: 'Worktree feature branch',
+      updatedAt: '2026-11-26T07:00:00.000Z',
+      cwd: '/worktrees/feat-import',
+    },
+  ]
+
+  it('lists exact matches by default and all folders with original cwd when requested', async () => {
+    const fake = codexAgents(catalog)
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const exact = await sessions.listImportable('codex', '/projects/current', null, false)
+    expect(exact.sessions).toEqual([
+      {
+        acpSessionId: 'codex-exact',
+        title: 'Current project work',
+        updatedAt: '2026-11-26T09:00:00.000Z',
+        imported: false,
+        cwd: '/projects/current',
+      },
+    ])
+
+    const all = await sessions.listImportable('codex', '/projects/current', null, true)
+    expect(all.sessions.map((s) => ({ id: s.acpSessionId, cwd: s.cwd }))).toEqual([
+      { id: 'codex-exact', cwd: '/projects/current' },
+      { id: 'codex-moved', cwd: '/old/deleted-repo' },
+      { id: 'codex-worktree', cwd: '/worktrees/feat-import' },
+    ])
+    expect(fake.listCalls).toEqual([
+      { cwd: '/projects/current', cursor: null },
+      { cwd: null, cursor: null },
+    ])
+  })
+
+  it('batch imports moved and worktree Codex sessions into a chosen target project and rejects unknown ids', async () => {
+    const fake = codexAgents(catalog)
+    const { sessions, added } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    await sessions.listImportable('codex', '/projects/current', null, true)
+    const first = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      acpSessionId: 'codex-moved',
+    })
+    const second = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      acpSessionId: 'codex-worktree',
+    })
+
+    expect(first).toMatchObject({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      title: 'Migrated repo conversation',
+    })
+    expect(second).toMatchObject({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      title: 'Worktree feature branch',
+    })
+    expect(sessions.list('/projects/current').map((s) => s.id)).toEqual([first.id, second.id])
+    expect(added).toContain('/projects/current')
+
+    await expect(
+      sessions.importSession({
+        agentId: 'codex',
+        projectPath: '/projects/current',
+        acpSessionId: 'does-not-exist',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+
+    const listedAfter = await sessions.listImportable('codex', '/projects/other', null, true)
+    expect(listedAfter.sessions.find((s) => s.acpSessionId === 'codex-moved')).toMatchObject({
+      imported: true,
+      importedProjectPath: '/projects/current',
+    })
+  })
+
+  it('deduplicates re-imports, restores archived sessions, and updates target project when reassigned', async () => {
+    const fake = codexAgents(catalog)
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const imported = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      acpSessionId: 'codex-moved',
+    })
+
+    // Re-importing into the same project reuses the exact record without creating a duplicate.
+    const sameAgain = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/current',
+      acpSessionId: 'codex-moved',
+    })
+    expect(sameAgain.id).toBe(imported.id)
+    expect(sessions.list('/projects/current')).toHaveLength(1)
+
+    // Archiving then re-importing into another target project reuses the record, restores it, and moves it.
+    await sessions.archive(imported.id)
+    const reassigned = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/destination',
+      acpSessionId: 'codex-moved',
+    })
+    expect(reassigned.id).toBe(imported.id)
+    expect(reassigned.projectPath).toBe('/projects/destination')
+    expect(reassigned.archivedAt).toBeNull()
+    expect(sessions.list('/projects/current')).toHaveLength(0)
+    expect(sessions.list('/projects/destination').map((s) => s.id)).toEqual([imported.id])
+    await vi.waitFor(async () => expect((await index())?.sessions).toHaveLength(1))
+  })
+
+  it('opens and continues a migrated Codex session cleanly under the target project path', async () => {
+    const fake = codexAgents(catalog)
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const imported = await sessions.importSession({
+      agentId: 'codex',
+      projectPath: '/projects/new-home',
+      acpSessionId: 'codex-moved',
+    })
+
+    const snap = await sessions.open(imported.id)
+    expect(snap.session.status).toBe('ready')
+    expect(fake.loadedCalls).toEqual([{ sessionId: 'codex-moved', cwd: '/projects/new-home' }])
+    expect(snap.session.projectPath).toBe('/projects/new-home')
+    expect(snap.entries).toMatchObject([
+      { kind: 'user', content: [{ type: 'text', text: 'Original question' }] },
+      { kind: 'agent', markdown: 'Original answer' },
+    ])
+
+    await sessions.prompt(imported.id, [{ type: 'text', text: 'Follow up' }])
+    await vi.waitFor(() =>
+      expect(fake.promptedCalls).toEqual([{ sessionId: 'codex-moved', text: 'Follow up' }]),
+    )
+    await vi.waitFor(async () => {
+      const afterPrompt = await sessions.snapshot(imported.id)
+      expect(afterPrompt.entries).toContainEqual(
+        expect.objectContaining({
+          kind: 'agent',
+          markdown: 'Continued: Follow up',
+        }),
+      )
+    })
+    await sessions.flush()
   })
 })
 
