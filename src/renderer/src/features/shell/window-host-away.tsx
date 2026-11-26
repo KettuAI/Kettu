@@ -4,18 +4,29 @@ import { useTranslation } from 'react-i18next'
 import { connectionText } from '@renderer/features/settings/host-text'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useWindowHostAway } from '@renderer/stores/window-host'
+import { useHostAway, useWindowHostAway } from '@renderer/stores/window-host'
 import { Glyph } from './glyph'
 import { HostAwayAction } from './host-away-action'
 
 /**
- * The notice a global page shows while the host the window is narrowed to is not connected: what
- * the page shows is what was last read from it, or nothing when it never answered.
+ * The notice a global page shows while the host it displays is not connected: what the page shows
+ * is what was last read from it, or nothing when it never answered. Defaults to the window's host
+ * when `hostId` is omitted.
  */
-export function WindowHostAway({ read, className }: { read: boolean; className?: string }) {
+export function WindowHostAway({
+  hostId,
+  read,
+  className,
+}: {
+  hostId?: string | null
+  read: boolean
+  className?: string
+}) {
   const { t } = useTranslation('shell')
   const { t: ts } = useTranslation('settings')
-  const host = useWindowHostAway()
+  const windowAway = useWindowHostAway()
+  const specificAway = useHostAway(hostId ?? null)
+  const host = hostId === undefined ? windowAway : specificAway
   const now = useNow()
   if (!host) return null
   return (

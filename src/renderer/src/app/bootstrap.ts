@@ -78,7 +78,7 @@ import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
-import { hostScopeEvent, hostScopeOpened, useSettingsHostStore } from '@renderer/stores/host-scope'
+import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
 import { initHosts, loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
@@ -119,7 +119,7 @@ import { goneHosts, hostListed, initHostSessions } from './host-sessions'
 import { followWindowTitle } from './window-title'
 
 /** An event of this computer's agent host, or with `hostId` of another host's. */
-function onHostEvent(event: HostEvent, hostId: string | null = null): void {
+export function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   // Another host's requests of devices of the account, which this computer may answer too.
   if (hostId !== null && hostRequestEvent(hostId, event)) return
   switch (event.type) {
@@ -221,6 +221,11 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     if (hostId === null) receiveGitHubStar(event.state)
     return
   }
+  if (event.type === 'settings.open') {
+    // A row of the desktop app's own comes only from this computer's host.
+    openCatalogRow(event.section, event.item, event.row, hostId)
+    return
+  }
   if (hostId !== null) return hostScopeEvent(hostId, event)
   switch (event.type) {
     case 'environment.changed':
@@ -249,11 +254,6 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.publishedChanged':
       marketPublishedChanged(null)
-      break
-    case 'settings.open':
-      // A row of the desktop app's own comes only from this computer's host.
-      useSettingsHostStore.setState({ hostId })
-      openCatalogRow(event.section, event.item, event.row)
       break
   }
 }

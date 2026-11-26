@@ -8,6 +8,7 @@ import { openPluginPage } from '@renderer/features/marketplace/plugin-landing'
 import { PluginStateMark } from '@renderer/features/marketplace/plugin-state'
 import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
 import { currentLocale } from '@renderer/lib/i18n'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { ItemLine, ItemRow } from './rows'
 
 export function PluginChannelRow({
@@ -20,6 +21,7 @@ export function PluginChannelRow({
   kinds: string
 }) {
   const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
   const name = pluginTitle(plugin.contents, currentLocale())
   const state = pluginState(plugin)
   return (
@@ -28,7 +30,7 @@ export function PluginChannelRow({
       label={t('notifications.alsoSent.open', { channel: title, plugin: name })}
       tile={<PluginTile name={plugin.contents.name} icon={plugin.contents.icon} size={24} />}
       name={title}
-      onOpen={() => openPluginPage(plugin.id)}
+      onOpen={() => openPluginPage(plugin.id, { hostId })}
     >
       <ItemLine>
         {state === 'ready' ? kinds : <PluginStateMark plugin={plugin} long />}

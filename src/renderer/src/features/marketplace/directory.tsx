@@ -702,11 +702,11 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
       <p className="ui-as-page-sub">
         {!namesHosts
           ? t('page.description')
-          : windowHost.kind === 'all'
-            ? t(isMac ? 'page.descriptionAllMac' : 'page.descriptionAllComputer')
-            : scope.hostId === null
-              ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
-              : t('page.descriptionOn', { host: hostName(scope.hostId) })}
+          : scope.hostId !== null
+            ? t('page.descriptionOn', { host: hostName(scope.hostId) })
+            : windowHost.kind === 'all'
+              ? t(isMac ? 'page.descriptionAllMac' : 'page.descriptionAllComputer')
+              : t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')}
       </p>
       <MarketAway>
         <div className="ui-as-toolbar ui-as-integrations__bar">
