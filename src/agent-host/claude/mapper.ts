@@ -91,6 +91,7 @@ const UNSUPPORTED_COMMANDS: ReadonlySet<string> = new Set([
 export function mapCommands(
   commands: readonly SlashCommandInfo[],
   terminal: ReadonlySet<string>,
+  skills?: ReadonlySet<string>,
 ): SlashCommand[] {
   const out: SlashCommand[] = []
   const seen = new Set<string>()
@@ -102,7 +103,14 @@ export function mapCommands(
     const hint = Array.isArray(command.argumentHint)
       ? command.argumentHint.join(' ')
       : command.argumentHint
-    out.push({ name, description: command.description ?? '', ...(hint ? { inputHint: hint } : {}) })
+    const isSkill =
+      command.source === 'skill' || command.type === 'skill' || (skills?.has(name) ?? false)
+    out.push({
+      name,
+      description: command.description ?? '',
+      ...(hint ? { inputHint: hint } : {}),
+      ...(isSkill ? { kind: 'skill' as const } : {}),
+    })
   }
   return out
 }

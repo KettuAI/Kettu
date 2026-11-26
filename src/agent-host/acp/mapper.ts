@@ -555,8 +555,19 @@ export function mapConfig(
   return mapped
 }
 
+function isAcpSkill(command: acp.AvailableCommand, skills?: ReadonlySet<string>): boolean {
+  if (skills?.has(command.name)) return true
+  const meta = (command as { _meta?: unknown })._meta
+  if (typeof meta !== 'object' || meta === null) return false
+  const record = meta as Record<string, unknown>
+  return record.kind === 'skill' || record.source === 'skill'
+}
+
 /** Each name once, the first sent: agy sends a skill once for each folder it found it in. */
-function mapCommands(commands: readonly acp.AvailableCommand[]): SlashCommand[] {
+export function mapCommands(
+  commands: readonly acp.AvailableCommand[],
+  skills?: ReadonlySet<string>,
+): SlashCommand[] {
   const listed = new Map<string, SlashCommand>()
   for (const command of commands) {
     if (listed.has(command.name)) continue
@@ -564,6 +575,7 @@ function mapCommands(commands: readonly acp.AvailableCommand[]): SlashCommand[] 
       name: command.name,
       description: command.description,
       ...(command.input?.hint ? { inputHint: command.input.hint } : {}),
+      ...(isAcpSkill(command, skills) ? { kind: 'skill' as const } : {}),
     })
   }
   return [...listed.values()]
@@ -877,7 +889,11 @@ function mapSessionMessage(
 }
 
 /** Maps one `session/update`. Unknown variants are ignored and reported as an effect. */
-export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext): MapperOutput {
+export function mapSessionUpdate(
+  update: acp.SessionUpdate,
+  ctx: MapperContext,
+  skills?: ReadonlySet<string>,
+): MapperOutput {
   const out = new Output()
   switch (update.sessionUpdate) {
     case 'user_message_chunk':
@@ -899,7 +915,7 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
     case 'available_commands_update':
       out.patches.push({
         op: 'session.update',
-        changes: { commands: mapCommands(update.availableCommands) },
+        changes: { commands: mapCommands(update.availableCommands, skills) },
       })
       break
     case 'config_option_update':

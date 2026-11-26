@@ -51,7 +51,11 @@ export function commandList(listed: readonly PiCommandInfo[]): SlashCommand[] {
     const name = typeof command.name === 'string' ? command.name.trim() : ''
     if (!name || commands.has(name)) continue
     const description = typeof command.description === 'string' ? command.description.trim() : ''
-    commands.set(name, { name, description: description || `(${command.source})` })
+    commands.set(name, {
+      name,
+      description: description || `(${command.source})`,
+      ...(command.source === 'skill' ? { kind: 'skill' as const } : {}),
+    })
   }
   for (const name of OWN) {
     if (commands.has(name)) continue

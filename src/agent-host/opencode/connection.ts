@@ -785,7 +785,11 @@ export class OpenCodeConnection implements AgentConnection {
     const listed = new Map<string, SlashCommand>()
     for (const command of offer.commands) {
       if (command.name === COMPACT || listed.has(command.name)) continue
-      listed.set(command.name, { name: command.name, description: command.description ?? '' })
+      listed.set(command.name, {
+        name: command.name,
+        description: command.description ?? '',
+        ...(command.source === 'skill' ? { kind: 'skill' as const } : {}),
+      })
     }
     return [...listed.values(), { name: COMPACT, description: t('opencode.command.compact') }]
   }

@@ -265,6 +265,7 @@ interface Session {
   uuids: Map<string, string>
   commands: SlashCommandInfo[]
   terminal: Set<string>
+  skills: Set<string>
   /** Reopen before the next prompt: the last one failed to sign in, or the query ended. */
   stale: boolean
   /** The servers the folder declares itself that the query was started without. */
@@ -1019,6 +1020,7 @@ export class ClaudeConnection implements AgentConnection {
       uuids: new Map(),
       commands: [],
       terminal: new Set(),
+      skills: new Set(),
       stale: false,
       held: [],
       adding: null,
@@ -1283,7 +1285,7 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   private publishCommands(session: Session): void {
-    const commands = mapCommands(session.commands, session.terminal)
+    const commands = mapCommands(session.commands, session.terminal, session.skills)
     this.deliver({
       sessionId: session.id,
       map: () => ({ patches: [{ op: 'session.update', changes: { commands } }], effects: [] }),
@@ -1371,6 +1373,12 @@ export class ClaudeConnection implements AgentConnection {
       if (system.subtype === 'init') {
         const terminal = system.terminal_slash_commands
         session.terminal = new Set(Array.isArray(terminal) ? (terminal as string[]) : [])
+        const skills = system.skills
+        if (Array.isArray(skills)) {
+          session.skills = new Set(
+            skills.filter((name): name is string => typeof name === 'string'),
+          )
+        }
         const version = session.version ?? system.claude_code_version
         if (typeof version === 'string') this.terminalCommands.remember(version, session.terminal)
         this.publishCommands(session)

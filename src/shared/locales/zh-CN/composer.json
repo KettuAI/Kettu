@@ -288,7 +288,11 @@
     "loading": "正在列出命令…",
     "chooseProject": "选择一个项目后才能列出命令",
     "yours": "你的",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "skill": "技能",
+    "activeSkills_other": "{{count}} 个技能",
+    "activeCommandAndSkills_other": "命令 · {{count}} 个技能",
+    "moreSkills": "还有 {{count}} 个"
   },
   "mentions": {
     "used": "本会话用过",

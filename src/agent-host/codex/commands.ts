@@ -82,6 +82,7 @@ export function commandList(skills: readonly SkillMetadata[]): SlashCommand[] {
     commands.set(name, {
       name,
       description: skill.shortDescription ?? skill.description ?? skill.name,
+      kind: 'skill',
     })
   }
   return [...commands.values()]

@@ -10,7 +10,7 @@ export type AppEvent =
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
   // A mention, such as a terminal's, put after the text of the composer of `draft`.
   | { kind: 'mention-into-composer'; draft: string; mention: string }
-  | { kind: 'command-into-composer'; sessionId: string; name: string } // a sent command, clicked
+  | { kind: 'command-into-composer'; sessionId: string; name: string; skill?: boolean } // a sent command or skill, clicked
   // Sends what the session's composer holds, comments included, in the pane `paneId` or any.
   | { kind: 'send-composer'; sessionId: string; paneId: string | null }
   // Scrolls the thread to the passage a comment in the composer is on.

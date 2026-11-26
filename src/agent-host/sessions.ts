@@ -45,6 +45,7 @@ import { firstLine, outlineText } from '@shared/outline'
 import { limitLevel, limitsForModel } from '@shared/plan-limits'
 import { reachedLimit } from '@shared/session-groups'
 import { longEnough, queryWords } from '@shared/search-fold'
+import { mentionedSkills } from '@shared/slash'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type {
   ControlOutcome,
@@ -199,6 +200,7 @@ import { carryMode, lostValues, lostValuesNotice, type LostValue } from './confi
 import {
   AgentRequestError,
   promptBlocks,
+  skillNotice,
   SideQuestionUnsupported,
   type AgentConnection,
   type ForkPoint,
@@ -224,6 +226,7 @@ import type { Diagnostics } from './diagnostics'
 import { answeredFields, checkedValues } from './elicitation'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import type { McpTransports } from './marketplace/servers'
+import type { SessionSkill } from './marketplace/skill-tools'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { listOf, t, type HostKey } from './i18n'
@@ -630,6 +633,11 @@ export interface SessionManagerDeps {
     record: SessionRecord,
     kettu: boolean,
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
+  /**
+   * Skills delivered through Kettu's `read_skill` MCP tool for agents that do not load skill
+   * folders themselves; null for folder-based agents.
+   */
+  toolSkills?: (record: SessionRecord) => readonly SessionSkill[] | null
   /** Kettu's own slash commands; without it a text goes as typed. */
   commands?: SessionCommands
   /** Kettu's own roles; without it no session starts as one. */
@@ -4442,10 +4450,42 @@ export class SessionManager {
 
   // Mapper output.
 
+  /** Appends Kettu's `read_skill` skills for sessions whose agent does not load skill folders. */
+  private withToolSkills(live: Live, commands: readonly SlashCommand[]): SlashCommand[] {
+    const skills = this.deps.toolSkills?.(live.record)
+    if (!skills || skills.length === 0) return [...commands]
+    const seen = new Set(commands.map((command) => command.name))
+    const extra: SlashCommand[] = []
+    for (const skill of skills) {
+      if (seen.has(skill.name)) continue
+      seen.add(skill.name)
+      extra.push({
+        name: skill.name,
+        description: skill.description,
+        kind: 'skill',
+        source: { kind: 'kettu' },
+      })
+    }
+    return extra.length > 0 ? [...commands, ...extra] : [...commands]
+  }
+
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
-    const finished = this.deps.plugins ? this.finishedTools(live, output.patches) : []
-    if (output.patches.length > 0) this.emit(live, output.patches)
+    const patches = this.deps.toolSkills
+      ? output.patches.map((patch) =>
+          patch.op === 'session.update' && patch.changes.commands
+            ? {
+                ...patch,
+                changes: {
+                  ...patch.changes,
+                  commands: this.withToolSkills(live, patch.changes.commands),
+                },
+              }
+            : patch,
+        )
+      : output.patches
+    const finished = this.deps.plugins ? this.finishedTools(live, patches) : []
+    if (patches.length > 0) this.emit(live, patches)
     for (const tool of finished) {
       this.tellPlugins(
         live,
@@ -7810,7 +7850,10 @@ export class SessionManager {
     if (!commands || first?.type !== 'text' || !first.text.startsWith('/')) {
       return { content, fresh: null, run: null }
     }
-    const found = await commands.expand(first.text, new Set(own.map((command) => command.name)))
+    const found = await commands.expand(
+      first.text,
+      new Set(own.filter((command) => !command.source).map((command) => command.name)),
+    )
     if (!found) return { content, fresh: null, run: null }
     const extra = commands.extra(agentId, found.needs)
     const kept = record?.commandTools
@@ -8395,6 +8438,18 @@ export class SessionManager {
         type: 'ref',
         ref: { kind: 'attachment', attachment: { ...store.view(record.id), ...sent.changes } },
       })
+    }
+    const toolSkills = this.deps.toolSkills?.(live.record)
+    if (toolSkills && toolSkills.length > 0) {
+      const promptText = content
+        .filter((item): item is Extract<UserContent, { type: 'text' }> => item.type === 'text')
+        .map((item) => item.command?.sent ?? item.text)
+        .join('\n')
+      const matched = mentionedSkills(
+        promptText,
+        toolSkills.map((skill) => skill.name),
+      )
+      if (matched.length > 0) wire.push({ type: 'text', text: skillNotice(matched) })
     }
     // A text file is read again as it goes, so it may have grown since the prompt was counted.
     if (wire.reduce((sum, block) => sum + blockBytes(block), 0) > PROMPT_BYTES) {
