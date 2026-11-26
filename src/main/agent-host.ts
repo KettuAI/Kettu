@@ -51,6 +51,7 @@ import {
 import { isControlOutcome, type ControlOutcome } from '@shared/control'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
+import { electronNodeRuntime } from '@shared/node-runtime'
 import type { PortDevice } from '@shared/remote/device'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { HostSettings } from '@shared/settings'
@@ -389,7 +390,7 @@ export class AgentHost {
         appVersion: app.getVersion(),
         platform: process.platform,
         isPackaged: app.isPackaged,
-        nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
+        nodeRuntime: electronNodeRuntime(),
         fakeAgentPath: app.isPackaged
           ? (process.env.KETTU_FAKE_AGENT ?? null)
           : join(app.getAppPath(), 'tools/fake-agent/main.ts'),

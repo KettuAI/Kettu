@@ -24,9 +24,10 @@
   "exclude": [
     "node_modules",
     "**/*.test.ts",
-    // Node.js only: the desktop's processes' logs and the socket a host listens on.
+    // Node.js only: the desktop's processes' logs, host sockets, and Electron's Node runtime lookup.
     "log/**",
     "socket-port.ts",
+    "node-runtime.ts",
     // Runs inside an artifact's page.
     "artifact-runtime/runtime.ts"
   ]
