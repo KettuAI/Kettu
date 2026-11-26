@@ -3,7 +3,7 @@
 import os from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { applyPatches, threadEntries, threadFromSnapshot, type ThreadState } from '@shared/thread'
-import { newTurnScope, type MapperContext } from '../session-updates'
+import { newTurnScope, type MapperContext, type MapperEffect } from '../session-updates'
 import { ClaudeMapper } from './mapper'
 import type { SdkMessage } from './sdk'
 
@@ -38,6 +38,7 @@ function run(messages: Record<string, unknown>[]) {
   const scope = newTurnScope()
   let n = 0
   const patches: unknown[] = []
+  const effects: MapperEffect[] = []
   for (const message of messages) {
     for (const delivery of mapper.live(message as unknown as SdkMessage) ?? []) {
       const ctx: MapperContext = {
@@ -51,10 +52,11 @@ function run(messages: Record<string, unknown>[]) {
       }
       const out = delivery.map(ctx)
       patches.push(...out.patches)
+      effects.push(...out.effects)
       thread = applyPatches(thread, out.patches)
     }
   }
-  return { entries: threadEntries(thread), patches }
+  return { entries: threadEntries(thread), patches, effects }
 }
 
 const status = (uuid: string, extra: Record<string, unknown> = {}) => ({
@@ -127,6 +129,42 @@ describe('a compaction', () => {
     const { entries } = run([compacting('a'), settled('b', 'failed', 'too long')])
     expect(entries).toMatchObject([
       { kind: 'compaction', id: 'c:a', status: 'failed', summary: 'too long' },
+    ])
+  })
+})
+
+describe('interruptible wait tools', () => {
+  it('emits interruptibleWait effects for Sleep and MCP sleep tool calls, not Bash', () => {
+    const { effects } = run([
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          id: 'm1',
+          content: [
+            { type: 'tool_use', id: 'tu-sleep', name: 'Sleep', input: { seconds: 60 } },
+            { type: 'tool_use', id: 'tu-mcp', name: 'mcp__clock__sleep', input: { ms: 5_000 } },
+            { type: 'tool_use', id: 'tu-bash', name: 'Bash', input: { command: 'sleep 30' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        uuid: 'u1',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tu-sleep', content: 'done' },
+            { type: 'tool_result', tool_use_id: 'tu-mcp', content: 'done' },
+            { type: 'tool_result', tool_use_id: 'tu-bash', content: 'done' },
+          ],
+        },
+      },
+    ])
+    expect(effects.filter((e) => e.kind === 'interruptibleWait')).toEqual([
+      { kind: 'interruptibleWait', id: 't:tu-sleep', active: true },
+      { kind: 'interruptibleWait', id: 't:tu-mcp', active: true },
+      { kind: 'interruptibleWait', id: 't:tu-sleep', active: false },
+      { kind: 'interruptibleWait', id: 't:tu-mcp', active: false },
     ])
   })
 })

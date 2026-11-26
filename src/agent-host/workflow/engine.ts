@@ -83,13 +83,30 @@ export interface TaskStepStart {
   role?: string
 }
 
+/** How a Kettu-originated prompt to a step session was handled. */
+export type StepSendDelivery = 'sent' | 'steered' | 'queued' | 'dropped'
+
+export interface StepSendOptions {
+  /** Wake an active turn blocked only in an interruptible wait (such as clock.sleep). */
+  wakeInterruptible?: boolean
+  /** Called once a queued prompt is actually delivered (sent or steered) into the session. */
+  onDelivered?: () => void
+  /** Called if a queued prompt is dropped or removed before delivery. */
+  onDropped?: () => void
+}
+
 export interface TaskSessions {
   createStep(params: TaskStepStart): Promise<SessionSummary>
   /**
    * Sends a message from Kettu, or queues it while the session works; a queued one goes out only
-   * if `due`, asked when its turn comes, still says so.
+   * if `due`, asked when its turn comes, still says so. Returns how it was delivered when known.
    */
-  send(sessionId: string, text: string, due?: () => boolean): Promise<void>
+  send(
+    sessionId: string,
+    text: string,
+    due?: () => boolean,
+    options?: StepSendOptions,
+  ): Promise<StepSendDelivery | void>
   /** Stops the session's turn, if one runs, and its carry-on planned for a plan limit's reset. */
   cancel(sessionId: string): Promise<void>
   /**
@@ -264,6 +281,17 @@ export class TaskEngine implements TaskSessionHooks {
    * reminder or stuck handling was paused until the user replies or dismisses the question.
    */
   private readonly pausedByQuestion = new Set<string>()
+  /**
+   * Reused-session rounds whose start prompt is queued behind real active work in that session
+   * and has not been delivered yet. Kept in `queued` state without being re-launched by `pump()`.
+   */
+  private readonly pendingDispatch = new Set<string>()
+  /**
+   * Rounds whose queued start prompt was just delivered and are transitioning to `working` inside
+   * the engine lock, so synchronous `working()` checks recognize them immediately without racing
+   * ahead of a prior turn's queued `turnEnded` callback.
+   */
+  private readonly deliveredDispatch = new Set<string>()
   private readonly deferredChecks = new Set<NodeJS.Immediate>()
   private chain: Promise<unknown> = Promise.resolve()
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -678,7 +706,7 @@ export class TaskEngine implements TaskSessionHooks {
     for (const task of this.tasks.values()) {
       if (task.status !== 'running') continue
       for (const round of task.rounds) {
-        if (WORKING.has(round.state)) {
+        if (WORKING.has(round.state) || this.pendingDispatch.has(round.id)) {
           working++
           byTask.set(task.id, (byTask.get(task.id) ?? 0) + 1)
         } else if (round.state === 'queued') queued.push({ task, round })
@@ -714,14 +742,61 @@ export class TaskEngine implements TaskSessionHooks {
       // Before the prompt goes, so what the agent writes counts as this round's.
       round.startedAt = this.now()
       let sessionId = round.sessionId
+      let delivery: StepSendDelivery = 'sent'
+      let delivered = false
+      let dropped = false
       if (sessionId && this.deps.sessions.has(sessionId)) {
-        this.bySession.set(sessionId, { taskId, roundId })
+        const reusedId = sessionId
+        this.bySession.set(reusedId, { taskId, roundId })
         // A session made for this round before a restart may never have had its first message.
-        const own = !task.rounds.some((r) => r !== round && r.sessionId === sessionId)
-        await this.deps.sessions.send(
-          sessionId,
+        const own = !task.rounds.some((r) => r !== round && r.sessionId === reusedId)
+        const due = () =>
+          task.status === 'running' &&
+          (round.state === 'starting' || round.state === 'queued') &&
+          this.roundOfSession(reusedId)?.round === round
+        const onDelivered = () => {
+          delivered = true
+          if (!this.pendingDispatch.has(round.id)) return
+          const startedAt = this.now()
+          this.deliveredDispatch.add(round.id)
+          // Transition inside `this.locked` so any prior turn's `turnEnded` already queued on the
+          // lock still sees `round.state === 'queued'` and does not send a spurious reminder.
+          void this.locked(() => {
+            this.deliveredDispatch.delete(round.id)
+            if (
+              !this.pendingDispatch.delete(round.id) ||
+              task.status !== 'running' ||
+              round.state !== 'queued'
+            ) {
+              return
+            }
+            round.state = 'working'
+            round.startedAt = startedAt
+            this.save(task)
+            this.stepEvent(task, round, 'started')
+          })
+        }
+        const onDropped = () => {
+          dropped = true
+          if (!this.pendingDispatch.delete(round.id)) return
+          void this.locked(() => {
+            if (task.status !== 'running' || round.state !== 'queued') return
+            this.stick(
+              round,
+              'start_failed',
+              'The queued round prompt was removed before delivery.',
+            )
+            this.save(task)
+            this.pump()
+          })
+        }
+        const result = await this.deps.sessions.send(
+          reusedId,
           own ? stepPrompt(task, round, where) : againPrompt(task, round, where),
+          due,
+          { wakeInterruptible: true, onDelivered, onDropped },
         )
+        delivery = result ?? 'sent'
       } else {
         const step = stepOf(task.workflow, round.stepId)!
         const options =
@@ -744,13 +819,41 @@ export class TaskEngine implements TaskSessionHooks {
       await this.locked(() => {
         if (round.state !== 'starting') {
           // Cancelled, ended or sent back while its session started: it must not work on.
+          this.pendingDispatch.delete(round.id)
+          this.deliveredDispatch.delete(round.id)
           if (sessionId) {
             void this.deps.sessions.cancel(sessionId).catch(() => {})
             this.deps.sessions.withdrawPending(sessionId)
           }
           return
         }
+        if (delivery === 'queued' && !delivered) {
+          if (dropped) {
+            this.stick(
+              round,
+              'start_failed',
+              'The queued round prompt was removed before delivery.',
+            )
+            this.save(task)
+            this.pump()
+            return
+          }
+          // Start prompt is queued behind real non-sleep work in the reused session; reflect
+          // queued/waiting rather than active execution until the prompt is actually delivered.
+          round.state = 'queued'
+          round.startedAt = null
+          this.pendingDispatch.add(round.id)
+          this.save(task)
+          return
+        }
+        if (delivery === 'dropped' && !delivered) {
+          this.stick(round, 'start_failed', 'The round prompt could not be delivered.')
+          this.save(task)
+          this.pump()
+          return
+        }
         round.state = 'working'
+        round.startedAt ??= this.now()
         this.save(task)
         this.stepEvent(task, round, 'started')
       })
@@ -853,7 +956,12 @@ export class TaskEngine implements TaskSessionHooks {
 
   working(sessionId: string): boolean {
     const found = this.roundOfSession(sessionId)
-    return found !== null && (found.round.state === 'working' || found.round.state === 'starting')
+    return (
+      found !== null &&
+      (found.round.state === 'working' ||
+        found.round.state === 'starting' ||
+        this.deliveredDispatch.has(found.round.id))
+    )
   }
 
   turnStarted(sessionId: string, turn: { byUser: boolean }): void {
@@ -1007,6 +1115,8 @@ export class TaskEngine implements TaskSessionHooks {
       if (!found) return
       const { task, round } = found
       this.pausedByQuestion.delete(round.id)
+      this.pendingDispatch.delete(round.id)
+      this.deliveredDispatch.delete(round.id)
       round.asking = false
       if (task.status === 'running' && LIVE.has(round.state) && round.state !== 'reviewing') {
         this.stick(round, 'session_gone', null)
@@ -1418,6 +1528,8 @@ export class TaskEngine implements TaskSessionHooks {
   private leaveWorking(round: RoundRecord): void {
     round.asking = false
     this.pausedByQuestion.delete(round.id)
+    this.pendingDispatch.delete(round.id)
+    this.deliveredDispatch.delete(round.id)
     if (round.sessionId) this.deps.sessions.withdrawPending(round.sessionId)
   }
 
@@ -1715,7 +1827,7 @@ export class TaskEngine implements TaskSessionHooks {
       if (!clean) throw invalidParams(t('tasks.noteEmpty'))
       task.notes = [...task.notes, { at: this.now(), text: clean }].slice(-MAX_TASK_NOTES)
       for (const round of task.rounds) {
-        if (WORKING.has(round.state) && round.sessionId)
+        if ((WORKING.has(round.state) || this.pendingDispatch.has(round.id)) && round.sessionId)
           void this.message(round.sessionId, notePrompt(clean))
       }
       this.save(task)
