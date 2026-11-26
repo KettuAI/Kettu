@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import {
+  Add01Icon,
   Alert02Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   CloudIcon,
+  FolderLinksIcon,
   GitBranchIcon,
   GitCommitIcon,
   Search01Icon,
@@ -26,17 +28,21 @@ import {
   ComboboxItem,
   ComboboxLabel,
   ComboboxList,
+  ComboboxSeparator,
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { toast } from '@renderer/components/ui/toast'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { shortAgo } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { glide } from '@renderer/lib/motion'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { openGitDialog, useGitStore } from '@renderer/stores/git'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import {
   chooseBase,
@@ -49,9 +55,17 @@ import {
   writeSlug,
 } from '@renderer/stores/worktree-choice'
 import { shortOid, WORKTREE_ICON } from '../worktree/worktree-icon'
+import {
+  buildLocalBranchModel,
+  LOCAL_NEW_BRANCH,
+  runningLocalSessionsCount,
+  switchLocalBranch,
+  type LocalBranchGroup,
+  type LocalBranchSwitchFailure,
+} from './local-branch'
 import { currentBase } from './worktree-base'
 
-type Page = 'home' | 'base' | 'name'
+type Page = 'home' | 'base' | 'name' | 'branch'
 type Where = 'local' | 'worktree'
 type Loaded = { list: BranchList; error: null } | { list: null; error: string } | null
 
@@ -63,27 +77,47 @@ const SLIDE: Variants = {
 }
 
 /**
- * New session's place to work, in the tray where the branch was: Local, the project folder, or a
- * new worktree, whose base and branch name each open a page of their own. Remembered per project.
+ * New session's place to work, in the tray where the branch was: Local, the project folder (with
+ * immediate local branch switching), or a new worktree, whose base and branch name each open a
+ * page of their own. Remembered per project.
  */
 export function WorktreeMenu({ projectPath, status }: { projectPath: string; status: GitStatus }) {
   const { t } = useTranslation('session')
+  const { t: tg } = useTranslation('git')
   const where = useWorktreeChoice((s) => s.where[projectPath] ?? 'local')
   const picked = useWorktreeChoice((s) => s.base[projectPath] ?? null)
   const template = useWorktreeChoice((s) => s.template[projectPath])
+  const runningGit = useGitStore((s) => s.running[projectPath] ?? null)
+  const runningLocal = useSessionsStore((s) => runningLocalSessionsCount(s.byId, projectPath))
   const [open, setOpen] = useState(false)
   const [page, setPage] = useState<Page>('home')
   const [into, setInto] = useState(1)
   const [read, setRead] = useState<{ projectPath: string; loaded: Loaded } | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [switchingState, setSwitchingState] = useState<{
+    projectPath: string
+    branch: string
+  } | null>(null)
+  const [failureState, setFailureState] = useState<{
+    projectPath: string
+    failure: LocalBranchSwitchFailure
+  } | null>(null)
+  const openRef = useRef(open)
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
+
   const current = currentBase(status)
   const base = picked ?? current
   const worktree = where === 'worktree'
   // The last list read stays while it is read again, but never another project's.
   const loaded = read?.projectPath === projectPath ? read.loaded : null
+  const switchingBranch = switchingState?.projectPath === projectPath ? switchingState.branch : null
+  const switchError = failureState?.projectPath === projectPath ? failureState.failure : null
+  const switchBusy = switchingBranch !== null || runningGit !== null
 
   useEffect(() => {
-    if (!open || !worktree) return
+    if (!open) return
     let live = true
     host('git.branches', { projectPath }).then(
       (list) => live && setRead({ projectPath, loaded: { list, error: null } }),
@@ -93,7 +127,7 @@ export function WorktreeMenu({ projectPath, status }: { projectPath: string; sta
     return () => {
       live = false
     }
-  }, [open, worktree, projectPath, attempt])
+  }, [open, projectPath, attempt])
 
   // Read again on each opening, since the project's settings may have changed it; a branch named
   // for the send needs it even while closed.
@@ -117,6 +151,39 @@ export function WorktreeMenu({ projectPath, status }: { projectPath: string; sta
   const label = (value: string | null): string =>
     value && value === status.head.oid && !status.head.branch ? shortOid(value) : (value ?? '')
 
+  const handleLocalSwitch = async (branch: string, create: boolean) => {
+    if (switchBusy) return
+    setFailureState(null)
+    setSwitchingState({ projectPath, branch })
+    try {
+      const outcome = await switchLocalBranch(projectPath, branch, create)
+      if (outcome.ok) {
+        setAttempt((n) => n + 1)
+        toast(
+          tg(outcome.created ? 'result.created' : 'result.switched', { branch: outcome.branch }),
+          undefined,
+          { tone: 'success' },
+        )
+        if (openRef.current) go('home')
+      } else if (openRef.current) {
+        setFailureState({ projectPath, failure: outcome })
+      } else {
+        toast(
+          outcome.message,
+          outcome.log
+            ? {
+                label: tg('failure.showLog'),
+                onClick: () => openGitDialog(projectPath, { kind: 'log' }),
+              }
+            : undefined,
+          { tone: 'warning' },
+        )
+      }
+    } finally {
+      setSwitchingState((prev) => (prev?.projectPath === projectPath ? null : prev))
+    }
+  }
+
   return (
     <Popover
       open={open}
@@ -129,6 +196,7 @@ export function WorktreeMenu({ projectPath, status }: { projectPath: string; sta
         if (next) {
           setPage('home')
           setInto(1)
+          setFailureState(null)
         }
         setOpen(next)
       }}
@@ -165,7 +233,49 @@ export function WorktreeMenu({ projectPath, status }: { projectPath: string; sta
               base={base}
               label={label}
               loaded={loaded}
-              onPage={go}
+              runningLocal={runningLocal}
+              switchingBranch={switchingBranch}
+              onChangeWhere={(next) => {
+                setFailureState(null)
+                chooseWhere(projectPath, next)
+              }}
+              onPage={(next) => {
+                if (next === 'branch') setFailureState(null)
+                go(next)
+              }}
+            />
+          ) : page === 'branch' ? (
+            <LocalBranchPage
+              status={status}
+              loaded={loaded}
+              runningLocal={runningLocal}
+              switchingBranch={switchingBranch}
+              busy={switchBusy}
+              switchError={switchError}
+              onRetry={() => {
+                setRead(null)
+                setAttempt((n) => n + 1)
+              }}
+              onBack={() => {
+                setFailureState(null)
+                go('home')
+              }}
+              onSwitch={(branch, create) => void handleLocalSwitch(branch, create)}
+              onUseWorktree={() => {
+                if (switchError && !switchError.create) {
+                  chooseBase(
+                    projectPath,
+                    switchError.branch === current ? null : switchError.branch,
+                  )
+                }
+                setFailureState(null)
+                chooseWhere(projectPath, 'worktree')
+                go('home')
+              }}
+              onShowLog={() => {
+                setOpen(false)
+                openGitDialog(projectPath, { kind: 'log' })
+              }}
             />
           ) : page === 'base' ? (
             <BasePage
@@ -240,6 +350,9 @@ function Home({
   base,
   label,
   loaded,
+  runningLocal,
+  switchingBranch,
+  onChangeWhere,
   onPage,
 }: {
   projectPath: string
@@ -248,6 +361,9 @@ function Home({
   base: string | null
   label: (value: string | null) => string
   loaded: Loaded
+  runningLocal: number
+  switchingBranch: string | null
+  onChangeWhere: (next: Where) => void
   onPage: (page: Page) => void
 }) {
   const { t } = useTranslation('session')
@@ -268,7 +384,7 @@ function Home({
         variant="tray"
         fullWidth
         value={where}
-        onChange={(next) => chooseWhere(projectPath, next)}
+        onChange={onChangeWhere}
         options={[
           { value: 'local', label: t('worktree.local'), icon: <FolderMark /> },
           {
@@ -279,26 +395,47 @@ function Home({
         ]}
       />
       {where === 'local' ? (
-        <div className="flex flex-col gap-1.5 px-1.5 pt-2.5 pb-0.75">
-          <p className="flex min-w-0 items-start gap-1.75 text-ui text-secondary">
-            <Glyph
-              icon={status.head.branch ? GitBranchIcon : GitCommitIcon}
-              size={13}
-              className="mt-0.5 shrink-0 text-icon"
-            />
-            <span className="min-w-0">
-              <Trans
-                t={t}
-                i18nKey="worktree.localWorks"
-                values={{ branch: label(currentBase(status)) }}
-                components={{
-                  name: <span className="font-mono text-code wrap-anywhere text-primary" />,
-                }}
+        <>
+          <div className="mt-1.5 overflow-hidden rounded-lg shadow-card">
+            <Row
+              label={t('worktree.branch')}
+              dataSlot="local-branch-row"
+              disabled={switchingBranch !== null}
+              onClick={() => onPage('branch')}
+            >
+              <Glyph
+                icon={status.head.branch ? GitBranchIcon : GitCommitIcon}
+                size={13}
+                className="shrink-0 text-icon"
               />
-            </span>
-          </p>
-          <p className="text-meta text-tertiary">{t('worktree.localHint')}</p>
-        </div>
+              <span className="min-w-0 truncate font-mono text-code">
+                {label(currentBase(status))}
+              </span>
+              {switchingBranch !== null ? (
+                <span className="shrink-0 text-hint text-tertiary">{t('worktree.switching')}</span>
+              ) : (
+                status.head.oid &&
+                status.head.branch && (
+                  <span className="shrink-0 font-mono text-code text-tertiary">
+                    {shortOid(status.head.oid)}
+                  </span>
+                )
+              )}
+            </Row>
+          </div>
+          {runningLocal > 0 && (
+            <p
+              data-slot="local-running-warning"
+              className="flex items-start gap-1.75 px-1.5 pt-2.25 text-meta text-warning"
+            >
+              <Glyph icon={Alert02Icon} size={13} className="mt-px shrink-0" />
+              <span className="min-w-0">
+                {t('worktree.localRunningWarning', { count: runningLocal })}
+              </span>
+            </p>
+          )}
+          <p className="px-1.5 pt-2 pb-0.75 text-meta text-tertiary">{t('worktree.localHint')}</p>
+        </>
       ) : (
         <>
           <div className="mt-1.5 overflow-hidden rounded-lg shadow-card">
@@ -345,24 +482,30 @@ function Home({
   )
 }
 
-/** A setting of the new worktree: its name, its value and the way to its page. */
+/** A setting of the session's place to work: its name, its value and the way to its page. */
 function Row({
   label,
   divided,
+  disabled,
+  dataSlot,
   onClick,
   children,
 }: {
   label: string
   divided?: boolean
+  disabled?: boolean
+  dataSlot?: string
   onClick: () => void
   children: ReactNode
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
+      data-slot={dataSlot}
       onClick={onClick}
       className={cn(
-        'grid min-h-9.5 w-full cursor-default grid-cols-[62px_minmax(0,1fr)_14px] items-center gap-2 pr-2.5 pl-2.75 text-left outline-hidden select-none hover:bg-accent focus-visible:bg-accent',
+        'grid min-h-9.5 w-full cursor-default grid-cols-[62px_minmax(0,1fr)_14px] items-center gap-2 pr-2.5 pl-2.75 text-left outline-hidden select-none hover:bg-accent focus-visible:bg-accent disabled:pointer-events-none disabled:opacity-50',
         divided && 'border-t border-subtle',
       )}
     >
@@ -382,6 +525,239 @@ function PageHeader({ title, onBack }: { title: string; onBack: () => void }) {
       </Button>
       <span className="truncate text-center text-menu font-medium">{title}</span>
     </div>
+  )
+}
+
+function LocalBranchPage({
+  status,
+  loaded,
+  runningLocal,
+  switchingBranch,
+  busy,
+  switchError,
+  onRetry,
+  onBack,
+  onSwitch,
+  onUseWorktree,
+  onShowLog,
+}: {
+  status: GitStatus
+  loaded: Loaded
+  runningLocal: number
+  switchingBranch: string | null
+  busy: boolean
+  switchError: LocalBranchSwitchFailure | null
+  onRetry: () => void
+  onBack: () => void
+  onSwitch: (branch: string, create: boolean) => void
+  onUseWorktree: () => void
+  onShowLog: () => void
+}) {
+  const { t } = useTranslation('session')
+  const now = useNow()
+  const { contains } = useComboboxFilter()
+  const [query, setQuery] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+  const list = loaded?.list ?? null
+
+  // Focused without scrolling, since the page is still sliding into the clipped popover.
+  useEffect(() => {
+    if (list) input.current?.focus({ preventScroll: true })
+  }, [list])
+
+  const model = useMemo(
+    () => (list ? buildLocalBranchModel(list, status, query) : null),
+    [list, status, query],
+  )
+
+  return (
+    <>
+      <PageHeader title={t('worktree.switchBranch')} onBack={onBack} />
+      {runningLocal > 0 && (
+        <p
+          data-slot="local-running-warning"
+          className="mb-1.5 flex items-start gap-1.75 rounded-lg bg-warning-tint px-2 py-1.5 text-meta text-warning"
+        >
+          <Glyph icon={Alert02Icon} size={13} className="mt-px shrink-0" />
+          <span className="min-w-0">
+            {t('worktree.localRunningWarning', { count: runningLocal })}
+          </span>
+        </p>
+      )}
+      {switchError && (
+        <div
+          role="alert"
+          data-slot="local-switch-error"
+          className="mb-1.5 flex flex-col gap-1.5 rounded-lg border border-danger-border bg-danger-tint px-2.25 py-2 text-meta"
+        >
+          <p className="text-danger">{switchError.message}</p>
+          {switchError.suggestWorktree && (
+            <p className="text-secondary">{t('worktree.switchWorktreeHint')}</p>
+          )}
+          {(switchError.suggestWorktree || switchError.log) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              {switchError.suggestWorktree && (
+                <Button variant="outline" size="xs" onClick={onUseWorktree}>
+                  {t('worktree.useNewWorktree')}
+                </Button>
+              )}
+              {switchError.log && (
+                <Button variant="ghost" size="xs" onClick={onShowLog}>
+                  {t('worktree.showLog')}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {loaded?.error ? (
+        <div className="flex flex-col items-start gap-2 px-1.5 pt-1 pb-1.5">
+          <p className="text-meta text-danger" title={loaded.error}>
+            {t('worktree.branchesFailed', { message: loaded.error.split('\n')[0] })}
+          </p>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            {t('worktree.retry')}
+          </Button>
+        </div>
+      ) : !model ? (
+        <div aria-busy className="flex flex-col gap-3 px-2 pt-3 pb-2.5">
+          <Skeleton className="h-3 w-44" />
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-3 w-52" />
+          <Skeleton className="h-3 w-36" />
+        </div>
+      ) : (
+        <Combobox
+          inline
+          open
+          autoHighlight
+          items={model.groups}
+          value={model.current}
+          inputValue={query}
+          onInputValueChange={setQuery}
+          onValueChange={(value: string | null) => {
+            if (busy) return
+            if (value === null || value === model.current) {
+              onBack()
+              return
+            }
+            if (value === LOCAL_NEW_BRANCH) {
+              if (model.createName) onSwitch(model.createName, true)
+              return
+            }
+            if (model.byName.get(value)?.worktree) return
+            onSwitch(value, false)
+          }}
+          onOpenChange={(next, details) => {
+            if (!next && details.reason === 'escape-key') onBack()
+          }}
+          itemToStringLabel={(value: string) => (value === LOCAL_NEW_BRANCH ? '' : value)}
+          filter={(value: string, search: string) =>
+            value === LOCAL_NEW_BRANCH || contains(value, search)
+          }
+        >
+          <ComboboxInput
+            ref={input}
+            showTrigger={false}
+            disabled={busy}
+            placeholder={t('worktree.findOrCreateBranch')}
+            aria-label={t('worktree.findOrCreateBranch')}
+            spellCheck={false}
+            className="mb-1 h-8 rounded-none border-0 border-b border-subtle bg-transparent shadow-none has-[[data-slot=input-group-control]:focus-visible]:border-subtle has-[[data-slot=input-group-control]:focus-visible]:shadow-none"
+          >
+            <InputGroupAddon>
+              <Glyph icon={Search01Icon} size={14} className="text-icon" />
+            </InputGroupAddon>
+          </ComboboxInput>
+          <ComboboxEmpty className="flex justify-center px-2 py-4 text-ui text-tertiary empty:hidden">
+            {t('worktree.noBranchMatch', { query: query.trim() })}
+          </ComboboxEmpty>
+          <ComboboxList className="max-h-72 p-0 data-empty:hidden">
+            {(group: LocalBranchGroup) =>
+              group.value === 'new' ? (
+                <ComboboxGroup key={group.value} items={group.items}>
+                  <ComboboxSeparator className="mx-0.75 my-1.25" />
+                  <ComboboxCollection>
+                    {(value: string) => (
+                      <ComboboxItem
+                        key={value}
+                        value={value}
+                        disabled={busy}
+                        className="h-7.5 gap-2 text-control"
+                      >
+                        <Glyph icon={Add01Icon} size={14} className="text-icon" />
+                        <span className="min-w-0 truncate">
+                          {t('worktree.createBranch', { name: model.createName ?? '' })}
+                        </span>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxCollection>
+                </ComboboxGroup>
+              ) : (
+                group.items.length > 0 && (
+                  <ComboboxGroup key={group.value} items={group.items}>
+                    <ComboboxLabel>{t('worktree.localBranches')}</ComboboxLabel>
+                    <ComboboxCollection>
+                      {(name: string) => {
+                        const branch = model.byName.get(name)
+                        const occupied = Boolean(branch?.worktree)
+                        const at = branch?.committedAt ?? null
+                        return (
+                          <ComboboxItem
+                            key={name}
+                            value={name}
+                            disabled={occupied || busy}
+                            title={
+                              branch?.worktree
+                                ? t('worktree.checkedOutIn', {
+                                    branch: name,
+                                    folder: branch.worktree,
+                                  })
+                                : undefined
+                            }
+                            className={cn(
+                              'h-7.5 gap-2 text-control',
+                              occupied && 'data-disabled:opacity-65',
+                            )}
+                          >
+                            <Glyph
+                              icon={occupied ? FolderLinksIcon : GitBranchIcon}
+                              size={14}
+                              className="text-icon"
+                            />
+                            <span className="min-w-0 truncate font-mono text-code">{name}</span>
+                            {name === model.current && (
+                              <span className="shrink-0 rounded-sm bg-muted px-1.25 text-caption font-medium text-secondary">
+                                {t('worktree.current')}
+                              </span>
+                            )}
+                            {switchingBranch === name ? (
+                              <span className="ml-auto shrink-0 pl-3 text-hint text-tertiary">
+                                {t('worktree.switching')}
+                              </span>
+                            ) : occupied ? (
+                              <span className="ml-auto shrink-0 rounded-sm bg-muted px-1.25 text-caption font-medium text-tertiary">
+                                {t('worktree.inWorktreeBadge')}
+                              </span>
+                            ) : (
+                              at !== null && (
+                                <span className="ml-auto shrink-0 pl-3 text-hint text-tertiary tabular">
+                                  {shortAgo(at, now)}
+                                </span>
+                              )
+                            )}
+                          </ComboboxItem>
+                        )
+                      }}
+                    </ComboboxCollection>
+                  </ComboboxGroup>
+                )
+              )
+            }
+          </ComboboxList>
+        </Combobox>
+      )}
+    </>
   )
 }
 

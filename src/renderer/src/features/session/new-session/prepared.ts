@@ -350,6 +350,17 @@ export function retryPrepare(): void {
   if (target) void prepare(target, true)
 }
 
+/**
+ * Replaces the window's prepared session when it targets `projectPath`, keeping any already
+ * applied draft options so switching local branches refreshes the agent's workspace context.
+ */
+export function refreshPreparedForProject(projectPath: string): void {
+  const current = useAgentOptionsStore.getState().prepared
+  if (!target || target.projectPath !== projectPath || !current) return
+  keepDraftOptions(current)
+  void prepare(target, true)
+}
+
 const setFirstRead = (hostId: string | null, agentId: AgentId, read: FirstRead | null): void =>
   useAgentOptionsStore.setState((s) => {
     const firstReads = { ...s.firstReads }
