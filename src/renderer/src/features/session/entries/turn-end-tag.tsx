@@ -2,9 +2,8 @@ import { InformationCircleIcon, StopCircleIcon } from '@hugeicons/core-free-icon
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { StopReason } from '@shared/thread'
-import { shortDuration } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
-import { stopReasonText } from './helpers'
+import { turnEndTagText } from './turn-end'
 
 /**
  * How a turn ended, as a muted line: an icon, the reason and, past a second, the turn's time. A
@@ -19,12 +18,9 @@ export function TurnEndTag({
   durationMs: number
   className?: string
 }) {
-  const { t } = useTranslation('session')
-  const reason = stopReasonText(stopReason, durationMs)
-  const text =
-    stopReason !== 'end_turn' && durationMs >= 1000
-      ? t('stopReason.withTime', { reason, time: shortDuration(durationMs) })
-      : reason
+  useTranslation('session')
+  const text = turnEndTagText(stopReason, durationMs)
+  if (text === null) return null
   return (
     <span
       className={cn(

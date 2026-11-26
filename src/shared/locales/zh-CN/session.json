@@ -598,7 +598,8 @@
     "fork": "从这里另开会话",
     "forking": "正在另开会话…",
     "forkNotReady": "会话就绪后才能另开会话",
-    "label": "回复操作"
+    "label": "回复操作",
+    "durationTitleWithTime": "{{duration}} · 完成于 {{time}}"
   },
   "changes": {
     "label": "改动",

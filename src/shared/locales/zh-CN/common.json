@@ -25,9 +25,12 @@
     "daysAgo_other": "{{count}} 天前",
     "seconds": "{{s}} 秒",
     "secondsShort": "{{s}} 秒",
+    "underSecond": "< 1 秒",
+    "minutesCompact": "{{m}} 分钟",
     "minutesSeconds": "{{m}} 分 {{s}} 秒",
     "minutesSecondsShort": "{{m}} 分 {{s}} 秒",
     "minutesLeft": "{{m}} 分钟",
+    "hoursCompact": "{{h}} 小时",
     "hoursMinutes": "{{h}} 小时 {{m}} 分",
     "hoursMinutesShort": "{{h}} 小时 {{m}} 分",
     "minutes": "{{m}} 分钟"

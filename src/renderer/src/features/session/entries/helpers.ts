@@ -11,7 +11,6 @@ import {
   type PermissionKind,
   type QuestionAnswer,
   type SessionStatus,
-  type StopReason,
   type ToolEntry,
   type ToolKind,
 } from '@shared/thread'
@@ -24,6 +23,9 @@ import { useTerminalsStore } from '@renderer/stores/terminals'
 import { nameHints } from '../project-names'
 import { agyLabel, type AgentSessionName } from './agy-tools'
 import { mcpLabel, type CallNames } from './mcp-tools'
+import { stopReasonText } from './turn-end'
+
+export { stopReasonText }
 
 /**
  * Brings a card that waits for the user into view while its thread follows the end. A reader
@@ -403,21 +405,6 @@ export function thoughtTitle(markdown: string): string | null {
   const first = bold?.[1] ?? text.split('\n', 1)[0]!.split(/(?<=[.!?\u3002\uff01\uff1f])\s*/, 1)[0]!
   const title = first.replace(/[*_`#>]/g, '').trim()
   return title === '' ? null : title
-}
-
-export function stopReasonText(stopReason: StopReason, durationMs: number): string {
-  switch (stopReason) {
-    case 'end_turn':
-      return i18n.t('session:stopReason.endTurn', { duration: duration(durationMs) })
-    case 'cancelled':
-      return i18n.t('session:stopReason.cancelled')
-    case 'max_tokens':
-      return i18n.t('session:stopReason.maxTokens')
-    case 'max_turn_requests':
-      return i18n.t('session:stopReason.maxTurnRequests')
-    case 'refusal':
-      return i18n.t('session:stopReason.refusal')
-  }
 }
 
 /** The words of a report of a turn the session asked another one for, from how it ended. */
