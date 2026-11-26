@@ -227,14 +227,20 @@ function plainText(html: string): string {
     })
 }
 
-/** Plain text of a bullet's HTML or Markdown, without issue links. */
+// Parenthetical issue/PR references and contributor credits, in ASCII or full-width parens:
+// "(#2654)", "(#2634, #2642)", "(#2675, thanks @user)", "(#2675, #2676, thanks @a, @b)",
+// "(thanks @user)", and Chinese credits using the equivalent keyword.
+const ISSUE_OR_CREDIT =
+  /\s*[(\uFF08]\s*(?:#\d+(?:\s*[,，]\s*#\d+)*(?:\s*[,，]\s*(?:thanks|thank you|感谢)\s+@[A-Za-z0-9_-]+(?:(?:\s*[,，、&]\s*|\s+(?:and|和)\s+)@[A-Za-z0-9_-]+)*)?|(?:thanks|thank you|感谢)\s+@[A-Za-z0-9_-]+(?:(?:\s*[,，、&]\s*|\s+(?:and|和)\s+)@[A-Za-z0-9_-]+)*)\s*[)\uFF09]/gi
+
+/** Plain text of a bullet's HTML or Markdown, without issue links or contributor credits. */
 function inlineText(item: string): string {
   return plainText(item)
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/(\*\*|__)((?:(?!\1).)+?)\1/g, '$2')
     .replace(/\*([^*\s](?:[^*]*[^*\s])?)\*/g, '$1')
     .replace(/`/g, '')
-    .replace(/\s*\((?:#\d+(?:,\s*)?)+\)/g, '')
+    .replace(ISSUE_OR_CREDIT, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
