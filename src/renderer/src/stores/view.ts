@@ -502,15 +502,40 @@ export function panelSession(panel: string): string | null {
   return panel.startsWith(NEW_SESSION_PANEL) ? null : panel
 }
 
+/**
+ * The folder a pane's side panel works in: a session's project, a sub-session's parent project,
+ * or New session's chosen project (falling back to the selected or first project on its host).
+ * Null for New session with No project or without an existing project to work in.
+ */
+export function paneProjectPath(
+  view: PaneView,
+  selected: string | null = null,
+  projects?: readonly Project[],
+): string | null {
+  if (view.kind === 'session') return view.projectPath
+  if (view.noProject) return null
+  if (view.parentId) return view.projectPath
+  if (projects) {
+    const project = newSessionProject(view, selected, projects)
+    return project && !project.missing ? project.path : null
+  }
+  return view.projectPath
+}
+
 /** Whose side panel a pane's view has: its session's, or New session's in its project. */
-export function panelOf(view: PaneView): string | null {
+export function panelOf(
+  view: PaneView,
+  selected: string | null = null,
+  projects?: readonly Project[],
+): string | null {
   if (view.kind === 'session') return view.sessionId
-  return view.projectPath ? newSessionPanel(view.projectPath) : null
+  const path = paneProjectPath(view, selected, projects)
+  return path ? newSessionPanel(path) : null
 }
 
 /** The panel the side panel shows, the pane in focus's; null at New session with No project. */
-export function shownPanel(state: ViewStore): string | null {
-  return panelOf(focusedPane(state.layout).view)
+export function shownPanel(state: ViewStore, projects?: readonly Project[]): string | null {
+  return panelOf(focusedPane(state.layout).view, state.projectPath, projects)
 }
 
 export function shownSidePane(state: ViewStore): SidePane | undefined {
@@ -707,7 +732,7 @@ export function showCreatedSession(
   const { layout } = useViewStore.getState()
   const pane = findPane(layout, paneId)
   if (!pane || pane.view.kind !== 'new') return false
-  const from = panelOf(pane.view)
+  const from = panelOf(pane.view) ?? (pane.view.noProject ? null : newSessionPanel(projectPath))
   inPlace(() =>
     useViewStore.setState((s) => ({
       ...withLayout(

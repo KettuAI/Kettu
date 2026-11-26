@@ -9,12 +9,14 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { insideAny, isWithin, movedPath } from '@renderer/features/files/paths'
 import { useGitStore } from './git'
+import { useProjectsStore } from './projects'
 import {
   changeDocs,
   closeDoc,
   docKey,
   keepDoc,
   openDoc,
+  paneProjectPath,
   panelOf,
   shownDoc,
   useViewStore,
@@ -478,8 +480,12 @@ function heldElsewhere(projectPath: string, key: string, except: string): boolea
 
 /** The side panel in view, when the pane in focus works in `projectPath`. */
 function panelIn(projectPath: string): string | null {
-  const view = focusedPane(useViewStore.getState().layout).view
-  return view.projectPath === projectPath ? panelOf(view) : null
+  const state = useViewStore.getState()
+  const projects = useProjectsStore.getState().projects
+  const view = focusedPane(state.layout).view
+  return paneProjectPath(view, state.projectPath, projects) === projectPath
+    ? panelOf(view, state.projectPath, projects)
+    : null
 }
 
 const filesOf = (projectPath: string): OpenFile[] =>

@@ -26,7 +26,7 @@ import { SendButton } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@shared/session-groups'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
-import { ClosePaneButton } from '@renderer/features/shell/header-tools'
+import { ClosePaneButton, HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useCloudOff } from '@renderer/lib/cloud'
@@ -162,6 +162,8 @@ export function NewSessionView({
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   // The agents listed are those of the host the session will be on.
   const startPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  // Side panel tools require an existing project folder (or the parent session's folder).
+  const toolsPath = startPath && (parent || !project?.missing) ? startPath : null
   const hostId = startPath === null ? (noProject ? null : chosenHost) : hostOfPath(startPath)
   const installed = useAgentsStore((s) => {
     // This computer's agents are read after launch; until then the chosen agent stands.
@@ -199,9 +201,13 @@ export function NewSessionView({
           </NoDrag>
         )}
         <span className="flex-1" />
-        <NoDrag className="kp-bar-tools">
-          <ClosePaneButton />
-        </NoDrag>
+        {toolsPath ? (
+          <HeaderTools projectPath={toolsPath} panel={newSessionPanel(toolsPath)} />
+        ) : (
+          <NoDrag className="kp-bar-tools">
+            <ClosePaneButton />
+          </NoDrag>
+        )}
       </TopBar>
       <ColumnScroller className="flex flex-col pb-(--top-bar)">
         <section className="ui-as-start" data-phase="start">

@@ -8,6 +8,7 @@ import { cn } from '@renderer/lib/utils'
 import { showProjects } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
+  paneProjectPath,
   panelOf,
   shownLayoutSessions,
   shownProjects,
@@ -163,9 +164,14 @@ export function MainArea() {
   // The side panel is the pane in focus's, and New session at No project has none. The area stays
   // around the split even then, so the panes do not mount again as the focus moves.
   const view = focused
-  const panel = panelOf(view)
+  const panel = panelOf(view, selected, projects)
   // A session's panel is its working folder's: its worktree's when it has one.
-  const panelPath = focusedFolder || view.projectPath || selected || projects[0]?.path || null
+  const panelPath =
+    focusedFolder ||
+    paneProjectPath(view, selected, projects) ||
+    selected ||
+    projects[0]?.path ||
+    null
   if (!panelPath) {
     return (
       <PageSheet>
