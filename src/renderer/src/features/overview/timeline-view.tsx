@@ -2,7 +2,14 @@ import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { clockTime } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
-import { sessionBars, taskBars, type OverviewRow, type TimelineBar } from './model'
+import {
+  rowSubParts,
+  rowTooltip,
+  sessionBars,
+  taskBars,
+  type OverviewRow,
+  type TimelineBar,
+} from './model'
 import { RowMark, RowSub, RowTime } from './parts'
 import { useRowFacts } from './use-row-facts'
 
@@ -60,9 +67,16 @@ export function TimelineRow({ row, project }: { row: OverviewRow; project: boole
       ? taskBars(facts.steps ?? [], now)
       : sessionBars(row.state, row.updatedAt, facts.read, facts.now, now)
   const shown = bars.filter((bar) => bar.to > start)
+  const { fullText } = rowSubParts(facts, { project, separator: t('separator') })
   return (
     <div className="k-ov-tlr" data-state={row.state}>
-      <button type="button" className="k-ov-open" aria-label={facts.title} onClick={facts.open} />
+      <button
+        type="button"
+        className="k-ov-open"
+        aria-label={facts.title}
+        title={rowTooltip(facts.title, fullText)}
+        onClick={facts.open}
+      />
       <span className="k-ov-mark">
         <RowMark row={row} />
       </span>

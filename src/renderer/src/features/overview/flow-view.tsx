@@ -7,7 +7,7 @@ import { TurnDots } from '@renderer/features/session/turn-dots'
 import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
-import type { OverviewRow } from './model'
+import { rowSubParts, rowTooltip, type OverviewRow } from './model'
 import { Outputs, RowMark, RowSub, RowTime, StepTags } from './parts'
 import { useRowFacts } from './use-row-facts'
 
@@ -35,10 +35,18 @@ export function FlowRow({ row, project }: { row: OverviewRow; project: boolean }
   const facts = useRowFacts(row)
   const [open, setOpen] = useState(false)
   const kids = row.kind === 'session' ? row.node.children : []
+  const extra = kids.length > 0 ? t('subSessions', { count: kids.length }) : null
+  const { fullText } = rowSubParts(facts, { project, extra, separator: t('separator') })
   return (
     <>
       <div className="k-ov-tr" data-state={row.state}>
-        <button type="button" className="k-ov-open" aria-label={facts.title} onClick={facts.open} />
+        <button
+          type="button"
+          className="k-ov-open"
+          aria-label={facts.title}
+          title={rowTooltip(facts.title, fullText)}
+          onClick={facts.open}
+        />
         <span className="k-ov-chev">
           {kids.length > 0 && (
             <button
@@ -57,8 +65,7 @@ export function FlowRow({ row, project }: { row: OverviewRow; project: boolean }
         <span className="k-ov-name">
           <b>{facts.title}</b>
           <small>
-            <RowSub facts={facts} project={project} />
-            {kids.length > 0 && t('separator') + t('subSessions', { count: kids.length })}
+            <RowSub facts={facts} project={project} extra={extra} />
           </small>
         </span>
         <StepTags steps={facts.steps} />

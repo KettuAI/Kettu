@@ -131,11 +131,11 @@
 }
 .k-ov-tr {
   grid-template-columns:
-    14px 20px minmax(170px, 1fr) minmax(300px, 2.6fr) minmax(140px, 0.9fr)
+    14px 20px minmax(250px, 1.65fr) minmax(220px, 1.95fr) minmax(130px, 0.9fr)
     minmax(110px, 0.7fr) 56px;
 }
 .k-ov-tlr {
-  grid-template-columns: 20px 220px minmax(0, 1fr) 64px;
+  grid-template-columns: 20px clamp(220px, 31%, 320px) minmax(0, 1fr) 64px;
   padding-left: 16px;
 }
 .k-ov-th {
@@ -189,6 +189,7 @@
   gap: 1px;
   min-width: 0;
   text-align: left;
+  container: k-ov-name / inline-size;
 }
 .k-ov-name b {
   overflow: hidden;
@@ -206,6 +207,92 @@
   color: var(--muted);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* Subtitle row: keep the host pill pinned and truncate the project folder before the agent name. */
+.k-ov-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.k-ov-sub__meta {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.k-ov-sub__sep {
+  flex: none;
+  white-space: pre;
+}
+.k-ov-sub__project {
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-ov-sub__by {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Let the project folder shrink first while still guaranteeing room for it beside the agent name. */
+.k-ov-sub__project ~ .k-ov-sub__by {
+  flex: 0 0 auto;
+  max-width: min(56cqi, calc(100cqi - 48px));
+}
+.k-ov-sub:has(.k-ov-sub__host) .k-ov-sub__project ~ .k-ov-sub__by {
+  max-width: min(46cqi, calc(60cqi - 44px));
+}
+.k-ov-sub__by:has(~ .k-ov-sub__extra) {
+  flex: 0 0 auto;
+  max-width: min(56cqi, calc(100cqi - 48px));
+}
+.k-ov-sub:has(.k-ov-sub__host) .k-ov-sub__by:has(~ .k-ov-sub__extra) {
+  max-width: min(46cqi, calc(60cqi - 44px));
+}
+.k-ov-sub__extra {
+  flex: 0 10 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.k-ov-sub__host {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  max-width: min(116px, 40cqi);
+  height: 18px;
+  padding: 0 5px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.k-ov-sub__host svg {
+  flex: none;
+  color: var(--muted);
+}
+.k-ov-sub__host span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* When project, agent, and host compete in a compact column, drop the sub-session count (the row chevron and tooltip still expose it). */
+@container k-ov-name (max-width: 340px) {
+  .k-ov-sub:has(.k-ov-sub__project):has(.k-ov-sub__host) .k-ov-sub__extra {
+    display: none;
+  }
 }
 .k-ov-gh {
   display: flex;
@@ -771,7 +858,9 @@
 }
 @container k-page (max-width: 900px) {
   .k-ov-tr {
-    grid-template-columns: 14px 20px minmax(150px, 1fr) minmax(200px, 1.6fr) minmax(120px, 1fr) 56px;
+    grid-template-columns:
+      14px 20px minmax(210px, 1.5fr) minmax(150px, 1.3fr) minmax(100px, 0.8fr)
+      56px;
   }
   .k-ov-tr > .k-ov-outs,
   .k-ov-th > :nth-child(6) {

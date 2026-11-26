@@ -131,7 +131,7 @@ function Detail({ row }: { row: OverviewRow }) {
           {facts.title}
         </h2>
         <p className="k-ov-detail__sub">
-          <RowSub facts={facts} />
+          <RowSub facts={facts} inline />
         </p>
         <p className="k-ov-detail__now" data-state={row.state}>
           {facts.now}
