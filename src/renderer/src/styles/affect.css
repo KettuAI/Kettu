@@ -5256,6 +5256,43 @@ li[data-row-exit='dust'] > * {
 .kettu-composer > .ui-ccc {
   max-width: none;
 }
+/* Editing a workflow suggestion via the composer: highlight the writing surface and pulse once on each Edit click. */
+.kettu-composer[data-editing-workflow] > .ui-ccc .ui-ccc__write {
+  box-shadow:
+    0 0 0 1.5px var(--focus-ring-color),
+    var(--elevation-card);
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+.kettu-composer[data-attention] > .ui-ccc .ui-ccc__write {
+  animation: kettu-composer-attention 650ms var(--ease-standard);
+}
+@keyframes kettu-composer-attention {
+  0% {
+    box-shadow:
+      0 0 0 1.5px var(--focus-ring-color),
+      0 0 0 0 var(--focus-ring-color),
+      var(--elevation-card);
+  }
+  40% {
+    box-shadow:
+      0 0 0 1.5px var(--focus-ring-color),
+      0 0 0 5px var(--focus-ring-color),
+      var(--elevation-card);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1.5px var(--focus-ring-color),
+      var(--elevation-card);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-composer[data-attention] > .ui-ccc .ui-ccc__write {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .kettu-composer[data-attention] > .ui-ccc .ui-ccc__write {
+  animation: none;
+}
 /* The model and permission menus open inside the main area, which sits under the toast layer, so
    the toasts step aside while one is open. */
 body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {

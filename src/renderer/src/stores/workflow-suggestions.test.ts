@@ -153,4 +153,52 @@ describe('workflow-suggestions store', () => {
       expect(useSuggestionsStore.getState().byId['wfs-abcdefghij23']?.answer.kind).toBe('started')
     })
   })
+
+  it('tracks editing state per session, bumps nonce on repeated clicks, and clears when card resolves', async () => {
+    const { editingSuggestionFor, loadSuggestions, useSuggestionsStore } =
+      await import('./workflow-suggestions')
+
+    const draftCard: WorkflowSuggestion = {
+      ...suggestion('wfs-draftcard234'),
+      source: { kind: 'draft', draftId: 'draft:abcdefghij23' },
+    }
+    const saveCard: WorkflowSuggestion = {
+      ...suggestion('wfs-savecard2345'),
+      purpose: 'save',
+      source: { kind: 'draft', draftId: 'draft:234567abcdef' },
+    }
+    useSuggestionsStore.getState().receive(draftCard)
+    useSuggestionsStore.getState().receive(saveCard)
+
+    // Clicking Edit starts editing and bumps nonce on repeat clicks so attention feedback replays.
+    useSuggestionsStore.getState().startEditing('s1', draftCard.id)
+    expect(editingSuggestionFor(useSuggestionsStore.getState(), 's1')).toEqual({
+      card: draftCard,
+      nonce: 1,
+    })
+
+    useSuggestionsStore.getState().startEditing('s1', draftCard.id)
+    expect(editingSuggestionFor(useSuggestionsStore.getState(), 's1')?.nonce).toBe(2)
+
+    // Stopping with a mismatched cardId leaves the active edit intact.
+    useSuggestionsStore.getState().stopEditing('s1', saveCard.id)
+    expect(editingSuggestionFor(useSuggestionsStore.getState(), 's1')?.card.id).toBe(draftCard.id)
+
+    // Live update resolving the card automatically clears its editing state.
+    useSuggestionsStore
+      .getState()
+      .receive({ ...draftCard, answer: { kind: 'starting', items: [] } })
+    expect(useSuggestionsStore.getState().editing['s1']).toBeUndefined()
+    expect(editingSuggestionFor(useSuggestionsStore.getState(), 's1')).toBeNull()
+
+    // Editing another card is also cleared when a session reload shows it was resolved elsewhere.
+    useSuggestionsStore.getState().startEditing('s1', saveCard.id)
+    expect(editingSuggestionFor(useSuggestionsStore.getState(), 's1')?.card.id).toBe(saveCard.id)
+
+    hostAtMock.mockResolvedValueOnce([
+      { ...saveCard, answer: { kind: 'saved', workflowId: 'wf-saved' } },
+    ])
+    await loadSuggestions('s1', null, { force: true })
+    expect(useSuggestionsStore.getState().editing['s1']).toBeUndefined()
+  })
 })

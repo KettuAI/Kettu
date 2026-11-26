@@ -1402,6 +1402,8 @@
       "notNow": "不要",
       "doItHere": "直接在这里做",
       "edit": "改一下",
+      "editingHint": "在下方输入框告诉 {{agent}} 要怎么改。",
+      "cancelEdit": "取消",
       "details": "详情",
       "source": {
         "library": "用你装的「{{name}}」工作流",

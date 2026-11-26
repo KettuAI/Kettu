@@ -1725,6 +1725,19 @@
   max-height: none;
   overflow: visible;
 }
+.ks-suggest--editing .ui-apc__btn--ghost {
+  background: var(--thread-hover);
+  color: var(--thread-ink);
+}
+.ks-suggest__editing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--thread-line);
+  padding-top: 10px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+}
 .ks-plan__preview {
   display: flex;
   flex-direction: column;

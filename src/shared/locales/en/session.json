@@ -1457,6 +1457,8 @@
       "notNow": "Not now",
       "doItHere": "Do it here",
       "edit": "Edit",
+      "editingHint": "Tell {{agent}} what to change in the composer below.",
+      "cancelEdit": "Cancel",
       "details": "Details",
       "source": {
         "library": "Your “{{name}}” workflow",

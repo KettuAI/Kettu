@@ -16,13 +16,52 @@ export interface SessionSuggestionsState {
 
 const IDLE_SESSION: SessionSuggestionsState = { status: 'idle', error: null, missed: [] }
 
+export interface EditingSuggestion {
+  cardId: string
+  /** Incremented on each Edit click so repeated clicks re-trigger composer attention feedback. */
+  nonce: number
+}
+
 interface SuggestionsStore {
   byId: Record<string, WorkflowSuggestion>
   /** The cards Start was pressed on in this window, which opens their task once it starts. */
   pressed: Record<string, true>
+  /** Workflow card currently being edited via the composer, per session id. */
+  editing: Record<string, EditingSuggestion>
   /** Load status per `${hostId ?? ''}/${sessionId}` session key. */
   sessions: Record<string, SessionSuggestionsState>
   receive(suggestion: WorkflowSuggestion): void
+  startEditing(sessionId: string, cardId: string): void
+  stopEditing(sessionId: string, cardId?: string): void
+}
+
+function pruneResolvedEditing(
+  editing: Record<string, EditingSuggestion>,
+  byId: Record<string, WorkflowSuggestion>,
+): { editing: Record<string, EditingSuggestion>; changed: boolean } {
+  let changed = false
+  const next: Record<string, EditingSuggestion> = {}
+  for (const [sessionId, entry] of Object.entries(editing)) {
+    const card = byId[entry.cardId]
+    if (card && card.answer.kind !== 'waiting') {
+      changed = true
+      continue
+    }
+    next[sessionId] = entry
+  }
+  return { editing: changed ? next : editing, changed }
+}
+
+/** Returns the active waiting workflow suggestion being edited in `sessionId`, if any. */
+export function editingSuggestionFor(
+  state: Pick<SuggestionsStore, 'byId' | 'editing'>,
+  sessionId: string,
+): { card: WorkflowSuggestion; nonce: number } | null {
+  const entry = state.editing[sessionId]
+  if (!entry) return null
+  const card = state.byId[entry.cardId]
+  if (!card || card.answer.kind !== 'waiting') return null
+  return { card, nonce: entry.nonce }
 }
 
 /** Monotonic counter ordering live suggestion events against RPC fetches. */
@@ -43,6 +82,7 @@ export function sessionKey(sessionId: string, hostId: string | null): string {
 export const useSuggestionsStore = create<SuggestionsStore>()((set) => ({
   byId: {},
   pressed: {},
+  editing: {},
   sessions: {},
   receive(suggestion) {
     eventGen.set(suggestion.id, ++generation)
@@ -60,10 +100,33 @@ export const useSuggestionsStore = create<SuggestionsStore>()((set) => ({
           nextSessions[key] = entry
         }
       }
+      const byId = { ...state.byId, [suggestion.id]: suggestion }
+      const pruned = pruneResolvedEditing(state.editing, byId)
       return {
-        byId: { ...state.byId, [suggestion.id]: suggestion },
+        byId,
+        ...(pruned.changed ? { editing: pruned.editing } : {}),
         ...(sessionsChanged ? { sessions: nextSessions } : {}),
       }
+    })
+  },
+  startEditing(sessionId, cardId) {
+    set((state) => {
+      const previous = state.editing[sessionId]
+      return {
+        editing: {
+          ...state.editing,
+          [sessionId]: { cardId, nonce: (previous?.nonce ?? 0) + 1 },
+        },
+      }
+    })
+  },
+  stopEditing(sessionId, cardId) {
+    set((state) => {
+      const current = state.editing[sessionId]
+      if (!current || (cardId !== undefined && current.cardId !== cardId)) return state
+      const next = { ...state.editing }
+      delete next[sessionId]
+      return { editing: next }
     })
   },
 }))
@@ -128,8 +191,10 @@ export function loadSuggestions(
           for (const id of asked) {
             if (byId[id] === undefined) nextMissed.add(id)
           }
+          const pruned = pruneResolvedEditing(state.editing, byId)
           return {
             byId,
+            ...(pruned.changed ? { editing: pruned.editing } : {}),
             sessions: {
               ...state.sessions,
               [key]: { status: 'loaded', error: null, missed: [...nextMissed] },
@@ -230,5 +295,5 @@ export function resetSuggestionsStore(): void {
   latestLoad.clear()
   inFlight.clear()
   requestedInFlight.clear()
-  useSuggestionsStore.setState({ byId: {}, pressed: {}, sessions: {} })
+  useSuggestionsStore.setState({ byId: {}, pressed: {}, editing: {}, sessions: {} })
 }

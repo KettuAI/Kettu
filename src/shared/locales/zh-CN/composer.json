@@ -9,6 +9,7 @@
       "limitReachedContinue": "{{limit}}限额已用完 · {{time}} 自动继续",
       "limitExtraUsage": "{{limit}}限额已用完 · 正在用额外用量",
       "ask": "回复…",
+      "editWorkflow": "告诉 {{agent}} 要怎么改这个工作流…",
       "taskRunning": "接着聊，不影响需求",
       "denied": "说说改用什么做法",
       "runningQueue": "排队一条消息 · Esc 停止",
@@ -83,6 +84,12 @@
   },
   "heldOutside": {
     "strip": "这个会话正开在终端里。在那边输入 /exit 退出后，它的对话会同步到这里。"
+  },
+  "workflowEdit": {
+    "title": "正在修改工作流「{{name}}」",
+    "hint": "告诉 {{agent}} 要怎么改，它会更新工作流卡片。",
+    "saveHint": "告诉 {{agent}} 要怎么改，再存为你的工作流。",
+    "cancel": "取消"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",

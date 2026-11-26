@@ -102,6 +102,25 @@ export function useBoxText<T>(
 }
 
 /**
+ * Whether a `focus-composer` event targets this composer: explicit `paneId` matches that pane
+ * even before its focused state flushes; explicit `sessionId` matches that session; otherwise only
+ * the focused pane's composer responds.
+ */
+export function matchesFocusComposer(
+  event: { sessionId?: string | null; paneId?: string | null },
+  target: { sessionId: string | null; paneId: string | null; focused: boolean },
+): boolean {
+  if (event.paneId != null) {
+    return (
+      event.paneId === target.paneId &&
+      (event.sessionId == null || event.sessionId === target.sessionId)
+    )
+  }
+  if (event.sessionId != null) return event.sessionId === target.sessionId
+  return target.focused
+}
+
+/**
  * The box's state, kept in the draft `draft`. `sessionId` is the session whose `insert-into-composer`
  * events it takes besides those for no session; null for New session. While `disabled`, nothing
  * is attached.
@@ -158,7 +177,9 @@ export function usePromptBox({
     onError: () => setError(t('prompt.historyFailed')),
   })
   // Only the focused pane's composer takes the events sent to no session in particular.
-  const paneFocused = usePane()?.focused ?? true
+  const pane = usePane()
+  const paneId = pane?.paneId ?? null
+  const paneFocused = pane?.focused ?? true
   const focused = useRef(paneFocused)
   useEffect(() => {
     focused.current = paneFocused
@@ -281,7 +302,12 @@ export function usePromptBox({
     () =>
       onAppEvent((event) => {
         onEvent(event)
-        if (event.kind === 'focus-composer' && focused.current) editor.current?.focus()
+        if (
+          event.kind === 'focus-composer' &&
+          matchesFocusComposer(event, { sessionId, paneId, focused: focused.current })
+        ) {
+          editor.current?.focus()
+        }
         if (event.kind === 'draft-written' && event.draft === draft) {
           closeHistory()
           const next = readDraft(draft)
@@ -305,7 +331,7 @@ export function usePromptBox({
           addMention(event.mention)
         }
       }),
-    [draft, sessionId, source, closeHistory, addText, addCommand, addMention],
+    [draft, sessionId, paneId, source, closeHistory, addText, addCommand, addMention],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */
