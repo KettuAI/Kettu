@@ -1839,6 +1839,7 @@ export function createValidators(platform: Platform): Validators {
         agentId: agentId(o),
         projectPath: absolutePath(o, 'projectPath', platform),
         ...(cursor !== undefined ? { cursor } : {}),
+        ...(o.allFolders === true ? { allFolders: true } : {}),
       }
     },
     'projects.list': none,

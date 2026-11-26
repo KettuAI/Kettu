@@ -1392,9 +1392,10 @@ export class AcpConnection implements AgentConnection {
   }
 
   async listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }> {
+    if (cwd === null) return { sessions: [], nextCursor: null }
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.list, {
         cwd,

@@ -3827,8 +3827,8 @@ export class AgentHost {
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })
         return this.mcpStatus()
       },
-      'agents.listSessions': ({ agentId, projectPath, cursor }) =>
-        sessions.listImportable(agentId, projectPath, cursor ?? null),
+      'agents.listSessions': ({ agentId, projectPath, cursor, allFolders }) =>
+        sessions.listImportable(agentId, projectPath, cursor ?? null, allFolders === true),
       'projects.list': () => {
         void projects.refreshMissing()
         return projects.list()

@@ -1139,9 +1139,10 @@ export class OpenCodeConnection implements AgentConnection {
   }
 
   async listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }> {
+    if (cwd === null) return { sessions: [], nextCursor: null }
     const query = cursor
       ? `cursor=${encodeURIComponent(cursor)}`
       : `directory=${encodeURIComponent(cwd)}&parentID=null&limit=${MESSAGE_PAGE}`

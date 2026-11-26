@@ -374,6 +374,8 @@ interface ThreadRecord {
   id: string
   /** The folder the session was opened in; null for a thread Kettu only saw. */
   cwd: string | null
+  /** Whether history uses paginated item listing or legacy `thread/read` turns. */
+  historyMode?: string
   settings: Settings
   /** The settings are the session's own, from its open, not a guess for a thread Kettu saw. */
   known: boolean
@@ -561,6 +563,7 @@ export class CodexConnection implements AgentConnection {
       capabilities: {
         loadSession: true,
         listSessions: true,
+        listAllSessions: true,
         resumeSession: true,
         closeSession: true,
         deleteSession: true,
@@ -728,6 +731,7 @@ export class CodexConnection implements AgentConnection {
       prompted: false,
       mapper: seen?.mapper ?? new ThreadMapper(),
     })
+    record.historyMode = response.thread.historyMode ?? seen?.historyMode
     record.usage = seen?.usage ?? null
     this.threads.set(id, record)
     void this.publishCommands(id)
@@ -853,17 +857,33 @@ export class CodexConnection implements AgentConnection {
 
   /** The thread's history, oldest first, each item with its turn. */
   private async items(threadId: string): Promise<ThreadItemsListResponse['data']> {
-    const entries: ThreadItemsListResponse['data'] = []
-    let cursor: string | null = null
-    do {
-      const page: ThreadItemsListResponse = await this.call<ThreadItemsListResponse>(
-        'thread/items/list',
-        { threadId, cursor, limit: 200, sortDirection: 'asc' },
-      )
-      entries.push(...page.data)
-      cursor = page.nextCursor
-    } while (cursor)
-    return entries
+    const readTurns = async (): Promise<ThreadItemsListResponse['data']> => {
+      const { thread } = await this.call<ThreadReadResponse>('thread/read', {
+        threadId,
+        includeTurns: true,
+      })
+      return thread.turns.flatMap((turn) => turn.items.map((item) => ({ turnId: turn.id, item })))
+    }
+    // Legacy rollouts store history in one file and serve turns through `thread/read`.
+    if (this.threads.get(threadId)?.historyMode === 'legacy') return readTurns()
+    try {
+      const entries: ThreadItemsListResponse['data'] = []
+      let cursor: string | null = null
+      do {
+        const page: ThreadItemsListResponse = await this.call<ThreadItemsListResponse>(
+          'thread/items/list',
+          { threadId, cursor, limit: 200, sortDirection: 'asc' },
+        )
+        entries.push(...page.data)
+        cursor = page.nextCursor
+      } while (cursor)
+      return entries
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.code === METHOD_NOT_FOUND) {
+        return readTurns()
+      }
+      throw error
+    }
   }
 
   /** Replays a thread's items to its target; returns the subagents they name. */
@@ -1076,7 +1096,7 @@ export class CodexConnection implements AgentConnection {
   }
 
   async listSessions(
-    cwd: string,
+    cwd: string | null,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }> {
     const response = await this.call<ThreadListResponse>('thread/list', {
