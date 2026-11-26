@@ -6653,8 +6653,9 @@ export class SessionManager {
   }
 
   /**
-   * Use now: the session's agent lets go of it between turns and attaches again, with the
-   * library's servers as they are now. A session that is not attached takes them when it does.
+   * Use now: the session's agent lets go of it between turns, so its next attach, at the next
+   * message or as the user types, has the library's servers as they are now. It does not attach
+   * here, since a resumed Claude Code session only finishes attaching once a message is sent.
    */
   async applyLibrary(sessionId: string): Promise<void> {
     const live = this.live.get(sessionId)
@@ -6662,7 +6663,9 @@ export class SessionManager {
     if (this.holdReason(live) !== null) {
       throw new HostError('busy', 'The session is busy; use the servers once its turn ends')
     }
-    await this.attachAgain(live, 'library servers used now')
+    this.update(live, { mcpChanged: [] })
+    this.release(live, 'library servers used now')
+    await this.releasing.get(live.id)
   }
 
   /**
