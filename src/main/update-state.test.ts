@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { UpdateState } from '@shared/updates'
-import { nextState, type TransitionContext, type UpdaterEvent } from './update-state'
+import {
+  nextState,
+  releaseHighlights,
+  type TransitionContext,
+  type UpdaterEvent,
+} from './update-state'
 
 const context: TransitionContext = {
   mode: 'install',
@@ -70,5 +75,72 @@ describe('a check while an update waits for its restart', () => {
       offered,
     )
     expect(run(downloading, [{ type: 'download-cancelled' }])).toEqual(offered)
+  })
+})
+
+describe('releaseHighlights', () => {
+  it('parses bilingual notes with folded Simplified Chinese and ignores Contributors', () => {
+    const notes = [
+      'A short summary line.',
+      '',
+      '## What changed',
+      '',
+      '- **Cards stay in reopened sessions**: details here. (#2654)',
+      '- Keep timeline dots above the rail (#2675, thanks @akatsukiro).',
+      '- Handle multiple credits on macOS (Apple silicon) (#2676, #2677, thanks @alice, @bob).',
+      '',
+      '<details>',
+      '<summary>简体中文更新说明</summary>',
+      '',
+      '## 中文',
+      '',
+      '- **重新打开的会话保留卡片**：详细说明。(#2654)',
+      '- 修复时间线圆点层级 (#2675，感谢 @akatsukiro)。',
+      '- 支持多位贡献者致谢（macOS）(#2676, #2677, 感谢 @alice、@bob)。',
+      '',
+      '</details>',
+      '',
+      '## Contributors',
+      '',
+      '- @akatsukiro',
+      '- @alice',
+      '',
+      '<a href="https://github.com/akatsukiro" title="@akatsukiro"><img src="https://github.com/akatsukiro.png?size=96" width="36" height="36" alt="@akatsukiro" /></a>',
+    ].join('\n')
+
+    expect(releaseHighlights(notes)).toEqual({
+      en: [
+        'Cards stay in reopened sessions',
+        'Keep timeline dots above the rail',
+        'Handle multiple credits on macOS (Apple silicon)',
+      ],
+      'zh-CN': ['重新打开的会话保留卡片', '修复时间线圆点层级', '支持多位贡献者致谢（macOS）'],
+    })
+  })
+
+  it('strips contributor attributions in HTML release notes and ignores Contributors lists', () => {
+    const html = [
+      '<h2>What changed</h2>',
+      '<ul>',
+      '<li>Fix session restore (<a href="https://github.com/KettuAI/Kettu/issues/2675">#2675</a>, thanks <a href="https://github.com/akatsukiro">@akatsukiro</a>).</li>',
+      '<li>Polish keyboard focus (thanks <a href="https://github.com/alice">@alice</a> and <a href="https://github.com/bob">@bob</a>).</li>',
+      '</ul>',
+      '<details>',
+      '<summary>简体中文更新说明</summary>',
+      '<h2>中文</h2>',
+      '<ul>',
+      '<li>修复会话恢复（<a href="https://github.com/KettuAI/Kettu/issues/2675">#2675</a>，感谢 <a href="https://github.com/akatsukiro">@akatsukiro</a>）。</li>',
+      '</ul>',
+      '</details>',
+      '<h2>Contributors</h2>',
+      '<ul>',
+      '<li><a href="https://github.com/akatsukiro">@akatsukiro</a></li>',
+      '</ul>',
+    ].join('\n')
+
+    expect(releaseHighlights(html)).toEqual({
+      en: ['Fix session restore', 'Polish keyboard focus'],
+      'zh-CN': ['修复会话恢复'],
+    })
   })
 })

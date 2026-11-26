@@ -184,6 +184,41 @@ Missing an agent you use? [Request it in an issue](https://github.com/KettuAI/Ke
 | [**KettuAI/workflows**](https://github.com/KettuAI/workflows) | Official multi-agent workflow definitions for the Kettu Marketplace                            |
 | [**KettuAI/themes**](https://github.com/KettuAI/themes)       | Community and official color themes catalog                                                    |
 
+## Contributors
+
+<!-- contributors:start -->
+
+Thank you to everyone helping shape Kettu — whether through merged pull requests or through accepted bug reports, ideas, and feedback.
+
+<p>
+  <a href="https://github.com/Yezh1i" title="@Yezh1i"><img src="https://github.com/Yezh1i.png?size=96" width="48" height="48" alt="@Yezh1i"></a>
+  <a href="https://github.com/xiaolfeng" title="@xiaolfeng"><img src="https://github.com/xiaolfeng.png?size=96" width="48" height="48" alt="@xiaolfeng"></a>
+  <a href="https://github.com/isyuah" title="@isyuah"><img src="https://github.com/isyuah.png?size=96" width="48" height="48" alt="@isyuah"></a>
+  <a href="https://github.com/kinhangliew-debug" title="@kinhangliew-debug"><img src="https://github.com/kinhangliew-debug.png?size=96" width="48" height="48" alt="@kinhangliew-debug"></a>
+  <a href="https://github.com/javalover123" title="@javalover123"><img src="https://github.com/javalover123.png?size=96" width="48" height="48" alt="@javalover123"></a>
+  <a href="https://github.com/NKUlpj" title="@NKUlpj"><img src="https://github.com/NKUlpj.png?size=96" width="48" height="48" alt="@NKUlpj"></a>
+  <a href="https://github.com/akatsukiro" title="@akatsukiro"><img src="https://github.com/akatsukiro.png?size=96" width="48" height="48" alt="@akatsukiro"></a>
+  <a href="https://github.com/jintongxu" title="@jintongxu"><img src="https://github.com/jintongxu.png?size=96" width="48" height="48" alt="@jintongxu"></a>
+  <a href="https://github.com/jkoe86710" title="@jkoe86710"><img src="https://github.com/jkoe86710.png?size=96" width="48" height="48" alt="@jkoe86710"></a>
+  <a href="https://github.com/Ne1ther" title="@Ne1ther"><img src="https://github.com/Ne1ther.png?size=96" width="48" height="48" alt="@Ne1ther"></a>
+  <a href="https://github.com/AlkaidSTART" title="@AlkaidSTART"><img src="https://github.com/AlkaidSTART.png?size=96" width="48" height="48" alt="@AlkaidSTART"></a>
+  <a href="https://github.com/Ariember" title="@Ariember"><img src="https://github.com/Ariember.png?size=96" width="48" height="48" alt="@Ariember"></a>
+  <a href="https://github.com/ShaoClean" title="@ShaoClean"><img src="https://github.com/ShaoClean.png?size=96" width="48" height="48" alt="@ShaoClean"></a>
+  <a href="https://github.com/Elijah-s" title="@Elijah-s"><img src="https://github.com/Elijah-s.png?size=96" width="48" height="48" alt="@Elijah-s"></a>
+  <a href="https://github.com/Kongbai333" title="@Kongbai333"><img src="https://github.com/Kongbai333.png?size=96" width="48" height="48" alt="@Kongbai333"></a>
+  <a href="https://github.com/KubaZzZo" title="@KubaZzZo"><img src="https://github.com/KubaZzZo.png?size=96" width="48" height="48" alt="@KubaZzZo"></a>
+  <a href="https://github.com/Leochens" title="@Leochens"><img src="https://github.com/Leochens.png?size=96" width="48" height="48" alt="@Leochens"></a>
+  <a href="https://github.com/maysilence" title="@maysilence"><img src="https://github.com/maysilence.png?size=96" width="48" height="48" alt="@maysilence"></a>
+  <a href="https://github.com/RainGoal" title="@RainGoal"><img src="https://github.com/RainGoal.png?size=96" width="48" height="48" alt="@RainGoal"></a>
+  <a href="https://github.com/songxff" title="@songxff"><img src="https://github.com/songxff.png?size=96" width="48" height="48" alt="@songxff"></a>
+  <a href="https://github.com/sunCloud998" title="@sunCloud998"><img src="https://github.com/sunCloud998.png?size=96" width="48" height="48" alt="@sunCloud998"></a>
+  <a href="https://github.com/w-bytes" title="@w-bytes"><img src="https://github.com/w-bytes.png?size=96" width="48" height="48" alt="@w-bytes"></a>
+  <a href="https://github.com/xhbs" title="@xhbs"><img src="https://github.com/xhbs.png?size=96" width="48" height="48" alt="@xhbs"></a>
+  <a href="https://github.com/xing-skyline" title="@xing-skyline"><img src="https://github.com/xing-skyline.png?size=96" width="48" height="48" alt="@xing-skyline"></a>
+</p>
+
+<!-- contributors:end -->
+
 ## Community & Contributing
 
 - **Issues & feedback**: Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) in any language, or use **Help › Report a Problem…** inside the app.
