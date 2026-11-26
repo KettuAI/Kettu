@@ -294,7 +294,7 @@ Use it without being asked when it fits: after you change a page or a component,
 
 \`browser_navigate\` opens a URL. A local dev server (localhost, 127.0.0.1, [::1], *.localhost or *.test) opens at once; any other site waits for the user to allow it. When the page calls other local ports on this host (such as a backend API or WebSocket server), list them in \`forward_ports\` so remote clients can reach them too. Run a dev server in a terminal the user sees first (${ref('terminals')}).
 
-A page you use lays out 1280 by 800, whatever room the user's panel has: the panel only shows it smaller, and a screenshot shows all of it. To check how it looks on a tablet or a phone, \`browser_resize\` lays it out at 768 by 1024 or 390 by 844 as a touch device with a mobile user agent, or at a width and height you give; the user can pick these sizes in the panel too, and the tab keeps whichever was picked last.
+A page you use lays out at desktop width (at least 1280 px wide, filling the user's panel height) and stays fixed for your turn so resizing the panel never reflows it mid-turn. To check how it looks on a tablet or a phone, \`browser_resize\` lays it out at 768 by 1024 or 390 by 844 as a touch device with a mobile user agent, or at a width and height you give; the user can also pick these sizes or native pane fill in the panel, and the tab keeps whichever was picked last.
 
 ## Reading and acting
 

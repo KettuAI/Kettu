@@ -30,10 +30,10 @@ import { parseOwnRelayInput } from './own-relay'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import {
-  PAGE_SIZE_NAMES,
+  PANE_PAGE_SIZE_MODES,
   type BrowserBounds,
   type BrowserOriginDecision,
-  type PageSizeName,
+  type PanePageSizeMode,
 } from '@shared/browser'
 import { isAgentId } from '@shared/agents'
 import { isControlOutcome, type ControlAgent } from '@shared/control'
@@ -1035,11 +1035,13 @@ export function registerIpcHandlers({
   handle('browser:stop', 1, (_, id) => browserViews.stop(sessionId(id)))
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
   handle('browser:page-size', 2, async (_, id, size) => {
-    if (!(PAGE_SIZE_NAMES as readonly unknown[]).includes(size)) {
-      throw new Error('A page size must be desktop, tablet or phone')
+    if (!(PANE_PAGE_SIZE_MODES as readonly unknown[]).includes(size)) {
+      throw new Error('A page size must be fit, desktop, tablet or phone')
     }
     const page = sessionId(id)
-    if (browserViews.paneControl(page)) await browserViews.setPageSize(page, size as PageSizeName)
+    if (browserViews.paneControl(page)) {
+      await browserViews.setPageSize(page, size as PanePageSizeMode)
+    }
   })
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))

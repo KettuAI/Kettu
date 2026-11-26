@@ -495,11 +495,11 @@ export const BROWSER_TOOLS: Tool[] = [
     name: 'browser_resize',
     title: 'Resize page',
     description:
-      `Sets the size your page lays out at: desktop ${sizeText('desktop')}, the one it starts ` +
-      `with, tablet ${sizeText('tablet')} or phone ${sizeText('phone')}, or a width and height ` +
-      'of your own. Tablet and phone lay it out as a touch device with a mobile user agent. The ' +
-      'size stays with the tab, whatever room the user’s panel has. Returns the page with a ' +
-      'snapshot.',
+      'Sets the size your page lays out at: desktop (at least 1280 px wide, filling the panel’s ' +
+      `height, the one it starts with), tablet ${sizeText('tablet')} or phone ${sizeText('phone')}, ` +
+      'or a width and height of your own. Tablet and phone lay it out as a touch device with a ' +
+      'mobile user agent. The size stays with the tab, and desktop stays fixed during your turn ' +
+      'so panel resizes never reflow it. Returns the page with a snapshot.',
     inputSchema: object({
       size: { type: 'string', enum: [...PAGE_SIZE_NAMES] },
       width: {
