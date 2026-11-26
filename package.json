@@ -155,7 +155,8 @@
       "@electron/notarize@2.5.0": "patches/@electron__notarize@2.5.0.patch",
       "@expo/serve-sim@0.13.3": "patches/@expo__serve-sim@0.13.3.patch",
       "@shadcn/react@0.3.1": "patches/@shadcn__react@0.3.1.patch",
-      "streamdown@2.7.1": "patches/streamdown@2.7.1.patch"
+      "streamdown@2.7.1": "patches/streamdown@2.7.1.patch",
+      "agent-device@0.21.36": "patches/agent-device@0.21.36.patch"
     }
   },
   "optionalDependencies": {

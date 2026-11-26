@@ -169,7 +169,13 @@ export function parseDevicectl(json: string): FoundDevice[] {
   const found: FoundDevice[] = []
   for (const device of parsed.result?.devices ?? []) {
     const hardware = device.hardwareProperties ?? {}
-    if (hardware.reality !== 'physical' || hardware.platform !== 'iOS' || !hardware.udid) continue
+    if (
+      hardware.reality !== 'physical' ||
+      (hardware.platform !== 'iOS' && hardware.platform !== 'iPadOS') ||
+      !hardware.udid
+    ) {
+      continue
+    }
     const connection = device.connectionProperties ?? {}
     const properties = device.deviceProperties ?? {}
     const problems: DeviceProblem[] = []
