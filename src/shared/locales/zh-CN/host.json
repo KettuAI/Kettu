@@ -111,6 +111,10 @@
         "gone": "这张定时任务卡片已不再等待回答",
         "answered": "这张定时任务卡片已经回答过了"
       },
+      "bot": {
+        "gone": "这张 Bot 确认卡片已不再等待回答",
+        "answered": "这张 Bot 确认卡片已经回答过了"
+      },
       "step": {
         "gone": "这一步已不再等待回答",
         "answered": "这一步已经回答过了"
@@ -251,7 +255,11 @@
     "routineCreate": "想新建定时任务「{{name}}」",
     "routineUpdate": "想修改定时任务「{{name}}」",
     "routineDelete": "想删除定时任务「{{name}}」",
-    "routineRun": "想立即运行定时任务「{{name}}」"
+    "routineRun": "想立即运行定时任务「{{name}}」",
+    "botCreate": "想新建 Bot「{{name}}」",
+    "botUpdate": "想修改 Bot「{{name}}」",
+    "botDelete": "想删除 Bot「{{name}}」",
+    "botRoleEdit": "想修改 Bot「{{name}}」的职责"
   },
   "routines": {
     "busy": "此定时任务已经有一个运行正在工作",

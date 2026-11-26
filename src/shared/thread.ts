@@ -2,6 +2,15 @@
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
 import { isAgentId, type AgentId } from './agents'
+import {
+  isBotCardFields,
+  type BotCardFields,
+  type BotChangeAction,
+  type BotChangeOutcome,
+  type BotRequestStatus,
+  type BotSessionRef,
+} from './bots'
+import type { Platform } from './platform'
 import type { LastRequest } from './model-requests'
 import type { BrowserOriginAnswer } from './browser'
 import {
@@ -86,9 +95,11 @@ export interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent' | 'routine' | 'task'
+  origin: 'user' | 'subagent' | 'routine' | 'task' | 'bot_main' | 'bot_work'
   subagent: SubagentInfo | null // set when origin is 'subagent'
   routine: RoutineRef | null // set when origin is 'routine'
+  /** 若属于某个 Bot 的主对话或派发工作会话，则记录其归属信息。 */
+  bot?: BotSessionRef | null
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
   /** Ephemeral: set while the session holds the computer, with the app it last used. */
@@ -484,6 +495,9 @@ export type ThreadEntry =
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
   | RoutineChangeEntry // Kettu's own record of an agent's change to a Routine, and its answer
+  | BotChangeEntry // Agent 通过受控 MCP 工具提议创建/修改/删除 Bot 或改写职责的强制确认卡片
+  | BotDispatchEntry // Bot 主对话中向本机或远端目标电脑派发工作会话的状态卡片
+  | BotHandoffEntry // 普通会话中 @Bot 交接任务及 Bot 结果回流的事件行
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
 
@@ -1017,6 +1031,65 @@ export interface RoutineChangeEntry {
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** Agent 通过受控 MCP 工具提议创建/修改/删除 Bot 或修改 ROLE.md；任何模式下均需用户点卡片确认。 */
+export interface BotChangeEntry {
+  kind: 'bot_change'
+  id: string
+  action: BotChangeAction
+  /** 目标 Bot ID；新建时为 null。 */
+  botId: string | null
+  /** 目标变更后的字段快照。 */
+  bot: BotCardFields
+  /** 修改/删除前快照，用于高亮差异。 */
+  before: BotCardFields | null
+  /** 仅删除时使用：该 Bot 关联的历史工作会话数。 */
+  sessions: number | null
+  /** 超时自动拒绝时间戳（毫秒）。 */
+  expiresAt: number
+  outcome: BotChangeOutcome | null
+  device?: FromDevice
+  after: string | null
+}
+
+export type { BotChangeAction, BotChangeOutcome, BotCardFields, BotSessionRef } from './bots'
+
+/** Bot 主对话流中的跨电脑/本机派发卡片，随远端或本地会话生命周期实时更新。 */
+export interface BotDispatchEntry {
+  kind: 'bot_dispatch'
+  id: string
+  requestId: string
+  botId: string
+  title: string
+  targetHostId: string | null
+  targetHostName: string
+  targetPlatform: Platform
+  projectPath: string
+  projectName: string
+  agentId: AgentId
+  model: string | null
+  branch: string | null
+  scope: PermissionScope
+  sessionId: string | null
+  status: BotRequestStatus
+  summary: string | null
+  error: string | null
+  after: string | null
+}
+
+/** 普通会话中通过 @Bot 发起交接，及 Bot 完成后向原会话回流结论的轻事件行。 */
+export interface BotHandoffEntry {
+  kind: 'bot_handoff'
+  id: string
+  botId: string
+  botName: string
+  botHandle: string
+  botSessionId: string | null
+  prompt: string
+  status: 'sent' | 'completed' | 'failed'
+  summary: string | null
   after: string | null
 }
 
@@ -1854,7 +1927,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       )
     case 'memory':
       return (
-        (value.layer === 'global' || value.layer === 'project') &&
+        (value.layer === 'global' || value.layer === 'project' || value.layer === 'bot') &&
         (value.action === 'remember' || value.action === 'update' || value.action === 'forget') &&
         (value.memoryId === null || typeof value.memoryId === 'string') &&
         typeof value.title === 'string' &&
@@ -1919,6 +1992,53 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.sessions === null || typeof value.sessions === 'number') &&
         typeof value.expiresAt === 'number' &&
         (value.outcome === null || isRoutineChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_change':
+      return (
+        (value.action === 'create' ||
+          value.action === 'update' ||
+          value.action === 'delete' ||
+          value.action === 'role_edit') &&
+        (value.botId === null || typeof value.botId === 'string') &&
+        isBotCardFields(value.bot) &&
+        (value.before === null || isBotCardFields(value.before)) &&
+        (value.sessions === null || typeof value.sessions === 'number') &&
+        typeof value.expiresAt === 'number' &&
+        (value.outcome === null || isBotChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_dispatch':
+      return (
+        typeof value.requestId === 'string' &&
+        typeof value.botId === 'string' &&
+        typeof value.title === 'string' &&
+        (value.targetHostId === null || typeof value.targetHostId === 'string') &&
+        typeof value.targetHostName === 'string' &&
+        (value.targetPlatform === 'darwin' ||
+          value.targetPlatform === 'win32' ||
+          value.targetPlatform === 'linux') &&
+        typeof value.projectPath === 'string' &&
+        typeof value.projectName === 'string' &&
+        isAgentId(value.agentId) &&
+        (value.model === null || typeof value.model === 'string') &&
+        (value.branch === null || typeof value.branch === 'string') &&
+        isPermissionScope(value.scope) &&
+        (value.sessionId === null || typeof value.sessionId === 'string') &&
+        typeof value.status === 'string' &&
+        (value.summary === null || typeof value.summary === 'string') &&
+        (value.error === null || typeof value.error === 'string') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_handoff':
+      return (
+        typeof value.botId === 'string' &&
+        typeof value.botName === 'string' &&
+        typeof value.botHandle === 'string' &&
+        (value.botSessionId === null || typeof value.botSessionId === 'string') &&
+        typeof value.prompt === 'string' &&
+        (value.status === 'sent' || value.status === 'completed' || value.status === 'failed') &&
+        (value.summary === null || typeof value.summary === 'string') &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'plugin_denial':
@@ -2042,6 +2162,22 @@ function isRoutineChangeOutcome(value: unknown): value is RoutineChangeOutcome {
   switch (value.kind) {
     case 'done':
       return typeof value.routineId === 'string'
+    case 'declined':
+    case 'expired':
+    case 'ended':
+      return true
+    case 'failed':
+      return typeof value.message === 'string'
+    default:
+      return false
+  }
+}
+
+function isBotChangeOutcome(value: unknown): value is BotChangeOutcome {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'done':
+      return typeof value.botId === 'string'
     case 'declined':
     case 'expired':
     case 'ended':

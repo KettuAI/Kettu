@@ -1,0 +1,223 @@
+{
+  "title": "Bots",
+  "newBot": "New Bot",
+  "editBot": "Edit Bot",
+  "createBot": "Create Bot",
+  "saveChanges": "Save changes",
+  "deleteBot": "Delete Bot",
+  "deleteConfirmTitle": "Delete {{name}}?",
+  "deleteConfirmBody": "This removes the Bot configuration, role instructions and Bot-only memory on this Home Host.",
+  "keepSessionsLabel": "Keep {{count}} work session(s) as regular sessions",
+  "keepSessionsHint": "Recommended: past work stays readable in your project history.",
+  "paused": "Paused",
+  "pause": "Pause",
+  "resume": "Resume",
+  "resetMain": "New main thread",
+  "homeHost": "Home · {{name}}",
+  "thisComputer": "This computer",
+  "onlineHosts": "{{online}}/{{total}} computers online",
+  "sidebar": {
+    "section": "Bots",
+    "add": "New Bot",
+    "empty": "Create a Bot to coordinate sessions across your computers.",
+    "pendingHost": "{{count}} pending offline",
+    "noActiveWork": "No active work"
+  },
+  "status": {
+    "needs_you": "Needs you",
+    "running": "Working",
+    "paused": "Paused",
+    "idle": "Idle"
+  },
+  "requestStatus": {
+    "received": "Received",
+    "queued": "Queued",
+    "waiting_host": "Waiting for computer",
+    "running": "Working",
+    "waiting_user": "Needs approval",
+    "delivered": "Done",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "expired": "Expired"
+  },
+  "tabs": {
+    "work": "Work",
+    "role": "Role",
+    "memory": "Memory",
+    "settings": "Settings"
+  },
+  "work": {
+    "computers": "Managed computers",
+    "active": "Active & queued",
+    "pendingOffline": "Waiting for computer",
+    "completed": "Completed",
+    "archiveDone": "Archive done",
+    "archivedCount": "Archived {{count}} finished session(s)",
+    "empty": "No work dispatched yet. Ask this Bot in the chat to assign tasks across your computers.",
+    "dispatchNow": "Dispatch now",
+    "cancel": "Cancel",
+    "openSession": "Open session",
+    "online": "Online",
+    "offline": "Offline",
+    "workingCount": "{{count}} working",
+    "offlineSavedNote": "Saved locally on Home Host. Confirm once the target computer is back online.",
+    "hostBackOnline": "{{host}} is back online with {{count}} pending Bot task(s)."
+  },
+  "role": {
+    "title": "Role instructions (ROLE.md)",
+    "hint": "Defines this Bot's identity, routing preferences, review checklists and reporting style.",
+    "placeholder": "Describe what this Bot owns, which projects live on which computers, and how it should delegate and report...",
+    "saved": "Role instructions saved"
+  },
+  "memory": {
+    "title": "Bot memory",
+    "subtitle": "Layer 3 memory specific to this Bot (priority: Project > Bot > Global).",
+    "add": "Add memory",
+    "search": "Search Bot memory...",
+    "empty": "No Bot memory yet. Facts learned across conversations appear here.",
+    "fieldTitle": "Title",
+    "fieldDescription": "Summary line",
+    "fieldBody": "Details",
+    "delete": "Delete",
+    "save": "Save"
+  },
+  "editor": {
+    "subtitle": "Configure a long-lived coordinator with its own avatar, role, memory and cross-computer targets.",
+    "examplesTitle": "Start from an example",
+    "sectionIdentity": "Identity & Harness",
+    "sectionTargets": "Computers & Projects",
+    "sectionPermissions": "Permissions & Limits",
+    "sectionRole": "Role instructions",
+    "name": "Name",
+    "namePlaceholder": "e.g. Engineering Lead",
+    "handle": "Handle",
+    "handleHint": "Mention with @{{handle}} from any session.",
+    "description": "Short description",
+    "descriptionPlaceholder": "Coordinates coding, review and CI tasks across my computers",
+    "harness": "Main conversation Harness",
+    "harnessHint": "Any enabled Harness with Kettu MCP support can drive this Bot. Its main thread runs in an isolated empty folder.",
+    "model": "Model (optional)",
+    "modelDefault": "Use agent default",
+    "targetsHint": "Choose which projects on this computer or paired computers this Bot manages. Leave empty to allow routing on demand.",
+    "noPairedHosts": "No other computers paired yet. Pair more computers in Settings › Sharing for cross-computer dispatch.",
+    "scopeLevel": "Work session permission ceiling",
+    "scopeWeb": "Allow web search & fetch in work sessions",
+    "maxConcurrent": "Max concurrent sessions",
+    "maxDaily": "Daily dispatch limit",
+    "timeLimit": "Session time limit",
+    "maxRounds": "Max unattended report rounds",
+    "scope": {
+      "read": "Read only",
+      "edit": "Edit project files",
+      "commands": "Edit & run commands"
+    }
+  },
+  "avatar": {
+    "title": "Avatar",
+    "tabPresets": "Illustrated",
+    "tabMonogram": "Monogram",
+    "tabUpload": "Upload",
+    "monogramLabel": "1–2 letters or symbol",
+    "paletteLabel": "Color palette",
+    "uploadButton": "Choose image",
+    "uploadHint": "PNG, JPG or WebP, automatically cropped to square and compressed to ≤64 KB.",
+    "uploadTooLarge": "Image could not be compressed under 64 KB.",
+    "presets": {
+      "architect": "Architect",
+      "owl": "Owl",
+      "sentinel": "Sentinel",
+      "scribe": "Scribe",
+      "courier": "Courier",
+      "compass": "Compass",
+      "anvil": "Anvil",
+      "spark": "Spark"
+    },
+    "palettes": {
+      "fox": "Fox",
+      "slate": "Slate",
+      "sage": "Sage",
+      "indigo": "Indigo",
+      "amber": "Amber",
+      "rose": "Rose",
+      "cyan": "Cyan",
+      "plum": "Plum"
+    }
+  },
+  "examples": {
+    "dev-manager": {
+      "name": "Dev Manager",
+      "description": "Plans and dispatches coding & test sessions across all paired computers.",
+      "role": "You are my cross-computer engineering lead.\n\n- Break requirements into clear, scoped work sessions and dispatch each to the computer that owns the target project.\n- Prefer read-only review sessions on a different model after major edits.\n- Keep status summaries concise and surface blockers or approvals immediately."
+    },
+    "pr-reviewer": {
+      "name": "PR Reviewer",
+      "description": "Runs focused, read-only code and architecture reviews across repositories.",
+      "role": "You are a strict, read-only PR reviewer.\n\n- Dispatch review sessions in read-only scope.\n- Focus on correctness, security, edge cases, race conditions and test coverage.\n- Group findings by severity and quote exact file paths."
+    },
+    "ci-oncall": {
+      "name": "CI On-Call",
+      "description": "Investigates build failures, reproduces issues and proposes minimal fixes.",
+      "role": "You are my CI on-call responder.\n\n- Diagnose failing builds or flaky tests on the computer where the repo lives.\n- Reproduce first, isolate root cause, then propose or dispatch a minimal fix with a regression test."
+    }
+  },
+  "workbench": {
+    "emptyTitle": "Start chatting with {{name}}",
+    "emptyBody": "Tell {{name}} what you want done across your computers. It will dispatch real sessions on the right machine and report back here.",
+    "placeholder": "Message {{name}} (@{{handle}})...",
+    "send": "Send",
+    "pausedBanner": "This Bot is paused. Resume it to dispatch new work sessions.",
+    "quickDispatch": "Quick dispatch",
+    "quickDispatchTitle": "Dispatch a work session",
+    "quickDispatchTask": "Task title",
+    "quickDispatchPrompt": "Instructions",
+    "quickDispatchTarget": "Target computer & project",
+    "quickDispatchWorktree": "Isolate in a new git worktree",
+    "quickDispatchSubmit": "Dispatch"
+  },
+  "changeCard": {
+    "title_create": "Create Bot",
+    "title_update": "Update Bot",
+    "title_delete": "Delete Bot",
+    "title_role_edit": "Update Bot role",
+    "who": "{{agent}} wants to apply this Bot change",
+    "confirm_create": "Create Bot",
+    "confirm_update": "Apply changes",
+    "confirm_delete": "Delete Bot",
+    "confirm_role_edit": "Save role",
+    "decline": "Decline",
+    "doing": "Applying...",
+    "done_create": "Created Bot {{name}}",
+    "done_update": "Updated Bot {{name}}",
+    "done_delete": "Deleted Bot {{name}}",
+    "done_role_edit": "Updated role of {{name}}",
+    "notDone_declined": "Declined Bot change for {{name}}",
+    "notDone_expired": "Bot change card for {{name}} expired",
+    "notDone_ended": "Bot change card for {{name}} ended with the turn",
+    "notDone_failed": "Bot change failed: {{message}}",
+    "openBot": "Open Bot",
+    "fieldName": "Name",
+    "fieldHandle": "Handle",
+    "fieldAgent": "Harness",
+    "fieldScope": "Permissions",
+    "fieldLimits": "Limits",
+    "fieldTargets": "Targets",
+    "fieldRole": "Role (ROLE.md)",
+    "targetsCount": "{{count}} project(s)",
+    "targetsAny": "Any project on demand"
+  },
+  "handoff": {
+    "banner": "Routing to {{name}} (@{{handle}}) with context from this session",
+    "sent": "Handed off to {{name}} (@{{handle}})",
+    "completed": "{{name}} replied",
+    "failed": "{{name}} could not complete the handoff",
+    "openBot": "Open Bot",
+    "sendToAgent": "Send summary to current Agent"
+  },
+  "settings": {
+    "heading": "Bots",
+    "maxConcurrentTitle": "Max concurrent Bot sessions",
+    "maxConcurrentDesc": "Maximum active work sessions across all Bots on this computer at once.",
+    "allowHandoffTitle": "Allow agents to hand off to Bots",
+    "allowHandoffDesc": "Let regular sessions call handoff_to_bot to delegate work to your Bots."
+  }
+}

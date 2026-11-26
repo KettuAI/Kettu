@@ -6,6 +6,7 @@ import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
+import type { BotRemoteAnswer, BotRemoteCall, BotRemoteEvent } from './bots'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { ComputerApp, ComputerFrame, ComputerHold } from './computer-use'
 import type { ControlOutcome } from './control'
@@ -219,6 +220,10 @@ export type MainToHost =
   // The plugin host is ready. In the desktop app its port travels in the transfer list; under
   // Node.js `socketPath` names the socket to connect to.
   | { type: 'host:plugin-port'; socketPath?: string }
+  // 跨电脑 Bot 远端桥接调用的返回结果。
+  | { type: 'bot-remote-result'; callId: number; answer: BotRemoteAnswer }
+  // 主进程监听到的远端主机上线/下线与远端会话状态变化，推送给本地 BotManager。
+  | { type: 'host:bot-remote-event'; event: BotRemoteEvent }
   | { type: 'host:shutdown' }
 
 /**
@@ -418,6 +423,8 @@ export type HostToMain =
   | { type: 'host:browser-ask-answer'; sessionId: string; outcome: ControlOutcome }
   // An agent's device tool call for the device host; answered by device-result.
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
+  // Bot 需要经主进程 HostSessions 访问已配对远端主机；由 bot-remote-result 回传。
+  | { type: 'host:bot-remote-call'; callId: number; call: BotRemoteCall }
   // The turn of a session whose agent used a device ended: its devices are nobody's now.
   | { type: 'host:device-turn-ended'; sessionId: string }
   // An agent's terminal tool call for the terminal host; answered by terminal-result.

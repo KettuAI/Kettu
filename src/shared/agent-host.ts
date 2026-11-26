@@ -13,6 +13,16 @@ import type { ParamValue } from './artifact-params'
 import type { PreviewStyle } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
+  BotAvatarMimeType,
+  BotChanges,
+  BotDraft,
+  BotHostTarget,
+  BotList,
+  BotRequest,
+  BotSessionRef,
+  BotView,
+} from './bots'
+import type {
   BrowserCallAnswer,
   BrowserDeviceCall,
   BrowserOriginAnswer,
@@ -764,6 +774,7 @@ export type McpToolGroup =
   | 'workflows'
   | 'settings'
   | 'routines'
+  | 'bots'
   | 'plugins'
 
 export interface McpToolSummary {
@@ -891,9 +902,10 @@ export interface SessionSummary {
   createdAt: number
   updatedAt: number
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine' | 'task'
+  origin: 'user' | 'subagent' | 'routine' | 'task' | 'bot_main' | 'bot_work'
   routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
   task?: SessionTaskRef | null // a workflow step's session, listed under its task; absent from older hosts
+  bot?: BotSessionRef | null // 属于某个 Bot 的主对话或跨机工作会话
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -1414,6 +1426,71 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // Bots: 跨电脑长期角色与工作台账。
+  'bots.list': { params: void; result: BotList }
+  'bots.get': { params: { botId: string }; result: BotView }
+  'bots.create': { params: BotDraft; result: BotView }
+  'bots.update': { params: { botId: string; changes: BotChanges }; result: BotView }
+  'bots.delete': { params: { botId: string; keepSessions?: boolean }; result: void }
+  'bots.setPaused': { params: { botId: string; paused: boolean }; result: BotView }
+  'bots.sendMain': {
+    params: {
+      botId: string
+      text: string
+      content?: UserContent[]
+      sourceSessionId?: string
+      sourceHostId?: string | null
+    }
+    result: { sessionId: string; bot: BotView }
+  }
+  'bots.resetMain': { params: { botId: string }; result: BotView }
+  'bots.dispatch': {
+    params: {
+      botId: string
+      targetHostId: string | null
+      projectPath: string
+      title: string
+      prompt: string
+      agentId?: AgentId
+      model?: string | null
+      worktree?: boolean
+      sourceSessionId?: string
+      sourceHostId?: string | null
+    }
+    result: BotRequest
+  }
+  'bots.retryPending': { params: { requestId: string }; result: BotRequest }
+  'bots.cancelRequest': { params: { requestId: string }; result: BotRequest }
+  'bots.archiveDone': { params: { botId: string }; result: { archived: number } }
+  'bots.answerChange': {
+    params: {
+      sessionId: string
+      entryId: string
+      decision: 'confirm' | 'decline'
+      keepSessions?: boolean
+    }
+    result: void
+  }
+  'bots.uploadAvatar': {
+    params: {
+      botId: string
+      mimeType: BotAvatarMimeType
+      dataBase64: string
+      crop?: { x: number; y: number; scale: number }
+    }
+    result: BotView
+  }
+  'bots.readAvatar': { params: { botId: string }; result: { dataUrl: string } | null }
+  'bots.listTargets': { params: void; result: { targets: BotHostTarget[] } }
+  'bots.handoff': {
+    params: {
+      botId: string
+      sessionId: string
+      text: string
+      contextSummary?: string
+    }
+    result: { botSessionId: string; entryId: string }
+  }
   // Kettu's plugins: packages in the Agent Plugins format, installed on the host. See plugins.
   'plugins.list': { params: void; result: { plugins: InstalledKettuPlugin[] } }
   // Reads a package from its source and says what it holds and would run. Nothing is installed
@@ -2450,6 +2527,23 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'bots.list',
+  'bots.get',
+  'bots.create',
+  'bots.update',
+  'bots.delete',
+  'bots.setPaused',
+  'bots.sendMain',
+  'bots.resetMain',
+  'bots.dispatch',
+  'bots.retryPending',
+  'bots.cancelRequest',
+  'bots.archiveDone',
+  'bots.answerChange',
+  'bots.uploadAvatar',
+  'bots.readAvatar',
+  'bots.listTargets',
+  'bots.handoff',
   'plugins.list',
   'plugins.inspect',
   'plugins.install',
@@ -2698,6 +2792,16 @@ export type HostEvent =
   | { type: 'workflows.changed' } // the workflow library or its settings changed; a page showing it reads again
   | { type: 'workflows.suggestion'; suggestion: WorkflowSuggestion } // a card's answer or Start's progress
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
+  | { type: 'bot.changed'; bot: BotView } // Bot 定义、角色或聚合状态发生变化
+  | { type: 'bot.removed'; botId: string }
+  | { type: 'bot.request'; request: BotRequest } // 派发工作或离线待办状态更新
+  | {
+      type: 'bot.hostOnline'
+      hostId: string
+      hostName: string
+      pendingCount: number
+      botIds: string[]
+    }
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.
   | { type: 'browser.call'; call: BrowserDeviceCall }

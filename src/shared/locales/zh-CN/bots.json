@@ -1,0 +1,223 @@
+{
+  "title": "Bots",
+  "newBot": "新建 Bot",
+  "editBot": "编辑 Bot",
+  "createBot": "创建 Bot",
+  "saveChanges": "保存修改",
+  "deleteBot": "删除 Bot",
+  "deleteConfirmTitle": "删除「{{name}}」？",
+  "deleteConfirmBody": "这将移除本主控电脑上的 Bot 配置、职责文档和 Bot 专属记忆。",
+  "keepSessionsLabel": "保留 {{count}} 个历史工作会话为普通会话",
+  "keepSessionsHint": "推荐开启：过往执行记录会完整保留在项目会话列表中。",
+  "paused": "已暂停",
+  "pause": "暂停",
+  "resume": "恢复",
+  "resetMain": "开启新主对话",
+  "homeHost": "主控 · {{name}}",
+  "thisComputer": "本机",
+  "onlineHosts": "{{online}}/{{total}} 台电脑在线",
+  "sidebar": {
+    "section": "Bots",
+    "add": "新建 Bot",
+    "empty": "创建一个 Bot，替你跨电脑协调项目会话。",
+    "pendingHost": "{{count}} 条离线待办",
+    "noActiveWork": "暂无进行中工作"
+  },
+  "status": {
+    "needs_you": "等你拍板",
+    "running": "处理中",
+    "paused": "已暂停",
+    "idle": "空闲"
+  },
+  "requestStatus": {
+    "received": "已收下",
+    "queued": "排队中",
+    "waiting_host": "等待电脑上线",
+    "running": "执行中",
+    "waiting_user": "待你审批",
+    "delivered": "已完成",
+    "failed": "执行失败",
+    "cancelled": "已取消",
+    "expired": "已过期"
+  },
+  "tabs": {
+    "work": "工作",
+    "role": "职责",
+    "memory": "记忆",
+    "settings": "设置"
+  },
+  "work": {
+    "computers": "受管电脑",
+    "active": "进行中与排队",
+    "pendingOffline": "等待电脑上线",
+    "completed": "已完成",
+    "archiveDone": "一键归档已完成",
+    "archivedCount": "已归档 {{count}} 个完结会话",
+    "empty": "还没有派发工作。在左侧对话里直接告诉 Bot，它会替你调度到对应电脑和项目。",
+    "dispatchNow": "立即派发",
+    "cancel": "取消",
+    "openSession": "查看会话",
+    "online": "在线",
+    "offline": "离线",
+    "workingCount": "{{count}} 个执行中",
+    "offlineSavedNote": "已保存在本主控电脑本地待办中，待目标电脑重新上线后由你确认派发。",
+    "hostBackOnline": "{{host}} 已重新上线，有 {{count}} 条 Bot 待办等待确认派发。"
+  },
+  "role": {
+    "title": "职责规范（ROLE.md）",
+    "hint": "定义该 Bot 的身份定位、跨电脑路由偏好、审查清单与汇报风格。",
+    "placeholder": "描述这个 Bot 负责哪些项目、各项目在哪台电脑上，以及应该如何拆活与汇报……",
+    "saved": "职责规范已保存"
+  },
+  "memory": {
+    "title": "Bot 专属记忆",
+    "subtitle": "第 3 层记忆，仅归属当前 Bot（优先级：项目记忆 > Bot 记忆 > 全局记忆）。",
+    "add": "新增记忆",
+    "search": "搜索 Bot 记忆…",
+    "empty": "还没有 Bot 专属记忆。Bot 在长期协作中积累的经验与偏好会展示在这里。",
+    "fieldTitle": "标题",
+    "fieldDescription": "一句话摘要",
+    "fieldBody": "详细内容",
+    "delete": "删除",
+    "save": "保存"
+  },
+  "editor": {
+    "subtitle": "创建一个长期在线的角色，配置专属头像、职责、记忆与跨电脑受管项目。",
+    "examplesTitle": "从开箱示例快速开始",
+    "sectionIdentity": "身份与驱动 Harness",
+    "sectionTargets": "受管电脑与项目",
+    "sectionPermissions": "权限上限与运行限额",
+    "sectionRole": "职责规范",
+    "name": "名称",
+    "namePlaceholder": "例如：研发管家",
+    "handle": "代号（@提及）",
+    "handleHint": "在任意会话输入 @{{handle}} 即可直接召唤该 Bot。",
+    "description": "一句话说明",
+    "descriptionPlaceholder": "跨多台电脑统筹需求拆解、代码修改与测试审查",
+    "harness": "主对话驱动 Harness",
+    "harnessHint": "可自由选择任意已启用且支持 Kettu MCP 的 Harness。主对话运行在物理隔离的空目录，不直接改业务代码。",
+    "model": "模型（可选）",
+    "modelDefault": "跟随该 Agent 默认模型",
+    "targetsHint": "勾选该 Bot 负责的本机或已配对电脑上的项目；留空则按需动态调度。",
+    "noPairedHosts": "暂未配对其他电脑。前往「设置 › 远程共享」配对更多电脑即可实现跨机调度。",
+    "scopeLevel": "派发工作会话权限上限",
+    "scopeWeb": "允许派发的工作会话联网搜索与抓取网页",
+    "maxConcurrent": "单 Bot 并发上限",
+    "maxDaily": "每日派发上限",
+    "timeLimit": "单次会话超时",
+    "maxRounds": "无人值守连续回报上限",
+    "scope": {
+      "read": "只读（审阅与分析）",
+      "edit": "项目内读写文件",
+      "commands": "项目内读写与执行命令"
+    }
+  },
+  "avatar": {
+    "title": "专属头像",
+    "tabPresets": "原创插画",
+    "tabMonogram": "字标",
+    "tabUpload": "上传图片",
+    "monogramLabel": "1–2 个字符或符号",
+    "paletteLabel": "主题配色",
+    "uploadButton": "选择图片",
+    "uploadHint": "支持 PNG、JPG、WebP，自动居中裁切为方形并压缩至 ≤64 KB 存在本机。",
+    "uploadTooLarge": "图片压缩后仍超过 64 KB，请换一张较小的图片。",
+    "presets": {
+      "architect": "架构师",
+      "owl": "审阅猫头鹰",
+      "sentinel": "哨兵",
+      "scribe": "书记官",
+      "courier": "信使",
+      "compass": "罗盘",
+      "anvil": "铁砧",
+      "spark": "火花"
+    },
+    "palettes": {
+      "fox": "狐狸橙",
+      "slate": "岩板灰",
+      "sage": "鼠尾草绿",
+      "indigo": "靛蓝",
+      "amber": "琥珀金",
+      "rose": "玫瑰红",
+      "cyan": "青蓝",
+      "plum": "梅紫"
+    }
+  },
+  "examples": {
+    "dev-manager": {
+      "name": "跨机研发管家",
+      "description": "跨多台电脑拆解需求、调度编码与测试会话，并持续汇总进度。",
+      "role": "你是我的跨电脑研发管家。\n\n- 把需求拆解为边界清晰的工作会话，自动派发到对应项目所在的电脑。\n- 重大改动后优先安排另一个模型做只读 Code Review。\n- 汇报简明扼要，遇到需要我拍板的风险或阻塞第一时间突出提示。"
+    },
+    "pr-reviewer": {
+      "name": "PR 审查官",
+      "description": "跨仓库执行只读代码审查、架构风险评估与边界缺陷排查。",
+      "role": "你是严格的只读 PR 审查官。\n\n- 始终以只读（read）权限派发审阅会话。\n- 重点检查逻辑正确性、并发竞态、安全隐患与测试覆盖。\n- 按严重程度分组汇报，并给出精确文件路径。"
+    },
+    "ci-oncall": {
+      "name": "CI 值班员",
+      "description": "排查构建与测试失败、定位根因并提出最小化修复方案。",
+      "role": "你是我的 CI 值班员。\n\n- 到对应仓库所在的电脑上复现并定位构建或测试失败原因。\n- 坚持先复现再修补，提交最小改动并附带回归测试。"
+    }
+  },
+  "workbench": {
+    "emptyTitle": "开始和「{{name}}」对话",
+    "emptyBody": "直接告诉「{{name}}」你的目标，它会判断项目在哪台电脑、该用哪个 Harness，替你派发真实会话并回报进度。",
+    "placeholder": "给 {{name}}（@{{handle}}）发消息…",
+    "send": "发送",
+    "pausedBanner": "当前 Bot 已暂停。恢复后才能继续派发新的工作会话。",
+    "quickDispatch": "快速派活",
+    "quickDispatchTitle": "手动派发一条工作会话",
+    "quickDispatchTask": "任务标题",
+    "quickDispatchPrompt": "执行要求",
+    "quickDispatchTarget": "目标电脑与项目",
+    "quickDispatchWorktree": "在独立 Git Worktree 中隔离执行",
+    "quickDispatchSubmit": "立即派发"
+  },
+  "changeCard": {
+    "title_create": "新建 Bot",
+    "title_update": "修改 Bot",
+    "title_delete": "删除 Bot",
+    "title_role_edit": "修改 Bot 职责",
+    "who": "{{agent}} 提议执行以下 Bot 变更",
+    "confirm_create": "确认创建",
+    "confirm_update": "确认修改",
+    "confirm_delete": "确认删除",
+    "confirm_role_edit": "保存职责",
+    "decline": "拒绝",
+    "doing": "正在执行…",
+    "done_create": "已新建 Bot「{{name}}」",
+    "done_update": "已修改 Bot「{{name}}」",
+    "done_delete": "已删除 Bot「{{name}}」",
+    "done_role_edit": "已更新「{{name}}」的职责",
+    "notDone_declined": "已拒绝「{{name}}」的 Bot 变更",
+    "notDone_expired": "「{{name}}」的 Bot 变更卡片已超时未处理",
+    "notDone_ended": "回合已结束，未执行「{{name}}」的 Bot 变更",
+    "notDone_failed": "Bot 变更失败：{{message}}",
+    "openBot": "打开 Bot",
+    "fieldName": "名称",
+    "fieldHandle": "代号",
+    "fieldAgent": "驱动 Harness",
+    "fieldScope": "权限上限",
+    "fieldLimits": "运行限额",
+    "fieldTargets": "受管项目",
+    "fieldRole": "职责（ROLE.md）",
+    "targetsCount": "{{count}} 个项目",
+    "targetsAny": "按需动态路由"
+  },
+  "handoff": {
+    "banner": "将以当前会话上下文转交给 {{name}}（@{{handle}}）",
+    "sent": "已转交给 {{name}}（@{{handle}}）",
+    "completed": "{{name}} 已回复",
+    "failed": "{{name}} 未能完成此次交接",
+    "openBot": "打开 Bot",
+    "sendToAgent": "把结论发给当前 Agent"
+  },
+  "settings": {
+    "heading": "Bots",
+    "maxConcurrentTitle": "整机 Bot 最大并发会话数",
+    "maxConcurrentDesc": "这台电脑上所有 Bot 同时处于运行中的工作会话总数上限。",
+    "allowHandoffTitle": "允许普通会话 Agent 委派给 Bot",
+    "allowHandoffDesc": "开启后，普通会话里的 Agent 可通过 handoff_to_bot 将任务交接给你的 Bot。"
+  }
+}
