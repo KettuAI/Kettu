@@ -7934,3 +7934,618 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   width: 44px;
   margin-left: 6px;
 }
+
+/* Settings > Archived sessions: wider column aligned with other pages' left edge, toolbar,
+   compact 38 px rows, filter popovers, sticky multi-select bar, and bulk delete list. */
+.kettu-settings .kettu-settings__body[data-section='archived'] {
+  max-width: 800px;
+  margin-left: max(0px, calc((100% - 640px) / 2));
+  margin-right: 0;
+}
+.kettu-settings .kettu-settings__body[data-section='archived'] .k-groups:empty {
+  display: none;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 56px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-tb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  color: var(--placeholder);
+  transition: box-shadow 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--control-on),
+    0 0 0 3px var(--control-on-tint);
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search.is-has {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search > input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search > input::placeholder {
+  color: var(--placeholder);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search__clear {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-search__clear:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-fb {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 210px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb:focus {
+  outline: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--control-on),
+    0 0 0 3px var(--control-on-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb.is-set {
+  background: var(--control-on-tint);
+  box-shadow: none;
+  color: var(--control-on);
+  font-weight: 500;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-fb__val {
+  font-weight: 500;
+}
+
+.k-ar-pop {
+  width: 268px;
+  padding: 6px;
+  gap: 0;
+}
+.k-ar-pop__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: -6px -6px 6px;
+  padding: 0 14px;
+  box-shadow: 0 1px 0 var(--border-subtle);
+  color: var(--text-tertiary);
+}
+.k-ar-pop__search > input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+}
+.k-ar-pop__search > input::placeholder {
+  color: var(--text-placeholder);
+}
+.k-ar-pop__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.k-ar-pop__div {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-subtle);
+}
+.k-ar-pop__empty {
+  padding: 14px 10px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.k-ar-mi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.k-ar-mi:hover,
+.k-ar-mi:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.k-ar-mi.is-on {
+  font-weight: 500;
+}
+.k-ar-mi__ck {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  color: var(--control-on);
+}
+.k-ar-mi__ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: var(--text-tertiary);
+}
+.k-ar-mi__t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-ar-mi__k {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--control-on);
+  cursor: pointer;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-groups {
+  display: flex;
+  flex-direction: column;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-group {
+  margin-top: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-group:first-child {
+  margin-top: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  margin: 0 0 6px;
+  padding: 0 2px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh.is-selecting {
+  gap: 10px;
+  padding-left: 15px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh__toggle:hover {
+  background: var(--bg-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh__fold {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-gh__count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-rows {
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 8px;
+  transition: background 100ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row:hover,
+:is(.kettu-settings, .kettu-sd) .k-ar-row:focus-within {
+  background: var(--bg-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row.is-sel {
+  background: var(--control-on-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-hit:focus-visible {
+  outline: 2px solid var(--control-on);
+  outline-offset: -2px;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-lead {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-lead__mark {
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-lead__cbx {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row:hover .k-ar-lead__mark,
+:is(.kettu-settings, .kettu-sd) .k-ar-row:has(.k-ar-lead__cbx :focus-visible) .k-ar-lead__mark,
+:is(.kettu-settings, .kettu-sd) .k-ar-row.is-selecting .k-ar-lead__mark,
+:is(.kettu-settings, .kettu-sd) .k-ar-row.is-sel .k-ar-lead__mark {
+  opacity: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row:hover .k-ar-lead__cbx,
+:is(.kettu-settings, .kettu-sd) .k-ar-row:has(.k-ar-lead__cbx :focus-visible) .k-ar-lead__cbx,
+:is(.kettu-settings, .kettu-sd) .k-ar-row.is-selecting .k-ar-lead__cbx,
+:is(.kettu-settings, .kettu-sd) .k-ar-row.is-sel .k-ar-lead__cbx {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-title {
+  position: relative;
+  z-index: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-sub {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: 210px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-sub__t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-kids {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-sp {
+  flex: 1;
+  min-width: 10px;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-br {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  max-width: 170px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-br__t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-pj {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-when {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  min-width: 46px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-acts {
+  position: relative;
+  z-index: 1;
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row:not(.is-selecting):is(:hover, :focus-within) .k-ar-acts {
+  display: inline-flex;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-row:not(.is-selecting):is(:hover, :focus-within) .k-ar-when {
+  display: none;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: var(--mark);
+  color: inherit;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-conv-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 64px 16px;
+  text-align: center;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-empty__ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg-hover);
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-empty__title {
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-empty__sub {
+  margin: 4px 0 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-empty__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:is(.kettu-settings, .kettu-sd) .k-ar-selbar {
+  position: sticky;
+  bottom: 20px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 6px 8px 6px 14px;
+  border-radius: 13px;
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--border-default),
+    var(--elevation-popover);
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-selbar__n {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-selbar__all {
+  margin: 0 4px 0 2px;
+  font-size: 12.5px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-selbar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border-default);
+}
+:is(.kettu-settings, .kettu-sd) .k-ar-selbar__del {
+  color: var(--danger);
+}
+
+.k-ar-dlg-list {
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.k-ar-dlg-list[data-scrollable] {
+  max-height: 248px;
+  overflow-y: auto;
+}
+.k-ar-dlg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+}
+.k-ar-dlg-row__t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-ar-dlg-row__subs {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+@container ui-as-main (max-width: 600px) {
+  :is(.kettu-settings, .kettu-sd) .k-ar-br,
+  :is(.kettu-settings, .kettu-sd) .k-ar-sub {
+    display: none;
+  }
+  :is(.kettu-settings, .kettu-sd) .k-ar-selbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
+}
+
+:root[data-reduce-motion='always'] :is(.k-ar-search, .k-ar-fb, .k-ar-row) {
+  transition: none;
+}

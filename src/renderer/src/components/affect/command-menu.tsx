@@ -50,6 +50,8 @@ export type CommandMenuProps = {
   scopes?: CommandScope[];
   scope?: string;
   onScopeChange?: (id: string) => void;
+  /** Starting text for the search field */
+  initialQuery?: string;
   /** Called as the search text changes */
   onQueryChange?: (query: string) => void;
   /** false: the groups passed in are already the results for the text, so the menu doesn't filter them again */
@@ -404,6 +406,7 @@ export function CommandMenu({
   scopes,
   scope,
   onScopeChange,
+  initialQuery = "",
   onQueryChange,
   filter = true,
   ask = true,
@@ -418,7 +421,7 @@ export function CommandMenu({
   const listRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(0);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [active, setActive] = useState<string | null>(null);
   const [ran, setRan] = useState<{ id: string; label: string } | null>(null);
   const [pill, setPill] = useState<{ y: number; h: number } | null>(null);
