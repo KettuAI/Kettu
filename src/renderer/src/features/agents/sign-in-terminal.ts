@@ -11,6 +11,7 @@ import { createTerminal } from '@renderer/stores/terminals'
 import {
   closeSettings,
   newSessionPanel,
+  paneProjectPath,
   panelOf,
   sessionsShown,
   toggleTerminal,
@@ -23,10 +24,12 @@ import {
  */
 export function signInTerminal(status: AgentStatus, command: string): void {
   const view = useViewStore.getState()
+  const projects = useProjectsStore.getState().projects
   const focused = focusedPane(view.layout).view
+  const focusedPath = paneProjectPath(focused, view.projectPath, projects)
   const here =
-    sessionsShown(view.main) && focused.projectPath && hostOfPath(focused.projectPath) === null
-      ? { projectPath: focused.projectPath, panel: panelOf(focused) }
+    sessionsShown(view.main) && focusedPath && hostOfPath(focusedPath) === null
+      ? { projectPath: focusedPath, panel: panelOf(focused, view.projectPath, projects) }
       : null
   const projectPath =
     here?.projectPath ??

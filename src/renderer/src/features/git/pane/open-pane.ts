@@ -1,7 +1,8 @@
 import { focusedPane } from '@renderer/features/split/layout'
 import { setGitPaneTab, type GitPaneTab } from '@renderer/stores/git'
 import { useGitStore } from '@renderer/stores/git'
-import { panelOf, toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { useProjectsStore } from '@renderer/stores/projects'
+import { paneProjectPath, panelOf, toggleSidePane, useViewStore } from '@renderer/stores/view'
 
 export interface OpenGitPane {
   tab: GitPaneTab
@@ -16,8 +17,14 @@ export interface OpenGitPane {
 
 /** Shows the Git pane on a page, in the session's side panel or, without one, the focused pane's. */
 export function openGitPane(projectPath: string, request: OpenGitPane): void {
-  const view = focusedPane(useViewStore.getState().layout).view
-  const panel = request.panel ?? (view.projectPath === projectPath ? panelOf(view) : null)
+  const state = useViewStore.getState()
+  const projects = useProjectsStore.getState().projects
+  const view = focusedPane(state.layout).view
+  const panel =
+    request.panel ??
+    (paneProjectPath(view, state.projectPath, projects) === projectPath
+      ? panelOf(view, state.projectPath, projects)
+      : null)
   if (!panel) return
   if (request.commit) {
     useGitStore.setState((s) => ({ commitAsk: { ...s.commitAsk, [projectPath]: request.commit! } }))

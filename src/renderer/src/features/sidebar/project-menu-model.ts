@@ -1,5 +1,6 @@
 import { newSession } from '@renderer/app/actions'
 import { focusedPane } from '@renderer/features/split/layout'
+import { useProjectsStore } from '@renderer/stores/projects'
 import {
   createTerminal,
   loadTerminals,
@@ -8,6 +9,7 @@ import {
 } from '@renderer/stores/terminals'
 import {
   newSessionPanel,
+  paneProjectPath,
   panelOf,
   sessionsShown,
   toggleTerminal,
@@ -20,9 +22,11 @@ import {
  */
 export async function openProjectTerminal(projectPath: string): Promise<void> {
   const s = useViewStore.getState()
+  const projects = useProjectsStore.getState().projects
   const focused = focusedPane(s.layout).view
-  const panel = panelOf(focused)
-  if (!s.settings.open && sessionsShown(s.main) && focused.projectPath === projectPath && panel) {
+  const panel = panelOf(focused, s.projectPath, projects)
+  const focusedPath = paneProjectPath(focused, s.projectPath, projects)
+  if (!s.settings.open && sessionsShown(s.main) && focusedPath === projectPath && panel) {
     // The pane starts a terminal itself when it opens in a panel that has none.
     toggleTerminal(panel, true)
     return
