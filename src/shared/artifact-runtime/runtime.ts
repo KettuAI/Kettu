@@ -628,11 +628,51 @@ export function start(config: RuntimeConfig): void {
         pick(elementAt(message.x, message.y), true)
         return
       }
-      case 'select-reveal':
-        if (Number.isSafeInteger(message.src)) {
-          sourceElement(message.src)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      case 'select-reveal': {
+        const replyChannel =
+          typeof message.channel === 'string' && message.channel !== '' ? message.channel : null
+        if (replyChannel) channel = replyChannel
+        if (!Number.isSafeInteger(message.src)) return
+        const element = sourceElement(message.src)
+        if (element) {
+          const before = element.getBoundingClientRect()
+          const inView =
+            before.bottom > 0 &&
+            before.top < window.innerHeight &&
+            before.right > 0 &&
+            before.left < window.innerWidth
+          if (!inView) {
+            element.scrollIntoView({
+              block: 'center',
+              behavior: replyChannel ? 'instant' : 'smooth',
+            })
+            redraw()
+          }
+        }
+        if (replyChannel) {
+          const rect = element?.getBoundingClientRect() ?? null
+          const box =
+            rect && (rect.width > 0 || rect.height > 0)
+              ? {
+                  x: Math.min(window.innerWidth - 22, Math.max(2, rect.right - 10)),
+                  y: Math.min(window.innerHeight - 22, Math.max(2, rect.top - 10)),
+                  width: 20,
+                  height: 20,
+                }
+              : null
+          const answer: Message = {
+            v: RUNTIME_VERSION,
+            id: nextId(),
+            kind: 'select',
+            channel: replyChannel,
+            selection: null,
+            located: { src: message.src, box },
+          }
+          if (config.transport === 'port') viaPort(answer)
+          else void request(answer).catch(() => {})
         }
         return
+      }
       case 'select-scroll':
         if (Number.isFinite(message.dx) && Number.isFinite(message.dy)) {
           window.scrollBy({ left: message.dx, top: message.dy, behavior: 'instant' })

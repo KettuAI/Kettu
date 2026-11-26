@@ -8,7 +8,12 @@ import {
 } from '@hugeicons/core-free-icons'
 import { motion, useReducedMotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { COMMENT_CHARS, type CommentAnchor, type CommentThread } from '@shared/artifact-comments'
+import {
+  COMMENT_CHARS,
+  isPending,
+  type CommentAnchor,
+  type CommentThread,
+} from '@shared/artifact-comments'
 import type { VersionSummary } from '@shared/artifacts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -171,6 +176,7 @@ export function ThreadPop({
   inline = false,
   onClose,
   onRepin,
+  onReopened,
 }: {
   artifactId: string
   thread: CommentThread
@@ -182,6 +188,8 @@ export function ThreadPop({
   onClose: () => void
   /** Starts pinning it again with the next click; null where the host cannot. */
   onRepin: (() => void) | null
+  /** Called after a resolved thread is reopened from inside the popover. */
+  onReopened?: () => void
 }) {
   const { t } = useTranslation('artifacts')
   const [reply, setReply] = useState('')
@@ -203,7 +211,10 @@ export function ThreadPop({
   }
   const resolve = () =>
     void host('artifacts.resolve', { id: artifactId, threadId: thread.id, resolved: !resolved })
-      .then(() => !resolved && onClose())
+      .then(() => {
+        if (!resolved) onClose()
+        else onReopened?.()
+      })
       .catch((reason: unknown) => setError(errorMessage(reason)))
 
   return (
@@ -242,7 +253,7 @@ export function ThreadPop({
                 key={i}
                 comment={comment}
                 unsent={
-                  state.kind === 'notSent' &&
+                  isPending(thread) &&
                   i === thread.comments.length - 1 &&
                   comment.author.session === null
                 }

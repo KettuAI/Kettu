@@ -500,6 +500,7 @@
     "newSessionNote": "它们会写进新会话的消息里，在那里发送。",
     "rowLabel": "评论 {{n}}：{{text}}",
     "sendOnly": "只发这一条",
+    "sendAgain": "再次发送",
     "saveFailed": "没有保存。{{error}}",
     "threadLabel": "评论 {{n}}",
     "close": "关闭",

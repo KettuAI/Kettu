@@ -666,6 +666,9 @@ function prepareAll(db: DatabaseSync) {
     setResolved: sql(
       'UPDATE artifact_threads SET resolved_at = ? WHERE artifact_id = ? AND id = ?',
     ),
+    reopenThread: sql(
+      'UPDATE artifact_threads SET resolved_at = NULL, sent_at = NULL, sent_to = NULL WHERE artifact_id = ? AND id = ?',
+    ),
     setSent: sql(
       'UPDATE artifact_threads SET sent_at = ?, sent_to = ? WHERE artifact_id = ? AND id = ?',
     ),
@@ -1889,12 +1892,14 @@ export class ThreadDb {
     )
   }
 
+  /** Marks a thread resolved, or reopens it so it waits to be sent again. */
   resolveThread(params: ArtifactCalls['resolve']['params']): CommentThread {
     return this.must((sql) => {
       const { id, threadId, resolved, at } = params
       this.artifactIn(sql, id, params.project, true)
       this.threadRow(sql, id, threadId)
-      sql.setResolved.run(resolved ? at : null, id, threadId)
+      if (resolved) sql.setResolved.run(at, id, threadId)
+      else sql.reopenThread.run(id, threadId)
       return this.threadNow(sql, id, threadId)
     })
   }

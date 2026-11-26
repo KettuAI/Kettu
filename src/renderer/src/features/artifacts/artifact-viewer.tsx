@@ -73,6 +73,7 @@ import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasEditor, type CanvasStates } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
 import { changeCount } from './change-words'
+import { canInlineDeckThread, canInlineDocThread } from './comment-threads'
 import type { PageActions } from './canvas-view'
 import { DeckPresent } from './deck-present'
 import { DeckSheet } from './deck-sheet'
@@ -417,6 +418,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
     return out
   }, [doc, threads])
 
+  const commentsShown = state.right === 'comments' || mode === 'comment'
+  const deckSlides = deck?.slides.length ?? 0
   const content = useMemo<ToolContent>(
     () =>
       shown?.canvas
@@ -428,14 +431,51 @@ export default function ArtifactViewer(place: ViewerPlace) {
             editor,
             focusLegacy: (index) => controls.commands?.focus(index),
           })
-        : isDocument || isDeck
+        : isDocument
           ? {
-              reveal: (_anchor, thread) => {
-                if (thread) setDocFocus((was) => ({ thread, seq: (was?.seq ?? 0) + 1 }))
+              reveal: (thread) => {
+                if (!canInlineDocThread(thread, { latest, commentsOpen: commentsShown })) {
+                  return null
+                }
+                setDocFocus((was) => ({ thread: thread.id, seq: (was?.seq ?? 0) + 1 }))
+                return 'inline'
               },
             }
-          : { reveal: (anchor) => anchor.offset !== null && editor?.reveal(null, anchor.offset) },
-    [id, doc, shown, panel?.panel, editor, controls, isDocument, isDeck],
+          : isDeck
+            ? {
+                reveal: (thread) => {
+                  if (
+                    !canInlineDeckThread(thread, {
+                      latest,
+                      commentsOpen: commentsShown,
+                      slideCount: deckSlides,
+                    })
+                  ) {
+                    return null
+                  }
+                  setDocFocus((was) => ({ thread: thread.id, seq: (was?.seq ?? 0) + 1 }))
+                  return 'inline'
+                },
+              }
+            : {
+                reveal: (thread) =>
+                  !thread.anchor.missing && thread.anchor.offset !== null && editor
+                    ? editor.revealPin(null, thread.anchor.offset)
+                    : null,
+              },
+    [
+      id,
+      doc,
+      shown,
+      panel?.panel,
+      editor,
+      controls,
+      isDocument,
+      isDeck,
+      latest,
+      commentsShown,
+      deckSlides,
+    ],
   )
   const tools = useViewerTools({
     id,
