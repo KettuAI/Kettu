@@ -22,6 +22,7 @@ import {
   LEGACY_OFFICIAL,
   outcomeName,
   stepName,
+  type ApprovedWorkflow,
   type Workflow,
   type WireWorkflowEntry,
   type WorkflowStep,
@@ -37,8 +38,9 @@ import { toast } from '@renderer/components/ui/toast'
 import { IconAction } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { splitName } from '@renderer/features/session/composer/levels'
+import { Diff } from '@renderer/features/session/markdown'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
-import { mediumAgo } from '@renderer/lib/format'
+import { basename, fullTime, mediumAgo } from '@renderer/lib/format'
 import { errorCode, errorMessage } from '@renderer/lib/host'
 import { optionsOn, picksOf, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { AGENT_NAMES, agentName } from '@renderer/stores/agents'
@@ -334,10 +336,11 @@ function RemoveDialog({
   )
 }
 
-/** The file as the host read it, the hash an approval names with it. */
+/** The file as the host read it, the hash an approval names with it, and what was approved before a change. */
 interface ReadFile {
   text: string | null
   hash: string
+  approved: ApprovedWorkflow | null
 }
 
 /** Reads the workflow's file; again when `key` changes, as the library says the file did. */
@@ -353,7 +356,11 @@ function useWorkflowFile(workflowId: string, key: string, enabled = true) {
       .request('workflows.read', { workflowId })
       .then((result) => {
         if (!live) return
-        setRead({ text: result.text, hash: result.entry.hash })
+        setRead({
+          text: result.text,
+          hash: result.entry.hash,
+          approved: result.approved ?? null,
+        })
         setError(null)
       })
       .catch((failure: unknown) => {
@@ -366,9 +373,53 @@ function useWorkflowFile(workflowId: string, key: string, enabled = true) {
   return { read, error, retry: () => setAttempt((n) => n + 1) }
 }
 
+/** When a changed workflow was last approved and when its file changed. */
+function ChangedTimes({
+  approvedAt,
+  changedAt,
+}: {
+  approvedAt: number | null
+  changedAt: number | null
+}) {
+  const { t } = useTranslation('marketplace')
+  if (approvedAt === null && changedAt === null) return null
+  return (
+    <span className="k-workflow-approve__times">
+      {approvedAt !== null && (
+        <time dateTime={new Date(approvedAt).toISOString()} title={fullTime(approvedAt)}>
+          {t('workflow.approval.approvedAt', { time: mediumAgo(approvedAt) })}
+        </time>
+      )}
+      {approvedAt !== null && changedAt !== null && <span aria-hidden>·</span>}
+      {changedAt !== null && (
+        <time dateTime={new Date(changedAt).toISOString()} title={fullTime(changedAt)}>
+          {t('workflow.approval.changedAt', { time: mediumAgo(changedAt) })}
+        </time>
+      )}
+    </span>
+  )
+}
+
+function WorkflowDiff({
+  entry,
+  oldText,
+  newText,
+}: {
+  entry: WireWorkflowEntry
+  oldText: string
+  newText: string
+}) {
+  const path = entry.file ? basename(entry.file) : `${entry.id}.yaml`
+  return (
+    <div className="k-workflow-approve__diff" data-selectable="">
+      <Diff path={path} oldText={oldText} newText={newText} />
+    </div>
+  )
+}
+
 /**
  * The approval of a workflow the user has not approved, or that changed since: what it is, its file
- * as read, Approve for that very file and Delete.
+ * or diff as read, Approve for that very file and Delete.
  */
 function Approval({
   entry,
@@ -384,6 +435,12 @@ function Approval({
   const { read, error, retry } = useWorkflowFile(entry.id, entry.hash)
   const [notice, setNotice] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [showFull, setShowFull] = useState(false)
+  const [seenHash, setSeenHash] = useState(entry.hash)
+  if (seenHash !== entry.hash) {
+    setSeenHash(entry.hash)
+    setShowFull(false)
+  }
   const origin = entry.origin
   const session = useSessionsStore((s) =>
     origin?.kind === 'agent' ? (s.byId[origin.sessionId] ?? null) : null,
@@ -452,6 +509,11 @@ function Approval({
     )
 
   const missing = missingTools(entry)
+  const approvedAt = read?.approved?.approvedAt ?? entry.approvedAt ?? null
+  const changedAt = read?.approved?.changedAt ?? entry.changedAt ?? null
+  const hasTimes = entry.approval === 'changed' && (approvedAt !== null || changedAt !== null)
+  const hasDiff = entry.approval === 'changed' && read?.approved?.text != null && read.text !== null
+  const showingDiff = hasDiff && !showFull
   return (
     <div className="k-workflow-approve">
       <ApprovalCard
@@ -476,8 +538,25 @@ function Approval({
         preview={
           <div className="k-workflow-approve__file">
             <span className="k-workflow-approve__head">
-              <b>{t('workflow.file.title')}</b>
-              <small>{t('workflow.approval.fileNote')}</small>
+              <b>{showingDiff ? t('workflow.approval.changesTitle') : t('workflow.file.title')}</b>
+              <small>
+                {hasTimes ? (
+                  <ChangedTimes approvedAt={approvedAt} changedAt={changedAt} />
+                ) : (
+                  t('workflow.approval.fileNote')
+                )}
+              </small>
+              {hasDiff && (
+                <button
+                  type="button"
+                  className="k-mkt-link k-workflow-approve__toggle"
+                  onClick={() => setShowFull((full) => !full)}
+                >
+                  {showFull
+                    ? t('workflow.approval.showChanges')
+                    : t('workflow.approval.showFullFile')}
+                </button>
+              )}
             </span>
             {error ? (
               <p className="k-mkt-error" role="alert">
@@ -487,7 +566,11 @@ function Approval({
                 </button>
               </p>
             ) : read ? (
-              <FileText text={read.text} />
+              showingDiff ? (
+                <WorkflowDiff entry={entry} oldText={read.approved!.text!} newText={read.text!} />
+              ) : (
+                <FileText text={read.text} />
+              )
             ) : (
               <Skeleton className="k-workflow-file__skeleton" />
             )}
@@ -993,11 +1076,22 @@ function Needs({ workflow, pending }: { workflow: Workflow; pending: boolean }) 
 function FileSection({ entry, open: openAtFirst }: { entry: WireWorkflowEntry; open: boolean }) {
   const { t } = useTranslation(['marketplace', 'common'])
   const [open, setOpen] = useState(openAtFirst)
+  const [showFull, setShowFull] = useState(false)
+  const [seenHash, setSeenHash] = useState(entry.hash)
+  if (seenHash !== entry.hash) {
+    setSeenHash(entry.hash)
+    setShowFull(false)
+  }
   const { read, error, retry } = useWorkflowFile(entry.id, entry.hash, open)
+  const approvedAt = read?.approved?.approvedAt ?? entry.approvedAt ?? null
+  const changedAt = read?.approved?.changedAt ?? entry.changedAt ?? null
+  const hasTimes = entry.approval === 'changed' && (approvedAt !== null || changedAt !== null)
+  const hasDiff = entry.approval === 'changed' && read?.approved?.text != null && read.text !== null
+  const showingDiff = hasDiff && !showFull
   return (
     <section>
       <h3 className="k-workflow-h3">
-        {t('workflow.file.title')}
+        {showingDiff ? t('workflow.approval.changesTitle') : t('workflow.file.title')}
         <button
           type="button"
           className="k-mkt-link k-workflow-h3__link"
@@ -1016,7 +1110,33 @@ function FileSection({ entry, open: openAtFirst }: { entry: WireWorkflowEntry; o
             </button>
           </p>
         ) : read ? (
-          <FileText text={read.text} />
+          <div className="k-workflow-approve__file">
+            {(hasTimes || hasDiff) && (
+              <span className="k-workflow-approve__head">
+                {hasTimes && (
+                  <small>
+                    <ChangedTimes approvedAt={approvedAt} changedAt={changedAt} />
+                  </small>
+                )}
+                {hasDiff && (
+                  <button
+                    type="button"
+                    className="k-mkt-link k-workflow-approve__toggle"
+                    onClick={() => setShowFull((full) => !full)}
+                  >
+                    {showFull
+                      ? t('workflow.approval.showChanges')
+                      : t('workflow.approval.showFullFile')}
+                  </button>
+                )}
+              </span>
+            )}
+            {showingDiff ? (
+              <WorkflowDiff entry={entry} oldText={read.approved!.text!} newText={read.text!} />
+            ) : (
+              <FileText text={read.text} />
+            )}
+          </div>
         ) : (
           <Skeleton className="k-workflow-file__skeleton" />
         ))}

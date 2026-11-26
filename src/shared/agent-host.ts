@@ -121,6 +121,7 @@ import type { AgentColor } from './settings'
 import type { CatalogSection } from './settings-catalog'
 import type { TurnPhase } from './turn-phase'
 import type {
+  ApprovedWorkflow,
   SessionTaskRef,
   WorkflowAddSource,
   WireWorkflowEntry,
@@ -1507,7 +1508,15 @@ export interface HostContract {
   'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
     params: { workflowId: string }
-    result: { entry: WireWorkflowEntry; text: string | null }
+    result: {
+      entry: WireWorkflowEntry
+      text: string | null
+      /**
+       * What was approved before the file changed; null while unapproved or unchanged. Absent from
+       * an older host.
+       */
+      approved?: ApprovedWorkflow | null
+    }
   }
   // Unapproved until `workflows.approve` names the hash the user was shown.
   'workflows.add': { params: WorkflowAddSource; result: WireWorkflowEntry }

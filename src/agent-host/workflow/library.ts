@@ -3,6 +3,7 @@
 // user approved, so an agent cannot write itself an unchecked flow. The user's pins and the workflow
 // switches in Settings live beside it in `state/workflows.json`, never in the workflow files.
 
+import type { Stats } from 'node:fs'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { isAgentId } from '@shared/agents'
@@ -13,6 +14,7 @@ import {
   WORKFLOW_FILE_BYTES,
   WORKFLOW_ID_CHARS,
   usableWorkflow,
+  type ApprovedWorkflow,
   type Workflow,
   type WorkflowAddSource,
   type WorkflowEntry,
@@ -33,6 +35,7 @@ export const WORKFLOWS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 const FETCH_TIMEOUT_MS = 15_000
 const MAX_LIBRARY = 200
 const ID = /^[a-z0-9][a-z0-9-]*$/
+const HASH = /^[0-9a-f]{64}$/
 
 export interface LibraryRecord {
   source: WorkflowSource
@@ -40,6 +43,15 @@ export interface LibraryRecord {
   addedAt: number
   /** The hash the user approved; null until they do. */
   approved: string | null
+  /** When `approved` was approved; absent on records saved before this was kept. */
+  approvedAt?: number
+  /**
+   * The latest changed file hash seen after approval (empty when the file is gone or unreadable),
+   * paired with `changedAt` so reading the same changed file again keeps one time.
+   */
+  changedHash?: string
+  /** When that changed file was written or first noticed. */
+  changedAt?: number
 }
 
 export interface WorkflowsFile {
@@ -57,6 +69,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const isNullableString = (value: unknown): value is string | null =>
   value === null || typeof value === 'string'
+
+const isTime = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+const isHashOrEmpty = (value: unknown): value is string =>
+  value === '' || (typeof value === 'string' && HASH.test(value))
 
 function originOf(value: unknown): WorkflowOrigin | null | undefined {
   if (value === null) return null
@@ -138,12 +156,24 @@ export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile
     ) {
       continue
     }
-    entries[id] = {
+    const record: LibraryRecord = {
       source: raw.source as WorkflowSource,
       origin,
       addedAt: raw.addedAt,
       approved: raw.approved,
     }
+    if (raw.approved !== null) {
+      if (isTime(raw.approvedAt)) record.approvedAt = raw.approvedAt
+      if (
+        isHashOrEmpty(raw.changedHash) &&
+        raw.changedHash !== raw.approved &&
+        isTime(raw.changedAt)
+      ) {
+        record.changedHash = raw.changedHash
+        record.changedAt = raw.changedAt
+      }
+    }
+    entries[id] = record
   }
   const pins: WorkflowsFile['pins'] = {}
   if (isRecord(data.pins)) {
@@ -192,6 +222,8 @@ export type WorkflowsStore = Pick<JsonFile<WorkflowsFile>, 'load' | 'save' | 'fl
 export interface WorkflowLibraryDeps {
   /** `<userData>/workflows`. */
   dir: string
+  /** Where the approved copy of each workflow file is kept, one file per workflow id. */
+  approvedDir?: string
   file: WorkflowsStore
   /** The Marketplace's MCP servers and Skills by the names agents know them by. */
   knownTools(): { mcp: ReadonlySet<string>; skills: ReadonlySet<string> }
@@ -250,19 +282,30 @@ interface Read {
   problems: WorkflowProblem[]
   workflow: Workflow | null
   hash: string
+  mtimeMs: number | null
+}
+
+export interface WorkflowLibraryRead {
+  entry: WorkflowEntry
+  text: string | null
+  approved: ApprovedWorkflow | null
 }
 
 export class WorkflowLibrary {
   private data: WorkflowsFile = emptyWorkflowsFile()
+  private readonly approvedDir: string
+  private readonly approvedSynced = new Map<string, string>()
   private readonly fetch: typeof fetch
   private readonly now: () => number
 
   constructor(private readonly deps: WorkflowLibraryDeps) {
+    this.approvedDir = deps.approvedDir ?? path.join(deps.dir, '.approved')
     this.fetch = deps.fetch ?? fetch
     this.now = deps.now ?? Date.now
   }
 
   async load(): Promise<void> {
+    this.approvedSynced.clear()
     this.data = await this.deps.file.load()
   }
 
@@ -296,15 +339,26 @@ export class WorkflowLibrary {
   /** The library but the workflows of plugins that are off, which come back when they are on. */
   async list(): Promise<WorkflowEntry[]> {
     const library = await this.readLibrary()
-    return library
-      .filter((read) => !this.pluginOff(read.id))
-      .map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user'))
+    const visible = library.filter((read) => !this.pluginOff(read.id))
+    await Promise.all(
+      visible.map((read) => {
+        const record = this.data.entries[read.id]
+        return record ? this.ensureApprovedSnapshot(read, record) : Promise.resolve()
+      }),
+    )
+    return visible.map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user'))
   }
 
-  async read(workflowId: string): Promise<{ entry: WorkflowEntry; text: string | null }> {
+  async read(workflowId: string): Promise<WorkflowLibraryRead> {
     const read = await this.readOne(workflowId)
-    const source = this.data.entries[workflowId]?.source ?? 'user'
-    return { entry: this.entryOf(read, source), text: read.text }
+    const record = this.data.entries[workflowId]
+    if (record) await this.ensureApprovedSnapshot(read, record)
+    const entry = this.entryOf(read, record?.source ?? 'user')
+    const approved =
+      entry.approval === 'changed' && record?.approved
+        ? await this.readApproved(workflowId, record, entry.changedAt)
+        : null
+    return { entry, text: read.text, approved }
   }
 
   /** The workflow a new task locks; refused when it does not read, has problems or is not approved. */
@@ -342,13 +396,20 @@ export class WorkflowLibrary {
     // The user approves what they saw: a file changed since then must be looked at again.
     if (read.hash !== hash) throw new HostError('conflict', t('workflow.changedSinceShown'))
     if (!read.workflow) throw invalidParams(t('workflow.invalid'))
-    const record = this.data.entries[workflowId] ?? {
-      source: 'user' as const,
+    await this.keepApproved(workflowId, read.text)
+    this.approvedSynced.set(workflowId, hash)
+    const now = this.now()
+    const record: LibraryRecord = this.data.entries[workflowId] ?? {
+      source: 'user',
       origin: null,
-      addedAt: this.now(),
+      addedAt: now,
       approved: null,
     }
+    const sameApproval = record.approved === hash
     record.approved = hash
+    if (!sameApproval || record.approvedAt === undefined) record.approvedAt = now
+    delete record.changedHash
+    delete record.changedAt
     this.data.entries[workflowId] = record
     this.save()
     this.deps.changed?.()
@@ -362,6 +423,8 @@ export class WorkflowLibrary {
       throw new HostError('restricted', t('plugins.fromPlugin', { plugin: origin.plugin }))
     }
     await rm(this.fileOf(workflowId), { force: true })
+    await rm(this.approvedFileOf(workflowId), { force: true })
+    this.approvedSynced.delete(workflowId)
     delete this.data.entries[workflowId]
     delete this.data.pins[workflowId]
     this.save()
@@ -429,7 +492,9 @@ export class WorkflowLibrary {
       return { entry: await this.write(text, 'community', origin), updated: false }
     await mkdir(this.deps.dir, { recursive: true })
     await writeFileAtomic(this.fileOf(id), text)
-    this.data.entries[id]!.origin = { ...origin }
+    const record = this.data.entries[id]!
+    record.origin = { ...origin }
+    this.markReplaced(record, text)
     this.save()
     this.deps.changed?.()
     return { entry: (await this.read(id)).entry, updated: true }
@@ -451,7 +516,9 @@ export class WorkflowLibrary {
     if (id === undefined) return (await this.write(text, 'plugin', origin)).id
     await mkdir(this.deps.dir, { recursive: true })
     await writeFileAtomic(this.fileOf(id), text)
-    this.data.entries[id]!.origin = { ...origin }
+    const record = this.data.entries[id]!
+    record.origin = { ...origin }
+    this.markReplaced(record, text)
     this.save()
     this.deps.changed?.()
     return id
@@ -465,6 +532,8 @@ export class WorkflowLibrary {
       if (origin?.kind !== 'plugin' || origin.pluginId !== pluginId) continue
       if (keep.includes(origin.name)) continue
       await rm(this.fileOf(id), { force: true })
+      await rm(this.approvedFileOf(id), { force: true })
+      this.approvedSynced.delete(id)
       delete this.data.entries[id]
       delete this.data.pins[id]
       removed = true
@@ -495,6 +564,8 @@ export class WorkflowLibrary {
     if (Buffer.byteLength(text, 'utf8') > WORKFLOW_FILE_BYTES)
       throw invalidParams(t('workflow.tooLarge'))
     await writeFileAtomic(this.fileOf(workflowId), text)
+    this.markReplaced(record, text)
+    this.save()
     this.deps.changed?.()
     return { entry: (await this.read(workflowId)).entry, changed: true }
   }
@@ -566,6 +637,94 @@ export class WorkflowLibrary {
     return path.join(this.deps.dir, `${id}.yaml`)
   }
 
+  private approvedFileOf(id: string): string {
+    return path.join(this.approvedDir, `${id}.yaml`)
+  }
+
+  private async keepApproved(id: string, text: string): Promise<void> {
+    await mkdir(this.approvedDir, { recursive: true })
+    await writeFileAtomic(this.approvedFileOf(id), text)
+  }
+
+  private async readApprovedText(id: string, expectedHash: string): Promise<string | null> {
+    if (!ID.test(id) || !HASH.test(expectedHash)) return null
+    try {
+      const file = this.approvedFileOf(id)
+      if ((await stat(file)).size > WORKFLOW_FILE_BYTES) return null
+      const text = await readFile(file, 'utf8')
+      return workflowHash(text) === expectedHash ? text : null
+    } catch {
+      return null
+    }
+  }
+
+  private async readApproved(
+    id: string,
+    record: LibraryRecord,
+    changedAt: number | null,
+  ): Promise<ApprovedWorkflow> {
+    const hash = record.approved!
+    const text = await this.readApprovedText(id, hash)
+    const workflow = text === null ? null : parseWorkflow(text).workflow
+    return {
+      hash,
+      text,
+      workflow,
+      approvedAt: record.approvedAt ?? null,
+      changedAt,
+    }
+  }
+
+  /**
+   * Keeps an approved copy for records saved before snapshots existed, once the matching file is
+   * read unchanged, without inventing an approval time.
+   */
+  private async ensureApprovedSnapshot(read: Read, record: LibraryRecord): Promise<void> {
+    if (read.text === null || record.approved === null || record.approved !== read.hash) return
+    if (this.approvedSynced.get(read.id) === read.hash) return
+    const existing = await this.readApprovedText(read.id, read.hash)
+    if (existing !== null) {
+      this.approvedSynced.set(read.id, read.hash)
+      return
+    }
+    try {
+      await this.keepApproved(read.id, read.text)
+      this.approvedSynced.set(read.id, read.hash)
+    } catch (error) {
+      this.deps.log(
+        'warn',
+        `Could not keep approved copy of workflow ${read.id}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  private markReplaced(record: LibraryRecord, text: string): void {
+    if (record.approved === null) return
+    const nextHash = workflowHash(text)
+    if (nextHash === record.approved) {
+      delete record.changedHash
+      delete record.changedAt
+    } else if (record.changedHash !== nextHash || record.changedAt === undefined) {
+      record.changedHash = nextHash
+      record.changedAt = this.now()
+    }
+  }
+
+  private changedAtFor(read: Read, record: LibraryRecord): number {
+    const now = this.now()
+    if (read.mtimeMs !== null) {
+      const mtime = Math.trunc(read.mtimeMs)
+      if (
+        mtime >= 0 &&
+        mtime <= now &&
+        (record.approvedAt === undefined || mtime >= record.approvedAt)
+      ) {
+        return mtime
+      }
+    }
+    return now
+  }
+
   private async readLibrary(): Promise<Read[]> {
     let names: string[]
     try {
@@ -585,17 +744,21 @@ export class WorkflowLibrary {
   }
 
   private async readOne(id: string): Promise<Read> {
-    if (!ID.test(id)) return { id, text: null, problems: [], workflow: null, hash: '' }
+    if (!ID.test(id))
+      return { id, text: null, problems: [], workflow: null, hash: '', mtimeMs: null }
     for (const ext of ['yaml', 'yml']) {
       const file = path.join(this.deps.dir, `${id}.${ext}`)
+      let info: Stats
       let text: string
       try {
-        if ((await stat(file)).size > WORKFLOW_FILE_BYTES) {
+        info = await stat(file)
+        if (info.size > WORKFLOW_FILE_BYTES) {
           return {
             id,
             text: null,
             workflow: null,
             hash: '',
+            mtimeMs: Number.isFinite(info.mtimeMs) ? info.mtimeMs : null,
             problems: [
               fileProblem('', 'workflowFile.fileTooLarge', { kb: WORKFLOW_FILE_BYTES / 1024 }),
             ],
@@ -610,6 +773,7 @@ export class WorkflowLibrary {
           text: null,
           workflow: null,
           hash: '',
+          mtimeMs: null,
           problems: [
             fileProblem('', 'workflowFile.unreadable', { reason: (error as Error).message }),
           ],
@@ -622,9 +786,10 @@ export class WorkflowLibrary {
         workflow: read.workflow,
         problems: read.problems,
         hash: workflowHash(text),
+        mtimeMs: Number.isFinite(info.mtimeMs) ? info.mtimeMs : null,
       }
     }
-    return { id, text: null, workflow: null, hash: '', problems: [] }
+    return { id, text: null, workflow: null, hash: '', mtimeMs: null, problems: [] }
   }
 
   private entryOf(read: Read, source: WorkflowSource): WorkflowEntry {
@@ -640,6 +805,21 @@ export class WorkflowLibrary {
     }
     const approval: WorkflowEntry['approval'] =
       record?.approved == null ? 'pending' : record.approved === read.hash ? 'approved' : 'changed'
+    let changedAt: number | null = null
+    if (record && record.approved !== null) {
+      if (approval === 'changed') {
+        if (record.changedHash !== read.hash || record.changedAt === undefined) {
+          record.changedHash = read.hash
+          record.changedAt = this.changedAtFor(read, record)
+          this.save()
+        }
+        changedAt = record.changedAt
+      } else if (record.changedHash !== undefined || record.changedAt !== undefined) {
+        delete record.changedHash
+        delete record.changedAt
+        this.save()
+      }
+    }
     return {
       id: read.id,
       source,
@@ -651,6 +831,8 @@ export class WorkflowLibrary {
       origin: record?.origin ?? null,
       file: this.fileOf(read.id),
       addedAt: record?.addedAt ?? null,
+      approvedAt: record?.approved != null ? (record.approvedAt ?? null) : null,
+      changedAt,
       pins: this.livePins(read.id, read.workflow),
     }
   }
