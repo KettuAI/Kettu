@@ -87,6 +87,7 @@ const LIVE_METHODS: ReadonlySet<string> = new Set<HostMethod>([
   'surfaces.answerAccess',
   'computer.answerApp',
   'computer.declineSetup',
+  'workflows.suggestions',
 ])
 
 /** Reads that tell the host something of the port, which each request must reach. */

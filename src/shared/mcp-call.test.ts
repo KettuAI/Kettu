@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mcpCallOf, mcpCallsOf } from './mcp-call'
+import { mcpCallOf, mcpCallsOf, workflowToolOfTitle } from './mcp-call'
 
 describe('mcpCallOf', () => {
   it("reads Claude Code's names for Kettu's and other servers' tools", () => {
@@ -81,5 +81,38 @@ describe('mcpCallsOf', () => {
     expect(mcpCallsOf('mcp__kettu__list_sessions')?.map((c) => c.tool)).toEqual(['list_sessions'])
     expect(mcpCallsOf('kettu.find_settings, github.search')).toBeNull()
     expect(mcpCallsOf('Read a.ts, b.ts')).toBeNull()
+  })
+})
+
+describe('workflowToolOfTitle', () => {
+  it('recognizes Kettu workflow card tools across every harness title format', () => {
+    for (const title of [
+      'mcp__kettu__suggest_workflow',
+      'kettu: suggest_workflow',
+      'kettu：suggest_workflow',
+      'kettu_suggest_workflow',
+      'kettu.suggest_workflow',
+      'kettu/suggest_workflow',
+      'mcp_kettu_suggest_workflow',
+      'suggest_workflow',
+      'kettu.list_workflows, kettu.suggest_workflow',
+    ]) {
+      expect(workflowToolOfTitle(title), title).toBe('start')
+    }
+    expect(workflowToolOfTitle('mcp__kettu__create_workflow')).toBe('create')
+    expect(workflowToolOfTitle('kettu: report_step')).toBe('report')
+    expect(workflowToolOfTitle('kettu：pick_step_agents')).toBe('pick')
+  })
+
+  it('ignores non-workflow tools and identically named tools on other servers', () => {
+    for (const title of [
+      'mcp__other__suggest_workflow',
+      'mcp__other__report_step',
+      'mcp__kettu__list_workflows',
+      'Read workflow.yaml',
+      '',
+    ]) {
+      expect(workflowToolOfTitle(title), title).toBeNull()
+    }
   })
 })

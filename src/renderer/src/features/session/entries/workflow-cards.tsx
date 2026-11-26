@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode, type Ref } from 'react'
+import { memo, useEffect, useState, type ReactNode, type Ref } from 'react'
 import { ArrowDown01Icon, Cancel01Icon, SparklesIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
@@ -10,13 +10,17 @@ import {
 } from '@shared/workflow'
 import type { AgentId, ToolEntry } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Button } from '@renderer/components/ui/button'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { outcomeTitle, stepTitle } from '@renderer/features/tasks/model'
 import { useTaskView } from '@renderer/features/tasks/use-task'
+import { errorMessage, sessionHost } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { loadFullEntry } from '@renderer/stores/threads'
 import { useHostWorkflows } from '@renderer/stores/workflows'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { openWorkflowMarketplace } from '../new-session/open-task'
@@ -31,6 +35,7 @@ import { SuggestionCard } from './suggestion-card'
 import {
   cardIdOf,
   listedLines,
+  needsFullWorkflowEntry,
   pickOf,
   reportOf,
   savedOf,
@@ -56,17 +61,51 @@ export const WorkflowToolCard = memo(function WorkflowToolCard({
   agentName: string
   className?: string
 }) {
+  const { t } = useTranslation(['session', 'common'])
   const tool = workflowCardOf(entry)
-  const body =
-    tool === 'start' || (tool === 'create' && cardIdOf(entry)) ? (
-      <SuggestionCard sessionId={sessionId} entry={entry} agent={agent} />
-    ) : tool === 'create' ? (
-      <SavedCard sessionId={sessionId} entry={entry} agent={agent} />
-    ) : tool === 'report' ? (
-      <ReportCard sessionId={sessionId} call={reportOf(entry)} agent={agent} />
-    ) : tool === 'pick' ? (
-      <PickCard sessionId={sessionId} call={pickOf(entry)} agent={agent} />
-    ) : null
+  const needsFull = needsFullWorkflowEntry(entry)
+  const [attempt, setAttempt] = useState(0)
+  const [loadError, setLoadError] = useState<{ attempt: number; message: string } | null>(null)
+
+  useEffect(() => {
+    if (!needsFull) return
+    let active = true
+    void loadFullEntry(sessionId, entry.id).catch((caught: unknown) => {
+      if (active) setLoadError({ attempt, message: errorMessage(caught) })
+    })
+    return () => {
+      active = false
+    }
+  }, [needsFull, sessionId, entry.id, attempt])
+
+  const activeError = loadError?.attempt === attempt ? loadError.message : null
+  const body = needsFull ? (
+    <CardShell tone={activeError ? 'bad' : 'quiet'}>
+      <CardHead
+        icon={WORKFLOW_ICON}
+        title={activeError ? t('workflow.card.loadFailed') : t('workflow.card.reading')}
+        badge={null}
+        aside={
+          activeError ? (
+            <Button size="xs" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+              {t('common:actions.retry')}
+            </Button>
+          ) : (
+            <Spinner className="size-3.5 text-muted-foreground" />
+          )
+        }
+      />
+      {activeError && <p className="text-meta text-secondary">{activeError}</p>}
+    </CardShell>
+  ) : tool === 'start' || (tool === 'create' && cardIdOf(entry)) ? (
+    <SuggestionCard sessionId={sessionId} entry={entry} agent={agent} />
+  ) : tool === 'create' ? (
+    <SavedCard sessionId={sessionId} entry={entry} agent={agent} />
+  ) : tool === 'report' ? (
+    <ReportCard sessionId={sessionId} call={reportOf(entry)} agent={agent} />
+  ) : tool === 'pick' ? (
+    <PickCard sessionId={sessionId} call={pickOf(entry)} agent={agent} />
+  ) : null
   return (
     <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
       {body}
@@ -79,7 +118,7 @@ function useCaller(sessionId: string) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
   return {
     summary,
-    hostId: summary ? hostOfSession(summary) : null,
+    hostId: summary ? hostOfSession(summary) : sessionHost(sessionId),
     task: summary?.task ?? null,
   }
 }

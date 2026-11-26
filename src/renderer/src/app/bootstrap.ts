@@ -75,7 +75,7 @@ import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@rende
 import { useIdleReleaseStore } from '@renderer/stores/idle-release'
 import { hostLoadClosed, hostLoadOpened, receiveLoad } from '@renderer/stores/host-load'
 import { useWorkflowsStore } from '@renderer/stores/workflows'
-import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
+import { suggestionsHostOpened, useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
@@ -415,6 +415,7 @@ export function bootstrap(): Promise<unknown> {
     void removeEmptySessions()
     void loadHostState()
     artifactsChanged()
+    suggestionsHostOpened(null)
     hostRestarted(null)
     rewatchAll((sessionId) => sessionHost(sessionId) === null)
     showFront(true)
@@ -449,6 +450,7 @@ export function bootstrap(): Promise<unknown> {
         artifactsHostOpened(hostId)
         routinesHostOpened(hostId)
         tasksHostOpened(hostId)
+        suggestionsHostOpened(hostId)
         hostScopeOpened(hostId)
         hostRequestsOpened(hostId)
         hostRestarted(hostId)
