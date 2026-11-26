@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
-/** The primary pointer cannot hover, as on a phone or a tablet: the query the stylesheets use. */
-const NO_HOVER = '(hover: none)'
+/** The primary pointer cannot hover or is coarse, as on phones and touch browsers that also advertise hover. */
+const NO_HOVER = '(hover: none), (pointer: coarse)'
 
 function subscribe(onChange: () => void): () => void {
   const list = window.matchMedia(NO_HOVER)

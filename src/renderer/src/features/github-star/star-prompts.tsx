@@ -107,7 +107,7 @@ function StarCardView() {
                 size="icon-xs"
                 aria-label={t('card.close')}
                 onClick={dismissGitHubStar}
-                className="absolute -top-1.5 -right-1.5 size-4.5 rounded-full text-(--shell-faint) opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/kstar:opacity-100 group-hover/kstar:opacity-100 hover:text-(--shell-ink) focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [&_svg:not([class*=size-])]:size-3"
+                className="absolute -top-1.5 -right-1.5 size-4.5 rounded-full text-(--shell-faint) opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/kstar:opacity-100 group-hover/kstar:opacity-100 hover:text-(--shell-ink) focus-visible:opacity-100 no-hover:opacity-100 [&_svg:not([class*=size-])]:size-3"
               />
             }
           >
