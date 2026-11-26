@@ -684,6 +684,21 @@ export function SidebarHover({ label }: { label: string }) {
   )
 }
 
+export function CloseSidePanelWithLastTab({ label }: { label: string }) {
+  const checked = useSettings().appearance.closeSidePanelWithLastTab
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ appearance: { closeSidePanelWithLastTab: v } })}
+      />
+    </>
+  )
+}
+
 // ---- Terminal
 
 export function ShellPicker() {

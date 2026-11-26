@@ -78,6 +78,7 @@ export interface SettingsFile {
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
     sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
+    closeSidePanelWithLastTab: boolean // closing the last tab in the side panel collapses it instead of showing the panel list
     sidebarOrder: SidebarPage[] // every page once, as the sidebar lists them; replaced whole
     sidebarHidden: SidebarPage[] // pages the sidebar leaves out; replaced whole
     fonts: UserFonts // replaced whole; a role left out keeps the theme's face
@@ -321,6 +322,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     reduceMotion: 'system',
     zoom: 1.1,
     sidebarHover: true,
+    closeSidePanelWithLastTab: false,
     sidebarOrder: [...SIDEBAR_PAGES],
     sidebarHidden: [],
     fonts: {},
