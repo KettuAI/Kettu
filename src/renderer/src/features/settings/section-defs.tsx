@@ -20,7 +20,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import type { AgentStatus } from '@shared/agent-host'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import { USER_FONT_ROLES } from '@shared/settings'
@@ -45,7 +45,6 @@ import { useAccountStore } from '@renderer/stores/account'
 import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useWebHostStore } from '@renderer/stores/web-host'
@@ -84,14 +83,14 @@ import {
   HarnessListItem,
   HarnessPage,
 } from './harness-section'
-import { ArchivedRow } from './archived-section'
+import { ArchivedSection } from './archived-section'
 import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
 import { DebugModeRow } from './debug-mode'
 import { FontFamily, UserFont } from './font-family'
 import { ConsentRow, ConsentsState } from './artifacts-section'
-import { EmptyCard, GroupNote } from './rows'
+import { GroupNote } from './rows'
 import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
 import { BringSignInsRow, BroughtMoreRow, BroughtSiteRow } from './sign-ins-rows'
 import { HostPage } from './host-page'
@@ -1145,42 +1144,22 @@ export function useAboutSection(): SectionDef {
   }
 }
 
-/** More archived rows than a tall window shows, drawn in full as the page opens. */
-const ARCHIVED_EAGER = 30
-
 export function useArchivedSection(): SectionDef {
-  const { t } = useTranslation(['settings', 'sidebar'])
-  const { hostId } = useHostScope()
-  const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId, hostId)))
-  const projects = useProjectsStore((s) => s.projects)
-  const where = (summary: SessionSummary) =>
-    summary.scratch
-      ? t('sidebar:project.noProject')
-      : (projects.find((p) => p.path === summary.projectPath)?.name ??
-        basename(summary.projectPath))
-  const list = group('archived', t('archived.group'), { count: archived.length })
+  const { t } = useTranslation('settings')
   return {
     id: 'archived',
     title: t('sections.archived'),
     description: t('pages.archived'),
     icon: Archive01Icon,
-    rows: archived.map((summary, i): RowDef => ({
-      id: summary.id,
-      setting: 'archived.sessions',
-      item: {
-        name: sessionTitle(summary),
-        description: where(summary),
-        keywords: agentName(summary.agentId, hostId),
+    rows: [
+      {
+        id: 'archived',
+        setting: 'archived.sessions',
+        searchOnly: true,
+        render: () => null,
       },
-      group: list,
-      layout: 'custom',
-      render: () => (
-        <ArchivedRow summary={summary} where={where(summary)} eager={i < ARCHIVED_EAGER} />
-      ),
-    })),
-    footer: archived.length === 0 && (
-      <EmptyCard title={t('archived.emptyTitle')} hint={t('archived.emptyHint')} />
-    ),
+    ],
+    footer: <ArchivedSection />,
   }
 }
 

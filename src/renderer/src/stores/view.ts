@@ -235,6 +235,8 @@ interface ViewStore {
   shortcutsOpen: boolean
   /** Search, over whatever the window shows. Not persisted. */
   searchOpen: boolean
+  /** Initial scope and query for the next Search open, cleared when it closes. */
+  searchInit: { scope?: string; query?: string } | null
   /** Back and Forward through what the main area showed, nearest last. Not persisted. */
   history: { back: Step[]; forward: Step[] }
   sidebarCollapsed: boolean
@@ -328,6 +330,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   settings: { open: false, section: null, item: null },
   shortcutsOpen: false,
   searchOpen: false,
+  searchInit: null,
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   sidebarDrawer: false,
@@ -1081,7 +1084,16 @@ export function toggleShortcuts(layerOpen: boolean): void {
 
 /** Shows Search, or closes it. */
 export function showSearch(open: boolean): void {
-  useViewStore.setState({ searchOpen: open })
+  useViewStore.setState({ searchOpen: open, ...(open ? {} : { searchInit: null }) })
+}
+
+/** Closes Settings when open and opens Search pre-set to a scope and optional query. */
+export function openSearch(init?: { scope?: string; query?: string }): void {
+  useViewStore.setState((s) => ({
+    searchOpen: true,
+    searchInit: init ?? null,
+    settings: { ...s.settings, open: false },
+  }))
 }
 
 /** Closes Search when open, and otherwise opens it unless another layer is open. */

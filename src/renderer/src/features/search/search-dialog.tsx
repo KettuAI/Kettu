@@ -188,8 +188,13 @@ const EXPAND = 'expand:'
 function SearchPalette() {
   const { t } = useTranslation(['sidebar', 'common'])
   const found = useSearchEntries()
-  const [query, setQuery] = useState('')
-  const [scope, setScope] = useState<SearchScope>('all')
+  const [init] = useState(() => useViewStore.getState().searchInit)
+  const [query, setQuery] = useState(() => init?.query ?? '')
+  const [scope, setScope] = useState<SearchScope>(() =>
+    init?.scope && (SCOPES as readonly string[]).includes(init.scope)
+      ? (init.scope as SearchScope)
+      : 'all',
+  )
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const conversations = useConversationHits(query)
   const others = useOtherHosts()
@@ -343,6 +348,7 @@ function SearchPalette() {
       placeholder={t('search.placeholder')}
       scopes={scopes}
       scope={scope}
+      initialQuery={init?.query ?? ''}
       onScopeChange={(id) => setScope(id as SearchScope)}
       onQueryChange={setQuery}
       empty={empty}
