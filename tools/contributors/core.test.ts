@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   aggregateContributors,
   assertSafeContributorUpdate,
+  calculateContributionScore,
   classifyContribution,
   END_MARKER,
   extractClosingIssueNumbers,
   extractExistingContributorLogins,
   extractPrNumbersFromSubject,
   formatAttribution,
+  githubAvatarUrl,
   isExcludedUser,
+  normalizeGitHubAvatarUrl,
   renderAvatarWall,
   renderReleaseNotesTemplate,
   START_MARKER,
@@ -16,9 +19,20 @@ import {
 } from './core.mjs'
 
 describe('contributor eligibility and sorting', () => {
-  it('excludes maintainers, automation accounts, and bots', () => {
-    expect(isExcludedUser({ login: 'Amigoer', type: 'User' })).toBe(true)
-    expect(isExcludedUser({ login: 'amigoer', type: 'User' })).toBe(true)
+  it('includes maintainers by default while excluding bots, and supports excluding maintainers for release notes', () => {
+    // 默认口径（README 贡献者墙）：保留维护者 Amigoer
+    expect(isExcludedUser({ login: 'Amigoer', type: 'User' })).toBe(false)
+    expect(isExcludedUser({ login: 'amigoer', type: 'User' })).toBe(false)
+
+    // 单版本发布说明致谢口径：可选排除维护者
+    expect(isExcludedUser({ login: 'Amigoer', type: 'User' }, { excludeMaintainers: true })).toBe(
+      true,
+    )
+    expect(isExcludedUser({ login: 'amigoer', type: 'User' }, { excludeMaintainers: true })).toBe(
+      true,
+    )
+
+    // 自动化账号、机器人与无效对象一律排除
     expect(isExcludedUser({ login: 'kettu-builder', type: 'User' })).toBe(true)
     expect(isExcludedUser({ login: 'kettu-planner', type: 'User' })).toBe(true)
     expect(isExcludedUser({ login: 'kettu-reviewer', type: 'User' })).toBe(true)
@@ -26,8 +40,19 @@ describe('contributor eligibility and sorting', () => {
     expect(isExcludedUser({ login: 'dependabot[bot]', type: 'Bot' })).toBe(true)
     expect(isExcludedUser({ login: 'some-app[bot]', type: 'User' })).toBe(true)
     expect(isExcludedUser({ login: 'some-bot', type: 'Bot' })).toBe(true)
+    expect(isExcludedUser({ login: 'ghost', type: 'User' })).toBe(true)
     expect(isExcludedUser(null)).toBe(true)
     expect(isExcludedUser({ login: 'akatsukiro', type: 'User' })).toBe(false)
+  })
+
+  it('normalizes avatar URLs onto avatars.githubusercontent.com', () => {
+    expect(githubAvatarUrl('Amigoer')).toBe('https://avatars.githubusercontent.com/Amigoer?s=96')
+    expect(
+      normalizeGitHubAvatarUrl('https://avatars.githubusercontent.com/u/266790742?v=4', 'Amigoer'),
+    ).toBe('https://avatars.githubusercontent.com/u/266790742?v=4&s=96')
+    expect(normalizeGitHubAvatarUrl('https://github.com/Amigoer.png?size=96', 'Amigoer')).toBe(
+      'https://avatars.githubusercontent.com/Amigoer?s=96',
+    )
   })
 
   it('counts merged PRs, completed issues, and accepted open issues only', () => {
@@ -56,7 +81,7 @@ describe('contributor eligibility and sorting', () => {
         state_reason: 'completed',
         user: { login: 'bob', type: 'User' },
       }),
-    ).toBe('issue')
+    ).toBe('completed_issue')
 
     expect(
       classifyContribution({
@@ -74,7 +99,7 @@ describe('contributor eligibility and sorting', () => {
         labels: [{ name: 'desktop' }],
         user: { login: 'carol', type: 'User' },
       }),
-    ).toBe('issue')
+    ).toBe('open_issue')
 
     for (const label of ['needs-info', 'invalid', 'duplicate', 'wontfix']) {
       expect(
@@ -88,58 +113,191 @@ describe('contributor eligibility and sorting', () => {
     }
   })
 
-  it('sorts deterministically by total descending, then case-insensitive login ascending', () => {
-    const result = aggregateContributors([
-      {
-        number: 1,
-        state: 'closed',
-        state_reason: 'completed',
-        user: { login: 'Zed', type: 'User' },
-      },
-      {
-        number: 2,
-        state: 'closed',
-        user: { login: 'bob', type: 'User' },
-        pull_request: { merged_at: '2026-11-20T00:00:00Z' },
-      },
-      {
-        number: 3,
-        state: 'open',
-        labels: [{ name: 'desktop' }],
-        user: { login: 'bob', type: 'User' },
-      },
-      {
-        number: 4,
-        state: 'closed',
-        state_reason: 'completed',
-        user: { login: 'alice', type: 'User' },
-      },
-      {
-        number: 5,
-        state: 'closed',
-        state_reason: 'completed',
-        user: { login: 'Amigoer', type: 'User' },
-      },
-      {
-        number: 6,
-        state: 'closed',
-        user: { login: 'dependabot[bot]', type: 'Bot' },
-        pull_request: { merged_at: '2026-11-20T00:00:00Z' },
-      },
-    ])
+  it('ranks contributors including maintainer by weighted contribution score with deterministic tie-breakers', () => {
+    expect(
+      calculateContributionScore({ commits: 10, prs: 2, completedIssues: 3, openIssues: 1 }),
+    ).toBe(27)
 
+    const result = aggregateContributors(
+      [
+        {
+          number: 1,
+          state: 'closed',
+          state_reason: 'completed',
+          user: { login: 'Zed', type: 'User' },
+        },
+        {
+          number: 2,
+          state: 'closed',
+          user: {
+            login: 'bob',
+            type: 'User',
+            avatar_url: 'https://avatars.githubusercontent.com/u/200?v=4',
+          },
+          pull_request: { merged_at: '2026-11-20T00:00:00Z' },
+        },
+        {
+          number: 3,
+          state: 'open',
+          labels: [{ name: 'desktop' }],
+          user: { login: 'bob', type: 'User' },
+        },
+        {
+          number: 4,
+          state: 'closed',
+          state_reason: 'completed',
+          user: { login: 'alice', type: 'User' },
+        },
+        // OpenOnly 提了 3 条开启中 Issue（3 分），低于 2 条已解决 Issue 的 CompletedTwo（4 分）
+        {
+          number: 5,
+          state: 'open',
+          labels: [{ name: 'desktop' }],
+          user: { login: 'OpenOnly', type: 'User' },
+        },
+        {
+          number: 6,
+          state: 'open',
+          labels: [{ name: 'desktop' }],
+          user: { login: 'OpenOnly', type: 'User' },
+        },
+        {
+          number: 7,
+          state: 'open',
+          labels: [{ name: 'desktop' }],
+          user: { login: 'OpenOnly', type: 'User' },
+        },
+        {
+          number: 8,
+          state: 'closed',
+          state_reason: 'completed',
+          user: { login: 'CompletedTwo', type: 'User' },
+        },
+        {
+          number: 9,
+          state: 'closed',
+          state_reason: 'completed',
+          user: { login: 'CompletedTwo', type: 'User' },
+        },
+        {
+          number: 10,
+          state: 'closed',
+          state_reason: 'completed',
+          user: { login: 'Amigoer', type: 'User' },
+        },
+        {
+          number: 11,
+          state: 'closed',
+          user: { login: 'dependabot[bot]', type: 'Bot' },
+          pull_request: { merged_at: '2026-11-20T00:00:00Z' },
+        },
+      ],
+      {
+        commitContributors: [
+          {
+            login: 'Amigoer',
+            type: 'User',
+            avatar_url: 'https://avatars.githubusercontent.com/u/266790742?v=4',
+            contributions: 100,
+          },
+          {
+            login: 'kettu-builder[bot]',
+            type: 'Bot',
+            contributions: 50,
+          },
+        ],
+      },
+    )
+
+    // 贡献值排序：
+    // 1. Amigoer: 100*1 + 1*2 = 102
+    // 2. bob: 1*5 + 1*1 = 6
+    // 3. CompletedTwo: 2*2 = 4
+    // 4. OpenOnly: 3*1 = 3
+    // 5. alice: 1*2 = 2
+    // 6. Zed: 1*2 = 2
     expect(result).toEqual([
-      { login: 'bob', prs: 1, issues: 1, total: 2 },
-      { login: 'alice', prs: 0, issues: 1, total: 1 },
-      { login: 'Zed', prs: 0, issues: 1, total: 1 },
+      {
+        login: 'Amigoer',
+        avatarUrl: 'https://avatars.githubusercontent.com/u/266790742?v=4&s=96',
+        commits: 100,
+        prs: 0,
+        completedIssues: 1,
+        openIssues: 0,
+        issues: 1,
+        total: 101,
+        score: 102,
+      },
+      {
+        login: 'bob',
+        avatarUrl: 'https://avatars.githubusercontent.com/u/200?v=4&s=96',
+        commits: 0,
+        prs: 1,
+        completedIssues: 0,
+        openIssues: 1,
+        issues: 1,
+        total: 2,
+        score: 6,
+      },
+      {
+        login: 'CompletedTwo',
+        avatarUrl: 'https://avatars.githubusercontent.com/CompletedTwo?s=96',
+        commits: 0,
+        prs: 0,
+        completedIssues: 2,
+        openIssues: 0,
+        issues: 2,
+        total: 2,
+        score: 4,
+      },
+      {
+        login: 'OpenOnly',
+        avatarUrl: 'https://avatars.githubusercontent.com/OpenOnly?s=96',
+        commits: 0,
+        prs: 0,
+        completedIssues: 0,
+        openIssues: 3,
+        issues: 3,
+        total: 3,
+        score: 3,
+      },
+      {
+        login: 'alice',
+        avatarUrl: 'https://avatars.githubusercontent.com/alice?s=96',
+        commits: 0,
+        prs: 0,
+        completedIssues: 1,
+        openIssues: 0,
+        issues: 1,
+        total: 1,
+        score: 2,
+      },
+      {
+        login: 'Zed',
+        avatarUrl: 'https://avatars.githubusercontent.com/Zed?s=96',
+        commits: 0,
+        prs: 0,
+        completedIssues: 1,
+        openIssues: 0,
+        issues: 1,
+        total: 1,
+        score: 2,
+      },
     ])
   })
 })
 
 describe('README contributors wall rendering and idempotent updates', () => {
-  it('renders GitHub-safe native avatar markup without inline styles or third-party proxies', () => {
-    const html = renderAvatarWall([{ login: 'akatsukiro' }, { login: 'Yezh1i' }])
-    expect(html).toContain('https://github.com/akatsukiro.png?size=96')
+  it('renders GitHub-safe native avatar markup on avatars.githubusercontent.com without inline styles', () => {
+    const html = renderAvatarWall([
+      {
+        login: 'Amigoer',
+        avatarUrl: 'https://avatars.githubusercontent.com/u/266790742?v=4&s=96',
+      },
+      { login: 'Yezh1i' },
+    ])
+    expect(html).toContain('https://avatars.githubusercontent.com/u/266790742?v=4&amp;s=96')
+    expect(html).toContain('https://avatars.githubusercontent.com/Yezh1i?s=96')
     expect(html).toContain('width="48" height="48"')
     expect(html).not.toContain('style=')
   })
@@ -168,8 +326,8 @@ describe('README contributors wall rendering and idempotent updates', () => {
     expect(twice).toBe(once)
 
     const updated = updateReadmeContent(once, [{ login: 'carol' }], 'en')
-    expect(updated).toContain('https://github.com/carol.png?size=96')
-    expect(updated).not.toContain('https://github.com/alice.png?size=96')
+    expect(updated).toContain('https://avatars.githubusercontent.com/carol?s=96')
+    expect(updated).not.toContain('https://avatars.githubusercontent.com/alice?s=96')
   })
 
   it('inserts before Chinese Community & Contributing heading', () => {
@@ -203,7 +361,7 @@ describe('README contributors wall rendering and idempotent updates', () => {
   })
 
   it('refuses to clear or silently truncate an existing contributors wall on filtered API results', () => {
-    const existingLogins = ['alice', 'bob', 'carol', 'dave', 'erin', 'frank']
+    const existingLogins = ['Amigoer', 'alice', 'bob', 'carol', 'dave', 'erin']
     const prOnlyItems = [
       {
         number: 10,
@@ -222,7 +380,15 @@ describe('README contributors wall rendering and idempotent updates', () => {
     ]
     const mixedItems = [...prOnlyItems, ...issueOnlyItems]
 
-    // Reproduces missing `issues: read`: API returns PRs only, yielding 0 external contributors.
+    // 复现缺少 `issues: read` 权限：接口只返回 PR，即使保留维护者也会丢失所有 Issue 贡献者
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [{ login: 'Amigoer' }],
+        items: prOnlyItems,
+      }),
+    ).toThrow(/issues: read/)
+
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
@@ -231,16 +397,7 @@ describe('README contributors wall rendering and idempotent updates', () => {
       }),
     ).toThrow(/issues: read/)
 
-    // Even if one external PR existed, missing `issues: read` must not drop existing issue reporters.
-    expect(() =>
-      assertSafeContributorUpdate({
-        existingLogins,
-        nextContributors: [{ login: 'alice' }],
-        items: prOnlyItems,
-      }),
-    ).toThrow(/issues: read/)
-
-    // Missing `pull-requests: read` when existing PR contributors disappear.
+    // 复现缺少 `pull-requests: read` 权限导致既有 PR 贡献者丢失
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
@@ -249,7 +406,7 @@ describe('README contributors wall rendering and idempotent updates', () => {
       }),
     ).toThrow(/pull-requests: read/)
 
-    // Empty API response must never clear an existing wall.
+    // API 返回 0 条数据时拒绝清空已有头像墙
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
@@ -258,11 +415,11 @@ describe('README contributors wall rendering and idempotent updates', () => {
       }),
     ).toThrow(/0 items/)
 
-    // Sudden 50%+ shrinkage fails by default unless --allow-shrink is passed.
+    // 骤减 50% 以上时默认拦截，除非显式传入 --allow-shrink
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
-        nextContributors: [{ login: 'alice' }, { login: 'bob' }],
+        nextContributors: [{ login: 'Amigoer' }, { login: 'alice' }],
         items: mixedItems,
       }),
     ).toThrow(/--allow-shrink/)
@@ -270,13 +427,13 @@ describe('README contributors wall rendering and idempotent updates', () => {
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
-        nextContributors: [{ login: 'alice' }, { login: 'bob' }],
+        nextContributors: [{ login: 'Amigoer' }, { login: 'alice' }],
         items: mixedItems,
         allowShrink: true,
       }),
     ).not.toThrow()
 
-    // Clearing a non-empty wall completely is still rejected even with allowShrink.
+    // 即使传入 allowShrink 也不允许把非空头像墙清空为 0
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
@@ -286,23 +443,23 @@ describe('README contributors wall rendering and idempotent updates', () => {
       }),
     ).toThrow(/Refusing to clear/)
 
-    // Normal additions or minor removals with both issues and PRs present pass.
+    // 同时包含 Issue 和 PR 且仅为正常增删时放行
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins,
         nextContributors: [
+          { login: 'Amigoer' },
           { login: 'alice' },
           { login: 'bob' },
           { login: 'carol' },
           { login: 'dave' },
-          { login: 'erin' },
           { login: 'grace' },
         ],
         items: mixedItems,
       }),
     ).not.toThrow()
 
-    // First-time population when no existing wall is present passes.
+    // 首次生成（原本没有贡献者墙）时放行
     expect(() =>
       assertSafeContributorUpdate({
         existingLogins: [],
@@ -339,7 +496,19 @@ describe('release notes contributor extraction and template rendering', () => {
           linkedIssues: [2675],
         },
       ],
-      contributors: [{ login: 'akatsukiro', prs: 0, issues: 1, total: 1 }],
+      contributors: [
+        {
+          login: 'akatsukiro',
+          avatarUrl: 'https://avatars.githubusercontent.com/akatsukiro?s=96',
+          commits: 0,
+          prs: 0,
+          completedIssues: 1,
+          openIssues: 0,
+          issues: 1,
+          total: 1,
+          score: 2,
+        },
+      ],
     })
 
     expect(md).toContain('## What changed')
@@ -347,6 +516,6 @@ describe('release notes contributor extraction and template rendering', () => {
     expect(md).toContain('<details>\n<summary>简体中文更新说明</summary>\n\n## 中文')
     expect(md).toContain('- keep timeline dots above rail (#2675，感谢 @akatsukiro)')
     expect(md).toContain('## Contributors')
-    expect(md).toContain('https://github.com/akatsukiro.png?size=96')
+    expect(md).toContain('https://avatars.githubusercontent.com/akatsukiro?s=96')
   })
 })

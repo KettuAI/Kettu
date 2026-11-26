@@ -14,12 +14,14 @@ import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
+  calculateContributionScore,
   classifyContribution,
   compareContributors,
   DEFAULT_REPO,
   extractClosingIssueNumbers,
   extractPrNumbersFromSubject,
   isExcludedUser,
+  normalizeGitHubAvatarUrl,
   renderReleaseNotesTemplate,
 } from './core.mjs'
 import { resolveGitHubToken } from './update-readme.mjs'
@@ -243,20 +245,40 @@ async function collectReleaseAttribution({ repo, from, to, numbers, token }) {
   const contributorMap = new Map()
 
   /**
-   * @param {string} login
-   * @param {'pr' | 'issue'} kind
+   * 记录单版本外部贡献者信息并累加综合贡献值。
+   *
+   * @param {import('./core.mjs').GitHubUser} user
+   * @param {'pr' | 'completed_issue' | 'open_issue'} kind
    */
-  const recordContributor = (login, kind) => {
+  const recordContributor = (user, kind) => {
+    const login = String(user.login).trim()
     const key = login.toLowerCase()
+    const avatarUrl = normalizeGitHubAvatarUrl(user.avatarUrl ?? user.avatar_url ?? null, login, 96)
     let entry = contributorMap.get(key)
     if (!entry) {
-      entry = { login, prs: 0, issues: 0, total: 0 }
+      entry = {
+        login,
+        avatarUrl,
+        commits: 0,
+        prs: 0,
+        completedIssues: 0,
+        openIssues: 0,
+        issues: 0,
+        total: 0,
+        score: 0,
+      }
       contributorMap.set(key, entry)
     }
     if (kind === 'pr') entry.prs += 1
-    else entry.issues += 1
-    entry.total += 1
+    else if (kind === 'completed_issue') entry.completedIssues += 1
+    else entry.openIssues += 1
+    entry.issues = entry.completedIssues + entry.openIssues
+    entry.total = entry.commits + entry.prs + entry.issues
+    entry.score = calculateContributionScore(entry)
   }
+
+  // 单版本发布说明致谢仅统计外部社区贡献者，排除维护者与机器人
+  const releaseExclude = { excludeMaintainers: true }
 
   for (const target of targets) {
     const item = await getIssue(target.number)
@@ -267,11 +289,11 @@ async function collectReleaseAttribution({ repo, from, to, numbers, token }) {
     const linked = new Set(target.extraIssues)
 
     if (isPr) {
-      // Only merged PRs count as PR contributions.
-      if (item.pull_request.merged_at != null && !isExcludedUser(item.user)) {
+      // 仅已合并的 PR 计入外部代码贡献
+      if (item.pull_request.merged_at != null && !isExcludedUser(item.user, releaseExclude)) {
         const login = String(item.user.login).trim()
         credits.add(login)
-        recordContributor(login, 'pr')
+        recordContributor(item.user, 'pr')
       }
       for (const issueNum of extractClosingIssueNumbers(item.body ?? '', repo)) {
         linked.add(issueNum)
@@ -283,16 +305,20 @@ async function collectReleaseAttribution({ repo, from, to, numbers, token }) {
 
       for (const issueNum of [...linked].sort((a, b) => a - b)) {
         const issue = await getIssue(issueNum)
-        if (classifyContribution(issue) === 'issue') {
+        const issueKind = classifyContribution(issue, releaseExclude)
+        if (issueKind === 'completed_issue' || issueKind === 'open_issue') {
           const login = String(issue.user.login).trim()
           credits.add(login)
-          recordContributor(login, 'issue')
+          recordContributor(issue.user, issueKind)
         }
       }
-    } else if (classifyContribution(item) === 'issue') {
-      const login = String(item.user.login).trim()
-      credits.add(login)
-      recordContributor(login, 'issue')
+    } else {
+      const itemKind = classifyContribution(item, releaseExclude)
+      if (itemKind === 'completed_issue' || itemKind === 'open_issue') {
+        const login = String(item.user.login).trim()
+        credits.add(login)
+        recordContributor(item.user, itemKind)
+      }
     }
 
     entries.push({

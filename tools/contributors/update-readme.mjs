@@ -1,9 +1,8 @@
 // @ts-check
-// Fetches public contributors (merged PR authors and accepted/completed public issue reporters)
-// from KettuAI/Kettu via the GitHub API and updates the Contributors wall in README.md and
-// README.zh-CN.md idempotently.
+// 从 GitHub API 拉取 KettuAI/Kettu 的代码提交者、已合并 PR 与有效公开 Issue，
+// 按综合贡献值排序后幂等更新 README.md 与 README.zh-CN.md 中的贡献者墙。
 //
-// Usage:
+// 用法：
 //   node tools/contributors/update-readme.mjs
 //   node tools/contributors/update-readme.mjs --check
 //   node tools/contributors/update-readme.mjs --dry-run
@@ -27,7 +26,7 @@ const README_EN = resolve(REPO_ROOT, 'README.md')
 const README_ZH = resolve(REPO_ROOT, 'README.zh-CN.md')
 
 /**
- * Resolves a GitHub token from the environment or the local `gh` CLI if authenticated.
+ * 依次从环境变量或本地已登录的 `gh` CLI 读取 GitHub 令牌。
  *
  * @returns {string}
  */
@@ -45,7 +44,7 @@ export function resolveGitHubToken() {
 }
 
 /**
- * Parses the next page URL from an HTTP Link header.
+ * 从 HTTP Link 响应头解析下一页 URL。
  *
  * @param {string | null} header
  * @returns {string | null}
@@ -60,7 +59,7 @@ function nextLink(header) {
 }
 
 /**
- * Fetches all pages of a GitHub REST API list endpoint.
+ * 拉取 GitHub REST 列表接口的全部页面（兼容 204 空内容响应）。
  *
  * @param {string} startUrl
  * @param {string} token
@@ -81,6 +80,7 @@ export async function fetchAllPages(startUrl, token) {
 
   while (url) {
     const response = await fetch(url, { headers })
+    if (response.status === 204) break
     if (!response.ok) {
       const detail = await response.text().catch(() => '')
       throw new Error(
@@ -98,7 +98,7 @@ export async function fetchAllPages(startUrl, token) {
 }
 
 /**
- * Parses CLI flags.
+ * 解析命令行参数。
  *
  * @param {string[]} argv
  */
@@ -132,12 +132,12 @@ function parseArgs(argv) {
 async function main() {
   const { repo, check, dryRun, json, allowShrink } = parseArgs(process.argv.slice(2))
   const token = resolveGitHubToken()
-  const items = await fetchAllPages(
-    `https://api.github.com/repos/${repo}/issues?state=all&per_page=100`,
-    token,
-  )
+  const [commitContributors, items] = await Promise.all([
+    fetchAllPages(`https://api.github.com/repos/${repo}/contributors?per_page=100`, token),
+    fetchAllPages(`https://api.github.com/repos/${repo}/issues?state=all&per_page=100`, token),
+  ])
   const counts = countApiItemKinds(items)
-  const contributors = aggregateContributors(items)
+  const contributors = aggregateContributors(items, { commitContributors })
 
   if (json) {
     console.log(JSON.stringify({ repo, count: contributors.length, contributors }, null, 2))
@@ -150,8 +150,7 @@ async function main() {
     { path: README_ZH, locale: 'zh-CN' },
   ]
 
-  // Validate every target before writing so a bad or permission-filtered API response cannot
-  // silently clear or partially modify README files.
+  // 写入前先校验所有目标，避免权限缺失或异常响应误清空 README 贡献者墙
   /** @type {Array<{ path: string, current: string, next: string }>} */
   const planned = targets.map((target) => {
     const current = readFileSync(target.path, 'utf8')
@@ -176,7 +175,7 @@ async function main() {
     }
   }
 
-  const summary = `${contributors.length} community contributors from ${counts.issues} issues and ${counts.pullRequests} pull requests`
+  const summary = `${contributors.length} contributors from ${commitContributors.length} commit accounts, ${counts.issues} issues, and ${counts.pullRequests} pull requests`
 
   if (check) {
     if (changed) {
