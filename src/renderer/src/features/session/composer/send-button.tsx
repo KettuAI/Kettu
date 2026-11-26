@@ -99,17 +99,20 @@ export function StopButton({ onStop }: { onStop: () => void }) {
 }
 
 /**
- * Send while a turn runs and the box holds a message: it queues the message. Where the agent takes
- * messages into a running turn, holding it offers Send now; the keys do the same without the menu.
+ * Send while a turn runs and the box holds a message: it queues or steers by setting. Where the
+ * agent takes messages into a running turn, holding it offers the other action; the keys do the
+ * same without the menu.
  */
 export function QueueButton({
   steering,
+  steerDefault,
   queueKey,
   steerKey,
   onQueue,
   onSteer,
 }: {
   steering: boolean
+  steerDefault: boolean
   queueKey: string
   steerKey: string
   onQueue: () => void
@@ -118,9 +121,10 @@ export function QueueButton({
   const { t } = useTranslation('composer')
   const anchor = useRef<HTMLButtonElement>(null)
   const timer = useRef<number | undefined>(undefined)
-  // The press that opened the menu, whose click must not queue the message.
+  // The press that opened the menu, whose click must not send the message.
   const held = useRef(false)
   const [open, setOpen] = useState(false)
+  const steers = steering && steerDefault
 
   const release = () => window.clearTimeout(timer.current)
   const press = (event: PointerEvent) => {
@@ -131,6 +135,24 @@ export function QueueButton({
       setOpen(true)
     }, HOLD_MS)
   }
+
+  const queueItem = {
+    key: 'queue',
+    icon: Clock01Icon,
+    name: t('prompt.queueIt'),
+    description: t('prompt.queueItHint'),
+    shortcut: queueKey,
+    onClick: onQueue,
+  }
+  const steerItem = {
+    key: 'steer',
+    icon: ArrowUp02Icon,
+    name: t('prompt.sendNow'),
+    description: t('prompt.sendNowHint'),
+    shortcut: steerKey,
+    onClick: onSteer,
+  }
+  const items = steers ? [steerItem, queueItem] : [queueItem, steerItem]
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -144,8 +166,10 @@ export function QueueButton({
               onPointerDown={press}
               onPointerUp={release}
               onPointerLeave={release}
+              onPointerCancel={release}
               onClick={() => {
                 if (held.current) held.current = false
+                else if (steers) onSteer()
                 else onQueue()
               }}
               className="ui-ccc__send kettu-send"
@@ -157,8 +181,14 @@ export function QueueButton({
         <TooltipContent>
           <Trans
             t={t}
-            i18nKey={steering ? 'prompt.queueHoldTooltip' : 'prompt.queueTooltip'}
-            values={{ shortcut: formatShortcut(queueKey) }}
+            i18nKey={
+              !steering
+                ? 'prompt.queueTooltip'
+                : steers
+                  ? 'prompt.steerHoldTooltip'
+                  : 'prompt.queueHoldTooltip'
+            }
+            values={{ shortcut: formatShortcut(steers ? steerKey : queueKey) }}
             components={{ shortcut: <span className="opacity-60" /> }}
           />
         </TooltipContent>
@@ -176,16 +206,13 @@ export function QueueButton({
             data-overlay-layer=""
             className="z-50 w-78 origin-(--transform-origin) rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
           >
-            <DropdownMenuItem className={DESCRIBED_ROW} onClick={onQueue}>
-              <Glyph icon={Clock01Icon} />
-              <ItemText name={t('prompt.queueIt')} description={t('prompt.queueItHint')} />
-              <DropdownMenuShortcut>{formatShortcut(queueKey)}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem className={DESCRIBED_ROW} onClick={onSteer}>
-              <Glyph icon={ArrowUp02Icon} />
-              <ItemText name={t('prompt.sendNow')} description={t('prompt.sendNowHint')} />
-              <DropdownMenuShortcut>{formatShortcut(steerKey)}</DropdownMenuShortcut>
-            </DropdownMenuItem>
+            {items.map((item) => (
+              <DropdownMenuItem key={item.key} className={DESCRIBED_ROW} onClick={item.onClick}>
+                <Glyph icon={item.icon} />
+                <ItemText name={item.name} description={item.description} />
+                <DropdownMenuShortcut>{formatShortcut(item.shortcut)}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            ))}
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>

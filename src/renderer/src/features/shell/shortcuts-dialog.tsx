@@ -14,16 +14,17 @@ export function ShortcutsDialog() {
   const { t } = useTranslation(['shell', 'common'])
   const open = useViewStore((s) => s.shortcutsOpen)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
+  const runningSend = useSettingsStore((s) => s.settings.general.runningSend)
   const [query, setQuery] = useState('')
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    return shortcutList(sendKey).filter(
+    return shortcutList(sendKey, runningSend).filter(
       (row) =>
         needle === '' ||
         t(`shortcuts.${row.action}`).toLowerCase().includes(needle) ||
         keyCaps(row.keys).join(' ').toLowerCase().includes(needle),
     )
-  }, [query, sendKey, t])
+  }, [query, runningSend, sendKey, t])
 
   return (
     <Dialog

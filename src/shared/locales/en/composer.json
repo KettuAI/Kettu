@@ -13,6 +13,8 @@
       "denied": "Say what to do differently",
       "runningQueue": "Queue a message · Esc stops",
       "runningTouch": "Queue a message",
+      "runningSteer": "Send into this turn · Esc stops",
+      "runningSteerTouch": "Send into this turn",
       "pickAgent": "Pick an agent to carry on with…"
     },
     "stop": "Stop",
@@ -22,6 +24,7 @@
     "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>",
     "queueTooltip": "Queue <shortcut>{{shortcut}}</shortcut>",
     "queueHoldTooltip": "Queue <shortcut>{{shortcut}}</shortcut> · hold to send now",
+    "steerHoldTooltip": "Send now <shortcut>{{shortcut}}</shortcut> · hold to queue",
     "queueIt": "Queue it",
     "queueItHint": "Sends when this turn ends",
     "sendNow": "Send now",
