@@ -34,6 +34,7 @@ import {
   type MarketplaceTab,
   type SessionView,
 } from '@renderer/stores/view'
+import { RunSettings } from './run-settings'
 import { installServer, setServerOn } from './actions'
 import { CommunityListingPage, CommunityPreviewPage } from './community'
 import { ConnectButton, ConnectionControls } from './connect'
@@ -225,6 +226,7 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
             serverId={server?.id ?? null}
             service={listing.title}
           />
+          {server && <RunSettings server={server} />}
         </div>
         <Side listing={listing} />
       </div>

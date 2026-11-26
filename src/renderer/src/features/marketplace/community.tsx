@@ -44,6 +44,7 @@ import { AGENT_NAMES } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
+import { RunSettings } from './run-settings'
 import {
   installServer,
   installSkill,
@@ -977,7 +978,10 @@ function BundleRuns({ listing, bundle }: { listing: MarketListing; bundle: Bundl
     s.settings.marketplace.mcp.find((x) => x.id === kettuId(listing.id)),
   )
   return kept ? (
-    <Runs spec={kept.spec} serverId={kept.id} service={listing.name} />
+    <>
+      <Runs spec={kept.spec} serverId={kept.id} service={listing.name} />
+      <RunSettings server={kept} />
+    </>
   ) : (
     <BundleNote bundle={bundle} />
   )
@@ -989,7 +993,10 @@ function ServerRuns({ listing, server }: { listing: MarketListing; server: Catal
     s.settings.marketplace.mcp.find((x) => x.id === kettuId(listing.id)),
   )
   return (
-    <Runs spec={kept?.spec ?? server.spec} serverId={kept?.id ?? null} service={listing.name} />
+    <>
+      <Runs spec={kept?.spec ?? server.spec} serverId={kept?.id ?? null} service={listing.name} />
+      {kept && <RunSettings server={kept} />}
+    </>
   )
 }
 

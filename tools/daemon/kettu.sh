@@ -13,4 +13,9 @@ while [ -L "$self" ]; do
 done
 package=$(cd "$(dirname "$self")/.." && pwd -P)
 
+# kettu mcp connect runs once per MCP server a client uses, so it is the bridge itself, never Node.js.
+if [ "${1:-}" = mcp ] && [ -x "$package/helpers/kettu-mcp-bridge" ]; then
+  exec "$package/helpers/kettu-mcp-bridge" "$@"
+fi
+
 exec "$package/node/bin/node" "$package/daemon/main.cjs" "$@"

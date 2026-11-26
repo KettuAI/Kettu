@@ -3,11 +3,13 @@
 // go to main apart from the settings. Each works on the host of the scope it is given.
 
 import {
+  MCP_RUN_DEFAULTS,
   serverName,
   type CatalogServer,
   type MarketConnection,
   type MarketServer,
   type MarketSkill,
+  type McpRun,
   type McpSpec,
   type SkillSource,
 } from '@shared/marketplace'
@@ -241,6 +243,20 @@ export async function changeServer(
 
 export function setServerOn(scope: HostScope, id: string, on: boolean): Promise<void> {
   return changeServer(scope, id, (server) => ({ ...server, on }))
+}
+
+/** How Kettu runs the server; a setting back at its default is dropped. */
+export function setServerRun(scope: HostScope, id: string, run: McpRun): Promise<void> {
+  const kept = Object.fromEntries(
+    Object.entries(run).filter(
+      ([key, value]) => value !== MCP_RUN_DEFAULTS[key as keyof typeof MCP_RUN_DEFAULTS],
+    ),
+  )
+  return changeServer(scope, id, (server) => {
+    const next: MarketServer = { ...server, run: kept }
+    if (Object.keys(kept).length === 0) delete next.run
+    return next
+  })
 }
 
 export function setServerAgents(scope: HostScope, id: string, agents: AgentChoice): Promise<void> {

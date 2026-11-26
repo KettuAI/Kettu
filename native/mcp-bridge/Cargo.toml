@@ -1,0 +1,17 @@
+[package]
+name = "kettu-mcp-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+description = "Carries a stdio MCP client to a server Kettu runs on its loopback service"
+
+# Standard library only: a client starts one bridge per server, so it stays small and starts fast.
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

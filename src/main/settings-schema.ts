@@ -45,8 +45,12 @@ import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import {
   catalogSkillId,
   MARKET_NAME,
+  MCP_RUN_LIMITS,
+  MCP_RUN_MODES,
   type MarketServer,
   type MarketSkill,
+  type McpRun,
+  type McpRunMode,
   type McpSpec,
   type McpValue,
 } from '@shared/marketplace'
@@ -625,7 +629,7 @@ function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | st
 /** A server of the Marketplace as a patch or the file gives it, or why it is not one. */
 function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketServer | string {
   if (!isRecord(raw)) return `"${path}" must be an object`
-  const allowed = ['id', 'name', 'title', 'source', 'version', 'spec', 'agents', 'on']
+  const allowed = ['id', 'name', 'title', 'source', 'version', 'spec', 'agents', 'on', 'run']
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, title, source, version, agents, on } = raw
@@ -664,6 +668,8 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
   if (typeof served === 'string') return served
   const onProblem = isBoolean(on, `${path}.on`)
   if (onProblem) return onProblem
+  const run = raw.run === undefined ? undefined : parseMcpRun(raw.run, `${path}.run`, strict)
+  if (typeof run === 'string') return run
   return {
     id,
     name,
@@ -673,7 +679,31 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
     spec,
     agents: served.agents,
     on: on as boolean,
+    ...(run && Object.keys(run).length > 0 ? { run } : {}),
   }
+}
+
+/** How a server runs, or why it is not that; a file drops what it does not know. */
+function parseMcpRun(raw: unknown, path: string, strict: boolean): McpRun | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const extra = extraKey(raw, ['mode', 'idleMinutes', 'startSeconds'], path, strict)
+  if (extra) return extra
+  const run: McpRun = {}
+  if (raw.mode !== undefined) {
+    const problem = oneOf(...MCP_RUN_MODES)(raw.mode, `${path}.mode`)
+    if (problem) return problem
+    run.mode = raw.mode as McpRunMode
+  }
+  for (const key of ['idleMinutes', 'startSeconds'] as const) {
+    const value = raw[key]
+    if (value === undefined) continue
+    const { min, max } = MCP_RUN_LIMITS[key]
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+      return `"${path}.${key}" must be a whole number from ${min} to ${max}`
+    }
+    run[key] = value
+  }
+  return run
 }
 
 /** The agents a server or skill goes to: all, or a list, whose unknown ids a file loses. */

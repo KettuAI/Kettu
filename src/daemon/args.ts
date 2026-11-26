@@ -63,6 +63,8 @@ export type Command =
       follow: boolean
     }
   | { kind: 'verbose'; on: boolean }
+  /** `mcp connect`: the bridge's own command line, which `bin/kettu` hands it without Node.js. */
+  | { kind: 'mcp'; args: string[] }
   /** What was wrong with the command line, in a short sentence. */
   | { kind: 'usage'; message: string }
 
@@ -102,6 +104,7 @@ Commands:
   verbose on                   Turn on detailed records for 24 hours; they hold prompts and code
   verbose off                  Turn detailed records off
   ssh-setup [<request>]        Run by Kettu's desktop app when it adds this computer over SSH
+  mcp connect <server>         Connect an MCP client that speaks stdio to a server Kettu runs
 
 Options:
   --debug                      With run or restart: open the daemon's and its hosts' Node.js
@@ -182,6 +185,8 @@ const quote = (value: string): string => `'${value}'`
 type Given = Map<OptionName, { raw: string; value: string | undefined }>
 
 export function parseCommand(argv: readonly string[]): Command {
+  // The bridge reads its own arguments, --agent among them.
+  if (argv[0] === 'mcp') return { kind: 'mcp', args: [...argv] }
   const { tokens } = parseArgs({
     args: [...argv],
     options: OPTIONS,

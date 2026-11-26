@@ -6,6 +6,7 @@ import { constants } from 'node:fs'
 import { access, copyFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { mcpBridgeFile } from '@shared/mcp-bridge'
 import { addressText } from '@shared/remote/address'
 import type { OwnRelayProblem } from '@shared/remote/own-relay'
 import type { RelayReport } from '@shared/remote/status'
@@ -608,7 +609,7 @@ async function until<T>(check: () => Promise<T | null>, ms: number): Promise<T |
   }
 }
 
-async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage' }>) {
+async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage' | 'mcp' }>) {
   const data = dataPath({
     platform: process.platform,
     home: os.homedir(),
@@ -832,6 +833,22 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
   }
 }
 
+/**
+ * `kettu mcp connect`, when it reaches Node.js rather than the bridge `bin/kettu` hands it to:
+ * the bridge beside the daemon's own folder, run with the same stdio.
+ */
+function mcpBridge(args: string[]): Promise<number> {
+  const bridge = path.join(__dirname, '..', 'helpers', mcpBridgeFile(process.platform))
+  return new Promise((resolve) => {
+    const child = spawn(bridge, args, { stdio: 'inherit' })
+    child.on('error', (error) => {
+      process.stderr.write(`kettu: the MCP bridge cannot run: ${error.message}\n`)
+      resolve(1)
+    })
+    child.on('exit', (code) => resolve(code ?? 1))
+  })
+}
+
 async function main(argv: string[]): Promise<number> {
   const command = parseCommand(argv)
   if (command.kind === 'help') {
@@ -846,6 +863,7 @@ async function main(argv: string[]): Promise<number> {
     process.stderr.write(`kettu: ${command.message}. Run kettu --help for usage.\n`)
     return 2
   }
+  if (command.kind === 'mcp') return mcpBridge(command.args)
   if (!SUPPORTED.includes(process.platform)) {
     process.stderr.write('kettu: the daemon runs on macOS and Linux\n')
     return 1

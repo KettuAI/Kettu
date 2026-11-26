@@ -36,8 +36,10 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
-import { PROXY_PREFIX } from '../marketplace/proxy'
+import { BRIDGE_PREFIX, BRIDGE_UPGRADE, McpRouter, type RouterCaller } from '../mcp-router/router'
+import type { Duplex } from 'node:stream'
 import type { McpToolGroup, McpToolSummary } from '@shared/agent-host'
+import type { MarketServer } from '@shared/marketplace'
 import {
   isMarketToolName,
   MARKET_AUTO_ALLOW,
@@ -49,6 +51,9 @@ import {
 import { SERVICE_NAME } from '../service-name'
 import {
   described,
+  FIND_TOOL,
+  findTools,
+  type Findable,
   GATEWAY_TOOL,
   gatewayInput,
   gatewayList,
@@ -292,10 +297,10 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   plugins?: PluginTools
   /** The skills behind the skill tools, which only an agent that loads no skill folders gets. */
   skills?: SkillToolsDeps
-  /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
-  proxy?: {
-    handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
-  }
+  /** The Marketplace's servers, each under a path of its own; without it none. */
+  router?: Pick<McpRouter, 'handle' | 'upgrade' | 'forget' | 'tools' | 'call'>
+  /** The library's servers by id, for the gateway's calls to the ones behind it. */
+  libraryServer?(serverId: string): MarketServer | null
 }
 
 /** A token for one session. */
@@ -303,12 +308,16 @@ interface SessionGrant {
   token: string
   project: string
   sessionId: string
-  /** Reaches Kettu's own server too, not only the proxy: Kettu's server is on for its agent. */
+  /** Reaches Kettu's own server too, not only the library's: Kettu's server is on for its agent. */
   own: boolean
   /** Lists the core tools and the gateway to the rest, for an agent that drops tools. */
   gateway: boolean
   /** Lists the next-message tool, for an agent that suggests by it. */
   suggests: boolean
+  /** The library servers handed to the session, which the token reaches, by id. */
+  servers: Set<string>
+  /** Those of them behind the gateway rather than declared, for an agent that drops tools. */
+  gated: Set<string>
 }
 
 /** A token for one agent process and folder, whose calls name their session in `_meta`. */
@@ -321,6 +330,8 @@ interface FolderGrant {
   own: boolean
   gateway: boolean
   suggests: boolean
+  servers: Set<string>
+  gated: Set<string>
 }
 
 type Grant = SessionGrant | FolderGrant
@@ -350,6 +361,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
         ...COMPUTER_READ_TOOLS,
         REPORT_TOOL,
         GUIDE_TOOL,
+        FIND_TOOL,
         ...SKILL_TOOL_NAMES,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
@@ -505,6 +517,10 @@ export class ArtifactService {
     server.on('error', (error) => {
       this.deps.log('error', `The artifacts service: ${error.message}`)
     })
+    server.on('upgrade', (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+      socket.on('error', () => socket.destroy())
+      this.upgrade(req, socket, head)
+    })
     // The host's own channel keeps its process alive; the service alone must not.
     server.unref()
     this.server = server
@@ -579,7 +595,7 @@ export class ArtifactService {
   /** What `tools/list` answers now: for an agent that drops tools, the core and the gateway. */
   private listedTools(grant?: Grant): Tool[] {
     const tools = this.allTools(grant)
-    return grant?.gateway ? gatewayList(tools) : tools
+    return grant?.gateway ? gatewayList(tools, grant.gated.size > 0) : tools
   }
 
   /** Every tool the session may use now; a step's session alone gets the step's tools. */
@@ -633,20 +649,43 @@ export class ArtifactService {
   }
 
   /**
-   * The bearer an attach of the session sends to the proxy, the same token as for the service
-   * itself; from `process` and its folder for an agent that keeps one server of a name per folder.
-   * A token made here alone reaches the proxy only. Null while the service is not running.
+   * How an attach of the session reaches the library's servers: the same token as for the service
+   * itself, from `process` and its folder for an agent that keeps one server of a name per folder.
+   * A token made here alone reaches only the servers it is handed. An attach hands a session its
+   * whole set, so it replaces the set before; a folder's token reaches what any of its sessions
+   * was handed. Null while the service is not running.
    */
-  bearer(
+  routerAccess(
     sessionId: string,
     project: string,
     process: AgentProcess | null,
-  ): { origin: string; token: string } | null {
+  ): {
+    origin: string
+    token: string
+    allow(serverIds: readonly string[]): void
+    gate(serverIds: readonly string[]): void
+  } | null {
     if (this.port === null) return null
     const grant = process
       ? this.folderGrant(process, project, sessionId, false)
       : this.sessionGrant(sessionId, project, false)
-    return { origin: `http://127.0.0.1:${this.port}`, token: grant.token }
+    if (!process) {
+      grant.servers = new Set()
+      grant.gated = new Set()
+    }
+    return {
+      origin: `http://127.0.0.1:${this.port}`,
+      token: grant.token,
+      allow: (serverIds) => {
+        for (const id of serverIds) grant.servers.add(id)
+      },
+      gate: (serverIds) => {
+        for (const id of serverIds) {
+          grant.servers.add(id)
+          grant.gated.add(id)
+        }
+      },
+    }
   }
 
   private sessionGrant(sessionId: string, project: string, own: boolean): SessionGrant {
@@ -654,7 +693,16 @@ export class ArtifactService {
     let grant = held === undefined ? undefined : this.grants.get(held)
     if (!grant || !('sessionId' in grant) || grant.project !== project) {
       this.revoke(sessionId)
-      grant = { token: newToken(), sessionId, project, own, gateway: false, suggests: false }
+      grant = {
+        token: newToken(),
+        sessionId,
+        project,
+        own,
+        gateway: false,
+        suggests: false,
+        servers: new Set(),
+        gated: new Set(),
+      }
       this.sessions.set(sessionId, this.add(grant))
     }
     if (own) grant.own = true
@@ -705,6 +753,8 @@ export class ArtifactService {
         own,
         gateway: false,
         suggests: false,
+        servers: new Set(),
+        gated: new Set(),
       }
       key = this.add(grant)
       byFolder.set(folder, key)
@@ -741,11 +791,13 @@ export class ArtifactService {
     if (!grant) return
     if ('sessionId' in grant) {
       this.grants.delete(key)
+      this.deps.router?.forget(key)
       return
     }
     grant.sessions.delete(sessionId)
     if (grant.sessions.size > 0) return
     this.grants.delete(key)
+    this.deps.router?.forget(key)
     const byFolder = this.folders.get(grant.process)
     if (byFolder?.get(grant.project) === key) byFolder.delete(grant.project)
   }
@@ -758,6 +810,7 @@ export class ArtifactService {
     for (const key of byFolder.values()) {
       const grant = this.grants.get(key)
       this.grants.delete(key)
+      this.deps.router?.forget(key)
       if (!grant || 'sessionId' in grant) continue
       for (const sessionId of grant.sessions) {
         if (this.sessions.get(sessionId) === key) this.sessions.delete(sessionId)
@@ -793,6 +846,51 @@ export class ArtifactService {
     return given.length === known.length && timingSafeEqual(given, known) ? grant : null
   }
 
+  /** Who a router request is from, by its token; null for a token Kettu does not have. */
+  private routerCaller(header: string | undefined): RouterCaller | null {
+    const grant = this.grantOf(header)
+    return grant ? this.routerCallerOf(grant) : null
+  }
+
+  private routerCallerOf(grant: Grant): RouterCaller {
+    const sessionId = 'sessionId' in grant ? grant.sessionId : null
+    return {
+      key: digest(grant.token),
+      sessionId,
+      folder: (sessionId && this.deps.sessionFolder?.(sessionId)) || grant.project,
+      servers: grant.servers,
+    }
+  }
+
+  /**
+   * The bridge's connection to a server, checked as every request is before it becomes a stream:
+   * no page's `Origin`, this host's `Host`, a token Kettu gave out.
+   */
+  private upgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer): void {
+    const deny = (status: number, message: string): void => {
+      const reason = status === 401 ? 'Unauthorized' : status === 404 ? 'Not Found' : 'Forbidden'
+      socket.end(
+        `HTTP/1.1 ${status} ${reason}\r\nContent-Type: text/plain\r\nConnection: close\r\n` +
+          `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`,
+      )
+    }
+    if (req.headers.origin !== undefined) return deny(403, 'Requests from web pages are refused')
+    if (req.headers.host !== `127.0.0.1:${this.port}`) return deny(403, 'Unknown host')
+    const path = (req.url ?? '').split('?')[0]!
+    const router = this.deps.router
+    if (!router || !path.startsWith(BRIDGE_PREFIX)) return deny(404, 'Not found')
+    if (req.headers.upgrade?.toLowerCase() !== BRIDGE_UPGRADE) return deny(404, 'Not found')
+    const caller = this.routerCaller(req.headers.authorization)
+    if (!caller) return deny(401, 'Kettu does not know this token; reconnect the server')
+    let name: string
+    try {
+      name = decodeURIComponent(path.slice(BRIDGE_PREFIX.length))
+    } catch {
+      return deny(404, 'Not found')
+    }
+    router.upgrade(socket, head, caller, name)
+  }
+
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     // A browser sends Origin on every cross-origin request; no agent's MCP client does.
     if (req.headers.origin !== undefined) {
@@ -803,11 +901,12 @@ export class ArtifactService {
       return refuse(res, 403, 'Unknown host')
     }
     const path = (req.url ?? '').split('?')[0]!
-    if (path.startsWith(PROXY_PREFIX) && this.deps.proxy) {
-      if (!this.grantOf(req.headers.authorization)) {
+    if (McpRouter.owns(path) && this.deps.router) {
+      const caller = this.routerCaller(req.headers.authorization)
+      if (!caller) {
         return refuse(res, 401, 'A session token is required', { 'WWW-Authenticate': 'Bearer' })
       }
-      return this.deps.proxy.handle(req, res, path)
+      return this.deps.router.handle(req, res, caller, path)
     }
     if (req.url !== SERVICE_PATH) return refuse(res, 404, 'Not found')
     if (req.method !== 'POST') {
@@ -885,6 +984,13 @@ export class ArtifactService {
       if (name === GATEWAY_TOOL && grant.gateway) {
         return this.callGateway(sdk, grant, caller, input, flags)
       }
+      if (name === FIND_TOOL && grant.gateway && grant.gated.size > 0) {
+        const query = (input as { query?: unknown } | undefined)?.query
+        return findTools(query, [
+          ...this.allTools(grant).map((tool) => ({ server: null, tool })),
+          ...(await this.gatedTools(grant)),
+        ])
+      }
       return this.callTool(sdk, grant, caller, name, input, flags)
     })
     return server
@@ -905,6 +1011,7 @@ export class ArtifactService {
     if ('error' in call) {
       return { content: [{ type: 'text', text: call.error }], isError: true }
     }
+    if (call.server !== undefined) return this.callGated(grant, call)
     const tools = this.allTools(grant)
     const tool = tools.find((listed) => listed.name === call.tool)
     if (!tool) return unknownTool(call.tool, tools)
@@ -923,6 +1030,72 @@ export class ArtifactService {
     } catch (error) {
       const text = (error as Error).message
       return withArguments({ content: [{ type: 'text', text }], isError: true }, tool)
+    }
+  }
+
+  /** The servers behind the gateway for this grant, by name. */
+  private gatedServers(grant: Grant): MarketServer[] {
+    return [...grant.gated].flatMap((id) => this.deps.libraryServer?.(id) ?? [])
+  }
+
+  /** The tools of the servers behind the gateway; a server that cannot list is left out. */
+  private async gatedTools(grant: Grant): Promise<Findable[]> {
+    const router = this.deps.router
+    if (!router) return []
+    const caller = this.routerCallerOf(grant)
+    const lists = await Promise.all(
+      this.gatedServers(grant).map(async (server) => {
+        try {
+          const tools = await router.tools(server, caller)
+          return tools.map((tool) => ({ server: server.name, tool }))
+        } catch (error) {
+          this.deps.log(
+            'warn',
+            `Could not list ${server.name}'s tools: ${(error as Error).message}`,
+          )
+          return []
+        }
+      }),
+    )
+    return lists.flat()
+  }
+
+  /** A gateway call to a tool of a server behind it, described when it has no arguments. */
+  private async callGated(
+    grant: Grant,
+    call: { tool: string; server?: string; arguments?: Record<string, unknown> },
+  ): Promise<CallToolResult> {
+    const router = this.deps.router
+    const server = this.gatedServers(grant).find((item) => item.name === call.server)
+    const fail = (text: string): CallToolResult => ({
+      content: [{ type: 'text', text }],
+      isError: true,
+    })
+    if (!router || !server) {
+      const names = this.gatedServers(grant).map((item) => item.name)
+      return fail(
+        `${call.server} is not an MCP server behind ${GATEWAY_TOOL}. Its servers: ${names.join(', ')}.`,
+      )
+    }
+    const caller = this.routerCallerOf(grant)
+    let tools: Tool[]
+    try {
+      tools = await router.tools(server, caller)
+    } catch (error) {
+      return fail(`${server.name} could not list its tools: ${(error as Error).message}`)
+    }
+    const tool = tools.find((item) => item.name === call.tool)
+    if (!tool) {
+      return fail(
+        `${server.name} has no tool ${call.tool}. Its tools: ${tools.map((item) => item.name).join(', ')}.`,
+      )
+    }
+    if (call.arguments === undefined) return described(tool, server.name)
+    try {
+      const result = await router.call(server, caller, tool.name, call.arguments)
+      return result.isError ? withArguments(result, tool) : result
+    } catch (error) {
+      return withArguments(fail((error as Error).message), tool)
     }
   }
 

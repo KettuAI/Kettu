@@ -2068,3 +2068,18 @@
   flex: none;
   margin: -4px -6px -4px 0;
 }
+
+/* How a kept server runs: the process choices, then the two times side by side. */
+.k-mkt-run__times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 12px;
+}
+.k-mkt-run__time {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}

@@ -490,6 +490,11 @@ export interface SessionMcp {
     transports: McpTransports,
     taken: readonly string[],
   ): McpServer[]
+  /**
+   * What the library hands the record's agent now, each server by name with a digest of how it
+   * runs, to tell what changed since a session attached.
+   */
+  libraryPrint?(record: SessionRecord): Record<string, string>
   /** The session left memory, closed, released or deleted: its token ends. */
   detached(sessionId: string): void
   turnEnded(sessionId: string): void
@@ -770,6 +775,8 @@ interface StartedModeHold {
 interface Live {
   id: string
   record: SessionRecord
+  /** The library as the agent last attached with it, from `SessionMcp.libraryPrint`. */
+  libraryPrint?: Record<string, string>
   saved: boolean
   thread: ThreadState
   seq: number
@@ -4405,6 +4412,11 @@ export class SessionManager {
     own: McpServer[],
   ): McpServer[] {
     if (!this.deps.mcp || !runtime) return []
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.libraryPrint = this.deps.mcp.libraryPrint?.(record)
+      if (live.thread.session.mcpChanged?.length) this.update(live, { mcpChanged: [] })
+    }
     return this.deps.mcp.library(
       sessionId,
       record,
@@ -6620,6 +6632,37 @@ export class SessionManager {
   libraryChanged(changed: (agentId: AgentId) => boolean): void {
     const agentIds = new Set([...this.live.values()].map((live) => live.record.agentId))
     for (const agentId of agentIds) if (changed(agentId)) this.configChanged(agentId)
+    this.libraryNotices()
+  }
+
+  /**
+   * An attached session hears which of the library's servers were added or changed since its
+   * agent attached, which reach it only when it attaches again.
+   */
+  private libraryNotices(): void {
+    const print = this.deps.mcp?.libraryPrint
+    if (!print) return
+    for (const live of this.live.values()) {
+      if (live.prepared || !live.libraryPrint || !live.connection) continue
+      const before = live.libraryPrint
+      const now = print(live.record)
+      const changed = Object.keys(now).filter((name) => before[name] !== now[name])
+      const shown = live.thread.session.mcpChanged ?? []
+      if (changed.join('\0') !== shown.join('\0')) this.update(live, { mcpChanged: changed })
+    }
+  }
+
+  /**
+   * Use now: the session's agent lets go of it between turns and attaches again, with the
+   * library's servers as they are now. A session that is not attached takes them when it does.
+   */
+  async applyLibrary(sessionId: string): Promise<void> {
+    const live = this.live.get(sessionId)
+    if (!live?.connection) return
+    if (this.holdReason(live) !== null) {
+      throw new HostError('busy', 'The session is busy; use the servers once its turn ends')
+    }
+    await this.attachAgain(live, 'library servers used now')
   }
 
   /**

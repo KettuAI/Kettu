@@ -32,6 +32,8 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
@@ -64,6 +66,7 @@ import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
 import { toggleSidePane } from '@renderer/stores/view'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
@@ -507,6 +510,7 @@ export function ContextButton({
             />
           )}
           <UsageLines sessionId={sessionId} usage={shown} />
+          <McpServersPart sessionId={sessionId} idle={idle} />
           {readsModelRequests(agentId) && (
             <button
               type="button"
@@ -527,6 +531,49 @@ export function ContextButton({
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+const NO_NAMES: string[] = []
+
+/**
+ * The session's MCP servers. For now only what changed in the library since its agent attached,
+ * with Use now, which attaches it again between turns so the servers reach it.
+ */
+function McpServersPart({ sessionId, idle }: { sessionId: string; idle: boolean }) {
+  const { t } = useTranslation('composer')
+  const changed = useThreadsStore(
+    (s) => s.replicas[sessionId]?.state?.session.mcpChanged ?? NO_NAMES,
+  )
+  const [applying, setApplying] = useState(false)
+  if (changed.length === 0) return null
+  const use = () => {
+    setApplying(true)
+    host('sessions.applyMcp', { sessionId })
+      .catch((error: unknown) =>
+        toast(t('usage.mcp.applyFailed', { error: errorMessage(error) }), undefined, {
+          tone: 'warning',
+        }),
+      )
+      .finally(() => setApplying(false))
+  }
+  return (
+    <section className="kettu-ctx__mcp">
+      <span className="kettu-ctx__title">{t('usage.mcp.title')}</span>
+      <div className="kettu-ctx__mcp-notice" role="status">
+        <span>{t('usage.mcp.changed', { names: changed.join(', '), count: changed.length })}</span>
+        <button
+          type="button"
+          className="kettu-ctx__mcp-use"
+          disabled={applying || !idle}
+          title={idle ? undefined : t('usage.mcp.afterTurn')}
+          onClick={use}
+        >
+          {applying && <Spinner className="size-3" />}
+          {t('usage.mcp.useNow')}
+        </button>
+      </div>
+    </section>
   )
 }
 

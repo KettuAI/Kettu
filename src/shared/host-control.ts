@@ -112,6 +112,8 @@ export type MainToHost =
       sessionRouterPath: string
       // The bundle of the process that runs Cline's SDK, which runs on `nodeRuntime`.
       clineHostPath: string
+      // The MCP bridge among the helpers, where the build has one; absent from older mains.
+      mcpBridgePath?: string | null
       settings: HostSettings
       // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
       socketPath?: string

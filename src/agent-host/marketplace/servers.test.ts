@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { MarketServer } from '@shared/marketplace'
 import type { Access } from './connections'
-import { proxyPath } from './proxy'
-import { ALL_TRANSPORTS, keyState, libraryServers, parseMarketKeys } from './servers'
+import { serverPath } from '../mcp-router/router'
+import {
+  ALL_TRANSPORTS,
+  BRIDGE_ENV,
+  keyState,
+  libraryServers,
+  parseMarketKeys,
+  serverCommand,
+} from './servers'
 
 const github: MarketServer = {
   id: 'io.github.github/github-mcp-server',
@@ -44,59 +51,182 @@ const context7: MarketServer = {
 
 const keys = (values: Record<string, Record<string, string>>) => parseMarketKeys(values)!
 
-describe('libraryServers with OAuth servers', () => {
-  const linear: MarketServer = {
-    id: 'app.linear/linear',
-    name: 'linear',
-    title: 'Linear',
-    source: 'registry',
-    version: '1.0.2',
-    spec: {
-      type: 'http',
-      transport: 'streamable-http',
-      url: 'https://mcp.linear.app/mcp',
-      headers: [{ name: 'X-Read-Only', value: 'true' }],
-      oauth: { flow: 'browser' },
+const ROUTER = 'http://127.0.0.1:4567'
+const router = () => {
+  const allowed: string[] = []
+  const gated: string[] = []
+  return {
+    access: {
+      origin: ROUTER,
+      token: 'session-token',
+      allow: (ids: readonly string[]) => void allowed.push(...ids),
+      gate: (ids: readonly string[]) => void gated.push(...ids),
     },
-    agents: 'all',
-    on: true,
+    allowed,
+    gated,
   }
-  const legacy: MarketServer = {
-    ...linear,
-    id: 'com.example/sse',
-    name: 'legacy',
-    spec: {
-      type: 'http',
-      transport: 'sse',
-      url: 'https://x.example/sse',
-      headers: [],
-      oauth: { flow: 'browser' },
-    },
-  }
-  const oauth = (access: Access) => ({
-    access: () => access,
-    bearer: () => ({ origin: 'http://127.0.0.1:4567', token: 'session-token' }),
+}
+const BRIDGE = '/Applications/Kettu.app/Contents/Resources/helpers/kettu-mcp-bridge'
+const STDIO_ONLY = { mcpHttp: false, mcpSse: false, mcpStdio: true }
+
+describe('libraryServers through the router', () => {
+  const held = keys({
+    [github.id]: { Authorization: 'ghp_secret' },
+    [context7.id]: { CONTEXT7_API_KEY: 'c7_secret' },
   })
 
-  it("goes through the proxy with the session's bearer while connected, never on a command line", () => {
-    const servers = libraryServers([linear, legacy], new Map(), 'codex', ALL_TRANSPORTS, {
+  it("hands each server by its own name and path with the session's token, never a key", () => {
+    const { access, allowed } = router()
+    const servers = libraryServers([github, context7], held, 'codex', ALL_TRANSPORTS, {
       platform: 'darwin',
-      oauth: oauth('proxy'),
+      router: access,
+      bridge: BRIDGE,
     })
     expect(servers).toEqual([
       {
         type: 'http',
-        name: 'linear',
-        url: `http://127.0.0.1:4567${proxyPath(linear.id)}`,
+        name: 'github',
+        url: `${ROUTER}${serverPath(github.id)}`,
+        headers: [{ name: 'Authorization', value: 'Bearer session-token' }],
+        secret: true,
+      },
+      {
+        type: 'http',
+        name: 'context7',
+        url: `${ROUTER}${serverPath(context7.id)}`,
         headers: [{ name: 'Authorization', value: 'Bearer session-token' }],
         secret: true,
       },
     ])
-    expect(JSON.stringify(servers)).not.toContain('mcp.linear.app')
+    expect(allowed).toEqual([github.id, context7.id])
+    const text = JSON.stringify(servers)
+    for (const secret of ['ghp_secret', 'c7_secret', 'githubcopilot.com', 'context7-mcp']) {
+      expect(text).not.toContain(secret)
+    }
+  })
+
+  it('gives an agent that speaks only stdio the bridge, its token in the environment only', () => {
+    const { access, allowed } = router()
+    const servers = libraryServers([github], held, 'kimi', STDIO_ONLY, {
+      platform: 'darwin',
+      router: access,
+      bridge: BRIDGE,
+    })
+    expect(servers).toEqual([
+      {
+        type: 'stdio',
+        name: 'github',
+        command: BRIDGE,
+        args: ['mcp', 'connect', 'github', '--agent', 'kimi'],
+        env: [
+          { name: BRIDGE_ENV.url, value: ROUTER },
+          { name: BRIDGE_ENV.token, value: 'session-token' },
+        ],
+        secret: true,
+      },
+    ])
+    expect(allowed).toEqual([github.id])
+    expect(JSON.stringify(servers)).not.toContain('ghp_secret')
+  })
+
+  it('hands a command to a stdio-only agent itself when the build has no bridge, and says so', () => {
+    const { access, allowed } = router()
+    const fell: string[] = []
+    const servers = libraryServers([github, context7], held, 'codex', STDIO_ONLY, {
+      platform: 'darwin',
+      router: access,
+      bridge: null,
+      fellBack: (server) => void fell.push(server.name),
+    })
+    expect(servers.map((server) => [server.type, server.name])).toEqual([['stdio', 'context7']])
+    expect(fell).toEqual(['github', 'context7'])
+    expect(allowed).toEqual([])
+  })
+
+  it('hands a command set to run by each agent to it as before, its keys with it', () => {
+    const { access, allowed } = router()
+    const own = { ...context7, run: { mode: 'agent' as const } }
+    const [server] = libraryServers([own], held, 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: access,
+    })
+    expect(server).toEqual({
+      type: 'stdio',
+      name: 'context7',
+      command: 'npx',
+      args: ['-y', '@upstash/context7-mcp@4.6.0'],
+      env: [
+        { name: 'CONTEXT7_API_KEY', value: 'c7_secret' },
+        { name: 'CONTEXT7_REGION', value: 'eu' },
+      ],
+      secret: true,
+    })
+    expect(allowed).toEqual([])
+  })
+
+  it('leaves out a server whose required key has no value, and one that is not signed in', () => {
+    const { access } = router()
+    const linear: MarketServer = {
+      ...github,
+      id: 'app.linear/linear',
+      name: 'linear',
+      spec: {
+        type: 'http',
+        transport: 'sse',
+        url: 'https://x.example/sse',
+        headers: [],
+        oauth: { flow: 'browser' },
+      },
+    }
+    const servers = libraryServers([github, linear], new Map(), 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: access,
+      oauth: { access: (): Access => null },
+    })
+    expect(servers).toEqual([])
+  })
+
+  it('puts the servers whose tools are large or unknown behind the gateway', () => {
+    const { access, allowed, gated } = router()
+    const small = [{ name: 'resolve', description: 'Resolves.', inputSchema: { type: 'object' } }]
+    const large = Array.from({ length: 80 }, (_, n) => ({ ...small[0], name: `tool_${n}` }))
+    const docs = { ...context7, agents: 'all' as const }
+    const known = new Map<string, unknown[] | null>([
+      [github.id, large],
+      [docs.id, small],
+    ])
+    const servers = libraryServers([github, docs], held, 'antigravity', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: access,
+      gateway: { known: (server) => known.get(server.id) ?? null },
+    })
+    expect(servers.map((server) => server.name)).toEqual(['context7'])
+    expect(allowed).toEqual([docs.id])
+    expect(gated).toEqual([github.id])
   })
 })
 
-describe('libraryServers with a bundle on Kettu’s Node.js', () => {
+describe("libraryServers beside the agent's own servers", () => {
+  const held = keys({ [github.id]: { Authorization: 'ghp_secret' } })
+
+  it("takes the name of the same server in the agent's file, so it runs once, as Kettu's", () => {
+    const { access } = router()
+    const clashes: string[] = []
+    const servers = libraryServers([github, context7], held, 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: access,
+      own: [
+        { name: 'gh', endpoint: { type: 'http', url: 'https://api.githubcopilot.com/mcp' } },
+        { name: 'context7', endpoint: { type: 'stdio', command: 'uvx', args: ['context7'] } },
+      ],
+      conflict: (server, own) => void clashes.push(`${server.name}:${own}`),
+    })
+    expect(servers.map((server) => server.name)).toEqual(['gh', 'context7'])
+    expect(clashes).toEqual(['context7:context7'])
+  })
+})
+
+describe('serverCommand', () => {
   const echo: MarketServer = {
     id: 'kettu:abcdefgh23',
     name: 'echo',
@@ -118,26 +248,15 @@ describe('libraryServers with a bundle on Kettu’s Node.js', () => {
     env: { ELECTRON_RUN_AS_NODE: '1' },
   }
 
-  it('starts it with the runtime the session has, never a stored app path', () => {
+  it("runs a bundle on Kettu's own Node.js, over the login shell's environment", () => {
     const held = keys({ [echo.id]: { ECHO_KEY: 'k' } })
-    expect(
-      libraryServers([echo], held, 'claude-code', ALL_TRANSPORTS, { platform: 'darwin', node }),
-    ).toEqual([
-      {
-        type: 'stdio',
-        name: 'echo',
-        command: node.command,
-        args: echo.spec.type === 'stdio' ? echo.spec.args : [],
-        env: [
-          { name: 'ELECTRON_RUN_AS_NODE', value: '1' },
-          { name: 'ECHO_KEY', value: 'k' },
-        ],
-        secret: true,
-      },
-    ])
-    expect(
-      libraryServers([echo], held, 'claude-code', ALL_TRANSPORTS, { platform: 'darwin' }),
-    ).toEqual([])
+    expect(serverCommand(echo, held, { PATH: '/usr/bin', ECHO_KEY: 'shell' }, node)).toEqual({
+      command: node.command,
+      args: ['/data/marketplace/mcpb/abcdefgh23/1.0.0/server/index.js'],
+      env: { PATH: '/usr/bin', ELECTRON_RUN_AS_NODE: '1', ECHO_KEY: 'k' },
+    })
+    expect(typeof serverCommand(echo, held, {}, undefined)).toBe('string')
+    expect(typeof serverCommand(echo, new Map(), {}, node)).toBe('string')
   })
 })
 

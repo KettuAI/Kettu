@@ -23,6 +23,7 @@ import type {
   TerminalHostToMain,
 } from '@shared/host-control'
 import { pushedAttention } from '@shared/attention'
+import { mcpBridgeFile } from '@shared/mcp-bridge'
 import { BROWSER_UNAVAILABLE } from '@shared/browser'
 import { resolveLocale, type Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
@@ -249,6 +250,13 @@ export class Hosts {
         usageWorkerPath: bundle('usage-worker.cjs'),
         sessionRouterPath: bundle('session-router.cjs'),
         clineHostPath: bundle('cline-host.cjs'),
+        // The package keeps the helpers beside the daemon's own folder, as out/ does.
+        mcpBridgePath: path.join(
+          options.bundleDir,
+          '..',
+          'helpers',
+          mcpBridgeFile(process.platform),
+        ),
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
         userAgent: daemonUserAgent(options.version, process.platform, process.arch),

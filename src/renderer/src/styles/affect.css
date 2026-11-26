@@ -6031,6 +6031,43 @@ button.kettu-ctx__part-row:focus-visible {
     height: 26px;
   }
 }
+/* The session's MCP servers; the notice of what changed since its agent attached is blue-tinted. */
+.kettu-ctx__mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 0.5px solid var(--composer-line);
+}
+.kettu-ctx__mcp-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-from);
+  color: var(--primary-foreground);
+  font-size: 12px;
+  line-height: 17px;
+}
+.kettu-ctx__mcp-notice > span {
+  flex: 1;
+  min-width: 0;
+}
+.kettu-ctx__mcp-use {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  color: var(--primary-foreground);
+}
+.kettu-ctx__mcp-use:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.kettu-ctx__mcp-use:disabled {
+  opacity: 0.5;
+}
 .kettu-ctx__note {
   margin: 0;
   padding: 0 14px 8px;
