@@ -191,6 +191,125 @@ export function renderContributorsBlock(contributors, locale) {
 }
 
 /**
+ * Extracts contributor logins already rendered between START_MARKER and END_MARKER.
+ *
+ * @param {string} content
+ * @returns {string[]}
+ */
+export function extractExistingContributorLogins(content) {
+  const startIndex = content.indexOf(START_MARKER)
+  const endIndex = content.indexOf(END_MARKER)
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) return []
+
+  const section = content.slice(startIndex + START_MARKER.length, endIndex)
+  /** @type {string[]} */
+  const logins = []
+  /** @type {Set<string>} */
+  const seen = new Set()
+
+  for (const match of section.matchAll(/<a\s+href="https:\/\/github\.com\/([^/"?#]+)"/gi)) {
+    const raw = match[1]
+    if (!raw) continue
+    let decoded
+    try {
+      decoded = decodeURIComponent(raw)
+    } catch {
+      decoded = raw
+    }
+    const login = decoded.trim()
+    if (!login) continue
+    const key = login.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    logins.push(login)
+  }
+
+  return logins
+}
+
+/**
+ * Counts standard issues and pull requests in a GitHub /issues API payload.
+ *
+ * @param {Iterable<GitHubIssueLike>} items
+ * @returns {{ total: number, issues: number, pullRequests: number }}
+ */
+export function countApiItemKinds(items) {
+  let total = 0
+  let issues = 0
+  let pullRequests = 0
+  for (const item of items) {
+    if (!item) continue
+    total += 1
+    if (item.pull_request != null) pullRequests += 1
+    else issues += 1
+  }
+  return { total, issues, pullRequests }
+}
+
+/**
+ * Guards against wiping or silently truncating an existing contributors wall when the GitHub API
+ * returns empty or permission-filtered results (e.g. a GITHUB_TOKEN missing `issues: read`).
+ *
+ * @param {{
+ *   existingLogins: ReadonlyArray<string>
+ *   nextContributors: ReadonlyArray<{ login: string }>
+ *   items: Iterable<GitHubIssueLike>
+ *   allowShrink?: boolean
+ * }} input
+ */
+export function assertSafeContributorUpdate({
+  existingLogins,
+  nextContributors,
+  items,
+  allowShrink = false,
+}) {
+  if (existingLogins.length === 0) return
+
+  const counts = countApiItemKinds(items)
+  const nextKeys = new Set(nextContributors.map((c) => c.login.trim().toLowerCase()))
+  const dropped = existingLogins.filter((login) => !nextKeys.has(login.trim().toLowerCase()))
+
+  if (nextContributors.length === 0) {
+    if (counts.total === 0) {
+      throw new Error(
+        `Refusing to clear ${existingLogins.length} existing contributors: GitHub API returned 0 items. Check authentication and repository access.`,
+      )
+    }
+    if (counts.pullRequests > 0 && counts.issues === 0) {
+      throw new Error(
+        `Refusing to clear ${existingLogins.length} existing contributors: GitHub API returned ${counts.pullRequests} pull requests and 0 issues. Ensure GITHUB_TOKEN has "issues: read" permission.`,
+      )
+    }
+    if (counts.issues > 0 && counts.pullRequests === 0) {
+      throw new Error(
+        `Refusing to clear ${existingLogins.length} existing contributors: GitHub API returned ${counts.issues} issues and 0 pull requests. Ensure GITHUB_TOKEN has "pull-requests: read" permission.`,
+      )
+    }
+    throw new Error(
+      `Refusing to clear ${existingLogins.length} existing contributors: aggregation produced 0 contributors from ${counts.total} API items.`,
+    )
+  }
+
+  if (!allowShrink && dropped.length > 0) {
+    if (counts.pullRequests > 0 && counts.issues === 0) {
+      throw new Error(
+        `Refusing to drop ${dropped.length} of ${existingLogins.length} existing contributors: GitHub API returned ${counts.pullRequests} pull requests and 0 issues. Ensure GITHUB_TOKEN has "issues: read" permission.`,
+      )
+    }
+    if (counts.issues > 0 && counts.pullRequests === 0) {
+      throw new Error(
+        `Refusing to drop ${dropped.length} of ${existingLogins.length} existing contributors: GitHub API returned ${counts.issues} issues and 0 pull requests. Ensure GITHUB_TOKEN has "pull-requests: read" permission.`,
+      )
+    }
+    if (existingLogins.length >= 4 && dropped.length >= Math.ceil(existingLogins.length / 2)) {
+      throw new Error(
+        `Refusing to drop ${dropped.length} of ${existingLogins.length} existing contributors (${nextContributors.length} remaining). Pass --allow-shrink if this removal is intentional.`,
+      )
+    }
+  }
+}
+
+/**
  * Inserts or idempotently updates the Contributors section in README.md / README.zh-CN.md.
  *
  * @param {string} content
