@@ -140,9 +140,18 @@ function keepDraftOptions(current: PreparedState | null): void {
   }))
 }
 
-/** The first send adopted it, so it is a session of its own now and nothing removes it. */
-export function adoptedPrepared(sessionId: string): void {
-  if (useAgentOptionsStore.getState().prepared?.summary?.id === sessionId) setPrepared(null)
+/**
+ * A session started from New session: if it adopted the prepared session, drop our handle without
+ * discarding it; otherwise discard any prepared session held for that agent without copying its
+ * one-off options (such as permission mode) into picks for the next session.
+ */
+export function sessionStarted(hostId: string | null, agentId: AgentId, sessionId: string): void {
+  const current = preparedFor(useAgentOptionsStore.getState(), hostId, agentId)
+  if (!current) return
+  setPrepared(null)
+  if (current.summary && current.summary.id !== sessionId) {
+    discard(current.summary.id)
+  }
 }
 
 /**

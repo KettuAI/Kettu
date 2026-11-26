@@ -57,3 +57,140 @@ describe('the effort New session carries to a picked model', () => {
     expect(effortOf(preparedConfig(ENTRY.config, ENTRY.levels, picks))).toBe('high')
   })
 })
+
+describe('start values with a prepared session', () => {
+  const MODE = select('mode', 'mode', 'default', [
+    'default',
+    'acceptEdits',
+    'plan',
+    'bypassPermissions',
+  ])
+  const CUSTOM = select('sandbox_net', 'other', 'off', ['off', 'on'])
+  const CLAUDE_ENTRY: AgentOptions = {
+    agentId: 'claude-code',
+    config: [select('model', 'model', 'sonnet', ['sonnet', 'opus']), MODE, CUSTOM],
+    levels: {},
+    remembered: {},
+    observedAt: 0,
+  }
+
+  it('preserves settled mode and non-remembered options from the prepared session', () => {
+    const prepared = [
+      select('model', 'model', 'sonnet', ['sonnet', 'opus']),
+      select('mode', 'mode', 'bypassPermissions', [
+        'default',
+        'acceptEdits',
+        'plan',
+        'bypassPermissions',
+      ]),
+      select('sandbox_net', 'other', 'on', ['off', 'on']),
+    ]
+    expect(startValues(CLAUDE_ENTRY, {}, { startMode: true, prepared })).toEqual({
+      mode: 'bypassPermissions',
+      sandbox_net: 'on',
+    })
+  })
+
+  it('keeps explicit mode even when it matches the cached agent default and overrides startMode', () => {
+    const withStartMode: AgentOptions = { ...CLAUDE_ENTRY, startMode: 'acceptEdits' }
+    const prepared = [
+      select('model', 'model', 'sonnet', ['sonnet', 'opus']),
+      select('mode', 'mode', 'default', ['default', 'acceptEdits', 'plan', 'bypassPermissions']),
+      CUSTOM,
+    ]
+    expect(startValues(withStartMode, {}, { startMode: true, prepared })).toEqual({
+      mode: 'default',
+    })
+  })
+
+  it('keeps full access mode even if the cached config temporarily recorded full access', () => {
+    const fullAccessDefault: AgentOptions = {
+      ...CLAUDE_ENTRY,
+      config: [
+        select('model', 'model', 'sonnet', ['sonnet', 'opus']),
+        select('mode', 'mode', 'bypassPermissions', [
+          'default',
+          'acceptEdits',
+          'plan',
+          'bypassPermissions',
+        ]),
+        CUSTOM,
+      ],
+    }
+    expect(
+      startValues(fullAccessDefault, {}, { startMode: true, prepared: fullAccessDefault.config }),
+    ).toEqual({
+      mode: 'bypassPermissions',
+    })
+  })
+
+  it('gives unsettled in-flight picks precedence over the prepared session config', () => {
+    const prepared = [
+      select('model', 'model', 'sonnet', ['sonnet', 'opus']),
+      select('mode', 'mode', 'bypassPermissions', [
+        'default',
+        'acceptEdits',
+        'plan',
+        'bypassPermissions',
+      ]),
+      select('sandbox_net', 'other', 'on', ['off', 'on']),
+    ]
+    expect(
+      startValues(
+        CLAUDE_ENTRY,
+        { mode: 'plan', sandbox_net: 'off' },
+        { startMode: true, prepared },
+      ),
+    ).toEqual({
+      mode: 'plan',
+    })
+  })
+
+  it('works when cached agent options are missing or provisional', () => {
+    const prepared = [
+      select('model', 'model', 'sonnet', ['sonnet', 'opus']),
+      select('mode', 'mode', 'bypassPermissions', [
+        'default',
+        'acceptEdits',
+        'plan',
+        'bypassPermissions',
+      ]),
+      select('sandbox_net', 'other', 'on', ['off', 'on']),
+    ]
+    expect(startValues(undefined, {}, { startMode: true, prepared })).toEqual({
+      model: 'sonnet',
+      mode: 'bypassPermissions',
+      sandbox_net: 'on',
+    })
+    const provisional: AgentOptions = {
+      agentId: 'claude-code',
+      config: [select('model', 'model', 'sonnet', ['sonnet', 'opus'])],
+      levels: {},
+      remembered: {},
+      observedAt: 0,
+      provisional: true,
+    }
+    expect(startValues(provisional, {}, { startMode: true, prepared })).toEqual({
+      model: 'sonnet',
+      mode: 'bypassPermissions',
+      sandbox_net: 'on',
+    })
+  })
+
+  it('uses the normal startMode when no prepared session is active and mode was not picked', () => {
+    const withStartMode: AgentOptions = { ...CLAUDE_ENTRY, startMode: 'acceptEdits' }
+    expect(startValues(withStartMode, {}, { startMode: true })).toEqual({
+      mode: 'acceptEdits',
+    })
+  })
+
+  it('sends a model reset back to the agent default when it differs from remembered', () => {
+    const rememberedOpus: AgentOptions = {
+      ...CLAUDE_ENTRY,
+      remembered: { model: 'opus' },
+    }
+    expect(startValues(rememberedOpus, { model: 'sonnet' }, { startMode: true })).toEqual({
+      model: 'sonnet',
+    })
+  })
+})

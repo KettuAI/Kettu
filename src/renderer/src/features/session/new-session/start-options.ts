@@ -120,9 +120,13 @@ function heldBy(
     : null
 }
 
-/** How a new session's options are worked out: with `startMode`, the agent's start mode is applied. */
+/**
+ * How a new session's options are worked out: with `startMode`, the agent's start mode is applied;
+ * with `prepared`, the prepared session's effective config stands under any unsettled `picks`.
+ */
 export interface StartFlags {
   startMode?: boolean
+  prepared?: readonly ConfigOption[]
 }
 
 /** The mode option the agent's start mode is set on, and that mode, when it offers it. */
@@ -223,26 +227,46 @@ export function carryEffortPicks(
 
 /**
  * What `sessions.create` takes: the start values that differ from the agent's own defaults, or
- * every value for a provisional entry, whose values need not be the agent's defaults. With
- * `startMode`, a pick of the mode is sent even when it is the agent's own, since it overrides the
- * start mode the session would otherwise start in. On another model than the agent's own, the
- * level is always sent, since the agent's default level is its own model's.
+ * every value for a provisional or missing entry, whose values need not be the agent's defaults.
+ * With `startMode`, a pick of the mode is sent even when it is the agent's own, since it overrides
+ * the start mode the session would otherwise start in. With `prepared`, the prepared session's
+ * effective values stand under any unsettled `picks`, and its mode is always sent so a non-adopted
+ * session (such as a new worktree) keeps the mode shown on New session even when the agent opened
+ * the prepared session in full access or differs from `startMode`. On another model than the
+ * agent's own, the level is always sent, since the agent's default level is its own model's.
  */
 export function startValues(
-  entry: AgentOptions,
+  entry: AgentOptions | undefined,
   picks: OptionValues = {},
   flags: StartFlags = {},
 ): OptionValues {
-  const defaults = new Map(entry.provisional ? [] : entry.config.map((o) => [o.id, o.value]))
-  const start = flags.startMode ? startModeOf(entry) : null
-  const config = startConfig(entry, picks, flags)
-  const model = entry.config.find((o) => o.category === 'model' && o.type === 'select')
+  if (!entry && !flags.prepared) return {}
+  const defaults = new Map(
+    !entry || entry.provisional ? [] : entry.config.map((o) => [o.id, o.value]),
+  )
+  const start = entry && flags.startMode ? startModeOf(entry) : null
+  const config = flags.prepared
+    ? preparedConfig(flags.prepared, entry?.levels ?? {}, picks)
+    : startConfig(entry!, picks, flags)
+  const model = entry?.config.find((o) => o.category === 'model' && o.type === 'select')
   const ownModel = !model || config.find((o) => o.id === model.id)?.value === model.value
   const values: OptionValues = {}
   for (const option of config) {
     const picked = start?.optionId === option.id && picks[option.id] === option.value
+    const preparedMode = flags.prepared !== undefined && option.category === 'mode'
     const level = option.category === 'thought_level' && !ownModel
-    if (picked || level || defaults.get(option.id) !== option.value) {
+    const overridesRemembered =
+      entry !== undefined &&
+      REMEMBERED.has(option.category) &&
+      entry.remembered[option.id] !== undefined &&
+      entry.remembered[option.id] !== option.value
+    if (
+      picked ||
+      preparedMode ||
+      level ||
+      overridesRemembered ||
+      defaults.get(option.id) !== option.value
+    ) {
       values[option.id] = option.value
     }
   }
