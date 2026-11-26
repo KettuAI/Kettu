@@ -1190,5 +1190,35 @@
     "multipleHint": "需要几个就加几个。",
     "keepHint": "留空就沿用之前填的值。",
     "updateSubmit": "更新"
+  },
+  "run": {
+    "title": "怎么跑",
+    "mode": "进程在哪里跑",
+    "modes": {
+      "session": {
+        "title": "每个会话一份",
+        "line": "第一次调工具时在会话的文件夹里起，会话之间不共用。"
+      },
+      "folder": {
+        "title": "同一文件夹共用一份",
+        "line": "同一个文件夹里的会话共用，适合要给项目建索引的服务器。"
+      },
+      "all": {
+        "title": "所有会话共用一份",
+        "line": "所有会话共用，适合不记状态的文档、搜索类服务器。"
+      },
+      "agent": {
+        "title": "让每个智能体自己跑",
+        "line": "和 Kettu 接管之前一样：每个智能体各起一份、拿到它的密钥，调用不经过滤，也不记录。"
+      }
+    },
+    "idle": "空闲多久停",
+    "start": "启动等多久",
+    "seconds_one": "{{count}} 秒",
+    "seconds_other": "{{count}} 秒",
+    "minutes_one": "{{count}} 分钟",
+    "minutes_other": "{{count}} 分钟",
+    "hours_one": "{{count}} 小时",
+    "hours_other": "{{count}} 小时"
   }
 }

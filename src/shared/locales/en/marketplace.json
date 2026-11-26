@@ -1214,5 +1214,35 @@
     "multipleHint": "Add as many as you need.",
     "keepHint": "Leave empty to keep the value you set before.",
     "updateSubmit": "Update"
+  },
+  "run": {
+    "title": "How it runs",
+    "mode": "Where its process runs",
+    "modes": {
+      "session": {
+        "title": "One per session",
+        "line": "Started in the session's folder the first time a tool is called, so nothing is shared between sessions."
+      },
+      "folder": {
+        "title": "One per folder",
+        "line": "Sessions in the same folder share it, for a server that indexes a project."
+      },
+      "all": {
+        "title": "One for all sessions",
+        "line": "Every session shares it, for a server that keeps no state, such as docs or search."
+      },
+      "agent": {
+        "title": "Let each agent run it",
+        "line": "As before Kettu ran servers: each agent starts its own copy and gets its keys, and calls are not filtered or recorded."
+      }
+    },
+    "idle": "Stop when idle for",
+    "start": "Wait for it to start",
+    "seconds_one": "{{count}} second",
+    "seconds_other": "{{count}} seconds",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours"
   }
 }

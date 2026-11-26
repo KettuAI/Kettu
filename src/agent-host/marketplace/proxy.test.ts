@@ -2,7 +2,10 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { MarketServer } from '@shared/marketplace'
+import type { Platform } from '@shared/platform'
 import { ArtifactService, type ArtifactServiceDeps } from '../artifacts/service'
+import { Answers } from '../mcp-router/answers'
+import { McpRouter, serverPath } from '../mcp-router/router'
 import { McpProxy, proxyPath } from './proxy'
 
 const closers: (() => Promise<void>)[] = []
@@ -55,7 +58,12 @@ async function upstream(valid: Set<string>) {
   return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`, seen }
 }
 
-async function setup(options: { valid: string[]; token: string; renewed: string | null }) {
+async function setup(options: {
+  valid: string[]
+  token: string
+  renewed: string | null
+  handed?: boolean
+}) {
   const remote = await upstream(new Set(options.valid))
   const server: MarketServer = {
     id: 'com.notion/mcp',
@@ -74,27 +82,40 @@ async function setup(options: { valid: string[]; token: string; renewed: string 
     on: true,
   }
   const refused: string[] = []
-  const proxy = new McpProxy({
-    servers: () => [server],
+  const tokens = {
+    signsIn: () => true,
     headers: () => ({ 'X-Read-Only': 'true' }),
     token: async () => options.token,
-    refused: async (_, used) => {
+    refused: async (_: string, used: string) => {
       refused.push(used)
       return options.renewed
     },
+  }
+  const proxy = new McpProxy(tokens)
+  const router = new McpRouter({
+    ...tokens,
+    servers: () => [server],
+    command: () => 'not a command',
+    proxy,
+    answers: new Answers(null),
+    appVersion: '0.0.0',
+    home: '/',
+    log: () => {},
+    processes: { platform: process.platform as Platform },
   })
   const service = new ArtifactService({
     log: () => {},
     plan: {},
     sessions: {},
-    proxy,
+    router,
   } as unknown as ArtifactServiceDeps)
   await service.start()
   closers.push(() => service.stop())
-  const bearer = service.bearer('s1', '/repo', null)!
-  const url = `${bearer.origin}${proxyPath(server.id)}`
-  const ask = (init: RequestInit & { headers?: Record<string, string> } = {}) =>
-    fetch(url, {
+  const bearer = service.routerAccess('s1', '/repo', null)!
+  if (options.handed !== false) bearer.allow([server.id])
+  const url = `${bearer.origin}${serverPath(server.id)}`
+  const ask = (init: RequestInit & { headers?: Record<string, string> } = {}, to = url) =>
+    fetch(to, {
       method: 'POST',
       body: '{"jsonrpc":"2.0","id":1,"method":"initialize"}',
       ...init,
@@ -107,6 +128,54 @@ async function setup(options: { valid: string[]; token: string; renewed: string 
     })
   return { remote, service, bearer, url, ask, refused }
 }
+
+describe('the router to a remote server', () => {
+  it('refuses a page, a name that only resolves here, and a server the session was not given', async () => {
+    const { ask, remote, url } = await setup({
+      valid: ['access-1'],
+      token: 'access-1',
+      renewed: null,
+    })
+    expect((await ask({ headers: { Origin: 'https://evil.example' } })).status).toBe(403)
+    const port = new URL(url).port
+    const rebound = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: new URL(url).pathname,
+          method: 'POST',
+          headers: { Host: `evil.example:${port}` },
+        },
+        (res) => {
+          res.resume()
+          resolve(res.statusCode ?? 0)
+        },
+      )
+      req.on('error', reject)
+      req.end('{}')
+    })
+    expect(rebound).toBe(403)
+    expect(remote.seen).toHaveLength(0)
+    const other = await setup({
+      valid: ['access-1'],
+      token: 'access-1',
+      renewed: null,
+      handed: false,
+    })
+    expect((await other.ask()).status).toBe(403)
+    expect(other.remote.seen).toHaveLength(0)
+  })
+
+  it('still answers the path sessions started before the router used', async () => {
+    const { ask, url } = await setup({ valid: ['access-1'], token: 'access-1', renewed: null })
+    const old = url.replace(/\/servers\/([0-9a-f]+)$/, (_, digest: string) =>
+      proxyPath('com.notion/mcp') === `/proxy/${digest}` ? `/proxy/${digest}` : '',
+    )
+    expect(old).toContain('/proxy/')
+    expect((await ask({}, old)).status).toBe(200)
+  })
+})
 
 describe('the proxy to an OAuth server', () => {
   it("forwards with the sign-in's token in place of the agent's, and the MCP headers both ways", async () => {
@@ -187,7 +256,7 @@ describe('the proxy to an OAuth server', () => {
     expect(remote.seen).toHaveLength(0)
   })
 
-  it("does not let a bearer made for the proxy alone reach Kettu's own server", async () => {
+  it("does not let a token made for the library alone reach Kettu's own server", async () => {
     const { service, bearer } = await setup({ valid: [], token: 'x', renewed: null })
     const own = await fetch(`${bearer.origin}/mcp`, {
       method: 'POST',

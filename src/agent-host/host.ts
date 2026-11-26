@@ -68,6 +68,7 @@ import type { PortDevice } from '@shared/remote/device'
 import type { MemorySource } from '@shared/memory'
 import type { HostSettings } from '@shared/settings'
 import {
+  runOf,
   serverFor,
   serverName,
   specInputs,
@@ -159,7 +160,10 @@ import { MarketIcons } from './marketplace/icons'
 import { MarketConnectionsService } from './marketplace/connections'
 import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
+import { createHash } from 'node:crypto'
 import { McpProxy } from './marketplace/proxy'
+import { Answers, answersFile } from './mcp-router/answers'
+import { McpRouter } from './mcp-router/router'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -184,6 +188,7 @@ import {
   keyState,
   libraryServers,
   parseMarketKeys,
+  serverCommand,
   serverHeaders,
   type MarketKeys,
 } from './marketplace/servers'
@@ -359,6 +364,11 @@ export interface HostOptions {
   sessionRouterPath?: string | null
   /** The bundle of the process that runs Cline's SDK; without it Cline runs over ACP. */
   clineHostPath?: string | null
+  /**
+   * The MCP bridge, which stdio-only agents reach the library's servers by; without it they get
+   * commands.
+   */
+  mcpBridgePath?: string | null
   settings: HostSettings
   baseEnv: Env
   send(message: HostToMain): void
@@ -586,6 +596,10 @@ export class AgentHost {
   private readonly marketConnections: MarketConnectionsService
   /** Where agents reach the OAuth servers, with a fresh token. */
   private readonly mcpProxy: McpProxy
+  private readonly mcpAnswers: Answers
+  private readonly mcpRouter: McpRouter
+  /** The bridge program, once it is found where main said; null without one. */
+  private mcpBridge: string | null = null
   /** The sign-ins sent to main that no push has carried back yet, by server id. */
   private readonly unkept = new Map<string, { state: string | null; pushes: number }>()
   /** The plugins Claude Code and Codex agents have of their own, which Kettu only lists. */
@@ -903,14 +917,40 @@ export class AgentHost {
         this.connectionChanged(serverId, connection, loginId, error),
       fetch: net,
     })
+    const signsIn = (server: MarketServer): boolean =>
+      this.marketConnections.access(server) === 'proxy'
     this.mcpProxy = new McpProxy({
-      servers: () => this.settings.marketplace.mcp,
+      signsIn,
       headers: (server) => serverHeaders(server, this.marketKeys),
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
       fetch: net,
     })
     const home = options.homeDir ?? os.homedir()
+    this.mcpAnswers = new Answers(answersFile(options.userDataPath, log))
+    this.trees = new AgentTrees({
+      file: agentProcessesFile(options.userDataPath, log),
+      control: options.processControl ?? processControl(platform),
+      graceMs: STOP_TIMINGS.termMs,
+      ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
+      log,
+    })
+    this.mcpRouter = new McpRouter({
+      servers: () => this.settings.marketplace.mcp,
+      command: (server) =>
+        serverCommand(server, this.marketKeys, this.env.agentEnv(), options.nodeRuntime),
+      headers: (server) => serverHeaders(server, this.marketKeys),
+      signsIn,
+      token: (serverId) => this.marketConnections.token(serverId),
+      refused: (serverId, used) => this.marketConnections.refused(serverId, used),
+      proxy: this.mcpProxy,
+      answers: this.mcpAnswers,
+      appVersion: options.appVersion,
+      home,
+      log,
+      fetch: net,
+      processes: { platform, trees: this.trees },
+    })
     this.ownPlugins = new OwnPluginsService({
       platform,
       agents: () => this.installedAgents(['claude-code', 'codex']),
@@ -967,13 +1007,6 @@ export class AgentHost {
       ownSkills: () => this.artifactService.guideFlags,
       kettuOn: (agentId) => !this.settings.mcp.kettu.off.includes(agentId),
       fetch: net,
-    })
-    this.trees = new AgentTrees({
-      file: agentProcessesFile(options.userDataPath, log),
-      control: options.processControl ?? processControl(platform),
-      graceMs: STOP_TIMINGS.termMs,
-      ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
-      log,
     })
     this.attachments = new Attachments({ userDataPath: options.userDataPath, log })
     const contentDir = path.join(options.userDataPath, 'artifacts', 'content')
@@ -1234,7 +1267,9 @@ export class AgentHost {
           return this.marketSkills.sessionSkills(agentId, [...step, ...added])
         },
       },
-      proxy: this.mcpProxy,
+      router: this.mcpRouter,
+      libraryServer: (serverId) =>
+        this.settings.marketplace.mcp.find((server) => server.id === serverId) ?? null,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
         list: (projectPath) => this.sessions.toolSessions(projectPath),
@@ -1440,17 +1475,43 @@ export class AgentHost {
                 ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
                 ...(record.commandTools?.mcp ?? []),
               ],
-              oauth: {
-                access: (server) => this.marketConnections.access(server),
-                bearer: () =>
-                  this.artifactService.bearer(
-                    sessionId,
-                    record.projectPath,
-                    this.agents.mcpServersByName(record.agentId) ? connection : null,
-                  ),
-              },
+              oauth: { access: (server) => this.marketConnections.access(server) },
+              router: this.artifactService.routerAccess(
+                sessionId,
+                record.projectPath,
+                this.agents.mcpServersByName(record.agentId) ? connection : null,
+              ),
+              bridge: this.mcpBridge,
+              ...(this.agents.toolGateway(record.agentId)
+                ? { gateway: { known: (server) => this.mcpRouter.knownTools(server) } }
+                : {}),
+              fellBack: (server, why) =>
+                this.diagnostics.log(
+                  'warn',
+                  `MCP server ${server.name} for ${record.agentId}: ${why}`,
+                ),
             },
           ),
+        libraryPrint: (record) => {
+          const also = [
+            ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
+            ...(record.commandTools?.mcp ?? []),
+          ]
+          const handed = this.settings.marketplace.mcp.filter(
+            (server) =>
+              serverFor(server, record.agentId) ||
+              (server.on && (also.includes(server.name) || also.includes(server.id))),
+          )
+          return Object.fromEntries(
+            handed.map((server) => [
+              server.name,
+              createHash('sha256')
+                .update(JSON.stringify([server.spec, runOf(server).mode === 'agent']))
+                .digest('hex')
+                .slice(0, 16),
+            ]),
+          )
+        },
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopUsing(sessionId)
@@ -1899,6 +1960,8 @@ export class AgentHost {
       host.trees.load(),
       host.agentOptions.load(),
       host.preparedRecords.load(),
+      host.mcpAnswers.load(),
+      host.findBridge(options.mcpBridgePath ?? null),
       host.attachments.load(),
       host.artifactService.start(),
       host.routines.load(),
@@ -2723,20 +2786,52 @@ export class AgentHost {
   }
 
   /**
+   * The bridge where main or the daemon said it is; a build without one hands commands as
+   * before.
+   */
+  private async findBridge(file: string | null): Promise<void> {
+    if (file && (await isExecutableFile(file, this.options.platform))) {
+      this.mcpBridge = file
+      return
+    }
+    this.diagnostics.log(
+      'warn',
+      `The MCP bridge is not in this build${file ? ` (${file})` : ''}; agents that speak only stdio get commands to run themselves`,
+    )
+  }
+
+  /**
    * The Marketplace's servers or keys may have changed from `servers` and `keys`: each agent whose
    * servers differ now has its prepared sessions replaced.
    */
   private marketChanged(servers: HostSettings['marketplace']['mcp'], keys: MarketKeys): void {
-    // Proxied servers compare by where they go, without a session's bearer.
-    const oauth = {
-      access: (server: MarketServer) => this.marketConnections.access(server),
-      bearer: () => ({ origin: '', token: '' }),
+    // Routed servers compare by where they go, without a session's token.
+    const oauth = { access: (server: MarketServer) => this.marketConnections.access(server) }
+    const router = { origin: '', token: '', allow: () => undefined }
+    const options = {
+      platform: this.options.platform,
+      oauth,
+      router,
+      bridge: this.mcpBridge,
+      node: this.options.nodeRuntime,
     }
-    const options = { platform: this.options.platform, oauth, node: this.options.nodeRuntime }
     const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
       JSON.stringify(libraryServers(list, held, agentId, ALL_TRANSPORTS, options))
     const now = this.settings.marketplace.mcp
     if (servers === now && keys === this.marketKeys) return
+    // A process runs with the keys and the command it started with, so a change stops it.
+    const before = new Map(servers.map((server) => [server.id, server]))
+    const changed = new Set(
+      now
+        .filter((server) => {
+          const was = before.get(server.id)
+          const runs = (item: MarketServer) => JSON.stringify([item.name, item.spec, item.run])
+          const inputs = (held: MarketKeys) => JSON.stringify([...(held.get(server.id) ?? [])])
+          return !was || runs(was) !== runs(server) || inputs(keys) !== inputs(this.marketKeys)
+        })
+        .map((server) => server.id),
+    )
+    this.mcpRouter.serversChanged(changed)
     this.sessions.libraryChanged(
       (agentId) => of(servers, keys, agentId) !== of(now, this.marketKeys, agentId),
     )
@@ -3542,6 +3637,8 @@ export class AgentHost {
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
         this.agents.stopAll(),
+        // Before the trees close, so the reaps of what its servers left are waited for.
+        this.mcpRouter.close(),
         this.git?.dispose().catch((error: unknown) => {
           this.diagnostics.log(
             'warn',
@@ -3966,6 +4063,7 @@ export class AgentHost {
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.refreshModels': ({ sessionId }) => sessions.refreshModels(sessionId),
+      'sessions.applyMcp': ({ sessionId }) => sessions.applyLibrary(sessionId),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.pin': ({ sessionId, pinned }) => sessions.pin(sessionId, pinned),

@@ -1,6 +1,6 @@
-// The proxy agents reach an OAuth server through: one path per server on the loopback MCP
-// service, behind the session's bearer, that forwards each request with a fresh token of the
-// user's sign-in in place of the agent's, and streams the answer back, JSON or SSE alike.
+// How agents reach a remote Streamable HTTP server through the router: each request forwarded as it
+// is, with the server's keys and, for one that signs in, a fresh token of the user's sign-in in
+// place of anything the agent sent, and the answer streamed back, JSON or SSE alike.
 
 import { createHash } from 'node:crypto'
 import type http from 'node:http'
@@ -20,7 +20,12 @@ const REQUEST_HEADERS = [
   'mcp-session-id',
   'mcp-protocol-version',
   'last-event-id',
+  // The stateless protocol routes by these without reading the body.
+  'mcp-method',
+  'mcp-name',
 ]
+/** Headers a tool's arguments are mirrored into in the stateless protocol, passed on unread. */
+const PARAM_HEADER = /^mcp-param-[a-z0-9-]+$/
 const ANSWER_HEADERS = ['content-type', 'mcp-session-id', 'mcp-protocol-version', 'cache-control']
 
 /** The proxy's path for a server: a digest of its id, which leaks nothing and needs no escaping. */
@@ -29,7 +34,8 @@ export function proxyPath(serverId: string): string {
 }
 
 export interface ProxyDeps {
-  servers(): readonly MarketServer[]
+  /** Whether requests to it carry the user's sign-in, rather than none for an open server. */
+  signsIn(server: MarketServer): boolean
   /** The server's fixed headers and filled inputs. */
   headers(server: MarketServer): Record<string, string>
   /** A fresh token, or null when the server is not connected. */
@@ -67,32 +73,34 @@ export class McpProxy {
     this.fetch = deps.fetch ?? fetch
   }
 
-  /** A request to `path` that the service has already checked the session's bearer of. */
-  async handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void> {
-    const server = this.deps
-      .servers()
-      .find((item) => item.spec.type === 'http' && item.spec.oauth && proxyPath(item.id) === path)
-    if (!server || server.spec.type !== 'http') return refuse(res, 404, 'Not found')
+  /** A request for `server`, whose caller the router has already let through to it. */
+  async handle(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    server: MarketServer,
+  ): Promise<void> {
+    if (server.spec.type !== 'http') return refuse(res, 404, 'Not found')
+    const oauth = this.deps.signsIn(server)
     const method = req.method ?? 'GET'
     if (method !== 'POST' && method !== 'GET' && method !== 'DELETE') {
       return refuse(res, 405, 'Method not allowed', { Allow: 'GET, POST, DELETE' })
     }
     const payload = method === 'POST' ? await body(req) : null
     if (method === 'POST' && payload === null) return refuse(res, 413, 'The request is too large')
-    let token = await this.deps.token(server.id)
+    let token = oauth ? await this.deps.token(server.id) : ''
     if (token === null) return this.signIn(res)
     const abort = new AbortController()
     res.on('close', () => abort.abort())
     const headers: Record<string, string> = { ...this.deps.headers(server) }
-    for (const name of REQUEST_HEADERS) {
-      const value = req.headers[name]
-      if (typeof value === 'string') headers[name] = value
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (typeof value !== 'string') continue
+      if (REQUEST_HEADERS.includes(name) || PARAM_HEADER.test(name)) headers[name] = value
     }
     const send = (bearer: string): Promise<Response> => {
       const timer = setTimeout(() => abort.abort(), ANSWER_MS)
       return this.fetch(server.spec.type === 'http' ? server.spec.url : '', {
         method,
-        headers: { ...headers, Authorization: `Bearer ${bearer}` },
+        headers: oauth ? { ...headers, Authorization: `Bearer ${bearer}` } : headers,
         ...(payload ? { body: payload } : {}),
         signal: abort.signal,
       }).finally(() => clearTimeout(timer))
@@ -100,7 +108,7 @@ export class McpProxy {
     let answer: Response
     try {
       answer = await send(token)
-      if (answer.status === 401) {
+      if (answer.status === 401 && oauth) {
         void answer.body?.cancel()
         token = await this.deps.refused(server.id, token)
         if (token === null) return this.signIn(res)

@@ -91,6 +91,11 @@ export interface SessionView {
   routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
+  /**
+   * Ephemeral: the library's MCP servers added or changed since the agent attached, by name, which
+   * reach the session once it attaches again; absent or empty when none.
+   */
+  mcpChanged?: string[]
   /** Ephemeral: set while the session holds the computer, with the app it last used. */
   computer?: ComputerUseView | null
   /**

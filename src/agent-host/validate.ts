@@ -2183,6 +2183,7 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), optionId: string(o, 'optionId', ID_CHARS), value }
     },
     'sessions.refreshModels': session,
+    'sessions.applyMcp': session,
     'sessions.rename': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), title: o.title === null ? null : string(o, 'title', 200) }

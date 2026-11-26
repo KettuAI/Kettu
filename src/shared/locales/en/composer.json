@@ -233,7 +233,15 @@
       "title": "Last request",
       "running": "running"
     },
-    "everyRequest": "Every request"
+    "everyRequest": "Every request",
+    "mcp": {
+      "title": "MCP servers",
+      "changed_one": "{{names}} was added or changed since this session started.",
+      "changed_other": "{{names}} were added or changed since this session started.",
+      "useNow": "Use now",
+      "afterTurn": "Available once the turn ends",
+      "applyFailed": "Could not use the servers now: {{error}}"
+    }
   },
   "attachments": {
     "label": "Attachments",

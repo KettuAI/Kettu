@@ -225,7 +225,15 @@
       "title": "上次请求",
       "running": "进行中"
     },
-    "everyRequest": "每次请求"
+    "everyRequest": "每次请求",
+    "mcp": {
+      "title": "MCP 服务器",
+      "changed_one": "{{names}} 在这个会话开始以后加了或改了。",
+      "changed_other": "{{names}} 在这个会话开始以后加了或改了。",
+      "useNow": "现在用上",
+      "afterTurn": "这一轮结束后可用",
+      "applyFailed": "没能现在用上：{{error}}"
+    }
   },
   "attachments": {
     "label": "附件",

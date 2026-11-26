@@ -1,8 +1,8 @@
 // Puts the app's helpers in a folder, `out/helpers` by default: scrcpy's server for Android,
-// downloaded at a pinned version and checked by its SHA-256, and on macOS the two iOS helpers and
-// the notch island's helper built from `native/`. The release run calls it before packaging, which
-// ships the folder as the app's `helpers` resource; `pnpm fetch:device-helpers` does the same for
-// development.
+// downloaded at a pinned version and checked by its SHA-256, the MCP bridge on every system, and
+// on macOS the two iOS helpers and the notch island's helper, all built from `native/`. The
+// release run calls it before packaging, which ships the folder as the app's `helpers` resource;
+// `pnpm fetch:device-helpers` does the same for development.
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -51,6 +51,13 @@ function build(helper) {
 
 await mkdir(out, { recursive: true })
 await scrcpyServer()
+// Without the bridge, agents that speak only stdio get commands to run themselves, as before, so
+// a build where it fails still ships; the warning shows on the release run.
+try {
+  build('mcp-bridge')
+} catch (error) {
+  console.log(`::warning::${error.message}; the app ships without the MCP bridge`)
+}
 if (process.platform === 'darwin') {
   build('ios-usb-capture')
   build('ios-device')

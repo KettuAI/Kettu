@@ -98,6 +98,8 @@ describe('the servers a session attaches with', () => {
       'delete_routine',
       'run_routine',
       'read_kettu_guide',
+      // It only searches the descriptions of the tools behind the gateway.
+      'find_tools',
       // They only read the skills the user turned on for the session's agent.
       'list_skills',
       'read_skill',

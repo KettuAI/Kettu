@@ -545,6 +545,33 @@ describe('items from the Kettu Marketplace in a patch', () => {
     })
   })
 
+  it('keeps how a server runs, and refuses a mode or a time it does not know', () => {
+    const run = { mode: 'folder', idleMinutes: 30, startSeconds: 60 }
+    expect(validateSettingsPatch({ marketplace: { mcp: [{ ...server, run }] } })).toEqual({
+      marketplace: { mcp: [{ ...server, run }] },
+    })
+    const bad = (value: unknown) => () =>
+      validateSettingsPatch({ marketplace: { mcp: [{ ...server, run: value }] } })
+    expect(bad({ mode: 'shared' })).toThrow()
+    expect(bad({ idleMinutes: 0 })).toThrow()
+    expect(bad({ idleMinutes: 2.5 })).toThrow()
+    expect(bad({ startSeconds: 601 })).toThrow()
+    expect(bad({ mode: 'session', extra: true })).toThrow()
+  })
+
+  it('reads how a server runs from the file, dropping a key it does not know', async () => {
+    const run = { mode: 'agent', idleMinutes: 5, later: 1 }
+    await save({ version: 1, marketplace: { mcp: [{ ...server, run }], skills: [] } })
+    const store = await SettingsStore.load(dir)
+    expect(store.get().marketplace.mcp[0]?.run).toEqual({ mode: 'agent', idleMinutes: 5 })
+  })
+
+  it('stores no run settings for a server that keeps every default', async () => {
+    await save({ version: 1, marketplace: { mcp: [{ ...server, run: {} }], skills: [] } })
+    const store = await SettingsStore.load(dir)
+    expect(store.get().marketplace.mcp[0]).not.toHaveProperty('run')
+  })
+
   it('keeps a bundle’s server on Kettu’s Node.js with its inputs’ labels and kinds', () => {
     const bundled = {
       ...server,

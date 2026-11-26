@@ -149,10 +149,6 @@ jobs:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
           # The renderer type check needs about 2.5 GB, over Node's default heap on the macOS runners.
           NODE_OPTIONS: --max-old-space-size=4096
-      # The daemon has no Intel macOS package; the Intel build ships the desktop app only.
-      - name: Package the daemon
-        if: runner.os != 'Windows' && matrix.target != '--mac --x64'
-        run: node tools/daemon/package.mjs --out daemon-package
       # The hosted web client and the one a self-hosted relay serves are the same on every runner,
       # so one of them builds both; the relay downloads its own and checks it against this list.
       - name: Package the web clients
@@ -172,11 +168,19 @@ jobs:
             sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           fi
           xcodebuild -version
-      # scrcpy's server for Android, checked by its SHA-256, and on macOS the iOS helpers and the
-      # notch island's built from native/ with the runner's Xcode and Rust; the package ships them
-      # as the helpers resource.
+      # scrcpy's server for Android, checked by its SHA-256, the MCP bridge on every runner with the
+      # runner's Rust, and on macOS the iOS helpers and the notch island's, built from native/ with
+      # its Xcode; the package ships them as the helpers resource.
+      - name: Show the Rust toolchain
+        shell: bash
+        run: cargo --version || echo "::warning::No Rust on this runner; it ships without the MCP bridge"
       - name: Fetch and build the device helpers
         run: node tools/install/device-helpers.mjs
+      # After the helpers, which the daemon's package carries beside it.
+      # It has no Intel macOS package; the Intel build ships the desktop app only.
+      - name: Package the daemon
+        if: runner.os != 'Windows' && matrix.target != '--mac --x64'
+        run: node tools/daemon/package.mjs --out daemon-package
       - name: Package
         if: env.MAC_SIGNED != 'true'
         run: pnpm exec electron-builder ${{ matrix.target }} --publish never

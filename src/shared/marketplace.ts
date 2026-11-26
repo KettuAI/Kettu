@@ -83,6 +83,37 @@ export interface MarketServer {
   spec: McpSpec
   agents: 'all' | AgentId[] // the agents that get it; 'all' takes in agents added later
   on: boolean
+  // How Kettu runs it; absent means each default of McpRun.
+  run?: McpRun
+}
+
+/**
+ * How Kettu runs a server for sessions. `mode` is where a command's process is shared: one per
+ * session (the default), one per folder, one for every session, or none, handing the server to
+ * each agent to run as it did before Kettu ran servers. A remote server only takes `startSeconds`;
+ * the rest are for commands.
+ */
+export interface McpRun {
+  mode?: McpRunMode
+  idleMinutes?: number // how long an unused process lives, 10 by default
+  startSeconds?: number // how long a process or server has to answer initialize, 30 by default
+}
+export type McpRunMode = 'session' | 'folder' | 'all' | 'agent'
+
+export const MCP_RUN_MODES: readonly McpRunMode[] = ['session', 'folder', 'all', 'agent']
+export const MCP_RUN_DEFAULTS = { mode: 'session', idleMinutes: 10, startSeconds: 30 } as const
+export const MCP_RUN_LIMITS = {
+  idleMinutes: { min: 1, max: 24 * 60 },
+  startSeconds: { min: 5, max: 600 },
+} as const
+
+/** A server's run settings with each default filled in. */
+export function runOf(server: Pick<MarketServer, 'run'>): Required<McpRun> {
+  return {
+    mode: server.run?.mode ?? MCP_RUN_DEFAULTS.mode,
+    idleMinutes: server.run?.idleMinutes ?? MCP_RUN_DEFAULTS.idleMinutes,
+    startSeconds: server.run?.startSeconds ?? MCP_RUN_DEFAULTS.startSeconds,
+  }
 }
 
 /** One server in the catalog, with the spec Kettu would install: its remote first, else a package. */
