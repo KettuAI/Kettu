@@ -193,6 +193,8 @@ export interface RelayRegion {
   url: string
   /** 面向用户展示的节点区域名称（来自签名区域清单，例如「上海一区」），缺失时界面回退显示区域 ID。 */
   name?: string
+  /** 可选的多语言区域名称映射（例如 `{ en: 'Shanghai', 'zh-CN': '上海' }`），用于按当前界面语言展示。 */
+  names?: Record<string, string>
   /**
    * The base64url SHA-256 of the region's certificate's SubjectPublicKeyInfo, which alone
    * vouches for a region at an IP address; only a verified signed list gives one.

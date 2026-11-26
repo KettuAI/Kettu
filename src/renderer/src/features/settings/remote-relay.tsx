@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { AlertCircleIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { RelayStatus } from '@shared/remote/relay-host'
+import { localizedRegionName } from '@shared/remote/relay-regions'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
 import { errorMessage } from '@renderer/lib/host'
@@ -74,7 +75,7 @@ export function DiscoverableSwitch({ label }: { label: string }) {
 /** Each relay and how it is doing, while the host signs in to them. */
 export function RelayRegions() {
   const { useRemoteStore } = useHostScope()
-  const { t } = useTranslation('settings')
+  const { t, i18n } = useTranslation('settings')
   const relay = useRemoteStore((s) => s.status?.relay)
   if (relay?.state !== 'on' || relay.relays.length === 0) {
     return <span className="text-hint text-tertiary">{t('remote.relay.regionsNone')}</span>
@@ -84,10 +85,11 @@ export function RelayRegions() {
       {relay.relays.map((entry) => (
         <li key={entry.url} className="k-list__row">
           <span className="k-list__name">
-            {/* 官方中继仅展示友好区域名称，不暴露底层域名、IP 或端口 */}
+            {/* 官方中继仅按当前界面语言展示友好区域名称，不暴露底层域名、IP 或端口 */}
             {entry.id === 'main'
               ? t('remote.relay.regionMain')
-              : (entry.name ?? t('remote.relay.region', { id: entry.id.toUpperCase() }))}
+              : (localizedRegionName(entry.name, entry.names, i18n.language) ??
+                t('remote.relay.region', { id: entry.id.toUpperCase() }))}
           </span>
           <RegionPill relay={entry} />
         </li>

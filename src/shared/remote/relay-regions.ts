@@ -68,6 +68,8 @@ export type RegionState = 'active' | 'probe'
 export interface ListedRegion {
   id: string
   name: string
+  /** 可选的多语言区域显示名映射（键为 BCP 47 语言标签，例如 `en`、`zh-CN`）。 */
+  names?: Record<string, string>
   /** ISO 3166 country code, or null when the list gives none. */
   country: string | null
   /** The region's origin. */
@@ -97,10 +99,75 @@ const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/
 const MAX_NAME = 64
+const LOCALE_KEY = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/
+const MAX_REGION_NAMES = 16
 
 /** A region's name as its signed list gives it, the words a device shows for it. */
 export const isRegionName = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= MAX_NAME && !CONTROL.test(value)
+
+/** 校验并解析可选的区域多语言名称映射：缺省或空对象返回 undefined，结构非法返回 null。 */
+export function parseRegionNames(value: unknown): Record<string, string> | undefined | null {
+  if (value === undefined) return undefined
+  const fields = record(value)
+  if (!fields) return null
+  const entries = Object.entries(fields)
+  if (entries.length > MAX_REGION_NAMES) return null
+  const parsed: Record<string, string> = {}
+  for (const [locale, label] of entries) {
+    if (!LOCALE_KEY.test(locale) || !isRegionName(label)) return null
+    parsed[locale] = label
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined
+}
+
+/** 比较两份可选区域多语言名称映射是否完全一致，用于判断改名时是否需要刷新状态。 */
+export function sameRegionNames(
+  a: Readonly<Record<string, string>> | undefined,
+  b: Readonly<Record<string, string>> | undefined,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  const keysA = Object.keys(a)
+  if (keysA.length !== Object.keys(b).length) return false
+  return keysA.every((key) => a[key] === b[key])
+}
+
+/** 根据当前界面语言从多语言映射中选择最匹配的区域展示名，未命中时回退默认名称。 */
+export function localizedRegionName(
+  name: string | undefined,
+  names: Readonly<Record<string, string>> | undefined,
+  language?: string | null,
+): string | undefined {
+  if (!names) return name
+  const lookup = new Map<string, string>()
+  for (const [locale, label] of Object.entries(names)) {
+    lookup.set(locale.toLowerCase(), label)
+  }
+  const normalized = (language ?? '').trim().replace(/_/g, '-').toLowerCase()
+  const candidates: string[] = []
+  if (normalized) {
+    candidates.push(normalized)
+    if (
+      normalized === 'zh-tw' ||
+      normalized === 'zh-hk' ||
+      normalized === 'zh-mo' ||
+      normalized.startsWith('zh-hant')
+    ) {
+      candidates.push('zh-tw', 'zh-hk', 'zh-hant', 'zh-cn', 'zh-hans', 'zh')
+    } else if (normalized === 'zh' || normalized.startsWith('zh-')) {
+      candidates.push('zh-cn', 'zh-hans', 'zh')
+    } else {
+      const base = normalized.split('-')[0]
+      if (base && base !== normalized) candidates.push(base)
+    }
+  }
+  for (const candidate of candidates) {
+    const matched = lookup.get(candidate)
+    if (matched) return matched
+  }
+  return name
+}
 
 /** The longest payload taken: 16 regions and their names fit well within it. */
 const MAX_PAYLOAD = 16 * 1024
@@ -170,16 +237,26 @@ export function regionOrigin(url: string, pin: string | null, main: string): str
 function parseRegion(value: unknown, main: string): ListedRegion | null {
   const fields = record(value)
   if (!fields) return null
-  const { id, name, country, url, pin, state } = fields
+  const { id, name, names, country, url, pin, state } = fields
   if (typeof id !== 'string' || !REGION_ID.test(id)) return null
   if (!isRegionName(name)) return null
+  const parsedNames = parseRegionNames(names)
+  if (parsedNames === null) return null
   if (country !== undefined && (typeof country !== 'string' || !COUNTRY.test(country))) return null
   if (state !== 'active' && state !== 'probe') return null
   if (pin !== undefined && !isPin(pin)) return null
   if (typeof url !== 'string') return null
   const origin = regionOrigin(url, pin ?? null, main)
   if (!origin) return null
-  return { id, name, country: country ?? null, url: origin, pin: pin ?? null, state }
+  return {
+    id,
+    name,
+    ...(parsedNames ? { names: parsedNames } : {}),
+    country: country ?? null,
+    url: origin,
+    pin: pin ?? null,
+    state,
+  }
 }
 
 const STUN = /^(?:[a-z0-9.-]{1,253}|\[[0-9a-fA-F:.]{2,45}\]):(\d{1,5})$/
@@ -269,11 +346,14 @@ export class RegionSerial {
   }
 }
 
-/** 将签名清单中的区域转换为中继连接项，保留展示名称及裸 IP 节点所需的证书指纹。 */
-export const asRelay = (region: ListedRegion): RelayRegion =>
-  region.pin
-    ? { id: region.id, url: region.url, name: region.name, pin: region.pin }
-    : { id: region.id, url: region.url, name: region.name }
+/** 将签名清单中的区域转换为中继连接项，保留展示名称、多语言名称及裸 IP 节点所需的证书指纹。 */
+export const asRelay = (region: ListedRegion): RelayRegion => ({
+  id: region.id,
+  url: region.url,
+  name: region.name,
+  ...(region.names ? { names: region.names } : {}),
+  ...(region.pin ? { pin: region.pin } : {}),
+})
 
 export interface HostRegionsInput {
   /** The main relay's origin. */

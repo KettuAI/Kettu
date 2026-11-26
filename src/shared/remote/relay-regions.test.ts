@@ -6,6 +6,9 @@ import {
   fastestRegions,
   hostRegions,
   isPin,
+  localizedRegionName,
+  parseRegionNames,
+  parseRegionPayload,
   parseRelayPrefer,
   parseRelayRegions,
   rankRegions,
@@ -247,7 +250,8 @@ describe('parseRelayStatuses', () => {
         {
           id: 'sh-1',
           url: 'https://203.0.113.7:7443',
-          name: '上海一区',
+          name: 'Shanghai',
+          names: { en: 'Shanghai', 'zh-CN': '上海' },
           connection: { state: 'connected' },
         },
       ]),
@@ -256,7 +260,8 @@ describe('parseRelayStatuses', () => {
       {
         id: 'sh-1',
         url: 'https://203.0.113.7:7443',
-        name: '上海一区',
+        name: 'Shanghai',
+        names: { en: 'Shanghai', 'zh-CN': '上海' },
         connection: { state: 'connected' },
       },
     ])
@@ -270,5 +275,63 @@ describe('parseRelayStatuses', () => {
         },
       ]),
     ).toBeNull()
+    expect(
+      parseRelayStatuses([
+        {
+          id: 'sh-1',
+          url: 'https://203.0.113.7:7443',
+          name: 'Shanghai',
+          names: { bad_locale: '上海' },
+          connection: { state: 'connected' },
+        },
+      ]),
+    ).toBeNull()
+  })
+})
+
+describe('多语言区域名称解析与回退', () => {
+  it('解析可选 names 字段并拒绝非法语言标签或控制字符', () => {
+    const parsed = parseRegionPayload(
+      {
+        v: 1,
+        serial: 1,
+        issuedAt: 1000,
+        place: { country: 'CN', asn: 4134 },
+        regions: [
+          {
+            id: 'sh-1',
+            name: 'Shanghai',
+            names: { en: 'Shanghai', 'zh-CN': '上海' },
+            url: 'https://203.0.113.7:7443',
+            pin: v.list.regions[1]!.pin,
+            state: 'active',
+          },
+          {
+            id: 'bad-1',
+            name: 'Bad',
+            names: { invalid_key: '无效' },
+            url: 'https://hk-1.relay.kettu.sh',
+            state: 'active',
+          },
+        ],
+        stun: [],
+      },
+      MAIN,
+    )
+    expect(parsed?.regions.map((r) => ({ id: r.id, name: r.name, names: r.names }))).toEqual([
+      { id: 'sh-1', name: 'Shanghai', names: { en: 'Shanghai', 'zh-CN': '上海' } },
+    ])
+    expect(parseRegionNames(undefined)).toBeUndefined()
+    expect(parseRegionNames({ 'zh-CN': '上海\n非法' })).toBeNull()
+  })
+
+  it('按界面语言标签匹配最合适的区域名称并在缺失时回退默认名称', () => {
+    const names = { en: 'Shanghai', 'zh-CN': '上海' }
+    expect(localizedRegionName('Shanghai', names, 'zh-CN')).toBe('上海')
+    expect(localizedRegionName('Shanghai', names, 'zh-Hans-CN')).toBe('上海')
+    expect(localizedRegionName('Shanghai', names, 'zh-TW')).toBe('上海')
+    expect(localizedRegionName('Shanghai', names, 'en-US')).toBe('Shanghai')
+    expect(localizedRegionName('Shanghai', names, 'ja-JP')).toBe('Shanghai')
+    expect(localizedRegionName('Shanghai', undefined, 'zh-CN')).toBe('Shanghai')
   })
 })

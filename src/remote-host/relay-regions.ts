@@ -482,6 +482,11 @@ export class RemoteRegions {
     return this.source.list?.regions.find((region) => region.url === url)?.name ?? null
   }
 
+  /** 返回签名清单中指定 `url` 区域的多语言名称映射，未配置时返回 null。 */
+  regionNames(url: string): Record<string, string> | null {
+    return this.source.list?.regions.find((region) => region.url === url)?.names ?? null
+  }
+
   // Peer to peer.
 
   /** The STUN servers of the verified list, as `host:port`; none while the relay is not in use. */
