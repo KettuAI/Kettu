@@ -18,7 +18,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
-import type { ThreadEntry, ToolEntry, ToolKind } from '@shared/thread'
+import { hasToolDigest, type ThreadEntry, type ToolEntry, type ToolKind } from '@shared/thread'
 import type { ToolCallLabels, ToolCallStatus } from '@renderer/components/affect/tool-call-card'
 import { toolMedia } from '../media/named'
 import { toolTime } from '../tool-times'
@@ -110,6 +110,7 @@ export function stackedGlyphs(
 
 /** Whether a call has details to open. */
 export function toolHasBody(entry: ToolEntry, projectPath: string): boolean {
+  if (hasToolDigest(entry)) return true
   const label = toolLabel(entry, projectPath)
   const command = label.kind === 'command' ? label.target : null
   return (

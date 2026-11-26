@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { SessionSummary } from '@shared/agent-host'
 import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { localHarnessCounts, useSessionsStore } from '@renderer/stores/sessions'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { appUpdateNotice } from './app-updates'
 import { updateBatch, updateCard, updateItems, type UpdatesInput } from './card-model'
+
+const NO_SESSIONS: UpdatesInput['sessions'] = []
 
 /** What the update card and its review list show, from the updater, the agents and the sessions. */
 export function useUpdates() {
@@ -19,19 +20,14 @@ export function useUpdates() {
   const queued = useUpdatesStore((s) => s.harnessQueued)
   const installing = useUpdatesStore((s) => s.harnessInstalling)
   const batch = useUpdatesStore((s) => s.harnessBatch)
-  // Harness updates are this computer's, so only its sessions hold them.
-  const sessions = useSessionsStore(
-    useShallow((s) =>
-      Object.values(s.byId)
-        .filter((summary) => hostOfSession(summary) === null)
-        .map((summary) => agentStatus(summary.agentId, summary.status)),
-    ),
-  )
+  // Harness updates are this computer's, so only its per-harness counts matter.
+  const sessionCounts = useSessionsStore(useShallow((s) => localHarnessCounts(s.byId)))
   const input: UpdatesInput = {
     app: appUpdateNotice(status, updatedSeen),
     statuses,
     taskErrors,
-    sessions,
+    sessions: NO_SESSIONS,
+    sessionCounts,
     waiting,
     queued,
     installing,
@@ -43,18 +39,4 @@ export function useUpdates() {
     items: updateItems(input),
     batch: updateBatch(input),
   }
-}
-
-type AgentStatusPair = Pick<SessionSummary, 'agentId' | 'status'>
-const pairs = new Map<string, AgentStatusPair>()
-
-/**
- * One object per agent and status, so the list compares equal while no session's agent or status
- * changes, whatever else in its summary does.
- */
-function agentStatus(agentId: SessionSummary['agentId'], status: SessionSummary['status']) {
-  const key = `${agentId}\n${status}`
-  let pair = pairs.get(key)
-  if (!pair) pairs.set(key, (pair = { agentId, status }))
-  return pair
 }

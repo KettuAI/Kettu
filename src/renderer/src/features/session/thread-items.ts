@@ -1,7 +1,10 @@
-import type { ThreadEntry, ThreadState } from '@shared/thread'
+import { diffPathOf, toolContentItems, type ThreadEntry, type ThreadState } from '@shared/thread'
 import { isArtifactWrite } from './entries/artifact-writes'
 import { workflowCardOf } from './entries/workflow-tools'
 import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
+
+const stateSignatures = new WeakMap<ThreadState, string>()
+const entryChars = new WeakMap<ThreadEntry, string>()
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
@@ -14,8 +17,23 @@ import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 // folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
+  const cached = stateSignatures.get(state)
+  if (cached !== undefined) return cached
   let signature = ''
-  for (const id of state.order) signature += charOf(state.byId[id])
+  for (const id of state.order) {
+    const entry = state.byId[id]
+    if (!entry) {
+      signature += 'o'
+      continue
+    }
+    let ch = entryChars.get(entry)
+    if (ch === undefined) {
+      ch = charOf(entry)
+      entryChars.set(entry, ch)
+    }
+    signature += ch
+  }
+  stateSignatures.set(state, signature)
   return signature
 }
 
@@ -295,7 +313,10 @@ function changedFiles(toolIds: string[], byId: Record<string, ThreadEntry>): num
   for (const id of toolIds) {
     const entry = byId[id]
     if (entry?.kind !== 'tool') continue
-    for (const content of entry.content) if (content.type === 'diff') paths.add(content.path)
+    for (const content of toolContentItems(entry)) {
+      const path = diffPathOf(content)
+      if (path !== null) paths.add(path)
+    }
   }
   return paths.size
 }

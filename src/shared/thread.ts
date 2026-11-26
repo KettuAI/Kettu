@@ -1330,6 +1330,43 @@ export type DigestedToolEntry = Omit<ToolEntry, 'content' | 'rawInput'> & {
 
 export type DigestedThreadEntry = Exclude<ThreadEntry, ToolEntry> | DigestedToolEntry
 
+export type AnyToolContent = ToolContent | ToolContentDigest
+
+export type DiffContentItem =
+  Extract<ToolContent, { type: 'diff' }> | Extract<ToolContentDigest, { of: 'diff' }>
+
+export function isToolContentDigest(item: AnyToolContent): item is ToolContentDigest {
+  return item.type === 'digest'
+}
+
+export function isDiffContentItem(item: AnyToolContent): item is DiffContentItem {
+  return item.type === 'diff' || (item.type === 'digest' && item.of === 'diff')
+}
+
+export function diffPathOf(item: AnyToolContent): string | null {
+  return isDiffContentItem(item) ? item.path : null
+}
+
+/** Views a tool entry's content items, including digests delivered to `TOOL_DIGESTS_FEATURE` clients. */
+export function toolContentItems(
+  entry: Pick<ToolEntry | DigestedToolEntry, 'content'>,
+): readonly AnyToolContent[] {
+  return entry.content as readonly AnyToolContent[]
+}
+
+/** Whether a tool entry still contains digested input or content that needs `sessions.entry`. */
+export function hasToolDigest(entry: ThreadEntry | DigestedThreadEntry | undefined): boolean {
+  if (!entry || entry.kind !== 'tool') return false
+  if (
+    'rawInputDigest' in entry &&
+    entry.rawInputDigest !== undefined &&
+    entry.rawInput === undefined
+  ) {
+    return true
+  }
+  return toolContentItems(entry).some(isToolContentDigest)
+}
+
 /** `SessionSnapshot` as a device that sent `TOOL_DIGESTS_FEATURE` gets it. */
 export type DigestedSnapshot = Omit<SessionSnapshot, 'entries'> & {
   entries: DigestedThreadEntry[]
@@ -1477,7 +1514,17 @@ export function applyPatches(
           if (partial) break
           throw new UnknownEntryError(patch.id)
         }
-        writableById()[patch.id] = { ...entry, ...patch.changes } as ThreadEntry
+        const merged = { ...entry, ...patch.changes } as ThreadEntry & {
+          rawInputDigest?: ToolInputDigest
+        }
+        if (
+          merged.kind === 'tool' &&
+          'rawInput' in patch.changes &&
+          patch.changes.rawInput !== undefined
+        ) {
+          delete merged.rawInputDigest
+        }
+        writableById()[patch.id] = merged
         break
       }
       case 'session.update':

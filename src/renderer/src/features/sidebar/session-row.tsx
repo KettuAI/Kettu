@@ -144,6 +144,8 @@ export const SessionRow = memo(function SessionRow({
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
+  const [cardMounted, setCardMounted] = useState(false)
+  if (cardOpen && !cardMounted) setCardMounted(true)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const drag = useSessionDragSource(summary.id, rename.renaming)
@@ -295,17 +297,20 @@ export const SessionRow = memo(function SessionRow({
     </button>
   )
 
-  const menuItems = picked ? (
-    <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
-  ) : (
-    <SessionMenuItems
-      summary={summary}
-      onRename={rename.menu.onRename}
-      onNewSubSession={rename.menu.onLeave}
-      onDelete={() => setDeleting(true)}
-      subagents={away ? undefined : node.subagents}
-    />
-  )
+  const menuItems =
+    menuOpen || moreOpen ? (
+      picked ? (
+        <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
+      ) : (
+        <SessionMenuItems
+          summary={summary}
+          onRename={rename.menu.onRename}
+          onNewSubSession={rename.menu.onLeave}
+          onDelete={() => setDeleting(true)}
+          subagents={away ? undefined : node.subagents}
+        />
+      )
+    ) : null
 
   const pinned = !!summary.pinnedAt
   return (
@@ -364,12 +369,14 @@ export const SessionRow = memo(function SessionRow({
                   alignOffset={-4}
                   className="w-[340px] p-0"
                 >
-                  <SessionCard
-                    summary={summary}
-                    cache={cache}
-                    status={status}
-                    onOpen={() => setCardOpen(false)}
-                  />
+                  {cardMounted && (
+                    <SessionCard
+                      summary={summary}
+                      cache={cache}
+                      status={status}
+                      onOpen={() => setCardOpen(false)}
+                    />
+                  )}
                 </HoverCardContent>
               </HoverCard>
               <ContextMenuContent

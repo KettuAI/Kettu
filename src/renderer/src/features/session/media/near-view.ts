@@ -3,21 +3,55 @@ import { useEffect, useState, type RefObject } from 'react'
 /** Media asks for its file once it is within one viewport of the visible part of its scroller. */
 const MARGIN = '100% 0px'
 
-const watched = new Map<Element, () => void>()
-const observers = new Map<Element | null, IntersectionObserver>()
+interface RootObserver {
+  observer: IntersectionObserver
+  count: number
+}
 
-function observerFor(root: Element | null): IntersectionObserver {
-  let observer = observers.get(root)
-  if (!observer) {
-    observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) if (entry.isIntersecting) watched.get(entry.target)?.()
-      },
-      { root, rootMargin: MARGIN },
-    )
-    observers.set(root, observer)
+const watched = new Map<Element, () => void>()
+const observers = new Map<Element | null, RootObserver>()
+
+function onIntersections(entries: IntersectionObserverEntry[]): void {
+  for (const entry of entries) if (entry.isIntersecting) watched.get(entry.target)?.()
+}
+
+function acquireObserver(root: Element | null): IntersectionObserver {
+  let entry = observers.get(root)
+  if (!entry) {
+    entry = {
+      observer: new IntersectionObserver(onIntersections, { root, rootMargin: MARGIN }),
+      count: 0,
+    }
+    observers.set(root, entry)
   }
-  return observer
+  entry.count++
+  return entry.observer
+}
+
+function releaseObserver(root: Element | null, observer: IntersectionObserver): void {
+  const entry = observers.get(root)
+  if (!entry || entry.observer !== observer) return
+  entry.count--
+  if (entry.count <= 0) {
+    observer.disconnect()
+    observers.delete(root)
+  }
+}
+
+/** Subscribes `element` under `root`'s shared observer and disconnects `root`'s observer once empty. */
+export function observeNearView(
+  element: Element,
+  root: Element | null,
+  onNear: () => void,
+): () => void {
+  const observer = acquireObserver(root)
+  watched.set(element, onNear)
+  observer.observe(element)
+  return () => {
+    watched.delete(element)
+    observer.unobserve(element)
+    releaseObserver(root, observer)
+  }
 }
 
 /**
@@ -35,13 +69,10 @@ export function useNearView(
     const element = ref.current
     if (!element || !enabled || near) return
     const root = element.closest(scroller)
-    const observer = observerFor(root)
-    watched.set(element, () => setNear(true))
-    observer.observe(element)
-    return () => {
-      watched.delete(element)
-      observer.unobserve(element)
-    }
+    return observeNearView(element, root, () => setNear(true))
   }, [ref, enabled, near, scroller])
   return near
 }
+
+/** Test-only helper to verify observers do not retain detached scroller roots. */
+export const _nearViewObserversCountForTests = (): number => observers.size

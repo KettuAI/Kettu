@@ -1,6 +1,7 @@
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
 import { i18n } from '@renderer/lib/i18n'
+import type { HarnessSessionCount } from '@renderer/stores/sessions'
 import type { HarnessBatchEntry } from '@renderer/stores/updates'
 import type { AgentTaskErrors, AgentUpdateOffer, HarnessFailure, HarnessRun } from './agent-updates'
 import { harnessUpdates } from './agent-updates'
@@ -68,6 +69,8 @@ export interface UpdatesInput {
   taskErrors: AgentTaskErrors
   /** This computer's sessions, which tell which harnesses run now and how often each is used. */
   sessions: readonly Pick<SessionSummary, 'agentId' | 'status'>[]
+  /** Pre-aggregated per-harness counts; avoids O(N) scans when provided by `useUpdates`. */
+  sessionCounts?: readonly HarnessSessionCount[]
   waiting: readonly AgentId[]
   queued: readonly AgentId[]
   /** The update the queue runs now, before its agent reports the task. */
@@ -88,14 +91,27 @@ export function runningByHarness(
   return counts
 }
 
+function runningCounts(input: UpdatesInput): Partial<Record<HarnessId, number>> {
+  if (!input.sessionCounts) return runningByHarness(input.sessions)
+  const counts: Partial<Record<HarnessId, number>> = {}
+  for (const { harnessId, running } of input.sessionCounts) {
+    if (running > 0) counts[harnessId] = running
+  }
+  return counts
+}
+
 /** Every update in the review list's order: Kettu first, then the harnesses used most. */
 export function updateItems(input: UpdatesInput): UpdateItem[] {
   const { offers } = harnessUpdates(input.statuses, input.taskErrors)
-  const running = runningByHarness(input.sessions)
+  const running = runningCounts(input)
   const used: Partial<Record<HarnessId, number>> = {}
-  for (const { agentId } of input.sessions) {
-    const harness = harnessOf(agentId)
-    used[harness] = (used[harness] ?? 0) + 1
+  if (input.sessionCounts) {
+    for (const { harnessId, total } of input.sessionCounts) used[harnessId] = total
+  } else {
+    for (const { agentId } of input.sessions) {
+      const harness = harnessOf(agentId)
+      used[harness] = (used[harness] ?? 0) + 1
+    }
   }
   const harnesses = offers.map(({ offer, skipped }): HarnessItem => {
     const harnessId = harnessOf(offer.agentId)
@@ -127,7 +143,7 @@ function batchItems(
   running: HarnessRun | null,
   failures: HarnessFailure[],
 ): BatchItem[] {
-  const sessions = runningByHarness(input.sessions)
+  const sessions = runningCounts(input)
   return input.batch.map(({ ended, ...entry }) => {
     const id = entry.agentId
     const failure = failures.find((f) => f.agentId === id) ?? null

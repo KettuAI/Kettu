@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { ToolContent } from '@shared/thread'
+import {
+  isDiffContentItem,
+  type AnyToolContent,
+  type DiffContentItem,
+  type ToolContent,
+} from '@shared/thread'
 import type { DiffStats } from '../markdown/diff-stats'
 import DiffStatsWorker from '../markdown/diff-stats-worker?worker'
 
@@ -9,7 +14,20 @@ const statsCache = new WeakMap<object, DiffStats>()
 // Diffs whose count failed: they show no count, but no card waits for them.
 const uncountable = new WeakSet<object>()
 
-const settled = (diff: DiffContent): boolean => statsCache.has(diff) || uncountable.has(diff)
+function digestStats(diff: DiffContentItem): DiffStats | null | undefined {
+  if (diff.type !== 'digest') return undefined
+  if (diff.added === null || diff.removed === null) return null
+  return { insertions: diff.added, deletions: diff.removed }
+}
+
+const settled = (diff: DiffContentItem): boolean =>
+  diff.type === 'digest' || statsCache.has(diff) || uncountable.has(diff)
+
+function statsOf(diff: DiffContentItem): DiffStats | null {
+  const digested = digestStats(diff)
+  if (digested !== undefined) return digested
+  return statsCache.get(diff) ?? null
+}
 
 /** Diffs a worker counts, sent in one message. */
 export interface DiffJob {
@@ -117,35 +135,41 @@ function countLater(diffs: DiffContent[], done: () => void): () => void {
 }
 
 /** Insertions and deletions over the diffs, or null until all of them are counted. */
-export function useDiffStats(content: ToolContent[]): DiffStats | null {
-  const diffs = content.filter((c) => c.type === 'diff')
+export function useDiffStats(content: readonly AnyToolContent[]): DiffStats | null {
+  const diffs = content.filter(isDiffContentItem)
+  const fullDiffs = diffs.filter((d): d is DiffContent => d.type === 'diff')
   const done = diffs.length > 0 && diffs.every(settled)
   const [, setVersion] = useState(0)
   useEffect(() => {
-    if (done || diffs.length === 0) return
-    return countLater(diffs, () => setVersion((v) => v + 1))
-  })
-  if (!done || !diffs.every((d) => statsCache.has(d))) return null
-  return diffs.reduce(
-    (sum, d) => {
-      const s = statsCache.get(d)!
-      return { insertions: sum.insertions + s.insertions, deletions: sum.deletions + s.deletions }
-    },
-    { insertions: 0, deletions: 0 },
-  )
-}
-
-/** Whether every diff `useDiffStats` was given is counted or failed to count. */
-export function diffsSettled(content: readonly ToolContent[]): boolean {
-  return content.every((c) => c.type !== 'diff' || settled(c))
-}
-
-/** The counts over diffs `useDiffStats` has loaded, or null while any is still to count. */
-export function cachedStats(diffs: readonly ToolContent[]): DiffStats | null {
+    if (done || fullDiffs.length === 0) return
+    return countLater(fullDiffs, () => setVersion((v) => v + 1))
+    // Re-subscribe only when the input list changes or its diffs are still waiting to be counted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, done])
+  if (!done) return null
   let insertions = 0
   let deletions = 0
   for (const d of diffs) {
-    const s = statsCache.get(d)
+    const s = statsOf(d)
+    if (!s) return null
+    insertions += s.insertions
+    deletions += s.deletions
+  }
+  return { insertions, deletions }
+}
+
+/** Whether every diff `useDiffStats` was given is counted or failed to count. */
+export function diffsSettled(content: readonly AnyToolContent[]): boolean {
+  return content.every((c) => !isDiffContentItem(c) || settled(c))
+}
+
+/** The counts over diffs `useDiffStats` has loaded, or null while any is still to count. */
+export function cachedStats(diffs: readonly AnyToolContent[]): DiffStats | null {
+  let insertions = 0
+  let deletions = 0
+  for (const d of diffs) {
+    if (!isDiffContentItem(d)) return null
+    const s = statsOf(d)
     if (!s) return null
     insertions += s.insertions
     deletions += s.deletions

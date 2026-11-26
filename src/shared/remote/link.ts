@@ -31,6 +31,7 @@ import {
   PROTOCOL_VERSION,
   RESUME_MS,
   RESUME_VERSION,
+  TOOL_DIGESTS_FEATURE,
   parseClosing,
   parseWelcome,
   type ClosingReason,
@@ -235,8 +236,8 @@ export function hello(
     protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
     client,
     ...(device ? { device } : {}),
-    // The web client shows the thread with the window's components.
-    features: [IMAGE_REFS_FEATURE],
+    // The web client loads stored images by hash and expands digested tool calls on demand.
+    features: [IMAGE_REFS_FEATURE, TOOL_DIGESTS_FEATURE],
     ...(account ? { account } : {}),
   }
 }

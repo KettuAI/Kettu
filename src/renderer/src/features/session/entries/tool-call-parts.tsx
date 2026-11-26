@@ -1,14 +1,18 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ToolEntry } from '@shared/thread'
+import { hasToolDigest, toolContentItems, type ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { ToolCallSection } from '@renderer/components/affect/tool-call-card'
+import { Button } from '@renderer/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { errorMessage } from '@renderer/lib/host'
+import { loadFullEntry } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
@@ -34,15 +38,46 @@ export const ToolBody = memo(function ToolBody({
   entryId: string
   projectPath: string
 }) {
-  const { t } = useTranslation('session')
+  const { t } = useTranslation(['session', 'common'])
   const labels = useToolCallLabels()
   const entry = useEntry(sessionId, entryId, 'tool')
+  const needsFull = hasToolDigest(entry)
+  const [loadError, setLoadError] = useState<{ attempt: number; message: string } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    if (!needsFull) return
+    let active = true
+    void loadFullEntry(sessionId, entryId).catch((error: unknown) => {
+      if (active) setLoadError({ attempt, message: errorMessage(error) })
+    })
+    return () => {
+      active = false
+    }
+  }, [needsFull, sessionId, entryId, attempt])
+  const activeError = loadError?.attempt === attempt ? loadError.message : null
   const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
   if (!entry) return null
+  if (needsFull) {
+    return activeError ? (
+      <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate" title={activeError}>
+          {activeError}
+        </span>
+        <Button size="xs" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+          {t('common:actions.retry')}
+        </Button>
+      </div>
+    ) : (
+      <div className="flex items-center justify-center py-3">
+        <Spinner className="size-4 text-muted-foreground" />
+      </div>
+    )
+  }
   const label = toolLabel(entry, projectPath, entry.status === 'completed')
   const command = label.kind === 'command' ? label.target : null
   // A command's output shows under it, in the same block, as a terminal prints it.
-  const output = command ? commandOutput(entry.content) : null
+  const items = toolContentItems(entry)
+  const output = command ? commandOutput(items) : null
   const content = output === null ? entry.content : entry.content.slice(1)
   const path = entry.locations[0]?.path
   return (

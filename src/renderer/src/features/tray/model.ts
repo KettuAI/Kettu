@@ -1,6 +1,6 @@
 import type { SessionSummary } from '@shared/agent-host'
 import type { PendingRequest } from '@shared/pending-requests'
-import type { ThreadEntry, ToolEntry } from '@shared/thread'
+import { diffPathOf, toolContentItems, type ThreadEntry, type ToolEntry } from '@shared/thread'
 
 /** A request the panel shows; the cards it has no words for are answered in the window. */
 export type TrayRequest = Exclude<PendingRequest, { kind: 'other' }>
@@ -41,7 +41,10 @@ export function changedFiles(entries: readonly ThreadEntry[]): number {
     if (entry.kind !== 'tool' || i < turn || entry.status !== 'completed') return
     if (!FILE_KINDS.has(entry.toolKind)) return
     for (const location of entry.locations) files.add(location.path)
-    for (const content of entry.content) if (content.type === 'diff') files.add(content.path)
+    for (const content of toolContentItems(entry)) {
+      const path = diffPathOf(content)
+      if (path !== null) files.add(path)
+    }
   })
   return files.size
 }

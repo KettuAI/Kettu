@@ -140,6 +140,13 @@ export function setHideIgnored(hide: boolean): void {
   writeJson(HIDE_IGNORED_KEY, hide)
 }
 
+const isWebClient = (): boolean =>
+  typeof window !== 'undefined' &&
+  (window as { kettu?: { client?: string } }).kettu?.client === 'web'
+const MAX_CACHED_PROJECTS_DESKTOP = 16
+const MAX_CACHED_PROJECTS_WEB = 8
+const MAX_AGENT_FOLDERS = 100
+
 /** A session's agent folder is asked for again when the session moves to another agent. */
 export const agentFolderKey = (sessionId: string, agentId: AgentId): string =>
   `${sessionId}\0${agentId}`
@@ -153,7 +160,19 @@ export function ensureAgentFolder(sessionId: string, agentId: AgentId): void {
   askedFolders.add(key)
   host('files.agentFolder', { sessionId }).then(
     (folder) =>
-      useFilesStore.setState((s) => ({ agentFolders: { ...s.agentFolders, [key]: folder } })),
+      useFilesStore.setState((s) => {
+        const agentFolders = { ...s.agentFolders }
+        if (key in agentFolders) delete agentFolders[key]
+        agentFolders[key] = folder
+        const keys = Object.keys(agentFolders)
+        for (let i = 0; keys.length - i > MAX_AGENT_FOLDERS; i++) {
+          const oldest = keys[i]!
+          if (oldest === key) continue
+          delete agentFolders[oldest]
+          askedFolders.delete(oldest)
+        }
+        return { agentFolders }
+      }),
     // Asked again by the next reply that names a file outside the project.
     () => askedFolders.delete(key),
   )
@@ -246,7 +265,31 @@ export function loadFiles(projectPath: string): Promise<void> {
     })
     .then((files) => {
       if (useFilesStore.getState().byProject[projectPath] !== files) {
-        useFilesStore.setState((s) => ({ byProject: { ...s.byProject, [projectPath]: files } }))
+        const limit = isWebClient() ? MAX_CACHED_PROJECTS_WEB : MAX_CACHED_PROJECTS_DESKTOP
+        useFilesStore.setState((s) => {
+          const byProject = { ...s.byProject }
+          if (projectPath in byProject) delete byProject[projectPath]
+          byProject[projectPath] = files
+          let folderReads = s.folderReads
+          const keys = Object.keys(byProject)
+          for (let i = 0; keys.length - i > limit; i++) {
+            const oldest = keys[i]!
+            if (
+              oldest === projectPath ||
+              watchers.has(oldest) ||
+              (s.open[oldest]?.length ?? 0) > 0
+            ) {
+              continue
+            }
+            delete byProject[oldest]
+            staleLists.delete(oldest)
+            if (oldest in folderReads) {
+              if (folderReads === s.folderReads) folderReads = { ...s.folderReads }
+              delete folderReads[oldest]
+            }
+          }
+          return { byProject, folderReads }
+        })
       }
       return files.error ? undefined : readFoldersAgain(projectPath, files.ignoredFolders)
     })

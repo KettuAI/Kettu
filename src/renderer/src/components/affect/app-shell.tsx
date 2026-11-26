@@ -2796,6 +2796,7 @@ export const css = /* css */ `
   /* A long list scrolls under the head, the cards at the bottom stay */
   overflow-y: auto;
   overscroll-behavior: contain;
+  contain: layout style;
   scrollbar-width: none;
 }
 .ui-as-side__nav::-webkit-scrollbar { display: none; }

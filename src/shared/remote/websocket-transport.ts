@@ -19,14 +19,29 @@ export function webSocketTransport(socket: WebSocket, relayed = false): Promise<
   let paused = false
   let listener: ((message: Uint8Array) => void) | null = null
   const waiting: Uint8Array[] = []
+  let waitingHead = 0
   const closeListeners: (() => void)[] = []
 
+  const clearWaiting = (): void => {
+    waiting.length = 0
+    waitingHead = 0
+  }
   const deliver = (): void => {
-    while (open && !paused && listener && waiting.length > 0) listener(waiting.shift()!)
+    while (open && !paused && listener && waitingHead < waiting.length) {
+      const next = waiting[waitingHead++]!
+      if (waitingHead === waiting.length) clearWaiting()
+      else if (waitingHead >= 64 && waitingHead * 2 >= waiting.length) {
+        waiting.splice(0, waitingHead)
+        waitingHead = 0
+      }
+      listener(next)
+    }
   }
   const end = (): void => {
     if (!open) return
     open = false
+    listener = null
+    clearWaiting()
     socket.close(1000)
   }
 
@@ -42,6 +57,8 @@ export function webSocketTransport(socket: WebSocket, relayed = false): Promise<
   socket.addEventListener('close', () => {
     open = false
     closed = true
+    listener = null
+    clearWaiting()
     for (const notify of closeListeners.splice(0)) notify()
   })
 

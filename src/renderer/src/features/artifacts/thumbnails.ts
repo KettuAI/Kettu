@@ -27,14 +27,27 @@ export type Thumbnail =
 /** What a thumbnail is made from: the version, and whether it is a canvas. */
 export type ThumbnailOf = Pick<ArtifactSummary, 'id' | 'version' | 'pages' | 'canvas'>
 
-/** About two hundred cards' worth of images; older ones are asked for again. */
-const KEPT = 200
+const isWebClient = (): boolean =>
+  typeof window !== 'undefined' &&
+  (window as { kettu?: { client?: string } }).kettu?.client === 'web'
+
+/** Max cached thumbnails and byte budget; older ones are evicted LRU and re-requested when visible. */
+const KEPT_DESKTOP = 200
+const KEPT_WEB = 40
+const MAX_BYTES_DESKTOP = 32 * 1024 * 1024
+const MAX_BYTES_WEB = 8 * 1024 * 1024
 /** As many as main renders at once. */
 const AT_ONCE = 3
 
-const made = new Map<string, Thumbnail>()
+interface CachedThumbnail {
+  thumbnail: Thumbnail
+  bytes: number
+}
+
+const made = new Map<string, CachedThumbnail>()
+let cachedBytes = 0
 const waiting: { key: string; id: string; run: () => Promise<Thumbnail> }[] = []
-const listeners = new Set<() => void>()
+const listenersByKey = new Map<string, Set<() => void>>()
 let asking = 0
 
 const LOADING: Thumbnail = { state: 'loading' }
@@ -43,11 +56,37 @@ function keyOf(artifact: Pick<ArtifactSummary, 'id' | 'version'>): string {
   return `${artifact.id}:${artifact.version}`
 }
 
-function settle(key: string, thumbnail: Thumbnail): void {
+function bytesOf(thumbnail: Thumbnail): number {
+  return thumbnail.state === 'ready' ? thumbnail.src.length * 2 : 0
+}
+
+function notifyKey(key: string): void {
+  const listeners = listenersByKey.get(key)
+  if (!listeners) return
+  for (const listener of [...listeners]) listener()
+}
+
+function evict(key: string): void {
+  const existing = made.get(key)
+  if (!existing) return
   made.delete(key)
-  made.set(key, thumbnail)
-  if (made.size > KEPT) made.delete(made.keys().next().value!)
-  for (const listener of listeners) listener()
+  cachedBytes -= existing.bytes
+}
+
+function settle(key: string, thumbnail: Thumbnail): void {
+  evict(key)
+  const bytes = bytesOf(thumbnail)
+  const maxEntries = isWebClient() ? KEPT_WEB : KEPT_DESKTOP
+  const maxBytes = isWebClient() ? MAX_BYTES_WEB : MAX_BYTES_DESKTOP
+  made.set(key, { thumbnail, bytes })
+  cachedBytes += bytes
+  while ((made.size > maxEntries || cachedBytes > maxBytes) && made.size > 1) {
+    const oldest = made.keys().next().value
+    if (oldest === undefined || oldest === key) break
+    evict(oldest)
+    notifyKey(oldest)
+  }
+  notifyKey(key)
 }
 
 async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
@@ -122,15 +161,26 @@ function drop(key: string): void {
   if (at >= 0) waiting.splice(at, 1)
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+function subscribeKey(key: string, listener: () => void): () => void {
+  let set = listenersByKey.get(key)
+  if (!set) {
+    set = new Set()
+    listenersByKey.set(key, set)
+  }
+  set.add(listener)
+  return () => {
+    set.delete(listener)
+    if (set.size === 0) listenersByKey.delete(key)
+  }
 }
 
 /** The card's thumbnail, asked for while `inView`. */
 export function useThumbnail(artifact: ThumbnailOf, inView: boolean): Thumbnail {
   const key = keyOf(artifact)
-  const thumbnail = useSyncExternalStore(subscribe, () => made.get(key) ?? LOADING)
+  const thumbnail = useSyncExternalStore(
+    (listener) => subscribeKey(key, listener),
+    () => made.get(key)?.thumbnail ?? LOADING,
+  )
   useEffect(() => {
     if (!inView) return
     ask(key, artifact.id, () => render(artifact))
@@ -152,7 +202,10 @@ export function usePartThumbnail(
   inView: boolean,
 ): Thumbnail {
   const key = `${id}:${version}:${JSON.stringify(part)}`
-  const thumbnail = useSyncExternalStore(subscribe, () => made.get(key) ?? LOADING)
+  const thumbnail = useSyncExternalStore(
+    (listener) => subscribeKey(key, listener),
+    () => made.get(key)?.thumbnail ?? LOADING,
+  )
   useEffect(() => {
     if (!inView) return
     ask(key, id, async () => {
@@ -164,4 +217,17 @@ export function usePartThumbnail(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, inView])
   return thumbnail
+}
+
+/** Test-only helper to inspect or clear the thumbnail cache. */
+export const _thumbnailsCacheForTests = {
+  size: () => made.size,
+  bytes: () => cachedBytes,
+  settleForTest: (key: string, thumbnail: Thumbnail) => settle(key, thumbnail),
+  clear: () => {
+    made.clear()
+    cachedBytes = 0
+    waiting.length = 0
+    listenersByKey.clear()
+  },
 }

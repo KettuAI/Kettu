@@ -1062,8 +1062,24 @@ async function deleteUnlessAtStake(
 /**
  * Deletes one session or several after one confirmation, which calls out the uncommitted files in
  * their folders and offers to archive instead, which keeps them.
+ * Mounted lazily on first open so hundreds of sidebar rows pay zero store subscriptions while closed.
  */
-export function DeleteSessionDialog({
+export function DeleteSessionDialog(props: {
+  sessionId: string
+  title: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onDeleted?: () => void
+  /** Several sessions picked together, this one among them. */
+  ids?: readonly string[]
+}) {
+  const [mounted, setMounted] = useState(props.open)
+  if (props.open && !mounted) setMounted(true)
+  if (!mounted) return null
+  return <DeleteSessionDialogInner {...props} />
+}
+
+function DeleteSessionDialogInner({
   sessionId,
   title,
   open,

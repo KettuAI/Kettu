@@ -220,15 +220,47 @@ export function rewatchGit(hostId: string | null = null): void {
 const RETRY_MS = 60_000
 // A card shown this long after its details were read reads them again.
 const STALE_MS = 60_000
+const MAX_CACHED_REFS = 200
+const MAX_CACHED_AVATARS = 200
 const referenceLoads = new Map<string, Promise<unknown>>()
 const loadedAt = new Map<string, number>()
 
+function setLoadedAt(url: string, at: number): void {
+  loadedAt.delete(url)
+  loadedAt.set(url, at)
+  while (loadedAt.size > MAX_CACHED_REFS) {
+    const oldest = loadedAt.keys().next().value
+    if (oldest === undefined || oldest === url) break
+    loadedAt.delete(oldest)
+  }
+}
+
+function setCapped<T>(
+  record: Record<string, T>,
+  key: string,
+  value: T,
+  limit: number,
+): Record<string, T> {
+  const next = { ...record }
+  if (key in next) delete next[key]
+  next[key] = value
+  const keys = Object.keys(next)
+  for (let i = 0; keys.length - i > limit; i++) {
+    const oldest = keys[i]!
+    if (oldest === key) continue
+    delete next[oldest]
+  }
+  return next
+}
+
 function receivePullRequest(pr: PullRequest, asked: string): void {
-  loadedAt.set(asked, Date.now())
+  setLoadedAt(asked, Date.now())
   useGitStore.setState((s) => ({
-    pullRequests: { ...s.pullRequests, [pr.url]: pr },
+    pullRequests: setCapped(s.pullRequests, pr.url, pr, MAX_CACHED_REFS),
     pullRequestAliases:
-      asked === pr.url ? s.pullRequestAliases : { ...s.pullRequestAliases, [asked]: pr.url },
+      asked === pr.url
+        ? s.pullRequestAliases
+        : setCapped(s.pullRequestAliases, asked, pr.url, MAX_CACHED_REFS),
     referenceErrors: without(s.referenceErrors, asked),
   }))
 }
@@ -241,7 +273,7 @@ function loadOnce(url: string, run: () => Promise<void>): Promise<void> {
       .catch((error: unknown) => {
         const message = errorMessage(error)
         useGitStore.setState((s) => ({
-          referenceErrors: { ...s.referenceErrors, [url]: message },
+          referenceErrors: setCapped(s.referenceErrors, url, message, MAX_CACHED_REFS),
         }))
       })
       .finally(() =>
@@ -278,9 +310,9 @@ export function receiveReference(url: string, found: IssueLookup): void {
     receivePullRequest(found.pullRequest, url)
     return
   }
-  loadedAt.set(url, Date.now())
+  setLoadedAt(url, Date.now())
   useGitStore.setState((s) => ({
-    issues: { ...s.issues, [url]: found.issue },
+    issues: setCapped(s.issues, url, found.issue, MAX_CACHED_REFS),
     referenceErrors: without(s.referenceErrors, url),
   }))
 }
@@ -377,13 +409,23 @@ export function loadAvatar(login: string): void {
       // No URL means GitHub has no picture; a URL whose picture did not load is asked again.
       const picture = url === null ? null : await window.kettu.avatars.load(url)
       if (url !== null && picture === null) {
+        avatarFailures.delete(login)
         avatarFailures.set(login, Date.now())
+        if (avatarFailures.size > MAX_CACHED_AVATARS) {
+          avatarFailures.delete(avatarFailures.keys().next().value!)
+        }
       } else {
         avatarFailures.delete(login)
-        useGitStore.setState((s) => ({ avatars: { ...s.avatars, [login]: picture } }))
+        useGitStore.setState((s) => ({
+          avatars: setCapped(s.avatars, login, picture, MAX_CACHED_AVATARS),
+        }))
       }
     } catch {
+      avatarFailures.delete(login)
       avatarFailures.set(login, Date.now())
+      if (avatarFailures.size > MAX_CACHED_AVATARS) {
+        avatarFailures.delete(avatarFailures.keys().next().value!)
+      }
     } finally {
       avatarLoads.delete(login)
     }
@@ -547,5 +589,6 @@ export function gitDialogOpener(projectPath: string): Element | null {
 }
 
 export function closeGitDialog(projectPath: string): void {
+  openers.delete(projectPath)
   useGitStore.setState((s) => ({ dialogs: without(s.dialogs, projectPath) }))
 }

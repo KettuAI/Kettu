@@ -114,6 +114,9 @@ export async function startDeviceChannel(
   // After the messages that arrived before the close are read.
   transport.onClose(() => {
     void reading.then(() => {
+      waiting.length = 0
+      listener = null
+      bytesListener = null
       resolveClosed()
       fail(new HandshakeDropped())
     })

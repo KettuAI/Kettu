@@ -18,6 +18,7 @@ import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { StillRunningLine } from '../still-running-line'
+import { lastUserEntryId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
 import { useEditable, useEditFrom } from './edit-from-here'
@@ -82,16 +83,7 @@ export function UserActions({
   const row = useRef<HTMLSpanElement>(null)
   const cancelled = useRef<HTMLButtonElement>(null)
   // Only the last turn's message stands for a cancelled turn still waiting to be written again.
-  const lastTurn = useThreadsStore((s) => {
-    const order = s.replicas[sessionId]?.state?.order
-    const byId = s.replicas[sessionId]?.state?.byId
-    if (!order || !byId) return false
-    for (let i = order.length - 1; i >= 0; i--) {
-      const entry = byId[order[i]!]
-      if (entry?.kind === 'user' && !entry.steered) return entry.id === entryId
-    }
-    return false
-  })
+  const lastTurn = useThreadsStore((s) => lastUserEntryId(s.replicas[sessionId]?.state) === entryId)
   const meta = (
     <span ref={row} className="ks-user__meta" data-open={edit.open ? '' : undefined}>
       {steered && (

@@ -4,7 +4,7 @@ import { useDark } from '@renderer/hooks/use-dark'
 import { cn } from '@renderer/lib/utils'
 import { useDiffStyle, type DiffStyle } from '@renderer/stores/diff-style'
 import { useCodeThemes } from './code-themes'
-import { diffsPool as pool } from './diff-pool'
+import { getDiffsPool } from './diff-pool'
 import type { DiffProps } from './index'
 
 // Side by side needs room for two columns of code, so a diff narrower than this, as in a thread
@@ -50,6 +50,7 @@ function DiffImpl({ path, oldText, newText, className }: DiffProps) {
     }),
     [dark, theme, diffStyle],
   )
+  const pool = useMemo(() => getDiffsPool(), [])
   return (
     <WorkerPoolContext.Provider value={pool}>
       <div ref={setBox}>

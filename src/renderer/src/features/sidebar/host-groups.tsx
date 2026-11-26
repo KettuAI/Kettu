@@ -6,7 +6,6 @@ import { Alert02Icon, ArrowRight01Icon, ComputerIcon, LaptopIcon } from '@hugeic
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { SessionSummary } from '@shared/agent-host'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { HostIcon, OnlineDot } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
@@ -20,6 +19,7 @@ import {
   byActivity,
   hostGroup,
   hostOfSession,
+  needsYouSummaries,
   needsYouTree,
   sidebarRows,
   useSessionsStore,
@@ -49,20 +49,7 @@ export function NeedsYouGroup({
 }) {
   const { t } = useTranslation('sidebar')
   // The sessions that need you and their parents, so a sub-session's request lists its root.
-  const summaries = useSessionsStore(
-    useShallow((s) => {
-      const found = new Set<SessionSummary>()
-      for (const summary of Object.values(s.byId)) {
-        if (summary.permissionCount === 0 && summary.attention !== 'error') continue
-        let at: SessionSummary | undefined = summary
-        while (at && !found.has(at)) {
-          found.add(at)
-          at = at.parentId ? s.byId[at.parentId] : undefined
-        }
-      }
-      return [...found]
-    }),
-  )
+  const summaries = useSessionsStore(useShallow((s) => needsYouSummaries(s.byId)))
   const shown = (host: string | null) =>
     hosts.includes(host) && !(host !== null && away.includes(host))
   const tasks = useTasksStore(

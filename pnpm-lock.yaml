@@ -15,7 +15,7 @@ patchedDependencies:
     hash: b311480dbd527bb4ad20f67fd46c12f4d36bd08b85a763d6a3367362d3f226b0
     path: patches/@pierre__theming@1.0.1.patch
   '@shadcn/react@0.3.1':
-    hash: d37d944084d6bf7912561042021583dcbb59042a2d4607821b335ed2c8615238
+    hash: 58e5a3028572fcd02982f02d71a2e2a5eb330d2fa1d5c6b0d3a5e76ece8584ff
     path: patches/@shadcn__react@0.3.1.patch
   streamdown@2.7.1:
     hash: 8f0984a9b6cf258f76d0beef150ece77691ac00182c8d35992196bf84ef3f168
@@ -118,7 +118,7 @@ importers:
         version: 1.6.0(@shikijs/themes@4.5.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@shadcn/react':
         specifier: ^0.3.1
-        version: 0.3.1(patch_hash=d37d944084d6bf7912561042021583dcbb59042a2d4607821b335ed2c8615238)(@types/react@19.3.0)(react@19.3.1)
+        version: 0.3.1(patch_hash=58e5a3028572fcd02982f02d71a2e2a5eb330d2fa1d5c6b0d3a5e76ece8584ff)(@types/react@19.3.0)(react@19.3.1)
       '@streamdown/cjk':
         specifier: 1.0.4
         version: 1.0.4(@types/mdast@4.0.4)(micromark-util-types@2.0.3)(micromark@4.0.3)(react@19.3.1)(unified@11.0.5)
@@ -6223,7 +6223,7 @@ snapshots:
 
   '@sec-ant/readable-stream@0.4.1': {}
 
-  '@shadcn/react@0.3.1(patch_hash=d37d944084d6bf7912561042021583dcbb59042a2d4607821b335ed2c8615238)(@types/react@19.3.0)(react@19.3.1)':
+  '@shadcn/react@0.3.1(patch_hash=58e5a3028572fcd02982f02d71a2e2a5eb330d2fa1d5c6b0d3a5e76ece8584ff)(@types/react@19.3.0)(react@19.3.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react: 19.3.1
