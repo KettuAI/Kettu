@@ -15,6 +15,7 @@ import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
 import { newSessionPanel } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
@@ -246,6 +247,12 @@ export function usePromptChips({
   const command = leadingName === null ? undefined : commands.find((c) => c.name === leadingName)
   const strip = !!command && focused && !popoverOpen && !hover && !pasted
 
+  // Passive previews and status strips can overlap the native browser view, but do not dismiss on
+  // outside clicks and must not suspend window drag regions.
+  useOverlayPresence(!!hover)
+  useOverlayPresence(!!pasted)
+  useOverlayPresence(strip)
+
   const overlays: ReactNode = (
     <>
       {links.dialog}
@@ -259,6 +266,7 @@ export function usePromptChips({
             className="pointer-events-none isolate z-(--layer-menu) outline-none"
           >
             <Popover.Popup
+              data-overlay-layer=""
               initialFocus={false}
               finalFocus={false}
               className={cn(POPUP, 'pointer-events-none')}
@@ -286,9 +294,10 @@ export function usePromptChips({
             side="top"
             align="start"
             sideOffset={4}
-            className="isolate z-(--layer-menu) outline-none"
+            className="isolate z-(--layer-menu) outline-none app-region-no-drag"
           >
             <Popover.Popup
+              data-overlay-layer=""
               initialFocus={false}
               finalFocus={false}
               className="flex items-center gap-2.5 rounded-lg bg-toast py-1.5 pr-1.5 pl-2.5 text-hint text-toast-foreground shadow-toast outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none"
@@ -314,9 +323,10 @@ export function usePromptChips({
             side="top"
             align="start"
             sideOffset={4}
-            className="pointer-events-none isolate z-40 w-(--anchor-width) outline-none"
+            className="pointer-events-none isolate z-(--layer-menu) w-(--anchor-width) outline-none"
           >
             <Popover.Popup
+              data-overlay-layer=""
               initialFocus={false}
               finalFocus={false}
               className={cn(

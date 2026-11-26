@@ -428,6 +428,7 @@ export function DateRangePicker({
       {open && (
         <div
           id={`${uid}-panel`}
+          data-overlay-layer=""
           role="dialog"
           aria-label={labels.choose}
           className="ui-drpc__panel"

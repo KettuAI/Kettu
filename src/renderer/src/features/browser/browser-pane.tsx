@@ -44,6 +44,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { panelSession } from '@renderer/stores/view'
 import { AddressField } from './address-field'
 import { OriginBar } from './origin-bar'
+import { covers, observeOverlayGeometry } from './overlay-cover'
 import { BringSignInsOffer, SignInChip } from './sign-in-offer'
 
 /**
@@ -62,6 +63,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   )
   const agent = useControlAgent(agentId, hostId)
   const overlays = useOpenOverlays()
+  const hasOpenOverlays = Object.keys(overlays).length > 0
   const showsPage = !!state && !!(state.url || state.page)
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   // The frame the page fills.
@@ -69,6 +71,10 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   const address = useRef<HTMLInputElement>(null)
   // The session the pane shows, so a capture that lands after the pane left it is dropped.
   const live = useRef<string | null>(null)
+  // Tracks which session has an active or completed freeze in the current show cycle so continuous
+  // geometry updates (typing in a popover, dragging a card) do not spam capturePage IPCs.
+  const freezingSession = useRef<string | null>(null)
+  const frozenSession = useRef<string | null>(null)
   const name = agentId ? agentName(agentId, hostId) : t('empty.agent')
 
   // The pane shows the page, so the toggle's dot has done its work.
@@ -98,16 +104,6 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     if (sessionId) void window.kettu.browser.navigate(sessionId, url)
   }
 
-  // Main shows the session's page while the pane is open, and keeps it while the pane is hidden;
-  // the pill on the page names the session's agent.
-  useEffect(() => {
-    if (!sessionId) return
-    void window.kettu.browser.show(sessionId, agent)
-    return () => {
-      void window.kettu.browser.hide(sessionId)
-    }
-  }, [sessionId, agent])
-
   // The page's frame, in the window's own pixels: the renderer's zoom scales CSS pixels. Main
   // rounds the page's corners as the frame's are, since nothing in the renderer can clip a view.
   const report = useCallback(() => {
@@ -128,14 +124,15 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
 
   // An overlay that covers the page takes a still in its place: a web view is a native layer the
   // renderer cannot draw over. Whether one covers it depends on where the overlays and the page's
-  // frame are, so the check runs whenever an overlay opens or closes, since one that covers the
-  // page can open while another is already open, and whenever the frame moves or resizes, since a
-  // side panel opening or a pane maximizing brings the page under an overlay that stays up.
+  // frame are, so the check runs whenever an overlay opens or closes, whenever an open overlay
+  // moves or resizes, and whenever the frame moves or resizes, since any of those can bring the
+  // page under an overlay that stays up.
   const coverCheck = useRef(0)
   const checkCover = useCallback(() => {
     cancelAnimationFrame(coverCheck.current)
     if (!sessionId) return
     const thaw = () => {
+      if (frozenSession.current === sessionId) frozenSession.current = null
       if (!useBrowserStore.getState().stills[sessionId]) return
       void window.kettu.browser.thaw(sessionId).finally(() => {
         useBrowserStore.getState().setStill(sessionId, null)
@@ -151,6 +148,11 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         thaw()
         return
       }
+      if (frozenSession.current === sessionId && useBrowserStore.getState().stills[sessionId]) {
+        return
+      }
+      if (freezingSession.current === sessionId) return
+      freezingSession.current = sessionId
       void window.kettu.browser
         .freeze(sessionId)
         .then((image) => {
@@ -159,16 +161,36 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
           // page already frozen, so whether to keep the still is decided by what covers it now.
           const now = page.current
           if (live.current === sessionId && now && covers(now)) {
+            frozenSession.current = sessionId
             useBrowserStore.getState().setStill(sessionId, image)
           } else {
+            if (frozenSession.current === sessionId) frozenSession.current = null
             void window.kettu.browser.thaw(sessionId).finally(() => {
               useBrowserStore.getState().setStill(sessionId, null)
             })
           }
         })
         .catch(() => {})
+        .finally(() => {
+          if (freezingSession.current === sessionId) freezingSession.current = null
+        })
     })
   }, [sessionId])
+
+  // Main shows the session's page while the pane is open, and keeps it while the pane is hidden;
+  // the pill on the page names the session's agent.
+  useEffect(() => {
+    if (!sessionId) return
+    frozenSession.current = null
+    freezingSession.current = null
+    void window.kettu.browser.show(sessionId, agent)
+    checkCover()
+    return () => {
+      frozenSession.current = null
+      freezingSession.current = null
+      void window.kettu.browser.hide(sessionId)
+    }
+  }, [sessionId, agent, checkCover])
 
   const frameChanged = useCallback(() => {
     report()
@@ -196,12 +218,21 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     return () => cancelAnimationFrame(coverCheck.current)
   }, [checkCover, overlays, maximized])
 
+  // Re-check coverage while overlays remain open and move, resize, or mount nested layers
+  // (such as typing in the composer popover, moving between hovered chips, or dragging a card).
+  useEffect(() => {
+    if (!sessionId || !hasOpenOverlays) return
+    return observeOverlayGeometry(checkCover)
+  }, [sessionId, hasOpenOverlays, checkCover])
+
   // Leaving the pane or its session drops a still that is no longer in front of anything.
   useEffect(() => {
     if (!sessionId) return
     live.current = sessionId
     return () => {
       live.current = null
+      frozenSession.current = null
+      freezingSession.current = null
       if (!useBrowserStore.getState().stills[sessionId]) return
       void window.kettu.browser.thaw(sessionId)
       useBrowserStore.getState().setStill(sessionId, null)
@@ -520,20 +551,4 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
       )}
     </div>
   )
-}
-
-/** Whether an open overlay covers the page's area. */
-function covers(area: Element): boolean {
-  const bounds = area.getBoundingClientRect()
-  for (const overlay of document.querySelectorAll('[data-overlay-layer]')) {
-    if (overlay.closest('[data-closed]')) continue
-    const rect = overlay.getBoundingClientRect()
-    const apart =
-      rect.right <= bounds.left ||
-      rect.left >= bounds.right ||
-      rect.bottom <= bounds.top ||
-      rect.top >= bounds.bottom
-    if (!apart) return true
-  }
-  return false
 }

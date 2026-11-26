@@ -21,6 +21,7 @@ export function QuitHint() {
         {shown && (
           <motion.div
             key={shown.expiresAt}
+            data-overlay-layer=""
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
