@@ -208,6 +208,8 @@ export interface ClientRegions {
   allowed(urls: string[]): string[]
   /** The name the signed list gives the region at `url`, or null. */
   regionName?(url: string): string | null
+  /** 返回签名清单中指定 `url` 区域的多语言名称映射，未配置时返回 null。 */
+  regionNames?(url: string): Record<string, string> | null
 }
 
 /** The Kettu relay, as this computer reaches hosts through it. */
@@ -1417,7 +1419,14 @@ class HostLink {
       return { state: 'online', relay: via.relay, own: true, ...allowed }
     }
     const region = this.client.options.relay?.regions?.regionName?.(via.relay) ?? null
-    return { state: 'online', relay: via.relay, ...(region ? { region } : {}), ...allowed }
+    const regionNames = this.client.options.relay?.regions?.regionNames?.(via.relay) ?? null
+    return {
+      state: 'online',
+      relay: via.relay,
+      ...(region ? { region } : {}),
+      ...(regionNames ? { regionNames } : {}),
+      ...allowed,
+    }
   }
 }
 

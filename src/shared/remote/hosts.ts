@@ -6,7 +6,7 @@ import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceName } from './device'
 import { isAccountId, type DirectAddress } from './protocol'
 import { parseHostRelay, relayOrigin, type HostRelay } from './relay'
-import { isRegionName } from './relay-regions'
+import { isRegionName, parseRegionNames } from './relay-regions'
 import { parseTranscript, type PairTranscript } from './discovery'
 
 /** How long pairing waits for a finished handshake before the host counts as unreachable. */
@@ -139,7 +139,14 @@ export type HostConnection =
    * `terminal` while its owner allows devices the terminal.
    */
   | { state: 'online'; address: DirectAddress; terminal?: true }
-  | { state: 'online'; relay: string; region?: string; own?: true; terminal?: true }
+  | {
+      state: 'online'
+      relay: string
+      region?: string
+      regionNames?: Record<string, string>
+      own?: true
+      terminal?: true
+    }
   /** Not reached; tried again with backoff. `relay` says what the relay answered, if anything. */
   | { state: 'offline'; relay?: RelayProblem }
   | { state: 'stopped'; reason: HostStop }
@@ -453,7 +460,10 @@ const STOPS: readonly string[] = ['removed', 'update_client', 'update_host', 'ot
 
 function parseConnection(value: unknown): HostConnection | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, address, relay, region, own, reason, terminal } = value as Record<string, unknown>
+  const { state, address, relay, region, regionNames, own, reason, terminal } = value as Record<
+    string,
+    unknown
+  >
   if (state === 'connecting') return { state }
   if (state === 'offline') {
     return RELAY_PROBLEMS.includes(relay as string)
@@ -465,7 +475,14 @@ function parseConnection(value: unknown): HostConnection | null {
     if (typeof relay === 'string') {
       if (relayOrigin(relay) !== relay) return null
       if (own === true) return { state, relay, own: true, ...extra }
-      return { state, relay, ...(isRegionName(region) ? { region } : {}), ...extra }
+      const parsedNames = parseRegionNames(regionNames)
+      return {
+        state,
+        relay,
+        ...(isRegionName(region) ? { region } : {}),
+        ...(parsedNames ? { regionNames: parsedNames } : {}),
+        ...extra,
+      }
     }
     const parsed = parseDirectAddress(address)
     return parsed ? { state, address: parsed, ...extra } : null
