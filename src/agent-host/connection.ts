@@ -645,6 +645,10 @@ export interface AgentConnection {
    * What fills a session's context, answered by the agent itself. Without it the host runs the
    * agent's report command in a hidden fork of the session.
    */
-  readContext?(sessionId: string, cwd: string, options: SessionOptions): Promise<ContextBreakdown>
+  readContext?(
+    sessionId: string,
+    cwd: string,
+    options: SessionOptions,
+  ): Promise<ContextBreakdown | null>
   readContextEstimates?(sessionId: string, cwd: string): Promise<ContextEstimates>
 }

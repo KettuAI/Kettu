@@ -7,13 +7,13 @@
 // Kettu reads the store while a session's turn starts or messages sub-agents and while its children
 // run, shows each child it finds as a sub-agent, and loads it in the parent's process.
 
-import { stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import type { SessionTarget } from '../connection'
 import { addEntry, toLf, type MapperOutput, type SubagentState } from '../session-updates'
 import { compareVersions } from '../versions'
+import { withAgySqliteReadOnly } from './agy-sqlite'
 import { DEFAULT_AGY_APP_DATA_DIR, isSafeAgyAppDataDir } from './agy-store'
 
 export const AGY_SUBAGENTS_VERSION = '1.5.15'
@@ -76,40 +76,63 @@ async function readChildrenFromFile(
   file: string,
   parentIds: readonly string[],
 ): Promise<AgyChild[]> {
-  try {
-    await stat(file)
-  } catch {
-    return []
-  }
-  const { DatabaseSync } = await import('node:sqlite')
-  const db = new DatabaseSync(file, { readOnly: true, timeout: 0 })
-  try {
+  const result = await withAgySqliteReadOnly(file, (db) => {
+    const placeholders = parentIds.map(() => '?').join(', ')
     const rows = db
       .prepare(
         `SELECT conversation_id, parent_conversation_id, status, killed, agent_name, title
          FROM conversation_summaries
-         WHERE parent_conversation_id IN (${parentIds.map(() => '?').join(', ')})
+         WHERE parent_conversation_id IN (${placeholders})
          ORDER BY rowid`,
       )
       .all(...parentIds)
-    return rows.flatMap((row): AgyChild[] => {
+    const byId = new Map<string, AgyChild>()
+    for (const row of rows) {
       const id = row.conversation_id
       const parentId = row.parent_conversation_id
-      if (typeof id !== 'string' || typeof parentId !== 'string' || id === '') return []
-      return [
-        {
+      if (typeof id !== 'string' || typeof parentId !== 'string' || id === '') continue
+      byId.set(id, {
+        id,
+        parentId,
+        status: typeof row.status === 'string' ? row.status : '',
+        killed: row.killed === 1 || row.killed === 1n,
+        agent: typeof row.agent_name === 'string' ? row.agent_name : '',
+        title: typeof row.title === 'string' ? row.title : '',
+      })
+    }
+
+    // 补充查询 conversation_parents 表（部分旁路提问或子会话的父子关系只写在该表）。
+    try {
+      const linked = db
+        .prepare(
+          `SELECT cp.conversation_id, cp.parent_id, cs.status, cs.killed, cs.agent_name, cs.title
+           FROM conversation_parents cp
+           LEFT JOIN conversation_summaries cs ON cs.conversation_id = cp.conversation_id
+           WHERE cp.parent_id IN (${placeholders})`,
+        )
+        .all(...parentIds)
+      for (const row of linked) {
+        const id = row.conversation_id
+        const parentId = row.parent_id
+        if (typeof id !== 'string' || typeof parentId !== 'string' || id === '' || byId.has(id)) {
+          continue
+        }
+        byId.set(id, {
           id,
           parentId,
           status: typeof row.status === 'string' ? row.status : '',
           killed: row.killed === 1 || row.killed === 1n,
           agent: typeof row.agent_name === 'string' ? row.agent_name : '',
           title: typeof row.title === 'string' ? row.title : '',
-        },
-      ]
-    })
-  } finally {
-    db.close()
-  }
+        })
+      }
+    } catch {
+      // 旧库不含 conversation_parents 表时静默忽略。
+    }
+
+    return [...byId.values()]
+  })
+  return result ?? []
 }
 
 /**

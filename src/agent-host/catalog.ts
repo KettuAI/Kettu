@@ -234,6 +234,8 @@ export interface AgentDefinition {
   keySignIn?: { method: string; variable: string }
   /** Its sign-in runs the program itself in a terminal, in place of the declared `replaces`. */
   terminalSignIn?: { replaces: readonly string[] }
+  /** 是否支持从本地会话存储直接读取精确上下文分类构成（无需中断当前回合）。 */
+  readsContext?: boolean
   /** 是否在上下文弹窗中展示可加载 Skills 与 MCP 工具定义的 token 估算。 */
   contextEstimates?: boolean
 }

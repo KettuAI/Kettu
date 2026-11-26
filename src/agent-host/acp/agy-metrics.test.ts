@@ -354,4 +354,66 @@ describe('AgyMetrics', () => {
     expect(session().speed).toBeUndefined()
     expect(session().lastRequest).toBeUndefined()
   })
+
+  it('优先使用本地轨迹库原生 TTFT/流式耗时，且自动压缩 CHECKPOINT 不污染对话速度', async () => {
+    let clock = 1_000
+    let latest: AgyStepUsage | null = null
+    const { target, session } = createTarget(1_000)
+    const metrics = new AgyMetrics(
+      async () => latest,
+      { target: () => target, now: () => clock },
+      [],
+    )
+
+    metrics.onNewSession('conv-1')
+    await metrics.preparePrompt('conv-1')
+    clock = 9_000
+    latest = {
+      stepIndex: 1,
+      model: 'gemini-4-neon',
+      createdAt: 1_000,
+      input: 2_000,
+      cacheRead: 10_000,
+      cacheWrite: null,
+      output: 500,
+      ttftMs: 1_200,
+      streamingMs: 2_500,
+    }
+    metrics.onUpdate(
+      'conv-1',
+      { sessionUpdate: 'usage_update', used: 12_500, size: 512_000 },
+      false,
+    )
+    await flush()
+
+    expect(session().speed?.last).toEqual({
+      tokens: 500,
+      ms: 2_500,
+      approx: false,
+      firstTokenMs: 1_200,
+    })
+    expect(session().lastRequest?.ms).toBe(3_700)
+
+    // 紧接着来一条 CHECKPOINT 自动压缩步：只更新 lastRequest，不改写 speed 均值。
+    clock = 15_000
+    latest = {
+      stepIndex: 2,
+      model: null,
+      createdAt: 10_000,
+      input: 8_000,
+      cacheRead: 200_000,
+      cacheWrite: null,
+      output: 3_000,
+      isCompaction: true,
+    }
+    metrics.onUpdate(
+      'conv-1',
+      { sessionUpdate: 'usage_update', used: 20_000, size: 512_000 },
+      false,
+    )
+    await flush()
+
+    expect(session().speed?.session.requests).toBe(1)
+    expect(session().lastRequest?.output).toBe(3_000)
+  })
 })

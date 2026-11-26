@@ -115,8 +115,29 @@ export interface PriceList {
 
 export const PRICES: PriceList = prices
 
-/** A model's price: its own name, then without a trailing date a stored row may still carry. */
+const TRAILING_VARIANT = /-(?:extra-high|minimal|low|medium|high|xhigh|max|thinking|tiered|[a-z])$/
+
+/**
+ * 查找模型对应的公开 API 价格：先精确匹配、去末尾日期，再剥离推理档位/思考/路由后缀，
+ * 最后尝试 `-preview` 公开条目；未收录的模型严格返回 null。
+ */
 export function priceFor(model: string): ModelPrice | null {
+  if (!model) return null
+  const exact = PRICES.models[model]
+  if (exact) return exact
+
   const dated = model.replace(/-\d{8}$/, '')
-  return PRICES.models[model] ?? (dated === model ? null : (PRICES.models[dated] ?? null))
+  if (dated !== model && PRICES.models[dated]) return PRICES.models[dated]!
+
+  // 逐层剥离尾部推理档位、thinking 与内部路由后缀（如 gemini-4-argon-high、gemini-3.8-flash-n）。
+  let base = dated
+  for (let i = 0; i < 3; i++) {
+    const next = base.replace(TRAILING_VARIANT, '')
+    if (next === base) break
+    base = next
+    if (PRICES.models[base]) return PRICES.models[base]!
+  }
+
+  if (PRICES.models[`${base}-preview`]) return PRICES.models[`${base}-preview`]!
+  return null
 }

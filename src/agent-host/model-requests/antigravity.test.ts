@@ -197,4 +197,125 @@ describe('antigravityModelRequests', () => {
     const raw = await reader.raw(target('no-file'), page!.turns[0]!.requests[0]!.raw, false)
     expect(raw.records).toHaveLength(2)
   })
+
+  it('从本地 conversations/*.db 补齐思考 token、原生计时与内部重试信息，并纳入 CHECKPOINT 压缩步', async () => {
+    const { DatabaseSync } = await import('node:sqlite')
+    const home = await mkdtemp(path.join(os.tmpdir(), 'agy-req-db-'))
+    tempDirs.push(home)
+    const sessionId = '33333333-3333-3333-3333-333333333333'
+    const logDir = path.join(
+      home,
+      '.gemini',
+      'antigravity-cli',
+      'brain',
+      sessionId,
+      '.system_generated',
+      'logs',
+    )
+    await mkdir(logDir, { recursive: true })
+    await writeFile(
+      path.join(logDir, 'transcript.jsonl'),
+      [
+        JSON.stringify({
+          step_index: 0,
+          type: 'USER_INPUT',
+          created_at: '2026-11-25T10:00:00Z',
+          content: '优化性能',
+        }),
+        JSON.stringify({
+          step_index: 1,
+          type: 'PLANNER_RESPONSE',
+          status: 'DONE',
+          created_at: '2026-11-25T10:00:01Z',
+          model: 'gemini-4-neon',
+          input_tokens: 1_000,
+          cache_read_tokens: 5_000,
+          output_tokens: 600,
+          content: '已分析',
+        }),
+        JSON.stringify({
+          step_index: 2,
+          type: 'CHECKPOINT',
+          status: 'DONE',
+          created_at: '2026-11-25T10:01:00Z',
+          input_tokens: 800,
+          cache_read_tokens: 20_000,
+          output_tokens: 300,
+          content: '# Resuming from a compaction',
+        }),
+      ].join('\n') + '\n',
+    )
+
+    // 构造对应的 conversations/<sessionId>.db，写入思考 token、TTFT、流式时长与重试记录。
+    const varint = (v: number): Buffer => {
+      let n = BigInt(v)
+      const out: number[] = []
+      do {
+        let b = Number(n & 0x7fn)
+        n >>= 7n
+        if (n > 0n) b |= 0x80
+        out.push(b)
+      } while (n > 0n)
+      return Buffer.from(out)
+    }
+    const fV = (f: number, v: number) => Buffer.concat([varint((f << 3) | 0), varint(v)])
+    const fB = (f: number, p: Buffer) => Buffer.concat([varint((f << 3) | 2), varint(p.length), p])
+    const fS = (f: number, s: string) => fB(f, Buffer.from(s, 'utf8'))
+
+    const convDir = path.join(home, '.gemini', 'antigravity-cli', 'conversations')
+    await mkdir(convDir, { recursive: true })
+    const db = new DatabaseSync(path.join(convDir, `${sessionId}.db`))
+    try {
+      db.exec(`
+        CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);
+        CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, metadata BLOB);
+      `)
+      const genChat = Buffer.concat([
+        fB(11, Buffer.concat([fV(1, 1), fV(2, 250_000_000)])), // TTFT = 1.25s
+        fB(12, Buffer.concat([fV(1, 3), fV(2, 500_000_000)])), // Stream = 3.50s
+        fS(19, 'gemini-4-neon'),
+      ])
+      db.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(10, fB(1, genChat))
+      const stepUsage = Buffer.concat([
+        fV(2, 1_000),
+        fV(3, 600),
+        fV(5, 5_000),
+        fS(7, 'req-xyz'),
+        fV(9, 240),
+        fV(10, 360),
+      ])
+      const retry = Buffer.concat([fS(3, 'overloaded'), fV(5, 429), fB(7, fV(1, 2))])
+      const stepMeta = Buffer.concat([
+        fB(7, fV(1, Math.floor(Date.parse('2026-11-25T10:00:06Z') / 1000))),
+        fB(9, stepUsage),
+        fB(20, Buffer.concat([fV(2, 1), fV(3, 10), fS(4, sessionId)])),
+        fB(28, retry),
+      ])
+      db.prepare('INSERT INTO steps VALUES (?, ?, ?, ?)').run(1, 15, 3, stepMeta)
+    } finally {
+      db.close()
+    }
+
+    const reader = antigravityModelRequests({ home })
+    const page = await reader.page(target(sessionId), null)
+    expect(page?.turns[0]!.requests).toHaveLength(2)
+
+    const [first, compact] = page!.turns[0]!.requests
+    expect(first?.tokens.reasoning).toBe(240)
+    expect(first?.requestId).toBe('req-xyz')
+    expect(first?.endedAt).toBe(Date.parse('2026-11-25T10:00:06Z'))
+    expect(first?.params).toEqual([
+      { name: 'TTFT', value: '1.25s' },
+      { name: 'Stream', value: '3.50s' },
+      { name: 'Retries', value: '1 · code 429 · +2.00s' },
+    ])
+
+    expect(compact?.model).toBe('gemini-4-neon')
+    expect(compact?.actions).toEqual([{ kind: 'tool', label: 'Compaction', count: 1 }])
+    expect(compact?.params).toContainEqual({ name: 'type', value: 'compaction' })
+
+    const summary = await reader.summary(target(sessionId))
+    expect(summary?.requests).toBe(2)
+    expect(summary?.tokens?.reasoning).toBe(240)
+  })
 })

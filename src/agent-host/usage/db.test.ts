@@ -4,6 +4,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SCHEMA_VERSION, UsageDb } from './db'
+import { priceFor } from './model'
 
 const dirs: string[] = []
 
@@ -62,5 +63,16 @@ describe("the usage database's upgrade to version 3", () => {
     expect(bucket('pi')).toEqual({ input: 181_730 + 100 + 10, cache_read: 1_402_752 + 300 })
     expect(bucket('claude-code')).toEqual({ input: 8, cache_read: 80_289 })
     check.close()
+  })
+})
+
+describe('priceFor variant matching', () => {
+  it('剥离推理档位与内部路由后缀并支持 -preview 回退，未收录模型仍返回 null', () => {
+    expect(priceFor('gemini-4-argon-high')).toEqual(priceFor('gemini-4-argon'))
+    expect(priceFor('claude-opus-5-5-max')).toEqual(priceFor('claude-opus-5-5'))
+    expect(priceFor('gemini-3.8-flash-n')).toEqual(priceFor('gemini-3.8-flash'))
+    expect(priceFor('gemini-3.7-flash-tiered')).toEqual(priceFor('gemini-3.7-flash'))
+    expect(priceFor('gemini-3-flash-a')).toEqual(priceFor('gemini-3-flash-preview'))
+    expect(priceFor('non-existent-model-xyz')).toBeNull()
   })
 })

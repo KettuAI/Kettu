@@ -9,6 +9,7 @@ import {
   AgyContextEstimator,
   estimateAgySkills,
   estimateMcpToolList,
+  mapAgyContextBreakdown,
   parseAgySkillsReply,
   type FetchFn,
 } from './agy-context'
@@ -183,6 +184,7 @@ describe('agy-context', () => {
       program: 'agy',
       home,
       run: async (options) => {
+        expect(options.env?.AGY_CLI_DISABLE_AUTO_UPDATE).toBe('true')
         options.onOutput?.('Authentication required')
         return finished('', { code: 1, aborted: true })
       },
@@ -191,5 +193,84 @@ describe('agy-context', () => {
     const result = await estimator.read(cwd, [])
     expect(result.skills).toEqual([{ name: 'demo-skill', tokens: expect.any(Number) }])
     expect(result.mcpServers).toEqual([])
+  })
+
+  it('将本地 gen_metadata 的 10 类上下文构成映射为 Kettu ContextBreakdown 并拆分 MCP 工具', () => {
+    const breakdown = mapAgyContextBreakdown(
+      {
+        model: 'gemini-4-neon',
+        responseModel: 'gemini-4-neon',
+        modelDisplayName: 'Gemini 4 Neon (XHigh)',
+        usage: null,
+        ttftMs: null,
+        streamingDurationMs: null,
+        extraMeta: {},
+        retries: [],
+        contextWindow: {
+          estimatedTokensUsed: 100_000,
+          maxContextTokens: 500_000,
+          totalTokens: 100_000,
+          groups: [
+            { name: 'System Prompt', type: 1, source: 1, tokens: 3_000, children: [] },
+            { name: 'Unspecified', type: 0, source: 1, tokens: 2_000, children: [] },
+            {
+              name: 'Tools',
+              type: 2,
+              source: 1,
+              tokens: 25_000,
+              children: [
+                { name: 'read_file', tokens: 10_000 },
+                { name: 'mcp_kettu_set_plan', tokens: 8_000 },
+                { name: 'mcp_github_get_me', tokens: 5_000 },
+              ],
+            },
+            {
+              name: 'Mcp Tools',
+              type: 4,
+              source: 1,
+              tokens: 1_000,
+              children: [{ name: 'mcp_servers', tokens: 1_000 }],
+            },
+            {
+              name: 'Skills',
+              type: 5,
+              source: 1,
+              tokens: 4_000,
+              children: [{ name: 'frontend-design', tokens: 4_000 }],
+            },
+            {
+              name: 'Rules',
+              type: 3,
+              source: 1,
+              tokens: 5_000,
+              children: [{ name: 'user_rules', tokens: 5_000 }],
+            },
+            { name: 'Chat Messages', type: 7, source: 0, tokens: 60_000, children: [] },
+          ],
+        },
+      },
+      12345,
+    )
+
+    expect(breakdown).not.toBeNull()
+    expect(breakdown!.model).toBe('Gemini 4 Neon (XHigh)')
+    expect(breakdown!.used).toBe(100_000)
+    expect(breakdown!.size).toBe(500_000)
+    const byName = Object.fromEntries(breakdown!.categories.map((c) => [c.name, c.tokens]))
+    expect(byName).toEqual({
+      'System prompt': 5_000,
+      'MCP tools': 14_000,
+      'System tools': 12_000,
+      Skills: 4_000,
+      'Memory files': 5_000,
+      Messages: 60_000,
+      'Free space': 400_000,
+    })
+    expect(breakdown!.lists.map((l) => l.name)).toEqual([
+      'MCP tools',
+      'Skills',
+      'Memory files',
+      'System tools',
+    ])
   })
 })

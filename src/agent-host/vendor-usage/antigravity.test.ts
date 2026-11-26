@@ -6,6 +6,7 @@ import {
   antigravitySignIn,
   antigravitySignInMethod,
   antigravityTier,
+  antigravityTierMultiple,
   antigravityTierSignIn,
   parseAntigravityCredits,
   parseAntigravityUsage,
@@ -241,5 +242,71 @@ describe('Google Antigravity plan limits', () => {
     expect(antigravityLimitsRead('agent-platform')).toBe('none')
     // Unknown: Kettu asks agy for its plan first, and never runs `/usage` blind.
     expect(antigravityLimitsRead(null)).toBe('unknown')
+  })
+
+  it('兼容 Proto3 零值省略（仅带未来重置时间或 disabled）与 7d 窗口，并识别 Ultra 5x/20x 档位', () => {
+    const reply = {
+      status: 'SUCCESS',
+      command: {
+        name: 'usage',
+        data: {
+          groups: [
+            {
+              name: 'Gemini 4 Argon',
+              buckets: [
+                // remaining_fraction 省略但 reset_time 在未来，应识别为已用 100%。
+                { window: '7d', reset_time: '2026-11-23T00:00:00Z' },
+                // disabled === true 应识别为已用 100%。
+                { window: '5h', disabled: true, reset_time: '2026-11-17T06:00:00Z' },
+                // 无 window 但 reset_time 在 6 小时内，推断为 5h。
+                { remaining_fraction: 0.4, reset_time: '2026-11-17T06:00:00Z' },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    expect(parseAntigravityUsage(reply, NOW)?.limits).toEqual([
+      {
+        window: 'seven_day_gemini_4_argon',
+        label: 'Weekly · Gemini 4 Argon',
+        usedPercent: 100,
+        resetsAt: Date.UTC(2026, 10, 23, 0, 0, 0),
+        state: 'reached',
+        observedAt: NOW,
+      },
+      {
+        window: 'five_hour_gemini_4_argon',
+        label: '5-hour · Gemini 4 Argon',
+        usedPercent: 100,
+        resetsAt: Date.UTC(2026, 10, 17, 6, 0, 0),
+        state: 'reached',
+        observedAt: NOW,
+      },
+      {
+        window: 'five_hour_gemini_4_argon',
+        label: '5-hour · Gemini 4 Argon',
+        usedPercent: 60,
+        resetsAt: Date.UTC(2026, 10, 17, 6, 0, 0),
+        state: 'ok',
+        observedAt: NOW,
+      },
+    ])
+
+    expect(
+      antigravityTierMultiple({
+        antigravity: { tier: { id: 'g1-ultra-tier', name: 'Google AI Ultra' } },
+      }),
+    ).toBe('20x')
+    expect(
+      antigravityTierMultiple({
+        antigravity: { tier: { id: 'g1-ultra-lite-tier', name: 'Google AI Ultra' } },
+      }),
+    ).toBe('5x')
+    expect(
+      antigravityTierMultiple({
+        antigravity: { tier: { id: 'g1-pro-tier', name: 'Google AI Pro' } },
+      }),
+    ).toBeNull()
   })
 })

@@ -8,13 +8,24 @@
 // with `--app-data-dir <dir>` without changing new sessions away from the default CLI store.
 
 import { statSync } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
+import { parsePbtxtTitle } from './agy-proto'
+import { withAgySqliteReadOnly } from './agy-sqlite'
 
 export const DEFAULT_AGY_APP_DATA_DIR = 'antigravity-cli'
 export const IDE_AGY_APP_DATA_DIR = 'antigravity'
+export const AGY_IDE_APP_DATA_DIR = 'antigravity-ide'
+export const AGY_IDEA_APP_DATA_DIR = 'antigravity-idea'
+/** Antigravity 各端默认数据目录，按 CLI → 桌面端 → IDE → JetBrains 顺序探测。 */
+export const AGY_APP_DATA_DIRS = [
+  DEFAULT_AGY_APP_DATA_DIR,
+  IDE_AGY_APP_DATA_DIR,
+  AGY_IDE_APP_DATA_DIR,
+  AGY_IDEA_APP_DATA_DIR,
+] as const
 export const AGY_APP_DATA_DIR_FLAG = '--app-data-dir'
 
 /**
@@ -121,6 +132,36 @@ function parseMetaRow(row: Record<string, unknown> | undefined): AgyConversation
   return { appDataDir, stepCount }
 }
 
+/** 返回指定会话在本地磁盘上的 SQLite 轨迹文件路径；ID 或目录非法时返回 null。 */
+export function agyConversationDbFile(
+  sessionId: string,
+  home = os.homedir(),
+  appDataDir = DEFAULT_AGY_APP_DATA_DIR,
+): string | null {
+  if (!isSafeAgySessionId(sessionId) || !isSafeAgyAppDataDir(appDataDir)) return null
+  return path.join(home, '.gemini', appDataDir, 'conversations', `${sessionId}.db`)
+}
+
+/** 读取 `annotations/<sessionId>.pbtxt` 中记录的会话标题，不存在或解析失败时返回 null。 */
+export async function readAgyAnnotationTitle(
+  sessionId: string,
+  home = os.homedir(),
+  appDataDir?: string,
+): Promise<string | null> {
+  if (!isSafeAgySessionId(sessionId)) return null
+  const dirs = appDataDir && isSafeAgyAppDataDir(appDataDir) ? [appDataDir] : [...AGY_APP_DATA_DIRS]
+  for (const dir of dirs) {
+    const file = path.join(home, '.gemini', dir, 'annotations', `${sessionId}.pbtxt`)
+    try {
+      const title = parsePbtxtTitle(await readFile(file, 'utf8'))
+      if (title) return title
+    } catch {
+      // 文件不存在或不可读时继续尝试下一个目录。
+    }
+  }
+  return null
+}
+
 /**
  * Reads `app_data_dir` and `step_count` for `sessionId` from agy's CLI summary database
  * (`<home>/.gemini/antigravity-cli/conversation_summaries.db`) in read-only mode.
@@ -133,23 +174,14 @@ export async function readAgyConversationMeta(
   if (!isSafeAgySessionId(sessionId)) return null
   const file = agySummariesDbFile(home, DEFAULT_AGY_APP_DATA_DIR)
   try {
-    if (!(await stat(file)).isFile()) return null
-  } catch {
-    return null
-  }
-  try {
-    const { DatabaseSync } = await import('node:sqlite')
-    const db = new DatabaseSync(file, { readOnly: true, timeout: 0 })
-    try {
+    return await withAgySqliteReadOnly(file, (db) => {
       const row = db
         .prepare(
           'SELECT app_data_dir, step_count FROM conversation_summaries WHERE conversation_id = ? LIMIT 1',
         )
         .get(sessionId) as Record<string, unknown> | undefined
       return parseMetaRow(row)
-    } finally {
-      db.close()
-    }
+    })
   } catch {
     return null
   }
@@ -162,9 +194,9 @@ export async function readAgyConversationMeta(
  * 1. Query `<home>/.gemini/antigravity-cli/conversation_summaries.db` for `app_data_dir`.
  * 2. Verify trajectory file presence (`.db` / `.pb`) under `<home>/.gemini/<appDataDir>/conversations/`.
  *    If the DB row points to a store without the trajectory file, check the fallback stores
- *    (`antigravity-cli`, then `antigravity`) on disk before trusting the DB value.
+ *    (`antigravity-cli`, `antigravity`, `antigravity-ide`, `antigravity-idea`) on disk before trusting the DB value.
  * 3. When the DB is absent, locked, or has no `app_data_dir` for the session, fall back to
- *    checking trajectory presence under `antigravity-cli` then `antigravity`.
+ *    checking trajectory presence across known product stores on disk.
  */
 export async function resolveAgyAppDataDir(
   sessionId: string,
@@ -175,25 +207,15 @@ export async function resolveAgyAppDataDir(
   const fromDb = meta?.appDataDir ?? null
   if (fromDb !== null) {
     if (await hasAgyTrajectory(sessionId, fromDb, home)) return fromDb
-    if (
-      fromDb !== DEFAULT_AGY_APP_DATA_DIR &&
-      (await hasAgyTrajectory(sessionId, DEFAULT_AGY_APP_DATA_DIR, home))
-    ) {
-      return DEFAULT_AGY_APP_DATA_DIR
-    }
-    if (
-      fromDb !== IDE_AGY_APP_DATA_DIR &&
-      (await hasAgyTrajectory(sessionId, IDE_AGY_APP_DATA_DIR, home))
-    ) {
-      return IDE_AGY_APP_DATA_DIR
+    for (const candidate of AGY_APP_DATA_DIRS) {
+      if (candidate !== fromDb && (await hasAgyTrajectory(sessionId, candidate, home))) {
+        return candidate
+      }
     }
     return fromDb
   }
-  if (await hasAgyTrajectory(sessionId, DEFAULT_AGY_APP_DATA_DIR, home)) {
-    return DEFAULT_AGY_APP_DATA_DIR
-  }
-  if (await hasAgyTrajectory(sessionId, IDE_AGY_APP_DATA_DIR, home)) {
-    return IDE_AGY_APP_DATA_DIR
+  for (const candidate of AGY_APP_DATA_DIRS) {
+    if (await hasAgyTrajectory(sessionId, candidate, home)) return candidate
   }
   return null
 }
@@ -204,11 +226,8 @@ export async function resolveAgyAppDataDir(
  */
 export function resolveAgyAppDataDirSync(sessionId: string, home = os.homedir()): string | null {
   if (!isSafeAgySessionId(sessionId)) return null
-  if (hasAgyTrajectorySync(sessionId, DEFAULT_AGY_APP_DATA_DIR, home)) {
-    return DEFAULT_AGY_APP_DATA_DIR
-  }
-  if (hasAgyTrajectorySync(sessionId, IDE_AGY_APP_DATA_DIR, home)) {
-    return IDE_AGY_APP_DATA_DIR
+  for (const candidate of AGY_APP_DATA_DIRS) {
+    if (hasAgyTrajectorySync(sessionId, candidate, home)) return candidate
   }
   return null
 }

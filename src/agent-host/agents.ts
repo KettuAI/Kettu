@@ -4242,7 +4242,12 @@ export class AgentManager {
   /** Whether the agent tells what fills a session's context: from its connection, or its report. */
   hasContext(agentId: AgentId): boolean {
     const slot = this.slots.get(agentId)
-    return !!slot && (hasContextReport(slot.def.id) || this.driver(slot).reads?.context === true)
+    return (
+      !!slot &&
+      (hasContextReport(slot.def.id) ||
+        this.driver(slot).reads?.context === true ||
+        slot.def.readsContext === true)
+    )
   }
 
   /** The limits from the connection when it reads them, else from the agent's report. */
@@ -6058,7 +6063,7 @@ export class AgentManager {
         ...(capabilities?.rewindFiles ? { rewindFiles: true } : {}),
         reports: this.hasLimits(slot.id) && !consoleSignIn,
         context: this.hasContext(slot.id),
-        liveContext: this.driver(slot).reads?.context === true,
+        liveContext: this.driver(slot).reads?.context === true || slot.def.readsContext === true,
         ...(this.driver(slot).reads?.contextEstimates || slot.def.contextEstimates
           ? { contextEstimates: true }
           : {}),
