@@ -664,7 +664,7 @@
       },
       "auto": {
         "name": "Auto",
-        "description": "Approve edits and safe commands; ask before irreversible actions"
+        "description": "Allows routine edits, safe commands, and reversible tools; asks before deleting core files or other sensitive actions"
       },
       "plan": {
         "name": "Plan",
@@ -673,6 +673,46 @@
       "fullAccess": {
         "name": "Full access",
         "description": "Never asks. Applies between turns, once its commands end, restarting agy"
+      }
+    },
+    "auto": {
+      "allowSessionMcp": "Allow `{{tool}}` for this session",
+      "allowSessionDir": "Allow edits in `{{dir}}` for this session",
+      "allowSessionCommand": "Allow `{{command}}` for this session",
+      "reason": {
+        "userRule": "Matches an ask rule in your Antigravity settings",
+        "deleteCore": "Deletes a core file or directory: {{target}}",
+        "deleteRecursive": "Recursively deletes files or directories",
+        "deleteFiles": "Deletes files or directories",
+        "moveCore": "Moves a core file or directory: {{target}}",
+        "sensitiveWrite": "Modifies a protected sensitive file: {{target}}",
+        "sensitiveRead": "Reads a sensitive credential or key file: {{target}}",
+        "outsideWrite": "Modifies a file outside the workspace: {{target}}",
+        "sensitiveUrl": "Accesses a restricted or non-public URL",
+        "sensitiveEnv": "Overrides a sensitive environment variable: {{name}}",
+        "privilegedCommand": "Runs a privileged or system-level command: {{command}}",
+        "systemMutation": "Changes system permissions or terminates processes: {{command}}",
+        "opaqueCommand": "Runs an opaque script or external command: {{command}}",
+        "complexCommand": "Uses complex shell syntax that cannot be verified statically",
+        "remoteScript": "Downloads and executes a remote script",
+        "destructiveCommand": "Runs a destructive command: {{command}}",
+        "destructiveScript": "Inline script contains destructive or deletion actions: {{command}}",
+        "sensitiveScript": "Inline script writes files or accesses sensitive paths: {{command}}",
+        "gitConfigFlag": "Git command sets config flags that can execute commands",
+        "gitDestructive": "Irreversible Git operation: {{command}}",
+        "gitForcePush": "Force-pushes and rewrites remote Git history",
+        "gitPush": "Pushes commits to a remote repository",
+        "gitDiscard": "Discards uncommitted local changes",
+        "gitRewrite": "Rewrites branches or history: {{command}}",
+        "remoteIrreversible": "Irreversible remote or publish action: {{command}}",
+        "remoteWrite": "External write action: {{command}}",
+        "mcpDestructive": "Destructive or irreversible MCP tool: {{tool}}",
+        "mcpSensitive": "Sensitive external or permission-changing MCP tool: {{tool}}",
+        "mcpUnknown": "External MCP tool: {{tool}}",
+        "deleteArtifact": "Deletes an artifact",
+        "terminalInput": "Sends input to an interactive terminal",
+        "computerControl": "Controls desktop apps on this computer",
+        "writeArtifactData": "Writes persistent artifact data"
       }
     },
     "fullAccess": {
