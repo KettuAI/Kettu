@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { isPending } from '@shared/artifact-comments'
 import { startThreadService } from '../threads/service'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
 import { ArtifactStore } from './store'
@@ -516,5 +517,56 @@ describe('a thread in a frame the canvas no longer lists', () => {
       offset: 10,
       missing: false,
     })
+  })
+})
+
+describe('reopening a resolved thread', () => {
+  it('clears sent metadata so it is pending again even when its original element is gone', async () => {
+    const id = await create({ html: '<h1>Title</h1><p>Body</p>' })
+    const thread = await store.addThread(id, {
+      anchor: {
+        version: 1,
+        path: 'index.html',
+        page: null,
+        offset: 14,
+        tag: 'p',
+        text: 'Body',
+        missing: false,
+      },
+      author: { person: 'owner', session: null },
+      body: 'Tighten this paragraph',
+    })
+    await store.markSent(id, [thread.id], caller.sessionId)
+    expect(
+      (await call('reply_comment', { id, thread: thread.id, text: 'Updated' })).error,
+    ).toBeNull()
+    expect((await call('resolve_comment', { id, thread: thread.id })).error).toBeNull()
+
+    // An HTML edit removes the original paragraph so the anchor becomes missing.
+    await call('update_artifact', { id, base_version: 1, html: '<h1>Title</h1>' })
+    const [resolvedGone] = await store.threads(id)
+    expect(resolvedGone).toMatchObject({
+      id: thread.id,
+      anchor: { version: 2, missing: true },
+      sentTo: caller.sessionId,
+    })
+    expect(resolvedGone?.resolvedAt).not.toBeNull()
+    expect(resolvedGone?.sentAt).not.toBeNull()
+    expect(isPending(resolvedGone!)).toBe(false)
+
+    // Reopening clears sentAt and sentTo so the user can send it again immediately.
+    const reopened = await store.resolve(id, thread.id, false)
+    expect(reopened).toMatchObject({
+      id: thread.id,
+      resolvedAt: null,
+      sentAt: null,
+      sentTo: null,
+      anchor: { version: 2, missing: true },
+    })
+    expect(isPending(reopened)).toBe(true)
+
+    const [stored] = await store.threads(id)
+    expect(stored).toMatchObject({ resolvedAt: null, sentAt: null, sentTo: null })
+    expect(isPending(stored!)).toBe(true)
   })
 })

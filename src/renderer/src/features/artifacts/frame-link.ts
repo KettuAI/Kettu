@@ -9,6 +9,7 @@ import {
   parseSelectMessage,
   RUNTIME_VERSION,
   type DriveMessage,
+  type PageBox,
   type PageKey,
   type PageSelection,
   type SelectMessage,
@@ -119,6 +120,27 @@ export class FrameLink {
   /** Moves the keyboard into the frame, where its page focuses what is typed in place. */
   focus(): void {
     this.frame?.focus()
+  }
+
+  /** Whether an iframe window is currently attached and able to receive messages. */
+  hasFrame(): boolean {
+    return !!this.frame?.contentWindow
+  }
+
+  /** Translates a viewport-relative box inside the iframe into window coordinates. */
+  viewportBox(box: PageBox): { left: number; top: number; right: number; bottom: number } | null {
+    const frame = this.frame
+    if (!frame) return null
+    const rect = frame.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    const scaleX = frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1
+    const scaleY = frame.offsetHeight > 0 ? rect.height / frame.offsetHeight : 1
+    return {
+      left: rect.left + box.x * scaleX,
+      top: rect.top + box.y * scaleY,
+      right: rect.left + (box.x + box.width) * scaleX,
+      bottom: rect.top + (box.y + box.height) * scaleY,
+    }
   }
 
   /** Takes the frame's picks, until `dispose`. */

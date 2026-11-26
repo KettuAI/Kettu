@@ -3,7 +3,7 @@
 // content tells them where things are through `ToolContent`; the cards and popovers are the same
 // for every kind.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isPending, type CommentAnchor, type CommentThread } from '@shared/artifact-comments'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
@@ -13,7 +13,12 @@ import { emitAppEvent } from '@renderer/app/events'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
-import { openCanvasFrame, setViewerState, type ViewerMode } from '@renderer/stores/artifact-viewer'
+import {
+  openCanvasFrame,
+  setViewerState,
+  viewerStateOf,
+  type ViewerMode,
+} from '@renderer/stores/artifact-viewer'
 import { setPaneSelection } from '@renderer/stores/artifacts'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { openSessionWithArtifact, showArtifactPage } from '@renderer/stores/view'
@@ -50,13 +55,19 @@ import './viewer-tools.css'
 type Box = { left: number; top: number; right: number; bottom: number }
 
 /**
- * What a kind's content tells the tools: how to bring an anchor into view. The canvas opens or
- * frames the frame it is in; a page scrolls to it; a document or a deck, which draw their own
- * pins, bring their own place forward.
+ * How a kind handled revealing a thread chosen in the Comments card: `'inline'` when the content
+ * opens the thread itself (such as under a document block or on a slide), a viewport box beside its
+ * pin, or `null` to open the thread popover centred in the content area.
+ */
+export type RevealOutcome = 'inline' | Box | null
+
+/**
+ * What a kind's content tells the tools: how to bring a thread's anchor into view. The canvas opens
+ * or frames the frame it is in; a page scrolls to it and locates its pin; a document or a deck,
+ * which draw their own pins, bring their own place forward when the thread is pinned there.
  */
 export interface ToolContent {
-  /** `thread` names the thread the anchor is for, which a document opens under its block. */
-  reveal(anchor: CommentAnchor, thread?: string): void
+  reveal(thread: CommentThread): RevealOutcome | Promise<RevealOutcome>
 }
 
 /** What Ask is about: frames of a canvas, one element, or the whole artifact. */
@@ -130,13 +141,47 @@ export function useViewerTools(input: ToolsInput) {
 
   const [tab, setTab] = useState<'open' | 'resolved'>('open')
   const [selected, setSelected] = useState<string | null>(null)
+  /** A thread opened from the Comments card (e.g. missing anchor, View mode, or resolved thread). */
+  const [cardThread, setCardThread] = useState<{ id: string; at: Box | null } | null>(null)
+  const focusSeq = useRef(0)
   const [repinning, setRepinning] = useState<string | null>(null)
   const [ask, setAsk] = useState<{ at: Box | null; subject: AskSubject } | null>(null)
   const commentsOpen = input.right === 'comments' || input.mode === 'comment'
   const numbers = useMemo(() => threadNumbers(threads ?? []), [threads])
+  const closeCardThread = useCallback(() => {
+    focusSeq.current += 1
+    setCardThread(null)
+  }, [])
+  useEffect(
+    () => () => {
+      focusSeq.current += 1
+    },
+    [],
+  )
+  // A direct click on the page (another pin or a draft pick) supersedes a card-opened thread.
+  useEffect(() => {
+    if (!editor) return
+    return editor.subscribe(() => {
+      const state = editor.get()
+      if (state.pin || state.picked) closeCardThread()
+    })
+  }, [editor, closeCardThread])
+  const activeCardThread = commentsOpen && !editing.pin ? cardThread : null
   const openThread = editing.pin
     ? ((threads ?? []).find((th) => numbers.get(th.id) === editing.pin!.n) ?? null)
-    : null
+    : activeCardThread
+      ? ((threads ?? []).find((th) => th.id === activeCardThread.id) ?? null)
+      : null
+  const openThreadNumber = editing.pin
+    ? editing.pin.n
+    : openThread
+      ? (numbers.get(openThread.id) ?? 0)
+      : 0
+  const openThreadAt = editing.pin
+    ? editing.pin.point
+      ? pointBox(editing.pin.point)
+      : null
+    : (activeCardThread?.at ?? null)
 
   // Pins show while the comments do: the open ones, or the resolved ones in their tab.
   useEffect(() => {
@@ -197,6 +242,7 @@ export function useViewerTools(input: ToolsInput) {
     (next: ViewerMode) => {
       if (input.mode !== 'comment' || next === 'comment') return
       setRepinning(null)
+      closeCardThread()
       const count = (threads ?? []).filter(isPending).length
       if (count === 0) return
       toast(
@@ -205,12 +251,26 @@ export function useViewerTools(input: ToolsInput) {
         { tone: 'info' },
       )
     },
-    [input.mode, threads, t, targetName, targets, target, sendPending],
+    [input.mode, threads, t, targetName, targets, target, sendPending, closeCardThread],
   )
 
   const focusThread = (thread: CommentThread) => {
+    const seq = ++focusSeq.current
     setSelected(thread.id)
-    input.content.reveal(thread.anchor, thread.id)
+    setAsk(null)
+    setRepinning(null)
+    editor?.clearPick()
+    editor?.clearPin()
+    const outcome = input.content.reveal(thread)
+    const apply = (result: RevealOutcome) => {
+      if (focusSeq.current !== seq) return
+      setCardThread(result === 'inline' ? null : { id: thread.id, at: result })
+    }
+    if (outcome && typeof outcome === 'object' && 'then' in outcome) {
+      void outcome.then(apply, () => apply(null))
+    } else {
+      apply(outcome)
+    }
   }
 
   // Beside a session there is no popover: what is selected rides above its composer.
@@ -323,6 +383,7 @@ export function useViewerTools(input: ToolsInput) {
       inline
       onClose={close}
       onRepin={null}
+      onReopened={() => setTab('open')}
     />
   )
 
@@ -398,8 +459,11 @@ export function useViewerTools(input: ToolsInput) {
 
   // The right card for the tools that have one.
   let right: RightContent | null = null
-  const close = () =>
+  const close = () => {
+    closeCardThread()
+    editor?.clearPin()
     setViewerState(id, (s) => ({ right: null, version: s.right === 'history' ? null : s.version }))
+  }
   const propsShown =
     input.mode === 'edit' && editing.mode === 'select' && !!editing.picked && !!editor && !!head
   if (propsShown && editor && shown && editing.picked) {
@@ -447,7 +511,7 @@ export function useViewerTools(input: ToolsInput) {
           targets={targets}
           target={target}
           onTarget={setPicked}
-          selected={selected}
+          selected={openThread?.id ?? selected}
           tab={tab}
           onTab={setTab}
           pageFiles={
@@ -506,21 +570,29 @@ export function useViewerTools(input: ToolsInput) {
         onClose={() => setAsk(null)}
       />
     )
-  } else if (openThread && editor) {
+  } else if (openThread) {
     overlay = (
       <ThreadPop
         key={openThread.id}
         artifactId={id}
         thread={openThread}
-        n={editing.pin!.n}
+        n={openThreadNumber}
         versions={versions}
-        at={editing.pin!.point ? pointBox(editing.pin!.point) : null}
-        onClose={() => editor.clearPin()}
+        at={openThreadAt}
+        onClose={() => {
+          editor?.clearPin()
+          closeCardThread()
+        }}
+        onReopened={() => setTab('open')}
         onRepin={
-          canRepin && openThread.anchor.missing
+          canRepin && editor && !summary?.type && openThread.anchor.missing
             ? () => {
                 setRepinning(openThread.id)
+                closeCardThread()
                 editor.clearPin()
+                if (input.mode !== 'comment') {
+                  setViewerState(id, { mode: 'comment', right: 'comments' })
+                }
                 toast(t('comments.repinHint'), undefined, { tone: 'info' })
               }
             : null
@@ -552,6 +624,10 @@ export function useViewerTools(input: ToolsInput) {
     }
     if (repinning) {
       setRepinning(null)
+      return true
+    }
+    if (activeCardThread) {
+      closeCardThread()
       return true
     }
     return false
@@ -622,26 +698,40 @@ export function canvasContent(input: {
   focusLegacy: (index: number) => void
 }): ToolContent {
   return {
-    reveal: (anchor) => {
+    reveal: (thread) => {
+      const { anchor } = thread
       const { doc, shown } = input
       if (doc && shown) {
         const page = doc.pages.find((p) => p.file === anchor.path)
-        if (!page) return
+        if (!page) return null
         if (anchor.offset !== null && !anchor.missing) {
-          openCanvasFrame(input.id, page.canvas, page.id)
           const index = shown.canvas?.pages.findIndex((p) => p.id === page.id) ?? -1
-          const src = anchor.offset
-          if (index >= 0) setTimeout(() => input.editor?.reveal(index, src), 400)
+          const alreadyOpen = viewerStateOf(input.id).opened === page.id
+          openCanvasFrame(input.id, page.canvas, page.id)
+          if (index >= 0) {
+            if (alreadyOpen && input.editor) return input.editor.revealPin(index, anchor.offset)
+            const src = anchor.offset
+            setTimeout(() => input.editor?.reveal(index, src), 400)
+          }
         } else {
           setViewerState(input.id, { page: page.canvas, opened: null, selection: [page.id] })
           showArtifactPage(input.panel, input.id, page.id)
         }
-        return
+        return null
       }
       const number = anchor.page?.number
       const index = shown?.canvas?.pages.findIndex((p) => p.number === number) ?? -1
-      if (index >= 0) input.focusLegacy(index)
-      else if (anchor.offset !== null && !anchor.missing) input.editor?.reveal(null, anchor.offset)
+      if (index >= 0) {
+        input.focusLegacy(index)
+        if (anchor.offset !== null && !anchor.missing && input.editor) {
+          return input.editor.revealPin(index, anchor.offset)
+        }
+        return null
+      }
+      if (anchor.offset !== null && !anchor.missing && input.editor) {
+        return input.editor.revealPin(null, anchor.offset)
+      }
+      return null
     },
   }
 }

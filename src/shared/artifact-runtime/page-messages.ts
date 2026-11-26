@@ -158,8 +158,9 @@ export type DriveMessage =
   | DocDrive
   // Which slide a deck's viewer shows and how, and what it does once.
   | DeckDrive
-  // Scrolls the element whose start tag lies at `src` into view, as a thread's card asks.
-  | { v: typeof RUNTIME_VERSION; kind: 'select-reveal'; src: number }
+  // Scrolls the element whose start tag lies at `src` into view, as a thread's card asks; when
+  // `channel` is given, answers with its pin's viewport box in `located` so a popover can sit by it.
+  | { v: typeof RUNTIME_VERSION; kind: 'select-reveal'; src: number; channel?: string }
   // Scrolls the page while a pick layer over it takes the wheel.
   | { v: typeof RUNTIME_VERSION; kind: 'select-scroll'; dx: number; dy: number }
   // Picks the element around the picked one, reported as a pick.

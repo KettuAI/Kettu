@@ -2,6 +2,7 @@
 // shows for the threads.
 
 import { isPending, type CommentThread } from '@shared/artifact-comments'
+import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import type { Pin } from '@shared/artifact-runtime/page-messages'
 import type { VersionSummary } from '@shared/artifacts'
@@ -86,4 +87,48 @@ export function pinsFor(
       if (thread.id === options.active) pin.active = true
       return [pin]
     })
+}
+
+/**
+ * Which single-thread send action a row's menu offers: unsent open threads can be sent on their
+ * own, and already-sent open threads (including legacy reopened rows) can be sent again.
+ */
+export function rowSendKind(
+  thread: CommentThread,
+  tab: 'open' | 'resolved',
+): 'sendOnly' | 'sendAgain' | null {
+  if (tab !== 'open' || thread.resolvedAt !== null) return null
+  return isPending(thread) ? 'sendOnly' : 'sendAgain'
+}
+
+/** Whether `DocumentSheet` renders a pin for `thread` and can open it inline under its block. */
+export function canInlineDocThread(
+  thread: CommentThread,
+  options: { latest: boolean; commentsOpen: boolean },
+): boolean {
+  return (
+    options.latest &&
+    options.commentsOpen &&
+    thread.resolvedAt === null &&
+    thread.anchor.path === DOCUMENT_ENTRY &&
+    thread.anchor.offset !== null &&
+    !thread.anchor.missing
+  )
+}
+
+/** Whether `DeckSheet` renders a pin for `thread` on its slide and can open it inline there. */
+export function canInlineDeckThread(
+  thread: CommentThread,
+  options: { latest: boolean; commentsOpen: boolean; slideCount: number },
+): boolean {
+  const slide = thread.anchor.page?.number ?? null
+  return (
+    options.latest &&
+    options.commentsOpen &&
+    thread.resolvedAt === null &&
+    thread.anchor.path === ARTIFACT_ENTRY &&
+    slide !== null &&
+    slide >= 1 &&
+    slide <= options.slideCount
+  )
 }

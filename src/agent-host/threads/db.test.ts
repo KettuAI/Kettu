@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { isPending } from '@shared/artifact-comments'
 import type { ContextBreakdown } from '@shared/context'
 import type { ContentRef, SessionView, ThreadEntry } from '@shared/thread'
 import { contentHash, contentPath } from '../artifacts/content'
@@ -1719,16 +1720,74 @@ describe("the thread database's comments", () => {
       [T1, null],
       [T2, 's2'],
     ])
-    expect(
-      db.resolveThread({ id: ID, project: '/p', threadId: T2, resolved: true, at: 10 }),
-    ).toMatchObject({
+    const resolved = db.resolveThread({
+      id: ID,
+      project: '/p',
+      threadId: T2,
+      resolved: true,
+      at: 10,
+    })
+    expect(resolved).toMatchObject({
       resolvedAt: 10,
+      sentAt: 8,
+      sentTo: 's2',
     })
-    expect(
-      db.resolveThread({ id: ID, project: null, threadId: T2, resolved: false, at: 11 }),
-    ).toMatchObject({
+    expect(isPending(resolved)).toBe(false)
+    const reopened = db.resolveThread({
+      id: ID,
+      project: null,
+      threadId: T2,
+      resolved: false,
+      at: 11,
+    })
+    expect(reopened).toMatchObject({
       resolvedAt: null,
+      sentAt: null,
+      sentTo: null,
     })
+    expect(isPending(reopened)).toBe(true)
+    expect(db.artifactThreads({ id: ID, project: null }).find((t) => t.id === T2)).toMatchObject({
+      resolvedAt: null,
+      sentAt: null,
+      sentTo: null,
+    })
+    db.close()
+  })
+
+  it('keeps sentAt and sentTo on resolve and clears both when reopening', () => {
+    const db = withArtifact()
+    add(db)
+    db.markThreadsSent({ id: ID, threadIds: [T1], sessionId: 's2', at: 8 })
+
+    const resolved = db.resolveThread({
+      id: ID,
+      project: '/p',
+      threadId: T1,
+      resolved: true,
+      at: 10,
+    })
+    expect(resolved).toMatchObject({ resolvedAt: 10, sentAt: 8, sentTo: 's2' })
+    expect(isPending(resolved)).toBe(false)
+
+    const reopened = db.resolveThread({
+      id: ID,
+      project: null,
+      threadId: T1,
+      resolved: false,
+      at: 11,
+    })
+    expect(reopened).toMatchObject({ resolvedAt: null, sentAt: null, sentTo: null })
+    expect(isPending(reopened)).toBe(true)
+
+    db.markThreadsSent({ id: ID, threadIds: [T1], sessionId: 's3', at: 12 })
+    const resolvedAgain = db.resolveThread({
+      id: ID,
+      project: '/p',
+      threadId: T1,
+      resolved: true,
+      at: 13,
+    })
+    expect(resolvedAgain).toMatchObject({ resolvedAt: 13, sentAt: 12, sentTo: 's3' })
     db.close()
   })
 

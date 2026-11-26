@@ -12,6 +12,10 @@ import { FrameLink } from './frame-link'
 
 /** How long a page has to say where an element lies. */
 const LOCATE_WAIT_MS = 2000
+/** How long revealing a comment waits for the frame to report its pin position before centring. */
+const REVEAL_WAIT_MS = 120
+
+export type ViewportBox = { left: number; top: number; right: number; bottom: number }
 
 export type EditorMode = 'select' | 'comment' | null
 
@@ -55,6 +59,8 @@ export interface EditorFrame {
   release(): void
   /** Where the element whose start tag lies at `src` is in the page, or null; null after a while. */
   locate(src: number): Promise<PageBox | null>
+  /** Reveals the element at `src` and returns its pin box in window coordinates, or null. */
+  reveal(src: number): Promise<ViewportBox | null>
   /**
    * Sets the page's declared parameters, shown at once and kept until it reloads; `hold` sets
    * them on each page the frame loads too, until they are set without it.
@@ -158,6 +164,28 @@ export class ArtifactEditor {
             channel: frame.link.channel,
           })
         }),
+      reveal: (src) => {
+        if (!frame.link.hasFrame()) return Promise.resolve(null)
+        return new Promise((resolve) => {
+          const finish = (box: PageBox | null): void => {
+            resolve(box ? frame.link.viewportBox(box) : null)
+          }
+          locating.get(src)?.(null)
+          locating.set(src, finish)
+          setTimeout(() => {
+            if (locating.get(src) === finish) {
+              locating.delete(src)
+              resolve(null)
+            }
+          }, REVEAL_WAIT_MS)
+          frame.link.post({
+            v: RUNTIME_VERSION,
+            kind: 'select-reveal',
+            src,
+            channel: frame.link.channel,
+          })
+        })
+      },
       params: (values, hold) => {
         const message = { v: RUNTIME_VERSION, kind: 'params', values } as const
         if (hold) frame.link.keep(message)
@@ -273,6 +301,17 @@ export class ArtifactEditor {
     for (const frame of this.frames) {
       if (frame.page === page) frame.link.post({ v: RUNTIME_VERSION, kind: 'select-reveal', src })
     }
+  }
+
+  /**
+   * Reveals the element at `src` in the open frame for `page` and returns its pin's window box so
+   * a thread popover can anchor beside it; returns null when the frame or element is unavailable.
+   */
+  revealPin(page: number | null, src: number): Promise<ViewportBox | null> {
+    for (const frame of this.frames) {
+      if (frame.page === page && frame.link.hasFrame()) return frame.reveal(src)
+    }
+    return Promise.resolve(null)
   }
 
   /** Closes the thread of the pin last clicked. */

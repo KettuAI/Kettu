@@ -523,6 +523,7 @@
     "newSessionNote": "They go into New session as a message; send it from there.",
     "rowLabel": "Comment {{n}}: {{text}}",
     "sendOnly": "Send only this",
+    "sendAgain": "Send again",
     "saveFailed": "Not saved. {{error}}",
     "threadLabel": "Comment {{n}}",
     "close": "Close",

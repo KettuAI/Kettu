@@ -21,7 +21,13 @@ import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { anchorLabel } from './anchors'
 import { sendThreads, type CommentsArtifact } from './comment-send'
-import { openOrder, threadNumbers, threadState, type ThreadState } from './comment-threads'
+import {
+  openOrder,
+  rowSendKind,
+  threadNumbers,
+  threadState,
+  type ThreadState,
+} from './comment-threads'
 import { NEW_SESSION, useTargetName, type SendTargets } from './send-targets'
 import { ToMenu } from './send-to'
 import { CardHead } from './tool-parts'
@@ -207,28 +213,38 @@ export function CommentsCard({
       </p>
     )
   } else {
-    body = list.map((thread) => (
-      <ThreadRow
-        key={thread.id}
-        thread={thread}
-        n={numbers.get(thread.id) ?? 0}
-        state={threadState(thread, versions)}
-        selected={thread.id === selected}
-        compact={tab === 'resolved'}
-        onFocus={() => onFocus(thread)}
-        onSendOnly={isPending(thread) ? () => send([thread]) : null}
-        onReopen={
-          tab === 'resolved'
-            ? () =>
-                void host('artifacts.resolve', {
-                  id: artifact.id,
-                  threadId: thread.id,
-                  resolved: false,
-                }).then(() => onTab('open'))
-            : null
-        }
-      />
-    ))
+    body = list.map((thread) => {
+      const sendKind = rowSendKind(thread, tab)
+      return (
+        <ThreadRow
+          key={thread.id}
+          thread={thread}
+          n={numbers.get(thread.id) ?? 0}
+          state={threadState(thread, versions)}
+          selected={thread.id === selected}
+          compact={tab === 'resolved'}
+          onFocus={() => onFocus(thread)}
+          sendAction={
+            sendKind
+              ? {
+                  label: t(sendKind === 'sendOnly' ? 'comments.sendOnly' : 'comments.sendAgain'),
+                  onSelect: () => send([thread]),
+                }
+              : null
+          }
+          onReopen={
+            tab === 'resolved'
+              ? () =>
+                  void host('artifacts.resolve', {
+                    id: artifact.id,
+                    threadId: thread.id,
+                    resolved: false,
+                  }).then(() => onTab('open'))
+              : null
+          }
+        />
+      )
+    })
   }
 
   return (
@@ -346,7 +362,7 @@ function ThreadRow({
   selected,
   compact,
   onFocus,
-  onSendOnly,
+  sendAction,
   onReopen,
 }: {
   thread: CommentThread
@@ -355,7 +371,7 @@ function ThreadRow({
   selected: boolean
   compact: boolean
   onFocus: () => void
-  onSendOnly: (() => void) | null
+  sendAction: { label: string; onSelect: () => void } | null
   onReopen: (() => void) | null
 }) {
   const { t } = useTranslation('artifacts')
@@ -392,10 +408,10 @@ function ThreadRow({
             <Button variant="secondary" size="sm" onClick={onReopen}>
               {t('comments.reopen')}
             </Button>
-          ) : onSendOnly ? (
+          ) : sendAction ? (
             <Dropdown
               align="end"
-              items={[{ label: t('comments.sendOnly'), icon: SentIcon, onSelect: onSendOnly }]}
+              items={[{ label: sendAction.label, icon: SentIcon, onSelect: sendAction.onSelect }]}
               trigger={({ open, toggle }) => (
                 <button
                   type="button"

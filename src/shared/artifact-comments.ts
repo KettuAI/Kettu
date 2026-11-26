@@ -50,7 +50,7 @@ export interface CommentThread {
   /** The first opens the thread; replies follow, oldest first. */
   comments: ArtifactComment[]
   resolvedAt: number | null
-  /** When the user last sent it to a session, and which; a reply of theirs clears both. */
+  /** When the user last sent it to a session, and which; a reply of theirs or reopening clears both. */
   sentAt: number | null
   sentTo: string | null
 }
