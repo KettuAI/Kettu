@@ -2,10 +2,11 @@
   "pair": {
     "title": "Use Kettu in this browser",
     "intro": "In Kettu on the computer, or on a device already added to it, open Settings › Remote access › Add device, choose Browser and scan its QR code with this device's camera, or paste its link here.",
-    "introHosted": "On the computer, open Kettu’s Settings › Remote access › Add device and scan its QR code with this device’s camera, or paste its link here. The computer must be signed in to the same Kettu account with the Kettu relay on.",
+    "introHosted": "Choose a computer signed in to your Kettu account, or paste a pairing link from Add device.",
     "linkLabel": "Pairing link",
     "linkPlaceholder": "http://…/pair#…",
     "linkPlaceholderHosted": "https://kettu.sh/pair#…",
+    "linkToggle": "Pair with a link instead",
     "notLink": "This is not a Kettu pairing link. Copy the link from Add device.",
     "submit": "Pair",
     "connecting": "Connecting to the computer…",
@@ -14,6 +15,49 @@
     "added": "Added. Opening Kettu…",
     "again": "Try again",
     "back": "Back",
+    "cancel": "Cancel",
+    "account": {
+      "heading": "Computers on your account",
+      "refresh": "Refresh",
+      "connect": "Connect",
+      "connectTo": "Connect to {{name}}",
+      "codeLabel": "Verification code {{code}}",
+      "empty": {
+        "title": "No available computers",
+        "body": "Computers signed in to the same Kettu account appear here once remote access, the Kettu relay, and “Let devices on your account find this computer” are on."
+      },
+      "unavailable": {
+        "title": "Cannot reach the Kettu relay",
+        "body": "Your computers appear here once the relay answers."
+      },
+      "signedOut": {
+        "title": "Sign-in expired",
+        "body": "Sign in again to see computers on your Kettu account."
+      },
+      "pair": {
+        "title": "Connect to {{name}}",
+        "connecting": "Connecting to {{name}}…",
+        "intro": "A six-digit code shows here and on {{name}} in a moment.",
+        "check": "Check that {{name}} shows the same code.",
+        "differs": "If it differs, cancel: another computer may be answering.",
+        "match": "Codes match",
+        "waiting": "Waiting for {{name}}…",
+        "matched": "Codes match. Choose Add for “{{device}}” on {{name}}, or on another device that uses it."
+      },
+      "failed": {
+        "void": "The request ended before {{name}} added this browser: it expired or was closed there. Try again.",
+        "rejected": "{{name}} did not add this browser.",
+        "unreachable": "Could not reach {{name}} through the Kettu relay. Check your connection and that {{name}} is on, then try again.",
+        "host_offline": "{{name}} is not available on the Kettu relay right now. Check that it is on, signed in, and lets devices on your account find it.",
+        "busy": "{{name}} is already handling a pairing request from another device. Wait a moment and try again.",
+        "cooling_down": "{{name}} declined several pairing requests in a row and is paused for a few minutes. Try again later or pair with a link.",
+        "wrong_account": "{{name}} is signed in to another Kettu account. Sign in here with that account.",
+        "other_account": "{{name}} belongs to another Kettu account. Sign in with that account to use it.",
+        "signed_out": "Your sign-in is no longer active. Sign in again to connect.",
+        "update_client": "This page is older than Kettu on {{name}}. Reload the page.",
+        "update_host": "Kettu on {{name}} is too old for this page. Update Kettu on {{name}}."
+      }
+    },
     "failed": {
       "void": "This code no longer works: it expired, was closed or was used for another device. Open Add device again for a new one.",
       "rejected": "The computer’s owner did not add this browser.",

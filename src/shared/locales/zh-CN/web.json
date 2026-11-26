@@ -2,10 +2,11 @@
   "pair": {
     "title": "在这个浏览器里用 Kettu",
     "intro": "在电脑上的 Kettu 里，或在已经添加到它的设备上，打开 设置 › 远程访问 › 添加设备，选“浏览器”，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。",
-    "introHosted": "在电脑上的 Kettu 里打开 设置 › 远程访问 › 添加设备，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。电脑要登录同一个 Kettu 账号，并打开 Kettu 中继。",
+    "introHosted": "选一台登录了同一个 Kettu 账号的电脑，或者粘贴“添加设备”里的配对链接。",
     "linkLabel": "配对链接",
     "linkPlaceholder": "http://…/pair#…",
     "linkPlaceholderHosted": "https://kettu.sh/pair#…",
+    "linkToggle": "改用配对链接",
     "notLink": "这不是 Kettu 的配对链接。从“添加设备”里复制链接。",
     "submit": "配对",
     "connecting": "正在连接电脑…",
@@ -14,6 +15,49 @@
     "added": "已添加，正在打开 Kettu…",
     "again": "重试",
     "back": "返回",
+    "cancel": "取消",
+    "account": {
+      "heading": "账号下的电脑",
+      "refresh": "刷新",
+      "connect": "连接",
+      "connectTo": "连接 {{name}}",
+      "codeLabel": "验证码 {{code}}",
+      "empty": {
+        "title": "没有可连接的电脑",
+        "body": "电脑登录同一个 Kettu 账号，并开启远程访问、Kettu 中继和“让账号下的设备找到这台电脑”后，会显示在这里。"
+      },
+      "unavailable": {
+        "title": "连不上 Kettu 中继",
+        "body": "中继恢复后，你的电脑会显示在这里。"
+      },
+      "signedOut": {
+        "title": "登录已失效",
+        "body": "重新登录后即可查看 Kettu 账号下的电脑。"
+      },
+      "pair": {
+        "title": "连接 {{name}}",
+        "connecting": "正在连接 {{name}}…",
+        "intro": "稍后这里和 {{name}} 上会显示一个六位验证码。",
+        "check": "确认 {{name}} 上显示的是同一个验证码。",
+        "differs": "不一致就取消：可能是别的电脑在应答。",
+        "match": "验证码一致",
+        "waiting": "等待 {{name}}…",
+        "matched": "验证码一致。在 {{name}} 上或你的另一台能用它的设备上，为“{{device}}”点击添加。"
+      },
+      "failed": {
+        "void": "{{name}} 添加之前请求就结束了：已过期，或在那边被关掉了。再试一次。",
+        "rejected": "{{name}} 没有添加这个浏览器。",
+        "unreachable": "经 Kettu 中继连不上 {{name}}。检查网络并确认 {{name}} 开着机，再试一次。",
+        "host_offline": "{{name}} 现在不在 Kettu 中继上。确认它开着机、已登录账号，并允许账号下的设备找到它。",
+        "busy": "{{name}} 正在处理另一台设备的配对请求。稍等一下再试。",
+        "cooling_down": "{{name}} 连续拒绝了多次配对请求，暂停接收几分钟。请稍后再试，或用配对链接添加。",
+        "wrong_account": "{{name}} 登录的是另一个 Kettu 账号。在这里用那个账号登录。",
+        "other_account": "{{name}} 属于另一个 Kettu 账号，用那个账号登录后才能用。",
+        "signed_out": "登录状态已失效，请重新登录后再连接。",
+        "update_client": "这个页面比 {{name}} 上的 Kettu 旧，刷新一下页面。",
+        "update_host": "{{name}} 上的 Kettu 太旧了，更新 {{name}} 上的 Kettu。"
+      }
+    },
     "failed": {
       "void": "这个码已经不能用了：过期了、被关掉了，或者给别的设备用过了。重新打开“添加设备”拿一个新的。",
       "rejected": "电脑的主人没有添加这个浏览器。",

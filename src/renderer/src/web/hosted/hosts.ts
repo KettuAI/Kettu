@@ -107,10 +107,13 @@ export function relayDial(
   token: () => Promise<string | null>,
   missed: (problem: RelayProblem | null) => void,
   regions: DialRegions,
+  signal?: AbortSignal,
 ): Dial {
   const named = namedRelays(relay)
   return async () => {
+    if (signal?.aborted) throw new DOMException('The request was aborted', 'AbortError')
     const access = await token()
+    if (signal?.aborted) throw new DOMException('The request was aborted', 'AbortError')
     if (!access) {
       missed('signed_out')
       throw new RelayMiss('signed_out')
@@ -125,7 +128,11 @@ export function relayDial(
       timeoutMs: RELAY_TIMEOUT_MS,
       attempted: (url, outcome) => regions.dialed(url, outcome),
       drained: (url) => regions.drained(url, () => joined?.close()),
+      ...(signal ? { signal } : {}),
     })
+    if (result.kind === 'aborted') {
+      throw new DOMException('The request was aborted', 'AbortError')
+    }
     if (result.kind === 'joined') {
       missed(null)
       joined = await webSocketTransport(result.socket, true)
