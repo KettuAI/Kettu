@@ -4,12 +4,18 @@
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { focusedPane } from '@renderer/features/split/layout'
+import { resolveActiveHostId } from '@renderer/lib/active-host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
 import type { HostAgentList } from '@renderer/lib/plan-readings'
 import { agentsOn, listedAgents, useAgentsStore } from './agents'
 import { hostScope, LOCAL_SCOPE, type HostScope } from './host-scope'
 import { isAway, otherHosts, shownHosts, useHostsStore, type OtherHost } from './hosts'
+import { hostOfSession, useSessionsStore } from './sessions'
 import { useViewStore } from './view'
+
+export { resolveActiveHostId }
 
 /** One host, null being this computer, or every host side by side. */
 export type WindowHost = { kind: 'one'; hostId: string | null } | { kind: 'all' }
@@ -139,4 +145,48 @@ export function useHostAway(hostId: string | null): OtherHost | null {
 export function useWindowHostAway(): OtherHost | null {
   const key = useKey()
   return useHostAway(key === ALL ? null : key)
+}
+
+/** The active session/project's host now (null for this computer, undefined when none). */
+export function activeHostId(): string | null | undefined {
+  const view = useViewStore.getState()
+  const sessions = useSessionsStore.getState().byId
+  return resolveActiveHostId({
+    main: view.main,
+    focusedPaneView: focusedPane(view.layout).view,
+    projectPath: view.projectPath,
+    sessionHost: (id) => {
+      const summary = sessions[id]
+      return summary ? hostOfSession(summary) : undefined
+    },
+  })
+}
+
+/** Reactive active session/project host (null for this computer, undefined when none). */
+export function useActiveHostId(): string | null | undefined {
+  const main = useViewStore((s) => s.main)
+  const focusedPaneView = useViewStore((s) => focusedPane(s.layout).view)
+  const projectPath = useViewStore((s) => s.projectPath)
+  const sessionId =
+    main.kind === 'session'
+      ? main.sessionId
+      : focusedPaneView.kind === 'session'
+        ? focusedPaneView.sessionId
+        : null
+  const sessionProjectPath = useSessionsStore((s) =>
+    sessionId ? s.byId[sessionId]?.projectPath : undefined,
+  )
+  return useMemo(
+    () =>
+      resolveActiveHostId({
+        main,
+        focusedPaneView,
+        projectPath,
+        sessionHost: (id) =>
+          id === sessionId && sessionProjectPath !== undefined
+            ? hostOfPath(sessionProjectPath)
+            : undefined,
+      }),
+    [main, focusedPaneView, projectPath, sessionId, sessionProjectPath],
+  )
 }

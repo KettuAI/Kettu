@@ -83,6 +83,11 @@ export interface PlanCard {
   account: AgentAccount | null
   /** The account's reset credits; null when it holds none or none could be read. */
   resets: CardResets | null
+  /**
+   * True when multiple shown hosts report unidentified cards for this harness and the compact
+   * surface focused onto this host's card.
+   */
+  hostScoped: boolean
 }
 
 function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
@@ -141,52 +146,56 @@ export function planTier(account: AgentAccount | null): string | null {
  * reading. OpenCode gets one per provider, named without a leading "OpenCode", which its mark shows.
  */
 export function planCards(accounts: readonly AccountAgent[], now: number): PlanCard[] {
-  return accounts.flatMap(({ key, hostId, hostIds, agent, limits, resets, name }): PlanCard[] => {
-    if (agent.harnessId === 'opencode') {
-      return (agent.providers ?? []).flatMap((provider) => {
-        const limits = provider.usage?.limits ?? []
-        const windows = cardWindows(limits, now)
-        // A provider with only a balance, such as DeepSeek's, shows it in Settings, not as a card.
-        if (windows.length === 0) return []
-        const balances = provider.usage?.balances ?? []
-        return [
-          {
-            key: `${key}:${provider.id}`,
-            hostId,
-            hostIds,
-            agentId: agent.id,
-            agentName: agent.name,
-            name: planName(agent.harnessName, provider.name),
-            tier: null,
-            windows,
-            limits,
-            balances,
-            account: { kind: 'external', label: provider.name, email: null },
-            resets: null,
-          },
-        ]
-      })
-    }
-    const windows = cardWindows(limits, now)
-    const balances = agent.balances ?? []
-    if (windows.length === 0 && balances.length === 0) return []
-    return [
-      {
-        key,
-        hostId,
-        hostIds,
-        agentId: agent.id,
-        agentName: agent.name,
-        name,
-        tier: planTier(agent.account),
-        windows,
-        limits,
-        balances,
-        account: agent.account,
-        resets: resets && resets.count > 0 ? resets : null,
-      },
-    ]
-  })
+  return accounts.flatMap(
+    ({ key, hostId, hostIds, agent, limits, resets, name, hostScoped }): PlanCard[] => {
+      if (agent.harnessId === 'opencode') {
+        return (agent.providers ?? []).flatMap((provider) => {
+          const limits = provider.usage?.limits ?? []
+          const windows = cardWindows(limits, now)
+          // A provider with only a balance, such as DeepSeek's, shows it in Settings, not as a card.
+          if (windows.length === 0) return []
+          const balances = provider.usage?.balances ?? []
+          return [
+            {
+              key: `${key}:${provider.id}`,
+              hostId,
+              hostIds,
+              agentId: agent.id,
+              agentName: agent.name,
+              name: planName(agent.harnessName, provider.name),
+              tier: null,
+              windows,
+              limits,
+              balances,
+              account: { kind: 'external', label: provider.name, email: null },
+              resets: null,
+              hostScoped: hostScoped === true,
+            },
+          ]
+        })
+      }
+      const windows = cardWindows(limits, now)
+      const balances = agent.balances ?? []
+      if (windows.length === 0 && balances.length === 0) return []
+      return [
+        {
+          key,
+          hostId,
+          hostIds,
+          agentId: agent.id,
+          agentName: agent.name,
+          name,
+          tier: planTier(agent.account),
+          windows,
+          limits,
+          balances,
+          account: agent.account,
+          resets: resets && resets.count > 0 ? resets : null,
+          hostScoped: hostScoped === true,
+        },
+      ]
+    },
+  )
 }
 
 const LEVEL_RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, bad: 2 }
@@ -226,6 +235,14 @@ export function currentCard(cards: readonly PlanCard[], key: string): PlanCard |
   let found: PlanCard | null = null
   for (const card of cards) {
     if (card.key !== key && !card.key.startsWith(`${key}:`)) continue
+    if (!found || cardRank(card) > cardRank(found)) found = card
+  }
+  if (found || key.startsWith('account:')) return found
+  const slash = key.indexOf('/')
+  if (slash < 0) return null
+  const agentId = key.slice(slash + 1)
+  for (const card of cards) {
+    if (!card.hostScoped || card.agentId !== agentId) continue
     if (!found || cardRank(card) > cardRank(found)) found = card
   }
   return found

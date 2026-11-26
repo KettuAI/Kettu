@@ -14,6 +14,8 @@ import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useHostInfo } from '@renderer/features/session/composer/host-info'
+import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
@@ -216,6 +218,7 @@ function PassedKey() {
 function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; now: number }) {
   const { t } = useTranslation('usage')
   const view = useLimitView()
+  const hostName = useHostName()
   return (
     <section className="k-u-card k-u-resets" aria-labelledby="resets-ahead-title">
       <header className="k-u-card__head">
@@ -230,6 +233,8 @@ function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; 
             const when = at - now < DAY ? countdown(at - now) : resetTime(at, now)
             const window = limitShort(ring.limit, ' · ')
             const percent = shownPercent(ring.percent, view)
+            const host = card.showHostLabel ? hostName(card.hostId) : null
+            const whoLabel = host ? `${card.name} (${host})` : card.name
             return (
               <Tooltip key={key}>
                 <TooltipTrigger
@@ -237,8 +242,9 @@ function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; 
                     <li
                       className="k-u-resets__row"
                       data-level={ring.level}
+                      data-host={host !== null || undefined}
                       aria-label={t('limits.resets.row', {
-                        window: `${card.name} · ${limitLabel(ring.limit)}`,
+                        window: `${whoLabel} · ${limitLabel(ring.limit)}`,
                         time: monthDayTime(at),
                         percent: t(view === 'left' ? 'limits.percentLeft' : 'limits.percentUsed', {
                           percent,
@@ -251,15 +257,27 @@ function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; 
                   <b aria-hidden className="k-num">
                     {when}
                   </b>
-                  <span aria-hidden className="k-u-resets__who">
-                    <AgentMark agent={card.agentId} hostId={card.hostId} size={13} />
-                    <span>{`${card.name} · ${window}`}</span>
-                  </span>
+                  {host ? (
+                    <span aria-hidden className="k-u-resets__who k-u-resets__who--stacked">
+                      <AgentMark agent={card.agentId} hostId={card.hostId} size={13} />
+                      <span className="k-u-resets__stack">
+                        <span>{`${card.name} · ${window}`}</span>
+                        <span className="k-u-resets__sub">{host}</span>
+                      </span>
+                    </span>
+                  ) : (
+                    <span aria-hidden className="k-u-resets__who">
+                      <AgentMark agent={card.agentId} hostId={card.hostId} size={13} />
+                      <span>{`${card.name} · ${window}`}</span>
+                    </span>
+                  )}
                   <span aria-hidden className="k-num k-u-resets__pct" data-level={ring.level}>
                     {percent}%
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>{`${limitLabel(ring.limit)} · ${monthDayTime(at)}`}</TooltipContent>
+                <TooltipContent>
+                  {`${host ? `${host} · ` : ''}${limitLabel(ring.limit)} · ${monthDayTime(at)}`}
+                </TooltipContent>
               </Tooltip>
             )
           })}
@@ -279,6 +297,8 @@ function ResetsAhead({ resets, now }: { resets: ReturnType<typeof resetsAhead>; 
 function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: number }) {
   const { t } = useTranslation('usage')
   const hostName = useHostName()
+  const hostInfo = useHostInfo(card.hostId)
+  const host = hostName(card.hostId)
   const installed = useAgentsStore((s) => {
     const agent = agentsOn(s, card.hostId).byId[card.agentId]
     return agent ? isInstalled(agent) : true
@@ -288,6 +308,12 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   const resets = card.resets
   const view = useLimitView()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
+  const cardLabel = [card.name, card.showHostLabel ? host : null, card.plan]
+    .filter(Boolean)
+    .join(', ')
+  const hoverTitle = [card.name, card.showHostLabel ? host : null, card.plan]
+    .filter(Boolean)
+    .join(' · ')
   const amountOf = (balance: ProviderBalance): string =>
     planBalance(
       balance.amount,
@@ -339,16 +365,24 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   )
   const face = (
     <>
-      <header>
-        <AgentMark agent={card.agentId} hostId={card.hostId} size={16} mono={!installed} />
-        <b>{card.name}</b>
-        {!named && age}
-        {failed ? (
-          <span className="k-u-tier k-u-tier--bad">{t('limits.failed')}</span>
-        ) : (
-          card.tier && <span className="k-u-tier">{card.tier}</span>
+      <div className="k-u-plan__head">
+        <header>
+          <AgentMark agent={card.agentId} hostId={card.hostId} size={16} mono={!installed} />
+          <b>{card.name}</b>
+          {!named && age}
+          {failed ? (
+            <span className="k-u-tier k-u-tier--bad">{t('limits.failed')}</span>
+          ) : (
+            card.tier && <span className="k-u-tier">{card.tier}</span>
+          )}
+        </header>
+        {card.showHostLabel && (
+          <span className="k-u-plan__host">
+            <HostIcon platform={hostInfo.platform} className="k-u-plan__host-icon" />
+            <span>{host}</span>
+          </span>
         )}
-      </header>
+      </div>
       {card.state === 'reading' ? (
         <div aria-busy className="k-u-plan__body">
           <span className="sr-only">{t('limits.reading')}</span>
@@ -458,7 +492,9 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
       )}
       {named && (
         <footer className="k-u-plan__foot">
-          <span className="k-u-plan__where">{where.join(' · ')}</span>
+          <span className="k-u-plan__where">
+            {card.showHostLabel ? t('limits.perHost') : where.join(' · ')}
+          </span>
           {age}
         </footer>
       )}
@@ -475,7 +511,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   if (card.rings.length === 0) {
     return (
       <article
-        aria-label={card.name}
+        aria-label={cardLabel}
         className="k-u-card k-u-plan"
         data-failed={failed || undefined}
       >
@@ -494,7 +530,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           render={
             <article
               tabIndex={0}
-              aria-label={card.plan ? `${card.name}, ${card.plan}` : card.name}
+              aria-label={cardLabel}
               className="k-u-card k-u-plan"
               data-failed={failed || undefined}
             />
@@ -504,9 +540,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
         </HoverCardTrigger>
         <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-80">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 text-hint">
-            <span className="col-span-3 truncate font-medium text-primary">
-              {card.plan ? `${card.name} · ${card.plan}` : card.name}
-            </span>
+            <span className="col-span-3 truncate font-medium text-primary">{hoverTitle}</span>
             {card.rings.map((ring) => {
               const pace = windowPace(ring.limit, now)
               return (
