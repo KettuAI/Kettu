@@ -415,6 +415,9 @@
 .k-routine__bar > .k-routine__state {
   -webkit-app-region: drag;
 }
+:root[data-overlay-open] .k-routine__bar > .k-routine__state {
+  -webkit-app-region: no-drag;
+}
 .k-back {
   display: inline-flex;
   flex: none;

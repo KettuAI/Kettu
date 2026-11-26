@@ -199,7 +199,7 @@ export function QueueButton({
           side="top"
           align="end"
           sideOffset={8}
-          className="isolate z-(--layer-menu) outline-none"
+          className="isolate z-(--layer-menu) outline-none app-region-no-drag"
         >
           <MenuPrimitive.Popup
             data-slot="dropdown-menu-content"

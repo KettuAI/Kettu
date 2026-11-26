@@ -23,7 +23,7 @@ function Combobox<Value, Multiple extends boolean | undefined = false, Item = Va
   onOpenChange,
   ...props
 }: ComboboxPrimitive.Root.Props<Value, Multiple, Item>) {
-  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange, { dismissible: true })
   return (
     <ComboboxPrimitive.Root
       open={open}

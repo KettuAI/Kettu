@@ -29,6 +29,7 @@ import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
 import { switchHost } from '@renderer/stores/host-switch'
 import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
@@ -60,6 +61,7 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const info = useAppInfo()
   const hostItems = useHostItems(hosts, close)
   const help = useHelpItems(close)
+  useOverlayPresence(true, { dismissible: true })
   useMenuClose(close)
 
   const then = (run: () => void) => () => {

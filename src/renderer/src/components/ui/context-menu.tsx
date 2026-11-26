@@ -12,7 +12,7 @@ function ContextMenu({
   onOpenChange,
   ...props
 }: ContextMenuPrimitive.Root.Props) {
-  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange, { dismissible: true })
   return (
     <ContextMenuPrimitive.Root
       data-slot="context-menu"
@@ -51,7 +51,7 @@ function ContextMenuContent({
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Positioner
-        className="isolate z-(--layer-menu) outline-none"
+        className="isolate z-(--layer-menu) outline-none app-region-no-drag"
         align={align}
         alignOffset={alignOffset}
         side={side}

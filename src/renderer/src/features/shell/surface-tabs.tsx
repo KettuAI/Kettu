@@ -1445,7 +1445,7 @@ function EndTerminal({
   return (
     <AlertDialog open={!!closing} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogPrimitive.Portal container={container}>
-        <AlertDialogPrimitive.Backdrop className="kp-confirm" />
+        <AlertDialogPrimitive.Backdrop className="kp-confirm app-region-no-drag" />
         <AlertDialogPrimitive.Popup className="kp-confirm__card" data-overlay-layer="">
           <AlertDialogPrimitive.Title>{t('closeDialog.title')}</AlertDialogPrimitive.Title>
           <AlertDialogPrimitive.Description>

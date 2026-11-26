@@ -20,6 +20,7 @@ import { FAVORITE_MODELS_ROW, openHostSettingsRow } from '@renderer/features/set
 import { Glyph } from '@renderer/features/shell/glyph'
 import { formatShortcut } from '@renderer/lib/platform'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { EffortDial } from './effort-dial'
 import { dialStops, type SelectOption } from './levels'
@@ -113,6 +114,7 @@ export function ModelMenu({
 
   const [innerOpen, setInnerOpen] = useState(false)
   const isOpen = open ?? innerOpen
+  useOverlayPresence(isOpen, { dismissible: true })
   // While the dial turns, the trigger follows the level at its mark.
   const [preview, setPreview] = useState<string | null>(null)
   const changeOpen = (next: boolean) => {
