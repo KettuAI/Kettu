@@ -25,6 +25,8 @@
   // shared package's own globals are for its own check alone; the DOM's types replace them here.
   "exclude": [
     "src/shared/socket-port.ts",
+    "src/shared/node-runtime.ts",
+    "src/shared/node-runtime.test.ts",
     "src/shared/log/**",
     "src/shared/runtime.d.ts",
     "src/shared/node_modules"

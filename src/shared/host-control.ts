@@ -79,7 +79,8 @@ export interface BusyCounts {
 
 /**
  * The program that runs a script as Node.js, for the shell probe and the agents that are scripts:
- * Electron's binary with ELECTRON_RUN_AS_NODE in the desktop app, Node.js itself under Node.js.
+ * Electron's binary (its LSUIElement Helper binary on macOS) with ELECTRON_RUN_AS_NODE in the
+ * desktop app, Node.js itself under Node.js.
  */
 export interface NodeRuntime {
   command: string
