@@ -1,18 +1,22 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { InstallOptions, InstalledAdapter } from './adapter-install'
 import type { ArchiveInstallOptions, InstalledArchive } from './archive-install'
 import type { ExitInfo } from './agent-process'
-import { AgentManager, type LaunchedAgent } from './agents'
+import { AgentManager, type AgentTimings, type LaunchedAgent } from './agents'
+import { CODEWHALE } from './agents/codewhale'
+import { CODEX } from './agents/codex'
 import { archiveKey } from './binary-install'
 import type { AgentDefinition } from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { SignedManifest } from './harness-manifest'
 import { parseBundled } from './harness-versions'
+import { CliVersions } from './installed-cli'
 import { parseRegistry, type RegistryAgents } from './registry'
+import { TextRing } from './ring'
 import { EnvironmentService } from './shell-env'
 import type { AgentUpdatesFile, HarnessManifestFile } from './storage'
 import { inProcessLauncher, loadFakeAgent } from './testing/harness'
@@ -615,5 +619,250 @@ describe('an archive the registry gives no SHA-256 for', () => {
       .logEntries()
       .find((entry) => entry.level === 'warn' && entry.message.includes('cd'.repeat(32)))
     expect(warning?.message).toContain('cursor-1.1.0.tar.gz')
+  })
+})
+
+interface ExternalCliSetup {
+  def: AgentDefinition
+  pkgName: string
+  command: string
+  initialVersion: string
+  latestVersion: string
+  probeDelayMs?: number
+  timings?: Partial<AgentTimings>
+}
+
+/**
+ * A manager with a globally npm-installed binary harness backed by a real `CliVersions` whose
+ * `stat` stays unchanged across upgrades (simulating a wrapper or shim script).
+ */
+async function externalCliManager(setup: ExternalCliSetup) {
+  const root = await realpath(await tempFolder('kettu-cli-refresh-'))
+  const prefix = path.join(root, 'prefix')
+  const script = path.join(prefix, 'lib', 'node_modules', ...setup.pkgName.split('/'), 'bin', 'cli')
+  await mkdir(path.dirname(script), { recursive: true })
+  await writeFile(script, '#!/bin/sh\n')
+  await chmod(script, 0o755)
+  const binDir = path.join(prefix, 'bin')
+  await mkdir(binDir, { recursive: true })
+  const program = path.join(binDir, setup.command)
+  await symlink(script, program)
+
+  const platform = process.platform === 'win32' ? 'win32' : process.platform
+  const nodeRuntime = { command: process.execPath, env: {} }
+  let installedVersion = setup.initialVersion
+  let probeRuns = 0
+  const cliVersions = new CliVersions({
+    platform,
+    // Keep file size and mtime constant across upgrades, as wrapper/shim scripts do.
+    stat: async () => ({ size: 128, mtimeMs: 1_000 }),
+    run: async () => {
+      probeRuns++
+      if (setup.probeDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, setup.probeDelayMs))
+      }
+      return {
+        code: 0,
+        signal: null,
+        timedOut: false,
+        aborted: false,
+        output: new TextRing(1024),
+        stdout: `${setup.command} ${installedVersion}\n`,
+      }
+    },
+  })
+  const settings: HostSettings = {
+    ...DEFAULT_SETTINGS,
+    locale: 'en',
+    initialSetupDone: true,
+    agents: { [setup.def.id]: { enabled: true } },
+    addedAgents: [],
+    disabledAgents: [],
+    usage: { fromComputer: false },
+    sessionTitles: true,
+    promptSuggestions: true,
+    continueAfterLimit: true,
+    agentPasswords: false,
+    lightModel: { mode: 'small' },
+    defaultAgent: null,
+    downloadService: false,
+  }
+  const agents = new AgentManager({
+    catalog: [setup.def],
+    platform,
+    nodeRuntime,
+    appVersion: KETTU_VERSION,
+    env: new EnvironmentService({
+      platform,
+      nodeRuntime,
+      baseEnv: { PATH: binDir, HOME: root },
+      resolve: async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({
+        nodeVersion: '24.11.0',
+        npmPath: path.join(root, 'npm'),
+        nodePath: path.join(root, 'node'),
+      }),
+    }),
+    diagnostics: new Diagnostics(),
+    launcher: inProcessLauncher(await loadFakeAgent()),
+    settings: () => settings,
+    reportsDir: path.join(root, 'reports'),
+    adaptersDir: path.join(root, 'harnesses'),
+    cliVersions,
+    fetchRegistry: async () => parseRegistry({ agents: [] })!,
+    fetchLatest: async () => ({ adapterVersion: setup.latestVersion, cliVersion: null }),
+    ...(setup.timings ? { timings: setup.timings } : {}),
+    status: () => {},
+    processes: () => {},
+    authCommands: () => {},
+  })
+  return {
+    agents,
+    setInstalledVersion(version: string) {
+      installedVersion = version
+    },
+    probeRuns: () => probeRuns,
+    status: () => agents.status(setup.def.id),
+  }
+}
+
+describe('refreshing externally upgraded CLIs', () => {
+  it('re-detects Codex during checkUpdates() and clears the update banner even when stat is unchanged', async () => {
+    const m = await externalCliManager({
+      def: CODEX,
+      pkgName: '@openai/codex',
+      command: 'codex',
+      initialVersion: '0.171.0',
+      latestVersion: '0.172.0',
+    })
+    await m.agents.list()
+    expect(m.status().cli?.installed?.version).toBe('0.171.0')
+
+    await m.agents.checkUpdates()
+    await vi.waitFor(() => expect(m.status().cli?.update).toMatchObject({ version: '0.172.0' }))
+
+    // User upgrades Codex externally in a terminal; shim stat remains unchanged.
+    m.setInstalledVersion('0.172.0')
+    const after = await m.agents.checkUpdates()
+    const codex = after.find((s) => s.id === 'codex')
+    expect(codex?.cli?.installed?.version).toBe('0.172.0')
+    expect(codex?.cli?.update).toBeNull()
+    expect(m.status().cli?.installed?.version).toBe('0.172.0')
+    expect(m.status().cli?.update).toBeNull()
+  })
+
+  it('re-detects Codex during agents.check("codex") and clears stale update banners immediately', async () => {
+    const m = await externalCliManager({
+      def: CODEX,
+      pkgName: '@openai/codex',
+      command: 'codex',
+      initialVersion: '0.171.0',
+      latestVersion: '0.172.0',
+    })
+    await m.agents.list()
+    await m.agents.checkUpdates()
+    await vi.waitFor(() => expect(m.status().cli?.update).toMatchObject({ version: '0.172.0' }))
+
+    // User upgrades Codex externally, then opens Settings > Harnesses > Codex.
+    m.setInstalledVersion('0.172.0')
+    const after = await m.agents.check('codex')
+    const codex = after.find((s) => s.id === 'codex')
+    expect(codex?.cli?.installed?.version).toBe('0.172.0')
+    expect(codex?.cli?.update).toBeNull()
+  })
+
+  it('awaits binaryVersionAsked on check() and checkUpdates() for binary harnesses without def.cli', async () => {
+    // check() path
+    const checked = await externalCliManager({
+      def: CODEWHALE,
+      pkgName: 'codewhale',
+      command: 'codewhale',
+      initialVersion: '1.0.0',
+      latestVersion: '2.0.0',
+      probeDelayMs: 25,
+    })
+    await checked.agents.list()
+    await vi.waitFor(() => expect(checked.status().cli?.installed?.version).toBe('1.0.0'))
+    await checked.agents.checkUpdates()
+    await vi.waitFor(() => expect(checked.status().cli?.update).toMatchObject({ version: '2.0.0' }))
+
+    checked.setInstalledVersion('2.0.0')
+    const checkStatuses = await checked.agents.check('codewhale')
+    const afterCheck = checkStatuses.find((s) => s.id === 'codewhale')
+    expect(afterCheck?.cli?.installed?.version).toBe('2.0.0')
+    expect(afterCheck?.version).toBe('2.0.0')
+    expect(afterCheck?.cli?.update).toBeNull()
+
+    // checkUpdates() path
+    const updated = await externalCliManager({
+      def: CODEWHALE,
+      pkgName: 'codewhale',
+      command: 'codewhale',
+      initialVersion: '1.0.0',
+      latestVersion: '2.0.0',
+      probeDelayMs: 25,
+    })
+    await updated.agents.list()
+    await vi.waitFor(() => expect(updated.status().cli?.installed?.version).toBe('1.0.0'))
+    await updated.agents.checkUpdates()
+    await vi.waitFor(() => expect(updated.status().cli?.update).toMatchObject({ version: '2.0.0' }))
+
+    updated.setInstalledVersion('2.0.0')
+    const updateStatuses = await updated.agents.checkUpdates()
+    const afterUpdateCheck = updateStatuses.find((s) => s.id === 'codewhale')
+    expect(afterUpdateCheck?.cli?.installed?.version).toBe('2.0.0')
+    expect(afterUpdateCheck?.version).toBe('2.0.0')
+    expect(afterUpdateCheck?.cli?.update).toBeNull()
+  })
+
+  it('re-detects due harnesses during scheduled update checks', async () => {
+    const m = await externalCliManager({
+      def: CODEX,
+      pkgName: '@openai/codex',
+      command: 'codex',
+      initialVersion: '0.171.0',
+      latestVersion: '0.172.0',
+      timings: { updateDelayMs: 15, updateIntervalMs: 15 },
+    })
+    try {
+      await m.agents.list()
+      await m.agents.checkUpdates()
+      await vi.waitFor(() => expect(m.status().cli?.update).toMatchObject({ version: '0.172.0' }))
+
+      m.setInstalledVersion('0.172.0')
+      m.agents.scheduleUpdateChecks()
+      await vi.waitFor(() => {
+        expect(m.status().cli?.installed?.version).toBe('0.172.0')
+        expect(m.status().cli?.update).toBeNull()
+      })
+    } finally {
+      await m.agents.stopAll()
+    }
+  })
+
+  it('updates status.version to the newly detected binary version once a stopped binary agent is upgraded externally', async () => {
+    const m = await externalCliManager({
+      def: CODEWHALE,
+      pkgName: 'codewhale',
+      command: 'codewhale',
+      initialVersion: '1.0.0',
+      latestVersion: '2.0.0',
+    })
+    await m.agents.list()
+    await m.agents.ensureReady('codewhale')
+    const runningVersion = m.status().version
+    expect(runningVersion).not.toBeNull()
+    await m.agents.stop('codewhale')
+
+    m.setInstalledVersion('2.0.0')
+    await m.agents.check('codewhale')
+    expect(m.status().version).toBe('2.0.0')
+    expect(m.status().cli?.installed?.version).toBe('2.0.0')
   })
 })

@@ -281,7 +281,8 @@ export interface CliVersionsOptions {
  * A timeout, a start that failed or a signal is asked once more at once, since the first run of a
  * fresh binary can be slow while it is scanned. Failing the same way twice, it is kept like any
  * other answer, so a program that hangs costs one wait, not one per detection; failing another
- * way, it is not kept. `clear()` (Reload environment) asks again either way.
+ * way, it is not kept. `clear()` (explicit checks, update checks, and Reload environment) asks
+ * again either way, including for wrapper or shim scripts whose own `stat` does not change.
  */
 export class CliVersions {
   private readonly answers = new Map<string, Promise<CliVersion>>()
