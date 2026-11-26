@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentManager } from './agents'
-import type { Diagnostics } from './diagnostics'
+import { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
+import { preparedFile, PreparedRecords, type PreparedFile } from './prepared'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
@@ -12,6 +13,8 @@ import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
 import type { StoredThread } from './threads/model'
 import type { ThreadStore } from './threads/store'
+import type { WorktreeInspection } from './worktrees/api'
+import type { WorktreeManager } from './worktrees/manager'
 
 let dir: string
 
@@ -33,6 +36,8 @@ function manager(
     outside?: OutsideReader
     threads?: Partial<ThreadStore>
     settings?: Record<string, unknown>
+    prepared?: PreparedRecords
+    worktrees?: Partial<WorktreeManager>
   } = {},
 ) {
   const added: string[] = []
@@ -46,6 +51,7 @@ function manager(
       restoreConfig: (_agentId: string, config: unknown[]) => config,
       status: () => ({ capabilities: null }),
       whileOpening: (_agentId: string, start: Promise<unknown>) => start,
+      runtime: () => null,
       ...extra.agents,
     } as unknown as AgentManager,
     projects: {
@@ -62,11 +68,13 @@ function manager(
     portOpen: () => false,
     threads: (extra.threads ?? null) as ThreadStore | null,
     reportsDir: path.join(dir, 'reports'),
-    diagnostics: { log: () => {} } as unknown as Diagnostics,
+    diagnostics: new Diagnostics(),
     git: () => null,
     events: new Proxy({}, { get: () => () => {} }) as SessionEvents,
     settings: () => ({ startModes: {}, ...extra.settings }) as never,
     ...(extra.outside ? { outside: extra.outside } : {}),
+    ...(extra.prepared ? { prepared: extra.prepared } : {}),
+    ...(extra.worktrees ? { worktrees: extra.worktrees as WorktreeManager } : {}),
   } satisfies ConstructorParameters<typeof SessionManager>[0]
   return { sessions: new SessionManager(deps), added, agents: deps.agents }
 }
@@ -511,6 +519,318 @@ describe('starting a session without a prepared one', () => {
     await sessions.load()
     await sessions.create({ agentId: 'antigravity', projectPath: '/repo' })
     await vi.waitFor(() => expect(setConfigOption).toHaveBeenCalledWith('acp-1', 'mode', 'auto'))
+    await sessions.flush()
+  })
+})
+
+describe('preparing and adopting sub-sessions under a worktree parent', () => {
+  const BASE_OID = 'a'.repeat(40)
+
+  async function preparedIndex(): Promise<PreparedFile | null> {
+    try {
+      return JSON.parse(await readFile(path.join(dir, 'state', 'prepared-sessions.json'), 'utf8'))
+    } catch {
+      return null
+    }
+  }
+
+  function fakeAgent() {
+    let seq = 0
+    const newSession = vi.fn<(cwd: string) => Promise<{ sessionId: string; config: unknown[] }>>(
+      async () => ({
+        sessionId: `acp-${++seq}`,
+        config: [],
+      }),
+    )
+    const prompt = vi.fn(async () => ({ stopReason: 'end_turn', tokens: null, models: null }))
+    const deleteSession = vi.fn(async () => {})
+    const connection = {
+      newSession,
+      prompt,
+      cancel: async () => {},
+      deleteSession,
+      register: () => {},
+      unregister: () => {},
+      isClosed: false,
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      init: { capabilities: { deleteSession: true } },
+      connection,
+    }
+    return {
+      newSession,
+      prompt,
+      deleteSession,
+      agents: {
+        name: () => 'Claude Code',
+        signedIn: () => {},
+        authRequired: () => {},
+        status: () => ({
+          capabilities: { prompt: { image: false, audio: false, embeddedContext: false } },
+          limits: [],
+        }),
+        runtime: () => runtime,
+        ensureReady: async () => runtime,
+      },
+    }
+  }
+
+  const parentRecord = (
+    id: string,
+    projectPath: string,
+    worktree: NonNullable<SessionRecord['worktree']>,
+  ): SessionRecord => ({
+    id,
+    agentId: 'claude-code',
+    acpSessionId: `acp-${id}`,
+    projectPath,
+    worktree,
+    title: 'Parent',
+    createdAt: 1,
+    updatedAt: 2,
+    lastViewedAt: null,
+    parentId: null,
+    origin: 'user',
+    description: null,
+    branch: null,
+  })
+
+  it('opens the prepared session in the parent worktree and preserves it on adoption', async () => {
+    const repo = path.join(dir, 'repo')
+    const wtPath = path.join(dir, 'wt-0')
+    await mkdir(repo, { recursive: true })
+    await mkdir(wtPath, { recursive: true })
+    const worktree = { path: wtPath, branch: 'kettu/wt-0', base: 'main', baseOid: BASE_OID }
+
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [parentRecord('parent', repo, worktree)] })
+    await store.flush()
+
+    const prepared = new PreparedRecords(preparedFile(dir, log))
+    await prepared.load()
+    const agent = fakeAgent()
+    const removeWorktree = vi.fn()
+    const { sessions } = manager(
+      {},
+      {
+        agents: agent.agents,
+        prepared,
+        worktrees: { remove: removeWorktree, settings: () => ({ waitForSetup: true }) as never },
+      },
+    )
+    await sessions.load()
+
+    const prep = await sessions.prepare(
+      { agentId: 'claude-code', projectPath: repo, parentId: 'parent' },
+      'win-1',
+    )
+    expect(agent.newSession).toHaveBeenCalledTimes(1)
+    expect(agent.newSession.mock.calls[0]?.[0]).toBe(wtPath)
+    expect(prep.parentId).toBe('parent')
+    expect(prep.worktree).toMatchObject({ path: wtPath, branch: 'kettu/wt-0', state: 'ready' })
+    await prepared.flush()
+    expect((await preparedIndex())?.sessions).toEqual([
+      { agentId: 'claude-code', acpSessionId: 'acp-1', cwd: wtPath },
+    ])
+
+    const child = await sessions.create({
+      agentId: 'claude-code',
+      projectPath: repo,
+      parentId: 'parent',
+      preparedId: prep.id,
+      prompt: [{ type: 'text', text: 'Work in the worktree' }],
+    })
+    expect(child.id).toBe(prep.id)
+    expect(child.parentId).toBe('parent')
+    expect(child.worktree).toMatchObject({ path: wtPath, branch: 'kettu/wt-0', state: 'ready' })
+    expect(agent.newSession).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(agent.prompt).toHaveBeenCalledTimes(1))
+
+    await sessions.flush()
+    await prepared.flush()
+    expect((await preparedIndex())?.sessions).toEqual([])
+    const persisted = (await index())?.sessions.find((item) => item.id === child.id)
+    expect(persisted?.worktree).toEqual(worktree)
+
+    // Deleting the child leaves the parent's worktree record and folder untouched.
+    await sessions.delete(child.id)
+    expect(removeWorktree).not.toHaveBeenCalled()
+    expect(sessions.summary('parent').worktree).toMatchObject({
+      path: wtPath,
+      branch: 'kettu/wt-0',
+      state: 'ready',
+    })
+  })
+
+  it('does not mix main-repository and worktree-child prepared sessions in cache or adoption', async () => {
+    const repo = path.join(dir, 'repo')
+    const wtPath = path.join(dir, 'wt-0')
+    await mkdir(repo, { recursive: true })
+    await mkdir(wtPath, { recursive: true })
+    const worktree = { path: wtPath, branch: 'kettu/wt-0', base: 'main', baseOid: BASE_OID }
+
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [parentRecord('parent', repo, worktree)] })
+    await store.flush()
+
+    const agent = fakeAgent()
+    const { sessions } = manager({}, { agents: agent.agents })
+    await sessions.load()
+
+    const mainPrep = await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-1')
+    const childPrep = await sessions.prepare(
+      { agentId: 'claude-code', projectPath: repo, parentId: 'parent' },
+      'win-1',
+    )
+    expect(childPrep.id).not.toBe(mainPrep.id)
+    expect(agent.newSession.mock.calls.map((call) => call[0])).toEqual([repo, wtPath])
+
+    // Adopting a main-repo prepared session when creating a worktree sub-session is refused.
+    const otherMain = await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-2')
+    const child = await sessions.create({
+      agentId: 'claude-code',
+      projectPath: repo,
+      parentId: 'parent',
+      preparedId: otherMain.id,
+    })
+    expect(child.id).not.toBe(otherMain.id)
+    expect(child.parentId).toBe('parent')
+    expect(child.worktree).toMatchObject({ path: wtPath, branch: 'kettu/wt-0', state: 'ready' })
+    expect(agent.newSession.mock.calls.at(-1)?.[0]).toBe(wtPath)
+    await sessions.flush()
+  })
+
+  it('recreates a missing parent worktree during prepare via cwdOf', async () => {
+    const repo = path.join(dir, 'repo')
+    const wtPath = path.join(dir, 'wt-missing')
+    await mkdir(repo, { recursive: true })
+    const worktree = {
+      path: wtPath,
+      branch: 'kettu/wt-missing',
+      base: 'main',
+      baseOid: BASE_OID,
+      removed: 'worktree' as const,
+    }
+
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [parentRecord('parent', repo, worktree)] })
+    await store.flush()
+
+    const recreate = vi.fn(async (_project: string, record: { path: string }) => {
+      await mkdir(record.path, { recursive: true })
+    })
+    const agent = fakeAgent()
+    const { sessions } = manager({}, { agents: agent.agents, worktrees: { recreate } })
+    await sessions.load()
+
+    const prep = await sessions.prepare(
+      { agentId: 'claude-code', projectPath: repo, parentId: 'parent' },
+      'win-1',
+    )
+    expect(recreate).toHaveBeenCalledTimes(1)
+    expect(agent.newSession).toHaveBeenCalledTimes(1)
+    expect(agent.newSession.mock.calls[0]?.[0]).toBe(wtPath)
+    expect(prep.worktree?.state).toBe('ready')
+    expect(sessions.summary('parent').worktree?.state).toBe('ready')
+  })
+
+  it('rejects prepare cleanly without falling back to the project folder when the parent branch is gone', async () => {
+    const repo = path.join(dir, 'repo')
+    const wtPath = path.join(dir, 'wt-gone')
+    await mkdir(repo, { recursive: true })
+    const worktree = { path: wtPath, branch: 'kettu/wt-gone', base: 'main', baseOid: BASE_OID }
+
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [parentRecord('parent', repo, worktree)] })
+    await store.flush()
+
+    const recreate = vi.fn(async () => {
+      throw new HostError('not_found', 'Branch not found')
+    })
+    const agent = fakeAgent()
+    const { sessions } = manager({}, { agents: agent.agents, worktrees: { recreate } })
+    await sessions.load()
+
+    await expect(
+      sessions.prepare({ agentId: 'claude-code', projectPath: repo, parentId: 'parent' }, 'win-1'),
+    ).rejects.toMatchObject({ code: 'restricted' })
+    expect(agent.newSession).not.toHaveBeenCalled()
+    expect(sessions.summary('parent').worktree?.state).toBe('gone')
+  })
+
+  it('hides prepared sub-sessions from inspectWorktree and drops them on removeWorktree', async () => {
+    const repo = path.join(dir, 'repo')
+    const wtPath = path.join(dir, 'wt-shared')
+    await mkdir(repo, { recursive: true })
+    await mkdir(wtPath, { recursive: true })
+    const worktree = { path: wtPath, branch: 'kettu/wt-shared', base: 'main', baseOid: BASE_OID }
+
+    const store = sessionsFile(dir, log)
+    store.save({
+      version: 1,
+      sessions: [
+        parentRecord('parent', repo, { ...worktree }),
+        parentRecord('other', repo, { ...worktree }),
+      ],
+    })
+    await store.flush()
+
+    const inspection: WorktreeInspection = {
+      exists: true,
+      branchExists: true,
+      head: BASE_OID,
+      uncommitted: 0,
+      unpushed: 0,
+      merged: false,
+    }
+    const prepared = new PreparedRecords(preparedFile(dir, log))
+    await prepared.load()
+    const agent = fakeAgent()
+    const remove = vi.fn(async () => {
+      await rm(wtPath, { recursive: true, force: true })
+      return { branchDeleted: false }
+    })
+    const recreate = vi.fn(async (_project: string, record: { path: string }) => {
+      await mkdir(record.path, { recursive: true })
+    })
+    const { sessions } = manager(
+      {},
+      {
+        agents: agent.agents,
+        prepared,
+        worktrees: {
+          inspect: async () => inspection,
+          stop: () => {},
+          remove,
+          recreate,
+        },
+      },
+    )
+    await sessions.load()
+
+    const prep = await sessions.prepare(
+      { agentId: 'claude-code', projectPath: repo, parentId: 'parent' },
+      'win-1',
+    )
+    const inspected = await sessions.inspectWorktree('other')
+    expect(inspected.others).toEqual(['parent'])
+
+    await sessions.removeWorktree('parent', 'keep', inspection)
+    await prepared.flush()
+    expect((await preparedIndex())?.sessions).toEqual([])
+
+    // Creating with the dropped preparedId falls back to a fresh session and recreates the worktree.
+    const child = await sessions.create({
+      agentId: 'claude-code',
+      projectPath: repo,
+      parentId: 'parent',
+      preparedId: prep.id,
+    })
+    expect(child.id).not.toBe(prep.id)
+    expect(recreate).toHaveBeenCalledTimes(1)
+    expect(child.worktree?.state).toBe('ready')
+    expect(agent.newSession.mock.calls.at(-1)?.[0]).toBe(wtPath)
     await sessions.flush()
   })
 })
