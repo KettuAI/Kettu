@@ -1053,6 +1053,7 @@ export class AgentHost {
     this.memory.onChange(() => this.hub.broadcast({ type: 'memory.changed' }))
     this.workflowLibrary = new WorkflowLibrary({
       dir: path.join(options.userDataPath, 'workflows'),
+      approvedDir: path.join(options.userDataPath, 'workflow-approved'),
       file: workflowsFile(options.userDataPath, log),
       knownTools: () => ({
         mcp: new Set(this.settings.marketplace.mcp.flatMap((server) => [server.name, server.id])),
@@ -3549,6 +3550,7 @@ export class AgentHost {
         this.marketBundles.flush(),
         this.plugins.flush(),
         this.publishDrafts.flush(),
+        this.workflowLibrary.flush(),
         this.workflowSuggestions.flush(),
         this.threads?.close(),
         this.usage.close(),

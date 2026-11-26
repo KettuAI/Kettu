@@ -154,8 +154,29 @@ export interface WorkflowEntry {
   /** The file on the host. */
   file: string
   addedAt: number | null
+  /** When the current or last approved version was approved; null before approval or on an older record. */
+  approvedAt: number | null
+  /** When an approved workflow's file changed; null while unchanged or unapproved. */
+  changedAt: number | null
   /** Who does each step for every task of this workflow, by step id; Auto for the rest. */
   pins: Record<string, StepPick>
+}
+
+/**
+ * What a changed workflow was when the user last approved it, returned when the workflow is read
+ * so clients can show what changed, when it was approved and when it changed.
+ */
+export interface ApprovedWorkflow {
+  /** SHA-256 of the approved file as read, hex. */
+  hash: string
+  /** The approved YAML file; null when the approval predates keeping a copy. */
+  text: string | null
+  /** The parsed approved workflow; null when `text` is absent or no longer reads. */
+  workflow: Workflow | null
+  /** When this version was approved; null when the record predates keeping the time. */
+  approvedAt: number | null
+  /** When the file changed after approval; null while unchanged. */
+  changedAt: number | null
 }
 
 /**
@@ -167,11 +188,18 @@ export const LEGACY_OFFICIAL = 'official'
 export type LegacyOfficial = typeof LEGACY_OFFICIAL
 
 /** A workflow entry as a client reads it from a host of any version. */
-export interface WireWorkflowEntry extends Omit<WorkflowEntry, 'source' | 'approval' | 'file'> {
+export interface WireWorkflowEntry extends Omit<
+  WorkflowEntry,
+  'source' | 'approval' | 'file' | 'approvedAt' | 'changedAt'
+> {
   source: WorkflowSource | LegacyOfficial
   approval: WorkflowApproval | LegacyOfficial
   /** Null for a workflow an older host shipped with. */
   file: string | null
+  /** Absent from an older host. */
+  approvedAt?: number | null
+  /** Absent from an older host. */
+  changedAt?: number | null
 }
 
 /**
