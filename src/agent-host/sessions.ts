@@ -4541,7 +4541,17 @@ export class SessionManager {
         const git = this.deps.git()
         if (!git) break
         if (effect.phase === 'started') git.toolCallStarted(folder, live.id, effect.toolCallId)
-        else git.toolCallEnded(folder, live.id, effect.toolCallId, effect.toolKind, effect.output)
+        else {
+          const entry = live.thread.byId[effect.entryId]
+          const tool = entry?.kind === 'tool' ? entry : undefined
+          git.toolCallEnded(folder, live.id, effect.toolCallId, {
+            toolKind: effect.toolKind,
+            status: tool?.status ?? 'failed',
+            title: tool?.title,
+            rawInput: tool?.rawInput,
+            output: effect.output,
+          })
+        }
         break
       }
       case 'subagent':

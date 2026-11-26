@@ -15,8 +15,13 @@ import {
   type PullRequestState,
   type PushTarget,
 } from '@shared/git'
-import type { ToolKind } from '@shared/thread'
-import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
+import type {
+  BranchPullRequest,
+  GitEventDraft,
+  GitServiceApi,
+  GitServiceDeps,
+  ToolCallOutcome,
+} from './api'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { logText } from '../localized-error'
@@ -827,7 +832,7 @@ export function createGitService(
     state: ProjectState,
     call: ToolCall | undefined,
     sessionId: string,
-    output: string,
+    outcome: ToolCallOutcome,
   ): Promise<void> {
     const knownNoPullRequest =
       state.pullRequest?.value === null ? state.pullRequest.branch : undefined
@@ -860,7 +865,13 @@ export function createGitService(
       before: before.status,
       after: after.status,
       newCommits,
-      output,
+      output: outcome.output,
+      tool: {
+        toolKind: outcome.toolKind,
+        status: outcome.status,
+        title: outcome.title,
+        rawInput: outcome.rawInput,
+      },
     })
     const fresh = events.filter((event) => {
       if (event.event !== 'pull_request') return true
@@ -1237,14 +1248,14 @@ export function createGitService(
       }
     },
 
-    toolCallEnded(projectPath, sessionId, toolCallId, toolKind: ToolKind, output) {
+    toolCallEnded(projectPath, sessionId, toolCallId, outcome) {
       const state = lookup(projectPath)
       if (!state || disposed) return
       const key = callKey(sessionId, toolCallId)
       const call = state.calls.get(key)
       state.calls.delete(key)
-      if (!canChangeRepository(toolKind)) return
-      void track(handleToolEnd(state, call, sessionId, output)).catch((error: unknown) =>
+      if (!canChangeRepository(outcome.toolKind)) return
+      void track(handleToolEnd(state, call, sessionId, outcome)).catch((error: unknown) =>
         log(
           'error',
           `Could not handle the end of a tool call in ${projectPath}: ${messageOf(error)}`,
