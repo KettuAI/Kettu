@@ -84,8 +84,9 @@ export function SessionIndicator({
 }
 
 /**
- * What a row shows after its caret. Where the row's tools show over its end, this fades out
- * under them, so the title and badges keep their places (styles/affect.css).
+ * What a row shows after its caret. On plain rows this fades out under the hover tools through a
+ * mask; on badged rows its end slot expands on hover so badges slide clear of the tools
+ * (styles/affect.css).
  */
 export function RowBody({ children }: { children: ReactNode }) {
   return (

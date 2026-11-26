@@ -443,18 +443,21 @@
   ) {
   color: revert-layer;
 }
-/* A session's or task's row keeps no room for its tools, More and Pin: on hover or focus they sit
-   over its end, which fades out under them through a mask, since the sidebar's fill is translucent.
-   A row with a badge (sub-agents, worktree, pull requests) keeps their room instead, as a project's
-   row does, so no badge goes under them. Nothing moves. Touch keeps App Shell's layout. */
+/* A session's or task's row keeps no room for its tools, More and Pin, while idle. Plain rows
+   fade their end under the tools through a mask on hover or focus, since the sidebar's fill is
+   translucent. Rows with a badge (sub-agents, worktree, pull requests) also release the idle
+   reservation so badges align flush at the right edge (or keep only the 16 px status slot while
+   an indicator shows), then slide left smoothly to clear More and Pin on hover, focus, or an open
+   menu. A project's row keeps its tools' room. Touch keeps App Shell's layout. */
 @property --kettu-row-cover {
   syntax: '<number>';
   inherits: false;
   initial-value: 0;
 }
 @media (hover: none) {
-  /* An empty status slot leaves a sub-agent badge at the row's end. */
-  .ui-as-chat-row:has([data-subagent-badge]) .kettu-row-end:not(:has(> :not(:empty))) {
+  /* An empty status slot leaves row badges at the row's end. */
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
+    .kettu-row-end:not(:has(> :not(:empty))) {
     display: none;
   }
 }
@@ -465,18 +468,50 @@
     > .ui-as-chat-folder {
     padding-right: 6px;
   }
-  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end,
-  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]) .kettu-row-end {
+  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end {
     min-width: 42px;
   }
-  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]):is(
-      :hover,
-      :has(:focus-visible),
-      [data-menu]
-    )
+  /* Badged rows stay flush right while idle, then expand the end slot to 42 px (+ 8 px gap + 6 px
+     padding = 56 px) so badges glide clear of More and Pin without overlapping them. */
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]) {
     .kettu-row-end {
-    opacity: 0;
-    transition: none;
+      min-width: 16px;
+      margin-left: 0;
+      transition:
+        width var(--duration-base) var(--ease-standard),
+        min-width var(--duration-base) var(--ease-standard),
+        margin-left var(--duration-base) var(--ease-standard),
+        opacity var(--duration-fast) ease;
+    }
+    .kettu-row-end:not(:has(> :not(:empty))) {
+      width: 0;
+      min-width: 0;
+      margin-left: -8px;
+      overflow: hidden;
+    }
+    &:has(> .ui-as-chat-row__tools > *):is(
+        :hover,
+        :has(:focus-visible),
+        [data-menu],
+        :has(:is([data-subagent-badge], [data-worktree-mark], [data-pr-badge])[data-popup-open])
+      ) {
+      .kettu-row-end {
+        min-width: 42px;
+      }
+      .kettu-row-end:not(:has(> :not(:empty))) {
+        width: 42px;
+        margin-left: 0;
+      }
+    }
+    &:has(> .ui-as-chat-row__tools > *):is(:hover, :has(:focus-visible), [data-menu])
+      .kettu-row-end {
+      opacity: 0;
+      transition:
+        width var(--duration-base) var(--ease-standard),
+        min-width var(--duration-base) var(--ease-standard),
+        margin-left var(--duration-base) var(--ease-standard),
+        opacity 90ms ease;
+    }
   }
   .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):not(
       :has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
@@ -501,6 +536,30 @@
   .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) > .ui-as-chat-row__tools {
     transition: opacity var(--duration-fast) ease;
   }
+  /* Give badged rows a brief beat to start sliding clear before the tools fade in. */
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]):is(
+      :hover,
+      :has(:focus-visible),
+      [data-menu]
+    )
+    > .ui-as-chat-row__tools {
+    transition: opacity 120ms ease 30ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge]) .kettu-row-end,
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
+    > .ui-as-chat-row__tools {
+    transition: none !important;
+  }
+}
+:root[data-reduce-motion='always']
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
+  .kettu-row-end,
+:root[data-reduce-motion='always']
+  .ui-as-chat-row:has([data-subagent-badge], [data-worktree-mark], [data-pr-badge])
+  > .ui-as-chat-row__tools {
+  transition: none !important;
 }
 .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *):is(
     :hover,
