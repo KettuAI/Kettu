@@ -14,7 +14,7 @@ import type {
   PullRequestState,
   RepositoryVisibility,
 } from '@shared/git'
-import type { GitEntry, ToolKind } from '@shared/thread'
+import type { GitEntry, ToolEntry, ToolKind } from '@shared/thread'
 import type { CommitContext } from './commit-context'
 import type { PullRequestContext } from './pull-request-context'
 import type { StarCheck } from './star'
@@ -23,6 +23,15 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 /** A git event for a session's thread; the session gives it its `g:<n>` id and `after`. */
 export type GitEventDraft = DistributiveOmit<GitEntry, 'id' | 'after'>
+
+/** What the git service reads from a finished tool call to attribute repository events. */
+export interface ToolCallOutcome {
+  toolKind: ToolKind
+  status: ToolEntry['status']
+  title?: string
+  rawInput?: string
+  output: string
+}
 
 export interface BranchPullRequest {
   number: number
@@ -133,8 +142,7 @@ export interface GitServiceApi {
     projectPath: string,
     sessionId: string,
     toolCallId: string,
-    toolKind: ToolKind,
-    output: string,
+    outcome: ToolCallOutcome,
   ): void
   turnEnded(projectPath: string, sessionId: string): void
   onChanged(listener: (status: GitStatus) => void): () => void
