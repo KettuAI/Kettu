@@ -319,4 +319,278 @@ describe('AgyBackgroundWait', () => {
     expect(events).toEqual([true])
     tracker.stop()
   })
+
+  it('handles real agy 1.5.18 order where usage_update arrives before tool_call on Step 1', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => tail,
+      settleMs: 300,
+      fallbackMs: 1_500,
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', null)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Pre-step initial usage_update with used === 0 must not trigger waiting.
+    tracker.onUpdate('s-1', usageUpdate(0), false)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(events).toEqual([])
+
+    // Step 1: thought -> usage_update -> tool_call (+15ms) -> tool_call_update(in_progress).
+    tracker.onUpdate('s-1', thoughtChunk('Starting background command.'), false)
+    tail = { stepIndex: 1, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: true }
+    tracker.onUpdate('s-1', usageUpdate(10_780), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('call-1', 'run_command', 'in_progress'), false)
+    await vi.advanceTimersByTimeAsync(11)
+    tracker.onUpdate('s-1', toolUpdate('call-1', 'in_progress'), false)
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'RUNNING', hasToolCalls: false }
+    await vi.advanceTimersByTimeAsync(3_500)
+    expect(events).toEqual([])
+
+    // Step 2: plain reply with no tool calls; sawTool from Step 1 must not leak.
+    tracker.onUpdate('s-1', msgChunk('READY'), false)
+    // Late in_progress update for Step 1's background command must not poison Step 2.
+    tracker.onUpdate('s-1', toolUpdate('call-1', 'in_progress'), false)
+    await vi.advanceTimersByTimeAsync(32)
+    tracker.onUpdate('s-1', usageUpdate(11_029), false)
+
+    // Transcript flushes Step 3 PLANNER_RESPONSE DONE before settleMs expires.
+    await vi.advanceTimersByTimeAsync(150)
+    tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+    await vi.advanceTimersByTimeAsync(150)
+    expect(events).toEqual([true])
+    expect(tracker.isWaiting('s-1')).toBe(true)
+    tracker.stop()
+  })
+
+  it('handles chunkless tool steps before a tool-less reply in agy 1.5.18 order', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    const tracker = new AgyBackgroundWait({
+      tailReader: null,
+      settleMs: 300,
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', null)
+    tracker.onUpdate('s-1', usageUpdate(0), false)
+
+    // Step 1: no thought or text chunk, only usage_update -> tool_call -> completed.
+    tracker.onUpdate('s-1', usageUpdate(10_780), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('call-1', 'manage_task', 'in_progress'), false)
+    tracker.onUpdate('s-1', toolUpdate('call-1', 'completed'), false)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(events).toEqual([])
+
+    // Step 2: another chunkless tool step (usage_update -> tool_call).
+    tracker.onUpdate('s-1', usageUpdate(11_000), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('call-2', 'run_command', 'in_progress'), false)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(events).toEqual([])
+
+    // Step 3: final reply with no tool calls settles into waiting.
+    tracker.onUpdate('s-1', msgChunk('Background job running.'), false)
+    tracker.onUpdate('s-1', usageUpdate(11_250), false)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(events).toEqual([true])
+    tracker.stop()
+  })
+
+  it('retries when transcript.jsonl still shows a fresh non-planner step after usage_update and confirms once PLANNER_RESPONSE flushes', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => tail,
+      settleMs: 300,
+      retryDelaysMs: [200, 400, 800],
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', null)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Step 1 tool step leaves transcript at step 2 GENERIC RUNNING.
+    tracker.onUpdate('s-1', thoughtChunk('Running task'), false)
+    tracker.onUpdate('s-1', usageUpdate(10_780), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('call-1', 'run_command', 'in_progress'), false)
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'RUNNING', hasToolCalls: false }
+
+    // Step 2 reply emits usage_update before step 3 flushes to disk.
+    tracker.onUpdate('s-1', msgChunk('READY'), false)
+    tracker.onUpdate('s-1', usageUpdate(11_029), false)
+
+    // At +300ms (initial check) and +500ms (retry 1), disk is still step 2 GENERIC RUNNING.
+    await vi.advanceTimersByTimeAsync(300)
+    expect(events).toEqual([])
+    await vi.advanceTimersByTimeAsync(200)
+    expect(events).toEqual([])
+
+    // Step 3 flushes before retry 2 (+400ms later, total +900ms) -> confirms waiting.
+    tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+    await vi.advanceTimersByTimeAsync(400)
+    expect(events).toEqual([true])
+    tracker.stop()
+  })
+
+  it('never marks waiting if flush retries exhaust on GENERIC, cancels retries on activity, and aborts immediately on non-terminal PLANNER_RESPONSE', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    let reads = 0
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => {
+        reads++
+        return tail
+      },
+      settleMs: 100,
+      retryDelaysMs: [100, 200],
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', 1_000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Case 1: Tail remains fresh GENERIC through every retry -> never marks waiting.
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'DONE', hasToolCalls: false }
+    tracker.onUpdate('s-1', msgChunk('Still working'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_200), false)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(events).toEqual([])
+
+    // Case 2: Tail is a fresh PLANNER_RESPONSE with status !== DONE -> aborts immediately without retrying.
+    const readsBeforeRunning = reads
+    tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'RUNNING', hasToolCalls: false }
+    tracker.onUpdate('s-1', msgChunk('Streaming...'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_400), false)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(events).toEqual([])
+    expect(reads - readsBeforeRunning).toBe(1)
+
+    // Case 3: Retry scheduled on fresh SYSTEM_MESSAGE is cancelled immediately if a tool_call arrives.
+    tail = { stepIndex: 4, type: 'SYSTEM_MESSAGE', status: 'DONE', hasToolCalls: false }
+    tracker.onUpdate('s-1', msgChunk('Checking'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_600), false)
+    await vi.advanceTimersByTimeAsync(100)
+    // Now retry 1 is pending in 100ms; a new tool_call cancels it even if transcript later writes DONE.
+    tracker.onUpdate('s-1', toolCall('c-next', 'run_command', 'in_progress'), false)
+    tail = { stepIndex: 5, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+    await vi.advanceTimersByTimeAsync(500)
+    expect(events).toEqual([])
+    tracker.stop()
+  })
+
+  it('ignores initial used === 0 usage_update without output on both first and subsequent turns', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    const tracker = new AgyBackgroundWait({
+      tailReader: null,
+      settleMs: 100,
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    // First turn (currentUsed is null).
+    tracker.onPromptStart('s-1', null)
+    tracker.onUpdate('s-1', usageUpdate(0), false)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(events).toEqual([])
+    tracker.onPromptEnd('s-1')
+
+    // Subsequent turn (currentUsed > 0, then agy emits initial used: 0).
+    tracker.onPromptStart('s-1', 10_000)
+    tracker.onUpdate('s-1', usageUpdate(0), false)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(events).toEqual([])
+    tracker.stop()
+  })
+
+  it('handles hidden suggest_next_message after usage_update followed by the final reply', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    const tracker = new AgyBackgroundWait({
+      tailReader: null,
+      settleMs: 100,
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', 1_000)
+    // Step 1: usage_update arrives before hidden tool_call.
+    tracker.onUpdate('s-1', thoughtChunk('Suggesting next prompt.'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_200), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('h-1', 'mcp_kettu_suggest_next_message', 'in_progress'), false)
+    tracker.onUpdate('s-1', toolUpdate('h-1', 'completed'), false)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(events).toEqual([])
+
+    // Step 2: final reply with no tool calls enters waiting cleanly.
+    tracker.onUpdate('s-1', msgChunk('Background task started.'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_400), false)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(events).toEqual([true])
+    tracker.stop()
+  })
+
+  it('falls back via transcript.jsonl when usage_update is omitted after a prior tool step', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => tail,
+      settleMs: 100,
+      fallbackMs: 500,
+      retryDelaysMs: [100, 200],
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', null)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Step 1 (agy 1.5.18 order): usage_update -> tool_call; must NOT trigger fallback while running.
+    tracker.onUpdate('s-1', thoughtChunk('Launching worker.'), false)
+    tracker.onUpdate('s-1', usageUpdate(10_000), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('c-1', 'invoke_subagent', 'in_progress'), false)
+    tail = { stepIndex: 1, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: true }
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(events).toEqual([])
+
+    // Step 2: streams final reply, omits usage_update; fallback verifies fresh tool-less DONE tail.
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'DONE', hasToolCalls: false }
+    tracker.onUpdate('s-1', msgChunk('Worker running.'), false)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(events).toEqual([])
+    // Transcript flushes step 3 during fallback retry window -> marks waiting.
+    tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+    await vi.advanceTimersByTimeAsync(100)
+    expect(events).toEqual([true])
+    tracker.stop()
+  })
 })

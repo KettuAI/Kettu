@@ -3,10 +3,13 @@
 // open via WaitForConversationFullyIdle.
 //
 // In an agentic loop, a model step only yields control when a `PLANNER_RESPONSE` completes with no
-// tool calls. Over ACP, agy signals each completed model step with `usage_update`. When a step
-// finishes without emitting any `tool_call` (including hidden internal tools), no permission or
-// question card is pending, and `session/prompt` stays open past a short settle delay, the main
-// session is idle waiting on background tasks rather than actively writing.
+// tool calls. Over ACP, agy emits `usage_update` when a model step finishes—and in agy 1.5.18+,
+// `usage_update` arrives shortly BEFORE the step's `tool_call` (with no second `usage_update`
+// after the tool runs), and `transcript.jsonl` may flush slightly after `usage_update`.
+//
+// When a step finishes without emitting any `tool_call` (including hidden internal tools), no
+// permission or question card is pending, and `session/prompt` stays open past a short settle
+// delay, the main session is idle waiting on background tasks rather than actively writing.
 //
 // As a fallback when agy omits `usage_update`, the tracker also checks the latest line of
 // `transcript.jsonl` after streaming chunks go quiet.
@@ -24,6 +27,9 @@ export const DEFAULT_SETTLE_MS = 300
 
 /** Idle delay after streamed chunks before checking `transcript.jsonl` as a fallback. */
 export const DEFAULT_FALLBACK_MS = 1_500
+
+/** Bounded backoff delays (ms) when `transcript.jsonl` has not flushed the new reply yet. */
+export const DEFAULT_FLUSH_RETRIES_MS: readonly number[] = [200, 400, 800, 1_500]
 
 /** Minimal metadata of the latest record written to agy's `transcript.jsonl`. */
 export interface AgyTranscriptTail {
@@ -43,6 +49,8 @@ export interface AgyBackgroundWaitOptions {
   settleMs?: number
   /** Quiet delay (ms) after streamed chunks before checking `transcript.jsonl` as a fallback. */
   fallbackMs?: number
+  /** Bounded backoff delays (ms) to re-check `transcript.jsonl` when a fresh non-planner step is still on disk. */
+  retryDelaysMs?: readonly number[]
   /** Called whenever a session enters or leaves the waiting-on-background-work state. */
   onWaitingChange: (sessionId: string, waiting: boolean) => void
 }
@@ -52,15 +60,19 @@ interface SessionState {
   sawOutput: boolean
   /** Whether the current model step emitted any tool call (including hidden calls). */
   sawTool: boolean
+  /** Tool call ids emitted during the current model step. */
+  stepToolIds: Set<string>
+  /** Tool call ids from earlier steps of this turn (e.g. background commands still in_progress). */
+  priorToolIds: Set<string>
   /** Number of open permission or question cards blocking this session. */
   pendingCards: number
   /** Last context token count from `usage_update`, to ignore config-only updates. */
   lastUsed: number | null
   /** Whether this session is currently reported as waiting on background work. */
   waiting: boolean
-  /** Debounce timer scheduled after a tool-less `usage_update`. */
+  /** Debounce or flush-retry timer scheduled after a tool-less `usage_update`. */
   timer: ReturnType<typeof setTimeout> | null
-  /** Fallback timer scheduled after streamed chunks go quiet. */
+  /** Fallback or flush-retry timer scheduled after streamed chunks go quiet. */
   fallbackTimer: ReturnType<typeof setTimeout> | null
   /** Incremented whenever activity invalidates pending timers or in-flight reads. */
   generation: number
@@ -140,6 +152,7 @@ export class AgyBackgroundWait {
   private readonly tailReader: AgyTailReader | null
   private readonly settleMs: number
   private readonly fallbackMs: number
+  private readonly retryDelaysMs: readonly number[]
   private readonly onWaitingChange: (sessionId: string, waiting: boolean) => void
   private stopped = false
 
@@ -147,6 +160,7 @@ export class AgyBackgroundWait {
     this.tailReader = options.tailReader ?? null
     this.settleMs = options.settleMs ?? DEFAULT_SETTLE_MS
     this.fallbackMs = options.fallbackMs ?? DEFAULT_FALLBACK_MS
+    this.retryDelaysMs = options.retryDelaysMs ?? DEFAULT_FLUSH_RETRIES_MS
     this.onWaitingChange = options.onWaitingChange
   }
 
@@ -158,6 +172,8 @@ export class AgyBackgroundWait {
     const state: SessionState = {
       sawOutput: false,
       sawTool: false,
+      stepToolIds: new Set(),
+      priorToolIds: new Set(),
       pendingCards: previous?.pendingCards ?? 0,
       lastUsed: currentUsed,
       waiting: false,
@@ -185,7 +201,7 @@ export class AgyBackgroundWait {
       this.clearTimers(state)
       state.generation++
       state.sawOutput = false
-      state.sawTool = false
+      this.retireStepTools(state)
     }
     if (state.waiting) {
       state.waiting = false
@@ -227,11 +243,14 @@ export class AgyBackgroundWait {
         state.generation++
         if (state.waiting) {
           state.waiting = false
-          state.sawTool = false
           this.onWaitingChange(sessionId, false)
         }
+        // In agy 1.5.18+, `tool_call` arrives after the tool step's `usage_update` and no second
+        // `usage_update` follows once the tool runs. Any new thought or reply chunk begins a new
+        // model step, so stale tool state from the previous step must not leak into it.
+        if (state.sawTool) this.retireStepTools(state)
         state.sawOutput = true
-        if (this.tailReader && !state.sawTool && state.pendingCards === 0) {
+        if (this.tailReader && state.pendingCards === 0) {
           this.scheduleFallback(sessionId, state)
         }
         return
@@ -243,14 +262,19 @@ export class AgyBackgroundWait {
           state.waiting = false
           this.onWaitingChange(sessionId, false)
         }
+        state.stepToolIds.add(update.toolCallId)
+        state.priorToolIds.delete(update.toolCallId)
         state.sawTool = true
         return
       }
       case 'tool_call_update': {
-        // Ignore completion updates for background commands from earlier steps while waiting.
+        // Ignore progress or completion updates from tools started in earlier steps (e.g. a
+        // background command still running while a later step replies or waits).
+        if (state.priorToolIds.has(update.toolCallId)) return
         if (!state.waiting && (update.status === 'pending' || update.status === 'in_progress')) {
           this.clearTimers(state)
           state.generation++
+          state.stepToolIds.add(update.toolCallId)
           state.sawTool = true
         }
         return
@@ -258,15 +282,17 @@ export class AgyBackgroundWait {
       case 'usage_update': {
         const usageChanged = state.lastUsed === null || update.used !== state.lastUsed
         state.lastUsed = update.used
+        // Ignore initial pre-step `used: 0` updates and config-only updates with unchanged `used`.
+        const hadStep = state.sawOutput || (usageChanged && update.used > 0)
+        if (!hadStep) return
         if (state.fallbackTimer) {
           clearTimeout(state.fallbackTimer)
           state.fallbackTimer = null
         }
         const hadTool = state.sawTool
-        const hadStep = state.sawOutput || usageChanged
         state.sawOutput = false
-        state.sawTool = false
-        if (hadTool || !hadStep || state.pendingCards > 0 || state.waiting) {
+        this.retireStepTools(state)
+        if (hadTool || state.pendingCards > 0 || state.waiting) {
           if (state.timer) {
             clearTimeout(state.timer)
             state.timer = null
@@ -312,6 +338,12 @@ export class AgyBackgroundWait {
     this.states.clear()
   }
 
+  private retireStepTools(state: SessionState): void {
+    for (const id of state.stepToolIds) state.priorToolIds.add(id)
+    state.stepToolIds.clear()
+    state.sawTool = false
+  }
+
   private clearTimers(state: SessionState): void {
     if (state.timer) {
       clearTimeout(state.timer)
@@ -339,8 +371,34 @@ export class AgyBackgroundWait {
     const generation = ++state.generation
     state.timer = setTimeout(() => {
       state.timer = null
-      void this.confirmWaiting(sessionId, state, generation, false)
+      void this.confirmWaiting(sessionId, state, generation, false, 0)
     }, this.settleMs)
+    state.timer.unref?.()
+  }
+
+  private scheduleRetry(
+    sessionId: string,
+    state: SessionState,
+    generation: number,
+    requireTranscript: boolean,
+    attempt: number,
+  ): void {
+    const delay = this.retryDelaysMs[attempt]
+    if (delay === undefined) return
+    if (requireTranscript) {
+      if (state.fallbackTimer) clearTimeout(state.fallbackTimer)
+      state.fallbackTimer = setTimeout(() => {
+        state.fallbackTimer = null
+        void this.confirmWaiting(sessionId, state, generation, true, attempt + 1)
+      }, delay)
+      state.fallbackTimer.unref?.()
+      return
+    }
+    if (state.timer) clearTimeout(state.timer)
+    state.timer = setTimeout(() => {
+      state.timer = null
+      void this.confirmWaiting(sessionId, state, generation, false, attempt + 1)
+    }, delay)
     state.timer.unref?.()
   }
 
@@ -349,7 +407,7 @@ export class AgyBackgroundWait {
     const generation = state.generation
     state.fallbackTimer = setTimeout(() => {
       state.fallbackTimer = null
-      void this.confirmWaiting(sessionId, state, generation, true)
+      void this.confirmWaiting(sessionId, state, generation, true, 0)
     }, this.fallbackMs)
     state.fallbackTimer.unref?.()
   }
@@ -359,6 +417,7 @@ export class AgyBackgroundWait {
     state: SessionState,
     generation: number,
     requireTranscript: boolean,
+    attempt: number,
   ): Promise<void> {
     if (this.stopped || this.states.get(sessionId) !== state || state.generation !== generation) {
       return
@@ -381,11 +440,20 @@ export class AgyBackgroundWait {
         if (isFinishedNoToolReply(tail)) {
           if (requireTranscript && !isFresh) return
           state.baselineStep = Math.max(state.baselineStep ?? -1, tail.stepIndex)
+        } else if (tail.type === 'PLANNER_RESPONSE') {
+          // A fresh PLANNER_RESPONSE with tool calls or still running means the model step did not
+          // yield control; abort immediately without retrying.
+          if (requireTranscript || isFresh) return
         } else {
+          // A fresh non-planner entry (e.g. GENERIC, SYSTEM_MESSAGE, USER_INPUT) can appear either
+          // while the new PLANNER_RESPONSE is still flushing to disk or while the agent is between
+          // steps. Re-check on a bounded backoff and never mark waiting unless a tool-less DONE
+          // PLANNER_RESPONSE arrives.
+          if (isFresh) {
+            this.scheduleRetry(sessionId, state, generation, requireTranscript, attempt)
+            return
+          }
           if (requireTranscript) return
-          // A fresh non-terminal step on disk (e.g. a PLANNER_RESPONSE with tool_calls or a
-          // GENERIC tool result) means the agent is actively continuing, not idle waiting.
-          if (isFresh) return
         }
       } else if (requireTranscript) {
         return

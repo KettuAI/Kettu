@@ -241,6 +241,8 @@ export interface AcpOptions {
   agyWaitSettleMs?: number
   /** Optional fallback quiet delay (ms) for agy background-wait detection, injectable for tests. */
   agyWaitFallbackMs?: number
+  /** Optional transcript-flush retry delays (ms) for agy background-wait detection, injectable for tests. */
+  agyWaitRetryDelaysMs?: readonly number[]
   /** Optional resolver for which agy `app_data_dir` owns a session, injectable for tests. */
   agyAppDataDir?: (sessionId: string) => Promise<string | null>
 }
@@ -1136,6 +1138,7 @@ export class AcpConnection implements AgentConnection {
                 : agyTailReader(this.hooks.home, (id) => this.agyAppDataDirOf(id)),
             settleMs: this.hooks.agyWaitSettleMs,
             fallbackMs: this.hooks.agyWaitFallbackMs,
+            retryDelaysMs: this.hooks.agyWaitRetryDelaysMs,
             onWaitingChange: (sessionId, waiting) => {
               this.targets.get(sessionId)?.apply({
                 patches: [],
