@@ -71,7 +71,10 @@ function SessionChip({ sessionId }: { sessionId: string | undefined }) {
   const summary = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
   if (!summary) return null
   return (
-    <div className="flex h-8 max-w-60 items-center gap-[9px] rounded-lg bg-surface py-1.5 pr-2.5 pl-2 text-ui text-primary shadow-menu">
+    <div
+      data-overlay-layer=""
+      className="flex h-8 max-w-60 items-center gap-[9px] rounded-lg bg-surface py-1.5 pr-2.5 pl-2 text-ui text-primary shadow-menu"
+    >
       {summary.origin === 'subagent' ? (
         <Glyph icon={BotIcon} size={14} className="shrink-0 text-secondary" />
       ) : (
@@ -100,6 +103,7 @@ export function DropHint() {
     <div
       ref={ref}
       aria-hidden
+      data-overlay-layer=""
       className="pointer-events-none absolute top-0 left-0 z-20 animate-in rounded-card bg-selection fade-in ring-1 ring-focus animation-duration-(--duration-fast)"
     />
   )

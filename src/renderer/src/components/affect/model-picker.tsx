@@ -870,6 +870,7 @@ export function ModelPicker({
         id={`${uid}-menu`}
         ref={popRef}
         className="ui-mdpc__pop"
+        data-overlay-layer={isOpen ? "" : undefined}
         data-tight={room ? "" : undefined}
         style={
           shift || lift || room
@@ -1133,6 +1134,7 @@ export function ModelPicker({
           <div
             ref={flyRef}
             className="ui-mdpc__fly"
+            data-overlay-layer=""
             data-side={flySide}
             style={{ top: flyTop, translate: flyNudge ? `${flyNudge}px 0` : undefined }}
             role="dialog"

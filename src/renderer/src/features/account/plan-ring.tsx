@@ -25,6 +25,7 @@ import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentsOn, planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
+import { useOverlayPresence } from '@renderer/stores/overlays'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
 import { openUsage, useViewStore } from '@renderer/stores/view'
@@ -127,6 +128,7 @@ export function PlanRing() {
   const currentKey = useCurrentAccountKey()
   const view = useLimitView()
   const [open, setOpen] = useState(false)
+  useOverlayPresence(open, { dismissible: true })
 
   const card = currentKey ? currentCard(cards, currentKey) : null
   const windows = card?.windows ?? []
