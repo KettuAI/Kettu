@@ -366,12 +366,25 @@ export function previewsCommand(command: string): boolean {
   return command.length > 60 || /&&|\|\||[;|\n]/.test(command)
 }
 
+/**
+ * Whether a slash entry is an exclusive leading command (like `/compact` or a `.md` command)
+ * or a stackable skill that can be combined multiple times in one message.
+ */
+export type SlashCommandKind = 'command' | 'skill'
+
 export interface SlashCommand {
   name: string
   description: string
   inputHint?: string
+  /** Defaults to `'command'` when omitted. */
+  kind?: SlashCommandKind
   /** Set on Kettu's own commands; an agent's carry none. */
   source?: CommandSource
+}
+
+/** Whether a slash entry is a stackable skill rather than an exclusive command. */
+export function isSkillCommand(command: Pick<SlashCommand, 'kind'>): boolean {
+  return command.kind === 'skill'
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import type { PluginMentionRef } from '@shared/plugin-refs'
+import { mentionedSkills } from '@shared/slash'
 import { putBackDraft } from '@renderer/app/actions'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -246,13 +247,28 @@ export function usePromptBox({
     [draft, source],
   )
 
-  /** Puts the command at the start of the text, unless it starts with it already. */
+  /**
+   * Puts an exclusive command at the start of the text unless it already starts with it, or
+   * appends a stackable skill unless the message already references it.
+   */
   const addCommand = useCallback(
-    (name: string) => {
+    (name: string, skill = false) => {
       const current = editor.current?.text() ?? ''
       const command = `/${name}`
-      const has = current.startsWith(command) && /^(\s|$)/.test(current.slice(command.length))
-      const next = has ? current : `${command} ${current.trimStart()}`
+      let next: string
+      if (skill) {
+        if (mentionedSkills(current, [name]).length > 0) {
+          next = current
+        } else if (current === '') {
+          next = `${command} `
+        } else {
+          const sep = /\s$/.test(current) ? '' : ' '
+          next = `${current}${sep}${command} `
+        }
+      } else {
+        const has = current.startsWith(command) && /^(\s|$)/.test(current.slice(command.length))
+        next = has ? current : `${command} ${current.trimStart()}`
+      }
       source.set(next, null)
       writeDraft(draft, next)
       editor.current?.setText(next)
@@ -282,7 +298,7 @@ export function usePromptBox({
         }
         if (event.kind === 'command-into-composer' && event.sessionId === sessionId) {
           closeHistory()
-          addCommand(event.name)
+          addCommand(event.name, event.skill)
         }
         if (event.kind === 'mention-into-composer' && event.draft === draft) {
           closeHistory()

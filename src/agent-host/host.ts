@@ -1480,6 +1480,13 @@ export class AgentHost {
           ...(record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : []),
           ...(record.commandTools?.skills ?? []),
         ]),
+      toolSkills: (record) =>
+        this.settings.mcp.kettu.off.includes(record.agentId)
+          ? null
+          : this.marketSkills.sessionSkills(record.agentId, [
+              ...(record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : []),
+              ...(record.commandTools?.skills ?? []),
+            ]),
       roles: { resolve: (ref) => this.roles.resolve(ref) },
       plugins: this.pluginHooks,
       commands: {

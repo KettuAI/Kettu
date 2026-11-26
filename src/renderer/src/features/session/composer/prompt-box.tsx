@@ -9,10 +9,12 @@ import {
   type ReactNode,
 } from 'react'
 import { Popover } from '@base-ui/react/popover'
+import { SparklesIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AgentId, SlashCommand } from '@shared/thread'
+import { isSkillCommand, type AgentId, type SlashCommand } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { menuCollisionPadding } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
@@ -49,7 +51,7 @@ import {
 import { usePromptChips } from './prompt-chips'
 import { ResizeGrip } from './resize-grip'
 import { commandSourceName } from './command-source'
-import { orderSlashMatches, placeCommand, slashAt } from './slash'
+import { applySlashChoice, orderSlashMatches, slashAt } from './slash'
 import { slashKeys } from './slash-list'
 import { addDraftMention } from './plugin-mentions'
 import { useMentionList, type MentionList } from './use-mention-list'
@@ -311,12 +313,7 @@ export function PromptBox({
     if (isPluginRow(item)) choosePlugin(item)
     else if (isMentionRow(item)) choose(item)
     else if (slash) {
-      const next = placeCommand(
-        source.text,
-        slash,
-        item.name,
-        commands.map((c) => c.name),
-      )
+      const next = applySlashChoice(source.text, slash, item, commands)
       update(next.text, next.caret)
     }
   }
@@ -627,21 +624,26 @@ function SlashItem({
   onHighlight: () => void
   onChoose: () => void
 }) {
+  const skill = isSkillCommand(command)
   return (
     <div
       role="option"
       id={id}
       aria-selected={highlighted}
       data-highlighted={highlighted ? '' : undefined}
+      data-slash-kind={skill ? 'skill' : 'command'}
       // Pressing a row keeps the focus, and with it the caret, in the box.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
       className="col-span-3 grid h-8 cursor-default grid-cols-subgrid items-center gap-x-5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
-      <span className="truncate font-medium text-primary">
-        <span className="text-tertiary">/</span>
-        {command.name}
+      <span className="flex min-w-0 items-center gap-1.5 font-medium text-primary">
+        {skill && <Glyph icon={SparklesIcon} className="size-3.25 shrink-0 text-control-on" />}
+        <span className="truncate">
+          <span className="text-tertiary">/</span>
+          {command.name}
+        </span>
       </span>
       <span className="truncate text-hint text-tertiary">{command.description}</span>
       <SlashSource command={command} agentId={agentId} />
@@ -652,6 +654,22 @@ function SlashItem({
 function SlashSource({ command, agentId }: { command: SlashCommand; agentId: AgentId | null }) {
   const { t } = useTranslation('composer')
   const name = commandSourceName(command.source, t)
-  if (name === null) return agentId ? <AgentMark agent={agentId} size={14} /> : <span />
-  return <span className="max-w-32 truncate text-small text-tertiary">{name}</span>
+  const skill = isSkillCommand(command)
+  const origin =
+    name === null ? (
+      agentId ? (
+        <AgentMark agent={agentId} size={14} />
+      ) : null
+    ) : (
+      <span className="max-w-32 truncate text-small text-tertiary">{name}</span>
+    )
+  if (!skill) return origin ?? <span />
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="rounded bg-control-on-tint px-1.25 py-0.5 text-caption leading-none font-medium text-control-on">
+        {t('slash.skill')}
+      </span>
+      {origin}
+    </span>
+  )
 }

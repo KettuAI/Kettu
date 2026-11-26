@@ -7,6 +7,7 @@
 // response's `usage`, and `session/fork` with its fork point in `_meta`); nothing else
 // unstable is advertised or called.
 
+import os from 'node:os'
 import { Readable, Writable } from 'node:stream'
 import {
   client,
@@ -17,6 +18,7 @@ import {
   type AgentApp,
   type AnyMessage,
   type AuthMethod,
+  type AvailableCommand,
   type ClientConnection,
   type ContentBlock,
   type InitializeResponse,
@@ -80,6 +82,7 @@ import {
   chunkTokens,
   gooseCallUsage,
   mapAuthStatus,
+  mapCommands,
   mapReportedAuthStatus,
   mapConfig,
   mapModelUsage,
@@ -119,7 +122,7 @@ import {
 } from './agy-auto-policy'
 import { AgyBackgroundWait, agyTailReader, type AgyTailReader } from './agy-background-wait'
 import { AgyCommands } from './agy-commands'
-import { AgyContextEstimator } from './agy-context'
+import { AgyContextEstimator, scanAgySkillsOnDisk } from './agy-context'
 import { AgyMetrics, agyStepReader, type AgyStepReader } from './agy-metrics'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { AGY_ELICITATION, askInCard, asksQuestions, OpenAsks } from './agy-questions'
@@ -503,6 +506,10 @@ export class AcpConnection implements AgentConnection {
   private subagents: AgySubagents | null = null
   /** Where each agy session was opened and with which servers, which its sub-agents load with. */
   private readonly agyOpened = new Map<string, { cwd: string; options: SessionOptions }>()
+  /** Skill names discovered on disk for each agy working directory, to tag skills as stackable. */
+  private readonly agySkillNames = new Map<string, ReadonlySet<string>>()
+  /** Latest raw commands received per agy session, re-mapped once disk skill scan finishes. */
+  private readonly agyRawCommands = new Map<string, readonly AvailableCommand[]>()
   /** The session each of agy's sub-agents was loaded under. */
   private readonly subagentParents = new Map<string, string>()
   /** Sub-agents opened again whose replay Kettu already shows. */
@@ -819,8 +826,13 @@ export class AcpConnection implements AgentConnection {
     return this.hooks.agentId === 'goose'
   }
 
-  private map(update: SessionUpdate, ctx: MapperContext): MapperOutput {
+  private map(sessionId: string, update: SessionUpdate, ctx: MapperContext): MapperOutput {
     if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
+      if (this.agy && update.sessionUpdate === 'available_commands_update') {
+        this.agyRawCommands.set(sessionId, update.availableCommands)
+        const cwd = this.agyOpened.get(this.agyRootOf(sessionId))?.cwd
+        return mapSessionUpdate(update, ctx, cwd ? this.agySkillNames.get(cwd) : undefined)
+      }
       return mapSessionUpdate(update, ctx)
     }
     if (this.agy && onAgyOwnFiles(update, ctx)) return { patches: [], effects: [] }
@@ -842,7 +854,7 @@ export class AcpConnection implements AgentConnection {
       this.notePlanWrite(sessionId, update)
       const replaying = target.context().replaying
       this.agyWait?.onUpdate(sessionId, update, replaying)
-      target.apply(this.withAccess(sessionId, this.map(update, target.context())))
+      target.apply(this.withAccess(sessionId, this.map(sessionId, update, target.context())))
       this.noteCommand(sessionId, update, target)
       this.subagents?.noted(sessionId, update, replaying)
       this.agyMetrics?.onUpdate(sessionId, update, replaying)
@@ -929,7 +941,7 @@ export class AcpConnection implements AgentConnection {
     if (!early) return
     this.pending.delete(sessionId)
     for (const update of early.updates) {
-      target.apply(this.withAccess(sessionId, this.map(update, target.context())))
+      target.apply(this.withAccess(sessionId, this.map(sessionId, update, target.context())))
     }
   }
 
@@ -1332,9 +1344,28 @@ export class AcpConnection implements AgentConnection {
     }
   }
 
-  /** 记录每个 agy 会话打开时的目录与 MCP 服务器，供子代理加载和上下文估算复用。 */
+  /** Records the cwd and MCP servers for each agy session and discovers disk skills for tagging. */
   private openedAgy(sessionId: string, cwd: string, options: SessionOptions): void {
-    if (this.agy) this.agyOpened.set(sessionId, { cwd, options })
+    if (!this.agy) return
+    this.agyOpened.set(sessionId, { cwd, options })
+    if (this.agySkillNames.has(cwd)) return
+    const home = this.hooks.home ?? os.homedir()
+    void scanAgySkillsOnDisk(cwd, home)
+      .then((entries) => {
+        const names = new Set(entries.map((entry) => entry.name))
+        this.agySkillNames.set(cwd, names)
+        if (names.size === 0 || this.isClosed) return
+        for (const [id, raw] of this.agyRawCommands) {
+          if (this.agyOpened.get(this.agyRootOf(id))?.cwd !== cwd) continue
+          const target = this.targets.get(id)
+          if (!target) continue
+          target.apply({
+            patches: [{ op: 'session.update', changes: { commands: mapCommands(raw, names) } }],
+            effects: [],
+          })
+        }
+      })
+      .catch(() => {})
   }
 
   /**
@@ -1383,6 +1414,7 @@ export class AcpConnection implements AgentConnection {
     this.agySessionGrants.delete(sessionId)
     this.agyCommands.delete(sessionId)
     this.agyOpened.delete(sessionId)
+    this.agyRawCommands.delete(sessionId)
     this.subagentParents.delete(sessionId)
     this.subagents?.forget(sessionId)
     this.agyMetrics?.forget(sessionId)

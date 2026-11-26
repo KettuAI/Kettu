@@ -12,7 +12,7 @@ describe("Pi's commands", () => {
       { name: '', source: 'prompt' },
     ])
     expect(list.slice(0, 3)).toEqual([
-      { name: 'skill:lint', description: 'Lint the code' },
+      { name: 'skill:lint', description: 'Lint the code', kind: 'skill' },
       { name: 'mcp', description: '(extension)' },
       { name: 'compact', description: 'A template named compact' },
     ])

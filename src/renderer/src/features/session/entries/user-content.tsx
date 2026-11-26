@@ -4,7 +4,13 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
 import type { PluginMentionRef } from '@shared/plugin-refs'
-import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/thread'
+import {
+  isSkillCommand,
+  type Attachment,
+  type ContentRef,
+  type ThreadEntry,
+  type UserContent,
+} from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
@@ -298,7 +304,11 @@ function ChipText({
   )
   const context = useMemo(
     () => ({
-      commands: [...(commands?.map((c) => c.name) ?? []), ...(command === null ? [] : [command])],
+      commands: [
+        ...(commands?.filter((c) => !isSkillCommand(c)).map((c) => c.name) ?? []),
+        ...(command === null ? [] : [command]),
+      ],
+      skills: commands?.filter(isSkillCommand).map((c) => c.name) ?? [],
       resolve,
     }),
     [commands, command, resolve],
@@ -306,6 +316,12 @@ function ChipText({
   const links = useLinkOpener(sessionId)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
     if (chip.kind === 'command') return null
+    if (chip.kind === 'skill') {
+      return sessionId
+        ? () =>
+            emitAppEvent({ kind: 'command-into-composer', sessionId, name: chip.name, skill: true })
+        : null
+    }
     if (chip.kind === 'link') return () => links.open(chip.url)
     if (isSurfaceMention(chip.kind)) {
       const id = chip.surfaceId

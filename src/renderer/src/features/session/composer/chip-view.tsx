@@ -8,6 +8,7 @@ import {
   Folder01Icon,
   GlobalIcon,
   PlugSocketIcon,
+  SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
 import { SiteIconImage } from '@renderer/components/site-icon-image'
@@ -44,7 +45,8 @@ export function ChipView({
   state?: ChipState
   surface?: boolean
 }) {
-  const missing = chip.kind !== 'command' && chip.kind !== 'link' && !!chip.missing
+  const missing =
+    chip.kind !== 'command' && chip.kind !== 'skill' && chip.kind !== 'link' && !!chip.missing
   return (
     <span
       data-chip={chip.kind}
@@ -121,6 +123,14 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
         <span className="text-control-on/55">/</span>
         {chip.name}
       </span>
+    )
+  }
+  if (chip.kind === 'skill') {
+    return (
+      <>
+        <Glyph icon={SparklesIcon} className="size-3.25 shrink-0 text-control-on" />
+        <span className="min-w-0 truncate font-medium text-primary">{chip.name}</span>
+      </>
     )
   }
   if (chip.kind === 'link') return <LinkBody chip={chip} />

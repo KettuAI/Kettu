@@ -299,7 +299,13 @@
     "loading": "Listing commands…",
     "chooseProject": "Choose a project to list its commands",
     "yours": "Yours",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "skill": "Skill",
+    "activeSkills_one": "{{count}} skill",
+    "activeSkills_other": "{{count}} skills",
+    "activeCommandAndSkills_one": "Command · {{count}} skill",
+    "activeCommandAndSkills_other": "Command · {{count}} skills",
+    "moreSkills": "+{{count}} more"
   },
   "mentions": {
     "used": "Used in this session",

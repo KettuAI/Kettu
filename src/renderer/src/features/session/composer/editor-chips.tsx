@@ -23,6 +23,7 @@ import type { EditorState, Line } from '@codemirror/state'
 import { createRoot, type Root } from 'react-dom/client'
 import { RenderedChip, type ChipState } from './chip-view'
 import { findChips, findLinks, mentionEndingAt, type Chip, type ChipContext } from './chips'
+import { slashAt } from './slash'
 
 export interface ChipHooks extends ChipContext {
   /** The pointer rests on a chip, or left the one it was on. */
@@ -128,6 +129,9 @@ function sameChip(a: Chip, b: Chip): boolean {
   if (a.kind === 'command' || b.kind === 'command') {
     return a.kind === b.kind && 'name' in a && 'name' in b && a.name === b.name
   }
+  if (a.kind === 'skill' || b.kind === 'skill') {
+    return a.kind === 'skill' && b.kind === 'skill' && a.name === b.name
+  }
   if (a.kind === 'link' || b.kind === 'link') {
     return a.kind === 'link' && b.kind === 'link' && a.url === b.url
   }
@@ -155,9 +159,12 @@ interface Drawn {
 const within = (chip: { from: number; to: number }, range: { from: number; to: number } | null) =>
   !!range && range.from <= chip.from && range.to >= chip.to && range.to > range.from
 
-/** The chips on one line; only the first line can start with a command. */
+/** The chips on one line; only the first line can start with an exclusive command. */
 function chipsOfLine(line: Line, hooks: ChipHooks): Chip[] {
-  const context = line.number === 1 ? hooks : { commands: [], resolve: hooks.resolve }
+  const context: ChipContext =
+    line.number === 1
+      ? hooks
+      : { commands: [], ...(hooks.skills ? { skills: hooks.skills } : {}), resolve: hooks.resolve }
   const chips = findChips(line.text, context)
   if (line.from === 0) return chips
   return chips.map((chip) => ({ ...chip, from: chip.from + line.from, to: chip.to + line.from }))
@@ -273,7 +280,16 @@ function mentionAt(view: EditorView, head: number): { from: number; to: number }
   return start < 0 ? null : { from: line.from + start, to: head }
 }
 
-/** The link or mention the caret is typing: the one it is in or at the end of, if any. */
+/** The `/word` the caret is currently typing, which stays text until the caret leaves it. */
+function slashTypingAt(view: EditorView, head: number): { from: number; to: number } | null {
+  const line = view.state.doc.lineAt(head)
+  const found = slashAt(line.text, head - line.from)
+  return found
+    ? { from: line.from + found.start, to: line.from + found.start + 1 + found.query.length }
+    : null
+}
+
+/** The link, mention or slash token the caret is typing: the one it is in or at the end of, if any. */
 function typingAt(view: EditorView, head: number): { from: number; to: number } | null {
   const line = view.state.doc.lineAt(head)
   for (const link of findLinks(line.text)) {
@@ -283,6 +299,8 @@ function typingAt(view: EditorView, head: number): { from: number; to: number } 
   }
   const mention = mentionAt(view, head)
   if (mention) return mention
+  const slash = slashTypingAt(view, head)
+  if (slash) return slash
   // A link still being typed, such as `https:/`, is not a link yet but will be.
   const before = line.text.slice(0, head - line.from)
   const start = before.search(/\S+$/)
@@ -330,7 +348,10 @@ const chipPlugin = ViewPlugin.fromClass(
       const hooks = update.state.facet(chipHooks)
       const before = update.startState.facet(chipHooks)
       // What resolves a chip changed, so every one is looked at again.
-      const rescan = hooks?.commands !== before?.commands || hooks?.resolve !== before?.resolve
+      const rescan =
+        hooks?.commands !== before?.commands ||
+        hooks?.skills !== before?.skills ||
+        hooks?.resolve !== before?.resolve
       const deleted = update.docChanged ? wholeChipsDeleted(update, this.found) : null
       if (rescan) this.found = findAll(update.state)
       else if (update.docChanged) this.found = refind(this.found, update)

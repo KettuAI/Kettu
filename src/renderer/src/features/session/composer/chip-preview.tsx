@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { File01Icon, Folder01Icon, GlobalIcon } from '@hugeicons/core-free-icons'
+import { File01Icon, Folder01Icon, GlobalIcon, SparklesIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { FileContent } from '@shared/files'
 import { githubReferenceFromLink } from '@shared/git'
+import type { SlashCommand } from '@shared/thread'
 import { REFERENCE_CARD_CLASS, ReferenceCard } from '@renderer/features/git/gh-reference'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
@@ -12,6 +13,7 @@ import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { defaultDestination } from '../link-open'
+import { commandSourceName } from './command-source'
 import type { Chip } from './chips'
 import { Glyph } from '@renderer/features/shell/glyph'
 
@@ -22,12 +24,16 @@ const PREVIEW_LINES = 6
 export function ChipPreview({
   chip,
   item,
+  commands,
+  agentName,
   projectPath,
   hostId,
   inSession,
 }: {
   chip: Chip
   item: DraftAttachment | undefined
+  commands?: readonly SlashCommand[]
+  agentName?: string
   projectPath: string | null
   hostId?: string | null
   /** A session's composer, whose links may open in its page in Kettu's browser. */
@@ -36,6 +42,26 @@ export function ChipPreview({
   const { t } = useTranslation('composer')
   const thread = useSettingsStore((s) => s.settings.thread)
   if (chip.kind === 'command') return null
+  if (chip.kind === 'skill') {
+    const entry = commands?.find((c) => c.name === chip.name)
+    const source = commandSourceName(entry?.source, t) ?? agentName
+    return (
+      <div className="flex w-75 flex-col gap-1.5 p-2.5">
+        <div className="flex items-center gap-1.75 text-small">
+          <Glyph icon={SparklesIcon} className="size-3.5 shrink-0 text-control-on" />
+          <span className="min-w-0 flex-1 truncate font-medium text-primary">
+            <span className="text-tertiary">/</span>
+            {chip.name}
+          </span>
+          {source && <span className="shrink-0 text-caption text-tertiary">{source}</span>}
+        </div>
+        {entry?.description && <div className="text-hint text-secondary">{entry.description}</div>}
+        <div className="text-caption text-tertiary">
+          {t('chips.backspaceRemoves', { key: isMac ? '⌫' : 'Backspace' })}
+        </div>
+      </div>
+    )
+  }
   if (chip.kind === 'link') {
     const reference = githubReferenceFromLink(chip.url)
     if (reference) {

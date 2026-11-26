@@ -52,14 +52,18 @@ function unlinkAddresses(children: MdNode[]): MdNode[] {
 function chipLinks({ chips: known }: ChipLinkOptions) {
   const context: ChipContext = {
     commands: known.flatMap(({ chip }) => (chip.kind === 'command' ? [chip.name] : [])),
+    skills: known.flatMap(({ chip }) => (chip.kind === 'skill' ? [chip.name] : [])),
     resolve: (token) => {
       const found = known.find(
         ({ chip, raw }) =>
           chip.kind !== 'command' &&
+          chip.kind !== 'skill' &&
           chip.kind !== 'link' &&
           splitLines(raw.slice(1)).name === token,
       )?.chip
-      return found && found.kind !== 'command' && found.kind !== 'link' ? found : null
+      return found && found.kind !== 'command' && found.kind !== 'skill' && found.kind !== 'link'
+        ? found
+        : null
     },
   }
   const visit = (node: MdNode): void => {

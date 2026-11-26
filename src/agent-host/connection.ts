@@ -370,6 +370,15 @@ export function deviceNotice(deviceId: string, name: string): string {
   return `[The user shares the device "${name}" with you, id ${deviceId}: use it with the device tools.]`
 }
 
+/** What an agent using Kettu's `read_skill` tool reads when the prompt selects Kettu skills. */
+export function skillNotice(names: readonly string[]): string {
+  if (names.length === 1) {
+    return `[The user selected the skill "${names[0]}": read it with read_skill before continuing.]`
+  }
+  const list = names.map((name) => `"${name}"`).join(', ')
+  return `[The user selected these skills: ${list}. Read each one with read_skill before continuing.]`
+}
+
 /** A message of the conversation before an agent took a session over, as it is carried to it. */
 export interface HistoryMessage {
   role: 'user' | 'assistant'

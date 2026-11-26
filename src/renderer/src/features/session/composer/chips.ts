@@ -4,6 +4,7 @@
 
 import { schemelessGitHubLinks } from '@shared/git'
 import type { PluginMentionRef } from '@shared/plugin-refs'
+import { findSkillTokens } from '@shared/slash'
 import { leadingCommand } from './slash'
 
 /** What an `@` mention names, once resolved against the attachments and the project. */
@@ -25,6 +26,7 @@ export interface MentionTarget {
 
 export type Chip =
   | { kind: 'command'; from: number; to: number; name: string }
+  | { kind: 'skill'; from: number; to: number; name: string }
   | ({
       from: number
       to: number
@@ -44,8 +46,10 @@ export type Chip =
     }
 
 export interface ChipContext {
-  /** The agent's command names. */
+  /** Exclusive leading slash command names (matched only at position 0). */
   commands: readonly string[]
+  /** Stackable skill names (matched at any word start in the text). */
+  skills?: readonly string[]
   /** What `@token` names, or null when nothing does and it stays text. */
   resolve: (token: string) => MentionTarget | null
 }
@@ -157,7 +161,7 @@ export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
   return links.sort((a, b) => a.from - b.from)
 }
 
-/** Every chip in the text, in order: the leading command, the mentions and the links. */
+/** Every chip in the text, in order: the leading command, mentions, links, and inline skills. */
 export function findChips(text: string, context: ChipContext): Chip[] {
   const chips: Chip[] = []
   const command = leadingCommand(text, context.commands)
@@ -180,6 +184,13 @@ export function findChips(text: string, context: ChipContext): Chip[] {
   }
   const taken = (from: number, to: number) => chips.some((c) => from < c.to && to > c.from)
   for (const link of findLinks(text)) if (!taken(link.from, link.to)) chips.push(link)
+  if (context.skills && context.skills.length > 0) {
+    for (const token of findSkillTokens(text, context.skills)) {
+      if (!taken(token.from, token.to)) {
+        chips.push({ kind: 'skill', from: token.from, to: token.to, name: token.name })
+      }
+    }
+  }
   return chips.sort((a, b) => a.from - b.from)
 }
 
