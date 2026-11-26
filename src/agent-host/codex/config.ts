@@ -95,14 +95,36 @@ export interface Settings {
   fast: boolean
 }
 
+const FAST_TIER_ALIASES = new Set(['fast', 'priority'])
+
+function isFastAlias(value: string): boolean {
+  return FAST_TIER_ALIASES.has(value.trim().toLowerCase())
+}
+
 /** The service tier that makes a model fast, or null for one that has none. */
 export function fastTier(model: Model | undefined): string | null {
   if (!model) return null
   const tier = model.serviceTiers?.find(
-    (item) => item.id === 'fast' || item.name.toLowerCase() === 'fast',
+    (item) => isFastAlias(item.id) || item.name.trim().toLowerCase() === 'fast',
   )
   if (tier) return tier.id
-  return model.additionalSpeedTiers?.includes('fast') ? 'fast' : null
+  return model.additionalSpeedTiers?.find((item) => isFastAlias(item)) ?? null
+}
+
+/**
+ * Whether a thread's reported service tier means fast mode: matches the model's advertised fast
+ * tier or the `fast` / `priority` aliases Codex uses across versions and config files.
+ */
+export function isFastServiceTier(
+  tier: string | null | undefined,
+  model: Model | undefined,
+): boolean {
+  if (!tier) return false
+  const normalized = tier.trim()
+  if (!normalized) return false
+  const advertised = fastTier(model)
+  if (advertised && normalized.toLowerCase() === advertised.toLowerCase()) return true
+  return isFastAlias(normalized)
 }
 
 /** A model's name as codex-acp showed it: `gpt-5.6-luna` as `5.6 Luna`. */

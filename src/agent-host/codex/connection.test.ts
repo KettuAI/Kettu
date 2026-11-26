@@ -1920,3 +1920,232 @@ describe('limits and subagents', () => {
     expect(ignored).toEqual(['notification item/someNewThing'])
   })
 })
+
+describe('fast mode', () => {
+  it('omits serviceTier on turns and settings updates when the model advertises no fast tier', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({
+      data: [
+        ...FAKE_MODELS,
+        {
+          id: 'custom-gateway-model',
+          displayName: 'custom-gateway-model',
+          description: 'Custom model without serviceTiers',
+          supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }],
+          defaultReasoningEffort: 'medium',
+          isDefault: false,
+        },
+      ],
+      nextCursor: null,
+    }))
+    server.on('thread/start', () =>
+      threadResponse('thread-custom', {
+        model: 'custom-gateway-model',
+        reasoningEffort: 'medium',
+        serviceTier: 'fast',
+      }),
+    )
+    const opened = await connection.newSession('/project')
+    // Do not force-show the Fast mode toggle when model/list advertises no fast tier.
+    expect(opened.config.find((o) => o.id === 'fast-mode')).toBeUndefined()
+
+    const prompt = connection.prompt(opened.sessionId, [{ type: 'text', text: 'hello' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).not.toHaveProperty('serviceTier')
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await prompt
+
+    const compact = connection.prompt(opened.sessionId, [{ type: 'text', text: '/compact' }])
+    await until(() => server.sent('thread/settings/update').length === 1)
+    expect(server.sent('thread/settings/update')[0]).not.toHaveProperty('serviceTier')
+    server.notify('turn/started', { threadId: opened.sessionId, turn: turn('turn-2') })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-2', 'completed'),
+    })
+    await compact
+  })
+
+  it('omits serviceTier when switching to a model without fast support and restores it when switching back', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    await connection.setConfigOption(opened.sessionId, 'fast-mode', true)
+
+    const switched = await connection.setConfigOption(opened.sessionId, 'model', 'gpt-5.6-luna')
+    expect(switched.find((o) => o.id === 'fast-mode')).toBeUndefined()
+
+    const first = connection.prompt(opened.sessionId, [{ type: 'text', text: 'on luna' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).not.toHaveProperty('serviceTier')
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await first
+
+    const back = await connection.setConfigOption(opened.sessionId, 'model', 'gpt-6.1-sol')
+    expect(back.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+
+    const second = connection.prompt(opened.sessionId, [{ type: 'text', text: 'on sol' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({ serviceTier: 'priority' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-2', 'completed'),
+    })
+    await second
+  })
+
+  it('treats fast and priority as aliases when reading initial and resumed serviceTier', async () => {
+    const { server, connection } = await connect()
+    // Model advertises serviceTiers id 'priority', while thread/start reports 'fast'.
+    server.on('thread/start', () => threadResponse('thread-fast-alias', { serviceTier: 'fast' }))
+    const opened = await connection.newSession('/project')
+    expect(opened.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    const p1 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'go' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).toMatchObject({ serviceTier: 'priority' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await p1
+
+    // Model advertises additionalSpeedTiers ['fast'], while thread/resume reports 'priority'.
+    server.on('model/list', () => ({
+      data: [
+        {
+          id: 'gpt-speed-only',
+          displayName: 'gpt-speed-only',
+          description: 'Legacy speed tier model',
+          supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }],
+          defaultReasoningEffort: 'medium',
+          additionalSpeedTiers: ['fast'],
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    }))
+    await connection.newSession('/project', { hidden: 'options' })
+    server.on('thread/resume', (params) =>
+      threadResponse(params.threadId as string, {
+        model: 'gpt-speed-only',
+        serviceTier: 'priority',
+      }),
+    )
+    const resumed = await connection.resumeSession('thread-priority-alias', '/project')
+    expect(resumed.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    const p2 = connection.prompt('thread-priority-alias', [{ type: 'text', text: 'resume go' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({ serviceTier: 'fast' })
+    server.notify('turn/completed', {
+      threadId: 'thread-priority-alias',
+      turn: turn('turn-2', 'completed'),
+    })
+    await p2
+
+    // Default or null serviceTier stays false.
+    server.on('thread/resume', (params) =>
+      threadResponse(params.threadId as string, {
+        model: 'gpt-speed-only',
+        serviceTier: null,
+      }),
+    )
+    const resumedNull = await connection.resumeSession('thread-null-tier', '/project')
+    expect(resumedNull.config.find((o) => o.id === 'fast-mode')?.value).toBe(false)
+  })
+
+  it('toggles fast mode with /fast, updates session config, and applies serviceTier on next turn', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    t.target.apply({
+      patches: [{ op: 'session.update', changes: { config: opened.config } }],
+      effects: [],
+    })
+    connection.register(opened.sessionId, t.target)
+    await until(() => t.thread().session.commands.some((c) => c.name === 'fast'))
+    expect(t.thread().session.commands.find((c) => c.name === 'fast')).toMatchObject({
+      name: 'fast',
+      inputHint: expect.any(String),
+    })
+
+    // /fast toggles off -> on
+    const toggledOn = await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast' }])
+    expect(toggledOn.stopReason).toBe('end_turn')
+    expect(server.sent('turn/start')).toEqual([])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    expect(t.entries().at(-1)).toMatchObject({ kind: 'agent' })
+
+    // Next turn carries the advertised fast tier
+    const turnOn = connection.prompt(opened.sessionId, [{ type: 'text', text: 'fast turn' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).toMatchObject({ serviceTier: 'priority' })
+    // While running, steering with /fast queues it as its own command instead of steering text.
+    server.notify('turn/started', { threadId: opened.sessionId, turn: turn('turn-1') })
+    await tick()
+    expect(await connection.steer(opened.sessionId, [{ type: 'text', text: '/fast off' }])).toBe(
+      'promptRequired',
+    )
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await turnOn
+
+    // /fast status reports status without changing it
+    const beforeStatus = t.entries().length
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast status' }])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    expect(t.entries().length).toBe(beforeStatus + 1)
+
+    // /fast off turns it off and next turn sends default
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast off' }])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(false)
+    const turnOff = connection.prompt(opened.sessionId, [{ type: 'text', text: 'normal turn' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({ serviceTier: 'default' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-2', 'completed'),
+    })
+    await turnOff
+
+    // /fast on turns it on explicitly, /fast toggles it back off, and invalid argument replies
+    // with usage without changing state.
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast on' }])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    const beforeInvalid = t.entries().length
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast turbo' }])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(true)
+    expect(t.entries().length).toBe(beforeInvalid + 1)
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast' }])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(false)
+    expect(server.sent('turn/start')).toHaveLength(2)
+  })
+
+  it('replies cleanly for /fast on a model without fast support without sending it to the model', async () => {
+    const { server, connection } = await connect()
+    server.on('thread/start', () =>
+      threadResponse('thread-luna', { model: 'gpt-5.6-luna', reasoningEffort: 'low' }),
+    )
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    t.target.apply({
+      patches: [{ op: 'session.update', changes: { config: opened.config } }],
+      effects: [],
+    })
+    connection.register(opened.sessionId, t.target)
+
+    const result = await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast on' }])
+    expect(result.stopReason).toBe('end_turn')
+    expect(server.sent('turn/start')).toEqual([])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')).toBeUndefined()
+    const reply = t.entries().at(-1)
+    expect(reply).toMatchObject({ kind: 'agent' })
+    expect(reply?.kind === 'agent' && reply.markdown).toContain('gpt-5.6-luna')
+  })
+})

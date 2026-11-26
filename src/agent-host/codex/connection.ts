@@ -59,6 +59,7 @@ import {
 import {
   commandList,
   parseCommand,
+  parseFastArg,
   skillsMessage,
   statusMessage,
   usageMessage,
@@ -71,7 +72,9 @@ import {
   ConfigValueError,
   DEFAULT_MODE,
   effortFor,
+  FAST_ID,
   fastTier,
+  isFastServiceTier,
   modeFromPolicy,
   modeOf,
   type Settings,
@@ -715,7 +718,7 @@ export class CodexConnection implements AgentConnection {
           collaboration: response.collaborationMode?.mode ?? 'default',
           model: modelId,
           effort: effortFor(model, response.reasoningEffort),
-          fast: !!response.serviceTier && response.serviceTier === fastTier(model),
+          fast: isFastServiceTier(response.serviceTier, model),
         }
     const seen = this.threads.get(id)
     const record = threadRecord(id, settings, {
@@ -1541,6 +1544,7 @@ export class CodexConnection implements AgentConnection {
           },
         }
       : null
+    const tier = this.fastTierOf(settings.model)
     return {
       threadId: record.id,
       approvalPolicy: mode.approvalPolicy,
@@ -1549,7 +1553,8 @@ export class CodexConnection implements AgentConnection {
       summary: 'auto',
       ...(settings.model ? { model: settings.model } : {}),
       ...(settings.effort ? { effort: settings.effort } : {}),
-      serviceTier: settings.fast ? (this.fastTierOf(settings.model) ?? 'default') : 'default',
+      // Omit serviceTier when the model advertises no fast tier, so Codex keeps config.toml's.
+      ...(tier ? { serviceTier: settings.fast ? tier : 'default' } : {}),
       ...(collaborationMode ? { collaborationMode } : {}),
     }
   }
@@ -1774,6 +1779,8 @@ export class CodexConnection implements AgentConnection {
     switch (name) {
       case 'plan':
         return rest ? this.answer(record, usage) : this.togglePlan(record)
+      case 'fast':
+        return this.answer(record, () => this.fastAnswer(record, rest))
       case 'compact':
         return this.commandTurn(record, async () => {
           await this.call('thread/compact/start', { threadId: record.id })
@@ -1938,10 +1945,34 @@ export class CodexConnection implements AgentConnection {
     return stopped('end_turn')
   }
 
+  /** `/fast [on|off|status]`: toggles or inspects fast mode for models that advertise it. */
+  private async fastAnswer(record: ThreadRecord, rest: string): Promise<string> {
+    const arg = parseFastArg(rest)
+    if (arg === 'invalid') return t('codex.fast.usage')
+    const models = await this.listModels()
+    const model = models.find((item) => item.id === record.settings.model)
+    if (!fastTier(model)) {
+      return record.settings.model
+        ? t('codex.fast.unsupported', { model: record.settings.model })
+        : t('codex.fast.unsupportedNoModel')
+    }
+    if (arg === 'status') {
+      return t(record.settings.fast ? 'codex.fast.statusOn' : 'codex.fast.statusOff')
+    }
+    const next = arg === 'toggle' ? !record.settings.fast : arg === 'on'
+    record.settings = applyOption(record.settings, models, FAST_ID, next)
+    this.publishConfig(record, models)
+    return t(next ? 'codex.fast.on' : 'codex.fast.off')
+  }
+
   /** Sets the collaboration mode of the session's next turns, and shows it in its options. */
   private async setCollaboration(record: ThreadRecord, value: 'default' | 'plan'): Promise<void> {
     const models = await this.listModels()
     record.settings = applyOption(record.settings, models, COLLABORATION_ID, value)
+    this.publishConfig(record, models)
+  }
+
+  private publishConfig(record: ThreadRecord, models: readonly Model[]): void {
     const target = this.targets.get(record.id)
     if (!target) return
     const config = buildConfig(record.settings, models)

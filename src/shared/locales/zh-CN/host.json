@@ -835,6 +835,10 @@
       "plan": {
         "description": "打开计划模式。"
       },
+      "fast": {
+        "description": "切换当前会话的快速模式。",
+        "hint": "[on|off|status]"
+      },
       "mcp": {
         "description": "查看 MCP 服务器的状态，或重新连接它们。",
         "hint": "[reconnect]"
@@ -920,6 +924,15 @@
       "stillStarting": "有些 MCP 服务器还在启动。稍后再运行 `/mcp` 查看它们的状态。",
       "unknownError": "未知的 MCP 启动错误",
       "unnamed": "（未命名）"
+    },
+    "fast": {
+      "on": "已开启快速模式。",
+      "off": "已关闭快速模式。",
+      "statusOn": "快速模式当前已开启。",
+      "statusOff": "快速模式当前已关闭。",
+      "unsupported": "当前模型（{{model}}）未声明支持快速模式。",
+      "unsupportedNoModel": "当前模型未声明支持快速模式。",
+      "usage": "命令“/fast”不带参数，或接受 `on`、`off`、`status`。"
     },
     "noValue": "Codex 的 {{option}} 没有 {{value}} 这个值",
     "cannotSignOut": "这里无法让 Codex 退出登录",

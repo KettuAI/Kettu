@@ -11,6 +11,7 @@ import type { SkillMetadata, ThreadTokenUsage } from './protocol'
 
 const COMMANDS = [
   'plan',
+  'fast',
   'mcp',
   'skills',
   'status',
@@ -25,7 +26,15 @@ const COMMANDS = [
 export type CodexCommand = (typeof COMMANDS)[number]
 
 /** The commands that take text after their name. */
-const WITH_INPUT = ['mcp', 'review', 'review-branch', 'review-commit', 'goal', 'rename'] as const
+const WITH_INPUT = [
+  'fast',
+  'mcp',
+  'review',
+  'review-branch',
+  'review-commit',
+  'goal',
+  'rename',
+] as const
 
 function hintOf(name: CodexCommand): string | null {
   const input = (WITH_INPUT as readonly string[]).includes(name)
@@ -81,6 +90,18 @@ export function commandList(skills: readonly SkillMetadata[]): SlashCommand[] {
 /** The answer to a command used without the text it needs. */
 export function usageMessage(name: CodexCommand): string {
   return t('codex.command.usage', { name, hint: hintOf(name) ?? t('codex.command.noArguments') })
+}
+
+export type FastCommandArg = 'toggle' | 'on' | 'off' | 'status' | 'invalid'
+
+/** `/fast`'s argument: empty toggles, `on`/`off` sets it, `status` reports it. */
+export function parseFastArg(rest: string): FastCommandArg {
+  const trimmed = rest.trim().toLowerCase()
+  if (trimmed === '') return 'toggle'
+  if (trimmed === 'on') return 'on'
+  if (trimmed === 'off') return 'off'
+  if (trimmed === 'status') return 'status'
+  return 'invalid'
 }
 
 export function skillsMessage(skills: readonly SkillMetadata[]): string {
