@@ -17,6 +17,9 @@ patchedDependencies:
   '@shadcn/react@0.3.1':
     hash: 58e5a3028572fcd02982f02d71a2e2a5eb330d2fa1d5c6b0d3a5e76ece8584ff
     path: patches/@shadcn__react@0.3.1.patch
+  agent-device@0.21.36:
+    hash: 90244b2046e805d815ead97f787be58374595e2f7cf0d68ea62d8aac8295d16c
+    path: patches/agent-device@0.21.36.patch
   streamdown@2.7.1:
     hash: 8f0984a9b6cf258f76d0beef150ece77691ac00182c8d35992196bf84ef3f168
     path: patches/streamdown@2.7.1.patch
@@ -30,7 +33,7 @@ importers:
         version: 4.0.0(electron@44.9.2)
       agent-device:
         specifier: 0.21.36
-        version: 0.21.36
+        version: 0.21.36(patch_hash=90244b2046e805d815ead97f787be58374595e2f7cf0d68ea62d8aac8295d16c)
       decompress:
         specifier: 4.2.1
         version: 4.2.1
@@ -6776,7 +6779,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agent-device@0.21.36: {}
+  agent-device@0.21.36(patch_hash=90244b2046e805d815ead97f787be58374595e2f7cf0d68ea62d8aac8295d16c): {}
 
   ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:
