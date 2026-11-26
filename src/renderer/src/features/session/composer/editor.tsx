@@ -24,6 +24,7 @@ import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/
 import { MAX_HEIGHT_SHARE, useComposerHeight } from '@renderer/stores/composer-height'
 import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
 import { markdownPreview } from './markdown-preview'
+import { clampTriggerRect, type BoxRect } from './popover-position'
 
 export interface ComposerEditorHandle {
   /** Focuses the box with the editor's own selection, which a DOM focus would lose. */
@@ -40,8 +41,13 @@ export interface ComposerEditorHandle {
   keepAsText(from: number, to: number): void
   /** The chip that starts at `pos`, as drawn. */
   chipElement(pos: number): HTMLElement | null
-  /** Where the character at `pos` starts on screen, or null while it is not drawn. */
-  leftOf(pos: number): number | null
+  /**
+   * The viewport rect of the character at `pos`, clamped to the editor's visible scroll area, or
+   * null while it is not drawn.
+   */
+  rectOf(pos: number): BoxRect | null
+  /** The editor's scrollable container, so popovers anchored to a line follow inner scrolls. */
+  scrollElement(): HTMLElement | null
   /** The box's height now and the least it can take, in pixels. */
   measure(): { height: number; least: number }
 }
@@ -408,11 +414,15 @@ export function ComposerEditor({
         const element = at instanceof HTMLElement ? at : at.parentElement
         return element?.closest<HTMLElement>('.cm-chip') ?? null
       },
-      leftOf: (pos) => {
+      rectOf: (pos) => {
         const editor = view.current
         if (!editor) return null
-        return editor.coordsAtPos(Math.min(pos, editor.state.doc.length), 1)?.left ?? null
+        const clamped = Math.max(0, Math.min(pos, editor.state.doc.length))
+        const coords = editor.coordsAtPos(clamped, 1)
+        if (!coords) return null
+        return clampTriggerRect(coords, editor.scrollDOM.getBoundingClientRect())
       },
+      scrollElement: () => view.current?.scrollDOM ?? null,
       measure: () => {
         const element = host.current
         if (!element) return { height: 0, least: 0 }
