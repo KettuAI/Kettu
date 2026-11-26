@@ -5,6 +5,7 @@ import { hostPath } from '@renderer/lib/host-paths'
 import { currentLocale } from '@renderer/lib/i18n'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { agentName } from '@renderer/stores/agents'
+import { findProjectForSession } from '@renderer/stores/projects'
 import { listedOrigin, sessionTitle } from '@renderer/stores/sessions'
 
 export type ArchivedGroupBy = 'date' | 'project'
@@ -114,13 +115,13 @@ export function buildArchivedEntries(
   hostId: string | null,
   noProjectLabel: string,
 ): ArchivedEntry[] {
-  const projectNames = new Map(projects.map((p) => [p.path, p.name]))
   const subCounts = archivedSubSessionCounts(byId)
   return archived.map((summary) => {
-    const projectKey = summary.scratch ? NO_PROJECT_KEY : summary.projectPath
+    const owner = summary.scratch ? undefined : findProjectForSession(projects, summary)
+    const projectKey = summary.scratch ? NO_PROJECT_KEY : (owner?.path ?? summary.projectPath)
     const projectLabel = summary.scratch
       ? noProjectLabel
-      : (projectNames.get(summary.projectPath) ?? basename(hostPath(summary.projectPath)))
+      : (owner?.name ?? basename(hostPath(summary.projectPath)))
     const parent = summary.parentId ? byId[summary.parentId] : undefined
     const worktreeBranch = summary.worktree?.branch ?? null
     return {

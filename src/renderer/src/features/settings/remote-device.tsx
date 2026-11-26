@@ -17,7 +17,7 @@ import { basename, monthDay } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { useHostScope, useSettingsHostStore } from '@renderer/stores/host-scope'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
@@ -200,7 +200,7 @@ export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: stri
         : null
   const project = useProjectsStore((s) =>
     projectPath
-      ? (s.projects.find((p) => p.path === projectPath)?.name ?? basename(projectPath))
+      ? (findProjectForPath(s.projects, projectPath)?.name ?? basename(projectPath))
       : null,
   )
   // The title the session had then, which a later rename does not change.

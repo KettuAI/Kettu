@@ -273,6 +273,10 @@ export class JsonFile<T> {
 export interface ProjectRecord {
   path: string
   name: string
+  /** Set when `name` was chosen by the user rather than derived from the folder basename. */
+  customName?: true
+  /** Additional local source folders associated with this project (excluding `path`). */
+  folders?: string[]
   addedAt: number
   lastOpenedAt: number
   pinnedAt?: number
@@ -314,6 +318,8 @@ export interface SessionRecord {
   agentId: AgentId
   acpSessionId: string
   projectPath: string
+  /** Primary path of the owning project when `projectPath` is an additional source folder. */
+  projectOwner?: string
   title: string | null
   titleSource?: 'agent' | 'written' // absent: the cut first line (or none)
   createdAt: number
@@ -710,9 +716,21 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
     ) {
       return `project ${index} is malformed`
     }
+    const folders = Array.isArray(item.folders)
+      ? [
+          ...new Set(
+            item.folders.filter(
+              (folder): folder is string =>
+                isString(folder) && folder !== '' && folder !== item.path,
+            ),
+          ),
+        ]
+      : []
     projects.push({
       path: item.path,
       name: item.name,
+      ...(item.customName === true ? { customName: true as const } : {}),
+      ...(folders.length > 0 ? { folders } : {}),
       addedAt: item.addedAt,
       lastOpenedAt: item.lastOpenedAt,
       ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
@@ -1068,6 +1086,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       agentId: item.agentId as AgentId,
       acpSessionId: item.acpSessionId,
       projectPath: item.projectPath,
+      ...(isString(item.projectOwner) && item.projectOwner !== ''
+        ? { projectOwner: item.projectOwner }
+        : {}),
       title: item.title,
       ...(item.titleSource === 'agent' || item.titleSource === 'written'
         ? { titleSource: item.titleSource }

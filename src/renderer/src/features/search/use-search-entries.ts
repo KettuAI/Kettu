@@ -23,7 +23,12 @@ import {
   usePluginSurfacesStore,
   type PluginSettingsSurface,
 } from '@renderer/stores/plugin-surfaces'
-import { useProjectsStore } from '@renderer/stores/projects'
+import {
+  findProjectForPath,
+  findProjectForSession,
+  projectFolders,
+  useProjectsStore,
+} from '@renderer/stores/projects'
 import {
   hostOfSession,
   sessionArchived,
@@ -107,17 +112,19 @@ export function useSearchEntries(): SearchEntry[] {
  * A project's name by its path, with the parent folders that tell it from another of the same name
  * in brackets, and "No project" for the scratch folders.
  */
-function useProjectName(): (path: string | null) => string {
+function useProjectName(): (path: string | null, owner?: string) => string {
   const { t } = useTranslation('sidebar')
   const projects = useProjectsStore(useShallow((s) => s.projects))
   const noProject = t('project.noProject')
   return useMemo(() => {
-    const names = new Map(projects.map((project) => [project.path, project.name]))
-    const hints = projectNameHints(projects.map((project) => project.path))
-    return (path) => {
+    const hints = projectNameHints(projects)
+    return (path, owner) => {
       if (path === null) return noProject
-      const name = names.get(path) ?? basename(hostPath(path))
-      const hint = hints.get(path)
+      const project =
+        findProjectForPath(projects, path) ??
+        (owner ? projects.find((item) => item.path === owner) : undefined)
+      const name = project?.name ?? basename(hostPath(path))
+      const hint = project ? hints.get(project.path) : undefined
       return hint ? `${name} (${hint})` : name
     }
   }, [projects, noProject])
@@ -140,7 +147,10 @@ function useSessionLine(): (summary: SessionSummary) => {
     const hostName = (id: string | null) =>
       id === null ? thisComputer : (others.find((host) => host.id === id)?.name ?? unknown)
     return (summary) => {
-      const project = projectName(summary.scratch ? null : summary.projectPath)
+      const project = projectName(
+        summary.scratch ? null : summary.projectPath,
+        summary.projectOwner,
+      )
       const host = others.length > 0 && only === undefined ? hostName(hostOfSession(summary)) : null
       const meta = [project, host, summary.branch].filter(Boolean).join(' · ')
       return { title: sessionTitle(summary), project, host, meta }
@@ -288,8 +298,9 @@ function useProjectEntries(): SearchEntry[] {
   return useMemo(() => {
     const counts = new Map<string, number>()
     for (const summary of Object.values(byId)) {
-      if (findable(summary, byId)) {
-        counts.set(summary.projectPath, (counts.get(summary.projectPath) ?? 0) + 1)
+      if (findable(summary, byId) && !summary.scratch) {
+        const owner = findProjectForSession(projects, summary)?.path ?? summary.projectPath
+        counts.set(owner, (counts.get(owner) ?? 0) + 1)
       }
     }
     return projects
@@ -299,13 +310,14 @@ function useProjectEntries(): SearchEntry[] {
         const folder = dirname(hostPath(project.path))
         const host = hostId === null ? null : (others.find((h) => h.id === hostId)?.name ?? unknown)
         const count = counts.get(project.path) ?? 0
+        const allPaths = projectFolders(project).map(hostPath).join(' ')
         return {
           kind: 'project',
           key: `project:${project.path}`,
           title: project.name,
           meta: host ? `${host} · ${folder}` : folder,
           trailing: count > 0 ? t('search.sessionCount', { count }) : null,
-          haystack: haystackOf(project.name, host, hostPath(project.path)),
+          haystack: haystackOf(project.name, host, allPaths),
           at: project.lastOpenedAt,
           path: project.path,
         }

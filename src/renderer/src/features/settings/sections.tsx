@@ -76,7 +76,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { homeStart } from '@renderer/web/host-path'
 import { askHostPath } from '@renderer/web/host-path-request'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { openReport, useReportStore } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
@@ -1328,7 +1328,7 @@ export function AllowedSiteRow({ site, onRemove }: { site: AllowedSite; onRemove
   const { t } = useTranslation('settings')
   const projects = useProjectsStore((s) => s.projects)
   const names = site.projects.map(
-    (path) => projects.find((project) => project.path === path)?.name ?? basename(path),
+    (path) => findProjectForPath(projects, path)?.name ?? basename(path),
   )
   const removing = site.removing
   return (

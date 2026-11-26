@@ -1838,7 +1838,12 @@
     "notExist": "{{path}} 不存在",
     "notFolder": "{{path}} 不是文件夹",
     "noProject": "{{path}} 不在项目列表里",
-    "moveBeforeItself": "项目不能移到它自己的前面"
+    "moveBeforeItself": "项目不能移到它自己的前面",
+    "atLeastOneFolder": "项目至少需要保留一个源文件夹",
+    "primaryFolderRequired": "主源文件夹无法移除",
+    "duplicateFolder": "{{path}} 已在该项目中",
+    "folderInOtherProject": "{{path}} 已属于项目 {{name}}",
+    "nameTooLong": "项目名称最多 {{max}} 个字符"
   },
   "process": {
     "toolTimedOut": "{{name}} 没有在 {{ms}} 毫秒内完成"

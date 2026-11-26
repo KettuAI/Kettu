@@ -607,6 +607,32 @@ describe('createValidators', () => {
     rejects(() => windows['projects.move']({ path: '/a', before: null }))
   })
 
+  it('validates display names and source folder lists when updating a project', () => {
+    const update = posix['projects.update']
+    expect(update({ path: '/a', name: 'My App', folders: ['/a', '/b'] })).toEqual({
+      path: '/a',
+      name: 'My App',
+      folders: ['/a', '/b'],
+    })
+    expect(update({ path: '/a', name: null })).toEqual({ path: '/a', name: null })
+    expect(update({ path: '/a', name: '' })).toEqual({ path: '/a', name: '' })
+    expect(windows['projects.update']({ path: 'C:\\a', folders: ['C:\\a', 'D:\\b'] })).toEqual({
+      path: 'C:\\a',
+      folders: ['C:\\a', 'D:\\b'],
+    })
+    rejects(() => update({ path: 'relative', name: 'x' }))
+    rejects(() => update({ path: '/a', name: 123 }))
+    rejects(() => update({ path: '/a', name: 'a\0b' }))
+    rejects(() => update({ path: '/a', name: 'x'.repeat(201) }))
+    rejects(() => update({ path: '/a', folders: [] }))
+    rejects(() => update({ path: '/a', folders: 'not-an-array' }))
+    rejects(() => update({ path: '/a', folders: ['/a', 'relative'] }))
+    rejects(() => update({ path: '/a', folders: ['/a', '/b\0c'] }))
+    rejects(() => update({ path: '/a', folders: ['/a', ''] }))
+    rejects(() => update({ path: '/a', folders: Array.from({ length: 51 }, (_, i) => `/f/${i}`) }))
+    rejects(() => windows['projects.update']({ path: 'C:\\a', folders: ['/posix'] }))
+  })
+
   it('keeps optional fields out when absent', () => {
     expect(
       posix['sessions.create']({ agentId: 'codex', projectPath: '/p', parentId: undefined }),

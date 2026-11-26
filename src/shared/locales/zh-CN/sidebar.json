@@ -104,6 +104,7 @@
     "importSessions": "导入会话…",
     "menu": {
       "newSession": "新建会话",
+      "edit": "编辑项目…",
       "pin": "置顶项目",
       "unpin": "取消置顶项目",
       "pinNoProject": "置顶",
@@ -113,6 +114,25 @@
       "showArchived": "显示已归档的会话",
       "worktreeSettings": "工作树设置…",
       "remove": "移除项目…"
+    },
+    "edit": {
+      "title": "编辑项目",
+      "nameLabel": "显示名称",
+      "nameHint": "留空则使用文件夹名称（{{name}}）。",
+      "foldersLabel": "源文件夹",
+      "foldersHint": "新建会话时可选择工作目录，已有会话继续使用各自原先的目录。",
+      "primary": "主目录",
+      "addFolder": "添加文件夹",
+      "enterPath": "输入路径",
+      "pathPlaceholder": "/path/to/folder",
+      "add": "添加",
+      "removeFolder": "移除 {{name}}",
+      "removeProject": "移除本地项目",
+      "save": "保存",
+      "errorEmptyPath": "请输入文件夹路径。",
+      "errorNotAbsolute": "请输入完整的绝对路径。",
+      "errorDuplicate": "该文件夹已在当前项目中。",
+      "errorOtherProject": "该文件夹已属于项目 {{name}}。"
     },
     "remove": {
       "title": "移除 {{name}}？",

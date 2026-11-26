@@ -834,6 +834,15 @@ export interface EnvironmentInfo {
 export interface Project {
   path: string
   name: string
+  /** True when `name` is a user-defined display name rather than the folder basename. */
+  customName?: true
+  /**
+   * All associated source folders for the project, starting with `path`, when the project has
+   * additional source folders. Absent for single-folder projects and on older hosts.
+   */
+  folders?: string[]
+  /** Subset of `folders` whose directories do not currently exist on disk (absent when none). */
+  missingFolders?: string[]
   missing: boolean // the folder no longer exists
   lastOpenedAt: number
   pinnedAt?: number | null // absent on hosts that do not support project pins
@@ -883,6 +892,8 @@ export interface SessionSummary {
   id: string
   agentId: AgentId
   projectPath: string
+  /** Primary path of the owning project when `projectPath` is one of its additional source folders. */
+  projectOwner?: string
   scratch: boolean // started with No project: projectPath is its own scratch folder
   title: string | null
   status: SessionStatus
@@ -1359,6 +1370,10 @@ export interface HostContract {
   }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
+  'projects.update': {
+    params: { path: string; name?: string | null; folders?: string[] }
+    result: Project
+  }
   'projects.remove': { params: { path: string }; result: void }
   'projects.touch': { params: { path: string }; result: void }
   // A null path pins the No project group.
@@ -2380,6 +2395,7 @@ export const HOST_METHODS = [
   'market.publishFolder',
   'projects.list',
   'projects.add',
+  'projects.update',
   'projects.remove',
   'projects.touch',
   'projects.pin',

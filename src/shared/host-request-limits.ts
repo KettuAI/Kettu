@@ -97,6 +97,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.publishFolder': NONE,
   'projects.list': HOST_MS,
   'projects.add': HOST_MS,
+  'projects.update': HOST_MS,
   'projects.remove': AGENT_MS,
   'projects.touch': HOST_MS,
   'projects.pin': HOST_MS,

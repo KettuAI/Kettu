@@ -14,7 +14,7 @@ import {
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForSession, useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useHostLabel } from './host-label'
 import { isRunning } from './session-menu-model'
@@ -35,11 +35,15 @@ export function RemoveProjectDialog({
   const { t } = useTranslation(['sidebar', 'common'])
   const hostId = hostOfPath(project.path)
   const hostName = useHostLabel(hostId)
+  const projects = useProjectsStore((s) => s.projects)
   // A sub-agent is part of its session, so it is not counted on its own.
   const [sessions, running] = useSessionsStore(
     useShallow((s) => {
       const own = Object.values(s.byId).filter(
-        (x) => x.projectPath === project.path && x.origin !== 'subagent',
+        (x) =>
+          !x.scratch &&
+          x.origin !== 'subagent' &&
+          findProjectForSession(projects, x)?.path === project.path,
       )
       return [own.length, own.filter(isRunning).length]
     }),

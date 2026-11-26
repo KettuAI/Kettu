@@ -3,10 +3,12 @@ import {
   artifactHost,
   artifactRefOf,
   forgetHostSessions,
+  fromHost,
   learnArtifactHost,
   learnRoutineHost,
   routeOf,
   routineHost,
+  toHost,
 } from './host'
 import { onHost } from './host-paths'
 
@@ -86,5 +88,53 @@ describe('the host a routine request goes to', () => {
     forgetHostSessions(HOST_A)
     expect(routineHost(routine(3))).toBeNull()
     expect(routineHost(routine(4))).toBe(HOST_B)
+  })
+})
+
+describe('project update and multi-folder host path qualification', () => {
+  it('strips host prefixes in projects.update requests and qualifies folders and projectOwner on responses', () => {
+    const params = {
+      path: onHost(HOST_A, '/work/app'),
+      name: 'Client Portal',
+      folders: [onHost(HOST_A, '/work/app'), onHost(HOST_A, '/work/docs')],
+    }
+    expect(routeOf('projects.update', params)).toBe(HOST_A)
+    expect(toHost('projects.update', params, 0)).toEqual({
+      path: '/work/app',
+      name: 'Client Portal',
+      folders: ['/work/app', '/work/docs'],
+    })
+
+    const updated = fromHost(HOST_A, 'projects.update', {
+      path: '/work/app',
+      name: 'Client Portal',
+      customName: true,
+      folders: ['/work/app', '/work/docs'],
+      missingFolders: ['/work/docs'],
+      missing: false,
+      lastOpenedAt: 1,
+    })
+    expect(updated).toEqual({
+      path: onHost(HOST_A, '/work/app'),
+      name: 'Client Portal',
+      customName: true,
+      folders: [onHost(HOST_A, '/work/app'), onHost(HOST_A, '/work/docs')],
+      missingFolders: [onHost(HOST_A, '/work/docs')],
+      missing: false,
+      lastOpenedAt: 1,
+    })
+
+    const session = fromHost(HOST_A, 'sessions.create', {
+      id: 's1',
+      agentId: 'fake-agent',
+      projectPath: '/work/docs',
+      projectOwner: '/work/app',
+    })
+    expect(session).toEqual({
+      id: 's1',
+      agentId: 'fake-agent',
+      projectPath: onHost(HOST_A, '/work/docs'),
+      projectOwner: onHost(HOST_A, '/work/app'),
+    })
   })
 })

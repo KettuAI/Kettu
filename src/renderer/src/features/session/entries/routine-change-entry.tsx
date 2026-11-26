@@ -24,7 +24,7 @@ import { onHost } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { openRoutine } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { revealWaiting } from './helpers'
@@ -78,9 +78,7 @@ function useWords(hostId: string | null) {
       case 'project': {
         if (routine.projectPath === null) return tr('routine.noProject')
         const path = onHost(hostId, routine.projectPath)
-        return (
-          projects.find((project) => project.path === path)?.name ?? basename(routine.projectPath)
-        )
+        return findProjectForPath(projects, path)?.name ?? basename(routine.projectPath)
       }
       case 'agent':
         return [agentName(routine.agentId, hostId), routine.model, routine.effort]

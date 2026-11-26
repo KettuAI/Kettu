@@ -33,7 +33,7 @@ import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { projectFolders, useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
 import { projectNameHints } from '../project-names'
 import { HostFolderDialog } from './host-folder-dialog'
@@ -130,7 +130,7 @@ export function ProjectMenu({
   const hosts = useOtherHosts()
   const { contains } = useComboboxFilter()
   const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
-  const hints = useMemo(() => projectNameHints(projects.map((p) => p.path)), [projects])
+  const hints = useMemo(() => projectNameHints(projects), [projects])
   const groups = useMemo(() => projectGroups(projects, hosts, host), [projects, hosts, host])
   const listed = useMemo(
     () => (host === undefined ? projects : projects.filter((p) => hostOfPath(p.path) === host)),
@@ -187,14 +187,15 @@ export function ProjectMenu({
         else if (value) choose(value)
       }}
       itemToStringLabel={label}
-      filter={(value: string, query: string) =>
-        value === OPEN_PROJECT ||
-        value.startsWith(OPEN_ON) ||
-        contains(
-          `${label(value)} ${hints.get(value) ?? ''} ${hosts.length > 0 ? hostName(hostOfPath(value)) : ''}`,
+      filter={(value: string, query: string) => {
+        if (value === OPEN_PROJECT || value.startsWith(OPEN_ON)) return true
+        const item = byPath.get(value)
+        const paths = item ? projectFolders(item).map(hostPath).join(' ') : ''
+        return contains(
+          `${label(value)} ${hints.get(value) ?? ''} ${paths} ${hosts.length > 0 ? hostName(hostOfPath(value)) : ''}`,
           query,
         )
-      }
+      }}
     >
       {/* The tray's link names the project alone, without the select's chevron. */}
       <Trigger

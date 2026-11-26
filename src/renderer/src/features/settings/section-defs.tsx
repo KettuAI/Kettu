@@ -44,7 +44,7 @@ import { agentName, awaitsPackage, harnessStatuses, usableAgents } from '@render
 import { useAccountStore } from '@renderer/stores/account'
 import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useWebHostStore } from '@renderer/stores/web-host'
@@ -1713,7 +1713,7 @@ export function useArtifactsSection(): SectionDef {
   const { rows, error, retry } = useConsents()
   const projects = useProjectsStore((s) => s.projects)
   const where = (row: ArtifactConsentRow): string =>
-    projects.find((p) => p.path === row.project)?.name ?? basename(row.project)
+    findProjectForPath(projects, row.project)?.name ?? basename(row.project)
   const list = group('page-permissions', t('artifacts.group'))
   return {
     id: 'artifacts',

@@ -116,10 +116,14 @@ export function stepTask(taskId: string | undefined | null): TaskSummary | undef
 /** The tasks a project's group lists: neither pinned nor archived, the latest first. */
 export function listedTasks(
   summaries: Record<string, TaskSummary>,
-  projectPath: string,
+  projectPath: string | readonly string[],
 ): TaskSummary[] {
+  const matches =
+    typeof projectPath === 'string'
+      ? (task: TaskSummary) => task.projectPath === projectPath
+      : (task: TaskSummary) => projectPath.includes(task.projectPath)
   return Object.values(summaries)
-    .filter((task) => task.projectPath === projectPath && !task.pinnedAt && !task.archivedAt)
+    .filter((task) => matches(task) && !task.pinnedAt && !task.archivedAt)
     .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 

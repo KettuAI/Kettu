@@ -55,7 +55,7 @@ import {
 } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForSession, isFolderMissing, useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useKettuRoles } from '@renderer/stores/kettu-roles'
@@ -65,6 +65,7 @@ import { branchHold, useWorktreeChoice, worktreeRequest } from '@renderer/stores
 import { refreshLimits } from '@renderer/stores/usage'
 import {
   chooseNewSessionHost,
+  chooseNewSessionProject,
   choosePaneAgent,
   newSessionPanel,
   openAgentSettings,
@@ -99,6 +100,7 @@ import { useBoxText, usePromptBox } from './composer/use-prompt-box'
 import { AgentPicker } from './new-session/agent-picker'
 import { HostMenu } from './new-session/host-menu'
 import { ProjectMenu } from './new-session/project-menu'
+import { SourceFolderMenu } from './new-session/source-folder-menu'
 import {
   enterNewSession,
   leaveNewSession,
@@ -154,6 +156,7 @@ import { isPhoneWindow } from '@renderer/features/shell/narrow'
 export function NewSessionView({
   paneId,
   project,
+  folder = null,
   noProject = false,
   hostId: chosenHost = null,
   parentId = null,
@@ -161,6 +164,8 @@ export function NewSessionView({
   /** The pane that shows it; New session's own controls change that pane's view. */
   paneId: string | null
   project: Project | null
+  /** Chosen source folder within `project` when the project has multiple source folders. */
+  folder?: string | null
   noProject?: boolean
   /** The host chosen before a project, null for this computer; a project decides it once chosen. */
   hostId?: string | null
@@ -171,9 +176,11 @@ export function NewSessionView({
   const chosenId = useViewStore((s) => (paneId ? paneAgent(s.layout, paneId) : null))
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   // The agents listed are those of the host the session will be on.
-  const startPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  const startPath = parent?.projectPath ?? (noProject ? null : (folder ?? project?.path ?? null))
+  const folderMissing =
+    !parent && !noProject && !!project && !!startPath && isFolderMissing(project, startPath)
   // Side panel tools require an existing project folder (or the parent session's folder).
-  const toolsPath = startPath && (parent || !project?.missing) ? startPath : null
+  const toolsPath = startPath && (parent || !folderMissing) ? startPath : null
   const hostId = startPath === null ? (noProject ? null : chosenHost) : hostOfPath(startPath)
   const installed = useAgentsStore((s) => {
     // This computer's agents are read after launch; until then the chosen agent stands.
@@ -232,6 +239,7 @@ export function NewSessionView({
             agentId={agentId}
             hostId={hostId}
             project={project}
+            folder={folder}
             noProject={noProject}
             parent={parent}
             onInput={setHoldsMessage}
@@ -285,6 +293,7 @@ function DraftComposer({
   agentId,
   hostId,
   project,
+  folder,
   noProject,
   parent,
   onInput,
@@ -295,6 +304,7 @@ function DraftComposer({
   /** The other host the session will be on, null for this computer. */
   hostId: string | null
   project: Project | null
+  folder: string | null
   noProject: boolean
   parent: SessionSummary | undefined
   /** Told on each change whether the draft holds what Send takes. */
@@ -350,7 +360,9 @@ function DraftComposer({
   const name = agentId ? agentName(agentId, hostId) : null
   // A sub-session of a session started with No project shares its parent's scratch folder.
   const inScratch = noProject || !!parent?.scratch
-  const projectPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  const projectPath = parent?.projectPath ?? (noProject ? null : (folder ?? project?.path ?? null))
+  const folderMissing =
+    !inScratch && !!project && !!projectPath && isFolderMissing(project, projectPath)
   const box = usePromptBox({
     draft: NEW_SESSION_DRAFT,
     sessionId: null,
@@ -364,28 +376,28 @@ function DraftComposer({
   useEffect(() => {
     keepHostArtifactAttachments(NEW_SESSION_DRAFT, hostId)
   }, [hostId])
-  const ready = inScratch || (!!project && !project.missing)
+  const ready = inScratch || (!!project && !folderMissing)
   // Read as values, so typing renders New session only when one of them changes.
   const heldBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const held = heldBy === null ? null : attachmentsBlock(attachments, box.source.text)
   const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments, artifacts))
   // A sub-session works in its parent's worktree, so only a top-level session in a repository
   // with a commit chooses one.
-  const gitStatus = useWorktreeStatus(!parent && !inScratch && project ? project.path : '')
+  const workingPath = !parent && !inScratch && project ? (projectPath ?? project.path) : null
+  const gitStatus = useWorktreeStatus(workingPath ?? '')
   const branchHeld = useWorktreeChoice((s) =>
-    gitStatus && project && s.where[project.path] === 'worktree'
-      ? branchHold(s, project.path)
+    gitStatus && workingPath && s.where[workingPath] === 'worktree'
+      ? branchHold(s, workingPath)
       : null,
   )
   const templateError = useWorktreeChoice((s) =>
-    project ? (s.templateError[project.path] ?? null) : null,
+    workingPath ? (s.templateError[workingPath] ?? null) : null,
   )
   // A task runs in a project of its own host, never as a sub-session or with No project.
-  const taskProject = !parent && !inScratch && project && !project.missing ? project : null
+  const taskProject = !parent && !inScratch && project && !folderMissing ? project : null
+  const taskPath = taskProject ? (workingPath ?? taskProject.path) : null
   const workflows = useHostWorkflows(hostId)
-  const chosenWorkflow = useWorkflowChoice((s) =>
-    taskProject ? (s.chosen[taskProject.path] ?? null) : null,
-  )
+  const chosenWorkflow = useWorkflowChoice((s) => (taskPath ? (s.chosen[taskPath] ?? null) : null))
   // A workflow no longer usable, or not read yet, leaves Chat chosen.
   const workflow = chosenWorkflow
     ? workflows.entries.find(
@@ -477,14 +489,14 @@ function DraftComposer({
 
   // With a workflow the message starts a task, its first step on the tray's agent and options.
   const startTask = async (entry: WireWorkflowEntry, options: Record<string, string | boolean>) => {
-    if (!agentId || !taskProject) return
+    if (!agentId || !taskPath) return
     const taken = box.take()
     const base = gitStatus ? currentBase(gitStatus) : null
     const { pace } = useWorkflowChoice.getState()
     try {
       const view = await useTasksStore.getState().start(
         {
-          projectPath: taskProject.path,
+          projectPath: taskPath,
           workflowId: entry.id,
           text: formatAttachedArtifactsPrompt(taken.prompt, taken.artifacts),
           pace,
@@ -550,8 +562,8 @@ function DraftComposer({
       ]
       // A worktree chosen before the project's status is read is still a worktree.
       const worktree =
-        project && !inScratch
-          ? worktreeRequest(project.path, gitStatus ? currentBase(gitStatus) : null)
+        workingPath && !inScratch
+          ? worktreeRequest(workingPath, gitStatus ? currentBase(gitStatus) : null)
           : null
       void startNewSession(
         agentId,
@@ -571,7 +583,7 @@ function DraftComposer({
     ? t('newSession.chooseAgentFirst')
     : !inScratch && !project
       ? t('newSession.chooseProjectFirst')
-      : project?.missing && !inScratch
+      : folderMissing
         ? t('newSession.missingLine')
         : firstOff
           ? t('newSession.workflow.stepAgents')
@@ -586,7 +598,7 @@ function DraftComposer({
                   : (held?.message ?? null)
   const blockedEnter = useBlockedEnter({
     // A missing folder is said under the box already.
-    reason: project?.missing && !inScratch ? null : blocked,
+    reason: folderMissing ? null : blocked,
     waiting: blocked !== null && blocked === held?.message && held.adding,
     source: box.source,
     attachments,
@@ -730,7 +742,10 @@ function DraftComposer({
                 {parent ? (
                   <>
                     <HostChip hostId={hostId} />
-                    <ParentProject project={project} scratch={parent.scratch} />
+                    <ParentProject
+                      project={project ?? findProjectForSession(projects, parent) ?? null}
+                      scratch={parent.scratch}
+                    />
                   </>
                 ) : (
                   <>
@@ -742,6 +757,16 @@ function DraftComposer({
                       chip
                       host={hostId}
                     />
+                    {!noProject && (
+                      <SourceFolderMenu
+                        project={project}
+                        folder={projectPath}
+                        onChoose={(nextFolder) => {
+                          chooseNewSessionProject(nextFolder)
+                          requestAnimationFrame(() => editor.current?.focus())
+                        }}
+                      />
+                    )}
                   </>
                 )}
                 <AgentPicker
@@ -750,25 +775,25 @@ function DraftComposer({
                   onChooseRole={chooseRole}
                   hostId={hostId}
                 />
-                {taskProject && (
+                {taskPath && (
                   <WorkflowMenu
                     hostId={hostId}
                     workflowId={workflow?.id ?? null}
                     firstAgentId={agentId}
                     onChoose={(id) => {
-                      chooseWorkflow(taskProject.path, id)
+                      chooseWorkflow(taskPath, id)
                       requestAnimationFrame(() => editor.current?.focus())
                     }}
                   />
                 )}
                 {workflow && gitStatus ? (
                   <TaskWorktreeTag base={currentBase(gitStatus)} />
-                ) : gitStatus && project ? (
-                  <WorktreeMenu projectPath={project.path} status={gitStatus} />
+                ) : gitStatus && workingPath ? (
+                  <WorktreeMenu projectPath={workingPath} status={gitStatus} />
                 ) : parent?.worktree ? (
                   <WorktreeTrayTag worktree={parent.worktree} />
                 ) : (
-                  !inScratch && project && <BranchLabel projectPath={project.path} />
+                  !inScratch && workingPath && <BranchLabel projectPath={workingPath} />
                 )}
               </span>
             </div>
@@ -776,7 +801,7 @@ function DraftComposer({
         />
       </div>
       <div className="kettu-start__notes">
-        {(projectError || (project?.missing && !inScratch)) && (
+        {(projectError || folderMissing) && (
           <p className="kettu-start__error" title={projectError ?? undefined}>
             {projectError ?? t('newSession.missingLine')}
           </p>
@@ -789,7 +814,7 @@ function DraftComposer({
         {workflow && gitStatus ? (
           <TaskWorktreeNote base={currentBase(gitStatus)} />
         ) : (
-          gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />
+          gitStatus && workingPath && <WorktreeNote projectPath={workingPath} status={gitStatus} />
         )}
         {agentId && role && (
           <RoleNotices role={role} agentId={agentId} agents={roleAgents} hostId={hostId} />
@@ -1071,8 +1096,7 @@ function PickUp({ hidden }: { hidden: boolean }) {
           <span className="kettu-pickup__project">
             {session.scratch
               ? t('newSession.noProject')
-              : (projects.find((p) => p.path === session.projectPath)?.name ??
-                basename(session.projectPath))}
+              : (findProjectForSession(projects, session)?.name ?? basename(session.projectPath))}
           </span>
         </button>
       ))}

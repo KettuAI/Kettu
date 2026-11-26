@@ -10,12 +10,20 @@ import { t } from './i18n'
 import { canonicalizePath, folderName, isAbsolutePath, pathKey } from './paths'
 import type { JsonFile, ProjectRecord, ProjectsFile } from './storage'
 
+export const PROJECT_NAME_MAX = 200
+export const MAX_PROJECT_FOLDERS = 50
+
 export interface ProjectsDeps {
   file: JsonFile<ProjectsFile>
   platform: Platform
   now?: () => number
   realpath?: (value: string) => Promise<string>
   isDirectory?: (value: string) => Promise<boolean>
+}
+
+export interface ProjectUpdate {
+  name?: string | null
+  folders?: string[]
 }
 
 async function isDirectory(value: string): Promise<boolean> {
@@ -43,7 +51,22 @@ export class Projects {
 
   async load(): Promise<void> {
     const file = await this.deps.file.load()
-    this.records = file.projects
+    this.records = file.projects.map((record) => {
+      const seen = new Set<string>([this.key(record.path)])
+      const folders = (record.folders ?? []).filter((folder) => {
+        const key = this.key(folder)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      return {
+        ...record,
+        ...(folders.length > 0 ? { folders } : {}),
+      }
+    })
+    for (const record of this.records) {
+      if (record.folders && record.folders.length === 0) delete record.folders
+    }
     this.noProjectPinnedAt = file.noProjectPinnedAt
     await this.refreshMissing(false)
   }
@@ -52,15 +75,26 @@ export class Projects {
     return pathKey(value, this.deps.platform)
   }
 
-  list(): Project[] {
-    return this.ordered().map((record) => ({
+  private toProject(record: ProjectRecord): Project {
+    const extra = record.folders ?? []
+    const all = [record.path, ...extra]
+    const missingFolders =
+      extra.length > 0 ? all.filter((folder) => this.missing.get(this.key(folder)) ?? false) : []
+    return {
       path: record.path,
       name: record.name,
+      ...(record.customName ? { customName: true as const } : {}),
+      ...(extra.length > 0 ? { folders: all } : {}),
+      ...(missingFolders.length > 0 ? { missingFolders } : {}),
       missing: this.missing.get(this.key(record.path)) ?? false,
       lastOpenedAt: record.lastOpenedAt,
       pinnedAt: record.pinnedAt ?? null,
       order: record.order ?? null,
-    }))
+    }
+  }
+
+  list(): Project[] {
+    return this.ordered().map((record) => this.toProject(record))
   }
 
   /** The user's order once they moved a project, the latest opened first until then. */
@@ -79,13 +113,38 @@ export class Projects {
     return { pinnedAt: this.noProjectPinnedAt ?? null }
   }
 
-  paths(): string[] {
-    return this.records.map((record) => record.path)
+  /** All folders associated with a project record, primary folder first. */
+  foldersOf(record: ProjectRecord): string[] {
+    return record.folders && record.folders.length > 0
+      ? [record.path, ...record.folders]
+      : [record.path]
   }
 
-  find(value: string): ProjectRecord | undefined {
+  /** All folders across every registered project (primary + additional), deduplicated. */
+  paths(): string[] {
+    const out = new Map<string, string>()
+    for (const record of this.records) {
+      for (const folder of this.foldersOf(record)) {
+        const key = this.key(folder)
+        if (!out.has(key)) out.set(key, folder)
+      }
+    }
+    return [...out.values()]
+  }
+
+  /** Matches a project strictly by its primary path. */
+  findPrimary(value: string): ProjectRecord | undefined {
     const key = this.key(value)
     return this.records.find((record) => this.key(record.path) === key)
+  }
+
+  /** Matches a project by its primary path or any of its associated source folders. */
+  find(value: string): ProjectRecord | undefined {
+    const key = this.key(value)
+    return (
+      this.records.find((record) => this.key(record.path) === key) ??
+      this.records.find((record) => record.folders?.some((folder) => this.key(folder) === key))
+    )
   }
 
   /**
@@ -107,31 +166,44 @@ export class Projects {
     return canonical
   }
 
-  /** Adds a folder, or marks an existing project as opened now. */
+  /** Adds a folder, or marks an existing project (primary or additional folder) as opened now. */
   async add(value: string): Promise<Project> {
     const canonical = await this.resolveDirectory(value)
     const existing = this.find(canonical)
     if (existing) {
       existing.lastOpenedAt = this.now()
-      this.missing.set(this.key(existing.path), false)
-    } else {
-      const now = this.now()
-      const places = this.records.flatMap((record) => record.order ?? [])
-      this.records.push({
-        path: canonical,
-        name: folderName(canonical, this.deps.platform),
-        addedAt: now,
-        lastOpenedAt: now,
-        // Once the user has an order, a new project goes to its end.
-        ...(places.length > 0 ? { order: Math.max(...places) + 1 } : {}),
-      })
       this.missing.set(this.key(canonical), false)
+      this.changed()
+      return this.toProject(existing)
     }
+    const now = this.now()
+    const places = this.records.flatMap((record) => record.order ?? [])
+    const created: ProjectRecord = {
+      path: canonical,
+      name: folderName(canonical, this.deps.platform),
+      addedAt: now,
+      lastOpenedAt: now,
+      // Once the user has an order, a new project goes to its end.
+      ...(places.length > 0 ? { order: Math.max(...places) + 1 } : {}),
+    }
+    this.records.push(created)
+    this.missing.set(this.key(canonical), false)
     this.changed()
-    return this.list().find((project) => this.key(project.path) === this.key(canonical))!
+    return this.toProject(created)
   }
 
-  /** The stored project for a path that may no longer exist, matched without realpath. */
+  /** The stored project for a primary path that may no longer exist, matched without realpath. */
+  matchPrimary(value: string): ProjectRecord {
+    if (!isAbsolutePath(value, this.deps.platform)) {
+      throw invalidParams('path must be an absolute path')
+    }
+    const api = this.deps.platform === 'win32' ? path.win32 : path.posix
+    const record = this.findPrimary(api.resolve(value))
+    if (!record) throw notFound(t('project.noProject', { path: value }))
+    return record
+  }
+
+  /** The stored project for a path (primary or additional) that may no longer exist. */
   match(value: string): ProjectRecord {
     if (!isAbsolutePath(value, this.deps.platform)) {
       throw invalidParams('path must be an absolute path')
@@ -140,6 +212,99 @@ export class Projects {
     const record = this.find(api.resolve(value))
     if (!record) throw notFound(t('project.noProject', { path: value }))
     return record
+  }
+
+  /**
+   * Updates a project's display name and/or associated source folders.
+   * Clearing `name` (empty or null) restores the primary folder basename.
+   * `folders` must retain the primary folder, reject duplicates, invalid paths, and folders
+   * already belonging to another project.
+   */
+  async update(record: ProjectRecord, changes: ProjectUpdate): Promise<Project> {
+    const api = this.deps.platform === 'win32' ? path.win32 : path.posix
+    const primaryKey = this.key(record.path)
+    let nextFolders: string[] | undefined
+    const nextMissing = new Map<string, boolean>()
+
+    if (changes.folders !== undefined) {
+      if (changes.folders.length === 0) {
+        throw invalidParams(t('project.atLeastOneFolder'))
+      }
+      if (changes.folders.length > MAX_PROJECT_FOLDERS) {
+        throw invalidParams(`folders holds more than ${MAX_PROJECT_FOLDERS}`)
+      }
+      const existingByKey = new Map<string, string>(
+        this.foldersOf(record).map((folder) => [this.key(folder), folder]),
+      )
+      const seen = new Set<string>()
+      const resolvedList: string[] = []
+      for (const raw of changes.folders) {
+        if (!isAbsolutePath(raw, this.deps.platform)) {
+          throw invalidParams(t('project.notAbsolute'))
+        }
+        const resolved = api.resolve(raw)
+        const existing = existingByKey.get(this.key(resolved))
+        let canonical: string
+        let isMissing = false
+        try {
+          canonical = await this.resolveDirectory(raw)
+        } catch (error) {
+          // Keep an already-associated folder that is currently unmounted/missing so renaming or
+          // editing other folders still succeeds; newly added folders must exist on disk.
+          if (existing !== undefined) {
+            canonical = existing
+            isMissing = true
+          } else {
+            throw error
+          }
+        }
+        const key = this.key(canonical)
+        if (seen.has(key)) {
+          throw invalidParams(t('project.duplicateFolder', { path: raw }))
+        }
+        const owner = this.find(canonical)
+        if (owner && owner !== record) {
+          throw invalidParams(t('project.folderInOtherProject', { path: raw, name: owner.name }))
+        }
+        seen.add(key)
+        nextMissing.set(key, isMissing)
+        resolvedList.push(canonical)
+      }
+      if (!seen.has(primaryKey)) {
+        throw invalidParams(t('project.primaryFolderRequired'))
+      }
+      nextFolders = resolvedList.filter((folder) => this.key(folder) !== primaryKey)
+    }
+
+    if (changes.name !== undefined) {
+      const trimmed = changes.name === null ? '' : changes.name.trim()
+      if (trimmed.length > PROJECT_NAME_MAX) {
+        throw invalidParams(t('project.nameTooLong', { max: PROJECT_NAME_MAX }))
+      }
+      const fallback = folderName(record.path, this.deps.platform)
+      if (trimmed === '' || trimmed === fallback) {
+        record.name = fallback
+        delete record.customName
+      } else {
+        record.name = trimmed
+        record.customName = true
+      }
+    }
+
+    if (nextFolders !== undefined) {
+      for (const oldFolder of record.folders ?? []) {
+        const oldKey = this.key(oldFolder)
+        if (!nextMissing.has(oldKey)) this.missing.delete(oldKey)
+      }
+      for (const [key, isMissing] of nextMissing) {
+        this.missing.set(key, isMissing)
+      }
+      if (nextFolders.length > 0) record.folders = nextFolders
+      else delete record.folders
+    }
+
+    this.changed()
+    return this.toProject(record)
   }
 
   /** How the project names and prepares its sessions' worktrees, with the defaults filled in. */
@@ -165,7 +330,9 @@ export class Projects {
 
   remove(record: ProjectRecord): void {
     this.records = this.records.filter((item) => item !== record)
-    this.missing.delete(this.key(record.path))
+    for (const folder of this.foldersOf(record)) {
+      this.missing.delete(this.key(folder))
+    }
     this.changed()
   }
 
@@ -196,18 +363,20 @@ export class Projects {
     this.changed()
   }
 
-  /** Marks projects whose folder is gone; they stay listed, so an unmounted drive loses nothing. */
+  /** Marks projects whose folders are gone; they stay listed, so an unmounted drive loses nothing. */
   async refreshMissing(notify = true): Promise<void> {
     let changed = false
     await Promise.all(
-      this.records.map(async (record) => {
-        const missing = !(await this.isDirectory(record.path))
-        const key = this.key(record.path)
-        if (this.missing.get(key) !== missing) {
-          this.missing.set(key, missing)
-          changed = true
-        }
-      }),
+      this.records.flatMap((record) =>
+        this.foldersOf(record).map(async (folder) => {
+          const missing = !(await this.isDirectory(folder))
+          const key = this.key(folder)
+          if (this.missing.get(key) !== missing) {
+            this.missing.set(key, missing)
+            changed = true
+          }
+        }),
+      ),
     )
     if (changed && notify) this.notify()
   }
@@ -220,7 +389,10 @@ export class Projects {
   private changed(): void {
     this.deps.file.save({
       version: 1,
-      projects: this.records.map((record) => ({ ...record })),
+      projects: this.records.map((record) => ({
+        ...record,
+        ...(record.folders ? { folders: [...record.folders] } : {}),
+      })),
       ...(this.noProjectPinnedAt === undefined
         ? {}
         : { noProjectPinnedAt: this.noProjectPinnedAt }),

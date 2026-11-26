@@ -37,6 +37,7 @@ import {
   noProjectKey,
   noProjectPinned,
   pinnedFolders,
+  projectFolders,
   useProjectsStore,
 } from '@renderer/stores/projects'
 import {
@@ -50,7 +51,8 @@ import {
   noProjectGroup,
   pinnedSummaries,
   pinnedTree,
-  projectSummaries,
+  projectGroupSummaries,
+  projectSessionTree,
   sessionTree,
   sidebarRows,
   sidebarTabStop,
@@ -70,6 +72,7 @@ import {
 import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
+import { EditProjectDialog } from './edit-project'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
@@ -134,9 +137,16 @@ export function SidebarList() {
     ),
   )
   const stop = useMemo(() => tabStopOf(stopKey), [stopKey])
-  // One dialog serves every project; it mounts the first time a project asks for it.
+  // One dialog each serves every project; they mount the first time a project asks for them.
   const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
+  const [editing, setEditing] = useState<{ path: string; open: boolean } | null>(null)
+  const [removing, setRemoving] = useState<{ project: Project; open: boolean } | null>(null)
   const importSessions = (project: Project) => setImporting({ project, open: true })
+  const editProject = (project: Project) => setEditing({ path: project.path, open: true })
+  const removeProject = (project: Project) => setRemoving({ project, open: true })
+  const editingProject = editing
+    ? (projects.find((item) => item.path === editing.path) ?? null)
+    : null
 
   return (
     <div className="kettu-side-list" role="presentation" onKeyDown={moveRowFocus}>
@@ -178,7 +188,9 @@ export function SidebarList() {
               stop={stop}
               hosts={hosts}
               away={away}
+              onEdit={editProject}
               onImport={importSessions}
+              onRemove={removeProject}
             />
             <SortableList
               className="kettu-side-hosts"
@@ -193,14 +205,22 @@ export function SidebarList() {
                   movable={hosts.length > 1}
                   projects={projects}
                   stop={stop}
+                  onEdit={editProject}
                   onImport={importSessions}
+                  onRemove={removeProject}
                 />
               ))}
             </SortableList>
           </>
         ) : (
           <>
-            <PinnedGroup projects={projects} stop={stop} onImport={importSessions} />
+            <PinnedGroup
+              projects={projects}
+              stop={stop}
+              onEdit={editProject}
+              onImport={importSessions}
+              onRemove={removeProject}
+            />
             <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
               <div className="ui-as-side__label kettu-projects-label">
                 <span>{t('nav.projects')}</span>
@@ -210,9 +230,21 @@ export function SidebarList() {
                 <span className="ui-as-side__empty">{t('nav.empty')}</span>
               )}
               {!noProjectPinned(noProjects, null) && (
-                <ProjectGroup project={null} stop={stop} onImport={importSessions} />
+                <ProjectGroup
+                  project={null}
+                  stop={stop}
+                  onEdit={editProject}
+                  onImport={importSessions}
+                  onRemove={removeProject}
+                />
               )}
-              <ProjectList projects={projects} stop={stop} onImport={importSessions} />
+              <ProjectList
+                projects={projects}
+                stop={stop}
+                onEdit={editProject}
+                onImport={importSessions}
+                onRemove={removeProject}
+              />
             </div>
           </>
         )}
@@ -222,6 +254,21 @@ export function SidebarList() {
           project={importing.project}
           open={importing.open}
           onOpenChange={(open) => setImporting({ ...importing, open })}
+        />
+      )}
+      {editing && editingProject && (
+        <EditProjectDialog
+          project={editingProject}
+          open={editing.open}
+          onOpenChange={(open) => setEditing(open ? editing : { ...editing, open: false })}
+          onRequestRemove={removeProject}
+        />
+      )}
+      {removing && (
+        <RemoveProjectDialog
+          project={removing.project}
+          open={removing.open}
+          onOpenChange={(open) => setRemoving({ ...removing, open })}
         />
       )}
     </div>
@@ -248,13 +295,17 @@ function moveHost(hosts: readonly (string | null)[], from: number, to: number): 
 function ProjectList({
   projects,
   stop,
+  onEdit,
   onImport,
+  onRemove,
   hostId = null,
   away = false,
 }: {
   projects: readonly Project[]
   stop: SidebarTabStop | null
+  onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onRemove: (project: Project) => void
   hostId?: string | null
   away?: boolean
 }) {
@@ -277,7 +328,9 @@ function ProjectList({
             <ProjectGroup
               project={project}
               stop={stop}
+              onEdit={onEdit}
               onImport={onImport}
+              onRemove={onRemove}
               hostId={hostId}
               away={away}
               handleRef={handleRef}
@@ -296,14 +349,18 @@ function HostSection({
   movable,
   projects,
   stop,
+  onEdit,
   onImport,
+  onRemove,
 }: {
   hostId: string | null
   index: number
   movable: boolean
   projects: readonly Project[]
   stop: SidebarTabStop | null
+  onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onRemove: (project: Project) => void
 }) {
   const away = isAway(useOtherHost(hostId)?.connection ?? null)
   const own = projects.filter((project) => hostOfPath(project.path) === hostId)
@@ -339,7 +396,9 @@ function HostSection({
                 <ProjectGroup
                   project={null}
                   stop={stop}
+                  onEdit={onEdit}
                   onImport={onImport}
+                  onRemove={onRemove}
                   hostId={hostId}
                   away={away}
                 />
@@ -347,7 +406,9 @@ function HostSection({
               <ProjectList
                 projects={own}
                 stop={stop}
+                onEdit={onEdit}
                 onImport={onImport}
+                onRemove={onRemove}
                 hostId={hostId}
                 away={away}
               />
@@ -367,7 +428,9 @@ function HostSection({
 function ProjectGroup({
   project,
   stop,
+  onEdit,
   onImport,
+  onRemove,
   hostId = null,
   away = false,
   showHost = false,
@@ -375,7 +438,9 @@ function ProjectGroup({
 }: {
   project: Project | null
   stop: SidebarTabStop | null
+  onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onRemove: (project: Project) => void
   hostId?: string | null
   away?: boolean
   showHost?: boolean
@@ -385,9 +450,11 @@ function ProjectGroup({
   const key = project?.path ?? noProjectGroup(hostId)
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
-  // What tells the project from another of the same name, as New session's project menu shows it.
-  const hint = useProjectsStore((s) =>
-    project ? projectNameHints(s.projects.map((p) => p.path)).get(project.path) : undefined,
+  const allProjects = useProjectsStore((s) => s.projects)
+  // What tells the project from another of the same display name, as New session's project menu shows it.
+  const hint = useMemo(
+    () => (project ? projectNameHints(allProjects).get(project.path) : undefined),
+    [allProjects, project],
   )
   const hostName = useHostLabel(hostId)
   const open = useViewStore((s) => !s.collapsedProjects[key])
@@ -397,24 +464,23 @@ function ProjectGroup({
   )
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  // Null until Remove project is first asked for, so the dialog mounts only then.
-  const [removing, setRemoving] = useState<boolean | null>(null)
   const noProject = useProjectsStore((s) =>
     project ? undefined : s.noProjects[noProjectKey(hostId)],
   )
   const projectPath = project?.path ?? null
+  const folders = useMemo(() => (project ? projectFolders(project) : []), [project])
   const summaries = useSessionsStore(
-    useShallow((s) => projectSummaries(s.byId, projectPath, hostId)),
+    useShallow((s) => projectGroupSummaries(s.byId, project, hostId, allProjects)),
   )
   const tree = useKeptNodes(
-    useMemo(
-      () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
-      [summaries, projectPath, hostId],
-    ),
+    useMemo(() => {
+      const subset = Object.fromEntries(summaries.map((x) => [x.id, x]))
+      return project
+        ? projectSessionTree(subset, project, allProjects)
+        : sessionTree(subset, null, hostId)
+    }, [summaries, project, allProjects, hostId]),
   )
-  const tasks = useTasksStore(
-    useShallow((s) => (project ? listedTasks(s.summaries, project.path) : [])),
-  )
+  const tasks = useTasksStore(useShallow((s) => (project ? listedTasks(s.summaries, folders) : [])))
   const rows = useMemo(() => sidebarRows(tree, tasks, byActivity), [tree, tasks])
   if (!project && tree.length === 0) return null
   const limited = limitRows(rows, allShown, (row) => rowInSight(row, shownId))
@@ -481,7 +547,15 @@ function ProjectGroup({
   )
   const tooltip = project ? (
     <TooltipContent side="right" className="max-w-sm font-mono break-all">
-      {hostPath(project.path)}
+      {folders.length > 1 ? (
+        <span className="flex flex-col gap-0.5">
+          {folders.map((folder) => (
+            <span key={folder}>{hostPath(folder)}</span>
+          ))}
+        </span>
+      ) : (
+        hostPath(project.path)
+      )}
     </TooltipContent>
   ) : (
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
@@ -504,9 +578,10 @@ function ProjectGroup({
     <ProjectMenuItems
       project={project}
       away={away}
+      onEdit={() => onEdit(project)}
       onPin={pin}
       onImport={() => onImport(project)}
-      onRemove={() => setRemoving(true)}
+      onRemove={() => onRemove(project)}
     />
   ) : (
     <NoProjectMenuItems
@@ -595,9 +670,6 @@ function ProjectGroup({
           <GroupRenameHints scope={key} />
         </ul>
       )}
-      {project && removing !== null && (
-        <RemoveProjectDialog project={project} open={removing} onOpenChange={setRemoving} />
-      )}
     </>
   )
 }
@@ -668,13 +740,17 @@ function PinnedGroup({
   stop,
   hosts,
   away,
+  onEdit,
   onImport,
+  onRemove,
 }: {
   projects: readonly Project[]
   stop: SidebarTabStop | null
   hosts?: readonly (string | null)[]
   away?: readonly string[]
+  onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onRemove: (project: Project) => void
 }) {
   const { t } = useTranslation('sidebar')
   const open = useViewStore((s) => !s.collapsedProjects[PINNED_GROUP])
@@ -741,7 +817,9 @@ function PinnedGroup({
               key={project?.path ?? noProjectGroup(hostId)}
               project={project}
               stop={stop}
+              onEdit={onEdit}
               onImport={onImport}
+              onRemove={onRemove}
               hostId={hostId}
               away={hostId !== null && away?.includes(hostId)}
               showHost={!!hosts}

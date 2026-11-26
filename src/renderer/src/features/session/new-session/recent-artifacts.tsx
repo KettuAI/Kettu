@@ -7,7 +7,7 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { openArtifact, openArtifacts } from '@renderer/stores/view'
 
 /** How many artifacts the list shows. */
@@ -62,7 +62,7 @@ export function RecentArtifacts({ hidden }: { hidden: boolean }) {
           <span className="kettu-pickup__project">
             {artifact.scratch
               ? t('newSession.noProject')
-              : (projects.find((p) => p.path === artifact.project)?.name ??
+              : (findProjectForPath(projects, artifact.project)?.name ??
                 basename(artifact.project))}
           </span>
         </button>

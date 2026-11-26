@@ -18,7 +18,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { basename } from '@renderer/lib/format'
 import { errorCode, errorMessage, hostAt } from '@renderer/lib/host'
 import { onArtifactEvent } from '@renderer/stores/artifacts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 
 /** A host's question, with the host that asked: null for this computer. */
 type Ask = ArtifactConsentAsk & { hostId: string | null }
@@ -70,7 +70,7 @@ export function ArtifactConsentDialog() {
   }
 
   const project = ask
-    ? (projects.find((p) => p.path === ask.project)?.name ?? basename(ask.project))
+    ? (findProjectForPath(projects, ask.project)?.name ?? basename(ask.project))
     : ''
   const agent = ask?.agent ?? t('consent.yourAgent')
   return (

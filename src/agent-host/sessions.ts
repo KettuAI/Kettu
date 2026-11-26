@@ -1641,6 +1641,7 @@ export class SessionManager {
       id: record.id,
       agentId: record.agentId,
       projectPath: record.projectPath,
+      ...(record.projectOwner ? { projectOwner: record.projectOwner } : {}),
       scratch: this.deps.scratch.contains(record.projectPath),
       title: record.customTitle ?? (session ? session.title : record.title),
       status,
@@ -1707,7 +1708,7 @@ export class SessionManager {
    * worktrees, so files, git and terminals may open there.
    */
   sessionFolders(): string[] {
-    const { platform, scratch } = this.deps
+    const { platform } = this.deps
     const folders = new Map<string, string>()
     const records = [
       ...this.records.values(),
@@ -1715,12 +1716,43 @@ export class SessionManager {
     ]
     for (const record of records) {
       const { projectPath, worktree } = record
-      if (scratch.contains(projectPath)) folders.set(pathKey(projectPath, platform), projectPath)
+      // Include every existing session's working directory (scratch folders as well as secondary
+      // source folders that may have been removed from a project) so existing sessions stay usable.
+      if (projectPath) folders.set(pathKey(projectPath, platform), projectPath)
       if (worktree && worktree.path !== '' && worktree.removed === undefined) {
         folders.set(pathKey(worktree.path, platform), worktree.path)
       }
     }
     return [...folders.values()]
+  }
+
+  /** Whether a canonical folder is the working directory of any indexed or live session. */
+  isSessionProjectPath(canonical: string): boolean {
+    const key = pathKey(canonical, this.deps.platform)
+    for (const record of this.allRecords()) {
+      if (record.projectPath && pathKey(record.projectPath, this.deps.platform) === key) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /** Primary path of the project that owns `projectPath` when it is an additional source folder. */
+  private projectOwnerOf(projectPath: string): string | undefined {
+    if (this.deps.scratch.contains(projectPath)) return undefined
+    const { projects, platform } = this.deps
+    const project =
+      typeof projects.find === 'function'
+        ? projects.find(projectPath)
+        : projects
+            .list()
+            .find(
+              (item) =>
+                samePath(item.path, projectPath, platform) ||
+                (item.folders?.some((folder) => samePath(folder, projectPath, platform)) ?? false),
+            )
+    if (!project || samePath(project.path, projectPath, platform)) return undefined
+    return project.path
   }
 
   /** The project of the session worktree at `folder`, or null when no session works there. */
@@ -5165,6 +5197,10 @@ export class SessionManager {
       }
     }
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
+    const projectOwner =
+      params.parentId !== undefined
+        ? (this.recordOf(params.parentId).projectOwner ?? this.projectOwnerOf(projectPath))
+        : this.projectOwnerOf(projectPath)
     let worktree: WorktreeRecord | undefined
     let newWorktree = false
     if (params.parentId !== undefined) {
@@ -5188,6 +5224,7 @@ export class SessionManager {
       agentId: params.agentId,
       acpSessionId: '',
       projectPath,
+      ...(projectOwner ? { projectOwner } : {}),
       ...(worktree ? { worktree } : {}),
       title: params.title ?? null,
       ...(params.title === undefined ? {} : { titleSource: 'agent' as const }),
@@ -5847,6 +5884,12 @@ export class SessionManager {
     this.deps.prepared?.remove(live.record.agentId, live.record.acpSessionId)
     const { projectPath } = live.record
     if (!this.deps.scratch.contains(projectPath)) await this.deps.projects.add(projectPath)
+    const projectOwner =
+      live.record.parentId !== null && this.has(live.record.parentId)
+        ? (this.recordOf(live.record.parentId).projectOwner ?? this.projectOwnerOf(projectPath))
+        : this.projectOwnerOf(projectPath)
+    if (projectOwner) live.record.projectOwner = projectOwner
+    else delete live.record.projectOwner
     const now = this.now()
     Object.assign(live.record, { createdAt: now, updatedAt: now, lastViewedAt: now })
     live.used = true
@@ -13329,9 +13372,22 @@ export class SessionManager {
     }
     // The sidebar lists only the projects in the list, which the user may have removed it from.
     const { projectPath } = record
-    const listed = this.deps.projects
-      .list()
-      .some((project) => samePath(project.path, projectPath, this.deps.platform))
+    const { projects, platform } = this.deps
+    const listed =
+      typeof projects.find === 'function'
+        ? projects.find(projectPath) !== undefined ||
+          (record.projectOwner !== undefined &&
+            projects.findPrimary(record.projectOwner) !== undefined)
+        : projects
+            .list()
+            .some(
+              (project) =>
+                samePath(project.path, projectPath, platform) ||
+                (project.folders?.some((folder) => samePath(folder, projectPath, platform)) ??
+                  false) ||
+                (record.projectOwner !== undefined &&
+                  samePath(project.path, record.projectOwner, platform)),
+            )
     if (!listed && !this.deps.scratch.contains(projectPath)) {
       await this.deps.projects.add(projectPath)
     }
@@ -13550,14 +13606,22 @@ export class SessionManager {
   }
 
   /** Removes a project's sessions from the index, closing live ones first. */
-  async removeProject(projectPath: string): Promise<void> {
-    const key = pathKey(projectPath, this.deps.platform)
+  async removeProject(projectPath: string, extraFolders: readonly string[] = []): Promise<void> {
+    const primaryKey = pathKey(projectPath, this.deps.platform)
+    const keys = new Set([
+      primaryKey,
+      ...extraFolders.map((folder) => pathKey(folder, this.deps.platform)),
+    ])
+    const belongs = (item: Pick<SessionRecord, 'projectPath' | 'projectOwner'>): boolean =>
+      keys.has(pathKey(item.projectPath, this.deps.platform)) ||
+      (item.projectOwner !== undefined &&
+        pathKey(item.projectOwner, this.deps.platform) === primaryKey)
     await Promise.all(
       [...this.live.values()]
-        .filter((l) => l.prepared && pathKey(l.record.projectPath, this.deps.platform) === key)
+        .filter((l) => l.prepared && belongs(l.record))
         .map((l) => this.dropPrepared(l)),
     )
-    const inProject = this.list().filter((s) => pathKey(s.projectPath, this.deps.platform) === key)
+    const inProject = this.list().filter((s) => belongs(s))
     await Promise.all(inProject.map((summary) => this.settled(summary.id)))
     for (const summary of inProject) {
       const live = this.live.get(summary.id)
@@ -13870,6 +13934,7 @@ export class SessionManager {
           .catch(() => null)
       : null
     await this.deps.projects.add(projectPath)
+    const projectOwner = this.projectOwnerOf(projectPath)
     const listed = found ?? this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
     const now = this.now()
     const updatedAt = listed?.updatedAt ? Date.parse(listed.updatedAt) : NaN
@@ -13879,6 +13944,7 @@ export class SessionManager {
       agentId: params.agentId,
       acpSessionId,
       projectPath,
+      ...(projectOwner ? { projectOwner } : {}),
       title: listed?.title ?? null,
       ...(listed?.title ? { titleSource: 'agent' as const } : {}),
       createdAt: now,

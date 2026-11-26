@@ -1,3 +1,4 @@
+import type { Project } from '@shared/agent-host'
 import { basename } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 
@@ -10,16 +11,15 @@ function parentsOf(path: string): string[] {
     .filter(Boolean)
 }
 
-/**
- * What tells projects with the same folder name apart, keyed by path: the fewest trailing parent
- * folders that differ between them, as "work" or "client/src". A name no other project shares
- * gets no entry.
- */
-export function nameHints(paths: readonly string[]): Map<string, string> {
+interface NamedPath {
+  path: string
+  name: string
+}
+
+function hintsForNamed(items: readonly NamedPath[]): Map<string, string> {
   const byName = new Map<string, string[]>()
-  for (const path of paths) {
-    const name = basename(path)
-    byName.set(name, [...(byName.get(name) ?? []), path])
+  for (const item of items) {
+    byName.set(item.name, [...(byName.get(item.name) ?? []), item.path])
   }
   const hints = new Map<string, string>()
   for (const group of byName.values()) {
@@ -39,17 +39,33 @@ export function nameHints(paths: readonly string[]): Map<string, string> {
 }
 
 /**
- * `nameHints` for the projects' paths as the window names them, each host telling its own projects
- * of one name apart by the paths it writes; keyed by the window's path.
+ * What tells folders with the same basename apart, keyed by path: the fewest trailing parent
+ * folders that differ between them, as "work" or "client/src". A name no other path shares
+ * gets no entry.
  */
-export function projectNameHints(paths: readonly string[]): Map<string, string> {
+export function nameHints(paths: readonly string[]): Map<string, string> {
+  return hintsForNamed(paths.map((path) => ({ path, name: basename(path) })))
+}
+
+/**
+ * Disambiguates projects on each host that share the same display name (or folder basename when
+ * plain paths are passed), keyed by the window's qualified path.
+ */
+export function projectNameHints(
+  items: readonly (string | Pick<Project, 'path' | 'name'>)[],
+): Map<string, string> {
+  const normalized: NamedPath[] = items.map((item) =>
+    typeof item === 'string'
+      ? { path: item, name: basename(hostPath(item)) }
+      : { path: item.path, name: item.name },
+  )
   const hints = new Map<string, string>()
-  for (const hostId of new Set(paths.map(hostOfPath))) {
-    const own = paths.filter((path) => hostOfPath(path) === hostId)
-    const found = nameHints(own.map(hostPath))
-    for (const path of own) {
-      const hint = found.get(hostPath(path))
-      if (hint) hints.set(path, hint)
+  for (const hostId of new Set(normalized.map((item) => hostOfPath(item.path)))) {
+    const own = normalized.filter((item) => hostOfPath(item.path) === hostId)
+    const found = hintsForNamed(own.map((item) => ({ path: hostPath(item.path), name: item.name })))
+    for (const item of own) {
+      const hint = found.get(hostPath(item.path))
+      if (hint) hints.set(item.path, hint)
     }
   }
   return hints
