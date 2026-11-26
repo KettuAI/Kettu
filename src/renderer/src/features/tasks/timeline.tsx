@@ -130,7 +130,7 @@ export function StartedFrom({ view, className }: { view: TaskView; className?: s
   )
 }
 
-/** Text you wrote, in the bubble and Markdown a message you sent has in a session. */
+/** Text you wrote, in the same bubble a message you sent has in a session. */
 function SentText({ text }: { text: string }) {
   return (
     <div className="ks-user__bubble">

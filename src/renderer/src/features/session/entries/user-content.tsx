@@ -46,6 +46,7 @@ import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { SessionIdContext } from '../media/grants'
 import { attachmentKey } from '../media/viewer-items'
+import { SentText } from './sent-text'
 
 const SentMarkdown = lazy(() => import('./sent-markdown'))
 
@@ -57,15 +58,20 @@ const IMAGE = 'max-h-40 max-w-60 rounded-lg object-cover shadow-card'
 /**
  * The text, images and references of a prompt, as the user wrote them. In the thread, its images
  * open the viewer.
+ *
+ * User-typed messages render verbatim with Kettu chips and explicit fenced code blocks; set
+ * `markdown` only for agent-to-agent or Kettu-authored cards that intentionally carry Markdown.
  */
 export function UserContentView({
   content,
   sessionId,
   entryId,
+  markdown = false,
 }: {
   content: UserContent[]
   sessionId?: string
   entryId?: string
+  markdown?: boolean
 }) {
   const { t } = useTranslation('composer')
   const rawText = textOf(content)
@@ -86,7 +92,13 @@ export function UserContentView({
       {text && (
         <div className="flex flex-col gap-1">
           <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
-            <ChipText text={text} command={command} sessionId={sessionId} entryId={entryId} />
+            <ChipText
+              text={text}
+              command={command}
+              sessionId={sessionId}
+              entryId={entryId}
+              markdown={markdown}
+            />
           </Clamp>
         </div>
       )}
@@ -286,12 +298,14 @@ function ChipText({
   command,
   sessionId,
   entryId,
+  markdown,
 }: {
   text: string
   /** The name of a command of Kettu's the text starts with. */
   command: string | null
   sessionId?: string
   entryId?: string
+  markdown: boolean
 }) {
   const projectPath = useContext(ProjectPathContext)
   const entry = useSentEntry(sessionId, entryId)
@@ -404,9 +418,13 @@ function ChipText({
   return (
     <div data-selectable="">
       <SessionIdContext value={sessionId ?? null}>
-        <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
-          <SentMarkdown text={text} context={context} renderChip={renderChip} />
-        </Suspense>
+        {markdown ? (
+          <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
+            <SentMarkdown text={text} context={context} renderChip={renderChip} />
+          </Suspense>
+        ) : (
+          <SentText text={text} context={context} renderChip={renderChip} />
+        )}
       </SessionIdContext>
       {links.dialog}
     </div>

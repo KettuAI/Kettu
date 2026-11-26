@@ -9,7 +9,10 @@ import {
   type ComponentProps,
   type CSSProperties,
 } from 'react'
-import { cjk } from '@streamdown/cjk'
+import {
+  cjkPlugin,
+  defaultRemarkPluginsNoSingleTilde,
+} from '@renderer/features/session/markdown/cjk-plugin'
 import { createCodePlugin } from '@renderer/features/session/markdown/code-plugin'
 import { useTranslation } from 'react-i18next'
 import { defaultRehypePlugins, Streamdown, type ExtraProps, type StreamdownProps } from 'streamdown'
@@ -41,7 +44,7 @@ import { wordDiff } from './word-diff'
 
 const plugins = {
   code: createCodePlugin({ themes: [kettuCodeTheme('light'), kettuCodeTheme('dark')] }),
-  cjk,
+  cjk: cjkPlugin,
 }
 
 // Links leave the page through the app, which asks before it opens one.
@@ -77,6 +80,7 @@ const Block = memo(function Block({ source }: { source: string }) {
       mode="static"
       skipHtml
       plugins={plugins}
+      remarkPlugins={defaultRemarkPluginsNoSingleTilde}
       components={components}
       rehypePlugins={rehypePlugins}
       linkSafety={linkSafety}

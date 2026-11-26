@@ -98,11 +98,11 @@ export const UserEntry = memo(function UserEntry({
         (entry.from ? (
           // A prompt another session's agent sent is not the user's bubble.
           <FromSessionCard from={entry.from}>
-            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} markdown />
           </FromSessionCard>
         ) : entry.kettu ? (
           <KettuCard>
-            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} markdown />
           </KettuCard>
         ) : (
           <div className="ks-user__bubble" data-run-notice={runNotice ? '' : undefined}>
@@ -281,7 +281,7 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
           : t('sessionMessage.fromParent')}
       </figcaption>
       <blockquote>
-        <UserContentView content={entry.content} sessionId={sessionId} entryId={entryId} />
+        <UserContentView content={entry.content} sessionId={sessionId} entryId={entryId} markdown />
       </blockquote>
     </figure>
   )
