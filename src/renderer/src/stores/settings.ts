@@ -1,35 +1,24 @@
-import { create } from 'zustand'
 import {
   DEFAULT_SETTINGS,
   isFontFamilyName,
   USER_FONT_ROLES,
   type SettingsFile,
-  type SettingsPatch,
 } from '@shared/settings'
 import { showColorMode } from '@renderer/lib/color-mode'
 import { applyLanguage } from '@renderer/lib/i18n'
+import { useSettingsStore, type SettingsStore } from './settings-store'
 
-export interface SettingsStore {
-  settings: SettingsFile
-  loaded: boolean
-  update(patch: SettingsPatch): Promise<void>
-}
+export { useSettingsStore, type SettingsStore }
 
-export const useSettingsStore = create<SettingsStore>()(() => ({
-  settings: DEFAULT_SETTINGS,
-  loaded: false,
-  async update(patch) {
-    const settings = await window.kettu.settings.update(patch)
-    useSettingsStore.setState({ settings })
-  },
-}))
-
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const darkQuery =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
 
 function applyAppearance(settings: SettingsFile, fade = false): void {
   const root = document.documentElement
   const { theme, textSize, reduceMotion, zoom, fonts } = settings.appearance
-  const dark = theme === 'dark' || (theme === 'system' && darkQuery.matches)
+  const dark = theme === 'dark' || (theme === 'system' && (darkQuery?.matches ?? false))
   showColorMode(dark ? 'dark' : 'light', fade)
   root.dataset.textSize = textSize
   root.dataset.reduceMotion = reduceMotion
@@ -52,7 +41,7 @@ function applyAppearance(settings: SettingsFile, fade = false): void {
  */
 export async function initSettings(): Promise<void> {
   applyAppearance(DEFAULT_SETTINGS)
-  darkQuery.addEventListener('change', () => {
+  darkQuery?.addEventListener('change', () => {
     const { settings, loaded } = useSettingsStore.getState()
     applyAppearance(settings, loaded)
   })
@@ -76,6 +65,8 @@ export async function initSettings(): Promise<void> {
 export function prefersReducedMotion(): boolean {
   return (
     useSettingsStore.getState().settings.appearance.reduceMotion === 'always' ||
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    (typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   )
 }

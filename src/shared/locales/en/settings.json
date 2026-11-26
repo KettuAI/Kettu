@@ -286,6 +286,11 @@
       "description": "With the sidebar collapsed, pointing at its button shows it over the page until the pointer leaves.",
       "keywords": "sidebar collapse expand peek reveal hover"
     },
+    "closeSidePanelWithLastTab": {
+      "name": "Close the side panel with its last tab",
+      "description": "Closing the last tab in the side panel collapses it instead of showing the panel list.",
+      "keywords": "side panel sidebar close collapse last tab tabs surfaces pane"
+    },
     "sidebarPages": {
       "overview": "Overview",
       "artifacts": "Artifacts",

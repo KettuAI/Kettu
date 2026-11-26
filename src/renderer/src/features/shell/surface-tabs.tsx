@@ -101,6 +101,7 @@ import {
   foldSurface,
   isSurfaceKind,
   moveSurfaceTab,
+  nextAfterClose,
   recordSurfaceOrder,
   surfaceKey,
   type TabKind,
@@ -122,6 +123,7 @@ import {
   docKey,
   isDocKind,
   keepDoc,
+  leaveEmptySidePanel,
   noteSelectedTab,
   panelSession,
   removeSideTab,
@@ -784,17 +786,13 @@ export function SurfaceTabs({
     [panel, projectPath, sessionId],
   )
 
-  // The selected tab hands the panel to its neighbour, of any kind; the last one to the list.
+  // The selected tab hands the panel to its neighbour, of any kind; closing the last one either
+  // collapses the side panel or shows the pane list, according to the user's setting.
   const close = useCallback(
     (item: SurfaceItem) => {
-      if (item.selected) {
-        const index = items.findIndex((other) => other.key === item.key)
-        const neighbor = [...items.slice(index + 1), ...items.slice(0, index).reverse()].find(
-          (other) => !other.selected,
-        )
-        if (neighbor) selectSurface(panel, neighbor)
-        else toggleSidePane(panel, 'surfaces', true)
-      }
+      const next = nextAfterClose(items, item)
+      if (next === 'empty') leaveEmptySidePanel(panel)
+      else if (next !== 'keep') selectSurface(panel, next.select)
       drop(item, browserTabs ?? 0)
     },
     [items, panel, browserTabs, drop],
@@ -843,7 +841,7 @@ export function SurfaceTabs({
             (item.kind !== 'terminal' || (focused ? item.id === focused : item.id !== right)),
         )
         if (target) requestClose(target)
-        else toggleSidePane(panel, 'surfaces', true)
+        else leaveEmptySidePanel(panel)
       }),
     [items, requestClose, panel],
   )

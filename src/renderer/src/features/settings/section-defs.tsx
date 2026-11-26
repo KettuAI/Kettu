@@ -153,6 +153,7 @@ import {
   AllowedSitesState,
   BackgroundFetch,
   ClearBrowsingData,
+  CloseSidePanelWithLastTab,
   ColorMode,
   ConfirmLinks,
   DataFolderActions,
@@ -418,6 +419,14 @@ export function useAppearanceSection(): SectionDef {
         setting: 'appearance.sidebar-hover',
         group: sidebar,
         render: () => <SidebarHover label={t('appearance.sidebarHover.name')} />,
+      },
+      {
+        id: 'close-side-panel-with-last-tab',
+        setting: 'appearance.close-side-panel-with-last-tab',
+        group: sidebar,
+        render: () => (
+          <CloseSidePanelWithLastTab label={t('appearance.closeSidePanelWithLastTab.name')} />
+        ),
       },
       // Drawn by the group's card, which puts them in the sidebar's order.
       ...sidebarOrder.map((page) => ({

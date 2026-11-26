@@ -1019,3 +1019,40 @@ describe('sending while a turn is running', () => {
     }
   })
 })
+
+describe('closing the side panel with its last tab', () => {
+  it('defaults to false and keeps a stored boolean on load', async () => {
+    expect((await SettingsStore.load(dir)).get().appearance.closeSidePanelWithLastTab).toBe(false)
+    await save({ version: 1, appearance: { closeSidePanelWithLastTab: true } })
+    expect((await SettingsStore.load(dir)).get().appearance.closeSidePanelWithLastTab).toBe(true)
+    await save({ version: 1, appearance: { closeSidePanelWithLastTab: false } })
+    expect((await SettingsStore.load(dir)).get().appearance.closeSidePanelWithLastTab).toBe(false)
+    for (const bad of ['yes', 1, null, {}]) {
+      await save({ version: 1, appearance: { closeSidePanelWithLastTab: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.closeSidePanelWithLastTab).toBe(false)
+    }
+  })
+
+  it('validates, merges, persists and keeps the setting on the client', async () => {
+    const patch = validateSettingsPatch({ appearance: { closeSidePanelWithLastTab: true } })
+    expect(patch).toEqual({ appearance: { closeSidePanelWithLastTab: true } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.appearance.closeSidePanelWithLastTab).toBe(true)
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(
+      withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).appearance
+        .closeSidePanelWithLastTab,
+    ).toBe(true)
+
+    const store = await SettingsStore.load(dir)
+    store.update(patch)
+    await store.flush()
+    expect((await SettingsStore.load(dir)).get().appearance.closeSidePanelWithLastTab).toBe(true)
+
+    for (const bad of ['true', 1, null, []]) {
+      expect(() =>
+        validateSettingsPatch({ appearance: { closeSidePanelWithLastTab: bad } }),
+      ).toThrow()
+    }
+  })
+})
