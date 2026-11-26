@@ -5,6 +5,7 @@ import {
   type DeviceCallAnswer,
 } from '@shared/device-agent'
 import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
+import { electronNodeRuntime } from '@shared/node-runtime'
 import type { PortDevice } from '@shared/remote/device'
 import deviceHostPath from '../device-host/index?modulePath'
 import { locale as currentLocale, t } from './i18n'
@@ -40,7 +41,7 @@ export class DeviceHost {
         platform: process.platform,
         appVersion: app.getVersion(),
         locale: currentLocale(),
-        nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
+        nodeRuntime: electronNodeRuntime(),
         dataDir: app.getPath('userData'),
         resourcesPath: app.isPackaged ? process.resourcesPath : null,
         allowDevices: deps.allowDevices(),

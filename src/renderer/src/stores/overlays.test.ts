@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OVERLAY_OPEN_ATTR, useOverlayStore } from './overlays'
+import { OVERLAY_LAYER, OVERLAY_OPEN_ATTR, useOverlayStore } from './overlays'
 
 const RENDERER_SRC = fileURLToPath(new URL('..', import.meta.url))
 
@@ -184,5 +184,122 @@ describe('drag region suspension wiring', () => {
         /dismissible:\s*true/,
       )
     }
+  })
+})
+
+/** Extracts opening JSX tag snippets for a given component name (handles nested `{...}` props). */
+function extractOpeningTags(source: string, tagPattern: RegExp): string[] {
+  const tags: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = tagPattern.exec(source)) !== null) {
+    let idx = match.index + match[0].length
+    let braceDepth = 0
+    let quote: "'" | '"' | '`' | null = null
+    while (idx < source.length) {
+      const ch = source[idx]!
+      if (quote) {
+        if (ch === '\\') idx++
+        else if (ch === quote) quote = null
+      } else if (ch === "'" || ch === '"' || ch === '`') {
+        quote = ch
+      } else if (ch === '{') {
+        braceDepth++
+      } else if (ch === '}') {
+        braceDepth = Math.max(0, braceDepth - 1)
+      } else if (ch === '>' && braceDepth === 0) {
+        tags.push(source.slice(match.index, idx + 1))
+        break
+      }
+      idx++
+    }
+  }
+  return tags
+}
+
+describe('overlay layer coverage wiring', () => {
+  it('marks every Base UI Popup in the renderer with data-overlay-layer', () => {
+    const tsxFiles = listFiles(RENDERER_SRC, '.tsx')
+    const popupFiles = tsxFiles.filter((file) => {
+      const text = readFileSync(file, 'utf8')
+      return /@base-ui\/react\//.test(text) && /<[A-Za-z0-9_]+\.Popup\b/.test(text)
+    })
+
+    expect(popupFiles.length).toBeGreaterThan(0)
+    for (const file of popupFiles) {
+      const text = readFileSync(file, 'utf8')
+      const rel = relative(RENDERER_SRC, file).split(sep).join('/')
+      const popups = extractOpeningTags(text, /<[A-Za-z0-9_]+\.Popup\b/g)
+      expect(popups.length, `${rel} should match its Base UI Popup tags`).toBeGreaterThan(0)
+      for (const tag of popups) {
+        expect(tag, `${rel} Popup must carry ${OVERLAY_LAYER}`).toContain(OVERLAY_LAYER)
+      }
+    }
+  })
+
+  it('wires PromptBox completion popover as a dismissible overlay layer', () => {
+    const text = readFileSync(
+      join(RENDERER_SRC, 'features', 'session', 'composer', 'prompt-box.tsx'),
+      'utf8',
+    )
+    expect(text).toMatch(/useOverlayPresence\(open,\s*\{\s*dismissible:\s*true\s*\}\)/)
+
+    const positioners = extractOpeningTags(text, /<Popover\.Positioner\b/g)
+    expect(positioners).toHaveLength(1)
+    expect(positioners[0]).toContain('z-(--layer-menu)')
+    expect(positioners[0]).toContain('app-region-no-drag')
+
+    const popups = extractOpeningTags(text, /<Popover\.Popup\b/g)
+    expect(popups).toHaveLength(1)
+    expect(popups[0]).toContain(`${OVERLAY_LAYER}=""`)
+  })
+
+  it('wires all three prompt-chips popovers as passive overlays so drag regions stay enabled', () => {
+    const text = readFileSync(
+      join(RENDERER_SRC, 'features', 'session', 'composer', 'prompt-chips.tsx'),
+      'utf8',
+    )
+
+    // Each of the 3 floating popovers (hover preview, pasted-link hint, command strip) registers
+    // with the overlay store so BrowserPane freezes when overlapped, without suspending drag regions.
+    const presenceCalls = text.match(/useOverlayPresence\([^)]*\)/g) ?? []
+    expect(presenceCalls).toHaveLength(3)
+    expect(text).not.toMatch(/dismissible:\s*true/)
+
+    const positioners = extractOpeningTags(text, /<Popover\.Positioner\b/g)
+    expect(positioners).toHaveLength(3)
+    for (const positioner of positioners) {
+      expect(positioner).toContain('z-(--layer-menu)')
+      expect(positioner).not.toContain('z-40')
+    }
+    // The interactive pasted-link bar (the only non-pointer-events-none positioner) must stay clickable.
+    const interactivePositioners = positioners.filter((tag) => !tag.includes('pointer-events-none'))
+    expect(interactivePositioners).toHaveLength(1)
+    expect(interactivePositioners[0]).toContain('app-region-no-drag')
+
+    const popups = extractOpeningTags(text, /<Popover\.Popup\b/g)
+    expect(popups).toHaveLength(3)
+    for (const popup of popups) {
+      expect(popup).toContain(`${OVERLAY_LAYER}=""`)
+    }
+  })
+
+  it('marks custom floating overlays with data-overlay-layer and wires PlanRing presence', () => {
+    for (const rel of [
+      'app/quit-hint.tsx',
+      'features/split/session-drag.tsx',
+      'components/affect/model-picker.tsx',
+      'components/affect/profile-menu.tsx',
+      'components/affect/app-shell.tsx',
+      'components/affect/date-range-picker.tsx',
+    ]) {
+      const text = readFileSync(join(RENDERER_SRC, rel), 'utf8')
+      expect(text, `${rel} must carry ${OVERLAY_LAYER}`).toContain(OVERLAY_LAYER)
+    }
+
+    const planRing = readFileSync(
+      join(RENDERER_SRC, 'features', 'account', 'plan-ring.tsx'),
+      'utf8',
+    )
+    expect(planRing).toMatch(/useOverlayPresence\(open,\s*\{\s*dismissible:\s*true\s*\}\)/)
   })
 })

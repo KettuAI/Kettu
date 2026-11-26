@@ -1352,7 +1352,7 @@ export function Popover({
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div ref={ref} className={["ui-as-popover", className].filter(Boolean).join(" ")} data-align={place.align} data-side={place.side} role="dialog">
+    <div ref={ref} data-overlay-layer="" className={["ui-as-popover", className].filter(Boolean).join(" ")} data-align={place.align} data-side={place.side} role="dialog">
       {children}
     </div>
   );

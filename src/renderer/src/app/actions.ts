@@ -25,7 +25,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { errorCode, errorMessage, forgetSessionHost, host, hostAt } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
+import { sessionStarted } from '@renderer/features/session/new-session/prepared'
 import { roleStarted } from '@renderer/features/session/new-session/role-choice'
 import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
 import {
@@ -229,13 +229,15 @@ export async function createSession(
       ...(worktree ? { worktree } : {}),
       ...(role ? { role } : {}),
     })
-    // A session in a new worktree or as a role starts its own agent; the prepared one stays the
-    // window's.
-    if (preparedId && !worktree && !role) adoptedPrepared(summary.id)
+    const hostId = projectPath === null ? null : hostOfPath(projectPath)
+    // Drop the prepared session once a session starts: if adopted it is now that session, and if
+    // a fresh session started instead (such as a new worktree or role), discard it without keeping
+    // one-off choices like permission mode for the next New session.
+    sessionStarted(hostId, agentId, summary.id)
     if (role) roleStarted()
     if (worktree) writeSlug(null)
     // The host now remembers what carries over; the rest starts afresh next time.
-    if (options) clearPicks(projectPath === null ? null : hostOfPath(projectPath), agentId)
+    clearPicks(hostId, agentId)
     useSessionsStore.getState().upsert(summary)
     // The session shows with its thread and renderer ready, so no skeleton flashes in between.
     await Promise.all([focusSession(summary.id), loadMarkdown().catch(() => {})])

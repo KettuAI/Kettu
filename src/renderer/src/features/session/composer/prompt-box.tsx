@@ -474,6 +474,7 @@ export function PromptBox({
           >
             <Popover.Popup
               ref={popup}
+              data-overlay-layer=""
               initialFocus={false}
               finalFocus={false}
               className={cn(

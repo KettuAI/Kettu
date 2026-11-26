@@ -244,6 +244,7 @@ export function ProfileMenu({
         {subItem && (
           <div
             ref={sideRef}
+            data-overlay-layer=""
             className="ui-pmc__side"
             role="menu"
             aria-label={subItem.label}

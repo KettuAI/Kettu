@@ -31,6 +31,7 @@ import type { AgentLauncher, AgentTimings } from '../agents'
 import { detectAgent, fakeAgent } from '../catalog'
 import type { Env } from '../find-command'
 import type { GitServiceApi } from '../git/api'
+import { electronNodeRuntime } from '@shared/node-runtime'
 import { AgentHost, type HostOptions } from '../host'
 import type { ProcessControl } from '../process-tree'
 import type { CacheTtlReader } from '../prompt-cache'
@@ -357,7 +358,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     userDataPath: dir,
     appVersion: '0.0.0-test',
     platform: process.platform,
-    nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
+    nodeRuntime: electronNodeRuntime(),
     fakeAgentPath: FAKE_AGENT_MAIN,
     settings: options.settings ?? {
       locale: 'en',

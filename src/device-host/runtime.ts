@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { t } from '@shared/hosts-text'
+import { electronNodeRuntime, type ResolveNodeExecOptions } from '@shared/node-runtime'
 import { isExecutableFile } from '../agent-host/find-command'
 
 const require = createRequire(__filename)
@@ -27,12 +28,23 @@ export function packageRoot(name: string): string {
   throw new Error(t('devices.notInstalled', { name }))
 }
 
+export interface NodeCommandOptions extends ResolveNodeExecOptions {
+  execPath?: string
+  isElectron?: boolean
+}
+
 /** How to run a Node.js script: this process's own runtime, as Node.js under Electron. */
-export function nodeCommand(env: NodeJS.ProcessEnv): { file: string; env: NodeJS.ProcessEnv } {
-  if (process.versions.electron) {
-    return { file: process.execPath, env: { ...env, ELECTRON_RUN_AS_NODE: '1' } }
+export function nodeCommand(
+  env: NodeJS.ProcessEnv,
+  options: NodeCommandOptions = {},
+): { file: string; env: NodeJS.ProcessEnv } {
+  const execPath = options.execPath ?? process.execPath
+  const isElectron = options.isElectron ?? Boolean(process.versions.electron)
+  if (isElectron) {
+    const runtime = electronNodeRuntime(execPath, options)
+    return { file: runtime.command, env: { ...env, ...runtime.env } }
   }
-  return { file: process.execPath, env }
+  return { file: execPath, env }
 }
 
 /** A loopback port nothing listens on now. */

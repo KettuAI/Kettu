@@ -490,19 +490,25 @@ function DraftComposer({
       }
       const optionsState = useAgentOptionsStore.getState()
       const entry = optionsOn(optionsState, hostId)[agentId]
-      // Without a prepared session, the values New session showed go with the create.
-      const options = entry
-        ? startValues(entry, picksOf(optionsState, hostId, agentId), { startMode: true })
-        : null
+      const prepared = preparedFor(optionsState, hostId, agentId)
+      const preparedList = prepared?.summary?.prepared?.config
+      const picks = picksOf(optionsState, hostId, agentId)
+      // Include the prepared session's effective values under any unsettled picks so sessions that
+      // cannot adopt it (such as new worktrees or roles) keep one-off choices like permission mode.
+      const options =
+        entry || preparedList
+          ? startValues(entry, picks, { startMode: true, prepared: preparedList })
+          : null
       if (workflow) {
         // A step session works in the mode Kettu gives steps, so the tray's mode stays behind.
+        const sourceConfig = preparedList ?? entry?.config
         const kept = Object.entries(options ?? {}).filter(
-          ([id]) => entry?.config.find((o) => o.id === id)?.category !== 'mode',
+          ([id]) => sourceConfig?.find((o) => o.id === id)?.category !== 'mode',
         )
         await startTask(workflow, Object.fromEntries(kept))
         return
       }
-      const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
+      const preparedId = prepared?.summary?.id ?? null
       const text = editor.current?.text() ?? box.source.text
       const surfaces = projectPath ? mentionSurfacesOf(newSessionPanel(projectPath)) : NO_SURFACES
       const content: UserContent[] = [
