@@ -4548,6 +4548,51 @@ describe('prompt content', () => {
   })
 })
 
+describe('session titles', () => {
+  it('generates and stores a title when the session does not already have a fixed one', async () => {
+    const s = await setup()
+    s.sdk.generatedTitle = 'Debug port isolation'
+    s.sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    const target = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, target)
+    await s.connection.prompt(sessionId, [
+      { type: 'text', text: 'Investigate KETTU_USER_DATA and debug port isolation' },
+    ])
+    await vi.waitFor(() => expect(target.thread.session.title).toBe('Debug port isolation'))
+    expect(target.effects).toContainEqual({ kind: 'title', title: 'Debug port isolation' })
+    expect(s.sdk.last.calls.some((call) => call.method === 'generateSessionTitle')).toBe(true)
+    expect(s.sdk.last.calls.some((call) => call.method === 'renameSession')).toBe(true)
+  })
+
+  it('skips title generation when opened with a fixed title', async () => {
+    const s = await setup()
+    s.sdk.generatedTitle = 'Generated replacement title'
+    s.sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    const target = new Target()
+    target.thread = {
+      ...target.thread,
+      session: { ...target.thread.session, title: 'Caller-given title' },
+    }
+    const { sessionId } = await s.connection.newSession('/repo', { titled: true })
+    s.connection.register(sessionId, target)
+    await s.connection.prompt(sessionId, [
+      { type: 'text', text: 'Investigate KETTU_USER_DATA and debug port isolation' },
+    ])
+    await settle()
+    expect(target.thread.session.title).toBe('Caller-given title')
+    expect(target.effects.filter((effect) => effect.kind === 'title')).toEqual([])
+    expect(s.sdk.last.calls.some((call) => call.method === 'generateSessionTitle')).toBe(false)
+    expect(s.sdk.last.calls.some((call) => call.method === 'renameSession')).toBe(false)
+  })
+})
+
 describe('the connection', () => {
   it('ends every query when it closes', async () => {
     const s = await setup()

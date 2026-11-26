@@ -1,9 +1,12 @@
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import type { AgentManager } from './agents'
+import { CLAUDE_CODE } from './catalog'
+import { claudeSdkDriver } from './claude/driver'
+import type { OwnTitles, SessionOptions, SessionTarget } from './connection'
 import { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import { preparedFile, PreparedRecords, type PreparedFile } from './prepared'
@@ -12,6 +15,7 @@ import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
 import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
+import { FakeChild, FakeClaudeSdk } from './testing/fake-claude-sdk'
 import { EMPTY_SESSION, type StoredThread } from './threads/model'
 import type { ThreadStore } from './threads/store'
 import type { WorktreeInspection } from './worktrees/api'
@@ -1593,5 +1597,393 @@ describe('preserving prepared session options when creating a worktree session',
     )
     expect(agent.configs.get('acp-3')?.find((o) => o.id === 'mode')?.value).toBe('default')
     await sessions.flush()
+  })
+})
+
+describe('agent-given session titles', () => {
+  function titleAgent(opts: {
+    ownTitles: OwnTitles | null
+    listedTitle?: string | null
+    writtenTitle?: string
+    onPrompt?: (acpId: string, target: SessionTarget) => void | Promise<void>
+    onLoad?: (acpId: string, target: SessionTarget) => void | Promise<void>
+    holdWrite?: () => Promise<string>
+  }) {
+    let seq = 0
+    const targets = new Map<string, SessionTarget>()
+    const defaultConfig = () => [
+      {
+        id: 'mode',
+        name: 'Mode',
+        category: 'mode' as const,
+        type: 'select' as const,
+        value: 'default',
+        choices: [{ value: 'default', name: 'Default' }],
+      },
+    ]
+    const newSession = vi.fn(async (_cwd: string, options?: SessionOptions) => ({
+      sessionId: `${options?.hidden ? 'hidden' : 'acp'}-${++seq}`,
+      config: defaultConfig(),
+    }))
+    const collect = vi.fn(async () => {
+      const title = opts.holdWrite ? await opts.holdWrite() : (opts.writtenTitle ?? 'Written title')
+      return [JSON.stringify({ '0': title })]
+    })
+    const listSessions = vi.fn(async () => ({
+      sessions: [...targets.keys()].map((sessionId) => ({
+        sessionId,
+        title: opts.listedTitle ?? 'Listed title',
+        updatedAt: null,
+        cwd: '/repo',
+      })),
+      nextCursor: null,
+    }))
+    const prompt = vi.fn(async (id: string) => {
+      const target = targets.get(id)
+      if (target && opts.onPrompt) await opts.onPrompt(id, target)
+      return { stopReason: 'end_turn' as const, tokens: null, models: [] }
+    })
+    const connection = {
+      closed: new Promise<void>(() => {}),
+      isClosed: false,
+      hiddenSessions: true,
+      close: () => {},
+      register: (id: string, target: SessionTarget) => {
+        targets.set(id, target)
+      },
+      unregister: (id: string) => {
+        targets.delete(id)
+      },
+      reopen: () => {},
+      newSession,
+      setConfigOption: async () => defaultConfig(),
+      loadSession: async (id: string) => {
+        const target = targets.get(id)
+        if (target && opts.onLoad) await opts.onLoad(id, target)
+        return { config: defaultConfig() }
+      },
+      resumeSession: async () => ({ config: defaultConfig() }),
+      listSessions,
+      collect,
+      removeHidden: async () => {},
+      cancel: async () => {},
+      prompt,
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      kettu: false,
+      init: {
+        name: 'Agent',
+        version: '1.0.0',
+        capabilities: {
+          loadSession: true,
+          listSessions: true,
+          resumeSession: true,
+          closeSession: false,
+          deleteSession: false,
+          forkSession: false,
+          forkAtMessage: false,
+          ownTitles: opts.ownTitles,
+          logout: false,
+          steering: false,
+          mcpHttp: true,
+          mcpSse: false,
+          mcpStdio: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+        authMethods: [],
+        raw: null,
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'Agent',
+      signedIn: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    return { agents, targets, newSession, collect, listSessions, prompt }
+  }
+
+  const titleSettings = { sessionTitles: true, lightModel: { mode: 'small' as const } }
+
+  it('keeps an explicit start_session title against agent title updates and allows user rename', async () => {
+    const agent = titleAgent({
+      ownTitles: 'sent',
+      onPrompt: (_id, target) => {
+        // Agent emits a model-written title update and then a null title clear during the turn.
+        target.apply({
+          patches: [
+            {
+              op: 'session.update',
+              changes: { title: 'KETTU_USER_DATA and debug port isolation', updatedAt: 999_999 },
+            },
+          ],
+          effects: [{ kind: 'title', title: 'KETTU_USER_DATA and debug port isolation' }],
+        })
+        target.apply({
+          patches: [{ op: 'session.update', changes: { title: null } }],
+          effects: [{ kind: 'title', title: null }],
+        })
+      },
+    })
+    const { sessions } = manager({}, { agents: agent.agents, settings: titleSettings })
+    await sessions.load()
+
+    const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const startedId = await sessions.startFromTool(caller.id, {
+      prompt: 'Check KETTU_USER_DATA and debug port isolation across windows',
+      title: 'Keep this title',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(agent.prompt).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(sessions.summary(startedId).status).toBe('ready'))
+
+    expect(agent.newSession.mock.calls[1]?.[1]?.titled).toBe(true)
+    expect(sessions.title(startedId)).toBe('Keep this title')
+    expect(sessions.summary(startedId).title).toBe('Keep this title')
+    expect(sessions.sessionInfo(startedId)?.title).toBe('Keep this title')
+
+    // Post-turn updates keep non-title fields (like updatedAt) while stripping generated titles.
+    const target = agent.targets.get('acp-2')!
+    target.apply({
+      patches: [
+        {
+          op: 'session.update',
+          changes: { title: 'Late generated title', updatedAt: 999_999 },
+        },
+      ],
+      effects: [{ kind: 'title', title: 'Late generated title' }],
+    })
+    expect(sessions.summary(startedId).title).toBe('Keep this title')
+    expect(sessions.summary(startedId).updatedAt).toBe(999_999)
+
+    await sessions.flush()
+    const saved = (await index())?.sessions.find((record) => record.id === startedId)
+    expect(saved?.title).toBe('Keep this title')
+    expect(saved?.titleSource).toBe('given')
+
+    // An explicit agent rename updates the given title and stays protected from generated updates.
+    sessions.renameByAgent(startedId, 'Agent renamed')
+    expect(sessions.summary(startedId).title).toBe('Agent renamed')
+    target.apply({
+      patches: [{ op: 'session.update', changes: { title: 'Another generated title' } }],
+      effects: [{ kind: 'title', title: 'Another generated title' }],
+    })
+    expect(sessions.summary(startedId).title).toBe('Agent renamed')
+
+    // Explicit user rename overrides the given title and stays over subsequent agent renames.
+    sessions.rename(startedId, 'User title')
+    expect(sessions.title(startedId)).toBe('User title')
+    expect(sessions.summary(startedId).title).toBe('User title')
+    sessions.renameByAgent(startedId, 'Should not override user')
+    expect(sessions.summary(startedId).title).toBe('User title')
+
+    // Clearing the user's custom title reveals the preserved given title, not a generated one.
+    sessions.rename(startedId, null)
+    expect(sessions.summary(startedId).title).toBe('Agent renamed')
+    await sessions.flush()
+  })
+
+  it('skips Kettu auto-titling and listed-title reads when start_session gives a title', async () => {
+    const written = titleAgent({ ownTitles: null, writtenTitle: 'Auto written title' })
+    const { sessions: s1 } = manager({}, { agents: written.agents, settings: titleSettings })
+    await s1.load()
+    const caller1 = await s1.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const started1 = await s1.startFromTool(caller1.id, {
+      prompt: 'Investigate startup timing across multiple host windows',
+      title: 'Startup timing',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(written.prompt).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(s1.summary(started1).status).toBe('ready'))
+    expect(written.collect).not.toHaveBeenCalled()
+    expect(s1.summary(started1).title).toBe('Startup timing')
+    await s1.flush()
+
+    const listed = titleAgent({ ownTitles: 'listed', listedTitle: 'Listed replacement' })
+    const { sessions: s2 } = manager({}, { agents: listed.agents, settings: titleSettings })
+    await s2.load()
+    const caller2 = await s2.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const started2 = await s2.startFromTool(caller2.id, {
+      prompt: 'Check listed titles on OpenCode sessions',
+      title: 'Explicit listed title',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(listed.prompt).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(s2.summary(started2).status).toBe('ready'))
+    expect(listed.listSessions).not.toHaveBeenCalled()
+    expect(s2.summary(started2).title).toBe('Explicit listed title')
+    await s2.flush()
+  })
+
+  it('still auto-titles start_session without a title, unless renamed by the agent first', async () => {
+    const sent = titleAgent({
+      ownTitles: 'sent',
+      onPrompt: (_id, target) => {
+        target.apply({
+          patches: [{ op: 'session.update', changes: { title: 'Agent generated title' } }],
+          effects: [{ kind: 'title', title: 'Agent generated title' }],
+        })
+      },
+    })
+    const { sessions: s1 } = manager({}, { agents: sent.agents, settings: titleSettings })
+    await s1.load()
+    const caller1 = await s1.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const untitled1 = await s1.startFromTool(caller1.id, {
+      prompt: 'Please audit our login retry behavior',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(s1.summary(untitled1).title).toBe('Agent generated title'))
+    expect(sent.newSession.mock.calls[1]?.[1]?.titled).toBeUndefined()
+    await s1.flush()
+
+    const written = titleAgent({ ownTitles: null, writtenTitle: 'Login retry audit' })
+    const { sessions: s2 } = manager({}, { agents: written.agents, settings: titleSettings })
+    await s2.load()
+    const caller2 = await s2.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const untitled2 = await s2.startFromTool(caller2.id, {
+      prompt: 'Please audit our login retry behavior',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(s2.summary(untitled2).title).toBe('Login retry audit'))
+    expect(written.collect).toHaveBeenCalledTimes(1)
+    await s2.flush()
+
+    // An explicit rename_session while auto-titling is in flight blocks the late written title.
+    let releaseTitle!: (title: string) => void
+    const delayed = titleAgent({
+      ownTitles: null,
+      holdWrite: () => new Promise<string>((resolve) => (releaseTitle = resolve)),
+    })
+    const { sessions: s3 } = manager({}, { agents: delayed.agents, settings: titleSettings })
+    await s3.load()
+    const caller3 = await s3.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const untitled3 = await s3.startFromTool(caller3.id, {
+      prompt: 'Please audit our login retry behavior',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(delayed.collect).toHaveBeenCalledTimes(1))
+    s3.renameByAgent(untitled3, 'Chosen mid-flight')
+    releaseTitle('Late generated title')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(s3.summary(untitled3).title).toBe('Chosen mid-flight')
+    await s3.flush()
+  })
+
+  it('preserves a given title across reload when replay emits a generated title', async () => {
+    const firstAgent = titleAgent({ ownTitles: 'sent' })
+    const first = manager({}, { agents: firstAgent.agents })
+    await first.sessions.load()
+    const caller = await first.sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const startedId = await first.sessions.startFromTool(caller.id, {
+      prompt: 'Check persistence across restarts',
+      title: 'Persisted title',
+      options: {},
+      report: false,
+    })
+    await vi.waitFor(() => expect(first.sessions.summary(startedId).status).toBe('ready'))
+    await first.sessions.flush()
+
+    const replayAgent = titleAgent({
+      ownTitles: 'sent',
+      onLoad: (_id, target) => {
+        target.apply({
+          patches: [{ op: 'session.update', changes: { title: 'Replayed generated title' } }],
+          effects: [{ kind: 'title', title: 'Replayed generated title' }],
+        })
+      },
+    })
+    const reloaded = manager({}, { agents: replayAgent.agents })
+    await reloaded.sessions.load()
+    await reloaded.sessions.open(startedId)
+    expect(reloaded.sessions.summary(startedId).title).toBe('Persisted title')
+    await reloaded.sessions.flush()
+  })
+
+  it('keeps an explicit start_session title on a real Claude Code connection', async () => {
+    const sdkDir = await mkdtemp(path.join(dir, 'claude-sdk-'))
+    const entry = path.join(sdkDir, 'sdk.mjs')
+    await writeFile(path.join(sdkDir, 'package.json'), JSON.stringify({ version: '0.3.314' }))
+    const sdk = new FakeClaudeSdk()
+    sdk.generatedTitle = 'Debug port isolation'
+    sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    const connection = claudeSdkDriver(async () => sdk).connect({
+      def: CLAUDE_CODE,
+      hooks: {
+        traffic: () => {},
+        account: () => {},
+        ignored: () => {},
+        log: () => {},
+      },
+      spec: {
+        command: entry,
+        args: [],
+        env: { CLAUDE_CODE_EXECUTABLE: '/opt/claude/bin/claude' },
+        shell: false,
+        display: { command: entry, args: [], env: {} },
+      },
+      env: { PATH: '/usr/bin', HOME: dir },
+      claudeSettingsDir: path.join(sdkDir, 'settings'),
+      spawn: () => new FakeChild() as never,
+    })
+    const init = await connection.initialize('1.0.0')
+    const runtime = { agentId: 'claude-code' as const, kettu: false, init, connection }
+    const agents = {
+      name: () => 'Claude Code',
+      signedIn: () => {},
+      status: () => ({ capabilities: init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    const { sessions } = manager({}, { agents, settings: titleSettings })
+    await sessions.load()
+
+    try {
+      const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+      const titledId = await sessions.startFromTool(caller.id, {
+        prompt: 'Check KETTU_USER_DATA and debug port isolation',
+        title: 'Given Claude title',
+        options: {},
+        report: false,
+      })
+      await vi.waitFor(() => expect(sdk.last.inputs).toHaveLength(1))
+      await vi.waitFor(() => expect(sessions.summary(titledId).status).toBe('ready'))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(sessions.summary(titledId).title).toBe('Given Claude title')
+      const titledQuery = sdk.last
+      expect(titledQuery.calls.some((call) => call.method === 'generateSessionTitle')).toBe(false)
+      expect(titledQuery.calls.some((call) => call.method === 'renameSession')).toBe(false)
+
+      const untitledId = await sessions.startFromTool(caller.id, {
+        prompt: 'Check KETTU_USER_DATA and debug port isolation',
+        options: {},
+        report: false,
+      })
+      await vi.waitFor(() =>
+        expect(sessions.summary(untitledId).title).toBe('Debug port isolation'),
+      )
+      expect(sdk.last.calls.some((call) => call.method === 'generateSessionTitle')).toBe(true)
+
+      sessions.rename(titledId, 'Renamed by user')
+      expect(sessions.summary(titledId).title).toBe('Renamed by user')
+      await sessions.flush()
+    } finally {
+      connection.close()
+    }
   })
 })

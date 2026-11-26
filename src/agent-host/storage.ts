@@ -321,7 +321,7 @@ export interface SessionRecord {
   /** Primary path of the owning project when `projectPath` is an additional source folder. */
   projectOwner?: string
   title: string | null
-  titleSource?: 'agent' | 'written' // absent: the cut first line (or none)
+  titleSource?: 'agent' | 'written' | 'given' // absent: the cut first line (or none); 'given': set explicitly by an agent, plugin or workflow
   createdAt: number
   updatedAt: number
   lastViewedAt: number | null
@@ -1090,7 +1090,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         ? { projectOwner: item.projectOwner }
         : {}),
       title: item.title,
-      ...(item.titleSource === 'agent' || item.titleSource === 'written'
+      ...(item.titleSource === 'agent' ||
+      item.titleSource === 'written' ||
+      item.titleSource === 'given'
         ? { titleSource: item.titleSource }
         : {}),
       createdAt: item.createdAt,

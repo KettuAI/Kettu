@@ -268,6 +268,17 @@ describe('the host files', () => {
 
   it('validates every session field', () => {
     expect(parseSessionsFile({ sessions: [session] })).toEqual({ version: 1, sessions: [session] })
+    for (const titleSource of ['agent', 'written', 'given'] as const) {
+      const sourced = { ...session, titleSource }
+      expect(parseSessionsFile({ sessions: [sourced] })).toEqual({
+        version: 1,
+        sessions: [sourced],
+      })
+    }
+    expect(parseSessionsFile({ sessions: [{ ...session, titleSource: 'other' }] })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
     expect(parseSessionsFile({ sessions: [{ ...session, agentId: 'other' }] })).toBe(
       'session 0 is malformed',
     )

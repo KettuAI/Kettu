@@ -1027,7 +1027,7 @@ export class ClaudeConnection implements AgentConnection {
       adding: null,
       hooks: settings.hooks,
       hooksHeld: false,
-      titleText: '',
+      titleText: options.titled ? null : '',
       titleRev: 0,
       titleForRev: null,
       titling: null,

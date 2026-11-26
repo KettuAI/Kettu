@@ -4147,6 +4147,9 @@ export class SessionManager {
       ...(role ? { role } : {}),
       ...(append ? { systemPromptAppend: append } : {}),
       ...(this.deps.settings().promptSuggestions ? { suggestions: true } : {}),
+      ...(record.customTitle !== undefined || record.titleSource === 'given'
+        ? { titled: true }
+        : {}),
     }
   }
 
@@ -4526,19 +4529,27 @@ export class SessionManager {
 
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
-    const patches = this.deps.toolSkills
-      ? output.patches.map((patch) =>
-          patch.op === 'session.update' && patch.changes.commands
-            ? {
-                ...patch,
-                changes: {
-                  ...patch.changes,
-                  commands: this.withToolSkills(live, patch.changes.commands),
-                },
+    const keepTitle = live.record.titleSource === 'given'
+    const patches =
+      this.deps.toolSkills || keepTitle
+        ? output.patches.flatMap((patch): Patch[] => {
+            if (patch.op !== 'session.update') return [patch]
+            let changes = patch.changes
+            if (keepTitle && 'title' in changes) {
+              const rest = { ...changes }
+              delete rest.title
+              if (Object.keys(rest).length === 0) return []
+              changes = rest
+            }
+            if (this.deps.toolSkills && changes.commands) {
+              changes = {
+                ...changes,
+                commands: this.withToolSkills(live, changes.commands),
               }
-            : patch,
-        )
-      : output.patches
+            }
+            return changes === patch.changes ? [patch] : [{ ...patch, changes }]
+          })
+        : output.patches
     const finished = this.deps.plugins ? this.finishedTools(live, patches) : []
     if (patches.length > 0) this.emit(live, patches)
     for (const tool of finished) {
@@ -4621,6 +4632,7 @@ export class SessionManager {
         this.deps.agents.setExtraUsage(agentId, effect.inUse)
         break
       case 'title': {
+        if (live.record.titleSource === 'given') break
         if (effect.title === null) {
           delete live.record.titleSource
           const fallback = this.firstUserText(live)
@@ -5219,6 +5231,7 @@ export class SessionManager {
       newWorktree = true
     }
     const now = this.now()
+    const givenTitle = params.title?.trim() ? params.title : null
     const record: SessionRecord = {
       id: randomUUID(),
       agentId: params.agentId,
@@ -5226,8 +5239,8 @@ export class SessionManager {
       projectPath,
       ...(projectOwner ? { projectOwner } : {}),
       ...(worktree ? { worktree } : {}),
-      title: params.title ?? null,
-      ...(params.title === undefined ? {} : { titleSource: 'agent' as const }),
+      title: givenTitle,
+      ...(givenTitle === null ? {} : { titleSource: 'given' as const }),
       createdAt: now,
       updatedAt: now,
       lastViewedAt: now,
@@ -5341,7 +5354,7 @@ export class SessionManager {
       projectPath,
       ...(worktree ? { worktree } : {}),
       title: params.title,
-      titleSource: 'agent',
+      titleSource: 'given',
       createdAt: now,
       updatedAt: now,
       lastViewedAt: now,
@@ -12607,16 +12620,17 @@ export class SessionManager {
     )
   }
 
-  /** Sets a session's agent title, which a title the user gave still wins over. */
+  /** Sets an agent-given title, which stays over generated ones while a user title still wins. */
   renameByAgent(sessionId: string, title: string): void {
     const record = this.recordOf(sessionId)
     if (record.customTitle !== undefined) return
-    record.titleSource = 'agent'
+    record.titleSource = 'given'
     const live = this.live.get(sessionId)
     if (live) {
       live.titlePrompt = null
       this.update(live, { title })
       this.persist(live)
+      this.touch(sessionId)
       return
     }
     record.title = title
@@ -14156,7 +14170,7 @@ export class SessionManager {
         out.push({
           sessionId: live.id,
           agentId: live.record.agentId,
-          title: live.thread.session.title,
+          title: live.record.customTitle ?? live.thread.session.title,
           turnStartedAt: turn ? live.thread.session.turnStartedAt : null,
           background,
         })
