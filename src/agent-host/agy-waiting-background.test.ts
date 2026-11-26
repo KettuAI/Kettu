@@ -138,10 +138,15 @@ function createScriptedAgy() {
         content: { type: 'text', text },
       })
     },
-    async sendTool(toolCallId: string, name: string, status: 'in_progress' | 'completed') {
+    async sendTool(
+      toolCallId: string,
+      name: string,
+      status: 'in_progress' | 'completed',
+      updateKind?: 'tool_call' | 'tool_call_update',
+    ) {
       const cur = active!
       await notify(cur.sessionId, cur.client, {
-        sessionUpdate: status === 'in_progress' ? 'tool_call' : 'tool_call_update',
+        sessionUpdate: updateKind ?? (status === 'in_progress' ? 'tool_call' : 'tool_call_update'),
         toolCallId,
         name,
         kind: name === 'run_command' ? 'execute' : 'other',
@@ -155,12 +160,12 @@ function createScriptedAgy() {
         status,
       })
     },
-    async sendUsage() {
+    async sendUsage(explicitUsed?: number) {
       const cur = active!
-      used += 500
+      const nextUsed = explicitUsed ?? (used += 500)
       await notify(cur.sessionId, cur.client, {
         sessionUpdate: 'usage_update',
-        used,
+        used: nextUsed,
         size: 1_048_576,
       })
     },
@@ -401,5 +406,64 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     expect(agy.prompts[1]!.text).toContain('Wait, skip that')
     agy.finish('end_turn')
     await window.untilStatus(id, 'ready')
+  })
+
+  it('clears Writing state and steers follow-ups under real agy 1.5.18 usage_update-before-tool_call order', async () => {
+    const { agy, window, id } = await openAgySession()
+
+    await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Run background command and report READY' }],
+    })
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(1))
+
+    // Initial pre-step usage_update { used: 0 } immediately after session/prompt.
+    await agy.sendUsage(0)
+
+    // Step 1: thought -> usage_update -> tool_call(in_progress) -> tool_call_update(in_progress)
+    // (real agy 1.5.18 wire order, with no second usage_update after the tool starts).
+    await agy.sendThought('Launching background shell command.')
+    await agy.sendUsage(10_780)
+    await agy.sendTool('call-bg-real', 'run_command', 'in_progress', 'tool_call')
+    await agy.sendTool('call-bg-real', 'run_command', 'in_progress', 'tool_call_update')
+
+    // Confirm Step 1 does NOT falsely enter waiting_background past DEFAULT_SETTLE_MS.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(window.thread(id).session.waitingBackground).not.toBe(true)
+
+    // Step 2: plain reply with no tool calls, followed by usage_update.
+    await agy.sendText('READY')
+    await window.until(() => agentReplies(window.entries(id)).some((entry) => entry.streaming))
+    expect(window.summary(id)?.phase).toBe('writing')
+    await agy.sendUsage(11_029)
+
+    // Must settle out of Writing into waiting_background even though Step 1 emitted tool_call after usage_update.
+    await window.until(() => window.thread(id).session.waitingBackground === true)
+    expect(agentReplies(window.entries(id))).toEqual([
+      expect.objectContaining({ markdown: 'READY', streaming: false }),
+    ])
+    expect(window.summary(id)?.phase).toBe('waiting_background')
+    expect(window.entries(id).find((entry) => entry.id === 't:call-bg-real')).toMatchObject({
+      status: 'in_progress',
+    })
+
+    // Follow-up sent via default sessions.queue delivers straight into agy via steering instead of queueing.
+    const followUp = await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Status check while command runs?' }],
+    })
+    expect(followUp).toEqual({ itemId: null })
+    await window.until(() => window.thread(id).session.waitingBackground === false)
+    expect(window.thread(id).session.queue).toEqual([])
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(2))
+    expect(agy.prompts[1]!.text).toContain('Status check while command runs?')
+
+    await agy.sendText('Still building.')
+    await agy.sendUsage(11_300)
+    await window.until(() => window.thread(id).session.waitingBackground === true)
+
+    agy.finish('end_turn')
+    await window.untilStatus(id, 'ready')
+    expect(window.thread(id).session.waitingBackground).toBe(false)
   })
 })

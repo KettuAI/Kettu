@@ -2028,7 +2028,22 @@ describe('agy 托管 Auto 模式、本会话总是允许与插件预检', () => 
 })
 
 describe("agy's waiting-on-background detection", () => {
-  function waitingAgy(version = '1.5.18') {
+  function waitingAgy(
+    version = '1.5.18',
+    waitOptions: {
+      tailReader?:
+        | (() => Promise<{
+            stepIndex: number
+            type: string
+            status: string
+            hasToolCalls: boolean
+          } | null>)
+        | null
+      settleMs?: number
+      fallbackMs?: number
+      retryDelaysMs?: readonly number[]
+    } = {},
+  ) {
     const prompts: string[] = []
     let client: AgentContext | null = null
     let running: ((reason: 'end_turn' | 'cancelled') => void) | null = null
@@ -2062,9 +2077,11 @@ describe("agy's waiting-on-background detection", () => {
       log: () => {},
       agentId: 'antigravity',
       name: 'Google Antigravity',
-      agyTailReader: async () => null,
-      agyWaitSettleMs: 15,
-      agyWaitFallbackMs: 2_000,
+      agyTailReader:
+        waitOptions.tailReader !== undefined ? waitOptions.tailReader : async () => null,
+      agyWaitSettleMs: waitOptions.settleMs ?? 15,
+      agyWaitFallbackMs: waitOptions.fallbackMs ?? 2_000,
+      agyWaitRetryDelaysMs: waitOptions.retryDelaysMs,
     })
 
     return {
@@ -2254,6 +2271,163 @@ describe("agy's waiting-on-background detection", () => {
     await agy.notify({ sessionUpdate: 'usage_update', used: 900, size: 100_000 })
     await new Promise((resolve) => setTimeout(resolve, 40))
     expect(waitingChanges).toEqual([])
+    agy.end()
+    await turn
+    agy.connection.close()
+  })
+
+  it('handles real agy 1.5.18 usage_update-before-tool_call order and delayed transcript flush', async () => {
+    let tail: {
+      stepIndex: number
+      type: string
+      status: string
+      hasToolCalls: boolean
+    } | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const agy = waitingAgy('1.5.18', {
+      tailReader: async () => tail,
+      settleMs: 30,
+      retryDelaysMs: [25, 25, 50],
+    })
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const waitingChanges: boolean[] = []
+    const target: SessionTarget = {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'waitingBackground') {
+            waitingChanges.push(effect.waiting)
+            if (effect.waiting) {
+              const settled = base
+                .entries()
+                .filter((entry) => entry.kind === 'agent' && entry.streaming)
+                .map((entry) => ({
+                  op: 'entry.update' as const,
+                  id: entry.id,
+                  changes: { streaming: false },
+                }))
+              if (settled.length > 0) base.target.apply({ patches: settled, effects: [] })
+            }
+          }
+        }
+      },
+    }
+    agy.connection.register(sessionId, target)
+
+    const turn = agy.connection.prompt(sessionId, text('run background build'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['run background build']))
+
+    // Initial pre-step usage_update { used: 0 } must not trigger waiting.
+    await agy.notify({ sessionUpdate: 'usage_update', used: 0, size: 1_048_576 })
+
+    // Step 1: thought -> usage_update -> tool_call -> tool_call_update(in_progress).
+    await agy.notify({
+      sessionUpdate: 'agent_thought_chunk',
+      content: { type: 'text', text: 'Starting command in background.' },
+    })
+    tail = { stepIndex: 1, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: true }
+    await agy.notify({ sessionUpdate: 'usage_update', used: 10_780, size: 1_048_576 })
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'cmd-1',
+      name: 'run_command',
+      kind: 'execute',
+      status: 'in_progress',
+      title: 'Run build',
+      rawInput: { CommandLine: 'npm run build', WaitMsBeforeAsync: 500, toolSummary: 'Build' },
+    })
+    await agy.notify({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'cmd-1',
+      status: 'in_progress',
+    })
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'RUNNING', hasToolCalls: false }
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(waitingChanges).toEqual([])
+
+    // Step 2: plain reply with usage_update while transcript.jsonl still ends at step 2 GENERIC.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'READY' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 11_029, size: 1_048_576 })
+
+    // Initial settle check sees GENERIC RUNNING, then step 3 flushes during retry window.
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(waitingChanges).toEqual([])
+    tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true]))
+
+    // Subsequent wakeup clears waitingBackground and opens a fresh agent reply.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Build finished.' },
+    })
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true, false]))
+
+    agy.end()
+    await turn
+    const replies = base
+      .entries()
+      .filter((entry): entry is Extract<ThreadEntry, { kind: 'agent' }> => entry.kind === 'agent')
+    expect(replies.map((entry) => entry.markdown)).toEqual(['READY', 'Build finished.'])
+    agy.connection.close()
+  })
+
+  it('handles hidden suggest_next_message after usage_update followed by the final reply', async () => {
+    const agy = waitingAgy('1.5.18', { settleMs: 30 })
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const waitingChanges: boolean[] = []
+    agy.connection.register(sessionId, {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'waitingBackground') waitingChanges.push(effect.waiting)
+        }
+      },
+    })
+
+    const turn = agy.connection.prompt(sessionId, text('watch task'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['watch task']))
+
+    // Step 1: usage_update arrives before hidden suggest_next_message tool_call.
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1_200, size: 1_048_576 })
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'hidden-1',
+      name: 'mcp_kettu_suggest_next_message',
+      kind: 'other',
+      status: 'in_progress',
+      title: 'suggest_next_message',
+      rawInput: { message: 'Check status' },
+    })
+    await agy.notify({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'hidden-1',
+      status: 'completed',
+    })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(waitingChanges).toEqual([])
+
+    // Step 2: final plain reply enters waitingBackground cleanly.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Watching in background.' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1_400, size: 1_048_576 })
+    await vi.waitFor(() => expect(waitingChanges).toEqual([true]))
+
     agy.end()
     await turn
     agy.connection.close()
