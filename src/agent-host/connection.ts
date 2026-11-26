@@ -441,6 +441,8 @@ export interface SessionOptions {
   fullAccess?: boolean
   /** Ask the agent for a guess at the user's next message after each turn, where it offers one. */
   suggestions?: boolean
+  /** The session already has a fixed title, so the agent does not need to generate one. */
+  titled?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */
