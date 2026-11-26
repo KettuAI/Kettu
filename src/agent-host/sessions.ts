@@ -7777,7 +7777,7 @@ export class SessionManager {
     kettu?: true,
   ): void {
     live.used = true
-    live.userTurn = kettu !== true && from === undefined
+    live.userTurn = kettu !== true && from === undefined && approval !== true
     if (live.userTurn) this.deps.options?.used(live.record.agentId, live.thread.session.config)
     const now = this.now()
     const entryId = this.addPrompt(live, content, now, from, device, approval, kettu)
@@ -8459,6 +8459,12 @@ export class SessionManager {
     }
     this.emit(live, [{ op: 'entry.add', entry: steered }])
     this.keepOrigin(live, steered)
+    if (item.approval || item.kettu) {
+      live.userTurn = false
+      if (live.record.origin === 'task') {
+        this.deps.task?.current?.turnStarted(live.id, { byUser: false })
+      }
+    }
     this.commitAttachments(live, resolved)
     if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
     live.queuedBy.delete(itemId)
@@ -8618,6 +8624,9 @@ export class SessionManager {
     this.clearContinueTimer(live.id)
     this.continueRetries.delete(live.id)
     this.tellStepLimit(live.record)
+    if (live.record.origin === 'task') {
+      this.deps.task?.current?.turnStarted(live.id, { byUser: !byAgent && live.userTurn })
+    }
     // The touch below sends the count without the suggestions the user talked past.
     this.deps.cards?.turnStarted(live.id)
     this.update(live, {
@@ -11377,6 +11386,28 @@ export class SessionManager {
   }
 
   /**
+   * Withdraws pending requests that outlast a turn (non-blocking requests, or any request left
+   * open while idle) so a finished or stopped workflow step never stays held waiting and cannot be
+   * woken by a stale card.
+   */
+  withdrawPending(sessionId: string): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const idle = live.turn === null
+    let changed = false
+    for (const [requestId, pending] of [...live.permissions]) {
+      if (!pending.nonBlocking && !idle) continue
+      this.settlePermission(live, requestId, 'withdrawn')
+      pending.answer('cancelled')
+      changed = true
+    }
+    if (changed) {
+      this.persist(live)
+      this.touch(live.id)
+    }
+  }
+
+  /**
    * Answers a request on the user's behalf from a plugin's channel, by the path of their click but
    * only with allow once or deny of a plain permission request: never a question, a plan, a form
    * or anything that lasts.
@@ -11433,6 +11464,9 @@ export class SessionManager {
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
+    if (approval && live.record.origin === 'task') {
+      this.deps.task?.current?.turnStarted(live.id, { byUser: false })
+    }
     if (!options?.now) return
     // A turn that cannot take it leaves the message in the queue, which goes when the turn ends.
     this.steerItem(live, item.id).catch((error: unknown) => {

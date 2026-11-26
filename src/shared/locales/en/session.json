@@ -1491,6 +1491,7 @@
       "lines": {
         "report": {
           "step_open": "The step was open for its report",
+          "answered": "No question or request waits for the user",
           "outcome": "“{{outcome}}” is one of this step's outcomes",
           "outcomePlain": "It reported one of this step's outcomes",
           "note": "The note it hands in is there",

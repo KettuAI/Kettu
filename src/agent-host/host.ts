@@ -1689,6 +1689,7 @@ export class AgentHost {
           await this.sessions.cancelContinue(sessionId).catch(() => {})
           await this.sessions.cancel(sessionId)
         },
+        withdrawPending: (sessionId) => this.sessions.withdrawPending(sessionId),
         delete: (sessionId) => this.sessions.delete(sessionId),
         has: (sessionId) => this.sessions.has(sessionId),
       },
