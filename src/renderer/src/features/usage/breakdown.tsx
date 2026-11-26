@@ -122,7 +122,12 @@ export function BreakdownCard({
     const out: Line[] = folded.rows.map((row, i) => ({
       key: row.key,
       label: nameOf(row),
-      title: grouping === 'project' ? (row.path ?? undefined) : undefined,
+      title:
+        grouping === 'project'
+          ? (row.path ?? undefined)
+          : grouping === 'model'
+            ? (row.name ?? undefined)
+            : undefined,
       mono: grouping === 'model' && row.name !== null,
       color: grouping === 'agent' ? color(row.key as AgentId) : SHARES[i]!,
       value: row.value,
@@ -217,7 +222,7 @@ export function BreakdownCard({
               </span>
             </div>
           </div>
-          <table className="k-u-bd__table">
+          <table className="k-u-bd__table" data-cols={grouping === 'type' ? 3 : 4}>
             <thead>
               <tr>
                 <th scope="col">{t(`breakdown.groups.${grouping}`)}</th>
