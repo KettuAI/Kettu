@@ -29,8 +29,12 @@ import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
+  avatarOf,
+  ghStateOf,
+  hostGitOf,
   isReferenceSettled,
   loadAvatar,
+  loadGitTools,
   loadReference,
   retryReference,
   useGitStore,
@@ -39,6 +43,7 @@ import {
 import { CopyButton } from './copy-button'
 import {
   shortReference,
+  useGitHostId,
   useProjectRepository,
   useReferenceData,
   type ReferenceData,
@@ -115,11 +120,11 @@ function clip(title: string): string {
  * Loads a reference's details the first time it scrolls into view, and has the host keep an open
  * one current for as long as it stays in view.
  */
-function useReferenceOnScreen(ref: GitHubReference) {
+function useReferenceOnScreen(ref: GitHubReference, hostId: string | null) {
   const target = useRef<HTMLSpanElement>(null)
   const [seen, setSeen] = useState(false)
   const [inView, setInView] = useState(false)
-  const settled = useGitStore((s) => isReferenceSettled(s, ref))
+  const settled = useGitStore((s) => isReferenceSettled(s, ref, hostId))
   useEffect(() => {
     const el = target.current
     if (!el) return
@@ -133,10 +138,13 @@ function useReferenceOnScreen(ref: GitHubReference) {
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    if (seen) loadReference(ref)
-  }, [seen, ref])
+    if (seen) loadReference(ref, false, hostId)
+  }, [seen, ref, hostId])
   const { url } = ref
-  useEffect(() => (inView && !settled ? watchReference(url) : undefined), [inView, settled, url])
+  useEffect(
+    () => (inView && !settled ? watchReference(url, hostId) : undefined),
+    [inView, settled, url, hostId],
+  )
   return target
 }
 
@@ -147,14 +155,17 @@ function useReferenceOnScreen(ref: GitHubReference) {
 export function ReferenceText({
   reference,
   bare,
+  hostId: explicitHostId,
   children,
 }: {
   reference: GitHubReference
   bare: boolean
+  hostId?: string | null
   children: ReactNode
 }) {
-  const target = useReferenceOnScreen(reference)
-  const { data } = useReferenceData(reference)
+  const hostId = useGitHostId(explicitHostId)
+  const target = useReferenceOnScreen(reference, hostId)
+  const { data } = useReferenceData(reference, hostId)
   const repo = useProjectRepository()
   const title = bare ? titleOf(data) : null
   return (
@@ -173,11 +184,11 @@ export function ReferenceText({
   )
 }
 
-function Author({ author }: { author: PullRequestAuthor }) {
+function Author({ author, hostId }: { author: PullRequestAuthor; hostId: string | null }) {
   const { t } = useTranslation('git')
-  const picture = useGitStore((s) => s.avatars[author.login])
+  const picture = useGitStore((s) => avatarOf(s, hostId, author.login))
   const { name, login, initial } = authorLabel(author)
-  useEffect(() => loadAvatar(author.login), [author.login])
+  useEffect(() => loadAvatar(author.login, hostId), [author.login, hostId])
   return (
     <div className="flex min-w-0 items-center gap-2">
       <Avatar aria-hidden className="size-5 after:border-subtle">
@@ -274,7 +285,15 @@ export function Stat({ children }: { children: ReactNode }) {
   )
 }
 
-function PullRequestDetails({ reference, pr }: { reference: GitHubReference; pr: PullRequest }) {
+function PullRequestDetails({
+  reference,
+  pr,
+  hostId,
+}: {
+  reference: GitHubReference
+  pr: PullRequest
+  hostId: string | null
+}) {
   const { t } = useTranslation('git')
   const now = useNow()
   const live = pr.state === 'open' || pr.state === 'draft'
@@ -332,7 +351,9 @@ function PullRequestDetails({ reference, pr }: { reference: GitHubReference; pr:
         </div>
       )}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0 flex-1">{pr.author && <Author author={pr.author} />}</div>
+        <div className="min-w-0 flex-1">
+          {pr.author && <Author author={pr.author} hostId={hostId} />}
+        </div>
         {pr.additions + pr.deletions > 0 && (
           <Stat>
             <span className="text-(--thread-add)">+{pr.additions.toLocaleString()}</span>
@@ -350,7 +371,15 @@ function PullRequestDetails({ reference, pr }: { reference: GitHubReference; pr:
   )
 }
 
-function IssueDetails({ reference, issue }: { reference: GitHubReference; issue: Issue }) {
+function IssueDetails({
+  reference,
+  issue,
+  hostId,
+}: {
+  reference: GitHubReference
+  issue: Issue
+  hostId: string | null
+}) {
   const { t } = useTranslation('git')
   const now = useNow()
   const repo = useProjectRepository()
@@ -413,7 +442,9 @@ function IssueDetails({ reference, issue }: { reference: GitHubReference; issue:
         </div>
       )}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0 flex-1">{issue.author && <Author author={issue.author} />}</div>
+        <div className="min-w-0 flex-1">
+          {issue.author && <Author author={issue.author} hostId={hostId} />}
+        </div>
         <Stat>
           <HugeiconsIcon icon={Comment01Icon} strokeWidth={STROKE} aria-hidden className="size-3" />
           {t('ref.comments', { count: issue.comments })}
@@ -445,9 +476,17 @@ function Loading() {
   )
 }
 
-function Missing({ reference, error }: { reference: GitHubReference; error: string | null }) {
+function Missing({
+  reference,
+  error,
+  hostId,
+}: {
+  reference: GitHubReference
+  error: string | null
+  hostId: string | null
+}) {
   const { t } = useTranslation('git')
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostId))
   const [retrying, setRetrying] = useState(false)
   return (
     <>
@@ -489,7 +528,7 @@ function Missing({ reference, error }: { reference: GitHubReference; error: stri
             disabled={retrying}
             onClick={() => {
               setRetrying(true)
-              void retryReference(reference).finally(() => setRetrying(false))
+              void retryReference(reference, hostId).finally(() => setRetrying(false))
             }}
           >
             {retrying ? (
@@ -510,15 +549,30 @@ function Missing({ reference, error }: { reference: GitHubReference; error: stri
 }
 
 /** A reference's card: what it is, its state and its author, or why that is not known. */
-export function ReferenceCard({ reference }: { reference: GitHubReference }) {
-  const { data, error } = useReferenceData(reference)
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+export function ReferenceCard({
+  reference,
+  hostId: explicitHostId,
+}: {
+  reference: GitHubReference
+  hostId?: string | null
+}) {
+  const hostId = useGitHostId(explicitHostId)
+  const { data, error } = useReferenceData(reference, hostId)
+  const gh = useGitStore((s) => ghStateOf(s, hostId))
   // Shown again a while later, a live one is read again behind what it shows.
-  useEffect(() => loadReference(reference, true), [reference])
-  if (data?.kind === 'pull') return <PullRequestDetails reference={reference} pr={data.pr} />
-  if (data?.kind === 'issue') return <IssueDetails reference={reference} issue={data.issue} />
+  useEffect(() => {
+    loadReference(reference, true, hostId)
+    const state = hostGitOf(useGitStore.getState(), hostId)
+    if (!state.tools && !state.toolsError) void loadGitTools(hostId)
+  }, [reference, hostId])
+  if (data?.kind === 'pull') {
+    return <PullRequestDetails reference={reference} pr={data.pr} hostId={hostId} />
+  }
+  if (data?.kind === 'issue') {
+    return <IssueDetails reference={reference} issue={data.issue} hostId={hostId} />
+  }
   if (error !== null || gh === 'not-installed' || gh === 'signed-out') {
-    return <Missing reference={reference} error={error} />
+    return <Missing reference={reference} error={error} hostId={hostId} />
   }
   return <Loading />
 }
@@ -528,6 +582,7 @@ export const REFERENCE_CARD_CLASS = 'flex w-[340px] flex-col gap-2.5 px-3.5 pt-3
 /** A trigger of the app's own, such as a sidebar badge, that shows a reference's card on hover. */
 export function ReferenceHoverCard({
   reference,
+  hostId,
   trigger,
   side = 'bottom',
   align = 'start',
@@ -536,6 +591,7 @@ export function ReferenceHoverCard({
   onOpenChange,
 }: {
   reference: GitHubReference
+  hostId?: string | null
   trigger: React.ReactElement
   side?: 'bottom' | 'right' | 'top'
   align?: 'start' | 'center'
@@ -554,7 +610,7 @@ export function ReferenceHoverCard({
         anchor={anchor}
         className={REFERENCE_CARD_CLASS}
       >
-        <ReferenceCard reference={reference} />
+        <ReferenceCard reference={reference} hostId={hostId} />
       </HoverCardContent>
     </HoverCard>
   )

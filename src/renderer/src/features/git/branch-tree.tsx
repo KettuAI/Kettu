@@ -21,10 +21,11 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { fullTime, longAgo } from '@renderer/lib/format'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useGitStore } from '@renderer/stores/git'
+import { ghStateOf, useGitStore } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import { disclosureKeys } from './popover-keys'
 import { ChangeRow, Count, ErrorRow, LineCounts, LoadingRows, PartHead, ROW } from './rows'
@@ -105,7 +106,7 @@ export function TreeLine({
  */
 export function BranchTree({ status, onClose }: { status: GitStatus; onClose: () => void }) {
   const { t } = useTranslation('git')
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(status.projectPath)))
   const running = useGitStore((s) => s.running[status.projectPath] ?? null)
   const cards = useCommitCards()
   const [all, setAll] = useState(false)

@@ -15,10 +15,12 @@ import { Textarea } from '@renderer/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
   EMPTY_BOX,
+  ghStateOf,
   setLeftOut,
   setGitPaneTab,
   updateCommitBox,
@@ -57,7 +59,7 @@ export function CommitBox({
   const { projectPath } = status
   const box = useGitStore((s) => s.box[projectPath] ?? EMPTY_BOX)
   const leftOut = useGitStore((s) => s.leftOut[projectPath] ?? NO_PATHS)
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(projectPath)))
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
   const running = useGitStore((s) => s.running[projectPath] ?? null)
   const [busy, setBusy] = useState<Then | null>(null)

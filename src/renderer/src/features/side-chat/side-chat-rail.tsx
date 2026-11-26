@@ -22,6 +22,7 @@ import {
 } from '@renderer/components/ui/select'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
+import { GitHostContext } from '@renderer/features/git/gh-reference-data'
 import { Markdown } from '@renderer/features/session/markdown'
 import { SendButton } from '@renderer/features/session/composer/send-button'
 import { TurnDots } from '@renderer/features/session/turn-dots'
@@ -495,7 +496,9 @@ function SideEntry({
       )}
       {entry.answer !== '' && (
         <div className="kc-a">
-          <Markdown markdown={entry.answer} streaming={waiting} />
+          <GitHostContext value={hostId}>
+            <Markdown markdown={entry.answer} streaming={waiting} />
+          </GitHostContext>
         </div>
       )}
       {waiting && (

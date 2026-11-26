@@ -10,9 +10,10 @@ import type { CheckRun, GitStatus, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { longAgo, shortDuration } from '@renderer/lib/format'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useGitStore } from '@renderer/stores/git'
+import { ghStateOf, useGitStore } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import { PrIcon } from './pr-icon'
 import { BADGE, prStateText, REVIEW_BADGE, REVIEW_KEY } from './pr-text'
@@ -36,7 +37,7 @@ export function PullRequestPart({
   onFix: () => void
 }) {
   const { t } = useTranslation('git')
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(status.projectPath)))
   if (!status.remote?.github) return null
   if (pr) return <PullRequestCard pr={pr} onOpen={onClose} onFix={onFix} />
 

@@ -6,6 +6,7 @@ import { githubReferenceFromLink } from '@shared/git'
 import { REFERENCE_CARD_CLASS, ReferenceCard } from '@renderer/features/git/gh-reference'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { hostPlatform, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
@@ -22,11 +23,13 @@ export function ChipPreview({
   chip,
   item,
   projectPath,
+  hostId,
   inSession,
 }: {
   chip: Chip
   item: DraftAttachment | undefined
   projectPath: string | null
+  hostId?: string | null
   /** A session's composer, whose links may open in its page in Kettu's browser. */
   inSession: boolean
 }) {
@@ -36,9 +39,10 @@ export function ChipPreview({
   if (chip.kind === 'link') {
     const reference = githubReferenceFromLink(chip.url)
     if (reference) {
+      const targetHost = hostId ?? (projectPath ? hostOfPath(projectPath) : null)
       return (
         <div className={REFERENCE_CARD_CLASS}>
-          <ReferenceCard reference={reference} />
+          <ReferenceCard reference={reference} hostId={targetHost} />
         </div>
       )
     }

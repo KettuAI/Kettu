@@ -19,6 +19,7 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { forgetHostAgentOptions, readHostAgentOptions } from '@renderer/stores/agent-options'
 import { forgetHostAgents, readHostAgents, useAgentsStore } from '@renderer/stores/agents'
+import { forgetHostGit } from '@renderer/stores/git'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { listedOrigin, useSessionsStore } from '@renderer/stores/sessions'
@@ -91,6 +92,7 @@ function forget(hostId: string): void {
   forgetHostSessions(hostId)
   forgetHostAgents(hostId)
   forgetHostAgentOptions(hostId)
+  forgetHostGit(hostId)
 }
 
 async function readLists(hostId: string): Promise<void> {

@@ -48,14 +48,15 @@ import {
 import { useConnectionStore } from '@renderer/stores/connection'
 import { filesChanged, rewatchFiles } from '@renderer/stores/files'
 import {
+  gitHostClosed,
   loadGitTools,
   receiveCurrentPr,
   receiveGitStatus,
+  receiveGitTools,
   receiveReference,
   refreshShownProject,
   rewatchGit,
   syncReferences,
-  useGitStore,
 } from '@renderer/stores/git'
 import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
 import {
@@ -153,7 +154,10 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
       receiveCurrentPr(event.projectPath, event.pr)
       return
     case 'git.reference':
-      receiveReference(event.url, event.found)
+      receiveReference(event.url, event.found, hostId)
+      return
+    case 'git.tools':
+      receiveGitTools(hostId, event.tools)
       return
     case 'agent.status':
       if (hostId === null) useAgentsStore.getState().setOne(event.status)
@@ -234,9 +238,6 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
     case 'files.changed':
       filesChanged(event.projectPath)
       return
-    case 'git.tools':
-      useGitStore.setState({ tools: event.tools })
-      break
     case 'usage.changed':
       usageChanged()
       break
@@ -455,6 +456,7 @@ export function bootstrap(): Promise<unknown> {
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)
         rewatchGit(hostId)
+        void loadGitTools(hostId)
         rewatchFiles(hostId)
         if (waitingSessions.size > 0) closeUnlistedPanes(waitingSessions)
       },
@@ -464,6 +466,7 @@ export function bootstrap(): Promise<unknown> {
         routinesHostClosed(hostId)
         tasksHostClosed(hostId)
         hostLoadClosed(hostId)
+        gitHostClosed(hostId)
       },
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })

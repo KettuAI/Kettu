@@ -6,14 +6,15 @@ import { useCommitCards } from '../commit-cards'
 import { Count, PartHead } from '../rows'
 import { pushNow, runStep } from '../steps'
 import { planSync, pushTargetOf, PUSH_LABEL, PUSHING } from '../sync'
-import { useGitStore } from '@renderer/stores/git'
+import { hostOfPath } from '@renderer/lib/host-paths'
+import { ghStateOf, useGitStore } from '@renderer/stores/git'
 import { ActionBtn } from './pane-ui'
 
 /** The branch's commits as a tree: those only this computer has, the push line, the pushed ones. */
 export function CommitsPage({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
   const { projectPath, upstream, defaultBranch, head, commits } = status
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(projectPath)))
   const running = useGitStore((s) => s.running[projectPath] ?? null)
   const cards = useCommitCards()
   const behind = upstream?.behind ?? 0

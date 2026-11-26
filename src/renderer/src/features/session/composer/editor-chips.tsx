@@ -39,6 +39,8 @@ export interface ChipHooks extends ChipContext {
   highlight?: { from: number; to: number } | null
   /** The project a GitHub reference in a chip is short for. */
   projectPath?: string | null
+  /** The host whose GitHub CLI resolves references in chips. */
+  hostId?: string | null
 }
 
 export const chipHooks = Facet.define<ChipHooks, ChipHooks | null>({
@@ -73,6 +75,7 @@ class ChipWidget extends WidgetType {
     readonly chip: Chip,
     readonly state: ChipState,
     readonly projectPath: string | null,
+    readonly hostId: string | null,
   ) {
     super()
   }
@@ -80,6 +83,7 @@ class ChipWidget extends WidgetType {
     return (
       other.state === this.state &&
       other.projectPath === this.projectPath &&
+      other.hostId === this.hostId &&
       sameChip(other.chip, this.chip)
     )
   }
@@ -89,6 +93,7 @@ class ChipWidget extends WidgetType {
         chip={this.chip}
         state={this.state}
         projectPath={this.projectPath}
+        hostId={this.hostId}
         onRendered={() => view.requestMeasure()}
       />,
     )
@@ -252,7 +257,7 @@ function draw(
       within(chip, selection) || within(chip, hooks.highlight ?? null) ? 'selected' : 'default'
     widgets.push(
       Decoration.replace({
-        widget: new ChipWidget(chip, state, hooks.projectPath ?? null),
+        widget: new ChipWidget(chip, state, hooks.projectPath ?? null, hooks.hostId ?? null),
       }).range(chip.from, chip.to),
     )
     chips.push(chip)

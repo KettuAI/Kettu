@@ -6,8 +6,10 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { PaneBody, PaneContext, PaneEmpty, PaneIcon } from '@renderer/features/shell/panel-button'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import {
+  ghStateOf,
   refreshGitProject,
   setGitPaneTab,
   useGitStore,
@@ -33,7 +35,7 @@ export default function GitPane({ panel, projectPath }: { panel: string; project
   const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(projectPath)))
   const tab = useGitStore((s) => s.paneTab[panel] ?? 'changes')
   const sessionId = panelSession(panel)
   const running = useSessionView(sessionId ?? '')?.status === 'running'

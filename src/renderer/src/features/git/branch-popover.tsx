@@ -11,9 +11,9 @@ import { useTranslation } from 'react-i18next'
 import type { GitStatus, PullRequest } from '@shared/git'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { hostPath } from '@renderer/lib/host-paths'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
-import { useGitStore } from '@renderer/stores/git'
+import { ghStateOf, useGitStore } from '@renderer/stores/git'
 import { BranchTree } from './branch-tree'
 import { handOffText } from './hand-off'
 import { Journey, NextStepCard } from './next-step-card'
@@ -51,7 +51,7 @@ export function BranchPopover({
   onOpenPane: (request: Omit<OpenGitPane, 'panel'>) => void
 }) {
   const { t } = useTranslation('git')
-  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const gh = useGitStore((s) => ghStateOf(s, hostOfPath(status.projectPath)))
   const count = changeTotal(status)
   const changes = useChanges(status.projectPath, count > 0)
   const fixChecks = (): void => {

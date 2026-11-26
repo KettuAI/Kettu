@@ -9,7 +9,8 @@ import { prStateText } from '@renderer/features/git/pr-text'
 import { shortAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { loadReference, useGitStore, watchReference } from '@renderer/stores/git'
+import { loadReference, pullRequestOf, useGitStore, watchReference } from '@renderer/stores/git'
+import { hostOfSession } from '@renderer/stores/sessions'
 import { sessionPullRequests } from './session-prs'
 
 // The most that the list shows; the rest are counted under it.
@@ -54,15 +55,23 @@ export function PrBadge({
   /** The badge's card opened, taking the place of the row's own. */
   onOpen: () => void
 }) {
-  return <PullRequestsBadge prs={sessionPullRequests(summary)} onOpen={onOpen} />
+  return (
+    <PullRequestsBadge
+      prs={sessionPullRequests(summary)}
+      hostId={hostOfSession(summary)}
+      onOpen={onOpen}
+    />
+  )
 }
 
 /** The badge for a list of pull requests, such as those on a task's branch. */
 export function PullRequestsBadge({
   prs,
+  hostId,
   onOpen,
 }: {
   prs: SessionPullRequest[]
+  hostId: string | null
   onOpen: () => void
 }) {
   const label = useBadgeLabel(prs)
@@ -73,9 +82,10 @@ export function PullRequestsBadge({
     .map((pr) => pr.url)
     .join('\n')
   useEffect(() => {
-    const releases = openUrls === '' ? [] : openUrls.split('\n').map(watchReference)
+    const releases =
+      openUrls === '' ? [] : openUrls.split('\n').map((url) => watchReference(url, hostId))
     return () => releases.forEach((release) => release())
-  }, [openUrls])
+  }, [openUrls, hostId])
   // Beside the sidebar, as the row's own card is, so it hides none of the rows.
   const row = () => self.current?.closest('[data-sidebar-row]') ?? self.current
   if (prs.length === 0) return null
@@ -109,6 +119,7 @@ export function PullRequestsBadge({
     return (
       <ReferenceHoverCard
         reference={referenceOf(prs[0]!)}
+        hostId={hostId}
         side="right"
         trigger={badge}
         onOpenChange={change}
@@ -125,13 +136,13 @@ export function PullRequestsBadge({
         anchor={row}
         className="w-[340px] p-1.5"
       >
-        <PrList prs={prs} />
+        <PrList prs={prs} hostId={hostId} />
       </HoverCardContent>
     </HoverCard>
   )
 }
 
-function PrList({ prs }: { prs: SessionPullRequest[] }) {
+function PrList({ prs, hostId }: { prs: SessionPullRequest[]; hostId: string | null }) {
   const { t } = useTranslation('sidebar')
   const listed = prs.slice(0, LISTED)
   return (
@@ -142,7 +153,7 @@ function PrList({ prs }: { prs: SessionPullRequest[] }) {
       <ul className="flex flex-col">
         {listed.map((pr) => (
           <li key={pr.url}>
-            <PrListItem pr={pr} />
+            <PrListItem pr={pr} hostId={hostId} />
           </li>
         ))}
       </ul>
@@ -155,11 +166,11 @@ function PrList({ prs }: { prs: SessionPullRequest[] }) {
   )
 }
 
-function PrListItem({ pr }: { pr: SessionPullRequest }) {
+function PrListItem({ pr, hostId }: { pr: SessionPullRequest; hostId: string | null }) {
   const now = useNow()
   const reference = useMemo(() => referenceOf(pr), [pr])
-  const details = useGitStore((s) => s.pullRequests[pr.url])
-  useEffect(() => loadReference(reference), [reference])
+  const details = useGitStore((s) => pullRequestOf(s, hostId, pr.url))
+  useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
   const state = details?.state ?? pr.state
   const at = details
     ? details.state === 'merged'
@@ -171,6 +182,7 @@ function PrListItem({ pr }: { pr: SessionPullRequest }) {
   return (
     <ReferenceHoverCard
       reference={reference}
+      hostId={hostId}
       side="right"
       trigger={
         <a
