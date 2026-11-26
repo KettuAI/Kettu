@@ -193,4 +193,24 @@ describe('start values with a prepared session', () => {
       model: 'sonnet',
     })
   })
+
+  it('carries remembered and picked model_config select options such as service-tier', () => {
+    const speed = select('service-tier', 'model_config', 'default', [
+      'default',
+      'priority',
+      'ultrafast',
+    ])
+    const codexEntry: AgentOptions = {
+      agentId: 'codex',
+      config: [select('model', 'model', 'gpt-6.3-ultra', ['gpt-6.3-ultra']), speed],
+      levels: {},
+      remembered: { 'service-tier': 'ultrafast' },
+      observedAt: 0,
+    }
+    expect(startConfig(codexEntry).find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    expect(startValues(codexEntry)).toEqual({ 'service-tier': 'ultrafast' })
+    expect(startValues(codexEntry, { 'service-tier': 'default' })).toEqual({
+      'service-tier': 'default',
+    })
+  })
 })

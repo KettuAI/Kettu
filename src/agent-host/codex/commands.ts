@@ -12,6 +12,7 @@ import type { SkillMetadata, ThreadTokenUsage } from './protocol'
 const COMMANDS = [
   'plan',
   'fast',
+  'ultrafast',
   'mcp',
   'skills',
   'status',
@@ -28,6 +29,7 @@ export type CodexCommand = (typeof COMMANDS)[number]
 /** The commands that take text after their name. */
 const WITH_INPUT = [
   'fast',
+  'ultrafast',
   'mcp',
   'review',
   'review-branch',

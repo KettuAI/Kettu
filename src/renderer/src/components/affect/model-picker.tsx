@@ -71,6 +71,31 @@ export type PickerToggle = {
   effect?: ReactNode;
 };
 
+/** Kettu: one option inside a segmented setting row, such as Standard / Fast / Ultrafast */
+export type PickerSelectChoice = {
+  id: string;
+  label: string;
+  /** What the last row says while this choice is pointed at or focused */
+  hint?: string;
+  /** Show a concise badge on the trigger while this choice is active */
+  trigger?: boolean;
+  /** Icon inside the trigger badge */
+  icon?: ReactNode;
+  /** Visual emphasis for the trigger badge */
+  tone?: "accent" | "intense";
+};
+
+/** Kettu: a segmented setting row in the model settings section, such as Speed tiers */
+export type PickerSelect = {
+  id: string;
+  label: string;
+  hint?: string;
+  value: string;
+  choices: PickerSelectChoice[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+};
+
 /** Kettu: a row under the switches that does something else, such as Switch agent; the picker closes first */
 export type PickerAction = {
   id: string;
@@ -151,6 +176,8 @@ export type ModelPickerProps = {
   /** Kettu: the agent's switches in place of Extended thinking and Web search */
   toggles?: PickerToggle[];
   onToggle?: (id: string, on: boolean) => void;
+  /** Kettu: segmented settings of the agent's own, such as Speed tiers */
+  selects?: PickerSelect[];
   /** Kettu: rows after the switches that act rather than choose */
   actions?: PickerAction[];
   /** Kettu: models behind a More models row, in a card beside the menu with a search field */
@@ -402,6 +429,110 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
   );
 });
 
+/** Kettu: one segmented setting row (e.g. Speed tiers) with a sliding thumb and arrow-key support */
+function PickerSelectRow({
+  select,
+  uid,
+  isOpen,
+  onHint,
+}: {
+  select: PickerSelect;
+  uid: string;
+  isOpen: boolean;
+  onHint: (hint: string | null) => void;
+}) {
+  const segRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
+  const choiceIds = select.choices.map((c) => c.id).join(" ");
+  useLayoutEffect(() => {
+    const btn = segRef.current?.querySelector<HTMLElement>(`[data-choice="${CSS.escape(select.value)}"]`);
+    if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
+  }, [select.value, isOpen, choiceIds]);
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (select.disabled || select.choices.length === 0) return;
+    const i = select.choices.findIndex((c) => c.id === select.value);
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (!step) return;
+    e.preventDefault();
+    const start = i < 0 ? 0 : i;
+    const next = select.choices[(start + step + select.choices.length) % select.choices.length];
+    if (!next) return;
+    select.onChange(next.id);
+    segRef.current?.querySelector<HTMLElement>(`[data-choice="${CSS.escape(next.id)}"]`)?.focus();
+  };
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const shownChoice = select.choices.find((c) => c.id === (hoveredId ?? select.value));
+  const shownHint = shownChoice?.hint;
+  return (
+    <div
+      className="ui-mdpc__effort ui-mdpc__effort--own ui-mdpc__select-row"
+      data-disabled={select.disabled ? "" : undefined}
+      onPointerEnter={(e) => e.pointerType === "mouse" && onHint(`select:${select.id}`)}
+      onPointerLeave={() => {
+        setHoveredId(null);
+        onHint(null);
+      }}
+    >
+      <span className="ui-mdpc__select-head">
+        <span className="ui-mdpc__effort-label" id={`${uid}-sel-${select.id}`}>
+          {select.label}
+        </span>
+        {shownHint && (
+          <span className="ui-mdpc__select-hint" title={shownHint}>
+            {shownHint}
+          </span>
+        )}
+      </span>
+      <div
+        ref={segRef}
+        className="ui-mdpc__segmented"
+        role="radiogroup"
+        aria-labelledby={`${uid}-sel-${select.id}`}
+        style={thumb ? { ["--x" as string]: `${thumb.x}px`, ["--w" as string]: `${thumb.w}px` } : undefined}
+        onKeyDown={onKeyDown}
+      >
+        <span className="ui-mdpc__thumb" aria-hidden="true" />
+        {select.choices.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            role="radio"
+            aria-checked={c.id === select.value}
+            disabled={select.disabled}
+            tabIndex={c.id === select.value ? 0 : -1}
+            data-choice={c.id}
+            className="ui-mdpc__seg-btn"
+            onClick={() => {
+              if (!select.disabled && c.id !== select.value) select.onChange(c.id);
+            }}
+            onPointerEnter={(e) => {
+              if (e.pointerType === "mouse") {
+                setHoveredId(c.id);
+                onHint(`select:${select.id}:${c.id}`);
+              }
+            }}
+            onFocus={() => {
+              setHoveredId(c.id);
+              onHint(`select:${select.id}:${c.id}`);
+            }}
+            onBlur={() => {
+              setHoveredId(null);
+              onHint(null);
+            }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ModelPicker({
   models,
   value,
@@ -428,6 +559,7 @@ export function ModelPicker({
   effortSlot,
   toggles,
   onToggle,
+  selects,
   actions,
   triggerLead,
   triggerLabel,
@@ -757,10 +889,26 @@ export function ModelPicker({
   let spoken: string;
   const pointedToggle = toggles?.find((t) => hint === `toggle:${t.id}`);
   const pointedAction = actions?.find((a) => hint === `action:${a.id}` && a.hint);
+  const pointedSelect = (() => {
+    if (!hint?.startsWith("select:") || !selects) return null;
+    const rest = hint.slice("select:".length);
+    const sep = rest.indexOf(":");
+    const selectId = sep >= 0 ? rest.slice(0, sep) : rest;
+    const choiceId = sep >= 0 ? rest.slice(sep + 1) : null;
+    const found = selects.find((s) => s.id === selectId);
+    if (!found) return null;
+    const choice = found.choices.find((c) => c.id === (choiceId ?? found.value));
+    const text = choice?.hint ?? found.hint ?? choice?.label ?? found.label;
+    return { key: `select-${found.id}-${choice?.id ?? found.value}`, text };
+  })();
   if (pointedAction?.hint) {
     caption = pointedAction.hint;
     captionKey = `action-${pointedAction.id}`;
     spoken = pointedAction.hint;
+  } else if (pointedSelect) {
+    caption = pointedSelect.text;
+    captionKey = pointedSelect.key;
+    spoken = pointedSelect.text;
   } else if (pointedToggle) {
     caption = pointedToggle.hint ?? pointedToggle.label;
     captionKey = `toggle-${pointedToggle.id}-${pointedToggle.on}`;
@@ -825,6 +973,11 @@ export function ModelPicker({
           `${labels.model}: ${chosen?.name ?? "none"}${isThinking ? ", extended thinking" : ""}${(toggles ?? [])
             .filter((t) => t.flag && t.on)
             .map((t) => `, ${t.label}`)
+            .join("")}${(selects ?? [])
+            .flatMap((s) => {
+              const active = s.choices.find((c) => c.id === s.value && c.trigger);
+              return active ? [`, ${active.label}`] : [];
+            })
             .join("")}`
         }
         onClick={() => setOpen(!isOpen, isOpen ? undefined : "list")}
@@ -843,6 +996,25 @@ export function ModelPicker({
               <span>{t.icon ?? <ThinkIcon />}</span>
             </span>
           ))}
+        {/* Kettu: a concise badge for an active segmented choice, such as Fast or Ultrafast */}
+        {selects?.map((s) => {
+          const activeChoice = s.choices.find((c) => c.id === s.value && c.trigger);
+          return (
+            <span
+              key={s.id}
+              className="ui-mdpc__unfold"
+              data-on={activeChoice ? "" : undefined}
+              aria-hidden="true"
+            >
+              <span className="ui-mdpc__unfold-inner">
+                <span className="ui-mdpc__badge" data-tone={activeChoice?.tone ?? "accent"}>
+                  {activeChoice?.icon}
+                  <span>{activeChoice?.label ?? ""}</span>
+                </span>
+              </span>
+            </span>
+          );
+        })}
         {/* Kettu: the agent's level in use, so it is never a guess */}
         {ownEffort && levels.find((x) => x.id === effortNow && x.trigger !== false)?.label && (
           <span className="ui-mdpc__detail">
@@ -955,8 +1127,8 @@ export function ModelPicker({
             </div>
           )}
 
-          {toggles ? (
-            // Kettu: the agent's effort and switches in the same rows, and actions after them
+          {toggles || selects ? (
+            // Kettu: the agent's effort, segmented settings and switches in the same rows, and actions after them
             <div className="ui-mdpc__settings">
               {effortSlot ? (
                 <div
@@ -1003,7 +1175,16 @@ export function ModelPicker({
                   </div>
                 )
               )}
-              {toggles.map((t) => (
+              {selects?.map((s) => (
+                <PickerSelectRow
+                  key={s.id}
+                  select={s}
+                  uid={uid}
+                  isOpen={isOpen}
+                  onHint={setHint}
+                />
+              ))}
+              {(toggles ?? []).map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -1401,9 +1582,10 @@ const css = /* css */ `
 .ui-mdpc__glow[data-leaving] { opacity: 0; animation: none; }
 .ui-mdpc__card, .ui-mdpc__foot { position: relative; z-index: 1; }
 @keyframes ui-mdpc-glow-in { from { opacity: 0; } to { opacity: 1; } }
-/* A switch's name unfolds on the trigger while it is on */
+/* A switch's name or speed badge unfolds on the trigger while it is on */
 .ui-mdpc__unfold { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }
-.ui-mdpc__unfold > .ui-mdpc__detail { min-width: 0; overflow: hidden; margin-left: 0; white-space: nowrap; }
+.ui-mdpc__unfold > .ui-mdpc__detail, .ui-mdpc__unfold > .ui-mdpc__unfold-inner { min-width: 0; overflow: hidden; margin-left: 0; white-space: nowrap; }
+.ui-mdpc__unfold > .ui-mdpc__unfold-inner { display: inline-flex; align-items: center; }
 .ui-mdpc__unfold[data-on] { grid-template-columns: 1fr; margin-left: -2px; opacity: 1; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 280ms ease 80ms; }
 .ui-mdpc__list[data-unrated] .ui-mdpc__varies { display: none; }
 /* The level on the trigger */
@@ -1411,6 +1593,11 @@ const css = /* css */ `
 /* The agent's own levels: the label on top, the levels across the menu */
 .ui-mdpc__effort--own { flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px 8px; }
 .ui-mdpc__effort--own .ui-mdpc__effort-label { flex-basis: 100%; }
+.ui-mdpc__effort--own .ui-mdpc__select-head { display: flex; flex-basis: 100%; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+.ui-mdpc__effort--own .ui-mdpc__select-head .ui-mdpc__effort-label { flex: 0 0 auto; }
+.ui-mdpc__select-hint { min-width: 0; overflow: hidden; font-size: 11.5px; line-height: 16px; color: var(--ui-mdpc-muted); white-space: nowrap; text-overflow: ellipsis; text-align: right; }
+.ui-mdpc__select-row[data-disabled] { opacity: 0.45; }
+.ui-mdpc__select-row[data-disabled] .ui-mdpc__seg-btn { cursor: default; }
 .ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
 .ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
 .ui-mdpc__toggle:disabled, .ui-mdpc__action[aria-disabled] { opacity: 0.45; cursor: default; }

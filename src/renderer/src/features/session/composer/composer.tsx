@@ -295,8 +295,12 @@ export function Composer({
     return turn?.reason === 'limit' ? turn.continuesAt : undefined
   })
   const switches = config.filter((o) => o.type === 'boolean')
+  const modelSelects = config.filter(
+    (o): o is SelectOption => o.category === 'model_config' && isSelect(o),
+  )
   const others = config.filter(
-    (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
+    (o): o is SelectOption =>
+      isSelect(o) && o !== mode && o !== model && o !== effort && o.category !== 'model_config',
   )
   const leftOthers = others.filter((o) => o.category === 'other')
   const rightOthers = others.filter((o) => o.category !== 'other')
@@ -758,7 +762,10 @@ export function Composer({
         modelSlot={
           !starting &&
           // An agent with no model menu switches from the agent menu itself.
-          (pending || choosingAgent || mustSwitch || !(model || effort || switches.length > 0) ? (
+          (pending ||
+          choosingAgent ||
+          mustSwitch ||
+          !(model || effort || switches.length > 0 || modelSelects.length > 0) ? (
             <AgentMenu
               agentId={pending?.agentId ?? (mustSwitch ? null : session.agentId)}
               values={pending ? pending.values : valuesOf(session.config)}

@@ -72,11 +72,15 @@ import {
   ConfigValueError,
   DEFAULT_MODE,
   effortFor,
-  FAST_ID,
   fastTier,
-  isFastServiceTier,
+  initialServiceTier,
   modeFromPolicy,
   modeOf,
+  resolveServiceTier,
+  SERVICE_TIER_ID,
+  serviceTierParam,
+  STANDARD_SERVICE_TIER,
+  ultrafastTier,
   type Settings,
 } from './config'
 import { estimateMcpServers, estimateSkills } from './context'
@@ -424,7 +428,7 @@ const UNKNOWN_SETTINGS: Settings = {
   collaboration: 'default',
   model: '',
   effort: null,
-  fast: false,
+  serviceTier: null,
 }
 
 function stopped(stopReason: PromptResult['stopReason']): PromptResult {
@@ -721,7 +725,7 @@ export class CodexConnection implements AgentConnection {
           collaboration: response.collaborationMode?.mode ?? 'default',
           model: modelId,
           effort: effortFor(model, response.reasoningEffort),
-          fast: isFastServiceTier(response.serviceTier, model),
+          serviceTier: initialServiceTier(response.serviceTier, model),
         }
     const seen = this.threads.get(id)
     const record = threadRecord(id, settings, {
@@ -1564,7 +1568,8 @@ export class CodexConnection implements AgentConnection {
           },
         }
       : null
-    const tier = this.fastTierOf(settings.model)
+    const model = this.knownModels.find((item) => item.id === settings.model)
+    const serviceTier = serviceTierParam(settings, model)
     return {
       threadId: record.id,
       approvalPolicy: mode.approvalPolicy,
@@ -1573,18 +1578,14 @@ export class CodexConnection implements AgentConnection {
       summary: 'auto',
       ...(settings.model ? { model: settings.model } : {}),
       ...(settings.effort ? { effort: settings.effort } : {}),
-      // Omit serviceTier when the model advertises no fast tier, so Codex keeps config.toml's.
-      ...(tier ? { serviceTier: settings.fast ? tier : 'default' } : {}),
+      // Omit serviceTier when the model advertises no speed tiers or does not support the chosen tier.
+      ...(serviceTier !== undefined ? { serviceTier } : {}),
       ...(collaborationMode ? { collaborationMode } : {}),
     }
   }
 
   private turnParams(record: ThreadRecord, input: UserInput[]): Record<string, unknown> {
     return { ...this.settingsParams(record), input }
-  }
-
-  private fastTierOf(modelId: string): string | null {
-    return fastTier(this.knownModels.find((model) => model.id === modelId))
   }
 
   async prompt(
@@ -1800,7 +1801,9 @@ export class CodexConnection implements AgentConnection {
       case 'plan':
         return rest ? this.answer(record, usage) : this.togglePlan(record)
       case 'fast':
-        return this.answer(record, () => this.fastAnswer(record, rest))
+        return this.answer(record, () => this.speedAnswer(record, 'fast', rest))
+      case 'ultrafast':
+        return this.answer(record, () => this.speedAnswer(record, 'ultrafast', rest))
       case 'compact':
         return this.commandTurn(record, async () => {
           await this.call('thread/compact/start', { threadId: record.id })
@@ -1965,24 +1968,36 @@ export class CodexConnection implements AgentConnection {
     return stopped('end_turn')
   }
 
-  /** `/fast [on|off|status]`: toggles or inspects fast mode for models that advertise it. */
-  private async fastAnswer(record: ThreadRecord, rest: string): Promise<string> {
+  /** `/fast` or `/ultrafast [on|off|status]`: toggles or inspects a speed tier for the current model. */
+  private async speedAnswer(
+    record: ThreadRecord,
+    kind: 'fast' | 'ultrafast',
+    rest: string,
+  ): Promise<string> {
     const arg = parseFastArg(rest)
-    if (arg === 'invalid') return t('codex.fast.usage')
+    if (arg === 'invalid') return t(`codex.${kind}.usage`)
     const models = await this.listModels()
     const model = models.find((item) => item.id === record.settings.model)
-    if (!fastTier(model)) {
+    const tier = kind === 'fast' ? fastTier(model) : ultrafastTier(model)
+    if (!tier) {
       return record.settings.model
-        ? t('codex.fast.unsupported', { model: record.settings.model })
-        : t('codex.fast.unsupportedNoModel')
+        ? t(`codex.${kind}.unsupported`, { model: record.settings.model })
+        : t(`codex.${kind}.unsupportedNoModel`)
     }
+    const active = resolveServiceTier(record.settings.serviceTier, model)
+    const isOn = active !== null && active.toLowerCase() === tier.toLowerCase()
     if (arg === 'status') {
-      return t(record.settings.fast ? 'codex.fast.statusOn' : 'codex.fast.statusOff')
+      return t(isOn ? `codex.${kind}.statusOn` : `codex.${kind}.statusOff`)
     }
-    const next = arg === 'toggle' ? !record.settings.fast : arg === 'on'
-    record.settings = applyOption(record.settings, models, FAST_ID, next)
+    const next = arg === 'toggle' ? !isOn : arg === 'on'
+    record.settings = applyOption(
+      record.settings,
+      models,
+      SERVICE_TIER_ID,
+      next ? tier : STANDARD_SERVICE_TIER,
+    )
     this.publishConfig(record, models)
-    return t(next ? 'codex.fast.on' : 'codex.fast.off')
+    return t(next ? `codex.${kind}.on` : `codex.${kind}.off`)
   }
 
   /** Sets the collaboration mode of the session's next turns, and shows it in its options. */

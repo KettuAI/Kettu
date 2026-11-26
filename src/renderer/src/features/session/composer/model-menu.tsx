@@ -12,6 +12,7 @@ import {
   ModelPicker,
   type PickerAction,
   type PickerModel,
+  type PickerSelect,
   type PickerToggle,
 } from '@renderer/components/affect/model-picker'
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
@@ -36,8 +37,16 @@ import {
 import { ModelMark } from './model-mark'
 import { modelRating } from './model-ratings'
 import { isSelect } from './options'
-import { isFast, isUltracode, lockedNow, useSwitchLine } from './switch-options'
-import { useSelectPick, useSwitchPicks, type Select } from './use-pick'
+import {
+  isFast,
+  isSpeedSelect,
+  isStandardSpeedChoice,
+  isUltracode,
+  isUltrafastChoice,
+  lockedNow,
+  useSwitchLine,
+} from './switch-options'
+import { useSelectPick, useSelectPicks, useSwitchPicks, type Select } from './use-pick'
 
 // The gradient's stops take their colors from the tokens (see .kettu-ultra-floor in affect.css).
 const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', 'currentColor']
@@ -99,9 +108,13 @@ export function ModelMenu({
   const effort = config.find(
     (o): o is SelectOption => o.category === 'thought_level' && isSelect(o),
   )
+  const modelSelects = config.filter(
+    (o): o is SelectOption => o.category === 'model_config' && isSelect(o),
+  )
   const switches = config.filter((o) => o.type === 'boolean')
   const [modelValue, pickModel] = useSelectPick(model, onSelect)
   const [effortValue, pickEffort] = useSelectPick(effort, onSelect)
+  const selectPicks = useSelectPicks(onSelect)
   const flips = useSwitchPicks(onSelect)
   const switchLine = useSwitchLine(harness)
   const effortControl = useSettingsStore((s) => s.settings.appearance.effortControl)
@@ -167,6 +180,34 @@ export function ModelMenu({
       label: s.name,
       ...(s.isDefault ? { trigger: false as const } : {}),
     })) ?? []
+
+  const selects: PickerSelect[] = modelSelects.map((o) => {
+    const speed = isSpeedSelect(o)
+    return {
+      id: o.id,
+      label: o.name,
+      hint: o.description ?? o.name,
+      value: selectPicks.valueOf(o),
+      disabled: lockedNow(o, running),
+      choices: o.choices.map((c) => {
+        const activeSpeed = speed && !isStandardSpeedChoice(c.value)
+        const intense = activeSpeed && (isUltrafastChoice(c.value) || isUltrafastChoice(c.name))
+        return {
+          id: c.value,
+          label: c.name,
+          hint: c.description ?? o.description ?? c.name,
+          ...(activeSpeed
+            ? {
+                trigger: true,
+                icon: <Glyph icon={FlashIcon} size={11} />,
+                tone: intense ? ('intense' as const) : ('accent' as const),
+              }
+            : {}),
+        }
+      }),
+      onChange: (value) => selectPicks.pick(o, value),
+    }
+  })
 
   const toggles: PickerToggle[] = switches.map((o) => {
     const ultra = isUltracode(o)
@@ -256,6 +297,7 @@ export function ModelMenu({
             />
           ) : undefined
         }
+        selects={selects}
         toggles={toggles}
         onToggle={(id, on) => {
           const option = switches.find((o) => o.id === id)
