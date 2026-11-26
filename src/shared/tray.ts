@@ -1,7 +1,15 @@
 // The contract between main and the menu bar panel, the page the tray icon's left click opens.
 
-import type { AgentsApi, HostMethod, HostParams, HostResult } from './agent-host'
+import type {
+  AgentAccount,
+  AgentsApi,
+  HostMethod,
+  HostParams,
+  HostResult,
+  PlanLimit,
+} from './agent-host'
 import type { KettuApi } from './ipc'
+import type { AgentId, HarnessId } from './thread'
 
 /** Where the panel sends the user: a page of the main window, which comes forward for it. */
 export type TrayTarget =
@@ -45,6 +53,23 @@ export const TRAY_HOST_METHODS = [
 
 export type TrayHostMethod = (typeof TRAY_HOST_METHODS)[number]
 
+/**
+ * What the menu bar panel reads of an agent on another host: only enough to match an account
+ * and pick its newest plan limit reading.
+ */
+export interface TrayHostAgent {
+  id: AgentId
+  harnessId: HarnessId
+  account: AgentAccount | null
+  limits: PlanLimit[]
+}
+
+/** One connected host's agents, as main passes them to the menu bar panel. */
+export interface TrayHostAgents {
+  hostId: string
+  agents: TrayHostAgent[]
+}
+
 /** What the panel's preload exposes as `window.kettu`: the reads it shares and its own calls. */
 export interface TrayPanelApi {
   platform: KettuApi['platform']
@@ -64,5 +89,8 @@ export interface TrayPanelApi {
     resize(height: number): void
     /** The panel came forward, so the page reads again and starts at its list. */
     onShown(listener: () => void): () => void
+    /** Other connected hosts' agents, for picking each account's newest plan limit reading. */
+    hostAgents(): Promise<TrayHostAgents[]>
+    onHostAgentsChanged(listener: (hosts: TrayHostAgents[]) => void): () => void
   }
 }

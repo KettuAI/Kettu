@@ -121,6 +121,7 @@ import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
 import { readPluginThemes, readThemeFolder, readThemeSources, ThemeStore } from './themes'
 import { KettuTray } from './tray'
+import { TrayHostAgentsFeed } from './tray-host-agents'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
@@ -309,12 +310,15 @@ async function start(): Promise<void> {
     (process.platform !== 'linux' && systemPreferences.getAnimationSettings().prefersReducedMotion)
   // The panel's page reads its settings as it starts, so it opens only once main answers calls.
   let ipcReady = false
+  let trayHostAgents: TrayHostAgentsFeed | null = null
   const trayPanel =
     process.platform === 'darwin'
       ? new TrayPanel({
           systemLocale,
           open: (target) => openTrayTarget(target),
           quit: () => app.quit(),
+          onShown: () => trayHostAgents?.ensureLoaded(),
+          onClosed: () => trayHostAgents?.deactivate(),
         })
       : null
   const tray = new KettuTray({
@@ -341,7 +345,6 @@ async function start(): Promise<void> {
       : {}),
   })
   tray.start()
-  if (trayPanel) registerTrayIpc(trayPanel)
 
   const mediaGrants = new MediaGrants()
   const browserOrigins = await BrowserOriginStore.load(userDataPath)
@@ -839,10 +842,20 @@ async function start(): Promise<void> {
       remoteBrowser.hostClosed(hostId)
       remoteArtifacts.ended(hostId)
       island.remoteClosed(hostId)
+      trayHostAgents?.ended(hostId)
     },
-    opened: (hostId) => island.remoteOpened(hostId),
-    event: (hostId, event) => island.remoteEvent(hostId, event),
-    resync: (hostId) => island.remoteResync(hostId),
+    opened: (hostId) => {
+      island.remoteOpened(hostId)
+      trayHostAgents?.opened(hostId)
+    },
+    event: (hostId, event) => {
+      island.remoteEvent(hostId, event)
+      trayHostAgents?.event(hostId, event)
+    },
+    resync: (hostId) => {
+      island.remoteResync(hostId)
+      trayHostAgents?.resync(hostId)
+    },
     artifactEvent: (hostId, event) => {
       if (event.type === 'artifacts.runtime') remoteArtifacts.streamed(hostId, event)
       else if (event.type === 'artifacts.changed' || event.type === 'artifacts.version') {
@@ -851,6 +864,14 @@ async function start(): Promise<void> {
     },
     media: hostMedia,
   })
+  if (trayPanel) {
+    trayHostAgents = new TrayHostAgentsFeed({
+      openHosts: () => hostSessions.openHosts(),
+      listAgents: (hostId) => hostSessions.call(hostId, 'agents.list', undefined),
+      changed: (hosts) => trayPanel.sendHostAgents(hosts),
+      warn: (message) => log.warn(message),
+    })
+  }
   const remoteArtifactsDir = join(userDataPath, 'artifacts', 'remote')
   const remoteArtifacts = new RemoteArtifacts({
     call: (hostId, method, params) => hostSessions.call(hostId, method, params),
@@ -877,6 +898,11 @@ async function start(): Promise<void> {
         .filter((host) => !host.removed)
         .map((host) => ({ id: host.id, name: host.name })),
     )
+    if (remoteHost.hosts !== null) {
+      trayHostAgents?.syncHosts(
+        remoteHost.hosts.filter((host) => !host.removed).map((host) => host.id),
+      )
+    }
     broadcast('hosts:changed', hostsStatus())
     relayToken.update()
   }
@@ -1294,6 +1320,7 @@ async function start(): Promise<void> {
     reports,
     island,
   })
+  if (trayPanel && trayHostAgents) registerTrayIpc(trayPanel, trayHostAgents)
   ipcReady = true
   installMenu(menuDeps)
 

@@ -65,7 +65,7 @@ import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult 
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { IslandState } from './island'
 import type { AgentId, HarnessId } from './thread'
-import type { TrayTarget } from './tray'
+import type { TrayHostAgents, TrayTarget } from './tray'
 import type { UpdateStatus } from './updates'
 
 /** How a host of the account is connected to: alone, or in a batch under one code. */
@@ -580,6 +580,8 @@ export interface IpcInvokeContract {
   'browser:load-site-icon': { args: [url: string]; result: void }
   /** A link in Kettu opened the address, in either place, so its site counts as opened. */
   'browser:site-opened': { args: [url: string]; result: void }
+  /** Other connected hosts' agents for the menu bar panel, taken from the panel's page alone. */
+  'tray:host-agents': { args: []; result: TrayHostAgents[] }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -627,6 +629,8 @@ export interface IpcEventContract {
   'sign-ins:changed': BroughtSite[]
   /** To the menu bar panel: it came forward. */
   'tray:shown': null
+  /** To the menu bar panel: another connected host's agents changed. */
+  'tray:host-agents-changed': TrayHostAgents[]
 }
 
 export type IpcEventChannel = keyof IpcEventContract
