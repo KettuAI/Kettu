@@ -22,6 +22,7 @@ import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
   DEFAULT_SETTINGS,
   NEW_SESSION_LISTS,
+  RUNNING_SENDS,
   ZOOM_LEVELS,
   stepZoom,
   type LightModel,
@@ -473,6 +474,26 @@ export function SendKey() {
           },
         ]}
         onChange={(v) => apply({ general: { sendKey: v } })}
+      />
+    </>
+  )
+}
+
+export function RunningSend() {
+  const { t } = useTranslation('settings')
+  const value = useSettings().general.runningSend ?? DEFAULT_SETTINGS.general.runningSend
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={t('general.runningSend.name')}
+        value={value}
+        options={RUNNING_SENDS.map((mode) => ({
+          value: mode,
+          label: t(`general.runningSend.${mode}`),
+        }))}
+        onChange={(v) => apply({ general: { runningSend: v } })}
       />
     </>
   )

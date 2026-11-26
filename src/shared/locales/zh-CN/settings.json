@@ -63,6 +63,13 @@
       "description": "另一个按键用于换行。",
       "keywords": "回车 换行 输入框 enter newline composer"
     },
+    "runningSend": {
+      "name": "运行中发送消息",
+      "description": "一轮进行中发送时的默认行为。另一组快捷键执行相反操作；不支持插入的智能体仍会加入队列。",
+      "keywords": "排队 队列 立即发送 插入 插队 运行中 输入框 快捷键 queue steer send now",
+      "queue": "加入队列",
+      "steer": "立即发送"
+    },
     "restore": {
       "name": "启动时恢复上次的会话",
       "description": "分屏会连同其中的窗格一起恢复。"

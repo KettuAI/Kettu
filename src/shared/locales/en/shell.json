@@ -43,6 +43,7 @@
     "findInSession": "Find in the session",
     "send": "Send",
     "sendNow": "Send now while running",
+    "queue": "Queue while running",
     "newLine": "New line",
     "focusComposer": "Focus the composer",
     "addFiles": "Add files or photos",

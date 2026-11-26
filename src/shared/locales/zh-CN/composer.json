@@ -13,6 +13,8 @@
       "denied": "说说改用什么做法",
       "runningQueue": "排队一条消息 · Esc 停止",
       "runningTouch": "排队一条消息",
+      "runningSteer": "立即发送一条消息 · Esc 停止",
+      "runningSteerTouch": "立即发送一条消息",
       "pickAgent": "选一个智能体接着做…"
     },
     "stop": "停止",
@@ -22,6 +24,7 @@
     "stopTooltip": "停止 <shortcut>{{shortcut}}</shortcut>",
     "queueTooltip": "排队 <shortcut>{{shortcut}}</shortcut>",
     "queueHoldTooltip": "排队 <shortcut>{{shortcut}}</shortcut> · 按住可立即发送",
+    "steerHoldTooltip": "立即发送 <shortcut>{{shortcut}}</shortcut> · 按住可加入队列",
     "queueIt": "加入队列",
     "queueItHint": "本轮结束后发送",
     "sendNow": "立即发送",

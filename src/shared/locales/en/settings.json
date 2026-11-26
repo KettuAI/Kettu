@@ -64,6 +64,13 @@
       "description": "The other key adds a new line.",
       "keywords": "enter newline composer"
     },
+    "runningSend": {
+      "name": "While a turn is running",
+      "description": "What sending does mid-turn. The other shortcut does the opposite; agents that cannot steer still queue.",
+      "keywords": "queue steer send now running turn interrupt composer shortcut",
+      "queue": "Queue",
+      "steer": "Send now"
+    },
     "restore": {
       "name": "Restore the last session on launch",
       "description": "A split view comes back with its panes."

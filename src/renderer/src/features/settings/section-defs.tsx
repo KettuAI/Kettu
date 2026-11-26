@@ -179,6 +179,7 @@ import {
   RememberedSitesList,
   RemoveAll,
   ReportProblem,
+  RunningSend,
   SendKey,
   ShellPicker,
   SidebarHover,
@@ -239,6 +240,12 @@ export function useGeneralSection(): SectionDef {
         setting: 'general.send-key',
         group: input,
         render: () => <SendKey />,
+      },
+      {
+        id: 'running-send',
+        setting: 'general.running-send',
+        group: input,
+        render: () => <RunningSend />,
       },
       {
         id: 'default-agent',

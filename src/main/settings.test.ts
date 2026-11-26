@@ -991,3 +991,31 @@ describe('the relay a host uses', () => {
     })
   })
 })
+
+describe('sending while a turn is running', () => {
+  it('queues by default and keeps a valid choice on load', async () => {
+    expect((await SettingsStore.load(dir)).get().general.runningSend).toBe('queue')
+    for (const choice of ['queue', 'steer'] as const) {
+      await save({ version: 1, general: { runningSend: choice } })
+      expect((await SettingsStore.load(dir)).get().general.runningSend).toBe(choice)
+    }
+    for (const bad of ['now', '', true, null, 1]) {
+      await save({ version: 1, general: { runningSend: bad } })
+      expect((await SettingsStore.load(dir)).get().general.runningSend).toBe('queue')
+    }
+  })
+
+  it('accepts queue or steer in a change, refuses the rest, and keeps it on the client', () => {
+    const patch = validateSettingsPatch({ general: { runningSend: 'steer' } })
+    expect(patch).toEqual({ general: { runningSend: 'steer' } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.general.runningSend).toBe('steer')
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).general.runningSend).toBe(
+      'steer',
+    )
+    for (const bad of ['now', '', false, null, 0]) {
+      expect(() => validateSettingsPatch({ general: { runningSend: bad } })).toThrow()
+    }
+  })
+})

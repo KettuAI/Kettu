@@ -27,6 +27,10 @@ export interface OnboardingState {
 export const NEW_SESSION_LISTS = ['sessions', 'artifacts', 'off'] as const
 export type NewSessionList = (typeof NEW_SESSION_LISTS)[number]
 
+/** What sending while a turn runs does by default: queue it, or steer into the turn. */
+export const RUNNING_SENDS = ['queue', 'steer'] as const
+export type RunningSend = (typeof RUNNING_SENDS)[number]
+
 /**
  * The model the requests Kettu makes itself ask: session titles, branch names, outline titles,
  * commit messages and problem report drafts. `small`: a small model of the task's agent, else the
@@ -48,6 +52,7 @@ export interface SettingsFile {
     language: LanguageSetting
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
+    runningSend: RunningSend // what sending while a turn runs does; the other shortcut flips it
     restoreLastSession: boolean
     newSessionList: NewSessionList // what New session lists under the input
     confirmQuitWhileRunning: boolean
@@ -296,6 +301,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     language: 'system',
     defaultAgent: null,
     sendKey: 'enter',
+    runningSend: 'queue',
     restoreLastSession: true,
     newSessionList: 'sessions',
     confirmQuitWhileRunning: true,

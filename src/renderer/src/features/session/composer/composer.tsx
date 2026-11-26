@@ -163,10 +163,12 @@ export function Composer({
   }, [hostId, pendingAgent, pendingKnown])
   const agentName = pendingName ?? ownName
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
+  const runningSend = useSettingsStore((s) => s.settings.general.runningSend)
   const agent = useAgentsStore((s) => agentsOn(s, hostId).byId[session.agentId])
   const readings = usePlanReadings()
   const limits = agent ? newestLimits(readings, agent) : undefined
   const steering = !!agent?.capabilities.steering
+  const steerDefault = steering && runningSend === 'steer'
   // A phone has no keys to name.
   const phone = usePhoneWindow()
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
@@ -210,7 +212,7 @@ export function Composer({
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
     canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
-    // During a turn the send key queues the message and the steer key sends it into the turn.
+    // During a turn the primary shortcut queues or steers by setting, and the secondary flips it.
     canQueue: running && holds && !blocked && pending === null && !mustSwitch,
   })
   // Comments on passages go with the message, so with one, Send works on an empty box.
@@ -242,8 +244,10 @@ export function Composer({
       : starting
         ? t('prompt.waitForStart', { agent: agentName })
         : (blocked?.message ?? null)
-  const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
-  const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
+  const primaryKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
+  const secondaryKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
+  const queueKey = steerDefault ? secondaryKey : primaryKey
+  const steerKey = steerDefault ? primaryKey : secondaryKey
   // `/btw` is Kettu's own: what follows it is asked in the side chat, beside the turn, never queued.
   const sideOn = session.sideChat !== undefined
   const builtin = useMemo(() => builtinCommands(sideOn, t), [sideOn, t])
@@ -321,7 +325,7 @@ export function Composer({
   const send = (now = { canSend, canQueue }) => {
     if (askBeside()) return
     if (pending && now.canSend) handOver()
-    else if (now.canSend || now.canQueue) queue(false, now.canSend)
+    else if (now.canSend || now.canQueue) queue(now.canQueue && steerDefault, now.canSend)
   }
   const blockedEnter = useBlockedEnter({
     reason: unsendable,
@@ -521,21 +525,20 @@ export function Composer({
       event.preventDefault()
       return
     }
-    const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
-    const steers =
-      running &&
-      steering &&
-      (sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey)
-    if ((sends || steers) && askBeside()) {
+    const primary =
+      sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event) && !event.shiftKey
+    const secondary =
+      sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey
+    if ((primary || secondary) && askBeside()) {
       event.preventDefault()
       return
     }
-    if (steers) {
+    if (running && steering && secondary) {
       event.preventDefault()
-      if (now.canQueue) queue(true)
+      if (now.canQueue) queue(!steerDefault)
       return
     }
-    if (!sends) return
+    if (!primary && !secondary) return
     event.preventDefault()
     if (now.canSend || now.canQueue) send(now)
     else if (now.holds) blockedEnter.enter()
@@ -564,7 +567,15 @@ export function Composer({
           : !running && rejected
             ? t('prompt.placeholder.denied')
             : running
-              ? t(phone ? 'prompt.placeholder.runningTouch' : 'prompt.placeholder.runningQueue')
+              ? t(
+                  steerDefault
+                    ? phone
+                      ? 'prompt.placeholder.runningSteerTouch'
+                      : 'prompt.placeholder.runningSteer'
+                    : phone
+                      ? 'prompt.placeholder.runningTouch'
+                      : 'prompt.placeholder.runningQueue',
+                )
               : taskRunning
                 ? t('prompt.placeholder.taskRunning')
                 : idleLine
@@ -591,13 +602,14 @@ export function Composer({
   const modelName = model
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  // While a turn runs, Stop shows with nothing written and Send, which queues, once a message is.
+  // While a turn runs, Stop shows with nothing written and Send once a message is.
   const sendControl =
     running && !holdsMessage ? (
       <StopButton onStop={cancel} />
     ) : running && canQueue ? (
       <QueueButton
         steering={steering}
+        steerDefault={steerDefault}
         queueKey={queueKey}
         steerKey={steerKey}
         onQueue={() => queue(false)}
