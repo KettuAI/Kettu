@@ -109,6 +109,7 @@
     "importSessions": "Import sessions…",
     "menu": {
       "newSession": "New session",
+      "edit": "Edit project…",
       "pin": "Pin project",
       "unpin": "Unpin project",
       "pinNoProject": "Pin",
@@ -118,6 +119,25 @@
       "showArchived": "Show archived",
       "worktreeSettings": "Worktree settings…",
       "remove": "Remove project…"
+    },
+    "edit": {
+      "title": "Edit project",
+      "nameLabel": "Display name",
+      "nameHint": "Leave blank to use the folder name ({{name}}).",
+      "foldersLabel": "Source folders",
+      "foldersHint": "Pick which folder to use when starting a new session. Existing sessions keep their original folders.",
+      "primary": "Primary",
+      "addFolder": "Add folder",
+      "enterPath": "Enter path",
+      "pathPlaceholder": "/path/to/folder",
+      "add": "Add",
+      "removeFolder": "Remove {{name}}",
+      "removeProject": "Remove project",
+      "save": "Save",
+      "errorEmptyPath": "Enter a folder path.",
+      "errorNotAbsolute": "Enter an absolute folder path.",
+      "errorDuplicate": "This folder is already added to the project.",
+      "errorOtherProject": "This folder already belongs to {{name}}."
     },
     "remove": {
       "title": "Remove {{name}}?",

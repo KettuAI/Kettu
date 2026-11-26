@@ -774,6 +774,133 @@ describe('the host files', () => {
     })
   })
 
+  it('persists custom project display names, falls back on clear, and manages multiple source folders', async () => {
+    const existingDirs = new Set(['/work/alpha/app', '/work/alpha/docs', '/work/beta/app'])
+    const symlinks = new Map([['/work/link-docs', '/work/alpha/docs']])
+    const registry = (time = 10) =>
+      new Projects({
+        file: projectsFile(dir, log),
+        platform: 'linux',
+        now: () => time,
+        realpath: async (value) => {
+          const target = symlinks.get(value) ?? value
+          if (!existingDirs.has(target)) throw new Error('ENOENT')
+          return target
+        },
+        isDirectory: async (value) => existingDirs.has(value),
+      })
+
+    const first = registry(10)
+    await first.load()
+    await first.add('/work/alpha/app')
+    await first.add('/work/beta/app')
+
+    // Set a custom display name and associate an additional source folder.
+    const updated = await first.update(first.matchPrimary('/work/alpha/app'), {
+      name: '  Client Portal  ',
+      folders: ['/work/alpha/app', '/work/alpha/docs'],
+    })
+    expect(updated).toMatchObject({
+      path: '/work/alpha/app',
+      name: 'Client Portal',
+      customName: true,
+      folders: ['/work/alpha/app', '/work/alpha/docs'],
+      missing: false,
+    })
+    expect(first.paths()).toEqual(['/work/alpha/app', '/work/alpha/docs', '/work/beta/app'])
+    // Adding an already-associated secondary folder touches the owning project instead of creating a duplicate.
+    const touched = await first.add('/work/alpha/docs')
+    expect(touched.path).toBe('/work/alpha/app')
+    expect(first.list()).toHaveLength(2)
+
+    // Reject duplicate folders (including via symlink), empty list, removing primary, missing folder, and folder owned by another project.
+    await expect(
+      first.update(first.matchPrimary('/work/alpha/app'), { folders: [] }),
+    ).rejects.toThrow(/at least one/)
+    await expect(
+      first.update(first.matchPrimary('/work/alpha/app'), { folders: ['/work/alpha/docs'] }),
+    ).rejects.toThrow(/primary/)
+    await expect(
+      first.update(first.matchPrimary('/work/alpha/app'), {
+        folders: ['/work/alpha/app', '/work/alpha/docs', '/work/link-docs'],
+      }),
+    ).rejects.toThrow(/already listed/)
+    await expect(
+      first.update(first.matchPrimary('/work/alpha/app'), {
+        folders: ['/work/alpha/app', '/work/missing'],
+      }),
+    ).rejects.toThrow(/does not exist/)
+    await expect(
+      first.update(first.matchPrimary('/work/alpha/app'), {
+        folders: ['/work/alpha/app', '/work/beta/app'],
+      }),
+    ).rejects.toThrow(/already belongs/)
+
+    await first.flush()
+
+    // Reload from disk and verify custom name, folders, and missing-folder tracking persist.
+    existingDirs.delete('/work/alpha/docs')
+    const second = registry(20)
+    await second.load()
+    const reloaded = second.list().find((p) => p.path === '/work/alpha/app')!
+    expect(reloaded).toMatchObject({
+      path: '/work/alpha/app',
+      name: 'Client Portal',
+      customName: true,
+      folders: ['/work/alpha/app', '/work/alpha/docs'],
+      missingFolders: ['/work/alpha/docs'],
+      missing: false,
+    })
+
+    // Renaming still works even while an already-associated secondary folder is unmounted/missing.
+    const renamed = await second.update(second.matchPrimary('/work/alpha/app'), {
+      name: 'Web Portal',
+      folders: ['/work/alpha/app', '/work/alpha/docs'],
+    })
+    expect(renamed.name).toBe('Web Portal')
+    expect(renamed.folders).toEqual(['/work/alpha/app', '/work/alpha/docs'])
+
+    // Clearing the display name falls back to the primary folder basename, and removing the secondary
+    // folder returns the project to single-folder representation.
+    const reset = await second.update(second.matchPrimary('/work/alpha/app'), {
+      name: '   ',
+      folders: ['/work/alpha/app'],
+    })
+    expect(reset.name).toBe('app')
+    expect(reset.customName).toBeUndefined()
+    expect(reset.folders).toBeUndefined()
+    expect(reset.missingFolders).toBeUndefined()
+    await second.flush()
+
+    // Backwards-compatible parsing drops duplicates, self-references, and invalid entries cleanly.
+    expect(
+      parseProjectsFile({
+        projects: [
+          {
+            path: '/work/alpha/app',
+            name: 'Client Portal',
+            customName: true,
+            folders: ['/work/alpha/app', '/work/alpha/docs', '/work/alpha/docs', '', 42],
+            addedAt: 1,
+            lastOpenedAt: 2,
+          },
+        ],
+      }),
+    ).toEqual({
+      version: 1,
+      projects: [
+        {
+          path: '/work/alpha/app',
+          name: 'Client Portal',
+          customName: true,
+          folders: ['/work/alpha/docs'],
+          addedAt: 1,
+          lastOpenedAt: 2,
+        },
+      ],
+    })
+  })
+
   it('keeps what each agent reported and drops what does not parse, entry by entry', () => {
     const account = { kind: 'account', label: 'Claude Max', email: 'me@example.com' }
     const limit = {

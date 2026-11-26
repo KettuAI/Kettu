@@ -11,7 +11,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 import { findPane } from './layout'
-import { newSessionProject } from './new-session-project'
+import { newSessionFolder, newSessionProject } from './new-session-project'
 import { usePane } from './pane-context'
 
 /** What a pane shows: a session, a session being created, or New session. */
@@ -31,11 +31,13 @@ export function PaneContent({ paneId }: { paneId: string }) {
     return <SessionView key={`${paneId}:${view.sessionId}`} sessionId={view.sessionId} />
   }
   const project = newSessionProject(view, selected, projects)
+  const folder = newSessionFolder(view, selected, project)
   return (
     <NewSessionView
       key={`${paneId}:new`}
       paneId={paneId}
       project={project}
+      folder={folder}
       noProject={view.noProject}
       hostId={view.hostId ?? null}
       parentId={view.parentId ?? null}

@@ -26,7 +26,8 @@ import {
   type PaneView,
   type Place,
 } from '@renderer/features/split/layout'
-import { newSessionProject } from '@renderer/features/split/new-session-project'
+import { newSessionFolder, newSessionProject } from '@renderer/features/split/new-session-project'
+import { isFolderMissing } from '@renderer/stores/projects'
 import type { RoutineExampleId } from '@renderer/features/routines/examples'
 import { NARROW_WINDOW, PHONE_WINDOW } from '@renderer/features/shell/narrow'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -518,7 +519,8 @@ export function paneProjectPath(
   if (view.parentId) return view.projectPath
   if (projects) {
     const project = newSessionProject(view, selected, projects)
-    return project && !project.missing ? project.path : null
+    const folder = newSessionFolder(view, selected, project)
+    return project && folder && !isFolderMissing(project, folder) ? folder : null
   }
   return view.projectPath
 }
@@ -573,7 +575,13 @@ export function shownProjects(state: ViewStore, projects: readonly Project[]): s
     if (!panes.has(pane.id)) return []
     const { view } = pane
     const fallback =
-      view.kind === 'new' ? newSessionProject(view, state.projectPath, projects)?.path : undefined
+      view.kind === 'new'
+        ? newSessionFolder(
+            view,
+            state.projectPath,
+            newSessionProject(view, state.projectPath, projects),
+          )
+        : undefined
     return [view.projectPath, fallback].filter((path): path is string => !!path)
   })
   return [...new Set(paths)].join('\n')

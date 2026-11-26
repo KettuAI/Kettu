@@ -3635,7 +3635,13 @@ export class AgentHost {
    * session works in: files, git and media are read nowhere else.
    */
   private assertOpenFolder(canonical: string): void {
-    if (this.scratch.contains(canonical) || this.sessions.isSessionWorktree(canonical)) return
+    if (
+      this.scratch.contains(canonical) ||
+      this.sessions.isSessionWorktree(canonical) ||
+      this.sessions.isSessionProjectPath(canonical)
+    ) {
+      return
+    }
     this.projects.match(canonical)
   }
 
@@ -3841,17 +3847,27 @@ export class AgentHost {
         return projects.list()
       },
       'projects.add': ({ path }) => projects.add(path),
+      'projects.update': ({ path, name, folders }) =>
+        projects.update(projects.matchPrimary(path), {
+          ...(name !== undefined ? { name } : {}),
+          ...(folders !== undefined ? { folders } : {}),
+        }),
       'projects.remove': async ({ path }) => {
-        const record = projects.match(path)
-        await sessions.removeProject(record.path)
+        const record = projects.matchPrimary(path)
+        await sessions.removeProject(record.path, record.folders)
         projects.remove(record)
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'projects.pin': ({ path, pinned }) =>
-        path === null ? projects.pinNoProject(pinned) : projects.pin(projects.match(path), pinned),
+        path === null
+          ? projects.pinNoProject(pinned)
+          : projects.pin(projects.matchPrimary(path), pinned),
       'projects.move': ({ path, before }) =>
-        projects.move(projects.match(path), before === null ? null : projects.match(before)),
+        projects.move(
+          projects.matchPrimary(path),
+          before === null ? null : projects.matchPrimary(before),
+        ),
       'projects.noProject': () => projects.noProject(),
       'projects.worktreeSettings': ({ path }) =>
         projects.worktreeSettings(projects.match(path).path),

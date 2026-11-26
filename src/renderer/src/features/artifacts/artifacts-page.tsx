@@ -74,7 +74,7 @@ import {
   useArtifactsStore,
   type ImportFailure,
 } from '@renderer/stores/artifacts'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { localSharing } from '@renderer/stores/sharing'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openArtifact, setArtifactsView, useViewStore } from '@renderer/stores/view'
@@ -321,7 +321,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const projectName = (artifact: ArtifactSummary): string =>
     artifact.scratch
       ? t('page.noProject')
-      : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
+      : (findProjectForPath(projects, artifact.project)?.name ?? basename(artifact.project))
   const sessionName = (id: string): string => {
     if (id === NO_SESSION) return t('page.imported')
     const info = sessions.get(id)
@@ -456,9 +456,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                 key={g.key}
                 group={g}
                 info={g.of.kind === 'session' ? sessions.get(g.of.sessionId) : undefined}
-                projectName={(path) =>
-                  projects.find((p) => p.path === path)?.name ?? basename(path)
-                }
+                projectName={(path) => findProjectForPath(projects, path)?.name ?? basename(path)}
                 folded={folded.has(g.key)}
                 onFold={() =>
                   setFolded((was) => {

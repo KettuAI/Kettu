@@ -2,6 +2,7 @@ import {
   Archive01Icon,
   ComputerTerminal01Icon,
   Download04Icon,
+  FolderEditIcon,
   FolderMinusIcon,
   FolderOpenIcon,
   GitBranchIcon,
@@ -36,12 +37,14 @@ import { openProjectTerminal } from './project-menu-model'
 export function ProjectMenuItems({
   project,
   away,
+  onEdit,
   onPin,
   onImport,
   onRemove,
 }: {
   project: Project
   away: boolean
+  onEdit: () => void
   onPin: (pinned: boolean) => Promise<void>
   onImport: () => void
   onRemove: () => void
@@ -55,6 +58,12 @@ export function ProjectMenuItems({
   // Left out once the project is known not to be a Git repository.
   const git = useGitStore((s) => s.status[project.path]?.repo !== null)
   const pinned = project.pinnedAt != null
+  const editItem = (
+    <DropdownMenuItem disabled={away} onClick={onEdit}>
+      <MenuGlyph icon={FolderEditIcon} />
+      {t('project.menu.edit')}
+    </DropdownMenuItem>
+  )
   const pinItem = project.pinnedAt !== undefined && (
     <DropdownMenuItem disabled={away} onClick={() => void onPin(!pinned)}>
       <MenuGlyph icon={pinned ? PinOffIcon : PinIcon} />
@@ -70,9 +79,12 @@ export function ProjectMenuItems({
   if (!local) {
     return (
       <>
-        {pinItem && <DropdownMenuGroup>{pinItem}</DropdownMenuGroup>}
         <DropdownMenuGroup>
-          {pinItem && <DropdownMenuSeparator />}
+          {editItem}
+          {pinItem}
+        </DropdownMenuGroup>
+        <DropdownMenuGroup>
+          <DropdownMenuSeparator />
           {removeItem}
         </DropdownMenuGroup>
       </>
@@ -87,6 +99,7 @@ export function ProjectMenuItems({
           {t('project.menu.newSession')}
           <DropdownMenuShortcut>{formatShortcut('Mod+N')}</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {editItem}
         {pinItem}
       </DropdownMenuGroup>
       <DropdownMenuGroup>

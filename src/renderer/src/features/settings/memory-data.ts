@@ -6,7 +6,7 @@ import { memoryErrorText } from '@renderer/lib/memory-errors'
 import { agentName } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useMemoryChanges } from '@renderer/stores/memory'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 
 /** A read of the host's memory: null until it came, then kept while a change reads it again. */
 export interface MemoryRead<T> {
@@ -90,7 +90,7 @@ export function useProjectName(hostId: string | null, project: string | null): s
   const name = useProjectsStore((s) =>
     project === null
       ? null
-      : (s.projects.find((p) => p.path === onHost(hostId, project))?.name ?? null),
+      : (findProjectForPath(s.projects, onHost(hostId, project))?.name ?? null),
   )
   return name ?? (project === null ? '' : basename(project))
 }

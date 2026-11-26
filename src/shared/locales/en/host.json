@@ -1843,7 +1843,12 @@
     "notExist": "{{path}} does not exist",
     "notFolder": "{{path}} is not a folder",
     "noProject": "No project at {{path}}",
-    "moveBeforeItself": "A project cannot move before itself"
+    "moveBeforeItself": "A project cannot move before itself",
+    "atLeastOneFolder": "A project must keep at least one source folder",
+    "primaryFolderRequired": "The primary source folder cannot be removed",
+    "duplicateFolder": "{{path}} is already listed in this project",
+    "folderInOtherProject": "{{path}} already belongs to {{name}}",
+    "nameTooLong": "Project name must be at most {{max}} characters"
   },
   "process": {
     "toolTimedOut": "{{name}} did not finish within {{ms}} ms"

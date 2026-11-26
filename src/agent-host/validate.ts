@@ -129,6 +129,7 @@ import {
   parseParams as parseViewParams,
   ViewDataError,
 } from './plugin-runtime/view-data'
+import { MAX_PROJECT_FOLDERS, PROJECT_NAME_MAX } from './projects'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -1844,6 +1845,52 @@ export function createValidators(platform: Platform): Validators {
     },
     'projects.list': none,
     'projects.add': folder,
+    'projects.update': (params) => {
+      const o = fields(params)
+      const path = absolutePath(o, 'path', platform)
+      let name: string | null | undefined
+      if (o.name !== undefined) {
+        if (o.name === null) {
+          name = null
+        } else if (typeof o.name === 'string') {
+          if (o.name.includes('\0')) throw invalidParams('name contains a NUL character')
+          if (o.name.trim().length > PROJECT_NAME_MAX) {
+            throw invalidParams(t('project.nameTooLong', { max: PROJECT_NAME_MAX }))
+          }
+          name = o.name
+        } else {
+          throw invalidParams('name must be a string or null')
+        }
+      }
+      let folders: string[] | undefined
+      if (o.folders !== undefined) {
+        if (!Array.isArray(o.folders)) throw invalidParams('folders must be a list')
+        if (o.folders.length === 0) throw invalidParams(t('project.atLeastOneFolder'))
+        if (o.folders.length > MAX_PROJECT_FOLDERS) {
+          throw invalidParams(`folders holds more than ${MAX_PROJECT_FOLDERS}`)
+        }
+        folders = o.folders.map((item, index) => {
+          if (typeof item !== 'string' || item.length === 0) {
+            throw invalidParams(`folders[${index}] must be a non-empty string`)
+          }
+          if (item.length > PATH_CHARS) {
+            throw invalidParams(
+              t('validate.tooLong', { key: `folders[${index}]`, max: PATH_CHARS }),
+            )
+          }
+          if (item.includes('\0')) throw invalidParams(`folders[${index}] contains a NUL character`)
+          if (!isAbsolutePath(item, platform)) {
+            throw invalidParams(`folders[${index}] must be an absolute path`)
+          }
+          return item
+        })
+      }
+      return {
+        path,
+        ...(name !== undefined ? { name } : {}),
+        ...(folders !== undefined ? { folders } : {}),
+      }
+    },
     'projects.remove': folder,
     'projects.touch': folder,
     'projects.pin': (params) => {

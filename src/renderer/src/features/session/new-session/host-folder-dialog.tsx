@@ -76,12 +76,15 @@ export function HostFolderDialog({
   open,
   onOpenChange,
   onOpened,
+  pickOnly = false,
 }: {
   hostId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** The project added on the host, by the path the window names it with. */
+  /** The project added on the host, or the picked folder when `pickOnly` is true. */
   onOpened: (projectPath: string) => void
+  /** When true, returns the selected folder without registering it as a separate project. */
+  pickOnly?: boolean
 }) {
   // The dialog opens on the folder list, so the arrows work at once.
   const list = useRef<HTMLDivElement>(null)
@@ -94,7 +97,13 @@ export function HostFolderDialog({
       >
         {hostId && (
           <HostScopeContext.Provider value={hostScope(hostId)}>
-            <Browser key={hostId} hostId={hostId} list={list} onOpened={onOpened} />
+            <Browser
+              key={hostId}
+              hostId={hostId}
+              list={list}
+              onOpened={onOpened}
+              pickOnly={pickOnly}
+            />
           </HostScopeContext.Provider>
         )}
       </DialogContent>
@@ -106,10 +115,12 @@ function Browser({
   hostId,
   list,
   onOpened,
+  pickOnly,
 }: {
   hostId: string
   list: RefObject<HTMLDivElement | null>
   onOpened: (path: string) => void
+  pickOnly: boolean
 }) {
   const { t } = useTranslation(['session', 'common'])
   const host = useOtherHost(hostId)
@@ -189,8 +200,12 @@ function Browser({
     setOpening(true)
     setFailed(null)
     try {
-      const project = await useProjectsStore.getState().add(onHost(hostId, path))
-      onOpened(project.path)
+      if (pickOnly) {
+        onOpened(onHost(hostId, path))
+      } else {
+        const project = await useProjectsStore.getState().add(onHost(hostId, path))
+        onOpened(project.path)
+      }
     } catch (error) {
       setFailed(errorMessage(error))
       setOpening(false)
