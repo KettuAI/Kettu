@@ -129,6 +129,14 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.settingsResult(message.callId, message.answer))
         }
         break
+      case 'mcp-install-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          (message.error === null || typeof message.error === 'string')
+        ) {
+          withHost((h) => h.mcpInstallResult(message.callId, message.error))
+        }
+        break
       case 'plugin-secret-result':
         if (
           Number.isSafeInteger(message.callId) &&

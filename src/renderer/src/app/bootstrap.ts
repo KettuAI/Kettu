@@ -244,6 +244,15 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
     case 'usage.status':
       receiveUsageStatus(event.status)
       break
+    case 'market.discoveryChanged':
+      if (useMarketplaceStore.getState().discovery)
+        void useMarketplaceStore.getState().loadDiscovery()
+      break
+    case 'market.mcpCheckChanged':
+      useMarketplaceStore.setState((state) => ({
+        mcpChecks: { ...state.mcpChecks, [event.serverId]: event.check },
+      }))
+      break
     case 'market.keysChanged':
       marketKeysChanged()
       break

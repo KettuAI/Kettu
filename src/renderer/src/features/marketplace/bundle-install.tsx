@@ -31,6 +31,7 @@ import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { installServer, updateCommunityServer, type AgentChoice } from './actions'
 import { useInstalling } from './hooks'
 import { AgentPicker, InputLabel } from './install'
+import { McpConfirmation } from './mcp-confirmation'
 
 const tm = i18n.getFixedT(null, 'marketplace')
 
@@ -207,8 +208,8 @@ function BundleForm({
   }
   return (
     <form className="k-mkt-install" onSubmit={submit}>
-      <b>{t('install.title', { name: plan.name })}</b>
-      <span>{t('install.note')}</span>
+      {update && <b>{t('install.title', { name: plan.name })}</b>}
+      <span>{t('mcp.runPermission')}</span>
       <div className="k-mkt-install__runs">
         <Icon icon={CommandLineIcon} size={13} />
         <span>
@@ -308,7 +309,7 @@ function BundleForm({
         )
       })}
       <Button size="sm" type="submit" disabled={missing}>
-        {update ? t('bundle.updateSubmit') : t('install.submit')}
+        {update ? t('bundle.updateSubmit') : t('mcp.addAndCheck')}
       </Button>
     </form>
   )
@@ -325,7 +326,7 @@ function Blocked({ plan }: { plan: BundlePlan }) {
   )
 }
 
-/** A bundle listing's Install: staged on the host first, then the form or Install at once. */
+/** A bundle listing's Install: staged on the host for review before installing. */
 export function BundleInstallButton({ listing }: { listing: MarketListing }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
@@ -344,8 +345,7 @@ export function BundleInstallButton({ listing }: { listing: MarketListing }) {
     setPreparing(true)
     try {
       const staged = await scope.request('market.bundlePrepare', { id: listing.id })
-      if (!staged.blocked && staged.inputs.length === 0) await finish(staged, 'all', {})
-      else setPlan(staged)
+      setPlan(staged)
     } catch (e) {
       warn(t('toast.installFailed', { name: listing.name, error: errorMessage(e) }))
     } finally {
@@ -362,28 +362,31 @@ export function BundleInstallButton({ listing }: { listing: MarketListing }) {
       >
         {preparing ? t('bundle.preparing') : busy ? t('install.installing') : t('install.submit')}
       </Button>
-      <Popover
+      <McpConfirmation
         open={plan !== null}
-        onClose={() => {
+        onOpenChange={(open) => {
+          if (open) return
           cancel(scope, plan)
           setPlan(null)
         }}
-        align="end"
-        className="ui-as-menu k-mkt-install-pop"
+        title={t('install.title', { name: listing.name })}
       >
-        {plan &&
-          (plan.blocked ? (
-            <Blocked plan={plan} />
-          ) : (
-            <BundleForm
-              plan={plan}
-              onDone={(agents, values) => {
-                setPlan(null)
-                void finish(plan, agents, values)
-              }}
-            />
-          ))}
-      </Popover>
+        {plan && (
+          <div className="kettu-sd__body">
+            {plan.blocked ? (
+              <Blocked plan={plan} />
+            ) : (
+              <BundleForm
+                plan={plan}
+                onDone={(agents, values) => {
+                  setPlan(null)
+                  void finish(plan, agents, values)
+                }}
+              />
+            )}
+          </div>
+        )}
+      </McpConfirmation>
     </span>
   )
 }

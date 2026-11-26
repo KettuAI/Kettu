@@ -1,3 +1,4 @@
+import { McpConfirmation, McpRunPreview } from './mcp-confirmation'
 // Connecting a remote server that signs in with OAuth: the Connect button and its popover, which
 // picks the agents, then waits while the user signs in at the service; and the connection's state
 // with what can be done about it.
@@ -161,6 +162,7 @@ function ConnectPanel({
   }
   return (
     <form className="k-mkt-install" onSubmit={submit}>
+      {!kept && <McpRunPreview spec={server.spec} />}
       <b>{t('connect.title', { name })}</b>
       <span>
         {!here
@@ -241,15 +243,39 @@ export function ConnectButton({
   server,
   kept = null,
   big = false,
+  label,
 }: {
   server: CatalogServer | MarketServer
   kept?: MarketServer | null
   big?: boolean
+  label?: string
 }) {
   const { t } = useTranslation('marketplace')
   const [open, setOpen] = useState(false)
   const flow = useConnectFlow(server.id)
   const busy = flow !== null && flow.phase !== 'failed'
+  if (!kept) {
+    return (
+      <>
+        <Button
+          size={big ? 'md' : 'sm'}
+          variant={big ? 'primary' : 'secondary'}
+          onClick={() => setOpen(true)}
+        >
+          {busy ? t('row.connecting') : (label ?? t('row.connect'))}
+        </Button>
+        <McpConfirmation
+          open={open}
+          onOpenChange={setOpen}
+          title={t('connect.title', { name: server.title })}
+        >
+          <div className="kettu-sd__body">
+            <ConnectPanel server={server} kept={null} onClose={() => setOpen(false)} />
+          </div>
+        </McpConfirmation>
+      </>
+    )
+  }
   return (
     <span className="k-mkt-row-end">
       {!open && <ConnectFailure serverId={server.id} />}
@@ -262,7 +288,7 @@ export function ConnectButton({
           icon={busy ? <span className="ui-as-spinner" aria-hidden /> : undefined}
           onClick={() => setOpen(!open)}
         >
-          {busy ? t('row.connecting') : t('row.connect')}
+          {busy ? t('row.connecting') : (label ?? t('row.connect'))}
         </Button>
       </ConnectPopover>
     </span>

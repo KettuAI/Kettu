@@ -1,3 +1,5 @@
+import { randomUUID as mcpId } from 'node:crypto'
+import type { McpCheck, McpDiscoveryRow, McpImportChoice } from '@shared/mcp-discovery'
 // The agent host, assembled: state, agents, sessions, git and the ports. start.ts runs it in
 // the utility process or under Node.js; tests run it in-process with fakes for the launcher,
 // shell and git.
@@ -74,6 +76,7 @@ import {
   specInputs,
   type CatalogServer,
   type MarketConnection,
+  MARKET_NAME,
   type MarketServer,
   type MarketSkill,
 } from '@shared/marketplace'
@@ -192,6 +195,14 @@ import {
   serverHeaders,
   type MarketKeys,
 } from './marketplace/servers'
+import {
+  McpDiscoveryService,
+  seenMcpFile,
+  type PreparedMcpImport,
+} from './marketplace/mcp-discovery'
+import { mcpConfigPaths } from './marketplace/mcp-config-paths'
+import { parseMcpPaste } from './marketplace/mcp-paste'
+import { importedServer, type ConfiguredMcp } from './marketplace/mcp-config'
 import { findCommand, isExecutableFile, type Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
@@ -584,6 +595,11 @@ export class AgentHost {
   private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
+  private readonly mcpDiscovery: McpDiscoveryService
+  private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
+  private readonly mcpCheckStates = new Map<string, McpCheck>()
+  private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
+  private nextMcpInstall = 1
   private agentEnvKeys: Record<string, Record<string, string>> = {}
   /** The secrets the plugins declare, by plugin then key, as main's key store holds them. */
   private pluginSecrets: Record<string, Record<string, string>> = {}
@@ -911,7 +927,8 @@ export class AgentHost {
     this.marketConnections = new MarketConnectionsService({
       log,
       servers: () => this.settings.marketplace.mcp,
-      headers: (server) => serverHeaders(server, this.marketKeys),
+      headers: (server) =>
+        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
       keep: (serverId, state) => this.keepSignIn(serverId, state),
       changed: (serverId, connection, loginId, error) =>
         this.connectionChanged(serverId, connection, loginId, error),
@@ -921,7 +938,8 @@ export class AgentHost {
       this.marketConnections.access(server) === 'proxy'
     this.mcpProxy = new McpProxy({
       signsIn,
-      headers: (server) => serverHeaders(server, this.marketKeys),
+      headers: (server) =>
+        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
       fetch: net,
@@ -938,8 +956,9 @@ export class AgentHost {
     this.mcpRouter = new McpRouter({
       servers: () => this.settings.marketplace.mcp,
       command: (server) =>
-        serverCommand(server, this.marketKeys, this.env.agentEnv(), options.nodeRuntime),
-      headers: (server) => serverHeaders(server, this.marketKeys),
+        serverCommand(server, this.marketKeys, this.env.agentEnv(), options.nodeRuntime, platform),
+      headers: (server) =>
+        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
       signsIn,
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
@@ -950,6 +969,19 @@ export class AgentHost {
       log,
       fetch: net,
       processes: { platform, trees: this.trees },
+    })
+    this.mcpDiscovery = new McpDiscoveryService({
+      seen: seenMcpFile(options.userDataPath, log),
+      files: () =>
+        mcpConfigPaths(
+          platform,
+          home,
+          this.agents.mcpDiscoveryAgents(),
+          this.projects.list().map(({ path }) => path),
+          (name, agent) => this.env.get(name, agent),
+        ),
+      library: () => this.settings.marketplace.mcp,
+      changed: () => this.hub.broadcast({ type: 'market.discoveryChanged' }),
     })
     this.ownPlugins = new OwnPluginsService({
       platform,
@@ -1470,6 +1502,7 @@ export class AgentHost {
             {
               platform,
               taken,
+              env: this.env.agentEnv(),
               node: options.nodeRuntime,
               also: [
                 ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
@@ -2267,6 +2300,7 @@ export class AgentHost {
 
   private portClosed(portId: string): void {
     this.load.portClosed(portId)
+    this.mcpDrafts.delete(portId)
     this.runtimeRequests.portClosed(portId)
     this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
@@ -2655,6 +2689,94 @@ export class AgentHost {
     this.sessions.settingsSettled(sessionId, entryId, { kind: 'changed', undone: true })
   }
 
+  private previewMcp(text: string, portId: string): McpDiscoveryRow[] {
+    this.mcpDrafts.delete(portId)
+    const drafts = new Map(parseMcpPaste(text).map((entry) => [mcpId(), entry]))
+    this.mcpDrafts.set(portId, drafts)
+    const names = new Set(this.settings.marketplace.mcp.map(({ name }) => name))
+    return [...drafts].map(([id, { name, spec, secrets }]) => ({
+      id,
+      name,
+      spec,
+      sources: [{ id, path: '', name, keys: Object.keys(secrets) }],
+      differentKeys: [],
+      existing: [],
+      isNew: false,
+      nameConflict: !MARKET_NAME.test(name) || names.has(name) || name === 'kettu',
+    }))
+  }
+
+  private async addMcp(choices: McpImportChoice[], portId: string): Promise<string[]> {
+    const drafts = this.mcpDrafts.get(portId)
+    const selected = new Set<string>()
+    const entries = choices.map(({ id, name, agents }) => {
+      const draft = drafts?.get(id)
+      if (!draft || selected.has(id) || !MARKET_NAME.test(name) || name === 'kettu') {
+        throw new HostError(
+          'invalid_params',
+          'Review each MCP server and choose an available name.',
+        )
+      }
+      selected.add(id)
+      const server = importedServer('manual:' + mcpId(), draft, name, agents, [])
+      delete server.importedFrom
+      return { server, secrets: draft.secrets }
+    })
+    const ids = await this.installMcp(entries)
+    if (this.mcpDrafts.get(portId) === drafts) this.mcpDrafts.delete(portId)
+    return ids
+  }
+
+  private async installMcp(entries: PreparedMcpImport[]): Promise<string[]> {
+    const callId = this.nextMcpInstall++
+    const error = await new Promise<string | null>((resolve) => {
+      this.mcpInstallCalls.set(callId, resolve)
+      this.options.send({ type: 'host:mcp-install', callId, entries })
+    })
+    if (error) throw new HostError('unavailable', error)
+    for (const { server, secrets, project } of entries) {
+      this.checkMcpServer(server, new Map(Object.entries(secrets)), project)
+    }
+    this.hub.broadcast({ type: 'market.discoveryChanged' })
+    return entries.map(({ server }) => server.id)
+  }
+
+  mcpInstallResult(callId: number, error: string | null): void {
+    const resolve = this.mcpInstallCalls.get(callId)
+    this.mcpInstallCalls.delete(callId)
+    resolve?.(error)
+  }
+
+  private checkMcpServer(
+    server: MarketServer,
+    keys: ReadonlyMap<string, string>,
+    project?: string,
+  ): void {
+    if (this.mcpCheckStates.get(server.id)?.state === 'checking') return
+    const changed = (check: McpCheck): void => {
+      this.mcpCheckStates.set(server.id, check)
+      this.hub.broadcast({ type: 'market.mcpCheckChanged', serverId: server.id, check })
+    }
+    changed({ state: 'checking' })
+    const env = this.env.agentEnv()
+    const token =
+      server.spec.type === 'http' && server.spec.oauth
+        ? this.marketConnections.token(server.id)
+        : null
+    void Promise.all([token, import('./marketplace/mcp-check')])
+      .then(([bearer, { checkMcp }]) =>
+        checkMcp(server, keys, {
+          env,
+          home: this.options.homeDir ?? os.homedir(),
+          platform: this.options.platform,
+          project: project ?? server.importedWith?.project ?? server.importedFrom?.[0]?.project,
+          node: this.options.nodeRuntime,
+          bearer: bearer ?? undefined,
+        }),
+      )
+      .then(changed, () => changed({ state: 'error', reason: 'cannot-connect' }))
+  }
+
   /** `market-result`: main's or the daemon's answer to a Marketplace call. */
   marketResult(callId: number, answer: MarketCallAnswer): void {
     const resolve = this.marketCalls.get(callId)
@@ -2813,6 +2935,7 @@ export class AgentHost {
       oauth,
       router,
       bridge: this.mcpBridge,
+      env: this.env.agentEnv(),
       node: this.options.nodeRuntime,
     }
     const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
@@ -3614,6 +3737,8 @@ export class AgentHost {
       })
     }
     this.marketCalls.clear()
+    for (const resolve of this.mcpInstallCalls.values()) resolve('The host stopped.')
+    this.mcpInstallCalls.clear()
     for (const resolve of this.trashCalls.values()) resolve('Kettu stopped before it answered.')
     this.trashCalls.clear()
     for (const resolve of this.pluginSecretCalls.values())
@@ -3633,6 +3758,7 @@ export class AgentHost {
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
+      this.mcpDiscovery.stop()
       this.fileWatches.stop()
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
@@ -3662,6 +3788,7 @@ export class AgentHost {
         this.preparedRecords.flush(),
         this.attachments.flush(),
         this.marketCatalog.flush(),
+        this.mcpDiscovery.flush(),
         this.marketSkills.flush(),
         this.marketBundles.flush(),
         this.plugins.flush(),
@@ -3863,6 +3990,17 @@ export class AgentHost {
         this.marketCatalog.catalog(refresh === true, cached === true),
       'market.search': ({ query }) => this.marketCatalog.search(query),
       'market.keys': () => keyState(this.settings.marketplace.mcp, this.marketKeys),
+      'market.discoverMcp': () => this.mcpDiscovery.scan(),
+      'market.dismissMcpNotice': ({ id }) => this.mcpDiscovery.dismiss(id),
+      'market.importMcp': ({ choices }) => this.installMcp(this.mcpDiscovery.prepare(choices)),
+      'market.previewMcp': ({ text }, { portId }) => this.previewMcp(text, portId),
+      'market.addMcp': ({ choices }, { portId }) => this.addMcp(choices, portId),
+      'market.checkMcp': ({ serverId }) => {
+        const server = this.settings.marketplace.mcp.find(({ id }) => id === serverId)
+        if (!server) throw new HostError('not_found', 'This MCP server is no longer installed.')
+        this.checkMcpServer(server, this.marketKeys.get(server.id) ?? new Map())
+      },
+      'market.mcpChecks': () => Object.fromEntries(this.mcpCheckStates),
       'market.connect': ({ serverId }) => this.marketConnections.connect(serverId),
       'market.detectSignIn': async ({ url, headers }) => ({
         oauth: await this.marketConnections.detect(

@@ -1,3 +1,4 @@
+import type { McpInstallEntry } from './mcp-discovery'
 // Messages between main and the hosts: over `utilityProcess` messaging in the desktop app, or the
 // IPC of `child_process.fork` when a host runs under Node.js.
 
@@ -139,6 +140,7 @@ export type MainToHost =
       // The secrets the plugins declare, by plugin id then key; read by the plugin's own script only.
       pluginSecrets?: Record<string, Record<string, string>>
     }
+  | { type: 'mcp-install-result'; callId: number; error: string | null }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
   // reads the logs, its agents and sessions, and writes the zip under its data folder.
@@ -323,6 +325,7 @@ export type HostToMain =
   // Keep (or, with null, clear) a server's OAuth sign-in after the host connected, renewed or
   // disconnected it; main stores the text as it stores keys and pushes host:market-keys again.
   | { type: 'host:market-oauth'; serverId: string; state: string | null }
+  | { type: 'host:mcp-install'; callId: number; entries: McpInstallEntry[] }
   | { type: 'host:ready' }
   // The harnesses whose user program the host's first start found, in the order to add them: the
   // settings' owner adds their default agents and records the first start as done.

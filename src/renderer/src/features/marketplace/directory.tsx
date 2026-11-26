@@ -1,3 +1,5 @@
+import { McpLibrary } from './mcp-library'
+import { McpAddDialog } from './mcp-review'
 // The Marketplace's directory: its tabs, search and Add over sections of skills, MCP servers and
 // workflows. Each source fills its sections as it answers; the rest show at once.
 
@@ -51,7 +53,7 @@ import { openMarketplace, setMarketplaceTab, type MarketplaceTab } from '@render
 import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { installSkill } from './actions'
 import { CommunityRow, CommunitySignedOut } from './community'
-import { AddServerDialog, AddSkillDialog } from './dialogs'
+import { AddSkillDialog } from './dialogs'
 import { usePluginInstall } from './plugin-hooks'
 import { AddPluginGithubDialog } from './plugin-install'
 import { MarketAway } from './parts'
@@ -799,6 +801,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           </div>
         </div>
         <HarnessPluginsNote />
+        <McpLibrary query={filter} showSections={tab === 'mcp'} />
         {published ? (
           <div key="published">
             <PublishedView query={filter} />
@@ -816,10 +819,10 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
             <Sections tab={tab} query={filter} registry={registry} />
           </div>
         )}
-        <AddServerDialog
+        <McpAddDialog
           open={dialog === 'mcp'}
           onOpenChange={(open) => setDialog(open ? 'mcp' : null)}
-          onAdded={() => setMarketplaceTab('installed')}
+          onAdded={() => setMarketplaceTab('mcp')}
         />
         <AddSkillDialog
           open={dialog === 'skill'}

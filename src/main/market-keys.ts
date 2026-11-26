@@ -1,3 +1,4 @@
+import type { McpInstallEntry } from '@shared/mcp-discovery'
 // `market-keys.json`: what the user filled in for the inputs of the servers the Marketplace
 // installed, API tokens among them, and each OAuth server's sign-in, by server id. Kept apart from
 // the settings, encrypted by the system in the desktop app, and in a file only the user can read
@@ -268,6 +269,27 @@ export interface MarketKeysOptions {
   log: Logger
 }
 
+function changedInputs(
+  server: MarketServer,
+  before: ReadonlyMap<string, string> | undefined,
+  values: readonly [string, string | null][],
+): Map<string, string> {
+  const declared = inputsOf(server.spec)
+  const inputs = new Map(before)
+  for (const [name, value] of values) {
+    const header = declared.get(name)
+    if (header === undefined) throw invalid(`"${server.name}" has no input "${name}"`)
+    if (value === null) {
+      inputs.delete(name)
+      continue
+    }
+    const problem = valueProblem(value, header)
+    if (problem) throw invalid(valueProblemText(problem, name))
+    inputs.set(name, value)
+  }
+  return inputs
+}
+
 /** Owns `market-keys.json`. Every change runs in turn, so none is lost to another. */
 export class MarketKeys {
   private queue: Promise<unknown> = Promise.resolve()
@@ -455,25 +477,44 @@ export class MarketKeys {
       if (this.readOnly) throw new MarketKeysError('unavailable', readOnlyText(this.readOnly))
       const server = this.options.servers().find((each) => each.id === patch.serverId)
       if (!server) throw invalid(t('marketKeys.noServer'))
-      const declared = inputsOf(server.spec)
-      const inputs = new Map(this.contents.keys.get(server.id))
-      for (const [name, value] of patch.values) {
-        const header = declared.get(name)
-        if (header === undefined) throw invalid(`"${server.name}" has no input "${name}"`)
-        if (value === null) {
-          inputs.delete(name)
-          continue
-        }
-        const problem = valueProblem(value, header)
-        if (problem) throw invalid(valueProblemText(problem, name))
-        inputs.set(name, value)
-      }
+      const inputs = changedInputs(server, this.contents.keys.get(server.id), patch.values)
       const keys: Keys = new Map(this.contents.keys)
       if (inputs.size > 0) keys.set(server.id, inputs)
       else keys.delete(server.id)
       const next = { ...this.contents, keys }
       await this.commit(pruned(next, this.options.servers()), true)
       return this.state()
+    })
+  }
+
+  /**
+   * Write keys before publishing the library records. After a crash, startup pruning removes
+   * keys for records that were never published.
+   */
+  async install(entries: readonly McpInstallEntry[], publish: () => void): Promise<void> {
+    await this.run(async () => {
+      const keys: Keys = new Map(this.contents.keys)
+      let addedKeys = false
+      for (const { server, secrets } of entries) {
+        if (Object.keys(secrets).length === 0) continue
+        if (this.readOnly) throw new MarketKeysError('unavailable', readOnlyText(this.readOnly))
+        const patch = parsePatch({ serverId: server.id, values: secrets })
+        const inputs = changedInputs(server, undefined, patch.values)
+        keys.set(server.id, inputs)
+        addedKeys = true
+      }
+      const next = { ...this.contents, keys }
+      if (addedKeys) await this.save(next)
+      try {
+        publish()
+      } catch (error) {
+        if (addedKeys) await this.save(this.contents)
+        throw error
+      }
+      if (addedKeys) {
+        this.contents = next
+        this.options.changed(this.contentsForHost())
+      }
     })
   }
 

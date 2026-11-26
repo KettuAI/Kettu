@@ -42,6 +42,7 @@ import { MarketUnauthorized, runMarketCall } from '../main/market-api'
 import { locale as currentLocale, setLocale, t } from '../main/i18n'
 import { createLogger } from '../main/log'
 import { MarketKeys, marketKeysFile } from '../main/market-keys'
+import { installDiscoveredMcp } from '../main/mcp-install'
 import { RelayFeatures, RelayToken, readRelayFeatures } from '../main/relay-token'
 import { nodeSystemReleaseForRun } from '../main/system-name'
 import type { RemoteIdentity } from '../main/remote-identity'
@@ -480,6 +481,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings: () => settings.get(),
     marketKeys: () => marketKeys.contentsForHost(),
     marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    installMcp: (entries) => installDiscoveredMcp(settings, marketKeys, entries),
     pluginSecret: (pluginId, key, value) =>
       marketKeys.setPluginSecret(pluginId, key, value).then(
         () => null,

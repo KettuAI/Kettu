@@ -2083,3 +2083,237 @@
   font-size: 13px;
   color: var(--muted);
 }
+
+.k-mcp-section {
+  margin-block-end: 1rem;
+}
+
+.k-mcp-rows {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.k-mcp-rows .ui-as-int-row {
+  min-width: 0;
+}
+
+.k-mcp-section-head,
+.k-mcp-notice,
+.k-mcp-error,
+.k-mcp-file-error,
+.k-mcp-review-header,
+.k-mcp-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.k-mcp-section-head > :first-child,
+.k-mcp-notice > :first-child,
+.k-mcp-error > :first-child,
+.k-mcp-file-error > :first-child,
+.k-mcp-review-header > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.k-mcp-notice,
+.k-mcp-error,
+.k-mcp-server-card {
+  border: var(--hairline) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 0.75rem 1rem;
+}
+
+.k-mcp-notice {
+  margin-block: 0.75rem;
+  background: var(--info-tint);
+  color: var(--info);
+  font-size: var(--text-ui);
+}
+
+.k-mcp-error {
+  margin-block: 1rem;
+  background: var(--danger-tint);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.k-mcp-error p {
+  margin-block-start: 0.25rem;
+  color: var(--text-secondary);
+}
+
+.k-mcp-agent-marks,
+.k-mcp-state,
+.k-mcp-source,
+.k-mcp-review-header label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.k-mcp-state > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.k-mcp-state-dot,
+.k-mcp-new-dot {
+  inline-size: 0.4375rem;
+  block-size: 0.4375rem;
+  flex: none;
+  border: var(--hairline) solid currentColor;
+  border-radius: 50%;
+}
+
+.k-mcp-new-dot {
+  color: var(--focus);
+  background: currentColor;
+}
+
+.k-mcp-state[data-state='connected'] {
+  color: var(--success);
+}
+
+.k-mcp-state[data-state='needs-sign-in'],
+.k-mcp-state[data-state='project-only'],
+.k-mcp-warning {
+  color: var(--warning);
+}
+
+.k-mcp-state[data-state='error'] {
+  color: var(--danger);
+}
+
+.k-mcp-state:not([data-state='idle']) .k-mcp-state-dot {
+  background: currentColor;
+}
+
+.k-mcp-found-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+}
+
+.k-mcp-file-error {
+  color: var(--text-tertiary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-dialog.kettu-sd {
+  max-width: min(42rem, calc(100% - 2rem));
+}
+
+.k-mcp-review-row,
+.k-mcp-paste,
+.k-mcp-run,
+.k-mcp-sources,
+.k-mcp-server-panel,
+.k-mcp-server-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.k-mcp-review-row {
+  border-block-start: var(--hairline) solid var(--border-subtle);
+  padding-block: 0.75rem;
+}
+
+.k-mcp-run {
+  color: var(--text-secondary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-run > code {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-tile);
+  background: var(--bg-code-block);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.k-mcp-source,
+.k-mcp-values li,
+.k-mcp-sources li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.k-mcp-source-option {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.k-mcp-source code {
+  color: var(--text-tertiary);
+}
+
+.k-mcp-server-panel {
+  padding-block: 1rem;
+}
+
+.k-mcp-server-panel[hidden] {
+  display: none;
+}
+
+.k-mcp-server-card {
+  gap: 0.75rem;
+  background: var(--bg-subtle);
+}
+
+.k-mcp-server-card h2 {
+  font-weight: 600;
+}
+
+.k-mcp-server-card dl {
+  display: grid;
+  grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+}
+
+.k-mcp-server-card dt {
+  color: var(--text-secondary);
+}
+
+.k-mcp-server-card dd {
+  overflow-wrap: anywhere;
+}
+
+.k-mcp-server-card .k-mcp-timings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.k-mcp-timings > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.k-mcp-settings-actions {
+  justify-content: flex-end;
+}
+
+.k-mcp-remove {
+  align-items: start;
+}
+
+.k-mcp-remove button {
+  color: var(--danger);
+}

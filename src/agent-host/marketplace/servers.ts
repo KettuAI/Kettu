@@ -20,6 +20,7 @@ import type { AgentId } from '@shared/thread'
 import type { AgentInit, McpServer } from '../connection'
 import { serverPath, type ServerCommand } from '../mcp-router/router'
 import type { Access } from './connections'
+import { getEnv, type Env } from '../find-command'
 
 /** The values of each server's inputs, by server id and input name. */
 export type MarketKeys = ReadonlyMap<string, ReadonlyMap<string, string>>
@@ -72,16 +73,37 @@ export function keyState(servers: readonly MarketServer[], keys: MarketKeys): Ma
   )
 }
 
+const reference = /\$\{([a-zA-Z_][a-zA-Z_0-9]*)\}/g
+export function resolveMcpReference(
+  value: string,
+  env: Env,
+  platform: Platform,
+): { value: string; missing?: string } {
+  let missing: string | undefined
+  const resolved = value.replace(reference, (_, name: string) => {
+    const found = getEnv(env, name, platform)
+    if (found === undefined) missing ??= name
+    return found ?? ''
+  })
+  return { value: resolved, missing }
+}
+
 /** A spec's headers or environment with the inputs filled; null when a required one is empty. */
 function filled(
   values: readonly McpValue[],
   keys: ReadonlyMap<string, string> | undefined,
+  shell?: { env: Env; platform: Platform },
 ): { values: { name: string; value: string }[]; secret: boolean } | null {
   const out: { name: string; value: string }[] = []
   let secret = false
   for (const item of values) {
     if (!('input' in item)) {
-      out.push({ name: item.name, value: item.value })
+      const resolved = shell
+        ? resolveMcpReference(item.value, shell.env, shell.platform)
+        : { value: item.value }
+      if (resolved.missing) return null
+      out.push({ name: item.name, value: resolved.value })
+      if (resolved.value !== item.value) secret = true
       continue
     }
     const value = keys?.get(item.name)
@@ -135,9 +157,13 @@ export const DECLARED_LIBRARY_BYTES = 12_000
 export const BRIDGE_ENV = { url: 'KETTU_MCP_URL', token: 'KETTU_MCP_TOKEN' } as const
 
 /** A server's fixed headers and filled inputs, as its requests carry them. */
-export function serverHeaders(server: MarketServer, keys: MarketKeys): Record<string, string> {
+export function serverHeaders(
+  server: MarketServer,
+  keys: MarketKeys,
+  shell?: { env: Env; platform: Platform },
+): Record<string, string> {
   if (server.spec.type !== 'http') return {}
-  const values = filled(server.spec.headers, keys.get(server.id))
+  const values = filled(server.spec.headers, keys.get(server.id), shell)
   return Object.fromEntries((values?.values ?? []).map((value) => [value.name, value.value]))
 }
 
@@ -148,13 +174,14 @@ export function serverHeaders(server: MarketServer, keys: MarketKeys): Record<st
 export function serverCommand(
   server: MarketServer,
   keys: MarketKeys,
-  env: Readonly<Record<string, string | undefined>>,
+  env: Readonly<Env>,
   node: NodeRuntime | undefined,
+  platform: Platform = process.platform as Platform,
 ): ServerCommand | string {
   const { spec } = server
   if (spec.type !== 'stdio') return `${server.name} is not a command`
   if (spec.runtime === 'node' && !node) return `${server.name} needs Kettu's Node.js`
-  const values = filled(spec.env, keys.get(server.id))
+  const values = filled(spec.env, keys.get(server.id), { env, platform })
   if (!values) return `${server.name} is missing a required value`
   const out: Record<string, string> = {}
   for (const [name, value] of Object.entries(env)) if (value !== undefined) out[name] = value
@@ -173,10 +200,11 @@ function direct(
   keys: MarketKeys,
   platform: Platform,
   node: NodeRuntime | undefined,
+  env: Env | undefined,
 ): McpServer | null {
   const { spec } = server
   if (spec.type !== 'stdio') return null
-  const values = filled(spec.env, keys.get(server.id))
+  const values = filled(spec.env, keys.get(server.id), env && { env, platform })
   if (!values) return null
   const runtime = spec.runtime === 'node' ? node : undefined
   const [command, args] = runtime
@@ -231,6 +259,7 @@ export function libraryServers(
   transports: McpTransports,
   options: {
     platform: Platform
+    env?: Env
     taken?: readonly string[]
     oauth?: OAuthAccess
     router?: RouterAccess | null
@@ -283,7 +312,14 @@ export function libraryServers(
     const byAgent = spec.type === 'stdio' && runOf(server).mode === 'agent'
     if (byAgent || !router) {
       if (spec.type !== 'stdio' || !transports.mcpStdio) continue
-      const entry = direct(server, nameOf(server), keys, options.platform, options.node)
+      const entry = direct(
+        server,
+        nameOf(server),
+        keys,
+        options.platform,
+        options.node,
+        options.env,
+      )
       if (entry) out.push(entry)
       continue
     }
@@ -310,7 +346,14 @@ export function libraryServers(
     if (!transports.mcpStdio) continue
     if (!options.bridge) {
       if (spec.type === 'stdio') {
-        const entry = direct(server, nameOf(server), keys, options.platform, options.node)
+        const entry = direct(
+          server,
+          nameOf(server),
+          keys,
+          options.platform,
+          options.node,
+          options.env,
+        )
         if (entry) out.push(entry)
         options.fellBack?.(server, 'this build has no bridge, so the agent runs it itself')
       } else {

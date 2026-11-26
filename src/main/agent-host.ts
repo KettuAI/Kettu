@@ -1,3 +1,4 @@
+import type { McpInstallEntry } from '@shared/mcp-discovery'
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
 import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
 import { isAbsolute, join } from 'node:path'
@@ -107,6 +108,7 @@ export interface AgentHostDeps {
   /** An agent's settings tool reads or changes the settings. */
   settingsCall?: (call: unknown) => SettingsCallAnswer
   /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
+  installMcp?(entries: McpInstallEntry[]): Promise<string | null>
   pluginSecret?: (pluginId: unknown, key: unknown, value: unknown) => Promise<string | null>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
@@ -822,6 +824,15 @@ export class AgentHost {
         if (!Number.isSafeInteger(callId)) break
         void trashAll(paths).then((error) =>
           this.host.post({ type: 'trash-result', callId, error }),
+        )
+        break
+      }
+      case 'host:mcp-install': {
+        const { callId, entries } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.installMcp
+        void (run ? run(entries) : Promise.resolve('This build cannot import MCP servers.')).then(
+          (error) => this.host.post({ type: 'mcp-install-result', callId, error }),
         )
         break
       }

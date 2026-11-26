@@ -1,3 +1,4 @@
+import { McpServerPageBody } from './mcp-server-page'
 // A server's listing: what it is and who publishes it, Install or its controls once installed,
 // the facts, what it runs and the values it needs, its links, and a few servers like it.
 
@@ -21,7 +22,7 @@ import {
   type McpSpec,
 } from '@shared/marketplace'
 import { backTo } from '@renderer/app/history'
-import { Dropdown, Icon, Popover } from '@renderer/components/affect/app-shell'
+import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SettingSwitch } from '@renderer/features/settings/controls'
@@ -34,10 +35,9 @@ import {
   type MarketplaceTab,
   type SessionView,
 } from '@renderer/stores/view'
-import { RunSettings } from './run-settings'
-import { installServer, setServerOn } from './actions'
+import { setServerOn } from './actions'
 import { CommunityListingPage, CommunityPreviewPage } from './community'
-import { ConnectButton, ConnectionControls } from './connect'
+import { ConnectButton } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
 import {
   useAgentName,
@@ -46,7 +46,7 @@ import {
   useConnectionText,
   useInstalling,
 } from './hooks'
-import { InstallForm } from './install'
+import { CatalogInstallConfirmation } from './install'
 import {
   asksFirst,
   catalogEntry,
@@ -202,11 +202,11 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
           {entry && oauthFlow(entry.spec) && (!server || installing?.fresh) ? (
             <ConnectButton server={entry} big />
           ) : server ? (
-            oauthFlow(server.spec) ? (
-              <ConnectionControls server={server} onRemoved={back} />
-            ) : (
-              <KeptControls server={server} onUninstalled={back} />
-            )
+            <SettingSwitch
+              label={t('listing.switch', { name: server.title })}
+              checked={server.on}
+              onChange={(on) => void setServerOn(scope, server.id, on)}
+            />
           ) : entry ? (
             oauthFlow(entry.spec) ? (
               <ConnectButton server={entry} big />
@@ -217,33 +217,34 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
         </span>
       </header>
 
-      <Facts listing={listing} server={server} />
+      {server ? (
+        <McpServerPageBody server={server} listing={listing} back={back} />
+      ) : (
+        <>
+          <Facts listing={listing} server={null} />
 
-      <div className="k-mkt-body">
-        <div className="k-mkt-body__main">
-          <Runs
-            spec={server?.spec ?? listing.spec}
-            serverId={server?.id ?? null}
-            service={listing.title}
-          />
-          {server && <RunSettings server={server} />}
-        </div>
-        <Side listing={listing} />
-      </div>
-
-      {related.items.length > 0 && (
-        <section className="ui-as-int-section">
-          <h2 className="ui-as-int-section__title">
-            {related.byPublisher && listing.publisher
-              ? t('listing.relatedFrom', { publisher: listing.publisher })
-              : t('listing.related')}
-          </h2>
-          <div className="ui-as-int-grid">
-            {related.items.map((item) => (
-              <RelatedRow key={item.id} server={item} tab={tab} />
-            ))}
+          <div className="k-mkt-body">
+            <div className="k-mkt-body__main">
+              <Runs spec={listing.spec} serverId={null} service={listing.title} />
+            </div>
+            <Side listing={listing} />
           </div>
-        </section>
+
+          {related.items.length > 0 && (
+            <section className="ui-as-int-section">
+              <h2 className="ui-as-int-section__title">
+                {related.byPublisher && listing.publisher
+                  ? t('listing.relatedFrom', { publisher: listing.publisher })
+                  : t('listing.related')}
+              </h2>
+              <div className="ui-as-int-grid">
+                {related.items.map((item) => (
+                  <RelatedRow key={item.id} server={item} tab={tab} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </ListingFrame>
   )
@@ -271,38 +272,19 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
 /** Install, at once or through the install form when the server asks for values. */
 export function InstallButton({ server }: { server: CatalogServer }) {
   const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
   const [open, setOpen] = useState(false)
   const busy = useInstalling(server.id)
-  const asks = asksFirst(server.spec)
   return (
-    <span className="ui-as-anchor">
-      <Button
-        loading={busy}
-        aria-expanded={asks ? open : undefined}
-        onClick={() => {
-          if (busy) return
-          if (asks) setOpen((o) => !o)
-          else void installServer(scope, server, 'all', {})
-        }}
-      >
-        {busy ? t('install.installing') : asks ? t('row.setUp') : t('row.install')}
+    <>
+      <Button loading={busy} onClick={() => setOpen(true)}>
+        {busy
+          ? t('install.installing')
+          : asksFirst(server.spec)
+            ? t('row.setUp')
+            : t('row.install')}
       </Button>
-      <Popover
-        open={open}
-        onClose={() => setOpen(false)}
-        align="end"
-        className="ui-as-menu k-mkt-install-pop"
-      >
-        <InstallForm
-          server={server}
-          onDone={(agents, values) => {
-            setOpen(false)
-            void installServer(scope, server, agents, values)
-          }}
-        />
-      </Popover>
-    </span>
+      <CatalogInstallConfirmation server={server} open={open} setOpen={setOpen} />
+    </>
   )
 }
 
