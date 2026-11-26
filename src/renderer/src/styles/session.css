@@ -547,6 +547,8 @@
 }
 .ks-thread .ui-tcc > .ui-tcc__top {
   position: relative;
+  /* Keep the step's dot above the rail (z-index: 1) even while ks-step-rise creates a stacking context. */
+  z-index: 2;
   margin-left: var(--ks-card-x);
 }
 .ks-thread .ui-tcc > .ui-tcc__top,
@@ -933,13 +935,20 @@
 
 /* A step that arrives while shown: the rail draws down to it, its dot pops and its row rises. */
 .ks-thread .ui-tcc-group__list > .ui-tcc:has(+ .ks-step-new)::before {
-  animation: ks-step-draw var(--duration-slow) var(--ease-out-quint) both;
+  animation: ks-step-draw var(--duration-slow) var(--ease-out-quint) backwards;
 }
 .ks-thread .ui-tcc-group__list > .ks-step-new > .ui-tcc__top::after {
-  animation: ks-step-pop var(--duration-slow) var(--ease-out-quint) both;
+  animation: ks-step-pop var(--duration-slow) var(--ease-out-quint) backwards;
 }
 .ks-thread .ui-tcc-group__list > .ks-step-new > .ui-tcc__top {
-  animation: ks-step-rise var(--duration-slow) var(--ease-out-quint) both;
+  animation: ks-step-rise var(--duration-slow) var(--ease-out-quint) backwards;
+}
+/* Release finished affectUI entrance animations in the thread so they do not stay composited and
+   split rail segments across Overlap layers with different 1x subpixel alignment. */
+.ks-thread .ui-tcc__status,
+.ks-thread .ui-tcc-group__title,
+.ks-thread .ui-tcc-group__stack .ui-tcc__icon {
+  animation-fill-mode: backwards;
 }
 
 /* Opening a step or a run: the fold opens in 320 ms while what it holds rises out of a soft blur
@@ -1145,9 +1154,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ks-thread .ui-tcc-group__list > .ui-tcc::before,
+  .ks-thread .ui-tcc-group__list > .ui-tcc:has(+ .ks-step-new)::before,
   .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top,
-  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::before,
+  .ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before,
   .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after,
   .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
   .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
@@ -1171,6 +1180,10 @@
   & .ui-tcc__glint {
     display: none;
   }
+  & .ks-thread .ui-tcc-group__list > .ui-tcc::before,
+  & .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top,
+  & .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::before,
+  & .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after,
   & .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
   & .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
   & .ks-fold-in,
