@@ -201,6 +201,7 @@ import { InstalledScripts } from './plugin-runtime/installed'
 import { PluginRefs } from './plugin-runtime/refs'
 import { PluginViews } from './plugin-runtime/views'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
+import { createHttpsTransport, type HttpTransport } from './plugin-runtime/network'
 import { PluginStorage } from './plugin-runtime/storage'
 import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
@@ -622,6 +623,8 @@ export class AgentHost {
   )
   /** The themes the plugins that are on bring, listed where main or the daemon reads them. */
   private readonly pluginThemes: PluginThemeIndex
+  /** The transport behind plugin scripts' `network.fetch`, through the agents' current proxy. */
+  private readonly pluginTransport: HttpTransport
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
@@ -658,6 +661,7 @@ export class AgentHost {
         answer: (pluginId, request, decision, from) =>
           this.pluginChannels.answer(pluginId, request, decision, from),
       },
+      transport: (request) => this.pluginTransport(request),
     }),
     onStatus: () => this.hub.broadcast({ type: 'plugins.changed' }),
     log: (level, message) => writeLog(level, 'plugins', message),
@@ -737,6 +741,10 @@ export class AgentHost {
     this.env.setConfigFolders(configFolders(catalog, options.settings))
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
     const net = proxyFetch(() => this.env.agentEnv(), platform)
+    this.pluginTransport = createHttpsTransport({
+      env: () => this.env.agentEnv(),
+      platform,
+    })
     this.media = new MediaService({
       platform,
       homeDir: options.homeDir ?? os.homedir(),
