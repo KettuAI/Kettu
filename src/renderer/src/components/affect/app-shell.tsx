@@ -3526,13 +3526,19 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
 /* Keyboard focus on a menu item shows like the pointer's hover */
 .ui-as-menu__item:focus-visible { background: var(--hover); color: var(--ink); }
 
-/* Touch screens: no hover – the row tools stay in view (just ⋯; pinning is in its menu), and targets grow to a finger's size */
-@media (hover: none) {
+/* Touch screens and phone-width viewports: no hover – the row tools stay in view (pinning moves into ⋯),
+   folder arrows remain visible, and each row reserves room for its visible buttons */
+@media (hover: none), (pointer: coarse), (max-width: 719px) {
   .ui-as-chat-row__tools, .ui-as-chat-folder-row .ui-as-chat-row__tools { opacity: 1; }
+  .ui-as-chat-folder__arrow { opacity: 1; }
   .ui-as-chat-row__pin { display: none; }
   .ui-as-chat-row .ui-as-chat-row__link, .ui-as-chat-folder-row > .ui-as-chat-folder { padding-right: 34px; }
   .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
   .ui-as-chat-folder-row:is(:hover, :has(:focus-visible), [data-menu]) > .ui-as-chat-folder { padding-right: 34px; }
+  .ui-as-chat-row:has(> .ui-as-chat-row__tools > :not(.ui-as-chat-row__pin) ~ :not(.ui-as-chat-row__pin)) .ui-as-chat-row__link,
+  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > :not(.ui-as-chat-row__pin) ~ :not(.ui-as-chat-row__pin)) > .ui-as-chat-folder { padding-right: 60px; }
+  .ui-as-chat-row:not(:has(> .ui-as-chat-row__tools > :not(.ui-as-chat-row__pin))) .ui-as-chat-row__link,
+  .ui-as-chat-folder-row:not(:has(> .ui-as-chat-row__tools > :not(.ui-as-chat-row__pin))) > .ui-as-chat-folder { padding-right: 6px; }
   .ui-as-chat-row__tool { color: var(--faint); }
 }
 @media (pointer: coarse) {

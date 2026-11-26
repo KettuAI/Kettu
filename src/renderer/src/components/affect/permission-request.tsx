@@ -870,7 +870,7 @@ const css = /* css */ `
   .ui-prc__kbd { display: none; }
 }
 /* Touch: no keyboard hints, bigger targets */
-@media (hover: none) {
+@media (hover: none), (pointer: coarse) {
   .ui-prc__kbd { display: none; }
 }
 @media (pointer: coarse) {

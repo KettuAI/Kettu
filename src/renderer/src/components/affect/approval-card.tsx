@@ -1095,7 +1095,7 @@ const css = /* css */ `
   .ui-apc__details { column-gap: 12px; }
 }
 /* Touch screens have no shortcuts */
-@media (hover: none) {
+@media (hover: none), (pointer: coarse) {
   .ui-apc__kbd { display: none; }
 }
 

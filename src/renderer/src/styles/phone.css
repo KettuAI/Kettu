@@ -149,10 +149,13 @@
     :is(
       [data-slot='kbd'],
       [data-slot='kbd-group'],
+      [data-slot='dropdown-menu-shortcut'],
+      [data-slot='context-menu-shortcut'],
       .ui-as-side__search kbd,
       .ui-as-menu__kbd,
       .ui-asw__kbd,
       .ui-pmc__kbd,
+      .kettu-nav-shortcut,
       .kc-hint
     ) {
     display: none;

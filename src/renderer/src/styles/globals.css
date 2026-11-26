@@ -45,6 +45,8 @@
 /* A phone's width, where the web client lays each surface out for a phone (styles/phone.css). The
    desktop window is never this narrow. */
 @custom-variant phone (@media (max-width: 719px));
+/* Touch devices or phone widths where hover is absent or unreliable. */
+@custom-variant no-hover (@media (hover: none), (pointer: coarse), (max-width: 719px));
 
 /* Reduce motion follows the OS, and Settings › Appearance can force it on. */
 @custom-variant motion-reduce {
@@ -1780,7 +1782,7 @@
 .block-picture:focus-within > .block-picture-actions {
   opacity: 1;
 }
-@media (hover: none) {
+@media (hover: none), (pointer: coarse), (max-width: 719px) {
   .block-picture-actions {
     opacity: 1;
   }

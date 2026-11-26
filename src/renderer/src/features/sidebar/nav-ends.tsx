@@ -55,9 +55,9 @@ const ROW_END = 'ml-auto shrink-0 text-[12px] font-normal text-(--faint) tabular
 /** A row's shortcut, a hint for the eye; the shortcut sheet lists it for everyone. */
 export function NavShortcut({ keys }: { keys: string }) {
   return (
-    <span aria-hidden className={ROW_END}>
+    <kbd aria-hidden className={cn('kettu-nav-shortcut font-sans phone:hidden', ROW_END)}>
       {formatShortcut(keys)}
-    </span>
+    </kbd>
   )
 }
 

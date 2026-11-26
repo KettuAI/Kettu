@@ -480,7 +480,7 @@ export const css = /* css */ `
 :where(.dark, [data-theme="dark"]) .ui-ss-badge[data-tone="ok"] { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
 .ui-ss-remove { flex: none; width: 28px; height: 28px; opacity: 0; transition: opacity 140ms ease; }
 .ui-ss-domain:hover .ui-ss-remove, .ui-ss-remove:focus-visible { opacity: 1; }
-@media (hover: none) { .ui-ss-remove { opacity: 1; } }
+@media (hover: none), (pointer: coarse), (max-width: 719px) { .ui-ss-remove { opacity: 1; } }
 .ui-ss-range { flex: none; white-space: nowrap; font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12.5px; color: var(--strong); }
 .ui-ss-empty { margin: 0; padding: 18px 16px; font-size: 13px; color: var(--muted); }
 .ui-ss-dns { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 16px 12px; box-shadow: inset 0 0.5px 0 var(--line); font-size: 12.5px; line-height: 18px; color: var(--muted); }

@@ -241,7 +241,7 @@ function HarnessRow({ item }: { item: HarnessItem }) {
           onClick={() => skipHarnessUpdates([offer.agentId])}
           className={cn(
             CARD_BUTTON,
-            'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+            'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 no-hover:opacity-100',
           )}
         >
           {t('review.skip')}
