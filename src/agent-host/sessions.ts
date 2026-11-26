@@ -5023,8 +5023,9 @@ export class SessionManager {
     }
     const role = params.role === undefined ? null : await this.resolveRole(params.role)
     const roleTools = role ? this.deps.commands?.extra(params.agentId, role.needs) : undefined
-    // A prepared session's agent already works in the project's folder, so a worktree starts anew,
-    // and it is attached already, so a command that names more tools or a role starts anew too.
+    // A prepared session's agent already works in its folder (the project's or its parent's
+    // worktree), so a new worktree starts anew, and it is attached already, so a command that
+    // names more tools or a role starts anew too.
     if (
       params.preparedId !== undefined &&
       params.worktree === undefined &&
@@ -5034,6 +5035,7 @@ export class SessionManager {
       const adopted = await this.adopt({
         agentId: params.agentId,
         preparedId: params.preparedId,
+        parentId: params.parentId,
         prompt,
         device: params.device,
       })
@@ -5421,14 +5423,17 @@ export class SessionManager {
   ): Promise<Live> {
     const { projects, scratch } = this.deps
     let projectPath: string
+    let worktree: WorktreeRecord | undefined
     if (params.parentId !== undefined) {
-      projectPath = this.recordOf(params.parentId).projectPath
+      const parent = this.recordOf(params.parentId)
+      projectPath = parent.projectPath
       if (
         params.projectPath !== null &&
         !samePath(params.projectPath, projectPath, this.deps.platform)
       ) {
         throw invalidParams(t('session.subSessionProject'))
       }
+      if (parent.worktree) worktree = { ...parent.worktree }
     } else {
       projectPath =
         params.projectPath === null
@@ -5441,6 +5446,7 @@ export class SessionManager {
       agentId: params.agentId,
       acpSessionId: '',
       projectPath,
+      ...(worktree ? { worktree } : {}),
       title: null,
       createdAt: now,
       updatedAt: now,
@@ -5494,12 +5500,16 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     let attach: SessionOptions
+    let cwd: string
     try {
+      cwd = await this.cwdOf(live)
+      if (gone()) throw removedWhileStarting()
       attach = await this.attachOptions(live.id, live.record, runtime)
       if (this.startsInFullAccess(live, { ...this.startModeOf(agentId), ...picks })) {
         attach = { ...attach, fullAccess: true }
       }
-      setup = await runtime.connection.newSession(workDir(live.record), attach)
+      if (gone()) throw removedWhileStarting()
+      setup = await runtime.connection.newSession(cwd, attach)
     } catch (error) {
       if (gone()) throw removedWhileStarting()
       const mapped = agentError(error)
@@ -5509,7 +5519,7 @@ export class SessionManager {
     this.deps.prepared?.add({
       agentId,
       acpSessionId: setup.sessionId,
-      cwd: workDir(live.record),
+      cwd,
     })
     if (gone()) {
       await this.removeUnlisted(live.id, runtime, setup.sessionId)
@@ -5616,11 +5626,13 @@ export class SessionManager {
   private async adopt(params: {
     agentId: AgentId
     preparedId: string
+    parentId?: string
     prompt: UserContent[] | undefined
     device?: FromDevice
   }): Promise<SessionSummary | null> {
     const asked = this.live.get(params.preparedId)
     if (!asked?.prepared || asked.record.agentId !== params.agentId) return null
+    if (asked.record.parentId !== (params.parentId ?? null)) return null
     const { portId, key } = asked.prepared
     const slot = this.preparedSlots.get(portId)
     const live = slot?.stale && slot.next?.prepared?.key === key ? slot.next : asked
@@ -5631,6 +5643,20 @@ export class SessionManager {
     }
     if (!live.prepared || this.live.get(live.id) !== live || !live.connection) return null
     if (live.thread.session.status !== 'ready') return null
+    if (live.record.parentId !== null) {
+      const parent =
+        this.live.get(live.record.parentId)?.record ?? this.records.get(live.record.parentId)
+      if (!parent) return null
+      const expected = parent.worktree?.path ?? null
+      const actual = live.record.worktree?.path ?? null
+      if (
+        (expected === null) !== (actual === null) ||
+        (expected !== null && actual !== null && !samePath(expected, actual, this.deps.platform))
+      ) {
+        return null
+      }
+      if (live.record.worktree?.removed !== undefined) return null
+    }
     const prepared = live.prepared
     live.prepared = null
     prepared.unwatch?.()
@@ -5651,7 +5677,18 @@ export class SessionManager {
     const entryId = prompt ? this.addPrompt(live, prompt, now, undefined, params.device) : null
     this.save(live)
     this.touch(live.id)
-    if (prompt && entryId) this.startTurn(live, prompt, now, entryId, portId)
+    if (prompt && entryId) {
+      if (this.waitsForWorktree(live)) {
+        live.heldFirst = {
+          content: prompt,
+          entryId,
+          ...(params.device ? { device: params.device } : {}),
+          portId,
+        }
+      } else {
+        this.startTurn(live, prompt, now, entryId, portId)
+      }
+    }
     return this.summary(live.id)
   }
 
@@ -12560,7 +12597,11 @@ export class SessionManager {
     const state = await manager.inspect(record.projectPath, worktree)
     const others = this.worktreeUsers(worktree.path)
       .filter(
-        (user) => user.id !== sessionId && user.origin !== 'subagent' && !this.isArchived(user),
+        (user) =>
+          user.id !== sessionId &&
+          user.origin !== 'subagent' &&
+          !this.live.get(user.id)?.prepared &&
+          !this.isArchived(user),
       )
       .filter((user) => this.topOf(user).id !== this.topOf(record).id)
       .map((user) => user.id)
@@ -12583,10 +12624,16 @@ export class SessionManager {
       throw notFound(t('session.noWorktreeToRemove'))
     }
     const users = this.worktreeUsers(worktree.path)
-    await this.closeAll(
-      users.filter((user) => this.live.has(user.id)),
-      true,
-    )
+    const preparedUsers: Live[] = []
+    const liveUsers: SessionRecord[] = []
+    for (const user of users) {
+      const live = this.live.get(user.id)
+      if (!live) continue
+      if (live.prepared) preparedUsers.push(live)
+      else liveUsers.push(user)
+    }
+    await Promise.all(preparedUsers.map((live) => this.dropPrepared(live)))
+    await this.closeAll(liveUsers, true)
     manager.stop(worktree.path)
     this.dropBranchName(worktree.path)
     const result = await manager.remove(record.projectPath, worktree, { branch, expected })
