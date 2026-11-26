@@ -482,7 +482,7 @@ describe('release notes contributor extraction and template rendering', () => {
     ).toEqual([2675, 2676, 2680])
   })
 
-  it('formats bilingual release notes with folded Simplified Chinese and bottom Contributors row', () => {
+  it('formats flat bilingual release notes without details folding or duplicate Contributors section', () => {
     expect(formatAttribution([2675], ['akatsukiro'], 'en')).toBe('(#2675, thanks @akatsukiro)')
     expect(formatAttribution([2675], ['akatsukiro'], 'zh-CN')).toBe('(#2675，感谢 @akatsukiro)')
 
@@ -513,9 +513,9 @@ describe('release notes contributor extraction and template rendering', () => {
 
     expect(md).toContain('## What changed')
     expect(md).toContain('- keep timeline dots above rail (#2675, thanks @akatsukiro)')
-    expect(md).toContain('<details>\n<summary>简体中文更新说明</summary>\n\n## 中文')
-    expect(md).toContain('- keep timeline dots above rail (#2675，感谢 @akatsukiro)')
-    expect(md).toContain('## Contributors')
-    expect(md).toContain('https://avatars.githubusercontent.com/akatsukiro?s=96')
+    expect(md).toContain('\n\n## 中文\n\n- keep timeline dots above rail (#2675，感谢 @akatsukiro)')
+    expect(md).not.toContain('<details>')
+    expect(md).not.toContain('<summary>')
+    expect(md).not.toContain('## Contributors')
   })
 })

@@ -1,9 +1,8 @@
 // @ts-check
-// Extracts external PR and linked-issue contributors for a release range or explicit issue/PR list
-// and outputs:
-//   1. Per-PR / per-issue external @login attribution map
-//   2. A bilingual collapsible GitHub Release Notes draft (English expanded, Simplified Chinese
-//      folded in <details>, and a compact Contributors avatar row at the bottom).
+// 提取发布区间或指定 Issue/PR 列表中的外部贡献者，并输出：
+//   1. 每条 PR / Issue 的外部 @login 致谢清单
+//   2. 平铺双语 GitHub Release Notes 草稿（英文 ## What changed + 中文 ## 中文，
+//      条目内保留 @login 致谢，交给 GitHub Releases 原生 Contributors 栏展示）。
 //
 // Usage:
 //   node tools/contributors/release-notes.mjs --from v0.1.25 --to HEAD

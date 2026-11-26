@@ -1,5 +1,5 @@
 // @ts-check
-// 社区贡献者聚合、综合贡献值排序、README 头像墙渲染、关联 Issue 解析与双语折叠发布说明模板纯函数。
+// 社区贡献者聚合、综合贡献值排序、README 头像墙渲染、关联 Issue 解析与双语平铺发布说明模板纯函数。
 
 export const DEFAULT_REPO = 'KettuAI/Kettu'
 
@@ -592,26 +592,17 @@ export function formatAttribution(refs, credits, locale) {
 }
 
 /**
- * 渲染附在 GitHub Release Notes 底部的单版本贡献者头像行。
- *
- * @param {ReadonlyArray<{ login: string, avatarUrl?: string | null }>} contributors
- * @returns {string}
- */
-export function renderReleaseContributorsSection(contributors) {
-  if (contributors.length === 0) return ''
-  return ['## Contributors', '', renderAvatarWall(contributors, { size: 36 })].join('\n')
-}
-
-/**
- * 渲染兼容桌面端更新弹窗解析器的双语折叠 GitHub Release Notes 草稿。
+ * 渲染兼容桌面端更新弹窗解析器的平铺双语 GitHub Release Notes 草稿：
+ * 英文区块与中文区块平铺展示（不使用 `<details>` 折叠），正文条目内保留 `@login` 致谢，
+ * 不在文末重复拼接手写 `## Contributors` 头像块（由 GitHub Releases 原生 Contributors 栏统一展示）。
  *
  * @param {{
  *   entries: ReadonlyArray<ReleaseEntry>
- *   contributors: ReadonlyArray<Contributor>
+ *   contributors?: ReadonlyArray<Contributor>
  * }} input
  * @returns {string}
  */
-export function renderReleaseNotesTemplate({ entries, contributors }) {
+export function renderReleaseNotesTemplate({ entries }) {
   const enBullets = entries.map((entry) => {
     const refs = entry.linkedIssues.length > 0 ? entry.linkedIssues : [entry.number]
     const suffix = formatAttribution(refs, entry.credits, 'en')
@@ -631,20 +622,10 @@ export function renderReleaseNotesTemplate({ entries, contributors }) {
     '',
     ...(enBullets.length > 0 ? enBullets : ['- <!-- Summarize notable changes here. -->']),
     '',
-    '<details>',
-    '<summary>简体中文更新说明</summary>',
-    '',
     '## 中文',
     '',
     ...(zhBullets.length > 0 ? zhBullets : ['- <!-- 在此处填写中文更新说明。 -->']),
-    '',
-    '</details>',
   ]
-
-  const creditsSection = renderReleaseContributorsSection(contributors)
-  if (creditsSection) {
-    sections.push('', creditsSection)
-  }
 
   return `${sections.join('\n')}\n`
 }
