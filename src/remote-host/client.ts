@@ -284,6 +284,8 @@ export interface HostClientOptions {
   regionsChanged?(hostId: string): void
   /** How often the network interfaces are read for a change; null reads them never. */
   networkCheckMs?: number | null
+  /** Local ports owned by Kettu itself that browser forwards must never bind directly. */
+  isForwardPortReserved?(port: number): boolean
 }
 
 type SessionEnd = { welcomed: boolean; reason: ClosingReason | null }
@@ -548,6 +550,9 @@ class HostLink {
       sendBytes: (stream, data) =>
         this.session?.open ? this.session.channel.sendBytes(stream, data) : null,
       nextStream: () => this.nextStream(),
+      ...(client.options.isForwardPortReserved
+        ? { isPortReserved: client.options.isForwardPortReserved }
+        : {}),
       log: client.options.log,
     })
     this.requests = new LinkRequests({
@@ -687,9 +692,13 @@ class HostLink {
   }
 
   /** A port on this computer that reaches `forward` on the host; null without its session. */
-  forward(sessionId: string, forward: BrowserForward): Promise<number | null> {
+  forward(
+    sessionId: string,
+    forward: BrowserForward,
+    reservedPorts?: readonly number[],
+  ): Promise<number | null> {
     if (!this.port) return Promise.resolve(null)
-    return this.forwards.listen(sessionId, forward)
+    return this.forwards.listen(sessionId, forward, reservedPorts)
   }
 
   /** The session's page is gone, so its forwards go. */
@@ -2683,8 +2692,13 @@ export class HostClient {
   }
 
   /** A port on this computer that reaches a dev server on a host; null when none can. */
-  forward(id: string, sessionId: string, forward: BrowserForward): Promise<number | null> {
-    return this.links.get(id)?.forward(sessionId, forward) ?? Promise.resolve(null)
+  forward(
+    id: string,
+    sessionId: string,
+    forward: BrowserForward,
+    reservedPorts?: readonly number[],
+  ): Promise<number | null> {
+    return this.links.get(id)?.forward(sessionId, forward, reservedPorts) ?? Promise.resolve(null)
   }
 
   closeForwards(id: string, sessionId: string): void {

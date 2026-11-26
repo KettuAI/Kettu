@@ -663,6 +663,7 @@ export class RemoteHost {
     hostId: string,
     sessionId: string,
     forward: BrowserForward,
+    reservedPorts?: readonly number[],
   ): Promise<number | null> {
     if (!this.hostList?.some((entry) => entry.id === hostId)) return null
     const answer = await this.request((requestId) => ({
@@ -671,6 +672,7 @@ export class RemoteHost {
       hostId,
       sessionId,
       forward,
+      ...(reservedPorts && reservedPorts.length > 0 ? { reservedPorts: [...reservedPorts] } : {}),
     }))
     if (answer?.type !== 'remote-host:forwarding') return null
     const { port } = answer

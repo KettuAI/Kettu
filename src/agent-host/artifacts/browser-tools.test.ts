@@ -21,6 +21,42 @@ function tools() {
 
 const caller = { sessionId: 's1', project: '/project' }
 
+describe('browser_navigate forward_ports arguments', () => {
+  it('accepts and deduplicates valid forward_ports for local dev server URLs', async () => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_navigate', {
+      url: 'http://localhost:3100/',
+      forward_ports: [8080, 8080, 9000],
+    })
+    expect(result.isError).toBeUndefined()
+    expect(call).toHaveBeenCalledOnce()
+    expect(call.mock.calls[0][0]).toMatchObject({
+      tool: 'browser_navigate',
+      args: { url: 'http://localhost:3100/', forward_ports: [8080, 9000] },
+    })
+  })
+
+  it.each([
+    [{ url: 'https://example.com/', forward_ports: [8080] }, /local dev server URL/],
+    [{ url: 'http://localhost:3100/', forward_ports: [] }, /1 to 8 TCP ports/],
+    [
+      { url: 'http://localhost:3100/', forward_ports: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+      /1 to 8 TCP ports/,
+    ],
+    [{ url: 'http://localhost:3100/', forward_ports: [0] }, /1 to 65535/],
+    [{ url: 'http://localhost:3100/', forward_ports: [65536] }, /1 to 65535/],
+    [{ url: 'http://localhost:3100/', forward_ports: [8080.5] }, /1 to 65535/],
+    [{ url: 'http://localhost:3100/', forward_ports: ['8080'] }, /1 to 65535/],
+  ])('refuses %j before main sees it', async (input, message) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_navigate', input)
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toMatchObject({ code: 'invalid' })
+    expect(String((result.content[0] as { text: string }).text)).toMatch(message)
+    expect(call).not.toHaveBeenCalled()
+  })
+})
+
 describe('browser_tabs arguments', () => {
   it('is offered with its actions', () => {
     const tool = BROWSER_TOOLS.find((t) => t.name === 'browser_tabs')

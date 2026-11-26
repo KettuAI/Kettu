@@ -12,7 +12,7 @@ import type {
   RemoteHostStatus,
   RemoteHostToMain,
 } from '@shared/host-control'
-import { isBrowserForward } from '@shared/browser'
+import { isBrowserForward, isBrowserForwardPort } from '@shared/browser'
 import { setLocale, t } from '@shared/hosts-text'
 import { isLocale } from '@shared/locale'
 import { writeLog } from '@shared/log/process-log'
@@ -579,6 +579,12 @@ export function startRemoteHost(
           return added !== null
         },
       },
+      isForwardPortReserved: (port) => {
+        const direct = live?.direct.status
+        if (direct?.state === 'listening' && direct.port === port) return true
+        if (live?.loopback?.port === port) return true
+        return false
+      },
       log,
     })
     started.start()
@@ -1083,7 +1089,7 @@ export function startRemoteHost(
         break
       }
       case 'remote-host:forward': {
-        const { requestId, hostId, sessionId, forward } = message
+        const { requestId, hostId, sessionId, forward, reservedPorts } = message
         if (!Number.isSafeInteger(requestId)) break
         const answer = (port: number | null): void =>
           send({ type: 'remote-host:forwarding', requestId, port })
@@ -1095,8 +1101,11 @@ export function startRemoteHost(
           answer(null)
           break
         }
+        const reserved = Array.isArray(reservedPorts)
+          ? reservedPorts.filter(isBrowserForwardPort)
+          : undefined
         const started = withRunning(async () =>
-          answer(client ? await client.forward(hostId, sessionId, forward) : null),
+          answer(client ? await client.forward(hostId, sessionId, forward, reserved) : null),
         )
         if (!started) answer(null)
         break

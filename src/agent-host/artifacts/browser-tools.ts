@@ -11,6 +11,9 @@ import type {
 import {
   BROWSER_TAB_ACTIONS,
   BROWSER_TOOL_NAMES,
+  isBrowserForwardPort,
+  loopbackForward,
+  MAX_COMPANION_FORWARDS,
   MAX_PAGE_SIDE,
   MAX_SESSION_TABS,
   MIN_PAGE_SIDE,
@@ -184,7 +187,14 @@ export const BROWSER_TOOLS: Tool[] = [
       'are the user’s to open. After you change a web page, open it here to check it before you ' +
       'finish, without being asked: the user watches this browser.',
     inputSchema: object(
-      { url: { type: 'string', maxLength: 8_192, description: 'An absolute http(s) address.' } },
+      {
+        url: { type: 'string', maxLength: 8_192, description: 'An absolute http(s) address.' },
+        forward_ports: {
+          type: 'array',
+          items: { type: 'integer' },
+          description: 'Extra local ports the page calls (e.g. API).',
+        },
+      },
       ['url'],
     ),
     outputSchema: output(PAGE),
@@ -551,7 +561,7 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
   }
   const o = (value ?? {}) as Args
   const allowed: Record<BrowserToolName, string[]> = {
-    browser_navigate: ['url'],
+    browser_navigate: ['url', 'forward_ports'],
     browser_navigate_back: [],
     browser_reload: [],
     browser_snapshot: [],
@@ -606,6 +616,22 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
       const url = text('url', true, 8_192)!
       if (url.trim() === '') throw invalid('url must not be empty.')
       args.url = url
+      if (o.forward_ports !== undefined) {
+        if (
+          !Array.isArray(o.forward_ports) ||
+          o.forward_ports.length === 0 ||
+          o.forward_ports.length > MAX_COMPANION_FORWARDS
+        ) {
+          throw invalid(`forward_ports must list 1 to ${MAX_COMPANION_FORWARDS} TCP ports.`)
+        }
+        if (!o.forward_ports.every(isBrowserForwardPort)) {
+          throw invalid('forward_ports must contain whole port numbers from 1 to 65535.')
+        }
+        if (loopbackForward(url) === null) {
+          throw invalid('forward_ports can only be used when opening a local dev server URL.')
+        }
+        args.forward_ports = [...new Set(o.forward_ports)]
+      }
       break
     }
     case 'browser_click': {

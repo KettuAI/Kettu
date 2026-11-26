@@ -694,6 +694,8 @@ export type MainToRemoteHost =
       hostId: string
       sessionId: string
       forward: BrowserForward
+      /** Local ports belonging to Kettu itself that the forward must never try to bind directly. */
+      reservedPorts?: number[]
     }
   // The session's page is gone: its forwards on that host close.
   | { type: 'remote-host:forward-close'; hostId: string; sessionId: string }

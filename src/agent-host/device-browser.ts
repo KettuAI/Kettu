@@ -5,10 +5,13 @@
 
 import type { HostEvent } from '@shared/agent-host'
 import {
+  isBrowserForwardPort,
   loopbackForward,
+  MAX_COMPANION_FORWARDS,
   type BrowserCallAnswer,
   type BrowserCallRequest,
   type BrowserDeviceCall,
+  type BrowserForward,
 } from '@shared/browser'
 import type { PortDevice } from '@shared/remote/device'
 import type { TurnSender } from './sessions'
@@ -121,7 +124,8 @@ export class DeviceBrowserCalls {
   call(portId: string, request: BrowserCallRequest): Promise<BrowserCallAnswer> {
     const url = request.tool === 'browser_navigate' ? request.args.url : undefined
     const forward = typeof url === 'string' ? loopbackForward(url) : null
-    if (forward && forward.port === this.deps.servicePort()) {
+    const servicePort = this.deps.servicePort()
+    if (forward && forward.port === servicePort) {
       return Promise.resolve({
         error: {
           code: 'not_allowed',
@@ -129,7 +133,29 @@ export class DeviceBrowserCalls {
         },
       })
     }
-    const call: BrowserDeviceCall = { ...request, ...(forward ? { forward } : {}) }
+    const forwards: BrowserForward[] = []
+    if (forward && Array.isArray(request.args.forward_ports)) {
+      const seen = new Set<number>([forward.port])
+      for (const value of request.args.forward_ports.slice(0, MAX_COMPANION_FORWARDS)) {
+        if (!isBrowserForwardPort(value)) continue
+        if (value === servicePort) {
+          return Promise.resolve({
+            error: {
+              code: 'not_allowed',
+              message: 'That port is Kettu’s own service on this host, which pages may not open.',
+            },
+          })
+        }
+        if (seen.has(value)) continue
+        seen.add(value)
+        forwards.push({ host: forward.host, port: value })
+      }
+    }
+    const call: BrowserDeviceCall = {
+      ...request,
+      ...(forward ? { forward } : {}),
+      ...(forwards.length > 0 ? { forwards } : {}),
+    }
     return new Promise((resolve) => {
       this.calls.set(request.callId, { portId, resolve })
       this.deps.send(portId, { type: 'browser.call', call })

@@ -6,8 +6,10 @@
 import {
   BROWSER_TOOL_NAMES,
   isBrowserForward,
+  isBrowserForwardPort,
   isOriginDecision,
   loopbackForward,
+  MAX_COMPANION_FORWARDS,
   type BrowserCallAnswer,
   type BrowserDeviceCall,
   type BrowserForward,
@@ -32,10 +34,8 @@ export function onHost(hostId: string, path: string): string {
 /** A host's call as main reads it, or null when it is not one. */
 export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
   if (typeof value !== 'object' || value === null) return null
-  const { callId, sessionId, tool, args, projectPath, forward, allowTab } = value as Record<
-    string,
-    unknown
-  >
+  const { callId, sessionId, tool, args, projectPath, forward, forwards, allowTab } =
+    value as Record<string, unknown>
   if (typeof callId !== 'number' || !Number.isSafeInteger(callId) || callId < 1) return null
   if (typeof sessionId !== 'string' || sessionId === '' || sessionId.length > MAX_ID_CHARS) {
     return null
@@ -44,6 +44,15 @@ export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
   if (typeof args !== 'object' || args === null || Array.isArray(args)) return null
   if (typeof projectPath !== 'string' || projectPath.length > MAX_PATH_CHARS) return null
   if (forward !== undefined && !isBrowserForward(forward)) return null
+  if (forwards !== undefined) {
+    if (
+      !Array.isArray(forwards) ||
+      forwards.length > MAX_COMPANION_FORWARDS ||
+      !forwards.every(isBrowserForward)
+    ) {
+      return null
+    }
+  }
   if (allowTab !== undefined && (typeof allowTab !== 'string' || allowTab.length > MAX_ID_CHARS)) {
     return null
   }
@@ -54,6 +63,7 @@ export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
     args: args as Record<string, unknown>,
     projectPath,
     ...(forward ? { forward } : {}),
+    ...(forwards && forwards.length > 0 ? { forwards } : {}),
     ...(typeof allowTab === 'string' ? { allowTab } : {}),
   }
 }
@@ -234,6 +244,14 @@ export class RemoteBrowser {
     return this.hosts.has(sessionId)
   }
 
+  /** The session's browser closed, freeing its local forwarded ports while the session stays. */
+  pageClosed(sessionId: string): void {
+    const hostId = this.hosts.get(sessionId)
+    if (!hostId) return
+    this.mappings.delete(sessionId)
+    this.deps.closeForwards(hostId, sessionId)
+  }
+
   /** The session's page is gone with its session: its forwards close. */
   pageRemoved(sessionId: string): void {
     this.local.delete(sessionId)
@@ -251,6 +269,12 @@ export class RemoteBrowser {
     }
   }
 
+  private rememberMapping(sessionId: string, mapping: Mapping): void {
+    if (mapping.local === mapping.remote) return
+    const known = (this.mappings.get(sessionId) ?? []).filter((m) => m.local !== mapping.local)
+    this.mappings.set(sessionId, [...known, mapping])
+  }
+
   private async answer(hostId: string, call: BrowserDeviceCall): Promise<BrowserCallAnswer> {
     const { callId, sessionId, tool } = call
     const owner = this.hosts.get(sessionId)
@@ -259,10 +283,28 @@ export class RemoteBrowser {
     }
     this.hosts.set(sessionId, hostId)
     let args = call.args
+    const remappedCompanions: { remotePort: number; localPort: number }[] = []
     if (tool === 'browser_navigate' && call.forward && typeof args.url === 'string') {
       const forward = loopbackForward(args.url)
       if (forward?.host !== call.forward.host || forward.port !== call.forward.port) {
         return { error: { code: 'invalid', message: 'The forward does not match the address.' } }
+      }
+      const extras = call.forwards ?? []
+      if (extras.length > 0) {
+        const declared = Array.isArray(args.forward_ports)
+          ? new Set(args.forward_ports.filter(isBrowserForwardPort))
+          : null
+        if (
+          !declared ||
+          extras.some((item) => item.host !== forward.host || !declared.has(item.port))
+        ) {
+          return {
+            error: {
+              code: 'invalid',
+              message: 'The companion forwards do not match the requested ports.',
+            },
+          }
+        }
       }
       const port = await this.deps.forward(hostId, sessionId, forward)
       if (port === null) {
@@ -274,8 +316,27 @@ export class RemoteBrowser {
         }
       }
       const { url, mapping } = forwardedUrl(args.url, port)
-      const known = (this.mappings.get(sessionId) ?? []).filter((m) => m.local !== mapping.local)
-      this.mappings.set(sessionId, [...known, mapping])
+      this.rememberMapping(sessionId, mapping)
+
+      const parsed = new URL(args.url)
+      for (const extra of extras) {
+        if (extra.port === forward.port) continue
+        const companionPort = await this.deps.forward(hostId, sessionId, extra)
+        if (companionPort === null) {
+          return {
+            error: {
+              code: 'navigation_failed',
+              message: t('browserRemote.forwardFailed', { port: extra.port }),
+            },
+          }
+        }
+        const companionUrl = `${parsed.protocol}//${parsed.hostname}:${extra.port}/`
+        const { mapping: companionMapping } = forwardedUrl(companionUrl, companionPort)
+        this.rememberMapping(sessionId, companionMapping)
+        if (companionPort !== extra.port) {
+          remappedCompanions.push({ remotePort: extra.port, localPort: companionPort })
+        }
+      }
       args = { ...args, url }
     }
     const answer = await this.deps.run(
@@ -288,7 +349,16 @@ export class RemoteBrowser {
       call.allowTab,
     )
     const mappings = this.mappings.get(sessionId) ?? []
-    if (mappings.length === 0) return answer
+    const remapNote =
+      remappedCompanions.length > 0
+        ? `\nNote: ${remappedCompanions
+            .map(
+              ({ remotePort, localPort }) =>
+                `local port ${remotePort} was busy, so remote port ${remotePort} is forwarded on 127.0.0.1:${localPort}`,
+            )
+            .join('; ')}.`
+        : ''
+    if (mappings.length === 0 && remapNote === '') return answer
     if ('error' in answer) {
       return {
         error: { ...answer.error, message: unmapped(answer.error.message, mappings) as string },
@@ -297,7 +367,7 @@ export class RemoteBrowser {
     const { text, value, image } = answer.result
     return {
       result: {
-        text: unmapped(text, mappings) as string,
+        text: `${unmapped(text, mappings) as string}${remapNote}`,
         value: unmapped(value, mappings) as Record<string, unknown>,
         ...(image ? { image } : {}),
       },
