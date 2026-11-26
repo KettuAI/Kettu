@@ -52,6 +52,7 @@ describe('reading Google Antigravity’s plan limits with agy', () => {
     ])
     expect(asked.every((options) => options.cwd === '/data/agent-reports')).toBe(true)
     expect(asked.every((options) => options.env.HOME === '/home/me')).toBe(true)
+    expect(asked.every((options) => options.env.AGY_CLI_DISABLE_AUTO_UPDATE === 'true')).toBe(true)
     expect(read.limits.map((limit) => limit.window)).toEqual([
       'seven_day_gemini_models',
       'five_hour_gemini_models',
@@ -112,5 +113,33 @@ describe('reading Google Antigravity’s plan limits with agy', () => {
     )
     expect(read.limits).toHaveLength(4)
     expect(read.balances).toEqual([])
+  })
+
+  it('disables agy background auto-update without duplicate env keys on Windows', async () => {
+    const asked: ProgramOptions[] = []
+    const originalEnv: Record<string, string> = {
+      USERPROFILE: 'C:\\Users\\me',
+      agy_cli_disable_auto_update: 'false',
+    }
+    await readAntigravityUsage(
+      {
+        ...deps(async (options) => {
+          asked.push(options)
+          return finished(JSON.stringify(options.args.includes('/usage') ? usage : credits))
+        }),
+        platform: 'win32',
+        env: originalEnv,
+      },
+      NOW,
+    )
+    expect(asked).toHaveLength(2)
+    for (const options of asked) {
+      const keys = Object.keys(options.env).filter(
+        (k) => k.toUpperCase() === 'AGY_CLI_DISABLE_AUTO_UPDATE',
+      )
+      expect(keys).toEqual(['AGY_CLI_DISABLE_AUTO_UPDATE'])
+      expect(options.env.AGY_CLI_DISABLE_AUTO_UPDATE).toBe('true')
+    }
+    expect(originalEnv.agy_cli_disable_auto_update).toBe('false')
   })
 })
