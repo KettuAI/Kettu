@@ -256,5 +256,19 @@ export function breakdownView(
   if (report && rows && (report.loading || report.key === key)) {
     return { kind: 'rows', rows, dimmed: report.loading, stale: false }
   }
+  // 对应当前 key 的一次读取已结束且无精确构成（如 Antigravity 新会话尚无 .db）时，不再停留在加载骨架屏。
+  if (report && !report.loading && report.key === key) {
+    return { kind: 'none' }
+  }
   return { kind: 'loading' }
+}
+
+/**
+ * 判断上下文弹层是否应显示「可加载的定义（估算）」区块：
+ * 仅当智能体支持估算且当前没有精确上下文明细、也没有正在读取精确明细时才展示，
+ * 避免与官方精确构成重复或加载瞬间闪烁，同时在暂无精确构成时平滑回退。
+ */
+export function showContextEstimates(estimates: boolean | undefined, view: BreakdownView): boolean {
+  if (!estimates) return false
+  return view.kind === 'none' || view.kind === 'error'
 }

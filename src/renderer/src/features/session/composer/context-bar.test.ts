@@ -8,6 +8,7 @@ import {
   contextSummary,
   formatPartShare,
   partFill,
+  showContextEstimates,
   shownUsage,
 } from './context-bar'
 
@@ -161,5 +162,57 @@ describe('context-bar', () => {
     ).toEqual({
       kind: 'none',
     })
+  })
+
+  it('returns none on idle when a finished read has no breakdown, and shows estimates only as fallback', () => {
+    const emptyDone: ContextReport = {
+      key: '10000/512000',
+      breakdown: null,
+      loading: false,
+      error: null,
+    }
+    const emptyView = breakdownView(emptyDone, '10000/512000', {
+      reports: true,
+      idle: true,
+      live: false,
+    })
+    expect(emptyView).toEqual({ kind: 'none' })
+    expect(showContextEstimates(true, emptyView)).toBe(true)
+
+    // 另一组 key 尚未读取完时仍应处于 loading，且不提前闪现估算区块。
+    const staleEmpty = breakdownView(emptyDone, '20000/512000', {
+      reports: true,
+      idle: true,
+      live: false,
+    })
+    expect(staleEmpty).toEqual({ kind: 'loading' })
+    expect(showContextEstimates(true, staleEmpty)).toBe(false)
+
+    // 已有精确上下文明细时隐藏估算区块，避免重复展示。
+    const rowsView = breakdownView(
+      {
+        key: '128000/200000',
+        breakdown: {
+          model: 'Gemini 4 Neon',
+          used: 128_000,
+          size: 200_000,
+          categories: SAMPLE_CATEGORIES,
+          lists: [],
+          observedAt: 1_000,
+        },
+        loading: false,
+        error: null,
+      },
+      '128000/200000',
+      { reports: true, idle: true, live: false },
+    )
+    expect(rowsView.kind).toBe('rows')
+    expect(showContextEstimates(true, rowsView)).toBe(false)
+
+    // 仅不支持精确拆分的智能体（如 Codex）或读取失败时显示估算；未开启 estimates 时一律隐藏。
+    expect(showContextEstimates(true, { kind: 'error', error: 'timeout' })).toBe(true)
+    expect(showContextEstimates(true, { kind: 'betweenTurns' })).toBe(false)
+    expect(showContextEstimates(false, { kind: 'none' })).toBe(false)
+    expect(showContextEstimates(undefined, { kind: 'none' })).toBe(false)
   })
 })

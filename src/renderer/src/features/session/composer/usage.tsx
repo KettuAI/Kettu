@@ -41,6 +41,7 @@ import {
   breakdownView,
   contextSummary,
   formatPartShare,
+  showContextEstimates,
   shownUsage,
 } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
@@ -349,6 +350,7 @@ const LIMIT_METER = { ok: 'mid', warn: 'high', bad: 'full' } as const
 export function ContextButton({
   sessionId,
   agentId,
+  agentName,
   idle,
   closed,
   reports,
@@ -365,6 +367,8 @@ export function ContextButton({
 }: {
   sessionId: string
   agentId: AgentId
+  /** 当前智能体的展示名称，用于上下文估算说明文案。 */
+  agentName?: string
   /** No turn runs. */
   idle: boolean
   /** The session is not attached to its agent, so nothing refreshes its context. */
@@ -412,6 +416,11 @@ export function ContextButton({
   const share = shown && shown.size > 0 ? shown.used / shown.size : 0
   const tone = contextTone(share)
   const percent = Math.round(share * 100)
+  // 与 ContextPart 保持同一视角，确保有精确构成或读取中时不会重复显示估算区块。
+  const view = shown
+    ? breakdownView(read, `${shown.used}/${shown.size}`, { reports, idle, live })
+    : null
+  const showEstimates = Boolean(shown && view && showContextEstimates(estimates, view))
   const onOpenChange = (next: boolean) => {
     setOpen(next)
     if (!next) return
@@ -489,11 +498,12 @@ export function ContextButton({
               subagent={subagent}
             />
           )}
-          {shown && estimates && (
+          {showEstimates && (
             <ContextEstimatePart
               key={`${sessionId}/${agentId}`}
               sessionId={sessionId}
               closed={closed}
+              agentName={agentName}
             />
           )}
           <UsageLines sessionId={sessionId} usage={shown} />
@@ -1244,7 +1254,15 @@ type EstimateReading = { estimates: ContextEstimates | null } | { error: string 
  * What the agent can load, sized by estimate: a section of its own under the measured context,
  * since these sizes are of everything available and no part of the total above.
  */
-function ContextEstimatePart({ sessionId, closed }: { sessionId: string; closed: boolean }) {
+function ContextEstimatePart({
+  sessionId,
+  closed,
+  agentName,
+}: {
+  sessionId: string
+  closed: boolean
+  agentName?: string
+}) {
   const { t } = useTranslation('composer')
   const [reading, setReading] = useState<EstimateReading | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -1303,7 +1321,9 @@ function ContextEstimatePart({ sessionId, closed }: { sessionId: string; closed:
             name={t('usage.estimates.mcpServers')}
             items={estimates?.mcpServers ?? null}
           />
-          <p className="kettu-ctx__defs-note">{t('usage.estimates.note')}</p>
+          <p className="kettu-ctx__defs-note">
+            {t('usage.estimates.note', { agent: agentName || t('usage.estimates.agentFallback') })}
+          </p>
         </>
       )}
     </section>
