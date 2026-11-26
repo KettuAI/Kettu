@@ -7,6 +7,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  AGY_IDE_APP_DATA_DIR,
   agyAppDataDirOverride,
   agyGeminiDir,
   agySummariesDbFile,
@@ -16,6 +17,7 @@ import {
   isSafeAgyAppDataDir,
   isSafeAgySessionId,
   offersSessionArg,
+  readAgyAnnotationTitle,
   readAgyConversationMeta,
   resolveAgyAppDataDir,
   resolveAgyAppDataDirSync,
@@ -188,5 +190,20 @@ describe('resolveAgyAppDataDir', () => {
 
     expect(await readAgyConversationMeta('legacy-ide', home)).toBeNull()
     expect(await resolveAgyAppDataDir('legacy-ide', home)).toBe('antigravity')
+  })
+
+  it('支持探测 antigravity-ide 目录并从 annotations/*.pbtxt 读取真实会话标题', async () => {
+    const home = await makeHome()
+    await writeTrajectory(home, AGY_IDE_APP_DATA_DIR, 'ide-v2-session', '.db')
+    expect(await resolveAgyAppDataDir('ide-v2-session', home)).toBe('antigravity-ide')
+    expect(resolveAgyAppDataDirSync('ide-v2-session', home)).toBe('antigravity-ide')
+
+    const annDir = path.join(home, '.gemini', AGY_IDE_APP_DATA_DIR, 'annotations')
+    await mkdir(annDir, { recursive: true })
+    await writeFile(
+      path.join(annDir, 'ide-v2-session.pbtxt'),
+      'title: "IDE \\344\\274\\232\\350\\257\\235"\n',
+    )
+    expect(await readAgyAnnotationTitle('ide-v2-session', home)).toBe('IDE 会话')
   })
 })

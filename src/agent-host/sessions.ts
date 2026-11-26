@@ -7860,7 +7860,19 @@ export class SessionManager {
         )
       }
     }
-    this.applyContextUsage(live, breakdown, revision)
+    if (breakdown) {
+      this.applyContextUsage(live, breakdown, revision)
+    } else if (live && this.contextCurrent(live)) {
+      const previous = live.thread.session.context
+      this.update(live, {
+        context: {
+          key: previous?.key ?? '',
+          breakdown: previous?.breakdown ?? null,
+          loading: false,
+          error: null,
+        },
+      })
+    }
     return breakdown
   }
 

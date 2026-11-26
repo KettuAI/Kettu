@@ -12,19 +12,22 @@ import type { LastRequest } from '@shared/model-requests'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import type { SessionTarget } from '../connection'
 import { scanBackwards } from '../prompt-cache'
-import { DEFAULT_AGY_APP_DATA_DIR, isSafeAgyAppDataDir } from './agy-store'
+import { decodeAgyGenMetadata, decodeAgyStepMetadata, resolveAgyModelName } from './agy-proto'
+import { withAgySqliteReadOnly } from './agy-sqlite'
+import { agyConversationDbFile, DEFAULT_AGY_APP_DATA_DIR, isSafeAgyAppDataDir } from './agy-store'
 import { fromAgy } from './agy-tools'
 
 /** 仅允许合法的会话 ID 字符，避免构造 transcript 路径时发生路径穿越。 */
 const SESSION_ID = /^[A-Za-z0-9_-]+$/
-/** 快速过滤标记：仅解析包含 PLANNER_RESPONSE 的行。 */
+/** 快速过滤标记：匹配模型响应与自动压缩步骤。 */
 const PLANNER_NEEDLE = '"PLANNER_RESPONSE"'
+const CHECKPOINT_NEEDLE = '"CHECKPOINT"'
 /** 倒序扫描 transcript.jsonl 尾部的最大字节数（1 MiB，足以覆盖单步大工具输出后的响应）。 */
 const TAIL_BYTES = 1 << 20
 /** agy 写盘与发 ACP usage_update 可能存在极短异步差，按此间隔最多重试读取两次。 */
 const DEFAULT_RETRIES_MS = [80, 160] as const
 
-/** transcript.jsonl 中单条 PLANNER_RESPONSE 解析出的用量数据。 */
+/** transcript.jsonl 与本地轨迹库单步解析出的用量及耗时数据。 */
 export interface AgyStepUsage {
   stepIndex: number
   model: string | null
@@ -34,6 +37,14 @@ export interface AgyStepUsage {
   cacheRead: number
   cacheWrite: number | null
   output: number
+  /** 思考/推理输出 token（已计入 output，来自本地轨迹库或 transcript 字段）。 */
+  thinking?: number | null
+  /** 是否为自动上下文压缩步骤（CHECKPOINT），不计入正常对话生成速度。 */
+  isCompaction?: boolean
+  /** 宿主原生测得的首字延迟（毫秒）。 */
+  ttftMs?: number | null
+  /** 宿主原生测得的流式生成耗时（毫秒）。 */
+  streamingMs?: number | null
 }
 
 /** 读取某个 agy 会话最新一条模型响应步骤的函数签名，便于单测注入。 */
@@ -122,9 +133,9 @@ function parseIsoTime(value: unknown): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
-/** 从单行 JSON 中解析 PLANNER_RESPONSE 的 token 用量；非目标行或格式不合法时返回 null。 */
+/** 从单行 JSON 中解析 PLANNER_RESPONSE 或 CHECKPOINT 的 token 用量；非目标行或格式不合法时返回 null。 */
 export function parseAgyPlannerStep(json: string): AgyStepUsage | null {
-  if (!json.includes(PLANNER_NEEDLE)) return null
+  if (!json.includes(PLANNER_NEEDLE) && !json.includes(CHECKPOINT_NEEDLE)) return null
   let record: Record<string, unknown> | null
   try {
     const parsed = JSON.parse(json) as unknown
@@ -135,7 +146,7 @@ export function parseAgyPlannerStep(json: string): AgyStepUsage | null {
   } catch {
     return null
   }
-  if (!record || record.type !== 'PLANNER_RESPONSE') return null
+  if (!record || (record.type !== 'PLANNER_RESPONSE' && record.type !== 'CHECKPOINT')) return null
   const stepIndex = nonNegative(record.step_index)
   if (stepIndex === null) return null
   const input = nonNegative(record.input_tokens)
@@ -144,6 +155,8 @@ export function parseAgyPlannerStep(json: string): AgyStepUsage | null {
   if (input === null && cacheRead === null && output === null) return null
   const cacheWrite =
     nonNegative(record.cache_write_tokens) ?? nonNegative(record.cache_creation_tokens)
+  const thinking = nonNegative(record.thinking_tokens)
+  const isCompaction = record.type === 'CHECKPOINT'
   return {
     stepIndex,
     model: typeof record.model === 'string' && record.model !== '' ? record.model : null,
@@ -152,17 +165,19 @@ export function parseAgyPlannerStep(json: string): AgyStepUsage | null {
     cacheRead: cacheRead ?? 0,
     cacheWrite,
     output: output ?? 0,
+    ...(thinking !== null ? { thinking } : {}),
+    ...(isCompaction ? { isCompaction: true } : {}),
   }
 }
 
-/** 倒序扫描指定 transcript.jsonl 文件，读取最新一条 PLANNER_RESPONSE 的用量。 */
+/** 倒序扫描指定 transcript.jsonl 文件，读取最新一条模型调用（或压缩）步骤的用量。 */
 export async function readLatestAgyStep(file: string): Promise<AgyStepUsage | null> {
   let found: AgyStepUsage | null = null
   try {
     await scanBackwards(
       file,
       (line) => {
-        if (!line.includes(PLANNER_NEEDLE)) return false
+        if (!line.includes(PLANNER_NEEDLE) && !line.includes(CHECKPOINT_NEEDLE)) return false
         found = parseAgyPlannerStep(line.toString('utf8'))
         return found !== null
       },
@@ -175,15 +190,82 @@ export async function readLatestAgyStep(file: string): Promise<AgyStepUsage | nu
   return found
 }
 
+interface AgyDbStepSupplement {
+  thinking: number | null
+  ttftMs: number | null
+  streamingMs: number | null
+  model: string | null
+}
+
+/** 从本地 `conversations/<sessionId>.db` 补读单步宿主原生耗时、思考 token 与真实模型名。 */
+export async function readAgyDbStepSupplement(
+  sessionId: string,
+  stepIndex: number,
+  home = os.homedir(),
+  appDataDir = DEFAULT_AGY_APP_DATA_DIR,
+): Promise<AgyDbStepSupplement | null> {
+  const dbFile = agyConversationDbFile(sessionId, home, appDataDir)
+  if (!dbFile) return null
+  try {
+    return await withAgySqliteReadOnly(dbFile, (db) => {
+      const row = db.prepare('SELECT metadata FROM steps WHERE idx = ? LIMIT 1').get(stepIndex) as
+        { metadata?: unknown } | undefined
+      if (!row?.metadata) return null
+      const meta = decodeAgyStepMetadata(row.metadata, stepIndex)
+      let gen = null
+      if (meta.genMetadataIdx !== null) {
+        const gRow = db
+          .prepare('SELECT data FROM gen_metadata WHERE idx = ? LIMIT 1')
+          .get(meta.genMetadataIdx) as { data?: unknown } | undefined
+        if (gRow?.data) gen = decodeAgyGenMetadata(gRow.data, { includeContext: false })
+      }
+      const thinking =
+        meta.modelUsage?.thinkingOutputTokens ?? gen?.usage?.thinkingOutputTokens ?? null
+      const ttftMs = gen?.ttftMs ?? null
+      let streamingMs = gen?.streamingDurationMs ?? null
+      if (
+        streamingMs === null &&
+        meta.viewableAtMs !== null &&
+        meta.finishedGeneratingAtMs !== null &&
+        meta.finishedGeneratingAtMs > meta.viewableAtMs
+      ) {
+        streamingMs = meta.finishedGeneratingAtMs - meta.viewableAtMs
+      }
+      const model = resolveAgyModelName({
+        responseModel: gen?.responseModel,
+        model: meta.modelUsage?.model ?? meta.generatorModel ?? gen?.model,
+        extraModelEnum: gen?.extraMeta.model_enum,
+        displayName: gen?.modelDisplayName,
+      })
+      return { thinking, ttftMs, streamingMs, model }
+    })
+  } catch {
+    return null
+  }
+}
+
 /** Default agy step reader pointing at `<home>/.gemini/<appDataDir>/brain/<sessionId>/...`. */
 export function agyStepReader(
   home = os.homedir(),
   appDataDirOf?: (sessionId: string) => string | undefined,
 ): AgyStepReader {
   return async (sessionId) => {
-    const file = agyTranscriptFile(sessionId, home, appDataDirOf?.(sessionId))
+    const appDataDir = appDataDirOf?.(sessionId) ?? DEFAULT_AGY_APP_DATA_DIR
+    const file = agyTranscriptFile(sessionId, home, appDataDir)
     if (!file) return null
-    return readLatestAgyStep(file).catch(() => null)
+    const step = await readLatestAgyStep(file).catch(() => null)
+    if (!step) return null
+    const sup = await readAgyDbStepSupplement(sessionId, step.stepIndex, home, appDataDir).catch(
+      () => null,
+    )
+    if (!sup) return step
+    return {
+      ...step,
+      model: step.model ?? sup.model,
+      ...(sup.thinking !== null ? { thinking: sup.thinking } : {}),
+      ...(sup.ttftMs !== null ? { ttftMs: sup.ttftMs } : {}),
+      ...(sup.streamingMs !== null ? { streamingMs: sup.streamingMs } : {}),
+    }
   }
 }
 
@@ -398,15 +480,31 @@ export class AgyMetrics {
     if (ctx.replaying || ctx.cancelling) return
     const session = ctx.thread.session
     const sentAt = latestTime(snapshot.sentAt, session.turnStartedAt)
-    const sample = timeRequest(step.output, sentAt, snapshot.firstOutputAt, snapshot.endedAt)
+    const nativeStreamMs =
+      typeof step.streamingMs === 'number' && step.streamingMs > 0 ? step.streamingMs : null
+    const nativeTtftMs = typeof step.ttftMs === 'number' && step.ttftMs >= 0 ? step.ttftMs : null
+    // 自动压缩步骤不参与正常对话的生成速度统计，避免压缩耗时拉偏会话均速。
+    const sample = step.isCompaction
+      ? null
+      : nativeStreamMs !== null && step.output > 0
+        ? {
+            tokens: step.output,
+            ms: nativeStreamMs,
+            approx: false,
+            firstTokenMs: nativeTtftMs,
+          }
+        : timeRequest(step.output, sentAt, snapshot.firstOutputAt, snapshot.endedAt)
     const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
+    const nativeTotalMs = nativeStreamMs !== null ? (nativeTtftMs ?? 0) + nativeStreamMs : null
     const lastRequest: LastRequest = {
       at: sentAt ?? step.createdAt ?? snapshot.endedAt,
       input: step.input,
       cacheRead: step.cacheRead,
       cacheWrite: step.cacheWrite,
       output: step.output,
-      ms: sentAt !== null && snapshot.endedAt >= sentAt ? snapshot.endedAt - sentAt : null,
+      ms:
+        nativeTotalMs ??
+        (sentAt !== null && snapshot.endedAt >= sentAt ? snapshot.endedAt - sentAt : null),
     }
     target.apply({
       patches: [

@@ -13,12 +13,24 @@ import {
   type ModelRequest,
   type ModelRequestsOverview,
   type RequestActionKind,
+  type RequestParam,
   type RequestPart,
   type RequestTokens,
   type RequestTurn,
 } from '@shared/model-requests'
 import { agyFullTranscriptFile, agyTranscriptFile } from '../acp/agy-metrics'
-import { DEFAULT_AGY_APP_DATA_DIR, resolveAgyAppDataDir } from '../acp/agy-store'
+import {
+  decodeAgyGenMetadata,
+  decodeAgyStepMetadata,
+  resolveAgyModelName,
+  type AgyProtoRetryInfo,
+} from '../acp/agy-proto'
+import { withAgySqliteReadOnly } from '../acp/agy-sqlite'
+import {
+  agyConversationDbFile,
+  DEFAULT_AGY_APP_DATA_DIR,
+  resolveAgyAppDataDir,
+} from '../acp/agy-store'
 import { t } from '../i18n'
 import { eachLine, fileSource, openLog } from '../usage/lines'
 import { withoutKettu } from './acp-messages'
@@ -40,8 +52,10 @@ import { foldAll, readRanges, type ModelRequestsReader, type RequestsTarget } fr
 type Rec = Record<string, unknown>
 
 const PLANNER_MARKER = Buffer.from('"PLANNER_RESPONSE"')
+const CHECKPOINT_MARKER = Buffer.from('"CHECKPOINT"')
 const USER_INPUT_MARKER = Buffer.from('"USER_INPUT"')
 const PLANNER_TEXT = '"PLANNER_RESPONSE"'
+const CHECKPOINT_TEXT = '"CHECKPOINT"'
 const USER_INPUT_TEXT = '"USER_INPUT"'
 
 /** agy 内置工具按操作类型的归类映射，其余工具归为普通 tool。 */
@@ -104,18 +118,26 @@ function plannerTokens(record: Rec): RequestTokens {
   const cacheRead = num(record.cache_read_tokens)
   const cacheWrite = num(record.cache_write_tokens) ?? num(record.cache_creation_tokens)
   const output = num(record.output_tokens)
+  const reasoning = num(record.thinking_tokens)
   return {
     input,
     cacheRead,
     cacheWrite,
     cacheWrite1h: null,
     output,
-    reasoning: null,
+    reasoning,
   }
 }
 
 function addTokens(sum: RequestTokens | null, next: RequestTokens): RequestTokens | null {
-  if (next.input === null && next.cacheRead === null && next.output === null) return sum
+  if (
+    next.input === null &&
+    next.cacheRead === null &&
+    next.output === null &&
+    next.reasoning === null
+  ) {
+    return sum
+  }
   const add = (a: number | null, b: number | null): number | null =>
     a === null && b === null ? null : (a ?? 0) + (b ?? 0)
   const base = sum ?? emptyTokens()
@@ -125,7 +147,7 @@ function addTokens(sum: RequestTokens | null, next: RequestTokens): RequestToken
     cacheWrite: add(base.cacheWrite, next.cacheWrite),
     cacheWrite1h: null,
     output: add(base.output, next.output),
-    reasoning: null,
+    reasoning: add(base.reasoning, next.reasoning),
   }
 }
 
@@ -266,7 +288,18 @@ export function parseAgyTranscript(lines: readonly TranscriptLine[]): RequestTur
       continue
     }
 
-    if (type !== 'PLANNER_RESPONSE') continue
+    if (type !== 'PLANNER_RESPONSE' && type !== 'CHECKPOINT') continue
+
+    const isCompaction = type === 'CHECKPOINT'
+    const tokens = plannerTokens(record)
+    if (
+      isCompaction &&
+      tokens.input === null &&
+      tokens.cacheRead === null &&
+      tokens.output === null
+    ) {
+      continue
+    }
 
     if (!turn) {
       turn = {
@@ -286,17 +319,18 @@ export function parseAgyTranscript(lines: readonly TranscriptLine[]): RequestTur
     ]
     const error = str(record.error)
     const status = record.status === 'ERROR' || error !== null ? 'failed' : 'done'
+    const params: RequestParam[] = isCompaction ? [{ name: 'type', value: 'compaction' }] : []
     const request: ModelRequest = {
       id: stepIndex !== null ? `step-${stepIndex}` : `req-${line.start}`,
       turnId: turn.id,
       sentAt: time(record.created_at),
       endedAt: null,
       model: str(record.model),
-      params: [],
+      params,
       requestId: null,
       stop: null,
-      tokens: plannerTokens(record),
-      actions,
+      tokens,
+      actions: isCompaction ? [{ kind: 'tool', label: 'Compaction', count: 1 }] : actions,
       sent: pendingSent.flatMap((item) => sentPartsOf(item.record)),
       received,
       kept: null,
@@ -311,19 +345,40 @@ export function parseAgyTranscript(lines: readonly TranscriptLine[]): RequestTur
     previousRequest = request
   }
 
+  // 对缺失模型名的自动压缩步骤，沿同页相邻请求回退推断模型。
+  const flat = turns.flatMap((item) => item.requests)
+  for (let i = 0; i < flat.length; i++) {
+    if (flat[i]!.model) continue
+    for (let prev = i - 1; prev >= 0; prev--) {
+      if (flat[prev]!.model) {
+        flat[i]!.model = flat[prev]!.model
+        break
+      }
+    }
+    if (flat[i]!.model) continue
+    for (let next = i + 1; next < flat.length; next++) {
+      if (flat[next]!.model) {
+        flat[i]!.model = flat[next]!.model
+        break
+      }
+    }
+  }
+
   return turns
 }
 
-/** 分页倒序规则：凑够一页 PLANNER_RESPONSE，并回溯到首条请求所属的 USER_INPUT。 */
+/** 分页倒序规则：凑够一页 PLANNER_RESPONSE / CHECKPOINT，并回溯到首条请求所属的 USER_INPUT。 */
 function agyPageRules(): PageRules {
   let requests = 0
+  const isModelLine = (line: Buffer): boolean =>
+    line.indexOf(PLANNER_MARKER) >= 0 || line.indexOf(CHECKPOINT_MARKER) >= 0
   return {
     add(line) {
-      if (line.indexOf(PLANNER_MARKER) >= 0) requests++
+      if (isModelLine(line)) requests++
     },
     enough: () => requests >= REQUESTS_PAGE,
     turnStart: (line) => line.indexOf(USER_INPUT_MARKER) >= 0,
-    requestEnd: (line) => line.indexOf(PLANNER_MARKER) >= 0,
+    requestEnd: isModelLine,
   }
 }
 
@@ -336,9 +391,9 @@ async function summarizeAgyFile(file: string): Promise<ModelRequestsOverview> {
   let turnNumber = 0
 
   await eachLine(log.source, 0, (text) => {
-    const isPlanner = text.includes(PLANNER_TEXT)
-    const isUser = !isPlanner && text.includes(USER_INPUT_TEXT)
-    if (!isPlanner && !isUser) return
+    const isModel = text.includes(PLANNER_TEXT) || text.includes(CHECKPOINT_TEXT)
+    const isUser = !isModel && text.includes(USER_INPUT_TEXT)
+    if (!isModel && !isUser) return
     let record: Rec
     try {
       const parsed = JSON.parse(text) as unknown
@@ -351,9 +406,18 @@ async function summarizeAgyFile(file: string): Promise<ModelRequestsOverview> {
       const stepIndex = num(record.step_index)
       turnNumber++
       if (stepIndex !== null) turns[`turn-${stepIndex}`] = turnNumber
-    } else if (record.type === 'PLANNER_RESPONSE') {
+    } else if (record.type === 'PLANNER_RESPONSE' || record.type === 'CHECKPOINT') {
+      const nextTokens = plannerTokens(record)
+      if (
+        record.type === 'CHECKPOINT' &&
+        nextTokens.input === null &&
+        nextTokens.cacheRead === null &&
+        nextTokens.output === null
+      ) {
+        return
+      }
       requests++
-      tokens = addTokens(tokens, plannerTokens(record))
+      tokens = addTokens(tokens, nextTokens)
     }
   })
 
@@ -364,6 +428,168 @@ async function summarizeAgyFile(file: string): Promise<ModelRequestsOverview> {
     tokens,
     system: null,
     turns: turnNumber > 0 ? turns : null,
+  }
+}
+
+function formatSeconds(ms: number): string {
+  return ms >= 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${(ms / 1000).toFixed(2)}s`
+}
+
+function summarizeRetries(retries: readonly AgyProtoRetryInfo[]): string | null {
+  // 仅有一条不含错误码/错误信息/退避延迟的记录属于正常首调，不计作异常重试。
+  const anomalous = retries.filter(
+    (item) => item.error !== null || item.reasonCode !== null || (item.delayMs ?? 0) > 0,
+  )
+  const count = retries.length > 1 ? retries.length - 1 : anomalous.length
+  if (count <= 0) return null
+  const codes = [
+    ...new Set(
+      anomalous
+        .map((item) => item.reasonCode)
+        .filter((code): code is number => typeof code === 'number' && code > 0),
+    ),
+  ]
+  const delayMs = anomalous.reduce((sum, item) => sum + (item.delayMs ?? 0), 0)
+  const parts = [`${count}`]
+  if (codes.length > 0) parts.push(`code ${codes.join('/')}`)
+  if (delayMs > 0) parts.push(`+${formatSeconds(delayMs)}`)
+  return parts.join(' · ')
+}
+
+/** 从本地 `conversations/<sessionId>.db` 补齐单页请求的思考 token、原生耗时、请求 ID 与内部重试诊断。 */
+async function enrichTurnsFromDb(
+  turns: RequestTurn[],
+  sessionId: string,
+  baseHome: string,
+  appDataDir: string,
+): Promise<void> {
+  const dbFile = agyConversationDbFile(sessionId, baseHome, appDataDir)
+  if (!dbFile) return
+
+  const byStep = new Map<number, ModelRequest>()
+  for (const turn of turns) {
+    for (const req of turn.requests) {
+      const m = /^step-(\d+)$/.exec(req.id)
+      if (m?.[1]) byStep.set(Number(m[1]), req)
+    }
+  }
+  if (byStep.size === 0) return
+
+  try {
+    await withAgySqliteReadOnly(dbFile, (db) => {
+      const stepIds = [...byStep.keys()]
+      const placeholders = stepIds.map(() => '?').join(', ')
+      const rows = db
+        .prepare(`SELECT idx, metadata FROM steps WHERE idx IN (${placeholders})`)
+        .all(...stepIds) as { idx?: unknown; metadata?: unknown }[]
+
+      const stepMetas = new Map<number, ReturnType<typeof decodeAgyStepMetadata>>()
+      const genIds = new Set<number>()
+      for (const row of rows) {
+        const idx = typeof row.idx === 'number' ? row.idx : Number(row.idx)
+        if (!Number.isFinite(idx) || !row.metadata) continue
+        const meta = decodeAgyStepMetadata(row.metadata, idx)
+        stepMetas.set(idx, meta)
+        if (meta.genMetadataIdx !== null) genIds.add(meta.genMetadataIdx)
+      }
+
+      const genMetas = new Map<number, ReturnType<typeof decodeAgyGenMetadata>>()
+      if (genIds.size > 0) {
+        try {
+          const ids = [...genIds]
+          const gRows = db
+            .prepare(
+              `SELECT idx, data FROM gen_metadata WHERE idx IN (${ids.map(() => '?').join(', ')})`,
+            )
+            .all(...ids) as { idx?: unknown; data?: unknown }[]
+          for (const gRow of gRows) {
+            const idx = typeof gRow.idx === 'number' ? gRow.idx : Number(gRow.idx)
+            if (!Number.isFinite(idx) || !gRow.data) continue
+            genMetas.set(idx, decodeAgyGenMetadata(gRow.data, { includeContext: false }))
+          }
+        } catch {
+          // 忽略缺少 gen_metadata 表的旧库。
+        }
+      }
+
+      for (const [idx, req] of byStep) {
+        const meta = stepMetas.get(idx)
+        if (!meta) continue
+        const gen =
+          meta.genMetadataIdx !== null ? (genMetas.get(meta.genMetadataIdx) ?? null) : null
+        const thinking =
+          meta.modelUsage?.thinkingOutputTokens ?? gen?.usage?.thinkingOutputTokens ?? null
+        if (thinking !== null && req.tokens.reasoning === null) {
+          req.tokens = { ...req.tokens, reasoning: thinking }
+        }
+        const requestId = meta.modelUsage?.requestId ?? gen?.usage?.requestId ?? null
+        if (requestId && !req.requestId) req.requestId = requestId
+
+        const ended = meta.finishedGeneratingAtMs ?? meta.completedAtMs
+        if (ended !== null && (req.sentAt === null || ended >= req.sentAt)) {
+          req.endedAt = ended
+        }
+
+        if (!req.model) {
+          req.model = resolveAgyModelName({
+            responseModel: gen?.responseModel,
+            model: meta.modelUsage?.model ?? meta.generatorModel ?? gen?.model,
+            extraModelEnum: gen?.extraMeta.model_enum,
+            displayName: gen?.modelDisplayName,
+          })
+        }
+
+        if (gen?.ttftMs !== null && gen?.ttftMs !== undefined && gen.ttftMs > 0) {
+          req.params.push({ name: 'TTFT', value: formatSeconds(gen.ttftMs) })
+        }
+        if (
+          gen?.streamingDurationMs !== null &&
+          gen?.streamingDurationMs !== undefined &&
+          gen.streamingDurationMs > 0
+        ) {
+          req.params.push({ name: 'Stream', value: formatSeconds(gen.streamingDurationMs) })
+        }
+        const retries = meta.retries.length > 0 ? meta.retries : (gen?.retries ?? [])
+        const retryText = summarizeRetries(retries)
+        if (retryText) req.params.push({ name: 'Retries', value: retryText })
+      }
+    })
+  } catch {
+    // 轨迹库不可读时静默保留 transcript.jsonl 已有数据。
+  }
+}
+
+/** 扫描本地轨迹库累计全会话思考 token，补齐 Requests 顶部总览。 */
+async function sumReasoningFromDb(
+  sessionId: string,
+  baseHome: string,
+  appDataDir: string,
+): Promise<number | null> {
+  const dbFile = agyConversationDbFile(sessionId, baseHome, appDataDir)
+  if (!dbFile) return null
+  const normCid = sessionId.toLowerCase()
+  try {
+    return await withAgySqliteReadOnly(dbFile, (db) => {
+      const rows = db
+        .prepare('SELECT idx, metadata FROM steps WHERE metadata IS NOT NULL')
+        .all() as { idx?: unknown; metadata?: unknown }[]
+      let total = 0
+      let found = false
+      for (const row of rows) {
+        const idx = typeof row.idx === 'number' ? row.idx : Number(row.idx)
+        if (!Number.isFinite(idx) || !row.metadata) continue
+        const meta = decodeAgyStepMetadata(row.metadata, idx)
+        if (meta.originCascadeId && meta.originCascadeId !== normCid) continue
+        const thinking = meta.modelUsage?.thinkingOutputTokens
+        if (typeof thinking === 'number' && thinking > 0) {
+          total += thinking
+          found = true
+        }
+      }
+      return found ? total : null
+    })
+  } catch {
+    return null
   }
 }
 
@@ -438,12 +664,13 @@ export function antigravityModelRequests(deps: {
     async page(target, before) {
       const resolved = await resolveFile(target)
       if (!resolved) return deps.fallback ? deps.fallback.page(target, before) : null
-      const { file } = resolved
+      const { file, appDataDir } = resolved
       const { size } = await stat(file)
       const end = before === null ? size : Math.min(size, Number(before))
       if (!Number.isSafeInteger(end) || end < 0) throw new Error('Not a page of this session')
       const { lines, from } = await readPageFrom(fileSource(file, size), end, agyPageRules())
       const turns = parseAgyTranscript(parseLines(lines))
+      await enrichTurnsFromDb(turns, target.acpSessionId, home(target), appDataDir)
       return {
         source: 'antigravity',
         turns,
@@ -454,11 +681,15 @@ export function antigravityModelRequests(deps: {
     async summary(target) {
       const resolved = await resolveFile(target)
       if (!resolved) return deps.fallback ? deps.fallback.summary(target) : null
-      const { file } = resolved
+      const { file, appDataDir } = resolved
       const info = await stat(file)
       const known = summaries.get(file)
       if (known && known.size === info.size && known.mtimeMs === info.mtimeMs) return known.summary
       const summary = await summarizeAgyFile(file)
+      if (summary.tokens && summary.tokens.reasoning === null) {
+        const reasoning = await sumReasoningFromDb(target.acpSessionId, home(target), appDataDir)
+        if (reasoning !== null) summary.tokens = { ...summary.tokens, reasoning }
+      }
       summaries.delete(file)
       summaries.set(file, { size: info.size, mtimeMs: info.mtimeMs, summary })
       if (summaries.size > 20) summaries.delete(summaries.keys().next().value!)

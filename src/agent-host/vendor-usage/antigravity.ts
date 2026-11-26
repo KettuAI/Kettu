@@ -32,6 +32,28 @@ export function antigravityTier(meta: unknown): string | null {
 }
 
 /**
+ * 从套餐元数据中识别 Ultra 档位倍率（`5x` / `20x`），未命中时返回 null。
+ * 用于填充账户卡片与账号菜单的 `AgentAccount.tier` 徽标。
+ */
+export function antigravityTierMultiple(meta: unknown): string | null {
+  const tier = answerTier(meta)
+  if (!tier) return null
+  const id = typeof tier.id === 'string' ? tier.id.trim().toLowerCase() : ''
+  const name = typeof tier.name === 'string' ? tier.name.trim() : ''
+  const description = typeof tier.description === 'string' ? tier.description.trim() : ''
+  const text = `${id} ${name} ${description}`
+  if (/(?:^|[-_\s])5x(?:$|[-_\s])|ultra[-_]?lite/i.test(text)) return '5x'
+  if (
+    /(?:^|[-_\s])20x(?:$|[-_\s])/i.test(text) ||
+    id === 'g1-ultra-tier' ||
+    (/^g1-ultra(?:-[a-z0-9]+)?-tier$/i.test(id) && !/lite|5x/i.test(id))
+  ) {
+    return '20x'
+  }
+  return null
+}
+
+/**
  * The sign-in the plan in an answer's `_meta` shows, by its id: Google's personal plans (the free
  * tier and Google One's `g1-` AI plans) or Gemini Enterprise and Google Cloud ones (`gcp-`,
  * `business-`), the ids agy 1.5.9 knows. Null for an answer with no plan, which an API key or a
@@ -94,8 +116,12 @@ export function antigravitySignIn(input: {
 
 const WINDOWS: Readonly<Record<string, { window: string; label: string }>> = {
   '5h': { window: 'five_hour', label: '5-hour' },
+  five_hour: { window: 'five_hour', label: '5-hour' },
   weekly: { window: 'seven_day', label: 'Weekly' },
+  '7d': { window: 'seven_day', label: 'Weekly' },
 }
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000
 
 const slug = (name: string): string =>
   name
@@ -143,15 +169,36 @@ export function parseAntigravityUsage(reply: unknown, now: number): VendorUsage 
       .filter(Boolean)
     for (const item of Array.isArray(group.buckets) ? group.buckets : []) {
       const bucket = object(item)
-      const kind = typeof bucket?.window === 'string' ? WINDOWS[bucket.window] : undefined
-      const left = number(bucket?.remaining_fraction)
-      if (!kind || left === null || left < 0 || left > 1) continue
+      if (!bucket) continue
+      const resetsAt = typeof bucket.reset_time === 'string' ? time(bucket.reset_time) : null
+      const rawWindow = typeof bucket.window === 'string' ? bucket.window.trim().toLowerCase() : ''
+      const kind =
+        rawWindow !== ''
+          ? WINDOWS[rawWindow]
+          : resetsAt !== null
+            ? resetsAt <= now + SIX_HOURS_MS
+              ? WINDOWS['5h']
+              : WINDOWS.weekly
+            : undefined
+      if (!kind) continue
+
+      const rawLeft = bucket.remaining_fraction
+      let left = number(rawLeft)
+      // Proto3 序列化在剩余配额为 0 时可能省略默认值字段；当显式 disabled 或仅有未来重置时间时按 0% 剩余处理。
+      if (left === null) {
+        const omitted = rawLeft === undefined || rawLeft === null
+        if (bucket.disabled === true || (omitted && resetsAt !== null && resetsAt > now)) {
+          left = 0
+        }
+      }
+      if (left === null || left < 0 || left > 1) continue
+
       const limit = percentLimit(
         `${kind.window}_${slug(name)}`,
         `${kind.label} · ${name}`,
         100 - left * 100,
         now,
-        typeof bucket?.reset_time === 'string' ? time(bucket.reset_time) : null,
+        resetsAt,
       )
       limits.push(models.length > 0 ? { ...limit, models: [...models] } : limit)
     }

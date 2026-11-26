@@ -43,6 +43,7 @@ export const ANTIGRAVITY: AgentDefinition = {
   // agy 1.5.14 drops the largest MCP tools past its customization budget, and over ACP gives the
   // model no call_mcp_tool for a dropped one.
   toolGateway: true,
-  // 启用上下文弹窗中的 Skills 与 MCP 工具定义估算区。
+  // 启用本地精确上下文构成读取，并在新会话首轮前保留 Skills 与 MCP 工具定义估算区。
+  readsContext: true,
   contextEstimates: true,
 }

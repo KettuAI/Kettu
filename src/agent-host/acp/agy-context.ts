@@ -10,13 +10,26 @@
 import { open, readdir, readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { ContextDefinitionEstimate, ContextEstimates } from '@shared/context'
+import type {
+  ContextBreakdown,
+  ContextDefinitionEstimate,
+  ContextEstimates,
+  ContextList,
+} from '@shared/context'
 import type { Platform } from '@shared/platform'
 import { runProgram, type ProgramOptions, type ProgramRun } from '../adapter-install'
 import type { McpServer } from '../connection'
 import type { Env } from '../find-command'
 import { frontmatter } from '../marketplace/frontmatter'
 import { proxyFetch } from '../proxy-fetch'
+import {
+  decodeAgyGenMetadata,
+  resolveAgyModelName,
+  type AgyContextTokenGroup,
+  type AgyProtoGenMetadata,
+} from './agy-proto'
+import { withAgySqliteReadOnly } from './agy-sqlite'
+import { agyConversationDbFile, DEFAULT_AGY_APP_DATA_DIR } from './agy-store'
 
 const UTF8_BYTES_PER_TOKEN = 4
 const SKILLS_TIMEOUT_MS = 15_000
@@ -25,6 +38,234 @@ const MCP_TIMEOUT_MS = 5_000
 const SKILL_FILE = 'SKILL.md'
 const SKILL_FRONTMATTER_BYTES = 16 * 1024
 const SIGN_IN_PROMPT = /Authentication required/i
+/** 禁用 agy 后台自动更新检查，避免 Windows 弹出 `--bg-updater` 控制台窗口。 */
+const DISABLE_AUTO_UPDATE = 'AGY_CLI_DISABLE_AUTO_UPDATE'
+
+function silentCliEnv(env: Env, platform: Platform): Env {
+  const next: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (platform === 'win32' && key.toUpperCase() === DISABLE_AUTO_UPDATE) continue
+    next[key] = value
+  }
+  next[DISABLE_AUTO_UPDATE] = 'true'
+  return next
+}
+
+function formatCompactTokens(tokens: number): string {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1).replace(/\.0$/, '')}k tokens`
+  return `${tokens} tokens`
+}
+
+function shareOf(tokens: number, size: number): number | null {
+  if (size <= 0) return null
+  return Math.round((tokens / size) * 1000) / 10
+}
+
+/**
+ * 将 Antigravity `gen_metadata` 中的官方上下文构成映射为 Kettu 的 `ContextBreakdown`。
+ * 分类名与 Kettu `context-bar.ts` 对齐，可直接复用多色进度条与分类明细面板。
+ */
+export function mapAgyContextBreakdown(
+  gen: AgyProtoGenMetadata,
+  now: number,
+): ContextBreakdown | null {
+  const cw = gen.contextWindow
+  if (!cw || cw.groups.length === 0) return null
+
+  const bucketTokens = new Map<string, number>()
+  const addBucket = (name: string, tokens: number): void => {
+    if (tokens <= 0) return
+    bucketTokens.set(name, (bucketTokens.get(name) ?? 0) + tokens)
+  }
+
+  const mcpServerTokens = new Map<string, number>()
+  const systemToolItems: { name: string; detail: string | null; tokens: string; raw: number }[] = []
+  const skillItems: { name: string; detail: string | null; tokens: string; raw: number }[] = []
+  const ruleItems: { name: string; detail: string | null; tokens: string; raw: number }[] = []
+
+  const classifyGroup = (group: AgyContextTokenGroup): void => {
+    const lower = group.name.trim().toLowerCase()
+    if (lower === 'chat messages' || group.type === 7) {
+      addBucket('Messages', group.tokens)
+      return
+    }
+    if (lower === 'rules' || group.type === 3) {
+      addBucket('Memory files', group.tokens)
+      for (const child of group.children) {
+        if (child.name && child.tokens > 0) {
+          ruleItems.push({
+            name: child.name,
+            detail: null,
+            tokens: formatCompactTokens(child.tokens),
+            raw: child.tokens,
+          })
+        }
+      }
+      return
+    }
+    if (lower === 'mcp tools' || group.type === 4) {
+      addBucket('MCP tools', group.tokens)
+      for (const child of group.children) {
+        if (child.name && child.tokens > 0) {
+          mcpServerTokens.set(child.name, (mcpServerTokens.get(child.name) ?? 0) + child.tokens)
+        }
+      }
+      return
+    }
+    if (lower === 'tools' || group.type === 2) {
+      if (group.children.length === 0) {
+        addBucket('System tools', group.tokens)
+        return
+      }
+      let mcpSum = 0
+      let sysSum = 0
+      for (const child of group.children) {
+        if (child.tokens <= 0) continue
+        const mcpMatch = /^mcp_([^_]+)_/.exec(child.name)
+        if (mcpMatch?.[1]) {
+          mcpSum += child.tokens
+          const server = mcpMatch[1]
+          mcpServerTokens.set(server, (mcpServerTokens.get(server) ?? 0) + child.tokens)
+        } else {
+          sysSum += child.tokens
+          systemToolItems.push({
+            name: child.name,
+            detail: null,
+            tokens: formatCompactTokens(child.tokens),
+            raw: child.tokens,
+          })
+        }
+      }
+      const unaccounted = Math.max(0, group.tokens - mcpSum - sysSum)
+      addBucket('MCP tools', mcpSum)
+      addBucket('System tools', sysSum + unaccounted)
+      return
+    }
+    if (lower === 'skills' || group.type === 5) {
+      addBucket('Skills', group.tokens)
+      for (const child of group.children) {
+        if (child.name && child.tokens > 0) {
+          skillItems.push({
+            name: child.name,
+            detail: null,
+            tokens: formatCompactTokens(child.tokens),
+            raw: child.tokens,
+          })
+        }
+      }
+      return
+    }
+    if (lower === 'system prompt' || lower === 'unspecified' || group.type === 1) {
+      addBucket('System prompt', group.tokens)
+      return
+    }
+    if (lower === 'subagents' || group.type === 6) {
+      addBucket('Subagents', group.tokens)
+      return
+    }
+    addBucket(group.name.trim() || 'Other', group.tokens)
+  }
+
+  for (const group of cw.groups) classifyGroup(group)
+  if (bucketTokens.size === 0) return null
+
+  const summedUsed = [...bucketTokens.values()].reduce((sum, val) => sum + val, 0)
+  const used = cw.totalTokens > 0 ? Math.max(summedUsed, cw.totalTokens) : summedUsed
+  const size = cw.maxContextTokens > 0 ? cw.maxContextTokens : 0
+
+  const categories: ContextBreakdown['categories'] = [...bucketTokens.entries()].map(
+    ([name, tokens]) => ({
+      name,
+      tokens,
+      share: shareOf(tokens, size),
+    }),
+  )
+  if (size > used) {
+    const free = size - used
+    categories.push({ name: 'Free space', tokens: free, share: shareOf(free, size) })
+  }
+
+  const lists: ContextList[] = []
+  if (mcpServerTokens.size > 0) {
+    const items = [...mcpServerTokens.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, tokens]) => ({ name, detail: null, tokens: formatCompactTokens(tokens) }))
+    lists.push({ name: 'MCP tools', items })
+  }
+  if (skillItems.length > 0) {
+    lists.push({
+      name: 'Skills',
+      items: skillItems
+        .sort((a, b) => b.raw - a.raw || a.name.localeCompare(b.name))
+        .map(({ name, detail, tokens }) => ({ name, detail, tokens })),
+    })
+  }
+  if (ruleItems.length > 0) {
+    lists.push({
+      name: 'Memory files',
+      items: ruleItems
+        .sort((a, b) => b.raw - a.raw || a.name.localeCompare(b.name))
+        .map(({ name, detail, tokens }) => ({ name, detail, tokens })),
+    })
+  }
+  if (systemToolItems.length > 0) {
+    lists.push({
+      name: 'System tools',
+      items: systemToolItems
+        .sort((a, b) => b.raw - a.raw || a.name.localeCompare(b.name))
+        .slice(0, 20)
+        .map(({ name, detail, tokens }) => ({ name, detail, tokens })),
+    })
+  }
+
+  const model =
+    gen.modelDisplayName ??
+    resolveAgyModelName({
+      responseModel: gen.responseModel,
+      model: gen.model,
+      extraModelEnum: gen.extraMeta.model_enum,
+    })
+
+  return {
+    model,
+    used,
+    size,
+    categories,
+    lists,
+    observedAt: now,
+  }
+}
+
+/**
+ * 从会话本地 `conversations/<sessionId>.db` 的最新 `gen_metadata` 中读取官方精确上下文构成。
+ * 当会话尚无轨迹库或不含 breakdown 字段时返回 null（上层平滑回退到估算区）。
+ */
+export async function readAgyContextBreakdown(
+  sessionId: string,
+  home = os.homedir(),
+  appDataDir = DEFAULT_AGY_APP_DATA_DIR,
+  now = Date.now(),
+): Promise<ContextBreakdown | null> {
+  const dbFile = agyConversationDbFile(sessionId, home, appDataDir)
+  if (!dbFile) return null
+  try {
+    return await withAgySqliteReadOnly(dbFile, (db) => {
+      const rows = db.prepare('SELECT data FROM gen_metadata ORDER BY idx DESC LIMIT 8').all() as {
+        data?: unknown
+      }[]
+      for (const row of rows) {
+        if (!row.data) continue
+        const gen = decodeAgyGenMetadata(row.data, { includeContext: true })
+        if (!gen) continue
+        const breakdown = mapAgyContextBreakdown(gen, now)
+        if (breakdown) return breakdown
+      }
+      return null
+    })
+  } catch {
+    return null
+  }
+}
 
 const estimatedTokens = (bytes: number): number => Math.ceil(bytes / UTF8_BYTES_PER_TOKEN)
 
@@ -329,12 +570,13 @@ export class AgyContextEstimator {
     if (!this.deps.program) return null
     const abort = new AbortController()
     let signIn = false
+    const platform = this.deps.platform ?? (process.platform as Platform)
     const run = await (this.deps.run ?? runProgram)({
       program: this.deps.program,
       args: [...(this.deps.args ?? []), '-p', '/skills', '--output-format', 'json'],
       cwd,
-      env: this.deps.env ?? {},
-      platform: this.deps.platform ?? (process.platform as Platform),
+      env: silentCliEnv(this.deps.env ?? {}, platform),
+      platform,
       timeoutMs: SKILLS_TIMEOUT_MS,
       signal: abort.signal,
       onOutput: (text) => {

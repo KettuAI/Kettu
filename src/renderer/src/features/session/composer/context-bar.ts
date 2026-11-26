@@ -244,6 +244,7 @@ export function breakdownView(
   if (live) {
     if (report && rows) return { kind: 'rows', rows, dimmed: false, stale: report.key !== key }
     if (report?.error) return { kind: 'error', error: report.error }
+    if (report && !report.loading) return { kind: 'none' }
     return { kind: 'loading' }
   }
   if (!idle) {

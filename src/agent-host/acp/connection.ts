@@ -27,7 +27,7 @@ import {
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
-import type { ContextEstimates } from '@shared/context'
+import type { ContextBreakdown, ContextEstimates } from '@shared/context'
 import type { Platform } from '@shared/platform'
 import type {
   AgentId,
@@ -74,6 +74,7 @@ import { compareVersions } from '../versions'
 import {
   ANTIGRAVITY_TIER_VERSION,
   antigravityTier,
+  antigravityTierMultiple,
   antigravityTierSignIn,
 } from '../vendor-usage/antigravity'
 import {
@@ -122,7 +123,7 @@ import {
 } from './agy-auto-policy'
 import { AgyBackgroundWait, agyTailReader, type AgyTailReader } from './agy-background-wait'
 import { AgyCommands } from './agy-commands'
-import { AgyContextEstimator, scanAgySkillsOnDisk } from './agy-context'
+import { AgyContextEstimator, readAgyContextBreakdown, scanAgySkillsOnDisk } from './agy-context'
 import { AgyMetrics, agyStepReader, type AgyStepReader } from './agy-metrics'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { AGY_ELICITATION, askInCard, asksQuestions, OpenAsks } from './agy-questions'
@@ -518,6 +519,12 @@ export class AcpConnection implements AgentConnection {
   private readonly agyMetrics: AgyMetrics | null = null
   /** Detects when agy finished replying and is idle waiting on background work. */
   private agyWait: AgyBackgroundWait | null = null
+  /** 仅在 Antigravity 连接上挂载：从本地轨迹库只读获取官方精确上下文分类构成。 */
+  readonly readContext?: (
+    sessionId: string,
+    cwd: string,
+    options: SessionOptions,
+  ) => Promise<ContextBreakdown | null>
   /** 仅在 Antigravity 连接上挂载：估算当前会话可加载的 Skills 与 MCP 工具定义大小。 */
   readonly readContextEstimates?: (sessionId: string, cwd: string) => Promise<ContextEstimates>
 
@@ -728,6 +735,15 @@ export class AcpConnection implements AgentConnection {
           platform,
           ...(hooks.home ? { home: hooks.home } : {}),
         })
+      this.readContext = async (sessionId) => {
+        const appDataDir =
+          this.agyAppDataDirOf(sessionId) ??
+          (this.hooks.agyAppDataDir
+            ? await this.hooks.agyAppDataDir(sessionId)
+            : await resolveAgyAppDataDir(sessionId, hooks.home)) ??
+          DEFAULT_AGY_APP_DATA_DIR
+        return readAgyContextBreakdown(sessionId, hooks.home, appDataDir)
+      }
       this.readContextEstimates = (sessionId, cwd) => {
         const opened = this.agyOpened.get(sessionId)
         return estimator.read(cwd, opened?.options.mcpServers ?? [])
@@ -2166,7 +2182,15 @@ export class AcpConnection implements AgentConnection {
     if (this.hooks.agentId !== 'antigravity') return
     if (this.version === null || compareVersions(this.version, ANTIGRAVITY_TIER_VERSION) < 0) return
     const plan = antigravityTier(meta)
-    if (plan) this.hooks.account({ kind: 'account', label: plan, email: null })
+    const tier = antigravityTierMultiple(meta)
+    if (plan) {
+      this.hooks.account({
+        kind: 'account',
+        label: plan,
+        email: null,
+        ...(tier ? { tier } : {}),
+      })
+    }
     this.hooks.signInShown?.(plan ? antigravityTierSignIn(meta) : null)
   }
 
