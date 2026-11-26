@@ -195,16 +195,18 @@ Kettu 通过官方原生 SDK 或专属服务接口深度驱动 Claude Code、Cod
   <a href="https://github.com/xiaolfeng" title="@xiaolfeng"><img src="https://github.com/xiaolfeng.png?size=96" width="48" height="48" alt="@xiaolfeng"></a>
   <a href="https://github.com/isyuah" title="@isyuah"><img src="https://github.com/isyuah.png?size=96" width="48" height="48" alt="@isyuah"></a>
   <a href="https://github.com/kinhangliew-debug" title="@kinhangliew-debug"><img src="https://github.com/kinhangliew-debug.png?size=96" width="48" height="48" alt="@kinhangliew-debug"></a>
+  <a href="https://github.com/akatsukiro" title="@akatsukiro"><img src="https://github.com/akatsukiro.png?size=96" width="48" height="48" alt="@akatsukiro"></a>
   <a href="https://github.com/javalover123" title="@javalover123"><img src="https://github.com/javalover123.png?size=96" width="48" height="48" alt="@javalover123"></a>
   <a href="https://github.com/NKUlpj" title="@NKUlpj"><img src="https://github.com/NKUlpj.png?size=96" width="48" height="48" alt="@NKUlpj"></a>
-  <a href="https://github.com/akatsukiro" title="@akatsukiro"><img src="https://github.com/akatsukiro.png?size=96" width="48" height="48" alt="@akatsukiro"></a>
-  <a href="https://github.com/jintongxu" title="@jintongxu"><img src="https://github.com/jintongxu.png?size=96" width="48" height="48" alt="@jintongxu"></a>
   <a href="https://github.com/jkoe86710" title="@jkoe86710"><img src="https://github.com/jkoe86710.png?size=96" width="48" height="48" alt="@jkoe86710"></a>
+  <a href="https://github.com/jintongxu" title="@jintongxu"><img src="https://github.com/jintongxu.png?size=96" width="48" height="48" alt="@jintongxu"></a>
+  <a href="https://github.com/liuchaowei666" title="@liuchaowei666"><img src="https://github.com/liuchaowei666.png?size=96" width="48" height="48" alt="@liuchaowei666"></a>
   <a href="https://github.com/Ne1ther" title="@Ne1ther"><img src="https://github.com/Ne1ther.png?size=96" width="48" height="48" alt="@Ne1ther"></a>
   <a href="https://github.com/AlkaidSTART" title="@AlkaidSTART"><img src="https://github.com/AlkaidSTART.png?size=96" width="48" height="48" alt="@AlkaidSTART"></a>
   <a href="https://github.com/Ariember" title="@Ariember"><img src="https://github.com/Ariember.png?size=96" width="48" height="48" alt="@Ariember"></a>
   <a href="https://github.com/ShaoClean" title="@ShaoClean"><img src="https://github.com/ShaoClean.png?size=96" width="48" height="48" alt="@ShaoClean"></a>
   <a href="https://github.com/Elijah-s" title="@Elijah-s"><img src="https://github.com/Elijah-s.png?size=96" width="48" height="48" alt="@Elijah-s"></a>
+  <a href="https://github.com/kcyu1010" title="@kcyu1010"><img src="https://github.com/kcyu1010.png?size=96" width="48" height="48" alt="@kcyu1010"></a>
   <a href="https://github.com/Kongbai333" title="@Kongbai333"><img src="https://github.com/Kongbai333.png?size=96" width="48" height="48" alt="@Kongbai333"></a>
   <a href="https://github.com/KubaZzZo" title="@KubaZzZo"><img src="https://github.com/KubaZzZo.png?size=96" width="48" height="48" alt="@KubaZzZo"></a>
   <a href="https://github.com/Leochens" title="@Leochens"><img src="https://github.com/Leochens.png?size=96" width="48" height="48" alt="@Leochens"></a>

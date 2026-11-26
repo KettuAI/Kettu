@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   aggregateContributors,
+  assertSafeContributorUpdate,
   classifyContribution,
   END_MARKER,
   extractClosingIssueNumbers,
+  extractExistingContributorLogins,
   extractPrNumbersFromSubject,
   formatAttribution,
   isExcludedUser,
@@ -175,6 +177,139 @@ describe('README contributors wall rendering and idempotent updates', () => {
     const out = updateReadmeContent(initial, [{ login: 'alice' }], 'zh-CN')
     expect(out).toContain('## 贡献者')
     expect(out.indexOf('## 贡献者')).toBeLessThan(out.indexOf('## 社区与参与贡献'))
+  })
+
+  it('extracts existing contributor logins only from within the contributor markers', () => {
+    const initial = [
+      '<a href="https://github.com/outside-link">Outside</a>',
+      '<a href="https://github.com/KettuAI/Kettu">Repo</a>',
+      '',
+      '## Community & Contributing',
+      '',
+      '- Issues',
+    ].join('\n')
+
+    expect(extractExistingContributorLogins(initial)).toEqual([])
+
+    const withWall = updateReadmeContent(
+      initial,
+      [{ login: 'Yezh1i' }, { login: 'alice-dev' }],
+      'en',
+    )
+    expect(extractExistingContributorLogins(withWall)).toEqual(['Yezh1i', 'alice-dev'])
+
+    const withEmptyWall = updateReadmeContent(initial, [], 'en')
+    expect(extractExistingContributorLogins(withEmptyWall)).toEqual([])
+  })
+
+  it('refuses to clear or silently truncate an existing contributors wall on filtered API results', () => {
+    const existingLogins = ['alice', 'bob', 'carol', 'dave', 'erin', 'frank']
+    const prOnlyItems = [
+      {
+        number: 10,
+        state: 'closed',
+        user: { login: 'Amigoer', type: 'User' },
+        pull_request: { merged_at: '2026-11-25T00:00:00Z' },
+      },
+    ]
+    const issueOnlyItems = [
+      {
+        number: 11,
+        state: 'closed',
+        state_reason: 'completed',
+        user: { login: 'alice', type: 'User' },
+      },
+    ]
+    const mixedItems = [...prOnlyItems, ...issueOnlyItems]
+
+    // Reproduces missing `issues: read`: API returns PRs only, yielding 0 external contributors.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [],
+        items: prOnlyItems,
+      }),
+    ).toThrow(/issues: read/)
+
+    // Even if one external PR existed, missing `issues: read` must not drop existing issue reporters.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [{ login: 'alice' }],
+        items: prOnlyItems,
+      }),
+    ).toThrow(/issues: read/)
+
+    // Missing `pull-requests: read` when existing PR contributors disappear.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [{ login: 'alice' }],
+        items: issueOnlyItems,
+      }),
+    ).toThrow(/pull-requests: read/)
+
+    // Empty API response must never clear an existing wall.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [],
+        items: [],
+      }),
+    ).toThrow(/0 items/)
+
+    // Sudden 50%+ shrinkage fails by default unless --allow-shrink is passed.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [{ login: 'alice' }, { login: 'bob' }],
+        items: mixedItems,
+      }),
+    ).toThrow(/--allow-shrink/)
+
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [{ login: 'alice' }, { login: 'bob' }],
+        items: mixedItems,
+        allowShrink: true,
+      }),
+    ).not.toThrow()
+
+    // Clearing a non-empty wall completely is still rejected even with allowShrink.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [],
+        items: mixedItems,
+        allowShrink: true,
+      }),
+    ).toThrow(/Refusing to clear/)
+
+    // Normal additions or minor removals with both issues and PRs present pass.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins,
+        nextContributors: [
+          { login: 'alice' },
+          { login: 'bob' },
+          { login: 'carol' },
+          { login: 'dave' },
+          { login: 'erin' },
+          { login: 'grace' },
+        ],
+        items: mixedItems,
+      }),
+    ).not.toThrow()
+
+    // First-time population when no existing wall is present passes.
+    expect(() =>
+      assertSafeContributorUpdate({
+        existingLogins: [],
+        nextContributors: [],
+        items: [],
+      }),
+    ).not.toThrow()
   })
 })
 

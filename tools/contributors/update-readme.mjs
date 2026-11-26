@@ -13,7 +13,14 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { aggregateContributors, DEFAULT_REPO, updateReadmeContent } from './core.mjs'
+import {
+  aggregateContributors,
+  assertSafeContributorUpdate,
+  countApiItemKinds,
+  DEFAULT_REPO,
+  extractExistingContributorLogins,
+  updateReadmeContent,
+} from './core.mjs'
 
 const REPO_ROOT = resolve(import.meta.dirname, '../..')
 const README_EN = resolve(REPO_ROOT, 'README.md')
@@ -100,33 +107,36 @@ function parseArgs(argv) {
   let check = false
   let dryRun = false
   let json = false
+  let allowShrink = false
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--check') check = true
     else if (arg === '--dry-run') dryRun = true
     else if (arg === '--json') json = true
+    else if (arg === '--allow-shrink') allowShrink = true
     else if (arg === '--repo' && argv[i + 1]) {
       repo = argv[i + 1]
       i += 1
     } else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: node tools/contributors/update-readme.mjs [--repo owner/name] [--check] [--dry-run] [--json]',
+        'Usage: node tools/contributors/update-readme.mjs [--repo owner/name] [--check] [--dry-run] [--json] [--allow-shrink]',
       )
       process.exit(0)
     } else {
       throw new Error(`Unknown argument: ${arg}`)
     }
   }
-  return { repo, check, dryRun, json }
+  return { repo, check, dryRun, json, allowShrink }
 }
 
 async function main() {
-  const { repo, check, dryRun, json } = parseArgs(process.argv.slice(2))
+  const { repo, check, dryRun, json, allowShrink } = parseArgs(process.argv.slice(2))
   const token = resolveGitHubToken()
   const items = await fetchAllPages(
     `https://api.github.com/repos/${repo}/issues?state=all&per_page=100`,
     token,
   )
+  const counts = countApiItemKinds(items)
   const contributors = aggregateContributors(items)
 
   if (json) {
@@ -140,39 +150,51 @@ async function main() {
     { path: README_ZH, locale: 'zh-CN' },
   ]
 
-  let changed = false
-  for (const target of targets) {
+  // Validate every target before writing so a bad or permission-filtered API response cannot
+  // silently clear or partially modify README files.
+  /** @type {Array<{ path: string, current: string, next: string }>} */
+  const planned = targets.map((target) => {
     const current = readFileSync(target.path, 'utf8')
+    const existingLogins = extractExistingContributorLogins(current)
+    assertSafeContributorUpdate({
+      existingLogins,
+      nextContributors: contributors,
+      items,
+      allowShrink,
+    })
     const next = updateReadmeContent(current, contributors, target.locale)
-    if (next !== current) {
+    return { path: target.path, current, next }
+  })
+
+  let changed = false
+  for (const plan of planned) {
+    if (plan.next !== plan.current) {
       changed = true
       if (!check && !dryRun) {
-        writeFileSync(target.path, next)
+        writeFileSync(plan.path, plan.next)
       }
     }
   }
 
+  const summary = `${contributors.length} community contributors from ${counts.issues} issues and ${counts.pullRequests} pull requests`
+
   if (check) {
     if (changed) {
       console.error(
-        `Contributors wall is out of date (${contributors.length} contributors). Run: node tools/contributors/update-readme.mjs`,
+        `Contributors wall is out of date (${summary}). Run: node tools/contributors/update-readme.mjs`,
       )
       process.exit(1)
     }
-    console.log(`Contributors wall is up to date (${contributors.length} contributors)`)
+    console.log(`Contributors wall is up to date (${summary})`)
     return
   }
 
   if (dryRun) {
-    console.log(
-      `Dry run: ${contributors.length} external contributors (${changed ? 'README files would change' : 'no changes'})`,
-    )
+    console.log(`Dry run: ${summary} (${changed ? 'README files would change' : 'no changes'})`)
     return
   }
 
-  console.log(
-    `${changed ? 'Updated' : 'Verified'} README files with ${contributors.length} community contributors`,
-  )
+  console.log(`${changed ? 'Updated' : 'Verified'} README files with ${summary}`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

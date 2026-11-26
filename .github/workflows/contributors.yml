@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '0 2 * * 1'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview contributor changes without pushing a branch or opening a pull request
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,9 +26,12 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # GET /repos/{owner}/{repo}/issues omits standard issues unless issues: read is granted.
+      issues: read
       pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       GITHUB_TOKEN: ${{ github.token }}
     defaults:
       run:
@@ -36,34 +44,88 @@ jobs:
         with:
           node-version: 24
       - name: Update contributors wall
-        run: node tools/contributors/update-readme.mjs
+        env:
+          DRY_RUN: ${{ inputs.dry_run == true && '--dry-run' || '' }}
+        run: node tools/contributors/update-readme.mjs --repo "$GITHUB_REPOSITORY" $DRY_RUN
       - name: Check for changes
+        if: inputs.dry_run != true
         id: diff
         run: |
           if git diff --quiet -- README.md README.zh-CN.md; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
+            git diff --stat -- README.md README.zh-CN.md
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Push branch and open or update pull request
-        if: steps.diff.outputs.changed == 'true'
+        if: inputs.dry_run != true && steps.diff.outputs.changed == 'true'
         run: |
           branch="chore/update-contributors"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
-          git add README.md README.zh-CN.md
-          git commit -m "docs(readme): refresh community contributors wall"
-          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+          # Fetch the remote branch first so --force-with-lease has its expected commit, and skip
+          # pushing when the branch already has the exact same README changes.
+          if git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null; then
+            if git diff --quiet "origin/$branch" -- README.md README.zh-CN.md; then
+              echo "Remote branch $branch already has the latest contributors wall"
+              need_push=false
+            else
+              need_push=true
+            fi
+          else
+            need_push=true
+          fi
+
+          if [ "$need_push" = true ]; then
+            git checkout -B "$branch"
+            git add README.md README.zh-CN.md
+            git commit -m "docs(readme): refresh community contributors wall"
+            if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+              expected_sha="$(git rev-parse "refs/remotes/origin/$branch")"
+              git push --force-with-lease="refs/heads/$branch:$expected_sha" origin "HEAD:refs/heads/$branch"
+            else
+              git push origin "HEAD:refs/heads/$branch"
+            fi
+          fi
 
           existing="$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
             echo "Updated existing pull request #$existing"
+            echo "Updated existing pull request #$existing on \`$branch\`." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          gh pr create \
+          set +e
+          pr_output="$(gh pr create \
             --base main \
             --head "$branch" \
             --title "docs(readme): refresh community contributors wall" \
-            --body "Automatically refreshes the community contributors avatar wall in README.md and README.zh-CN.md from public merged pull requests and accepted/completed public issues."
+            --body "Automatically refreshes the community contributors avatar wall in README.md and README.zh-CN.md from public merged pull requests and accepted/completed public issues." 2>&1)"
+          pr_status=$?
+          set -e
+
+          if [ "$pr_status" -eq 0 ]; then
+            echo "$pr_output"
+            echo "Opened pull request: $pr_output" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # When the repository disables "Allow GitHub Actions to create and approve pull requests",
+          # keep the pushed branch ready and guide maintainers to open the PR or enable the setting.
+          if grep -qi 'not permitted to create or approve pull requests' <<< "$pr_output"; then
+            compare_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
+            echo "::warning::Pushed updated contributors wall to $branch, but GitHub Actions is not permitted to create pull requests. Open the PR at $compare_url or enable 'Allow GitHub Actions to create and approve pull requests' in Settings > Actions > General."
+            {
+              echo "### Manual pull request needed"
+              echo ""
+              echo "Updated \`README.md\` and \`README.zh-CN.md\` were pushed to branch \`$branch\`, but this repository does not permit GitHub Actions to create pull requests."
+              echo ""
+              echo "- [Create pull request from \`$branch\`]($compare_url)"
+              echo "- To let this workflow open PRs automatically, enable **Allow GitHub Actions to create and approve pull requests** in **Settings > Actions > General > Workflow permissions**."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "$pr_output" >&2
+          exit "$pr_status"
