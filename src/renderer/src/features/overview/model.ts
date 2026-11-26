@@ -168,6 +168,37 @@ export function replyLine(reply: string | null | undefined): string | null {
   return line || null
 }
 
+/** Structured subtitle segments for an Overview row and its full tooltip string. */
+export interface RowSubParts {
+  project: string | null
+  by: string | null
+  extra: string | null
+  host: string | null
+  fullText: string
+}
+
+/** Splits a row's subtitle into structured segments and builds its full tooltip text. */
+export function rowSubParts(
+  facts: { project: string; by: string; host: string | null },
+  {
+    project = true,
+    extra = null,
+    separator,
+  }: { project?: boolean; extra?: string | null; separator: string },
+): RowSubParts {
+  const projectName = project && facts.project ? facts.project : null
+  const by = facts.by || null
+  const extraText = extra || null
+  const host = facts.host || null
+  const fullText = [projectName, by, extraText, host].filter(Boolean).join(separator)
+  return { project: projectName, by, extra: extraText, host, fullText }
+}
+
+/** Builds a row hover tooltip that exposes full truncated title and subtitle metadata. */
+export function rowTooltip(title: string, subtitle: string): string {
+  return subtitle ? `${title}\n${subtitle}` : title
+}
+
 // The timeline.
 
 export interface TimelineBar {
