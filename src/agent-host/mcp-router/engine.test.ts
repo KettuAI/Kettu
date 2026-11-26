@@ -456,6 +456,12 @@ describe('the two eras of the protocol', () => {
     })
     client.deliver(call('c', 'live', { _meta: meta }))
     await settle()
-    expect(client.answer('c')).toMatchObject({ result: { content: [{ text: 'called live' }] } })
+    expect(client.answer('c')).toMatchObject({
+      result: {
+        content: [{ text: 'called live' }],
+        resultType: 'complete',
+        _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'fake' } },
+      },
+    })
   })
 })

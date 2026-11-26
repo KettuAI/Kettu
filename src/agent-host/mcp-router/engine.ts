@@ -440,7 +440,23 @@ export class Instance {
         result,
       )
     }
-    link.reply({ ...response, id: forwarded.id })
+    link.reply({ ...response, id: forwarded.id, ...this.modernResult(link, result) })
+  }
+
+  /** A result of the old protocol as a new agent reads one: complete, naming the server. */
+  private modernResult(
+    link: Link,
+    result: Record<string, unknown> | undefined,
+  ): { result: Record<string, unknown> } | null {
+    if (!result || link.era !== 'modern' || this.era === 'modern') return null
+    const server = this.init?.serverInfo
+    return {
+      result: {
+        resultType: 'complete',
+        ...result,
+        _meta: { ...(isRecord(server) ? { [META_SERVER]: server } : {}), ...metaOf(result) },
+      },
+    }
   }
 
   /**
