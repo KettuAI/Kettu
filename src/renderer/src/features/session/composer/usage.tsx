@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
@@ -31,22 +31,25 @@ import {
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import {
-  ContextWindow,
-  type ContextPart as ContextWindowPart,
-} from '@renderer/components/affect/context-window'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { joinPlanTier } from '@renderer/features/account/model'
-import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
+import {
+  barSegments,
+  breakdownView,
+  contextSummary,
+  formatPartShare,
+  shownUsage,
+} from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { planResetShort, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
   clockTime,
   countdown,
+  exactCount,
   fullTime,
   limitLabel,
   limitShort,
@@ -340,8 +343,8 @@ const LIMIT_METER = { ok: 'mid', warn: 'high', bad: 'full' } as const
 
 /**
  * How much of the context is used, as a ring and its percentage, and a plan limit nearing its end
- * before them, on the composer's tray. It opens affectUI's Context Window over what fills the
- * context, then the session's tokens and the plan's limits.
+ * before them, on the composer's tray. It opens a compact context usage card with a progress bar
+ * and optional breakdown, followed by the session's tokens and the plan's limits.
  */
 export function ContextButton({
   sessionId,
@@ -597,6 +600,9 @@ function ContextPart({
   subagent?: boolean
 }) {
   const { t } = useTranslation('composer')
+  const uid = useId()
+  const [hot, setHot] = useState<string | null>(null)
+  const [opened, setOpened] = useState<string | null>(null)
   const key = `${usage.used}/${usage.size}`
   const view = breakdownView(report, key, { reports, idle, live })
   // Managed reports are refreshed by the host, independently of this popover's lifetime.
@@ -610,65 +616,202 @@ function ContextPart({
   const busy = view.kind === 'rows' && view.dimmed
   const retry = () => loadContext(sessionId, key, true)
   const listOf = (name: string) => lists.find((l) => l.name.toLowerCase() === name.toLowerCase())
-  const parts: ContextWindowPart[] = rows
-    ? rows
-        .filter((row) => row.part.kind !== 'free')
-        .map((row) => {
-          const list = listOf(row.name)
-          const paths = MEMORY_FILES.test(row.name)
-          // A skill's source is the agent's own key, such as `syncedSkills`; a plugin's skill
-          // already names its plugin.
-          const bare = SKILLS.test(row.name)
-          return {
-            id: row.name,
-            label: row.name,
-            tokens: row.tokens,
-            locked: true,
-            ...(row.part.kind === 'buffer'
-              ? { color: 'var(--composer-faint)', reserved: true }
-              : {}),
-            ...(list
-              ? {
-                  items: list.items.map((item, index) => ({
-                    id: String(index),
-                    label: paths
-                      ? middlePath(item.name)
-                      : item.detail && !bare
-                        ? `${item.name} · ${item.detail}`
-                        : item.name,
-                    tokens: parseTokens(item.tokens),
-                    ...(paths ? { title: item.name } : {}),
-                  })),
-                }
-              : {}),
-          }
-        })
-    : [{ id: 'used', label: t('usage.context.used'), tokens: usage.used, locked: true }]
+  const summary = contextSummary(usage, rows)
+  const tone = contextTone(summary.share)
+  const segments = barSegments(rows, summary.used, summary.cap)
+  const breakdownRows = rows ? rows.filter((row) => row.part.kind !== 'free') : null
+  const hotRow = breakdownRows?.find((row) => row.name === hot) ?? null
   const unlisted = lists.filter(
     (l) => !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
   )
+  const statusTone = hotRow ? 'hot' : summary.level !== 'ok' ? summary.level : undefined
+  const statusText = hotRow
+    ? `${hotRow.name} · ${formatPartShare(hotRow.tokens, summary.cap)}`
+    : summary.level === 'full'
+      ? summary.over > 0
+        ? t('usage.window.over', { n: tokens(summary.over) })
+        : t('usage.window.full')
+      : summary.level === 'warn'
+        ? t('usage.window.left', { n: tokens(summary.free) })
+        : t('usage.window.free', { n: tokens(summary.free) })
   return (
     <>
-      <div aria-busy={busy} className="kettu-ctx__window" data-busy={busy || undefined}>
-        <ContextWindow
-          parts={parts}
-          limit={usage.size}
-          title={t('usage.context.title')}
-          model={model ?? undefined}
-          modelIcon={model ? <AgentMark agent={agentId} size={12} /> : undefined}
-          readOnly
-          steadyHead
-          labels={{
-            free: (n) => t('usage.window.free', { n }),
-            left: (n) => t('usage.window.left', { n }),
-            over: (n) => t('usage.window.over', { n }),
-            full: t('usage.window.full'),
-            of: (n) => t('usage.window.of', { n }),
-            share: (percent) => t('usage.window.share', { percent }),
-            used: (used, cap, percent) => t('usage.window.used', { used, cap, percent }),
-            nothing: t('usage.window.nothing'),
-          }}
-        />
+      <div
+        aria-busy={busy}
+        className="kettu-ctx__main"
+        data-level={METER[tone]}
+        data-busy={busy || undefined}
+        onPointerLeave={() => setHot(null)}
+      >
+        <div className="kettu-ctx__head">
+          <span className="kettu-ctx__title">{t('usage.context.title')}</span>
+          {model && (
+            <span className="kettu-ctx__model" title={model}>
+              <span className="kettu-ctx__model-icon">
+                <AgentMark agent={agentId} size={12} />
+              </span>
+              <span>{model}</span>
+            </span>
+          )}
+        </div>
+
+        <div
+          className="kettu-ctx__bar"
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={summary.cap}
+          aria-valuenow={Math.min(summary.used, summary.cap)}
+          aria-label={t('usage.window.used', {
+            used: tokens(summary.used),
+            cap: tokens(summary.cap),
+            percent: summary.percent,
+          })}
+          data-hot={hotRow ? '' : undefined}
+        >
+          {segments.map((segment) => (
+            <span
+              key={segment.key}
+              className="kettu-ctx__seg"
+              data-kind={segment.part.kind}
+              data-color={segment.part.kind === 'source' ? segment.part.color : undefined}
+              data-on={hot === segment.key ? '' : undefined}
+              data-tiny={segment.widthPercent > 0 && segment.widthPercent < 1.5 ? '' : undefined}
+              style={{ width: `${segment.widthPercent}%` }}
+              onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse' && breakdownRows) setHot(segment.key)
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="kettu-ctx__metrics tabular">
+          <span
+            className="kettu-ctx__stat"
+            title={t('usage.context.tokens', {
+              tokens: `${exactCount(summary.used)} / ${exactCount(summary.cap)}`,
+            })}
+          >
+            <strong className="kettu-ctx__percent">{summary.percent}%</strong>
+            <span className="kettu-ctx__sep" aria-hidden>
+              ·
+            </span>
+            <span className="kettu-ctx__counts">
+              {tokens(summary.used)} / {tokens(summary.cap)}
+            </span>
+          </span>
+          <span className="kettu-ctx__free" data-tone={statusTone} title={statusText}>
+            {statusText}
+          </span>
+        </div>
+
+        {breakdownRows && breakdownRows.length > 0 && (
+          <ul className="kettu-ctx__parts">
+            {breakdownRows.map((row) => {
+              const list = listOf(row.name)
+              const canOpen = Boolean(list)
+              const isOpen = opened === row.name
+              const isHot = hot === row.name
+              const paths = MEMORY_FILES.test(row.name)
+              // A skill's source is the agent's own key, such as `syncedSkills`; a plugin's skill
+              // already names its plugin.
+              const bare = SKILLS.test(row.name)
+              const rowContent = (
+                <>
+                  <span
+                    className="kettu-ctx__swatch"
+                    data-kind={row.part.kind}
+                    data-color={row.part.kind === 'source' ? row.part.color : undefined}
+                    aria-hidden
+                  />
+                  <span className="kettu-ctx__part-label" title={row.name}>
+                    <span className="truncate" dir="auto">
+                      {row.name}
+                    </span>
+                    {canOpen && (
+                      <Glyph
+                        icon={ArrowDown01Icon}
+                        size={11}
+                        className={cn('kettu-ctx__part-chevron', isOpen && 'rotate-180')}
+                      />
+                    )}
+                  </span>
+                  <span className="kettu-ctx__part-share tabular">
+                    {formatPartShare(row.tokens, summary.cap)}
+                  </span>
+                  <span
+                    className="kettu-ctx__part-value tabular"
+                    title={t('usage.context.tokens', { tokens: exactCount(row.tokens) })}
+                  >
+                    {tokens(row.tokens)}
+                  </span>
+                </>
+              )
+              return (
+                <li
+                  key={row.name}
+                  className="kettu-ctx__part"
+                  data-on={isHot ? '' : undefined}
+                  data-dim={hotRow && !isHot ? '' : undefined}
+                  onPointerEnter={(e) => {
+                    if (e.pointerType === 'mouse') setHot(row.name)
+                  }}
+                >
+                  {canOpen ? (
+                    <button
+                      type="button"
+                      className="kettu-ctx__part-row"
+                      aria-expanded={isOpen}
+                      aria-controls={`${uid}-${row.name}`}
+                      onClick={() => setOpened(isOpen ? null : row.name)}
+                      onFocus={() => setHot(row.name)}
+                      onBlur={() => setHot(null)}
+                    >
+                      {rowContent}
+                    </button>
+                  ) : (
+                    <div className="kettu-ctx__part-row">{rowContent}</div>
+                  )}
+                  {list && isOpen && (
+                    <ul id={`${uid}-${row.name}`} className="kettu-ctx__part-items tabular">
+                      {list.items.length === 0 ? (
+                        <li className="kettu-ctx__part-empty">{t('usage.window.nothing')}</li>
+                      ) : (
+                        list.items.map((item, index) => {
+                          const itemLabel = paths
+                            ? middlePath(item.name)
+                            : item.detail && !bare
+                              ? `${item.name} · ${item.detail}`
+                              : item.name
+                          const parsed = parseTokens(item.tokens)
+                          return (
+                            <li key={index}>
+                              <span
+                                className="truncate"
+                                title={paths ? item.name : itemLabel}
+                                dir="auto"
+                              >
+                                {itemLabel}
+                              </span>
+                              <span
+                                title={
+                                  parsed > 0
+                                    ? t('usage.context.tokens', { tokens: exactCount(parsed) })
+                                    : undefined
+                                }
+                              >
+                                {parsed > 0 ? tokens(parsed) : item.tokens}
+                              </span>
+                            </li>
+                          )
+                        })
+                      )}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
       {/* A refresh in progress adds no line: the card opens upward, so a passing line jolts it. */}
       {view.kind === 'rows' && view.stale && (report?.error || (!live && !idle)) && (
@@ -1039,8 +1182,8 @@ function BreakdownRows({ label }: { label: string }) {
   return (
     <div aria-label={label} className="kettu-ctx__pad flex flex-col">
       {[4 / 5, 3 / 5, 2 / 3].map((width) => (
-        <div key={width} className="flex h-6 items-center">
-          <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
+        <div key={width} className="flex h-5 items-center">
+          <Skeleton className="h-2.5" style={{ width: `${width * 100}%` }} />
         </div>
       ))}
     </div>
