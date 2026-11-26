@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import type { AgentManager } from './agents'
 import { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
@@ -36,6 +37,7 @@ function manager(
     outside?: OutsideReader
     threads?: Partial<ThreadStore>
     settings?: Record<string, unknown>
+    options?: AgentOptionsStore
     prepared?: PreparedRecords
     worktrees?: Partial<WorktreeManager>
   } = {},
@@ -72,6 +74,7 @@ function manager(
     git: () => null,
     events: new Proxy({}, { get: () => () => {} }) as SessionEvents,
     settings: () => ({ startModes: {}, ...extra.settings }) as never,
+    ...(extra.options ? { options: extra.options } : {}),
     ...(extra.outside ? { outside: extra.outside } : {}),
     ...(extra.prepared ? { prepared: extra.prepared } : {}),
     ...(extra.worktrees ? { worktrees: extra.worktrees as WorktreeManager } : {}),
@@ -1074,5 +1077,232 @@ describe('empty-replay guard and recovery of cached empty imported threads', () 
     const snapshot = await sessions.open(record.id)
     expect(loadSession).not.toHaveBeenCalled()
     expect(snapshot.entries).toEqual([])
+  })
+})
+
+describe('preserving prepared session options when creating a worktree session', () => {
+  const BASE_OID = 'b'.repeat(40)
+
+  const makeConfig = (mode = 'default', custom = 'off') => [
+    {
+      id: 'mode',
+      name: 'Mode',
+      category: 'mode' as const,
+      type: 'select' as const,
+      value: mode,
+      choices: [
+        { value: 'default', name: 'Ask' },
+        { value: 'acceptEdits', name: 'Accept edits' },
+        { value: 'plan', name: 'Plan' },
+        { value: 'bypassPermissions', name: 'Full access' },
+      ],
+    },
+    {
+      id: 'sandbox_net',
+      name: 'Network',
+      category: 'other' as const,
+      type: 'select' as const,
+      value: custom,
+      choices: [
+        { value: 'off', name: 'Off' },
+        { value: 'on', name: 'On' },
+      ],
+    },
+  ]
+
+  function configurableAgent() {
+    let seq = 0
+    const configs = new Map<string, ReturnType<typeof makeConfig>>()
+    const newSession = vi.fn<
+      (
+        cwd: string,
+        options?: { fullAccess?: boolean },
+      ) => Promise<{ sessionId: string; config: ReturnType<typeof makeConfig> }>
+    >(async () => {
+      const sessionId = `acp-${++seq}`
+      const config = makeConfig('default', 'off')
+      configs.set(sessionId, config)
+      return { sessionId, config }
+    })
+    const setConfigOption = vi.fn(async (sessionId: string, optionId: string, value: string) => {
+      const next = (configs.get(sessionId) ?? makeConfig()).map((option) =>
+        option.id === optionId ? { ...option, value } : option,
+      )
+      configs.set(sessionId, next)
+      return next
+    })
+    const deleteSession = vi.fn(async () => {})
+    const connection = {
+      newSession,
+      setConfigOption,
+      prompt: vi.fn(async () => ({ stopReason: 'end_turn', tokens: null, models: null })),
+      cancel: async () => {},
+      deleteSession,
+      register: () => {},
+      unregister: () => {},
+      isClosed: false,
+    }
+    const runtime = (agentId: 'claude-code' | 'codex') => ({
+      agentId,
+      init: { capabilities: { deleteSession: true } },
+      connection,
+    })
+    return {
+      newSession,
+      setConfigOption,
+      configs,
+      agents: {
+        name: (id: string) => (id === 'codex' ? 'Codex' : 'Claude Code'),
+        signedIn: () => {},
+        authRequired: () => {},
+        status: () => ({
+          capabilities: { prompt: { image: false, audio: false, embeddedContext: false } },
+          limits: [],
+        }),
+        runtime: (id: 'claude-code' | 'codex') => runtime(id),
+        ensureReady: async (id: 'claude-code' | 'codex') => runtime(id),
+      },
+    }
+  }
+
+  it('carries prepared mode and non-remembered options into a new worktree without remembering mode', async () => {
+    const repo = path.join(dir, 'repo')
+    const wt1 = path.join(dir, 'wt-1')
+    const wt2 = path.join(dir, 'wt-2')
+    await mkdir(repo, { recursive: true })
+    await mkdir(wt1, { recursive: true })
+    await mkdir(wt2, { recursive: true })
+
+    let wtCount = 0
+    const worktrees: Partial<WorktreeManager> = {
+      create: async () => {
+        const wtPath = ++wtCount === 1 ? wt1 : wt2
+        return {
+          path: wtPath,
+          branch: `kettu/wt-${wtCount}`,
+          base: 'main',
+          baseOid: BASE_OID,
+        }
+      },
+      settings: () => ({ waitForSetup: false }) as never,
+      prepare: async () => ({ state: 'ready' }),
+    }
+    const optionsStore = new AgentOptionsStore({
+      file: agentOptionsFile(dir, log),
+      changed: () => {},
+    })
+    await optionsStore.load()
+
+    const agent = configurableAgent()
+    const { sessions } = manager(
+      {},
+      {
+        agents: agent.agents,
+        options: optionsStore,
+        settings: { startModes: { 'claude-code': 'acceptEdits' } },
+        worktrees,
+      },
+    )
+    await sessions.load()
+
+    const prep = await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-1')
+    await sessions.setConfigOption(prep.id, 'mode', 'bypassPermissions')
+    await sessions.setConfigOption(prep.id, 'sandbox_net', 'on')
+
+    const created = await sessions.create(
+      {
+        agentId: 'claude-code',
+        projectPath: repo,
+        preparedId: prep.id,
+        worktree: { base: 'main' },
+      },
+      'win-1',
+    )
+    expect(created.id).not.toBe(prep.id)
+    expect(agent.newSession.mock.calls[1]?.[0]).toBe(wt1)
+    expect(agent.newSession.mock.calls[1]?.[1]?.fullAccess).toBe(true)
+    expect(agent.configs.get('acp-2')?.find((o) => o.id === 'mode')?.value).toBe(
+      'bypassPermissions',
+    )
+    expect(agent.configs.get('acp-2')?.find((o) => o.id === 'sandbox_net')?.value).toBe('on')
+
+    // One-off mode and non-remembered options must not be remembered for subsequent sessions.
+    expect(optionsStore.rememberedOf('claude-code')).toEqual({})
+    await sessions.discard(prep.id)
+
+    const next = await sessions.create(
+      {
+        agentId: 'claude-code',
+        projectPath: repo,
+        worktree: { base: 'main' },
+      },
+      'win-1',
+    )
+    expect(next.id).not.toBe(created.id)
+    expect(agent.newSession.mock.calls[2]?.[1]?.fullAccess).toBeUndefined()
+    expect(agent.configs.get('acp-3')?.find((o) => o.id === 'mode')?.value).toBe('acceptEdits')
+    expect(agent.configs.get('acp-3')?.find((o) => o.id === 'sandbox_net')?.value).toBe('off')
+    await sessions.flush()
+    await optionsStore.flush()
+  })
+
+  it('gives explicit create options priority over prepared config and ignores mismatched agents', async () => {
+    const repo = path.join(dir, 'repo')
+    const wt1 = path.join(dir, 'wt-1')
+    const wt2 = path.join(dir, 'wt-2')
+    await mkdir(repo, { recursive: true })
+    await mkdir(wt1, { recursive: true })
+    await mkdir(wt2, { recursive: true })
+
+    let wtCount = 0
+    const worktrees: Partial<WorktreeManager> = {
+      create: async () => ({
+        path: ++wtCount === 1 ? wt1 : wt2,
+        branch: `kettu/wt-${wtCount}`,
+        base: 'main',
+        baseOid: BASE_OID,
+      }),
+      settings: () => ({ waitForSetup: false }) as never,
+      prepare: async () => ({ state: 'ready' }),
+    }
+    const agent = configurableAgent()
+    const { sessions } = manager(
+      {},
+      {
+        agents: agent.agents,
+        settings: { startModes: { 'claude-code': 'acceptEdits' } },
+        worktrees,
+      },
+    )
+    await sessions.load()
+
+    const prep = await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-1')
+    await sessions.setConfigOption(prep.id, 'mode', 'bypassPermissions')
+
+    // Explicit options override the prepared session's mode.
+    await sessions.create(
+      {
+        agentId: 'claude-code',
+        projectPath: repo,
+        preparedId: prep.id,
+        options: { mode: 'plan' },
+        worktree: { base: 'main' },
+      },
+      'win-1',
+    )
+    expect(agent.configs.get('acp-2')?.find((o) => o.id === 'mode')?.value).toBe('plan')
+
+    // Passing a Claude preparedId when creating a Codex session must not leak Claude's options.
+    await sessions.create(
+      {
+        agentId: 'codex',
+        projectPath: repo,
+        preparedId: prep.id,
+        worktree: { base: 'main' },
+      },
+      'win-1',
+    )
+    expect(agent.configs.get('acp-3')?.find((o) => o.id === 'mode')?.value).toBe('default')
+    await sessions.flush()
   })
 })

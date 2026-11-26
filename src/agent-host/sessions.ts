@@ -5144,11 +5144,13 @@ export class SessionManager {
     this.touch(live.id)
     if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
     try {
-      // As a prepared session starts: the settings' start mode and the agent's remembered values
-      // under what the caller picked, which a client sends only when changed.
+      // As a prepared session starts: the settings' start mode and the agent's remembered values,
+      // then the referenced prepared session's effective options when it could not be adopted,
+      // under what the caller picked explicitly.
       live.startValues = {
         ...this.startModeOf(params.agentId),
         ...this.deps.options?.rememberedOf(params.agentId),
+        ...this.preparedOptionsOf(params, projectPath, options, portId),
         ...options,
       }
       await this.startNew(live)
@@ -5648,6 +5650,48 @@ export class SessionManager {
       await this.removeUnlisted(`left by an earlier run in ${left.cwd}`, runtime, left.acpSessionId)
       this.deps.prepared?.remove(left.agentId, left.acpSessionId)
     }
+  }
+
+  /**
+   * Effective config values from a referenced prepared session that could not be adopted (for
+   * example because the new session runs in a new worktree or as a role), so one-off choices
+   * such as permission mode still carry into the created session.
+   */
+  private preparedOptionsOf(
+    params: {
+      agentId: AgentId
+      projectPath: string | null
+      parentId?: string
+      preparedId?: string
+    },
+    projectPath: string,
+    options: Record<string, string | boolean>,
+    portId?: string,
+  ): Record<string, string | boolean> {
+    if (params.preparedId === undefined) return {}
+    const asked = this.live.get(params.preparedId)
+    if (!asked?.prepared || asked.record.agentId !== params.agentId) return {}
+    if (portId !== undefined && asked.prepared.portId !== portId) return {}
+    if (asked.record.parentId !== (params.parentId ?? null)) return {}
+    if (asked.thread.session.status !== 'ready') return {}
+    if (this.preparedSlots.get(asked.prepared.portId)?.stale) return {}
+    if (
+      params.projectPath === null
+        ? !asked.prepared.scratch
+        : !samePath(asked.record.projectPath, projectPath, this.deps.platform)
+    ) {
+      return {}
+    }
+    const config = asked.thread.session.config
+    const model = config.find((o) => o.category === 'model' && o.type === 'select')
+    const switchedModel =
+      model !== undefined && model.id in options && options[model.id] !== model.value
+    const values: Record<string, string | boolean> = {}
+    for (const option of config) {
+      if (switchedModel && option.category === 'thought_level') continue
+      values[option.id] = option.value
+    }
+    return values
   }
 
   /**
