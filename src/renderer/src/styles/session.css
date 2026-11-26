@@ -1030,8 +1030,8 @@
 }
 
 /* Opening a step or a run: the fold opens in 320 ms while what it holds rises out of a soft blur
-   one after another, as the thread's entrance does (thread-entrance.ts). Closing fades the
-   details first, then folds them. The opening classes are set only when someone opens it. */
+   one after another. Closing fades the details first, then folds them. The opening classes are set
+   only when someone opens it. */
 .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
   transition:
     grid-template-rows 260ms var(--ease-out-quint) 40ms,

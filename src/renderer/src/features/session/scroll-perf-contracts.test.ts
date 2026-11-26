@@ -34,4 +34,11 @@ describe('long-session scroll performance contracts', () => {
     expect(thread).toContain('data-reply-key={replyKey ?? undefined}')
     expect(thread).not.toContain('onPointerEnter={() => hoverReply')
   })
+
+  it('does not blank thread content at opacity 0 or poll frames in thread-entrance', () => {
+    const entrance = read('src/features/session/thread-entrance.ts')
+    expect(entrance).not.toContain("style.opacity = '0'")
+    expect(entrance).not.toContain('requestAnimationFrame')
+    expect(entrance).not.toContain('blur(')
+  })
 })

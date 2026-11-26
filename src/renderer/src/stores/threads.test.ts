@@ -179,4 +179,30 @@ describe('threads store performance and digests', () => {
     expect(Object.keys(useThreadsStore.getState().replicas)).toEqual(['s2'])
     expect(hostMock).toHaveBeenCalledWith('sessions.unwatch', { sessionId: 's1' })
   })
+
+  it('invalidates cached outlines on forgetSession and rewatchAll', async () => {
+    hostMock.mockImplementation((method: string, params: { sessionId?: string }) => {
+      if (method === 'sessions.open' || method === 'sessions.snapshot') {
+        return Promise.resolve(snapshot(params.sessionId ?? 's', []))
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, forgetSession, rewatchAll } = await import('./threads')
+    const { commitCachedOutline, getCachedOutline, invalidateOutlines } =
+      await import('@renderer/features/session/outline/outline-cache')
+    invalidateOutlines()
+
+    await focusSession('s1')
+    await focusSession('s2')
+    commitCachedOutline('s1', [{ pos: 0, entryId: 'u1', text: 'one', title: null }])
+    commitCachedOutline('s2', [{ pos: 0, entryId: 'u2', text: 'two', title: null }])
+
+    forgetSession('s1')
+    expect(getCachedOutline('s1')).toBeNull()
+    expect(getCachedOutline('s2')).not.toBeNull()
+
+    rewatchAll((id) => id === 's2')
+    expect(getCachedOutline('s2')).toBeNull()
+  })
 })
