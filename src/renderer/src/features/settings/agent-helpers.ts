@@ -8,7 +8,7 @@ import type { AgentId, HarnessId } from '@shared/thread'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
-import { isInstalled } from '@renderer/stores/agents'
+import { isInstalled, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 
 export const VENDORS: Partial<Record<HarnessId, string>> = {
@@ -100,6 +100,30 @@ export function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
 export function percent(limit: PlanLimit, view: LimitView): string {
   const shown = limitPercent(limit, view)
   return shown === null ? '—' : `${shown}%`
+}
+
+/**
+ * Quietly re-checks harness detection on the given store so external CLI upgrades are picked up
+ * without flickering loading indicators or surfacing transient errors.
+ */
+export function checkHarnessQuietly(agents: AgentsStoreHook, harnessId?: HarnessId): Promise<void> {
+  return agents
+    .getState()
+    .check(harnessId)
+    .catch((e: unknown) => {
+      console.warn(`Could not check ${harnessId ?? 'harnesses'}: ${errorMessage(e)}`)
+    })
+}
+
+/**
+ * Triggers a background harness check whenever Settings > Harnesses or a specific harness page
+ * opens or switches host/harness.
+ */
+export function useHarnessCheck(harnessId?: HarnessId): void {
+  const { useAgentsStore } = useHostScope()
+  useEffect(() => {
+    void checkHarnessQuietly(useAgentsStore, harnessId)
+  }, [harnessId, useAgentsStore])
 }
 
 /** The harness's own version: the user's CLI it runs, or the program's, never Kettu's package. */

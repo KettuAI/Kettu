@@ -1128,10 +1128,23 @@ export class AgentManager {
       .map((h) => h.def.id)
   }
 
+  /**
+   * Detects `harnesses` again and waits for each binary program's `--version` answer, so callers
+   * that report versions or compare them against updates see what is on disk now.
+   */
+  private async refreshHarnesses(
+    harnesses: readonly Harness[],
+    clearCache: boolean,
+  ): Promise<void> {
+    if (clearCache) this.cliVersions.clear()
+    await Promise.all(harnesses.map((h) => this.detect(h)))
+    await Promise.all(harnesses.map((h) => h.binaryVersionAsked))
+  }
+
   async check(agentId?: AgentId): Promise<AgentStatus[]> {
     await this.detectAll()
     const harnesses = agentId ? [this.slot(agentId).h] : [...this.harnesses.values()]
-    await Promise.all(harnesses.map((h) => this.detect(h)))
+    await this.refreshHarnesses(harnesses, true)
     return this.statuses()
   }
 
@@ -1142,9 +1155,8 @@ export class AgentManager {
 
   /** Detects every harness again in the environment as it is now. */
   async redetect(): Promise<AgentStatus[]> {
-    this.cliVersions.clear()
     this.npmConfigs.clear()
-    await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
+    await this.refreshHarnesses([...this.harnesses.values()], true)
     return this.statuses()
   }
 
@@ -2578,9 +2590,18 @@ export class AgentManager {
       await before
       await this.detectAll()
       if (this.stopped) return { checked: 0, failures: [] }
+      const now = Date.now()
+      // Re-detect local CLIs before fetching remote versions so upgrades done outside Kettu are
+      // reflected instead of comparing against the startup cache.
+      if (all) {
+        await this.refreshHarnesses([...this.harnesses.values()], true)
+      } else {
+        const due = this.checkable().filter((h) => this.checkDue(h) <= now)
+        if (due.length > 0) await this.refreshHarnesses(due, true)
+      }
+      if (this.stopped) return { checked: 0, failures: [] }
       const abort = new AbortController()
       this.updateAbort = abort
-      const now = Date.now()
       const harnesses = this.checkable().filter((h) => all || this.checkDue(h) <= now)
       const [listing, ...results] = await Promise.all([
         all ? this.readListing(abort.signal) : null,
@@ -3241,8 +3262,7 @@ export class AgentManager {
         const name = path.basename(run.program).replace(/\.(?:cmd|exe)$/i, '')
         const failure = programFailure(name, result, timeoutMs)
         if (failure) throw new Error(failure)
-        this.cliVersions.clear()
-        await this.detect(h)
+        await this.refreshHarnesses([h], true)
         h.cliSkipped = null
         const update = this.updateOf(h)
         if (update && h.def.cli && !this.stopped && !this.targeted(h)) {
@@ -5906,8 +5926,15 @@ export class AgentManager {
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
           : null,
       state: slot.state,
+      // A running process reports the version it started on; once stopped, the binary's current
+      // version on disk takes over so external upgrades show without waiting for another start.
       // Kettu's own install names its release when the program reports no version of its own.
-      version: init?.version ?? h.binaryVersion ?? installed?.version ?? null,
+      version:
+        (this.running(slot) ? init?.version : null) ??
+        h.binaryVersion ??
+        init?.version ??
+        installed?.version ??
+        null,
       // None runs while the user's own program runs in its place.
       package:
         launch.kind === 'package' && !replaces
@@ -6184,9 +6211,15 @@ export class AgentManager {
    * looks up tools such as brew on PATH, which `status` does not wait for.
    */
   private async refreshCliCommand(h: Harness): Promise<void> {
+    const version = this.cliUpdateVersion(h)
+    if (!version) {
+      this.cliCommandKeys.delete(h)
+      this.cliCommands.delete(h)
+      return
+    }
     const mine = this.userProgram(h)
-    const key = [this.cliUpdateVersion(h), h.cliMethod, h.cliGlobal?.dir, mine?.path].join('\0')
-    if (!this.cliUpdateVersion(h) || this.cliCommandKeys.get(h) === key) return
+    const key = [version, h.cliMethod, h.cliGlobal?.dir, mine?.path].join('\0')
+    if (this.cliCommandKeys.get(h) === key) return
     this.cliCommandKeys.set(h, key)
     const plan = await this.cliUpdatePlan(h).catch(() => null)
     if (this.cliCommandKeys.get(h) !== key) return

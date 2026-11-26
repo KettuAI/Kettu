@@ -78,7 +78,7 @@ import {
   NoAgents,
 } from './agents-section'
 import {
-  EnvironmentFooter,
+  HarnessesFooter,
   HarnessGroupActions,
   HarnessListItem,
   HarnessPage,
@@ -807,7 +807,7 @@ export function useHarnessesSection(): SectionDef {
         render: () => null,
       },
     ],
-    footer: <EnvironmentFooter />,
+    footer: <HarnessesFooter />,
     itemPage: (harnessId) => <HarnessPage harnessId={harnessId as HarnessId} />,
     mark:
       updates.length > 0
