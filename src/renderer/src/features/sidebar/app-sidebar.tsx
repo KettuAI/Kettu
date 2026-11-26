@@ -3,7 +3,7 @@ import { Add01Icon, ArrowRight01Icon, MoreHorizontalIcon } from '@hugeicons/core
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { Project, SessionSummary } from '@shared/agent-host'
+import type { Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
 import { retryHostState } from '@renderer/app/bootstrap'
 import { FolderClosedMark } from '@renderer/components/affect/app-shell'
@@ -42,19 +42,21 @@ import {
 import {
   byActivity,
   byPin,
+  hasNoProjectSessions,
   hostGroup,
   hostOfSession,
-  inPinnedTree,
+  hostsWithNoProjectSessions,
   keepSameNodes,
   noProjectGroup,
+  pinnedSummaries,
   pinnedTree,
+  projectSummaries,
   sessionTree,
   sidebarRows,
   sidebarTabStop,
   type SessionNode,
   type SidebarRow,
   type SidebarTabStop,
-  listedOrigin,
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { listedTasks, pinnedTasks, useTasksStore } from '@renderer/stores/tasks'
@@ -228,19 +230,7 @@ export function SidebarList() {
 
 /** Whether `hostId` has a session started with No project that the list shows. */
 function useHasNoProjectSessions(hostId: string | null): boolean {
-  return useSessionsStore((s) => noProjectHosts(Object.values(s.byId), [hostId]).length > 0)
-}
-
-/** Those of `hosts` with a session started with No project that the list shows. */
-function noProjectHosts(
-  summaries: readonly SessionSummary[],
-  hosts: readonly (string | null)[],
-): (string | null)[] {
-  return hosts.filter((hostId) =>
-    summaries.some(
-      (x) => x.scratch && listedOrigin(x) && !x.archivedAt && hostOfSession(x) === hostId,
-    ),
-  )
+  return useSessionsStore((s) => hasNoProjectSessions(s.byId, hostId))
 }
 
 /** `hosts` with the one at `from` moved to `to`, kept as this window's order. */
@@ -412,14 +402,10 @@ function ProjectGroup({
   const noProject = useProjectsStore((s) =>
     project ? undefined : s.noProjects[noProjectKey(hostId)],
   )
-  const summaries = useSessionsStore(
-    useShallow((s) =>
-      Object.values(s.byId).filter((x) =>
-        project ? x.projectPath === project.path : x.scratch && hostOfSession(x) === hostId,
-      ),
-    ),
-  )
   const projectPath = project?.path ?? null
+  const summaries = useSessionsStore(
+    useShallow((s) => projectSummaries(s.byId, projectPath, hostId)),
+  )
   const tree = useKeptNodes(
     useMemo(
       () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
@@ -692,9 +678,7 @@ function PinnedGroup({
 }) {
   const { t } = useTranslation('sidebar')
   const open = useViewStore((s) => !s.collapsedProjects[PINNED_GROUP])
-  const summaries = useSessionsStore(
-    useShallow((s) => Object.values(s.byId).filter((x) => inPinnedTree(s.byId, x))),
-  )
+  const summaries = useSessionsStore(useShallow((s) => pinnedSummaries(s.byId)))
   const tree = useKeptNodes(
     useMemo(
       () =>
@@ -715,7 +699,7 @@ function PinnedGroup({
   const noProjects = useProjectsStore((s) => s.noProjects)
   // A No project group shows only while it has sessions, pinned or not.
   const scratchHosts = useSessionsStore(
-    useShallow((s) => noProjectHosts(Object.values(s.byId), hosts ?? [null])),
+    useShallow((s) => hostsWithNoProjectSessions(s.byId, hosts ?? [null])),
   )
   const folders = useMemo(
     () =>

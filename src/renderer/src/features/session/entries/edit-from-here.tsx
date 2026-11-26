@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { canEditAt, lastSwitchAt, turnsFrom, usedAtEnd } from '@shared/rewind'
-import type { ThreadState, ToolEntry } from '@shared/thread'
+import { diffPathOf, toolContentItems, type ThreadState, type ToolEntry } from '@shared/thread'
 import { editFromMessage } from '@renderer/app/actions'
 import { toast } from '@renderer/components/ui/toast'
 import { Popover, PopoverContent } from '@renderer/components/ui/popover'
@@ -72,7 +72,10 @@ function editFacts(state: ThreadState, entryId: string): EditFacts | null {
     if (entry.toolKind === 'execute') commands = true
     if (!FILE_KINDS.has(entry.toolKind) || entry.status !== 'completed') continue
     for (const location of entry.locations) files.add(location.path)
-    for (const content of entry.content) if (content.type === 'diff') files.add(content.path)
+    for (const content of toolContentItems(entry)) {
+      const path = diffPathOf(content)
+      if (path !== null) files.add(path)
+    }
   }
   const { status, background } = session
   return {

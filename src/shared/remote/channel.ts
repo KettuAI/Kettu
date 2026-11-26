@@ -279,6 +279,7 @@ export class Channel {
   private fail(error: unknown): Error {
     if (!this.error) {
       this.error = error instanceof Error ? error : new Error(String(error))
+      this.partial = null
       this.handlers.end(this.error)
     }
     return this.error

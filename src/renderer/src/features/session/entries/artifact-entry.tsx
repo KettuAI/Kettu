@@ -84,10 +84,22 @@ function useStanding(id: string): ArtifactStanding {
 }
 
 /** Each artifact's latest read of its versions, at the head it was read for, shared by its cards. */
+const MAX_VERSION_READS = 100
 const versionReads = new Map<
   string,
   { head: number | null; versions: VersionSummary[] | null; done: Promise<void> }
 >()
+
+function rememberVersionRead(
+  id: string,
+  entry: { head: number | null; versions: VersionSummary[] | null; done: Promise<void> },
+): void {
+  versionReads.delete(id)
+  versionReads.set(id, entry)
+  if (versionReads.size > MAX_VERSION_READS) {
+    versionReads.delete(versionReads.keys().next().value!)
+  }
+}
 
 /**
  * The artifact's versions, read once a card is in view that lacks its own. A version never changes
@@ -114,7 +126,7 @@ function useVersions(
         (versions) => void (next.versions = versions),
         () => undefined,
       )
-      versionReads.set(id, next)
+      rememberVersionRead(id, next)
       read = next
     }
     let live = true

@@ -61,17 +61,40 @@ export function endedOnRejection(state: ThreadState | null | undefined): boolean
   return false
 }
 
+const writingIds = new WeakMap<ThreadState, string | null>()
+const lastUserIds = new WeakMap<ThreadState, string | null>()
+
 /**
  * The message the agent is still writing, when it is the turn's latest entry; once anything else
  * follows it, it reads as written even before the agent says so.
  */
 export function writingId(state: ThreadState | null | undefined): string | null {
   if (!state) return null
+  if (writingIds.has(state)) return writingIds.get(state)!
+  let found: string | null = null
   for (let i = state.order.length - 1; i >= 0; i--) {
     const entry = state.byId[state.order[i]!]
     // A plan or a notice may land while the message still streams; a subagent's card follows it.
     if (!entry || entry.kind === 'plan' || entry.kind === 'notice') continue
-    return entry.kind === 'agent' && entry.streaming ? entry.id : null
+    found = entry.kind === 'agent' && entry.streaming ? entry.id : null
+    break
   }
-  return null
+  writingIds.set(state, found)
+  return found
+}
+
+/** The id of the latest non-steered user entry in `state`, cached per state object. */
+export function lastUserEntryId(state: ThreadState | null | undefined): string | null {
+  if (!state) return null
+  if (lastUserIds.has(state)) return lastUserIds.get(state)!
+  let found: string | null = null
+  for (let i = state.order.length - 1; i >= 0; i--) {
+    const entry = state.byId[state.order[i]!]
+    if (entry?.kind === 'user' && !entry.steered) {
+      found = entry.id
+      break
+    }
+  }
+  lastUserIds.set(state, found)
+  return found
 }

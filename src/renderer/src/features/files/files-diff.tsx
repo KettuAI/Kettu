@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react'
 import type { FileDiffMetadata, SelectedLineRange } from '@pierre/diffs'
 import { FileDiff, WorkerPoolContext } from '@pierre/diffs/react'
 import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
-import { diffsPool as pool } from '@renderer/features/session/markdown/diff-pool'
+import { getDiffsPool } from '@renderer/features/session/markdown/diff-pool'
 import { useDark } from '@renderer/hooks/use-dark'
 import { useDiffStyle } from '@renderer/stores/diff-style'
 import { hunkHeader } from './hunk-header'
@@ -59,6 +59,7 @@ function FilesDiffImpl({
     }),
     [dark, theme, diffStyle, onSelect],
   )
+  const pool = useMemo(() => getDiffsPool(), [])
   const first = fileDiff.hunks[0]
   return (
     <WorkerPoolContext.Provider value={pool}>

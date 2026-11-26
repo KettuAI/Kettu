@@ -12,7 +12,9 @@ import { holdBlob, releaseBlob } from '@renderer/lib/media-blobs'
 import { MEDIA_PATH, mediaToken, PART_BYTES, type Part, type PartAsk } from './media-ranges'
 
 /** Blob URLs kept alive; older ones are revoked, and a view that still shows one asks again. */
-const MAX_URLS = 100
+const MAX_URLS = 40
+/** Total bytes kept across in-memory fallback Blob URLs when the media service worker is absent. */
+const MAX_BLOB_CACHE_BYTES = 64 * 1024 * 1024
 
 /** Files the page answers its media URLs for; the oldest are forgotten. */
 const MAX_FILES = 1_000
@@ -26,7 +28,8 @@ const WORKER_WAIT_MS = 3_000
 /** How long a save's frame stays; the download goes on without it once it has begun. */
 const SAVE_FRAME_MS = 60_000
 
-const urls: string[] = []
+const urls = new Map<string, number>()
+let totalBlobBytes = 0
 
 type ReadResult =
   | (Omit<Extract<MediaReadResult, { kind: 'granted' }>, 'bytes'> & { bytes: ArrayBuffer })
@@ -43,12 +46,22 @@ interface Known {
 const files = new Map<string, Known>()
 let worker: Promise<boolean> = Promise.resolve(false)
 
-function keep(url: string): void {
-  urls.push(url)
-  while (urls.length > MAX_URLS) {
-    const old = urls.shift()!
-    URL.revokeObjectURL(old)
-    releaseBlob(old)
+function keep(url: string, size: number): void {
+  const existing = urls.get(url)
+  if (existing !== undefined) {
+    totalBlobBytes -= existing
+    urls.delete(url)
+  }
+  urls.set(url, size)
+  totalBlobBytes += size
+  while ((urls.size > MAX_URLS || totalBlobBytes > MAX_BLOB_CACHE_BYTES) && urls.size > 1) {
+    const oldest = urls.keys().next().value
+    if (oldest === undefined || oldest === url) break
+    const oldestSize = urls.get(oldest) ?? 0
+    urls.delete(oldest)
+    totalBlobBytes -= oldestSize
+    URL.revokeObjectURL(oldest)
+    releaseBlob(oldest)
   }
 }
 
@@ -186,7 +199,7 @@ async function grant(link: HostLink, params: MediaReadParams): Promise<MediaOpen
   }
   const blob = new Blob([read.bytes], { type: read.media.mimeType })
   const url = URL.createObjectURL(blob)
-  keep(url)
+  keep(url, blob.size)
   holdBlob(url, blob)
   return { kind: 'granted', grant: { ...shown, url, size: read.media.size } }
 }

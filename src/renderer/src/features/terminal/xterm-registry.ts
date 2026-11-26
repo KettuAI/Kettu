@@ -3,7 +3,7 @@ import type { FitAddon } from '@xterm/addon-fit'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { terminals } from '@renderer/lib/host'
-import { isMac, isMod } from '@renderer/lib/platform'
+import { isMac, isMod, isWeb } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { holdsTerminalInput, setSink, useTerminalsStore } from '@renderer/stores/terminals'
 import { terminalFontStack } from './font-stack'
@@ -167,7 +167,7 @@ async function create(id: string): Promise<Instance> {
   watchOnce()
   const term = new m.Terminal({
     allowProposedApi: true,
-    scrollback: TERMINAL_FLOW.scrollback,
+    scrollback: isWeb ? Math.min(TERMINAL_FLOW.scrollback, 2_000) : TERMINAL_FLOW.scrollback,
     fontFamily: fontFamily(),
     fontSize: useSettingsStore.getState().settings.terminal.fontSize,
     lineHeight: 1.2,

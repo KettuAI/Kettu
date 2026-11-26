@@ -1,6 +1,10 @@
 import { ALREADY_ANSWERED } from '@shared/agent-host'
 import {
   entryMessageId,
+  isDiffContentItem,
+  toolContentItems,
+  type AnyToolContent,
+  type DiffContentItem,
   type FormValues,
   type FromDevice,
   type FromSession,
@@ -8,7 +12,6 @@ import {
   type QuestionAnswer,
   type SessionStatus,
   type StopReason,
-  type ToolContent,
   type ToolEntry,
   type ToolKind,
 } from '@shared/thread'
@@ -181,7 +184,7 @@ const FENCED = /^(`{3,})[^\n`]*\n([\s\S]*?)\n?\1$/
  * What a command printed, when its result is one fenced block of text, as agents send a shell's
  * output; null for anything else, which shows as Markdown.
  */
-export function commandOutput(content: readonly ToolContent[]): string | null {
+export function commandOutput(content: readonly AnyToolContent[]): string | null {
   const first = content[0]
   if (first?.type !== 'markdown') return null
   const match = FENCED.exec(first.markdown.trim())
@@ -199,7 +202,7 @@ export function groupLabel(steps: RunStep[]): string {
     .join(i18n.t('session:summary.separator'))
 }
 
-type Diff = Extract<ToolContent, { type: 'diff' }>
+type Diff = DiffContentItem
 
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
@@ -231,7 +234,7 @@ export function toolStep(entry: ToolEntry): RunStep {
     return { ...base, paths: first !== undefined ? [first] : [], ...description }
   }
   // Codex sends a patch's files only in its diffs, and locations only with a permission request.
-  const diffs = entry.content.filter((c) => c.type === 'diff')
+  const diffs = toolContentItems(entry).filter(isDiffContentItem)
   const paths = diffs.length > 0 ? diffs.map((d) => d.path) : entry.locations.map((l) => l.path)
   return { ...base, paths: [...new Set(paths)], diffs, ...description }
 }
@@ -363,7 +366,9 @@ export function runSummary(steps: RunStep[]): {
   const created = new Set<string>()
   for (const step of steps) {
     if (step.kind !== 'tool') continue
-    for (const diff of step.diffs ?? []) if (diff.oldText === null) created.add(diff.path)
+    for (const diff of step.diffs ?? []) {
+      if (diff.type === 'diff' && diff.oldText === null) created.add(diff.path)
+    }
   }
   const byPart = new Map<RunPart, Unit[]>()
   for (const unit of steps.flatMap((step) => unitsOf(step, created))) {

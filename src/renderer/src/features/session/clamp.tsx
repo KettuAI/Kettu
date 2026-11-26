@@ -91,9 +91,17 @@ export function Clamp({
     }
     return () => {
       later.delete(measured)
+      if (later.size === 0 && laterFrame !== 0) {
+        cancelAnimationFrame(laterFrame)
+        laterFrame = 0
+      }
       for (const target of targets) {
-        observer().unobserve(target)
+        sharedObserver?.unobserve(target)
         measuredBy.delete(target)
+      }
+      if (measuredBy.size === 0 && sharedObserver) {
+        sharedObserver.disconnect()
+        sharedObserver = null
       }
     }
   }, [])

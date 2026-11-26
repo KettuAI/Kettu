@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { NoProject, Project, SessionSummary } from '@shared/agent-host'
+import { harnessOf, type HarnessId } from '@shared/thread'
 import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -54,6 +55,280 @@ export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
   return summary.origin !== 'routine' && summary.origin !== 'task'
 }
 
+/** Shallow equality for session summaries so identical `session.summary` pushes keep `byId` stable. */
+function sameSummary(a: SessionSummary, b: SessionSummary): boolean {
+  if (a === b) return true
+  const keysA = Object.keys(a) as (keyof SessionSummary)[]
+  const keysB = Object.keys(b) as (keyof SessionSummary)[]
+  if (keysA.length !== keysB.length) return false
+  for (const key of keysA) {
+    const va = a[key]
+    const vb = b[key]
+    if (va === vb) continue
+    if (key === 'routine' && va && vb && typeof va === 'object' && typeof vb === 'object') {
+      const ra = va as NonNullable<SessionSummary['routine']>
+      const rb = vb as NonNullable<SessionSummary['routine']>
+      if (
+        ra.routineId === rb.routineId &&
+        ra.trigger === rb.trigger &&
+        ra.scheduledFor === rb.scheduledFor
+      ) {
+        continue
+      }
+    }
+    return false
+  }
+  return true
+}
+
+export interface HarnessSessionCount {
+  harnessId: HarnessId
+  total: number
+  running: number
+}
+
+interface SessionIndex {
+  byProject: Map<string, SessionSummary[]>
+  scratchByHost: Map<string | null, SessionSummary[]>
+  hasListedScratchByHost: Set<string | null>
+  pinnedRelated: SessionSummary[]
+  needsYouRelated: SessionSummary[]
+  localHarnessCounts: HarnessSessionCount[]
+  projectTrees: Map<string, SessionNode[]>
+  scratchTrees: Map<string | null, SessionNode[]>
+  pinnedTree?: SessionNode[]
+  needsYouTree?: SessionNode[]
+}
+
+const EMPTY_SUMMARIES: SessionSummary[] = []
+const sessionIndexes = new WeakMap<Record<string, SessionSummary>, SessionIndex>()
+const harnessCountCache = new Map<string, HarnessSessionCount>()
+
+function internHarnessCount(
+  harnessId: HarnessId,
+  total: number,
+  running: number,
+): HarnessSessionCount {
+  const key = `${harnessId}:${total}:${running}`
+  let entry = harnessCountCache.get(key)
+  if (!entry) {
+    if (harnessCountCache.size > 256) harnessCountCache.clear()
+    entry = { harnessId, total, running }
+    harnessCountCache.set(key, entry)
+  }
+  return entry
+}
+
+function indexOf(byId: Record<string, SessionSummary>): SessionIndex {
+  let index = sessionIndexes.get(byId)
+  if (index) return index
+
+  const byProject = new Map<string, SessionSummary[]>()
+  const scratchByHost = new Map<string | null, SessionSummary[]>()
+  const hasListedScratchByHost = new Set<string | null>()
+  const pinnedRelated: SessionSummary[] = []
+  const needsYouSet = new Set<SessionSummary>()
+  const localCounts = new Map<HarnessId, { total: number; running: number }>()
+
+  for (const s of Object.values(byId)) {
+    let list = byProject.get(s.projectPath)
+    if (!list) byProject.set(s.projectPath, (list = []))
+    list.push(s)
+
+    const hostId = hostOfSession(s)
+    if (s.scratch) {
+      let scratchList = scratchByHost.get(hostId)
+      if (!scratchList) scratchByHost.set(hostId, (scratchList = []))
+      scratchList.push(s)
+      if (listedOrigin(s) && !s.archivedAt) hasListedScratchByHost.add(hostId)
+    }
+
+    if (inPinnedTree(byId, s)) pinnedRelated.push(s)
+
+    if (s.permissionCount > 0 || s.attention === 'error') {
+      let at: SessionSummary | undefined = s
+      while (at && !needsYouSet.has(at)) {
+        needsYouSet.add(at)
+        at = at.parentId ? byId[at.parentId] : undefined
+      }
+    }
+
+    if (hostId === null) {
+      const harnessId = harnessOf(s.agentId)
+      let counts = localCounts.get(harnessId)
+      if (!counts) localCounts.set(harnessId, (counts = { total: 0, running: 0 }))
+      counts.total++
+      if (s.status === 'running' || s.status === 'awaiting_permission') counts.running++
+    }
+  }
+
+  const localHarnessCounts = [...localCounts.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([harnessId, { total, running }]) => internHarnessCount(harnessId, total, running))
+
+  index = {
+    byProject,
+    scratchByHost,
+    hasListedScratchByHost,
+    pinnedRelated,
+    needsYouRelated: [...needsYouSet],
+    localHarnessCounts,
+    projectTrees: new Map(),
+    scratchTrees: new Map(),
+  }
+  sessionIndexes.set(byId, index)
+  return index
+}
+
+/** O(1) indexed lookup of a project's or host scratch group's sessions for sidebar selectors. */
+export function projectSummaries(
+  byId: Record<string, SessionSummary>,
+  projectPath: string | null,
+  hostId: string | null = null,
+): SessionSummary[] {
+  const index = indexOf(byId)
+  return projectPath === null
+    ? (index.scratchByHost.get(hostId) ?? EMPTY_SUMMARIES)
+    : (index.byProject.get(projectPath) ?? EMPTY_SUMMARIES)
+}
+
+/** O(1) indexed lookup of sessions belonging to pinned trees. */
+export function pinnedSummaries(byId: Record<string, SessionSummary>): SessionSummary[] {
+  return indexOf(byId).pinnedRelated
+}
+
+/** O(1) indexed lookup of sessions waiting for user action or errored, plus their ancestors. */
+export function needsYouSummaries(byId: Record<string, SessionSummary>): SessionSummary[] {
+  return indexOf(byId).needsYouRelated
+}
+
+/** O(1) indexed check for whether `hostId` has any visible No project session. */
+export function hasNoProjectSessions(
+  byId: Record<string, SessionSummary>,
+  hostId: string | null,
+): boolean {
+  return indexOf(byId).hasListedScratchByHost.has(hostId)
+}
+
+/** Indexed subset of `hosts` that have visible No project sessions. */
+export function hostsWithNoProjectSessions(
+  byId: Record<string, SessionSummary>,
+  hosts: readonly (string | null)[],
+): (string | null)[] {
+  const set = indexOf(byId).hasListedScratchByHost
+  return hosts.filter((hostId) => set.has(hostId))
+}
+
+/** Per-harness total and running session counts on this computer, cached per `byId` reference. */
+export function localHarnessCounts(byId: Record<string, SessionSummary>): HarnessSessionCount[] {
+  return indexOf(byId).localHarnessCounts
+}
+
+function isRunningStatus(status: SessionSummary['status']): boolean {
+  return status === 'running' || status === 'awaiting_permission'
+}
+
+function needsAttention(summary: SessionSummary): boolean {
+  return summary.permissionCount > 0 || summary.attention === 'error'
+}
+
+function replaceInList(
+  list: readonly SessionSummary[],
+  id: string,
+  next: SessionSummary,
+): SessionSummary[] {
+  let replaced = false
+  const out = list.map((item) => {
+    if (item.id === id) {
+      replaced = true
+      return next
+    }
+    return item
+  })
+  if (!replaced) out.push(next)
+  return out
+}
+
+/**
+ * Incrementally derives a new `SessionIndex` when a single existing session updates in place
+ * (status/phase/title/updatedAt/usage heartbeats). Unrelated project arrays and cached trees keep
+ * their exact object references so sidebar groups skip rebuilding and re-rendering.
+ */
+function updateIndexForUpsert(
+  prevById: Record<string, SessionSummary>,
+  prevIndex: SessionIndex,
+  prev: SessionSummary,
+  next: SessionSummary,
+): SessionIndex | null {
+  if (
+    prev.projectPath !== next.projectPath ||
+    prev.scratch !== next.scratch ||
+    prev.parentId !== next.parentId ||
+    prev.origin !== next.origin ||
+    Boolean(prev.archivedAt) !== Boolean(next.archivedAt) ||
+    Boolean(prev.pinnedAt) !== Boolean(next.pinnedAt) ||
+    prev.agentId !== next.agentId ||
+    needsAttention(prev) !== needsAttention(next) ||
+    inPinnedTree(prevById, prev)
+  ) {
+    return null
+  }
+
+  const byProject = new Map(prevIndex.byProject)
+  const prevProjectList = byProject.get(next.projectPath)
+  if (!prevProjectList) return null
+  byProject.set(next.projectPath, replaceInList(prevProjectList, next.id, next))
+
+  const projectTrees = new Map(prevIndex.projectTrees)
+  projectTrees.delete(next.projectPath)
+
+  let scratchByHost = prevIndex.scratchByHost
+  let scratchTrees = prevIndex.scratchTrees
+  const hostId = hostOfSession(next)
+  if (next.scratch) {
+    scratchByHost = new Map(prevIndex.scratchByHost)
+    const prevScratchList = scratchByHost.get(hostId)
+    if (!prevScratchList) return null
+    scratchByHost.set(hostId, replaceInList(prevScratchList, next.id, next))
+    scratchTrees = new Map(prevIndex.scratchTrees)
+    scratchTrees.delete(hostId)
+  }
+
+  let needsYouRelated = prevIndex.needsYouRelated
+  let needsYouTree = prevIndex.needsYouTree
+  if (needsYouRelated.some((item) => item.id === next.id)) {
+    needsYouRelated = replaceInList(needsYouRelated, next.id, next)
+    needsYouTree = undefined
+  }
+
+  let localHarnessCounts = prevIndex.localHarnessCounts
+  if (hostId === null) {
+    const deltaRunning =
+      (isRunningStatus(next.status) ? 1 : 0) - (isRunningStatus(prev.status) ? 1 : 0)
+    if (deltaRunning !== 0) {
+      const harnessId = harnessOf(next.agentId)
+      localHarnessCounts = localHarnessCounts.map((entry) =>
+        entry.harnessId === harnessId
+          ? internHarnessCount(harnessId, entry.total, Math.max(0, entry.running + deltaRunning))
+          : entry,
+      )
+    }
+  }
+
+  return {
+    byProject,
+    scratchByHost,
+    hasListedScratchByHost: prevIndex.hasListedScratchByHost,
+    pinnedRelated: prevIndex.pinnedRelated,
+    needsYouRelated,
+    localHarnessCounts,
+    projectTrees,
+    scratchTrees,
+    pinnedTree: prevIndex.pinnedTree,
+    needsYouTree,
+  }
+}
+
 export const useSessionsStore = create<SessionsStore>()((set, get) => ({
   byId: {},
   loaded: false,
@@ -73,7 +348,18 @@ export const useSessionsStore = create<SessionsStore>()((set, get) => ({
     }))
   },
   upsert(summary) {
-    set((state) => ({ byId: { ...state.byId, [summary.id]: listed(summary) } }))
+    set((state) => {
+      const next = listed(summary)
+      const prev = state.byId[summary.id]
+      if (prev && sameSummary(prev, next)) return state
+      const byId = { ...state.byId, [summary.id]: next }
+      const prevIndex = prev ? sessionIndexes.get(state.byId) : undefined
+      if (prev && prevIndex) {
+        const nextIndex = updateIndexForUpsert(state.byId, prevIndex, prev, next)
+        if (nextIndex) sessionIndexes.set(byId, nextIndex)
+      }
+      return { byId }
+    })
   },
   remove(sessionId) {
     set((state) => {
@@ -176,24 +462,43 @@ export function sessionTree(
   projectPath: string | null,
   hostId: string | null = null,
 ): SessionNode[] {
-  return buildTree(
-    byId,
-    (s) =>
-      listedOrigin(s) &&
-      (projectPath === null
-        ? s.scratch && hostOfSession(s) === hostId
-        : s.projectPath === projectPath),
-    (s) => !s.pinnedAt && !s.archivedAt,
-  ).sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+  const index = indexOf(byId)
+  if (projectPath === null) {
+    let cached = index.scratchTrees.get(hostId)
+    if (!cached) {
+      cached = buildTree(
+        byId,
+        index.scratchByHost.get(hostId) ?? EMPTY_SUMMARIES,
+        (s) => listedOrigin(s) && s.scratch && hostOfSession(s) === hostId,
+        (s) => !s.pinnedAt && !s.archivedAt,
+      ).sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+      index.scratchTrees.set(hostId, cached)
+    }
+    return cached
+  }
+  let cached = index.projectTrees.get(projectPath)
+  if (!cached) {
+    cached = buildTree(
+      byId,
+      index.byProject.get(projectPath) ?? EMPTY_SUMMARIES,
+      (s) => listedOrigin(s) && s.projectPath === projectPath,
+      (s) => !s.pinnedAt && !s.archivedAt,
+    ).sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+    index.projectTrees.set(projectPath, cached)
+  }
+  return cached
 }
 
 /** The pinned sessions across the projects as trees, in the order they were pinned. */
 export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
-  return buildTree(
+  const index = indexOf(byId)
+  index.pinnedTree ??= buildTree(
     byId,
+    index.pinnedRelated,
     (s) => listedOrigin(s),
     (s) => !!s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
+  return index.pinnedTree
 }
 
 /**
@@ -201,27 +506,29 @@ export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] 
  * failed: the top-level ones, the latest first. They stay listed in their projects as well.
  */
 export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[] {
-  return (
-    buildTree(
-      byId,
-      (s) => listedOrigin(s),
-      (s) => !s.archivedAt,
-    )
-      .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
-      // The row stands for the whole tree, so it shows what its sub-sessions wait for as its own.
-      .map((node) => ({
-        ...node,
-        children: [],
-        own: { permissionCount: node.permissionCount, running: node.running },
-      }))
-      .sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+  const index = indexOf(byId)
+  index.needsYouTree ??= buildTree(
+    byId,
+    index.needsYouRelated,
+    (s) => listedOrigin(s),
+    (s) => !s.archivedAt,
   )
+    .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
+    // The row stands for the whole tree, so it shows what its sub-sessions wait for as its own.
+    .map((node) => ({
+      ...node,
+      children: [],
+      own: { permissionCount: node.permissionCount, running: node.running },
+    }))
+    .sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+  return index.needsYouTree
 }
 
 /** Every top-level session on any host that is not archived, as trees, pinned ones included. */
 export function liveTree(byId: Record<string, SessionSummary>): SessionNode[] {
   return buildTree(
     byId,
+    Object.values(byId),
     (s) => listedOrigin(s),
     (s) => !s.archivedAt,
   )
@@ -288,12 +595,13 @@ export function archivedSessions(
 
 function buildTree(
   byId: Record<string, SessionSummary>,
+  candidates: readonly SessionSummary[],
   within: (s: SessionSummary) => boolean,
   rootKept: (s: SessionSummary) => boolean,
 ): SessionNode[] {
   const children = new Map<string, SessionSummary[]>()
   const roots: SessionSummary[] = []
-  for (const s of Object.values(byId)) {
+  for (const s of candidates) {
     if (!within(s) || s.archivedAt) continue
     if (s.parentId && byId[s.parentId]) {
       const list = children.get(s.parentId) ?? []
@@ -552,6 +860,44 @@ export function visibleOrder(
 }
 
 /**
+ * Fast O(1) check for the common case where the active top-level session is directly visible
+ * under its project or scratch group, avoiding a full `visibleOrder` build on every summary tick.
+ */
+function isFastVisibleSession(
+  view: SidebarView,
+  byId: Record<string, SessionSummary>,
+  projects: readonly Project[],
+  tasks: Record<string, TaskSummary>,
+  noProjects: Readonly<Record<string, NoProject>>,
+  sessionId: string,
+): boolean {
+  const s = byId[sessionId]
+  if (!s || s.archivedAt || !listedOrigin(s) || s.origin === 'subagent' || s.parentId) return false
+  const hosts = view.hosts ?? [null]
+  const hostId = hostOfSession(s)
+  if (!hosts.includes(hostId)) return false
+  // If any task adopted this session as its origin, fall back to full visibleOrder.
+  for (const key in tasks) {
+    if (tasks[key]?.from?.sessionId === sessionId) return false
+  }
+  if (s.pinnedAt) return !view.collapsedProjects[PINNED_GROUP]
+  if (s.scratch) {
+    const pinned = noProjectPinned(noProjects, hostId)
+    if (pinned && view.collapsedProjects[PINNED_GROUP]) return false
+    if (!pinned && view.collapsedProjects[hostGroup(hostId)]) return false
+    return !view.collapsedProjects[noProjectGroup(hostId)]
+  }
+  const project = projects.find((p) => p.path === s.projectPath)
+  if (!project) return false
+  if (project.pinnedAt != null) {
+    if (view.collapsedProjects[PINNED_GROUP]) return false
+  } else if (view.collapsedProjects[hostGroup(hostId)]) {
+    return false
+  }
+  return !view.collapsedProjects[project.path]
+}
+
+/**
  * The list's one Tab stop: the row in front while the list shows it, a session's, a task's or a
  * step's; otherwise the first group header, then no stop at all while the list has no rows.
  */
@@ -562,6 +908,12 @@ export function sidebarTabStop(
   tasks: Record<string, TaskSummary> = {},
   noProjects: Readonly<Record<string, NoProject>> = {},
 ): SidebarTabStop | null {
+  if (
+    view.main.kind === 'session' &&
+    isFastVisibleSession(view, byId, projects, tasks, noProjects, view.main.sessionId)
+  ) {
+    return { kind: 'session', id: view.main.sessionId }
+  }
   const order = visibleOrder(view, byId, projects, tasks, noProjects)
   const front =
     view.main.kind === 'session'

@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from 'react'
 import { cjk } from '@streamdown/cjk'
-import { createCodePlugin } from '@streamdown/code'
+import { createCodePlugin } from './code-plugin'
 import { Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -84,15 +84,22 @@ function createPlugins({ light, dark }: CodeThemes) {
 type Plugins = ReturnType<typeof createPlugins>
 
 // One set per pair of code themes, shared by every chunk: Streamdown's context depends on it, and
-// a new object would re-render every code block.
+// a new object would re-render every code block. Keep only the latest couple of theme pairs.
+const MAX_THEME_PLUGIN_SETS = 2
 const pluginsByThemes = new Map<string, Plugins>()
 
 function pluginsFor(themes: CodeThemes): Plugins {
   const key = `${themes.light} ${themes.dark}`
   let plugins = pluginsByThemes.get(key)
-  if (!plugins) {
-    plugins = createPlugins(themes)
+  if (plugins) {
+    pluginsByThemes.delete(key)
     pluginsByThemes.set(key, plugins)
+    return plugins
+  }
+  plugins = createPlugins(themes)
+  pluginsByThemes.set(key, plugins)
+  if (pluginsByThemes.size > MAX_THEME_PLUGIN_SETS) {
+    pluginsByThemes.delete(pluginsByThemes.keys().next().value!)
   }
   return plugins
 }

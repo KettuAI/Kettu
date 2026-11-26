@@ -59,6 +59,8 @@ export type AIAnswerProps = {
   children?: ReactNode;
   /** The label's words while it writes and once done, for a translation */
   labels?: { writing?: string; answer?: string };
+  /** Smoothly animate the body height with a ResizeObserver; disable when CSS sizes the body directly */
+  glideHeight?: boolean;
 };
 
 type Token = { i: number; kind: "word"; text: string; bold?: boolean; code?: boolean } | { i: number; kind: "cite"; ids: number[] };
@@ -185,13 +187,15 @@ export function AIAnswer({
   onDone,
   children,
   labels,
+  glideHeight = true,
 }: AIAnswerProps) {
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
   const custom = children !== undefined;
   // Your own content glides to its new height only while it writes; once done it takes its own height
-  const glide = useRef(true);
-  glide.current = !custom || streaming;
+  const shouldGlide = glideHeight && (!custom || streaming);
+  const glide = useRef(shouldGlide);
+  glide.current = shouldGlide;
   const { blocks, total } = useMemo(() => parse(answer, sources.length), [answer, sources.length]);
   const [run, setRun] = useState(0);
   const [ownPhase, setPhase] = useState<Phase>("reading");
@@ -274,12 +278,16 @@ export function AIAnswer({
     const card = cardRef.current;
     const inner = innerRef.current;
     if (!card || !inner) return;
+    if (!shouldGlide) {
+      if (card.style.height) card.style.height = "";
+      return;
+    }
     const set = () => (card.style.height = glide.current ? `${inner.offsetHeight}px` : "");
     set();
     const ro = new ResizeObserver(set);
     ro.observe(inner);
     return () => ro.disconnect();
-  }, [streaming]);
+  }, [shouldGlide]);
 
   useEffect(() => {
     if (!copied) return;

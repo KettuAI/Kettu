@@ -17,6 +17,8 @@ const FRAME_PATH = '/frame/'
 /** Maximum in-memory artifact bytes kept in the browser LRU cache. */
 const MAX_CACHE_BYTES = 64 * 1024 * 1024
 const MAX_CACHE_ENTRIES = 512
+/** Maximum cached immutable version manifests (including inline index HTML). */
+const MAX_VERSION_READS = 64
 
 interface OpenFrameEntry {
   artifactId: string
@@ -113,23 +115,37 @@ export function createVirtualFrames(link: HostLink): {
     }
   }
 
+  function rememberVersion(key: string, promise: Promise<ArtifactContent>): void {
+    reads.delete(key)
+    reads.set(key, promise)
+    while (reads.size > MAX_VERSION_READS) {
+      const oldest = reads.keys().next().value
+      if (oldest === undefined || oldest === key) break
+      reads.delete(oldest)
+    }
+  }
+
   function readVersion(artifactId: string, version: number | null): Promise<ArtifactContent> {
     if (version !== null) {
       const key = `${artifactId}@${version}`
       const existing = reads.get(key)
-      if (existing) return existing
+      if (existing) {
+        reads.delete(key)
+        reads.set(key, existing)
+        return existing
+      }
       const promise = (
         link.request('artifacts.read', { id: artifactId, version }) as Promise<ArtifactContent>
       ).catch((error: unknown) => {
         reads.delete(key)
         throw error
       })
-      reads.set(key, promise)
+      rememberVersion(key, promise)
       return promise
     }
     return (link.request('artifacts.read', { id: artifactId }) as Promise<ArtifactContent>).then(
       (result) => {
-        reads.set(`${artifactId}@${result.version}`, Promise.resolve(result))
+        rememberVersion(`${artifactId}@${result.version}`, Promise.resolve(result))
         return result
       },
     )

@@ -4,20 +4,36 @@ import { useEffect, useState, type RefObject } from 'react'
 const watched = new Map<Element, (inView: boolean) => void>()
 let observer: IntersectionObserver | null = null
 
+// Keep the callback at module scope so V8 never retains the first mounted element via a shared
+// hook closure context.
+function getObserver(): IntersectionObserver {
+  observer ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) watched.get(entry.target)?.(entry.isIntersecting)
+  })
+  return observer
+}
+
+/** Subscribes `element` to the shared IntersectionObserver and disconnects it when unused. */
+export function observeInView(element: Element, onChange: (inView: boolean) => void): () => void {
+  const active = getObserver()
+  watched.set(element, onChange)
+  active.observe(element)
+  return () => {
+    watched.delete(element)
+    active.unobserve(element)
+    if (watched.size === 0 && observer === active) {
+      observer.disconnect()
+      observer = null
+    }
+  }
+}
+
 export function useInView(ref: RefObject<Element | null>): boolean {
   const [inView, setInView] = useState(false)
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    observer ??= new IntersectionObserver((entries) => {
-      for (const entry of entries) watched.get(entry.target)?.(entry.isIntersecting)
-    })
-    watched.set(element, setInView)
-    observer.observe(element)
-    return () => {
-      watched.delete(element)
-      observer?.unobserve(element)
-    }
+    return observeInView(element, setInView)
   }, [ref])
   return inView
 }

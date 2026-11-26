@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import {
   applyPatches,
   coalescePatches,
+  hasToolDigest,
   prependEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -57,14 +58,21 @@ interface ThreadsStore {
 export const useThreadsStore = create<ThreadsStore>()(() => ({ replicas: {} }))
 
 /** How many recently viewed sessions stay watched, so switching back to them is instant. */
-const KEEP_WATCHED = 4
+const KEEP_WATCHED_DESKTOP = 4
+const KEEP_WATCHED_WEB = 1
+const isWebClient = (): boolean =>
+  typeof window !== 'undefined' &&
+  (window as { kettu?: { client?: string } }).kettu?.client === 'web'
+const keepWatchedLimit = (): number => (isWebClient() ? KEEP_WATCHED_WEB : KEEP_WATCHED_DESKTOP)
 
 const watched: string[] = [] // most recent last
 // The sessions the split shows, folded panes included; they stay watched however many there are.
 let pinned: string[] = []
 const pending = new Map<string, PatchBatch[]>() // batches that arrived before their snapshot
+const pendingOverflow = new Set<string>()
 const snapshotsInFlight = new Map<string, Promise<void>>()
 const pagesInFlight = new Map<string, Promise<boolean>>()
+const entriesInFlight = new Map<string, Promise<void>>()
 // Entries added live, with when they arrived; they animate in once, on their first render.
 const fresh = new Map<string, Map<string, number>>()
 const FRESH_FOR_MS = 1000
@@ -94,6 +102,10 @@ const queuedLast = new Map<string, PatchBatch>()
 const resync = new Set<string>()
 /** How many patches of one session wait for a frame before they give way to a snapshot. */
 const MAX_QUEUED_PATCHES = 1_000
+/** Cap on distinct queued batches across sessions while frames are paused (e.g., background tabs). */
+const MAX_QUEUED_BATCHES = 256
+/** Cap on buffered batches waiting behind an in-flight snapshot for one session. */
+const MAX_PENDING_BATCHES = 128
 
 /**
  * Whether an entry arrived live in the last second rather than from a snapshot or a history
@@ -146,6 +158,7 @@ function firstSeq(batch: PatchBatch): number {
 function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
   let state = threadFromSnapshot(snapshot)
   let seq = snapshot.seq
+  const overflowed = pendingOverflow.delete(sessionId)
   const buffered = (pending.get(sessionId) ?? []).sort((a, b) => a.seq - b.seq)
   pending.delete(sessionId)
   const partial = snapshot.older !== null
@@ -166,6 +179,13 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
     olderFailure: null,
     plan: snapshot.plan,
   })
+  if (overflowed) {
+    queueMicrotask(() => {
+      if (useThreadsStore.getState().replicas[sessionId]?.state) {
+        void fetchSnapshot(sessionId, 'sessions.snapshot')
+      }
+    })
+  }
 }
 
 function flush(): void {
@@ -183,7 +203,13 @@ function flush(): void {
     const replica = (next ?? replicas)[batch.sessionId]
     if (!replica) continue
     if (!replica.state || snapshotsInFlight.has(batch.sessionId)) {
+      if (pendingOverflow.has(batch.sessionId)) continue
       const list = pending.get(batch.sessionId) ?? []
+      if (list.length >= MAX_PENDING_BATCHES) {
+        pending.delete(batch.sessionId)
+        pendingOverflow.add(batch.sessionId)
+        continue
+      }
       list.push(batch)
       pending.set(batch.sessionId, list)
       continue
@@ -225,6 +251,12 @@ function flush(): void {
   for (const sessionId of refetch) void fetchSnapshot(sessionId, 'sessions.snapshot')
 }
 
+function dropQueuedFor(sessionId: string): void {
+  if (queuedLast.delete(sessionId)) {
+    queue = queue.filter((queued) => queued.sessionId !== sessionId)
+  }
+}
+
 function markFresh(batch: PatchBatch, echoes: readonly UserEntry[]): void {
   const now = performance.now()
   for (const patch of batch.patches) {
@@ -240,7 +272,8 @@ function markFresh(batch: PatchBatch, echoes: readonly UserEntry[]): void {
 /**
  * Called for every `session.patches` event; batches are applied once per animation frame. Until
  * then a session's batches that follow each other merge into one, and past `MAX_QUEUED_PATCHES`
- * they are dropped for a snapshot, which the replica already takes after a gap.
+ * (or on sequence gaps / global queue pressure) they are dropped for a snapshot, which the replica
+ * already takes after a gap.
  */
 export function receiveBatch(batch: PatchBatch): void {
   const { sessionId } = batch
@@ -248,15 +281,25 @@ export function receiveBatch(batch: PatchBatch): void {
   // The snapshot read at the next frame holds what this batch changes.
   if (resync.has(sessionId)) return
   const last = queuedLast.get(sessionId)
-  if (last && firstSeq(batch) === last.seq + 1) {
-    const end = last.patches.pop()
-    last.patches.push(...coalescePatches(end ? [end, ...batch.patches] : batch.patches))
-    last.seq = batch.seq
-    if (last.patches.length > MAX_QUEUED_PATCHES) {
-      queue = queue.filter((queued) => queued.sessionId !== sessionId)
-      queuedLast.delete(sessionId)
-      resync.add(sessionId)
+  if (last) {
+    if (batch.seq <= last.seq) return
+    if (firstSeq(batch) === last.seq + 1) {
+      const end = last.patches.pop()
+      last.patches.push(...coalescePatches(end ? [end, ...batch.patches] : batch.patches))
+      last.seq = batch.seq
+      if (last.patches.length > MAX_QUEUED_PATCHES) {
+        dropQueuedFor(sessionId)
+        resync.add(sessionId)
+      }
+      return
     }
+    // A sequence gap already requires a snapshot on flush; drop stale queued patches now.
+    dropQueuedFor(sessionId)
+    resync.add(sessionId)
+    return
+  }
+  if (batch.patches.length > MAX_QUEUED_PATCHES || queue.length >= MAX_QUEUED_BATCHES) {
+    resync.add(sessionId)
     return
   }
   const own: PatchBatch = {
@@ -364,18 +407,60 @@ export function keepWatched(sessionIds: readonly string[]): void {
   dropUnwatched()
 }
 
+function clearSessionBuffers(sessionId: string): void {
+  pending.delete(sessionId)
+  pendingOverflow.delete(sessionId)
+  fresh.delete(sessionId)
+  sending.delete(sessionId)
+  resync.delete(sessionId)
+  dropQueuedFor(sessionId)
+}
+
+/**
+ * Reads a full tool entry from the host when the page received a digested summary
+ * (`TOOL_DIGESTS_FEATURE`), deduplicating concurrent reads for the same entry.
+ */
+export function loadFullEntry(sessionId: string, entryId: string): Promise<void> {
+  const current = useThreadsStore.getState().replicas[sessionId]?.state?.byId[entryId]
+  if (!hasToolDigest(current)) return Promise.resolve()
+  const key = `${sessionId}\0${entryId}`
+  const existing = entriesInFlight.get(key)
+  if (existing) return existing
+  const run = host('sessions.entry', { sessionId, entryId })
+    .then((full) => {
+      const replica = useThreadsStore.getState().replicas[sessionId]
+      const latest = replica?.state?.byId[entryId]
+      if (!replica?.state || !latest || latest.kind !== 'tool' || full.kind !== 'tool') return
+      const merged: ThreadEntry = {
+        ...full,
+        // Keep fresher live status/permission fields if a patch arrived while loading.
+        status: latest.status,
+        permission: latest.permission,
+        permissionResult: latest.permissionResult,
+      }
+      setReplica(sessionId, {
+        ...replica,
+        state: {
+          ...replica.state,
+          byId: { ...replica.state.byId, [entryId]: merged },
+        },
+      })
+    })
+    .finally(() => entriesInFlight.delete(key))
+  entriesInFlight.set(key, run)
+  return run
+}
+
 /** Drops the sessions watched only as recent ones past the last few; the layout's stay. */
 function dropUnwatched(): void {
   const recent = watched.filter((sessionId) => !pinned.includes(sessionId))
-  const dropped = new Set(recent.slice(0, Math.max(0, recent.length - KEEP_WATCHED)))
+  const dropped = new Set(recent.slice(0, Math.max(0, recent.length - keepWatchedLimit())))
   for (let i = watched.length - 1; i >= 0; i--) {
     const sessionId = watched[i]!
     if (!dropped.has(sessionId)) continue
     watched.splice(i, 1)
     void host('sessions.unwatch', { sessionId }).catch(() => {})
-    pending.delete(sessionId)
-    fresh.delete(sessionId)
-    sending.delete(sessionId)
+    clearSessionBuffers(sessionId)
     useThreadsStore.setState((s) => {
       const replicas = { ...s.replicas }
       delete replicas[sessionId]
@@ -418,9 +503,7 @@ export function rewatchAll(only?: (sessionId: string) => boolean): void {
 export function forgetSession(sessionId: string): void {
   const at = watched.indexOf(sessionId)
   if (at >= 0) watched.splice(at, 1)
-  pending.delete(sessionId)
-  fresh.delete(sessionId)
-  sending.delete(sessionId)
+  clearSessionBuffers(sessionId)
   useThreadsStore.setState((s) => {
     if (!(sessionId in s.replicas)) return s
     const replicas = { ...s.replicas }

@@ -2,7 +2,7 @@
 
 import { createContext } from 'react'
 import { mediaKindOfName } from '@shared/media'
-import type { ToolEntry } from '@shared/thread'
+import { diffPathOf, toolContentItems, type ToolEntry } from '@shared/thread'
 import { localTarget } from '@renderer/features/session/markdown/local-links'
 
 interface HastNode {
@@ -124,9 +124,13 @@ export const sameFile = (path: string) => path.replace(/\\/g, '/').replace(/^(?:
  */
 export function toolMedia(entry: Pick<ToolEntry, 'toolKind' | 'content' | 'locations'>): string[] {
   if (entry.toolKind === 'delete') return []
-  if (entry.content.some((c) => c.type === 'ref' && c.ref.kind === 'image')) return []
+  const items = toolContentItems(entry)
+  if (items.some((c) => c.type === 'ref' && c.ref.kind === 'image')) return []
   const paths = [
-    ...entry.content.flatMap((c) => (c.type === 'diff' ? [c.path] : [])),
+    ...items.flatMap((c) => {
+      const path = diffPathOf(c)
+      return path !== null ? [path] : []
+    }),
     ...entry.locations.map((location) => location.path),
   ]
   const seen = new Set<string>()

@@ -1,23 +1,32 @@
-import type { ThreadEntry, ToolContent, ToolEntry } from '@shared/thread'
-
-type Diff = Extract<ToolContent, { type: 'diff' }>
+import {
+  isDiffContentItem,
+  toolContentItems,
+  type DiffContentItem,
+  type ThreadEntry,
+  type ToolEntry,
+} from '@shared/thread'
 
 const finished = (entry: ThreadEntry | undefined): entry is ToolEntry =>
   entry?.kind === 'tool' && entry.status === 'completed'
 
-const diffsOf = (entry: ToolEntry): Diff[] =>
-  entry.content.filter((content): content is Diff => content.type === 'diff')
+const diffsOf = (entry: ToolEntry): DiffContentItem[] =>
+  toolContentItems(entry).filter(isDiffContentItem)
 
 export interface TurnChange {
   path: string
-  diffs: Diff[]
+  diffs: DiffContentItem[]
   /** True when the turn's latest completed tool for this path deleted it. */
   deleted: boolean
+  /** Tool entry ids that produced these diffs, used to fetch full bodies on demand when digested. */
+  entryIds: string[]
 }
 
 /** A turn's changed files in the order it first changed them, each with its diffs in order. */
 export function turnChanges(entries: (ThreadEntry | undefined)[]): TurnChange[] {
-  const byPath = new Map<string, { diffs: Diff[]; deleted: boolean }>()
+  const byPath = new Map<
+    string,
+    { diffs: DiffContentItem[]; deleted: boolean; entryIds: Set<string> }
+  >()
   for (const entry of entries) {
     if (!finished(entry)) continue
     const deleting = entry.toolKind === 'delete'
@@ -27,8 +36,9 @@ export function turnChanges(entries: (ThreadEntry | undefined)[]): TurnChange[] 
       if (existing) {
         existing.diffs.push(diff)
         existing.deleted = deleting
+        existing.entryIds.add(entry.id)
       } else {
-        byPath.set(diff.path, { diffs: [diff], deleted: deleting })
+        byPath.set(diff.path, { diffs: [diff], deleted: deleting, entryIds: new Set([entry.id]) })
       }
     }
     // A delete tool may carry the path only in locations after an earlier edit in the same turn.
@@ -39,5 +49,10 @@ export function turnChanges(entries: (ThreadEntry | undefined)[]): TurnChange[] 
       }
     }
   }
-  return [...byPath].map(([path, { diffs, deleted }]) => ({ path, diffs, deleted }))
+  return [...byPath].map(([path, { diffs, deleted, entryIds }]) => ({
+    path,
+    diffs,
+    deleted,
+    entryIds: [...entryIds],
+  }))
 }

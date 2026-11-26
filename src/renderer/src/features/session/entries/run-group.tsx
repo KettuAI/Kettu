@@ -2,7 +2,12 @@ import { memo, startTransition, useCallback, useEffect, useMemo, useState } from
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { IconSvgElement } from '@hugeicons/react'
-import type { ThreadEntry, ToolContent } from '@shared/thread'
+import {
+  isDiffContentItem,
+  toolContentItems,
+  type AnyToolContent,
+  type ThreadEntry,
+} from '@shared/thread'
 import type { ToolCallLabels } from '@renderer/components/affect/tool-call-card'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ToolCallGroup } from '@renderer/components/affect/tool-call-card'
@@ -106,8 +111,8 @@ export const RunGroup = memo(function RunGroup({
   // Loads the counts of every edit's diffs, which the line then reads from the cache.
   const diffs = useMemo(
     () =>
-      shown.flatMap((entry): ToolContent[] =>
-        entry.kind === 'tool' ? entry.content.filter((c) => c.type === 'diff') : [],
+      shown.flatMap((entry): AnyToolContent[] =>
+        entry.kind === 'tool' ? toolContentItems(entry).filter(isDiffContentItem) : [],
       ),
     [shown],
   )

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDown01Icon,
   BrowserIcon,
@@ -24,6 +24,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { relativeToRoot } from '@renderer/features/files/file-location'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { isHtmlFile, previewHtml, useHtmlPreview } from '@renderer/features/files/html-preview'
@@ -37,11 +38,12 @@ import { openGitPane } from '@renderer/features/git/pane/open-pane'
 import { useDeletedGitPaths } from '@renderer/features/git/use-git-data'
 import { MenuGlyph } from '@renderer/features/shell/glyph'
 import { relativePath } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { openDiff, openFile } from '@renderer/stores/files'
 import { useGitStore } from '@renderer/stores/git'
-import { useThreadsStore } from '@renderer/stores/threads'
+import { loadFullEntry, useThreadsStore } from '@renderer/stores/threads'
 import { turnChanges, type TurnChange } from '../turn-work'
 import { changeRowMenuModel, isChangeDeleted, type ChangeRowMenuModel } from './change-row-menu'
 import { DiffBlock } from './diff-block'
@@ -174,6 +176,7 @@ export const ChangesCard = memo(function ChangesCard({
       {(allShown ? ordered : ordered.slice(0, SHOWN)).map((change) => (
         <ChangeRow
           key={change.path}
+          sessionId={sessionId}
           change={change}
           projectPath={projectPath}
           local={local}
@@ -213,6 +216,7 @@ function Counts({ insertions, deletions }: { insertions: number; deletions: numb
  * file's page has a Preview at its end, whose room the other rows keep while `pages`.
  */
 function ChangeRow({
+  sessionId,
   change,
   projectPath,
   local,
@@ -221,6 +225,7 @@ function ChangeRow({
   onPage,
   pages,
 }: {
+  sessionId: string
   change: TurnChange
   projectPath: string
   local: boolean
@@ -229,7 +234,24 @@ function ChangeRow({
   onPage: (() => void) | null
   pages: boolean
 }) {
-  const { t } = useTranslation('files')
+  const { t } = useTranslation(['files', 'common'])
+  const [open, setOpen] = useState(false)
+  const [loadError, setLoadError] = useState<{ attempt: number; message: string } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const needsFull = change.diffs.some((diff) => diff.type === 'digest')
+  useEffect(() => {
+    if (!open || !needsFull) return
+    let active = true
+    void Promise.all(change.entryIds.map((id) => loadFullEntry(sessionId, id))).catch(
+      (error: unknown) => {
+        if (active) setLoadError({ attempt, message: errorMessage(error) })
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [open, needsFull, sessionId, change.entryIds, attempt])
+  const activeError = loadError?.attempt === attempt ? loadError.message : null
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   const cut = shown.lastIndexOf('/') + 1
@@ -257,16 +279,16 @@ function ChangeRow({
         <button
           type="button"
           className="ks-page-btn focus-ring"
-          title={t('htmlPreview.inKettu')}
+          title={t('files:htmlPreview.inKettu')}
           onClick={onPage}
         >
           <Icon icon={BrowserIcon} size={13} />
-          {t('htmlPreview.preview')}
+          {t('files:htmlPreview.preview')}
         </button>
       ) : (
         <span aria-hidden className="ks-page-btn invisible">
           <Icon icon={BrowserIcon} size={13} />
-          {t('htmlPreview.preview')}
+          {t('files:htmlPreview.preview')}
         </span>
       )}
     </div>
@@ -274,16 +296,35 @@ function ChangeRow({
     trigger
   )
   return (
-    <Collapsible>
+    <Collapsible open={open} onOpenChange={setOpen}>
       <ContextMenu>
         <ContextMenuTrigger render={row} />
         <ChangeRowMenu projectPath={projectPath} menu={menu} />
       </ContextMenu>
       <CollapsibleContent className={PANEL} keepMounted={false}>
         <div className="flex flex-col gap-2 px-1.5 pt-1 pb-2">
-          {change.diffs.map((diff, index) => (
-            <DiffBlock key={index} diff={diff} projectPath={projectPath} />
-          ))}
+          {needsFull ? (
+            activeError ? (
+              <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                <span className="min-w-0 truncate" title={activeError}>
+                  {activeError}
+                </span>
+                <Button size="xs" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+                  {t('common:actions.retry')}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-3">
+                <Spinner className="size-4 text-muted-foreground" />
+              </div>
+            )
+          ) : (
+            change.diffs.map((diff, index) =>
+              diff.type === 'diff' ? (
+                <DiffBlock key={index} diff={diff} projectPath={projectPath} />
+              ) : null,
+            )
+          )}
         </div>
       </CollapsibleContent>
     </Collapsible>
