@@ -30,6 +30,7 @@ import {
 import { agentsOn, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
+import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
@@ -75,6 +76,7 @@ import { QueueButton, SendButton, StopButton } from './send-button'
 import { SessionPlace } from './session-place'
 import { SwitchConfirm } from './switch-confirm'
 import { SwitchStrip } from './switch-strip'
+import { WorkflowEditStrip } from './workflow-edit-strip'
 import { SpeedButton } from './speed'
 import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
@@ -122,10 +124,19 @@ export function Composer({
   agentName: string
   mustSwitch?: boolean
 }) {
-  const { t } = useTranslation(['composer', 'session'])
+  const { t, i18n } = useTranslation(['composer', 'session'])
   const sessionId = session.id
   // A task this conversation started still runs; what is said here goes to this agent alone.
   const taskRunning = useTasksStore((s) => taskFrom(s.summaries, sessionId)?.status === 'running')
+  // Workflow suggestion card the user clicked Edit on, while it is still waiting for an answer.
+  const editingEntry = useSuggestionsStore((s) => s.editing[sessionId] ?? null)
+  const editingCard = useSuggestionsStore((s) =>
+    editingEntry ? (s.byId[editingEntry.cardId] ?? null) : null,
+  )
+  const editingSuggestion =
+    editingEntry && editingCard && editingCard.answer.kind === 'waiting'
+      ? { card: editingCard, nonce: editingEntry.nonce }
+      : null
   // Another agent picked to take the session over with the next message, shown as its own.
   const pending = useAgentSwitchStore((s) => s.pending[sessionId] ?? null)
   // Every agent here is one of the host the session is on.
@@ -331,6 +342,29 @@ export function Composer({
     if (document.activeElement === document.body) box.editor.current?.focus()
   }, [starting, ready, focused, box.editor, phone])
 
+  // Clicking Edit on a workflow card brings the composer into view, focuses it and pulses its ring.
+  const editingNonce = editingSuggestion?.nonce ?? 0
+  useEffect(() => {
+    if (editingNonce === 0) return
+    const el = root.current
+    if (!el) return
+    delete el.dataset.attention
+    let timer = 0
+    const frame = requestAnimationFrame(() => {
+      el.dataset.attention = ''
+      el.scrollIntoView({ block: 'nearest' })
+      box.editor.current?.focus()
+      timer = window.setTimeout(() => {
+        delete el.dataset.attention
+      }, 680)
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      if (timer) window.clearTimeout(timer)
+      delete el.dataset.attention
+    }
+  }, [editingNonce, box.editor])
+
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.
   const send = (now = { canSend, canQueue }) => {
@@ -410,6 +444,7 @@ export function Composer({
     const now = useAgentSwitchStore.getState().pending[sessionId]
     if (!now) return
     const { taken, sent, content, commentIds } = takeContent()
+    useSuggestionsStore.getState().stopEditing(sessionId)
     const options = Object.keys(now.values).length > 0 ? { options: now.values } : {}
     host('sessions.switchAgent', {
       sessionId,
@@ -449,6 +484,7 @@ export function Composer({
   /** With `shown`, the session is free, so the message shows in the thread as it goes. */
   const queue = (steer: boolean, shown = false) => {
     const { taken, sent, content, commentIds, summary } = takeContent()
+    useSuggestionsStore.getState().stopEditing(sessionId)
     const unshow = shown ? showSending(sessionId, content) : null
     host('sessions.queue', { sessionId, content, ...(summary ? { comments: summary } : {}) })
       .then(({ itemId }) => {
@@ -517,6 +553,11 @@ export function Composer({
       event.preventDefault()
       return
     }
+    if (event.key === 'Escape' && editingSuggestion) {
+      event.preventDefault()
+      useSuggestionsStore.getState().stopEditing(sessionId, editingSuggestion.card.id)
+      return
+    }
     if (event.key === 'Escape' && running) {
       event.preventDefault()
       // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on;
@@ -531,6 +572,7 @@ export function Composer({
     // With nothing written, Enter and Mod+Enter answer the waiting card, as its buttons show.
     const cardKey = isMod(event) ? 'confirm' : event.metaKey || event.ctrlKey ? null : 'enter'
     if (
+      !editingSuggestion &&
       !now.holds &&
       !event.shiftKey &&
       !event.altKey &&
@@ -580,27 +622,29 @@ export function Composer({
                 time: resetTime(typeof continuesAt === 'number' ? continuesAt : reached.resetsAt),
               },
             )
-          : !running && rejected
-            ? t('prompt.placeholder.denied')
-            : waitingBackground
-              ? t(
-                  phone
-                    ? 'prompt.placeholder.waitingBackgroundTouch'
-                    : 'prompt.placeholder.waitingBackground',
-                )
-              : running
+          : !running && editingSuggestion
+            ? t('prompt.placeholder.editWorkflow', { agent: agentName })
+            : !running && rejected
+              ? t('prompt.placeholder.denied')
+              : waitingBackground
                 ? t(
-                    steerDefault
-                      ? phone
-                        ? 'prompt.placeholder.runningSteerTouch'
-                        : 'prompt.placeholder.runningSteer'
-                      : phone
-                        ? 'prompt.placeholder.runningTouch'
-                        : 'prompt.placeholder.runningQueue',
+                    phone
+                      ? 'prompt.placeholder.waitingBackgroundTouch'
+                      : 'prompt.placeholder.waitingBackground',
                   )
-                : taskRunning
-                  ? t('prompt.placeholder.taskRunning')
-                  : idleLine
+                : running
+                  ? t(
+                      steerDefault
+                        ? phone
+                          ? 'prompt.placeholder.runningSteerTouch'
+                          : 'prompt.placeholder.runningSteer'
+                        : phone
+                          ? 'prompt.placeholder.runningTouch'
+                          : 'prompt.placeholder.runningQueue',
+                    )
+                  : taskRunning
+                    ? t('prompt.placeholder.taskRunning')
+                    : idleLine
   // A phone has no Tab to take it with.
   const suggestion =
     placeholder === idleLine && idle && !phone ? (session.suggestion ?? null) : null
@@ -662,6 +706,7 @@ export function Composer({
       data-composer=""
       className="kettu-composer"
       data-starting={starting || undefined}
+      data-editing-workflow={editingSuggestion ? '' : undefined}
     >
       <AnimatePresence initial={false}>
         {cacheNoticeShown && (
@@ -700,6 +745,25 @@ export function Composer({
                   )
                 )}
                 <CommentList sessionId={sessionId} />
+                <AnimatePresence initial={false}>
+                  {editingSuggestion && (
+                    <WorkflowEditStrip
+                      key={editingSuggestion.card.id}
+                      workflowName={
+                        editingSuggestion.card.workflow.locales[i18n.language]?.name ??
+                        editingSuggestion.card.workflow.name
+                      }
+                      agentName={agentName}
+                      save={editingSuggestion.card.purpose === 'save'}
+                      onCancel={() => {
+                        useSuggestionsStore
+                          .getState()
+                          .stopEditing(sessionId, editingSuggestion.card.id)
+                        box.focus()
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
                 <AnimatePresence initial={false}>
                   {outOfCredit && !starting && (
                     <OutOfCreditStrip

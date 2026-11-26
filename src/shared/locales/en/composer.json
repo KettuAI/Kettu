@@ -9,6 +9,7 @@
       "limitReachedContinue": "{{limit}} limit reached · continues {{time}}",
       "limitExtraUsage": "{{limit}} limit reached · using extra usage",
       "ask": "Reply…",
+      "editWorkflow": "Tell {{agent}} what to change in this workflow…",
       "taskRunning": "Keep chatting; this doesn’t change the task",
       "denied": "Say what to do differently",
       "runningQueue": "Queue a message · Esc stops",
@@ -83,6 +84,12 @@
   },
   "heldOutside": {
     "strip": "This session is open in a terminal. Exit it there with /exit, and its conversation shows up here."
+  },
+  "workflowEdit": {
+    "title": "Editing workflow “{{name}}”",
+    "hint": "Tell {{agent}} what to change — it will update the workflow card.",
+    "saveHint": "Tell {{agent}} what to change before saving this workflow.",
+    "cancel": "Cancel"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",

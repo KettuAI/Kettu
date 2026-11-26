@@ -28,19 +28,21 @@ import { ConnectButton } from '@renderer/features/marketplace/connect'
 import { useConnection } from '@renderer/features/marketplace/hooks'
 import { InstallButton } from '@renderer/features/marketplace/listing'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { usePane } from '@renderer/features/split/pane-context'
 import { chartShown, chartToTask, holdChart } from '@renderer/features/tasks/chart-morph'
 import { WorkflowChart } from '@renderer/features/tasks/workflow-chart'
 import { count, runningFor } from '@renderer/lib/format'
 import { errorMessage, hostAt, sessionHost } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { HostScopeContext, hostScope, LOCAL_SCOPE, useHostScope } from '@renderer/stores/host-scope'
-import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
+import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { useSuggestion, useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { openTask, openWorkflowMarketplace } from '../new-session/open-task'
 import { listOf, localStepName, WORKFLOW_ICON } from '../new-session/workflow-picks'
 import { useSessionView } from '../use-thread'
 import { revealWaiting } from './helpers'
-import { cardIdOf, suggestionFallbackName } from './workflow-tools'
+import { canEditSuggestion, cardIdOf, suggestionFallbackName } from './workflow-tools'
 
 /**
  * The host's card for a suggestion or a workflow to keep, in the session's host's scope, so the
@@ -164,7 +166,13 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
   const { t, i18n } = useTranslation('session')
   const root = useRef<HTMLDivElement>(null)
   const scope = useHostScope()
+  const paneId = usePane()?.paneId ?? null
+  const summary = useSessionsStore((s) => s.byId[card.sessionId])
+  const archived = useSessionsStore((s) => sessionArchived(s.byId, card.sessionId))
+  const otherHost = useOtherHost(scope.hostId)
+  const away = !!(otherHost && isAway(otherHost.connection))
   const config = useSessionView(card.sessionId)?.config
+  const editing = useSuggestionsStore((s) => s.editing[card.sessionId]?.cardId === card.id)
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState(false)
   const [blocked, setBlocked] = useState<string[]>([])
@@ -173,7 +181,19 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
   const starting = answer.kind === 'starting'
   const failed = answer.kind === 'failed'
   const waiting = answer.kind === 'waiting'
+  const editable = canEditSuggestion({
+    waiting,
+    away,
+    archived,
+    origin: summary?.origin,
+    worktreeState: summary?.worktree?.state,
+  })
   const name = nameOf(card.workflow, i18n.language)
+
+  const edit = () => {
+    useSuggestionsStore.getState().startEditing(card.sessionId, card.id)
+    emitAppEvent({ kind: 'focus-composer', sessionId: card.sessionId, paneId })
+  }
 
   useEffect(() => revealWaiting(root.current), [])
   // Sign-in states are read once a tool needs one.
@@ -234,7 +254,7 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
   return (
     <div ref={root} className="min-w-0">
       <ApprovalCard
-        className="ks-suggest"
+        className={cn('ks-suggest', editing && waiting && 'ks-suggest--editing')}
         title={save ? t('workflow.card.saveTitle', { name }) : t('workflow.card.title')}
         description={<Summary card={card} />}
         icon={<Icon icon={WORKFLOW_ICON} size={15} />}
@@ -250,7 +270,7 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
         }
         denyLabel={save ? t('workflow.card.notNow') : t('workflow.card.doItHere')}
         editLabel={t('workflow.card.edit')}
-        onEdit={waiting ? () => emitAppEvent({ kind: 'focus-composer' }) : undefined}
+        onEdit={editable ? edit : undefined}
         allowAlways={false}
         shortcuts
         status="pending"
@@ -276,6 +296,21 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
                   save ? undefined : () => void answerWith('another').catch(() => undefined)
                 }
               />
+            )}
+            {waiting && editing && (
+              <div role="status" aria-live="polite" className="ks-suggest__editing">
+                <Glyph icon={WORKFLOW_ICON} size={13} className="shrink-0 text-link" />
+                <span className="min-w-0 flex-1">{t('workflow.card.editingHint', { agent })}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    useSuggestionsStore.getState().stopEditing(card.sessionId, card.id)
+                  }
+                  className="shrink-0 text-link hover:underline"
+                >
+                  {t('workflow.card.cancelEdit')}
+                </button>
+              </div>
             )}
           </div>
         }

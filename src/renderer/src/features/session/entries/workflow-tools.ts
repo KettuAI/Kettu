@@ -1,6 +1,7 @@
 // The calls of the workflow tools of Kettu's MCP server, which the thread draws as cards: what they
 // asked and what Kettu answered, and the card a suggestion or a workflow to keep shows.
 
+import type { SessionSummary } from '@shared/agent-host'
 import type { CheckLine, CheckNext, PickCheck, ReportCheck } from '@shared/workflow'
 import { workflowToolOfTitle, type WorkflowCardTool } from '@shared/mcp-call'
 import { hasToolDigest, toolContentItems, type ThreadState, type ToolEntry } from '@shared/thread'
@@ -232,4 +233,24 @@ export function openSuggestion(state: ThreadState): string | null {
     if (answer === 'waiting' || answer === 'failed') return entry.id
   }
   return null
+}
+
+/**
+ * Whether Edit on a workflow suggestion card can route the user to the session's composer: only
+ * while the card waits and the session actually renders a live composer.
+ */
+export function canEditSuggestion({
+  waiting,
+  away,
+  archived,
+  origin,
+  worktreeState,
+}: {
+  waiting: boolean
+  away: boolean
+  archived: boolean
+  origin: SessionSummary['origin'] | undefined
+  worktreeState: NonNullable<SessionSummary['worktree']>['state'] | undefined
+}): boolean {
+  return waiting && !away && !archived && origin !== 'subagent' && worktreeState !== 'gone'
 }

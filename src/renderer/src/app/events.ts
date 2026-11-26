@@ -1,7 +1,7 @@
 // In-app events between parts of the interface that do not share a store.
 
 export type AppEvent =
-  | { kind: 'focus-composer' }
+  | { kind: 'focus-composer'; sessionId?: string | null; paneId?: string | null }
   | { kind: 'focus-browser-address'; sessionId: string } // Mod+L typed in a session's browser page
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
