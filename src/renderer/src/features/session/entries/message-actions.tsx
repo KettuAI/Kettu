@@ -23,6 +23,7 @@ import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
 import { useEditable, useEditFrom } from './edit-from-here'
 import { forkBlocked, forkEntry } from './helpers'
+import { completedTurnDuration } from './turn-end'
 import { TurnEndTag } from './turn-end-tag'
 
 function Ago({ at }: { at: number }) {
@@ -233,6 +234,7 @@ export const ReplyFooter = memo(
         ? t('replyFooter.forkNotReady')
         : t('replyFooter.fork')
 
+    const completedDuration = completedTurnDuration(end, at)
     const when =
       at !== undefined ? (
         <span className="flex min-w-0 items-center gap-1.5 truncate tabular">
@@ -253,29 +255,37 @@ export const ReplyFooter = memo(
         <div
           className={cn('ks-reply-foot', animation)}
           data-shown={hovered || forking ? '' : undefined}
+          data-has-duration={completedDuration ? '' : undefined}
         >
-          <MessageActions
-            quiet={false}
-            onCopy={copyText}
-            actions={['copy']}
-            label={t('replyFooter.label')}
-            labels={labels}
-            extraActions={
-              showFork
-                ? [
-                    {
-                      key: 'fork',
-                      tip: forkLabel,
-                      label: forkLabel,
-                      icon: forking ? <Spinner /> : <ForkIcon />,
-                      disabled: forking || blocked,
-                      onClick: () => void fork(),
-                    },
-                  ]
-                : []
-            }
-            after={when}
-          />
+          {completedDuration && (
+            <span className="ks-reply-foot__duration" title={completedDuration.title}>
+              {completedDuration.label}
+            </span>
+          )}
+          <div className="ks-reply-foot__actions">
+            <MessageActions
+              quiet={false}
+              onCopy={copyText}
+              actions={['copy']}
+              label={t('replyFooter.label')}
+              labels={labels}
+              extraActions={
+                showFork
+                  ? [
+                      {
+                        key: 'fork',
+                        tip: forkLabel,
+                        label: forkLabel,
+                        icon: forking ? <Spinner /> : <ForkIcon />,
+                        disabled: forking || blocked,
+                        onClick: () => void fork(),
+                      },
+                    ]
+                  : []
+              }
+              after={when}
+            />
+          </div>
           {error && (
             <span className="ml-2 min-w-0 truncate text-danger" title={error}>
               {error}

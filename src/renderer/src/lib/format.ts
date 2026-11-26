@@ -153,6 +153,29 @@ export function shortDuration(ms: number): string {
   return i18n.t('time.hoursMinutesShort', { h: Math.floor(m / 60), m: m % 60 })
 }
 
+/**
+ * Compact elapsed duration for a completed turn: "< 1s", "3s", "1m", "1m 12s", "1h", "1h 4m".
+ * Returns null when the duration is missing, non-positive, or not finite.
+ */
+export function turnDuration(ms: number | null | undefined): string | null {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return null
+  if (ms < 1000) return i18n.t('time.underSecond')
+  const totalSeconds = Math.round(ms / 1000)
+  if (totalSeconds < 60) return i18n.t('time.secondsShort', { s: totalSeconds })
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes < 60) {
+    const seconds = totalSeconds % 60
+    return seconds === 0
+      ? i18n.t('time.minutesCompact', { m: totalMinutes })
+      : i18n.t('time.minutesSecondsShort', { m: totalMinutes, s: seconds })
+  }
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes === 0
+    ? i18n.t('time.hoursCompact', { h: hours })
+    : i18n.t('time.hoursMinutesShort', { h: hours, m: minutes })
+}
+
 /** How long a turn has run, to the minute once it passes one: "45 s", "4 m", "1 h 20 m". */
 export function runningFor(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))

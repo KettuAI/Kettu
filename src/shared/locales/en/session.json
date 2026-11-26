@@ -620,7 +620,8 @@
     "fork": "Fork from here",
     "forking": "Forking…",
     "forkNotReady": "Forks once the session is ready",
-    "label": "Reply actions"
+    "label": "Reply actions",
+    "durationTitleWithTime": "{{duration}} · Completed {{time}}"
   },
   "changes": {
     "label": "Changes",

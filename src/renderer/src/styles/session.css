@@ -415,21 +415,52 @@
   }
 }
 
-/* A reply's copy, fork and time show while the pointer is on its turn, as under a message you
-   sent; they keep their room, so nothing moves. */
+/* A reply's completed duration stays quietly visible on the left, while copy, fork and time fade
+   in beside it on hover or focus. Both keep their room, so nothing shifts. */
 .ks-reply-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
+  min-height: 28px;
   margin-left: -6px;
   font-size: 12px;
   color: var(--thread-faint);
+}
+.ks-reply-foot[data-has-duration] {
+  margin-left: 0;
+  gap: 0 4px;
+}
+.ks-reply-foot__duration {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  min-height: 28px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ks-reply-foot__actions {
+  display: flex;
+  align-items: center;
+  flex: 1 1 120px;
+  min-width: 0;
   opacity: 0;
   transition: opacity 140ms ease;
 }
-.ks-reply-foot[data-shown],
-.ks-reply-foot:focus-within {
+.ks-reply-foot[data-shown] .ks-reply-foot__actions,
+.ks-reply-foot:focus-within .ks-reply-foot__actions {
   opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-reply-foot__actions {
+    transition: none;
+  }
+}
+:root[data-reduce-motion='always'] .ks-reply-foot__actions {
+  transition: none;
 }
 .ks-reply-foot .ui-mac {
   flex: 1;

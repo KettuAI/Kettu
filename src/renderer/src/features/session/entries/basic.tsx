@@ -26,7 +26,7 @@ import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marke
 import { Spinner } from '@renderer/components/ui/spinner'
 import { AIAnswer, type AnswerSource } from '@renderer/components/affect/ai-answer'
 import { dayTime } from '@renderer/features/routines/model'
-import { PANEL, stopReasonText } from './helpers'
+import { PANEL } from './helpers'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -50,6 +50,7 @@ import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
 import { SentCommandNote } from './sent-command'
 import { FromSessionCard, KettuCard, ReportLine } from './session-origin'
+import { turnEndTagText } from './turn-end'
 import { TurnEndTag } from './turn-end-tag'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
@@ -422,9 +423,11 @@ export const TurnEndEntry = memo(function TurnEndEntry({ sessionId, entryId }: E
       />
     )
   }
+  const text = turnEndTagText(entry.stopReason, entry.durationMs)
+  if (text === null) return null
   return (
     <Marker className={cn('text-xs tabular', animation)}>
-      <MarkerContent>{stopReasonText(entry.stopReason, entry.durationMs)}</MarkerContent>
+      <MarkerContent>{text}</MarkerContent>
     </Marker>
   )
 })
