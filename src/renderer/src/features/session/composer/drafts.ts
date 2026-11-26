@@ -2,14 +2,27 @@ import { PLUGIN_REF_LIMITS, type PluginMentionRef } from '@shared/plugin-refs'
 import { isAttachment, type Attachment } from '@shared/thread'
 import { removeKey } from '@renderer/lib/storage'
 
-// Unsent composer text, attachments, passage comments and the items mentioned from plugins per
-// session, in localStorage under `draft:<sessionId>` as JSON `{ text, attachments, comments,
-// mentions }`, written 300 ms after the last change. One stored as plain text, before drafts had
-// attachments, reads as text alone, and one stored before comments or mentions as one without them. A draft that is too large or fails to save stays in
-// memory.
+// Unsent composer text, attachments, attached artifact references, passage comments and the items
+// mentioned from plugins per session, in localStorage under `draft:<sessionId>` as JSON
+// `{ text, attachments, comments, mentions, artifacts }`, written 300 ms after the last change.
+// One stored as plain text, before drafts had attachments, reads as text alone, and one stored
+// before comments, mentions or artifacts as one without them. A draft that is too large or fails
+// to save stays in memory.
 
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
+
+/** The artifact kind badge shown on an attached artifact chip and reference block. */
+export type AttachedArtifactKind = 'document' | 'slides' | 'web' | 'canvas'
+
+/** A project artifact attached to a composer draft as a lightweight reference. */
+export interface AttachedArtifact {
+  id: string
+  title: string
+  kind: AttachedArtifactKind
+  /** Another host that holds the artifact; omitted for this computer. */
+  hostId?: string
+}
 
 /**
  * A draft's attachment as stored: the host's record of it, and what the tile shows about it;
@@ -40,6 +53,7 @@ interface Draft {
   attachments: SavedAttachment[]
   comments: DraftComment[]
   mentions: PluginMentionRef[]
+  artifacts: AttachedArtifact[]
 }
 
 const WRITE_DELAY_MS = 300
@@ -50,7 +64,7 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const PREFIX = 'draft:'
 const key = (sessionId: string) => `${PREFIX}${sessionId}`
-const EMPTY: Draft = { text: '', attachments: [], comments: [], mentions: [] }
+const EMPTY: Draft = { text: '', attachments: [], comments: [], mentions: [], artifacts: [] }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -92,6 +106,20 @@ function isMention(value: unknown): value is PluginMentionRef {
   )
 }
 
+const ARTIFACT_KINDS: ReadonlySet<string> = new Set(['document', 'slides', 'web', 'canvas'])
+
+function isAttachedArtifact(value: unknown): value is AttachedArtifact {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.title === 'string' &&
+    typeof value.kind === 'string' &&
+    ARTIFACT_KINDS.has(value.kind) &&
+    (value.hostId === undefined || typeof value.hostId === 'string')
+  )
+}
+
 /** A stored draft; one stored as plain text, or that is not a draft's JSON, is text alone. */
 export function parseDraft(raw: string): Draft {
   if (raw.startsWith('{')) {
@@ -102,18 +130,27 @@ export function parseDraft(raw: string): Draft {
         const mentions = Array.isArray(value.mentions)
           ? value.mentions.filter(isMention).slice(0, PLUGIN_REF_LIMITS.perMessage)
           : []
+        const seenArtifacts = new Set<string>()
+        const artifacts = Array.isArray(value.artifacts)
+          ? value.artifacts.filter((item): item is AttachedArtifact => {
+              if (!isAttachedArtifact(item) || seenArtifacts.has(item.id)) return false
+              seenArtifacts.add(item.id)
+              return true
+            })
+          : []
         return {
           text: value.text,
           attachments: value.attachments.filter(isSaved),
           comments,
           mentions,
+          artifacts,
         }
       }
     } catch {
       // Text that only starts like JSON.
     }
   }
-  return { text: raw, attachments: [], comments: [], mentions: [] }
+  return { text: raw, attachments: [], comments: [], mentions: [], artifacts: [] }
 }
 
 function read(sessionId: string): Draft {
@@ -143,9 +180,17 @@ export function readDraftMentions(sessionId: string): PluginMentionRef[] {
   return read(sessionId).mentions
 }
 
-/** Whether a draft holds what Send takes: text other than white space, or an attachment. */
-export function hasMessage(text: string, attachments: readonly unknown[]): boolean {
-  return text.trim().length > 0 || attachments.length > 0
+export function readDraftArtifacts(sessionId: string): AttachedArtifact[] {
+  return read(sessionId).artifacts
+}
+
+/** Whether a draft holds what Send takes: text other than white space, an attachment, or an artifact. */
+export function hasMessage(
+  text: string,
+  attachments: readonly unknown[],
+  artifacts: readonly unknown[] = [],
+): boolean {
+  return text.trim().length > 0 || attachments.length > 0 || artifacts.length > 0
 }
 
 function write(sessionId: string, draft: Draft): void {
@@ -174,6 +219,10 @@ export function writeDraftMentions(sessionId: string, mentions: PluginMentionRef
   write(sessionId, { ...read(sessionId), mentions })
 }
 
+export function writeDraftArtifacts(sessionId: string, artifacts: AttachedArtifact[]): void {
+  write(sessionId, { ...read(sessionId), artifacts })
+}
+
 /** Writes a pending draft now, for example when the composer unmounts. */
 export function flushDraft(sessionId: string): void {
   const timer = timers.get(sessionId)
@@ -181,7 +230,12 @@ export function flushDraft(sessionId: string): void {
   timers.delete(sessionId)
   const draft = memory.get(sessionId)
   if (draft === undefined) return
-  if (!draft.text && draft.attachments.length === 0 && draft.comments.length === 0) {
+  if (
+    !draft.text &&
+    draft.attachments.length === 0 &&
+    draft.comments.length === 0 &&
+    draft.artifacts.length === 0
+  ) {
     removeKey(key(sessionId))
     memory.delete(sessionId)
     return
@@ -213,12 +267,17 @@ export function draftIds(): string[] {
   return [...ids].sort()
 }
 
-/** The sessions whose draft, saved or in memory, holds text, an attachment or a comment. */
+/** The sessions whose draft, saved or in memory, holds text, an attachment, a comment or an artifact. */
 export function draftedSessions(): string[] {
   return draftIds().filter((id) => {
     if (id === NEW_SESSION_DRAFT) return false
     const draft = read(id)
-    return draft.text.trim() !== '' || draft.attachments.length > 0 || draft.comments.length > 0
+    return (
+      draft.text.trim() !== '' ||
+      draft.attachments.length > 0 ||
+      draft.comments.length > 0 ||
+      draft.artifacts.length > 0
+    )
   })
 }
 

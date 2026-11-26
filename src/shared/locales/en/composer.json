@@ -260,6 +260,7 @@
     "add": "Add files, photos or a folder",
     "addFiles": "Add files or photos…",
     "addFolder": "Add a folder…",
+    "attachArtifact": "Attach artifact…",
     "screenshot": "Screenshot of the browser",
     "noPage": "No page open",
     "openBrowser": "Open the browser first",
@@ -354,5 +355,20 @@
     "remove": "Remove comment {{number}}",
     "edit": "Edit comment {{number}}",
     "show": "Show passage {{number}} in the thread"
+  },
+  "artifacts": {
+    "pickerTitle": "Attach artifact",
+    "searchPlaceholder": "Search artifacts…",
+    "loading": "Loading artifacts…",
+    "emptyProject": "No artifacts in this project yet",
+    "empty": "No artifacts yet",
+    "allAttached": "All artifacts are already attached",
+    "noMatch": "No matching artifacts",
+    "allProjects": "All projects",
+    "noProject": "No project",
+    "attachedLabel": "Attached artifacts",
+    "remove": "Remove {{title}}",
+    "open": "Open {{title}}",
+    "sentLabel": "Referenced artifacts"
   }
 }

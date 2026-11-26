@@ -75,11 +75,21 @@ import {
 } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
+import {
+  formatAttachedArtifactsPrompt,
+  keepHostArtifactAttachments,
+} from './composer/artifact-attachments'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './composer/chips'
 import { draftMentions } from './composer/plugin-mentions'
 import { mentionSurfacesOf } from './composer/mention-surfaces'
-import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from './composer/drafts'
+import {
+  hasMessage,
+  NEW_SESSION_DRAFT,
+  readDraft,
+  readDraftArtifacts,
+  readDraftAttachments,
+} from './composer/drafts'
 import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
 import { PromptBox, type SlashNote } from './composer/prompt-box'
@@ -172,7 +182,11 @@ export function NewSessionView({
   const agentId = installed ? chosenId : null
   // From the kept draft, so a draft left on an earlier visit hides Pick up from the start.
   const [holdsMessage, setHoldsMessage] = useState(() =>
-    hasMessage(readDraft(NEW_SESSION_DRAFT), readDraftAttachments(NEW_SESSION_DRAFT)),
+    hasMessage(
+      readDraft(NEW_SESSION_DRAFT),
+      readDraftAttachments(NEW_SESSION_DRAFT),
+      readDraftArtifacts(NEW_SESSION_DRAFT),
+    ),
   )
 
   const drop = useFileDrop(NEW_SESSION_DRAFT, false)
@@ -335,16 +349,20 @@ function DraftComposer({
     draft: NEW_SESSION_DRAFT,
     sessionId: null,
     projectPath,
+    noProject: inScratch,
     hostId,
     disabled: false,
     onActivity: noteActivity,
   })
-  const { attachments, editor } = box
+  const { attachments, artifacts, editor } = box
+  useEffect(() => {
+    keepHostArtifactAttachments(NEW_SESSION_DRAFT, hostId)
+  }, [hostId])
   const ready = inScratch || (!!project && !project.missing)
   // Read as values, so typing renders New session only when one of them changes.
   const heldBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const held = heldBy === null ? null : attachmentsBlock(attachments, box.source.text)
-  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments))
+  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments, artifacts))
   // A sub-session works in its parent's worktree, so only a top-level session in a repository
   // with a commit chooses one.
   const gitStatus = useWorktreeStatus(!parent && !inScratch && project ? project.path : '')
@@ -462,7 +480,7 @@ function DraftComposer({
         {
           projectPath: taskProject.path,
           workflowId: entry.id,
-          text: taken.prompt,
+          text: formatAttachedArtifactsPrompt(taken.prompt, taken.artifacts),
           pace,
           agentId,
           options,
@@ -509,17 +527,18 @@ function DraftComposer({
         return
       }
       const preparedId = prepared?.summary?.id ?? null
-      const text = editor.current?.text() ?? box.source.text
+      const rawText = editor.current?.text() ?? box.source.text
+      const text = formatAttachedArtifactsPrompt(rawText, artifacts)
       const surfaces = projectPath ? mentionSurfacesOf(newSessionPanel(projectPath)) : NO_SURFACES
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
-        ...surfaceRefs(text, mentionResolver([], null, surfaces)).map((ref) => ({
+        ...surfaceRefs(rawText, mentionResolver([], null, surfaces)).map((ref) => ({
           type: 'ref' as const,
           ref,
         })),
         ...pluginRefs(
-          text,
+          rawText,
           mentionResolver([], null, NO_SURFACES, draftMentions(NEW_SESSION_DRAFT)),
         ).map((ref) => ({ type: 'ref' as const, ref: { kind: 'plugin' as const, ...ref } })),
       ]

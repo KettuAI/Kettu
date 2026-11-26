@@ -50,6 +50,7 @@ import { commentsMessage } from '../entries/reply-quote'
 import { CommentList } from './comment-list'
 import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
+import { formatAttachedArtifactsPrompt } from './artifact-attachments'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { mentionSurfacesOf } from './mention-surfaces'
@@ -203,14 +204,17 @@ export function Composer({
   // A closed session attaches to its agent as the message goes.
   const idle = (status === 'ready' || status === 'closed') && !heldOutside
   const folder = useSessionFolder(sessionId) ?? session.projectPath
+  const isScratch = useSessionsStore((s) => !!s.byId[sessionId]?.scratch)
   const box = usePromptBox({
     draft: sessionId,
     sessionId,
     projectPath: folder,
+    artifactProjectPath: session.projectPath,
+    noProject: isScratch,
     hostId,
     disabled: starting,
   })
-  const { attachments, error, setError } = box
+  const { attachments, artifacts, error, setError } = box
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
     canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
@@ -220,7 +224,8 @@ export function Composer({
   // Comments on passages go with the message, so with one, Send works on an empty box.
   const commented = useReplyComments(sessionId).length > 0
   // Read as values, so typing renders the composer only when one of them changes.
-  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments)) || commented
+  const holdsMessage =
+    useBoxText(box, (text) => hasMessage(text, attachments, artifacts)) || commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
   const { canSend, canQueue } = can(holdsMessage, blocked)
@@ -236,7 +241,7 @@ export function Composer({
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text
-    const holds = hasMessage(text, attachments) || commentsOf(sessionId).length > 0
+    const holds = hasMessage(text, attachments, artifacts) || commentsOf(sessionId).length > 0
     return { holds, ...can(holds, attachmentsBlock(attachments, text)) }
   }
   // Why the send key does nothing now, for the line under the box.
@@ -258,7 +263,7 @@ export function Composer({
     if (!sideOn) return false
     const question = sideQuestionOf(box.editor.current?.text() ?? box.source.text)
     if (question === null) return false
-    if (attachments.length > 0) {
+    if (attachments.length > 0 || artifacts.length > 0) {
       setError(t('attachments.sideNoAttachments'))
       return true
     }
@@ -344,8 +349,9 @@ export function Composer({
     const taken = box.take()
     const comments = commentsOf(sessionId)
     keepComments(sessionId)
+    const withArtifacts = formatAttachedArtifactsPrompt(taken.prompt, taken.artifacts)
     const sent = selection && taken.prompt.trim() ? selection : null
-    const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
+    const prompt = sent ? selectionPrompt(withArtifacts, sent) : withArtifacts
     if (sent) setPaneSelection(null)
     const text = commentsMessage(comments, prompt)
     // How the message reads in the queue: the count, then the text or else the first comment.
@@ -360,17 +366,19 @@ export function Composer({
       ...(text.trim() ? [{ type: 'text' as const, text }] : []),
       ...attachmentContent(taken.held),
       // A terminal, tab or device the text mentions goes with it, which lets the agent use it.
-      ...surfaceRefs(prompt, mentionResolver([], null, mentionSurfacesOf(sessionId))).map(
+      ...surfaceRefs(taken.prompt, mentionResolver([], null, mentionSurfacesOf(sessionId))).map(
         (ref) => ({
           type: 'ref' as const,
           ref,
         }),
       ),
       // An item of a plugin the text mentions goes with it, and its content is read as it is sent.
-      ...pluginRefs(prompt, mentionResolver([], null, NO_SURFACES, taken.mentions)).map((ref) => ({
-        type: 'ref' as const,
-        ref: { kind: 'plugin' as const, ...ref },
-      })),
+      ...pluginRefs(taken.prompt, mentionResolver([], null, NO_SURFACES, taken.mentions)).map(
+        (ref) => ({
+          type: 'ref' as const,
+          ref: { kind: 'plugin' as const, ...ref },
+        }),
+      ),
     ]
     const commentIds = comments.map((c) => c.id)
     return { taken, sent, content, commentIds, summary }

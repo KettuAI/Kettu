@@ -21,6 +21,14 @@ import {
   type DraftAttachment,
 } from '@renderer/stores/attachments'
 import {
+  draftArtifactAttachments,
+  hydrateDraftArtifactAttachments,
+  restoreDraftArtifactAttachments,
+  setDraftArtifactAttachments,
+  useDraftArtifactAttachments,
+  type AttachedArtifact,
+} from './artifact-attachments'
+import {
   attachBrowserPage,
   attachFiles,
   attachImages,
@@ -48,6 +56,7 @@ export interface Taken {
   prompt: string
   held: DraftAttachment[]
   mentions: readonly PluginMentionRef[]
+  artifacts: readonly AttachedArtifact[]
 }
 
 export type PromptBoxState = ReturnType<typeof usePromptBox>
@@ -100,6 +109,8 @@ export function usePromptBox({
   draft,
   sessionId,
   projectPath,
+  artifactProjectPath,
+  noProject = false,
   hostId,
   disabled,
   onActivity,
@@ -107,6 +118,10 @@ export function usePromptBox({
   draft: string
   sessionId: string | null
   projectPath: string | null
+  /** Canonical project path for scoping project artifacts (differs from projectPath in worktrees). */
+  artifactProjectPath?: string | null
+  /** True when the session or New session targets No project (scratch). */
+  noProject?: boolean
   /** The host the message goes to, null for this computer; a host without a project has one too. */
   hostId: string | null
   disabled: boolean
@@ -116,11 +131,13 @@ export function usePromptBox({
   const { t } = useTranslation('composer')
   const [source] = useState(() => {
     hydrateDraftMentions(draft)
+    hydrateDraftArtifactAttachments(draft)
     return new BoxText(readDraft(draft))
   })
   const [error, setError] = useState<string | null>(null)
   // Each Mod+Shift+A for this composer asks the plus menu to open once more.
   const [addRequest, setAddRequest] = useState(0)
+  const [artifactPickerOpen, setArtifactPickerOpen] = useState(false)
   const editor = useRef<ComposerEditorHandle>(null)
   const {
     position: historyPosition,
@@ -146,6 +163,7 @@ export function usePromptBox({
     focused.current = paneFocused
   }, [paneFocused])
   const attachments = useAttachmentsStore(selectDraft(draft))
+  const artifacts = useDraftArtifactAttachments(draft)
 
   useEffect(() => () => flushDraft(draft), [draft])
 
@@ -295,22 +313,25 @@ export function usePromptBox({
     const prompt = editor.current?.text() ?? source.text
     const held = attachments
     const mentions = draftMentions(draft)
+    const attachedArtifacts = draftArtifactAttachments(draft)
     editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
     source.set('', null)
     clearDraft(draft)
     setDraftAttachments(draft, [])
     setDraftMentions(draft, [])
+    setDraftArtifactAttachments(draft, [])
     setError(null)
-    return { prompt, held, mentions }
+    return { prompt, held, mentions, artifacts: attachedArtifacts }
   }
   /** A failed send's handler: its error, and its message back in the draft above what is there. */
   const restore =
-    ({ prompt, held, mentions }: Taken) =>
+    ({ prompt, held, mentions, artifacts: attachedArtifacts }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
       putBackDraft(draft, prompt, held)
       restoreDraftMentions(draft, mentions)
+      restoreDraftArtifactAttachments(draft, attachedArtifacts)
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {
@@ -340,13 +361,25 @@ export function usePromptBox({
     requestAnimationFrame(() => editor.current?.focus())
   }
 
+  const openArtifactPicker = () => {
+    if (disabled) return
+    onActivity?.()
+    setArtifactPickerOpen(true)
+  }
+
   return {
     draft,
     sessionId,
     projectPath,
+    artifactProjectPath: artifactProjectPath !== undefined ? artifactProjectPath : projectPath,
+    noProject,
     disabled,
     source,
     attachments,
+    artifacts,
+    artifactPickerOpen,
+    setArtifactPickerOpen,
+    openArtifactPicker,
     error,
     setError,
     update,
