@@ -2455,7 +2455,8 @@
   text-align: left;
 }
 .ks-file:hover,
-.ks-file[data-panel-open] {
+.ks-file[data-panel-open],
+.ks-file[data-popup-open] {
   background: var(--thread-hover);
 }
 .ks-file__name {
@@ -2481,6 +2482,7 @@
   min-width: 0;
 }
 .ks-file-row:hover,
+.ks-file-row[data-popup-open],
 .ks-file-row:has(> .ks-file[data-panel-open]) {
   background: var(--thread-hover);
 }

@@ -3,8 +3,6 @@ import {
   Archive01Icon,
   ArrowMoveDownRightIcon,
   Cancel01Icon,
-  CodeIcon,
-  ComputerIcon,
   FolderRemoveIcon,
   ComputerTerminal01Icon,
   Copy01Icon,
@@ -22,13 +20,11 @@ import {
   SidebarRightIcon,
   SlidersHorizontalIcon,
   StopCircleIcon,
-  Tick02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import type { EditorList } from '@shared/editors'
 import type { SessionView } from '@shared/thread'
 import {
   archiveSession,
@@ -65,13 +61,15 @@ import {
   DropdownMenuSubTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { toast } from '@renderer/components/ui/toast'
+import { OpenInEditorMenu } from '@renderer/features/files/open-in-editor-menu'
+import { isLocalProject } from '@renderer/features/files/operations'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { modelName } from '@renderer/features/session/conversation-markdown'
 import { exportConversation } from '@renderer/features/session/export-conversation'
 import { Glyph, MenuGlyph } from '@renderer/features/shell/glyph'
 import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
+import { hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { fileManagerName, formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -256,7 +254,7 @@ export function SessionMenuItems({
   const unread = summary.attention === 'unread'
   const running = isRunning(summary)
   // Only this computer's folders open in its file manager and its editors.
-  const local = !isWeb && hostOfPath(summary.projectPath) === null
+  const local = isLocalProject(summary.projectPath)
   const resume = resumeCommand(summary, hostPath(sessionFolder(summary)))
   const { id } = summary
   const subSessions = useListedSubSessions([id])
@@ -465,7 +463,7 @@ export function SessionMenuItems({
         )
       }
       case 'openInEditor':
-        return <OpenInEditor key={name} path={sessionFolder(summary)} />
+        return <OpenInEditorMenu key={name} path={sessionFolder(summary)} />
       case 'showInFolder':
         return (
           <DropdownMenuItem
@@ -661,77 +659,6 @@ export function SessionMenuHeader({
       </div>
       <DropdownMenuSeparator />
     </>
-  )
-}
-
-/**
- * **Open in editor**: the editors installed on this computer with their own icons, the last one
- * used checked and named on the item, and **Choose app…** for one Kettu does not know.
- */
-function OpenInEditor({ path }: { path: string }) {
-  const { t } = useTranslation('sidebar')
-  const [list, setList] = useState<EditorList | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    window.kettu.editors.list().then(
-      (next) => !cancelled && setList(next),
-      (failure: unknown) => !cancelled && setError(errorMessage(failure)),
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const current = list?.editors.find((editor) => editor.id === list.last) ?? null
-  const open = (editorId: string) =>
-    void window.kettu.editors
-      .open(editorId, path)
-      .catch((failure: unknown) => toast(errorMessage(failure)))
-  const choose = () =>
-    void window.kettu.editors.choose(path).catch((failure: unknown) => toast(errorMessage(failure)))
-
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <MenuGlyph icon={CodeIcon} />
-        <span className="min-w-0 flex-1 truncate">{t('row.openInEditor')}</span>
-        {current && (
-          <span className="max-w-24 shrink-0 truncate pl-4 text-hint text-tertiary">
-            {current.name}
-          </span>
-        )}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-50">
-        {error ? (
-          <DropdownMenuItem disabled>{error}</DropdownMenuItem>
-        ) : list === null ? (
-          <DropdownMenuItem disabled>{t('row.findingEditors')}</DropdownMenuItem>
-        ) : list.editors.length === 0 ? (
-          <DropdownMenuItem disabled>{t('row.noEditors')}</DropdownMenuItem>
-        ) : (
-          list.editors.map((editor) => (
-            <DropdownMenuItem key={editor.id} onClick={() => open(editor.id)}>
-              {editor.icon ? (
-                <img src={editor.icon} alt="" className="size-4 shrink-0" draggable={false} />
-              ) : (
-                <MenuGlyph icon={ComputerIcon} />
-              )}
-              <span className="min-w-0 truncate">{editor.name}</span>
-              {editor.id === current?.id && (
-                <Glyph icon={Tick02Icon} size={12} className="ml-auto size-3" />
-              )}
-            </DropdownMenuItem>
-          ))
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={choose}>
-          <MenuGlyph icon={FolderOpenIcon} />
-          {t('row.chooseApp')}
-        </DropdownMenuItem>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
   )
 }
 

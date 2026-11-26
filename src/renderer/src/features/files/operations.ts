@@ -4,8 +4,8 @@
 import { toast } from '@renderer/components/ui/toast'
 import { emitAppEvent } from '@renderer/app/events'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
-import { hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
+import { isWeb } from '@renderer/lib/platform'
 import {
   closeRemoved,
   followMoves,
@@ -13,7 +13,15 @@ import {
   openFile,
   useFilesStore,
 } from '@renderer/stores/files'
+import { hostFilePath, isLocalProject as isLocalProjectFor } from './file-location'
 import { folderOf, joinPath, nameOf, outermost } from './paths'
+
+export { hostFilePath } from './file-location'
+
+/** Whether `projectPath` lives on this computer and runs in the desktop app. */
+export function isLocalProject(projectPath: string): boolean {
+  return isLocalProjectFor(projectPath, isWeb)
+}
 
 /** What a failure says: a name already taken in the user's words, anything else as it came. */
 function failed(error: unknown): void {
@@ -145,20 +153,23 @@ export async function deleteEntries(
   return 'done'
 }
 
-/** A path of the project as its host writes it, joined with the separator the host uses. */
-export function hostFilePath(projectPath: string, path: string): string {
-  const root = hostPath(projectPath)
-  const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/'
-  return path === '' ? root : `${root.replace(/[\\/]+$/, '')}${sep}${path.split('/').join(sep)}`
+/** Reveals a local file or folder in the system file manager, toasting on failure. */
+export function showFileInManager(path: string): void {
+  void window.kettu.shell.showItem(path).catch((failure: unknown) => toast(errorMessage(failure)))
+}
+
+/** Copies formatted path text to the clipboard and tells once copied. */
+export function copyFilePathText(text: string, count = 1): void {
+  void navigator.clipboard.writeText(text).then(
+    () => toast(i18n.t('files:tree.copiedPath', { count })),
+    (error: unknown) => toast(errorMessage(error)),
+  )
 }
 
 /** Copies the paths, one a line, telling once they are copied. */
 export function copyPaths(projectPath: string, paths: readonly string[], relative: boolean): void {
   const text = paths.map((path) => (relative ? path : hostFilePath(projectPath, path))).join('\n')
-  void navigator.clipboard.writeText(text).then(
-    () => toast(i18n.t('files:tree.copiedPath', { count: paths.length })),
-    (error: unknown) => toast(errorMessage(error)),
-  )
+  copyFilePathText(text, paths.length)
 }
 
 /** Opens a terminal in the side panel `panel`, starting in `folder` of the project. */
