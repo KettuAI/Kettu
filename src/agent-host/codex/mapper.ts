@@ -14,6 +14,7 @@ import type {
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
+import { isSleepMcpTool, isSleepToolName } from '../interruptible-wait'
 import { planMarkdown, planRevision } from '../plan-revision'
 import { isRowlessCall, isRowWhenFailed } from '../plan-tool'
 import { ANSWERS_OPTION } from '../question-answers'
@@ -403,6 +404,9 @@ export class ThreadMapper {
           ...(raw !== undefined ? { rawInput: raw } : {}),
           ...(own ? { structured: own } : {}),
         })
+        if (!ctx.replaying && isSleepMcpTool(item.server, item.tool)) {
+          out.effects.push({ kind: 'interruptibleWait', id: `t:${item.id}`, active: !done })
+        }
         break
       }
       case 'dynamicToolCall': {
@@ -414,6 +418,9 @@ export class ThreadMapper {
           ...(done ? { content: dynamicContent(item) } : {}),
           ...(raw !== undefined ? { rawInput: raw } : {}),
         })
+        if (!ctx.replaying && isSleepToolName(item.tool)) {
+          out.effects.push({ kind: 'interruptibleWait', id: `t:${item.id}`, active: !done })
+        }
         break
       }
       case 'collabAgentToolCall':
@@ -462,6 +469,11 @@ export class ThreadMapper {
         break
       case 'contextCompaction':
         this.compaction(ctx, out, item.id, done)
+        break
+      case 'sleep':
+        if (!ctx.replaying) {
+          out.effects.push({ kind: 'interruptibleWait', id: `sleep:${item.id}`, active: !done })
+        }
         break
       case 'enteredReviewMode':
       case 'exitedReviewMode':

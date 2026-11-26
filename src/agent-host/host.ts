@@ -1685,7 +1685,8 @@ export class AgentHost {
       library: this.workflowLibrary,
       sessions: {
         createStep: (params) => this.sessions.createStep(params),
-        send: (sessionId, text, due) => this.sessions.sendFromKettu(sessionId, text, due),
+        send: (sessionId, text, due, options) =>
+          this.sessions.sendFromKettu(sessionId, text, due, options),
         cancel: async (sessionId) => {
           await this.sessions.cancelContinue(sessionId).catch(() => {})
           await this.sessions.cancel(sessionId)

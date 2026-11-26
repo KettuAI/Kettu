@@ -380,7 +380,7 @@ export type ThreadItem = ItemTimes &
     | { type: 'contextCompaction'; id: string }
     | { type: 'hookPrompt'; id: string }
     | { type: 'functionCallOutput'; id: string }
-    | { type: 'sleep'; id: string }
+    | { type: 'sleep'; id: string; durationMs?: number }
   )
 
 export interface TokenUsageBreakdown {
