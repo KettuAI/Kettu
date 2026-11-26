@@ -1819,7 +1819,10 @@ export interface HostContract {
   }
   // Lists the models the agent offers now in a session that listed them when it attached.
   'sessions.refreshModels': { params: { sessionId: string }; result: void }
-  /** Use now: the agent attaches again between turns, with the library's MCP servers as they are. */
+  /**
+   * Use now: the agent lets go of the session between turns, so its next attach has the
+   * library's MCP servers as they are.
+   */
   'sessions.applyMcp': { params: { sessionId: string }; result: void }
   // title null: back to the agent's title.
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }

@@ -117,7 +117,10 @@ export interface RouterAccess {
   token: string
   /** The servers handed to the session, which its token may then reach. */
   allow(serverIds: readonly string[]): void
-  /** Servers the session reaches only through Kettu's tool gateway, for an agent that drops tools. */
+  /**
+   * Servers the session reaches only through Kettu's tool gateway, for an agent that drops
+   * tools.
+   */
   gate?(serverIds: readonly string[]): void
 }
 
@@ -243,7 +246,10 @@ export function libraryServers(
     /** Servers a workflow step names, by name or id, which its session gets while they are on. */
     also?: readonly string[]
     fellBack?(server: MarketServer, why: string): void
-    /** The servers the agent's own configuration sets up, which an entry of the same name replaces. */
+    /**
+     * The servers the agent's own configuration sets up, which an entry of the same name
+     * replaces.
+     */
     own?: readonly OwnServer[]
     /** The agent's own server of that name is another server, which Kettu's entry replaces. */
     conflict?(server: MarketServer, own: string): void

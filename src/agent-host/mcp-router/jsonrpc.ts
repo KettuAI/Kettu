@@ -40,7 +40,10 @@ export const META_SUBSCRIPTION = 'io.modelcontextprotocol/subscriptionId'
 export const METHOD_NOT_FOUND = -32601
 export const INVALID_PARAMS = -32602
 export const INTERNAL_ERROR = -32603
-/** What the router answers when the server cannot be reached or started; JSON-RPC's server range. */
+/**
+ * What the router answers when the server cannot be reached or started; JSON-RPC's server
+ * range.
+ */
 export const SERVER_UNAVAILABLE = -32000
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
