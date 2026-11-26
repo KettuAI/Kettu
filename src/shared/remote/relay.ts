@@ -191,6 +191,8 @@ export type RelayToDevice = { type: 'joined' } | { type: 'drain' }
 export interface RelayRegion {
   id: string
   url: string
+  /** 面向用户展示的节点区域名称（来自签名区域清单，例如「上海一区」），缺失时界面回退显示区域 ID。 */
+  name?: string
   /**
    * The base64url SHA-256 of the region's certificate's SubjectPublicKeyInfo, which alone
    * vouches for a region at an IP address; only a verified signed list gives one.

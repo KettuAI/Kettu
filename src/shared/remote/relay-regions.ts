@@ -269,11 +269,11 @@ export class RegionSerial {
   }
 }
 
-/** A region as relays are opened to it: its origin, and its pin when it has one. */
+/** 将签名清单中的区域转换为中继连接项，保留展示名称及裸 IP 节点所需的证书指纹。 */
 export const asRelay = (region: ListedRegion): RelayRegion =>
   region.pin
-    ? { id: region.id, url: region.url, pin: region.pin }
-    : { id: region.id, url: region.url }
+    ? { id: region.id, url: region.url, name: region.name, pin: region.pin }
+    : { id: region.id, url: region.url, name: region.name }
 
 export interface HostRegionsInput {
   /** The main relay's origin. */

@@ -29,7 +29,7 @@ import {
   type RelayRefusal,
   type RelayRegion,
 } from './relay'
-import { DRAINED_MS } from './relay-regions'
+import { DRAINED_MS, isRegionName } from './relay-regions'
 
 /** Why the last try on a relay ended. */
 export type RelayHostError =
@@ -701,6 +701,7 @@ export class RelayHost {
         (control, i) =>
           control === this.controls[i] &&
           next[i]!.id === control.region.id &&
+          next[i]!.name === control.region.name &&
           next[i]!.pin === control.region.pin,
       )
     if (same) return
@@ -744,15 +745,17 @@ export function parseRelayStatuses(value: unknown): RelayStatus[] | null {
   const kept: RelayStatus[] = []
   for (const entry of value) {
     if (typeof entry !== 'object' || entry === null) return null
-    const { id, url, connection } = entry as Record<string, unknown>
+    const { id, url, name, connection } = entry as Record<string, unknown>
     const { state, error } = (connection ?? {}) as Record<string, unknown>
     if (typeof id !== 'string' || id.length > 32 || typeof url !== 'string') return null
+    if (name !== undefined && !isRegionName(name)) return null
     if (relayOrigin(url) !== url || !CONNECTIONS.includes(state as string)) return null
     const failed = state === 'retrying' || state === 'refused'
     if (failed && !ERRORS.includes(error as string)) return null
     kept.push({
       id,
       url,
+      ...(name !== undefined ? { name } : {}),
       connection: (failed ? { state, error } : { state }) as RelayConnection,
     })
   }

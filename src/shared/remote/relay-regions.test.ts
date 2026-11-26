@@ -16,6 +16,7 @@ import {
   type RegionList,
 } from './relay-regions'
 import { decodeRelayBytes } from './relay'
+import { parseRelayStatuses } from './relay-host'
 import { RelayStats, localDay, reportBody } from './relay-report'
 
 const { regions: v } = vectors
@@ -105,8 +106,13 @@ describe('the regions a host signs in to', () => {
     const own = await list()
     expect(hostRegions({ main: MAIN, own, preferred: [] })).toEqual([
       { id: 'main', url: MAIN },
-      { id: 'hk-1', url: 'https://hk-1.relay.kettu.sh' },
-      { id: 'sh-1', url: 'https://203.0.113.7:7443', pin: v.list.regions[1]!.pin },
+      { id: 'hk-1', url: 'https://hk-1.relay.kettu.sh', name: 'Hong Kong' },
+      {
+        id: 'sh-1',
+        url: 'https://203.0.113.7:7443',
+        name: 'Shanghai',
+        pin: v.list.regions[1]!.pin,
+      },
     ])
   })
 
@@ -230,5 +236,39 @@ describe('the daily round trip report', () => {
       now: () => now,
     })
     expect(later.due('daemon')).toBeNull()
+  })
+})
+
+describe('parseRelayStatuses', () => {
+  it('保留合法的区域名称并拒绝包含控制字符的名称', () => {
+    expect(
+      parseRelayStatuses([
+        { id: 'main', url: MAIN, connection: { state: 'connected' } },
+        {
+          id: 'sh-1',
+          url: 'https://203.0.113.7:7443',
+          name: '上海一区',
+          connection: { state: 'connected' },
+        },
+      ]),
+    ).toEqual([
+      { id: 'main', url: MAIN, connection: { state: 'connected' } },
+      {
+        id: 'sh-1',
+        url: 'https://203.0.113.7:7443',
+        name: '上海一区',
+        connection: { state: 'connected' },
+      },
+    ])
+    expect(
+      parseRelayStatuses([
+        {
+          id: 'sh-1',
+          url: 'https://203.0.113.7:7443',
+          name: 'bad\nname',
+          connection: { state: 'connected' },
+        },
+      ]),
+    ).toBeNull()
   })
 })
