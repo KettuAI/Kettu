@@ -68,6 +68,21 @@ export function useWindowScope(): HostScope {
 }
 
 /**
+ * The host scope for a Marketplace view: `hostId` when explicitly pinned (null being this
+ * computer), otherwise the window's host scope.
+ */
+export function marketplaceScope(hostId: string | null | undefined): HostScope {
+  if (hostId !== undefined) return hostId === null ? LOCAL_SCOPE : hostScope(hostId)
+  const shown = windowHost()
+  return shown.kind === 'one' && shown.hostId !== null ? hostScope(shown.hostId) : LOCAL_SCOPE
+}
+
+export function useMarketplaceScope(hostId: string | null | undefined): HostScope {
+  const windowScope = useWindowScope()
+  return hostId !== undefined ? (hostId === null ? LOCAL_SCOPE : hostScope(hostId)) : windowScope
+}
+
+/**
  * The agents of the hosts the window shows, this computer (null) first, as menus and pages list
  * them: added ones that are not turned off.
  */
@@ -106,14 +121,22 @@ export function useHostName(): (hostId: string | null) => string {
 }
 
 /**
+ * The host when it is another host that is not connected, whose pages show what was last read,
+ * greyed and read-only; null for this computer or an online host.
+ */
+export function useHostAway(hostId: string | null): OtherHost | null {
+  return useHostsStore((s) => {
+    if (hostId === null) return null
+    const host = otherHosts(s).find((h) => h.id === hostId)
+    return host && isAway(host.connection) ? host : null
+  })
+}
+
+/**
  * The host the window is narrowed to while it is not connected, whose pages show what was last
  * read, greyed and read-only; null otherwise.
  */
 export function useWindowHostAway(): OtherHost | null {
   const key = useKey()
-  return useHostsStore((s) => {
-    if (key === null || key === ALL) return null
-    const host = otherHosts(s).find((h) => h.id === key)
-    return host && isAway(host.connection) ? host : null
-  })
+  return useHostAway(key === ALL ? null : key)
 }

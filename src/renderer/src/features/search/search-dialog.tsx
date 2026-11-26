@@ -154,7 +154,10 @@ function openEntry(entry: SearchEntry): void {
       break
     case 'section':
       if ('pluginSetting' in entry) {
-        openPluginPage(entry.pluginSetting.pluginId, { row: entry.pluginSetting.row })
+        openPluginPage(entry.pluginSetting.pluginId, {
+          row: entry.pluginSetting.row,
+          hostId: entry.pluginSetting.hostId,
+        })
       } else openSettings(entry.section)
       break
     case 'action':

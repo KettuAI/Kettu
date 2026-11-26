@@ -41,11 +41,11 @@ export default function PluginPane({ panel, projectPath }: { panel: string; proj
   const from: SessionView | undefined = sessionId
     ? { kind: 'session', sessionId, projectPath }
     : undefined
-  const settings = <PluginSettingsButton pluginId={tab.pluginId} from={from} />
+  const settings = <PluginSettingsButton pluginId={tab.pluginId} hostId={hostId} from={from} />
   if (surface && surface.missing.length > 0) {
     return (
       <PaneBody>
-        <SetUp surface={surface} viewId={tab.viewId} from={from} tools={settings} />
+        <SetUp surface={surface} viewId={tab.viewId} hostId={hostId} from={from} tools={settings} />
       </PaneBody>
     )
   }
@@ -65,7 +65,15 @@ export default function PluginPane({ panel, projectPath }: { panel: string; proj
 }
 
 /** The bar's last tool: the plugin's page. */
-function PluginSettingsButton({ pluginId, from }: { pluginId: string; from?: SessionView }) {
+function PluginSettingsButton({
+  pluginId,
+  hostId,
+  from,
+}: {
+  pluginId: string
+  hostId: string | null
+  from?: SessionView
+}) {
   const { t } = useTranslation('plugin-views')
   return (
     <Button
@@ -73,7 +81,7 @@ function PluginSettingsButton({ pluginId, from }: { pluginId: string; from?: Ses
       size="icon-sm"
       aria-label={t('pluginSettings')}
       title={t('pluginSettings')}
-      onClick={() => openPluginPage(pluginId, { from })}
+      onClick={() => openPluginPage(pluginId, { from, hostId })}
     >
       <Glyph icon={Settings02Icon} size={15} />
     </Button>
@@ -84,11 +92,13 @@ function PluginSettingsButton({ pluginId, from }: { pluginId: string; from?: Ses
 function SetUp({
   surface,
   viewId,
+  hostId,
   from,
   tools,
 }: {
   surface: PluginSurface
   viewId: string
+  hostId: string | null
   from?: SessionView
   tools: ReactNode
 }) {
@@ -119,7 +129,7 @@ function SetUp({
           <EmptyContent>
             <Button
               size="sm"
-              onClick={() => openPluginPage(surface.pluginId, { setup: true, from })}
+              onClick={() => openPluginPage(surface.pluginId, { setup: true, from, hostId })}
             >
               {t('setup.action', { plugin })}
             </Button>

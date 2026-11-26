@@ -42,6 +42,7 @@ import {
   useViewStore,
   type MarketplaceTab,
 } from '@renderer/stores/view'
+import { useHostName, useNamesHosts } from '@renderer/stores/window-host'
 import { ConfirmDialog, PluginToolAgentsDialog } from './dialogs'
 import { useAgentName } from './hooks'
 import { homeShort } from './model'
@@ -438,12 +439,15 @@ interface Taken {
  * Takes, once, what the way onto the page asked of it: the row to show, which flashes as a search
  * result does, and the first missing setting to focus, with a toast after an install.
  */
-function useLanding(plugin: InstalledKettuPlugin | null): {
+function useLanding(
+  plugin: InstalledKettuPlugin | null,
+  hostId: string | null,
+): {
   focus: string | null
   flash: string | null
 } {
   const pluginId = plugin?.id ?? null
-  const landing = usePluginLanding(pluginId)
+  const landing = usePluginLanding(pluginId, hostId)
   const [from, setFrom] = useState<PluginLanding | null>(null)
   const [taken, setTaken] = useState<Taken | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
@@ -466,7 +470,7 @@ function useLanding(plugin: InstalledKettuPlugin | null): {
   }
   useEffect(() => {
     if (!taken || pluginId === null) return
-    takePluginLanding(pluginId)
+    takePluginLanding(pluginId, hostId)
     if (taken.toast) toast(taken.toast, undefined, { tone: 'success' })
     const row = taken.row
     if (!row) return
@@ -482,7 +486,7 @@ function useLanding(plugin: InstalledKettuPlugin | null): {
       cancelAnimationFrame(frame)
       clearTimeout(timer)
     }
-  }, [taken, pluginId])
+  }, [taken, pluginId, hostId])
   return { focus: taken?.focus ?? null, flash }
 }
 
@@ -498,13 +502,15 @@ export function PluginHome({
   backLabel?: string
 }) {
   const { t } = useTranslation('marketplace')
-  const { useMarketplaceStore } = useHostScope()
+  const { hostId, useMarketplaceStore } = useHostScope()
+  const namesHosts = useNamesHosts()
+  const hostName = useHostName()
   const plugins = useInstalledPlugins()
   const error = useMarketplaceStore((s) => s.pluginsError)
   const publisher = usePluginPublisher()
   const [updating, setUpdating] = useState(false)
   const plugin = plugins?.find((item) => item.id === id) ?? null
-  const { focus, flash } = useLanding(plugin)
+  const { focus, flash } = useLanding(plugin, hostId)
   if (!plugin) {
     return (
       <ListingFrame back={back} label={backLabel}>
@@ -533,6 +539,12 @@ export function PluginHome({
           <span className="k-mkt-head__pub">
             {publisher(plugin)}
             {contents.version && <span className="k-mkt-head__trust">{contents.version}</span>}
+            {namesHosts && (
+              <span className="k-mkt-head__trust">
+                {'· '}
+                {hostName(hostId)}
+              </span>
+            )}
           </span>
           {description && <span className="k-mkt-head__line">{description}</span>}
         </span>

@@ -9,7 +9,7 @@ import { css as securityCss } from '@renderer/components/affect/settings-securit
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { HostScopeContext } from '@renderer/stores/host-scope'
 import { returnedTo, type MarketplaceTab, type SessionView } from '@renderer/stores/view'
-import { useWindowHostAway, useWindowScope } from '@renderer/stores/window-host'
+import { useHostAway, useMarketplaceScope } from '@renderer/stores/window-host'
 import { Directory } from './directory'
 import { ListingPage } from './listing'
 import './marketplace.css'
@@ -31,15 +31,17 @@ function rememberScroll(key: string, top: number): void {
 export default function MarketplacePage({
   item,
   tab,
+  hostId,
   from,
 }: {
   item: string | null
   tab: MarketplaceTab
+  hostId?: string | null
   from?: SessionView
 }) {
   const scroller = useRef<HTMLDivElement>(null)
-  const scope = useWindowScope()
-  const away = useWindowHostAway() !== null
+  const scope = useMarketplaceScope(hostId)
+  const away = useHostAway(scope.hostId) !== null
   const { useMarketplaceStore } = scope
 
   // Each host has its own store, so a host chosen again shows what was read of it at once. An
@@ -62,7 +64,9 @@ export default function MarketplacePage({
   useLayoutEffect(() => {
     const view = scroller.current
     if (!view) return
-    const back = !item && returnedTo({ kind: 'marketplace' })
+    const back =
+      !item &&
+      returnedTo(hostId === undefined ? { kind: 'marketplace' } : { kind: 'marketplace', hostId })
     view.scrollTo({ top: back ? (directoryScroll.get(directoryKey()) ?? 0) : 0 })
     if (!back) return
     for (const animation of view.getAnimations({ subtree: true })) {
@@ -96,7 +100,13 @@ export default function MarketplacePage({
           </style>
           <div aria-hidden className="k-mkt-drag app-region-drag" />
           {item ? (
-            <ListingPage key={`${scope.hostId}|${item}`} item={item} tab={tab} from={from} />
+            <ListingPage
+              key={`${scope.hostId}|${item}`}
+              item={item}
+              tab={tab}
+              hostId={hostId}
+              from={from}
+            />
           ) : (
             <Directory key={scope.hostId ?? 'local'} tab={tab} />
           )}

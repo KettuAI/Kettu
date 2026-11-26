@@ -77,9 +77,16 @@ function publisherOf(listing: Listing): string | null {
   return listing.source === 'manual' ? i18n.t('marketplace:listing.addedByYou') : null
 }
 
-/** The listing's Back: to the directory on the tab it was opened from. */
-function leave(tab: MarketplaceTab): void {
-  backTo({ kind: 'marketplace', ...(tab !== 'all' ? { tab } : {}) }, () => openMarketplace({ tab }))
+/** The listing's Back: to the directory on the tab and host it was opened from. */
+function leave(tab: MarketplaceTab, hostId?: string | null): void {
+  backTo(
+    {
+      kind: 'marketplace',
+      ...(tab !== 'all' ? { tab } : {}),
+      ...(hostId !== undefined ? { hostId } : {}),
+    },
+    () => openMarketplace({ tab, hostId }),
+  )
 }
 
 /** A plugin page's Back to the session whose side panel opened it. */
@@ -94,15 +101,17 @@ function returnTo(session: SessionView): void {
 export function ListingPage({
   item,
   tab,
+  hostId,
   from,
 }: {
   item: string
   tab: MarketplaceTab
+  hostId?: string | null
   from?: SessionView
 }) {
   const { t } = useTranslation('marketplace')
   const ref = parseItem(item)
-  const back = () => leave(tab)
+  const back = () => leave(tab, hostId)
   if (item === KETTU_ITEM) return <BuiltinServerPage tab={tab} back={back} />
   const publishedId = publishedIdOf(item)
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />

@@ -378,7 +378,7 @@ export function PluginConsent({
       done.current = true
       onInstalled?.(plugin)
       onClose()
-      landOnPlugin(plugin)
+      landOnPlugin(plugin, scope.hostId)
     } catch (e) {
       setError(errorMessage(e))
     } finally {

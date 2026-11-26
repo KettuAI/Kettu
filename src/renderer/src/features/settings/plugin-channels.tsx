@@ -17,7 +17,7 @@ type Channel = NonNullable<InstalledKettuPlugin['contents']['channels']>[number]
 /** The rows of Also sent to, one per channel of a plugin on the host; none when no plugin adds one. */
 export function usePluginChannelRows(): RowDef[] {
   const { t } = useTranslation('settings')
-  const { useMarketplaceStore } = useHostScope()
+  const { hostId, useMarketplaceStore } = useHostScope()
   const plugins = useInstalledPlugins()
   const load = useMarketplaceStore((s) => s.loadPlugins)
   useEffect(() => {
@@ -39,7 +39,7 @@ export function usePluginChannelRows(): RowDef[] {
         item: { name: title, description: kinds },
         group,
         layout: 'custom',
-        open: () => openPluginPage(plugin.id),
+        open: () => openPluginPage(plugin.id, { hostId }),
         render: () => <PluginChannelRow plugin={plugin} title={title} kinds={kinds} />,
       }
     }),

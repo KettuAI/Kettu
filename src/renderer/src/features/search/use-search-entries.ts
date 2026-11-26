@@ -18,7 +18,11 @@ import { useShownRoutines } from '@renderer/features/routines/window-routines'
 import { artifactHost, routineHost } from '@renderer/lib/host'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { isAway, useOtherHosts } from '@renderer/stores/hosts'
-import { loadPluginSurfaces, usePluginSurfacesStore } from '@renderer/stores/plugin-surfaces'
+import {
+  loadPluginSurfaces,
+  usePluginSurfacesStore,
+  type PluginSettingsSurface,
+} from '@renderer/stores/plugin-surfaces'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
   hostOfSession,
@@ -345,24 +349,30 @@ function useActionEntries(): SearchEntry[] {
   }, [t, starred])
 }
 
-/**
- * The actions the plugins that are on declare, on each host the window shows that is reachable.
- * The hosts are read when Search opens, and a plugin changing is told by the host.
- */
-function usePluginActionEntries(): SearchEntry[] {
-  const { t, i18n: language } = useTranslation('sidebar')
+/** The hosts Search reads plugins from: the narrowed host, or every reachable host. */
+function usePluginHostIds(): (string | null)[] {
   const others = useOtherHosts()
   const only = useOnlyHost()
-  const hostName = useHostName()
-  const namesHosts = useNamesHosts()
-  const byHost = usePluginSurfacesStore((s) => s.byHost)
-  const hostIds = useMemo<(string | null)[]>(
+  return useMemo<(string | null)[]>(
     () =>
       only === undefined
         ? [null, ...others.filter((host) => !isAway(host.connection)).map((host) => host.id)]
         : [only],
     [only, others],
   )
+}
+
+/**
+ * The actions the plugins that are on declare, on each host the window shows that is reachable.
+ * The hosts are read when Search opens, and a plugin changing is told by the host.
+ */
+function usePluginActionEntries(): SearchEntry[] {
+  const { t, i18n: language } = useTranslation('sidebar')
+  const only = useOnlyHost()
+  const hostName = useHostName()
+  const namesHosts = useNamesHosts()
+  const byHost = usePluginSurfacesStore((s) => s.byHost)
+  const hostIds = usePluginHostIds()
   useEffect(() => {
     for (const hostId of hostIds) {
       if (!byHost[hostId ?? '']) void loadPluginSurfaces(hostId)
@@ -404,38 +414,73 @@ function usePluginActionEntries(): SearchEntry[] {
   )
 }
 
+/** Builds Search entries for plugin settings across `hostIds`, tagging each with its host. */
+export function buildPluginSettingEntries({
+  hostIds,
+  byHost,
+  language,
+  showHost,
+  hostName,
+  trailing,
+}: {
+  hostIds: readonly (string | null)[]
+  byHost: Record<string, { settings: PluginSettingsSurface[] } | undefined>
+  language: string
+  showHost: boolean
+  hostName: (hostId: string | null) => string
+  trailing: (plugin: string) => string
+}): SearchEntry[] {
+  return hostIds.flatMap((hostId) => {
+    const host = showHost ? hostName(hostId) : null
+    return (byHost[hostId ?? '']?.settings ?? []).flatMap((plugin) => {
+      const pluginTitle = surfaceTitle(plugin, language)
+      const label = host ? `${pluginTitle} \u00b7 ${host}` : pluginTitle
+      return plugin.settings.map((setting): SearchEntry => ({
+        kind: 'section',
+        key: `pluginSetting:${hostId ?? ''}/${plugin.pluginId}/${setting.key}`,
+        title: setting.title,
+        meta: setting.description ?? null,
+        trailing: trailing(label),
+        haystack: haystackOf(setting.title, setting.description, pluginTitle, host),
+        at: 0,
+        pluginSetting: {
+          hostId,
+          pluginId: plugin.pluginId,
+          row: settingRow(setting.key),
+          plugin: { name: plugin.name, title: pluginTitle, icon: plugin.icon },
+        },
+      }))
+    })
+  })
+}
+
 /**
- * The settings plugins declare, on the host the Marketplace shows, whose plugin pages they open.
- * A plugin that is off keeps its settings.
+ * The settings plugins declare, on each host the window shows that is reachable; each opens its
+ * plugin's page on that host. A plugin that is off keeps its settings.
  */
 function usePluginSettingEntries(): SearchEntry[] {
   const { t, i18n: language } = useTranslation('sidebar')
   const only = useOnlyHost()
-  const hostId = only ?? null
-  const surfaces = usePluginSurfacesStore((s) => s.byHost[hostId ?? ''])
+  const hostName = useHostName()
+  const namesHosts = useNamesHosts()
+  const byHost = usePluginSurfacesStore((s) => s.byHost)
+  const hostIds = usePluginHostIds()
   useEffect(() => {
-    if (!surfaces) void loadPluginSurfaces(hostId)
-  }, [hostId, surfaces])
+    for (const hostId of hostIds) {
+      if (!byHost[hostId ?? '']) void loadPluginSurfaces(hostId)
+    }
+  }, [hostIds, byHost])
   return useMemo(
     () =>
-      (surfaces?.settings ?? []).flatMap((plugin) => {
-        const pluginTitle = surfaceTitle(plugin, language.language)
-        return plugin.settings.map((setting): SearchEntry => ({
-          kind: 'section',
-          key: `pluginSetting:${plugin.pluginId}/${setting.key}`,
-          title: setting.title,
-          meta: setting.description ?? null,
-          trailing: t('search.pluginSetting', { plugin: pluginTitle }),
-          haystack: haystackOf(setting.title, setting.description, pluginTitle),
-          at: 0,
-          pluginSetting: {
-            pluginId: plugin.pluginId,
-            row: settingRow(setting.key),
-            plugin: { name: plugin.name, title: pluginTitle, icon: plugin.icon },
-          },
-        }))
+      buildPluginSettingEntries({
+        hostIds,
+        byHost,
+        language: language.language,
+        showHost: namesHosts && only === undefined,
+        hostName,
+        trailing: (plugin) => t('search.pluginSetting', { plugin }),
       }),
-    [surfaces, language.language, t],
+    [hostIds, byHost, language.language, namesHosts, only, hostName, t],
   )
 }
 

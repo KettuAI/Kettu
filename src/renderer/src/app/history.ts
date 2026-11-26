@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { isMac } from '@renderer/lib/platform'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
+import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
@@ -48,6 +49,12 @@ export function canShow(view: HistoryView): boolean {
     const { list, deleted } = useArtifactsStore.getState()
     if (!list || !deleted) return true
     return [...list, ...deleted].some((artifact) => artifact.id === view.id)
+  }
+  if (view.kind === 'marketplace' && view.hostId) {
+    const state = useHostsStore.getState()
+    if (state.status !== null && !otherHosts(state).some((host) => host.id === view.hostId)) {
+      return false
+    }
   }
   return true
 }

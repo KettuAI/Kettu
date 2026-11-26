@@ -129,7 +129,12 @@ export type SearchEntry = EntryBase &
     | {
         /** A plugin's setting, listed with Settings but on the plugin's page in the Marketplace. */
         kind: 'section'
-        pluginSetting: { pluginId: string; row: string; plugin: SearchPlugin }
+        pluginSetting: {
+          hostId: string | null
+          pluginId: string
+          row: string
+          plugin: SearchPlugin
+        }
       }
     | { kind: 'action'; action: SearchAction; shortcut: string | null }
     | {

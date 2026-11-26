@@ -8,19 +8,21 @@ import { Button } from '@renderer/components/affect/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { useWindowHostAway } from '@renderer/stores/window-host'
+import { useHostAway } from '@renderer/stores/window-host'
 
 /**
  * What the page shows of its host, greyed and out of reach while that host is offline, under the
  * notice that says whether it is what was last read.
  */
 export function MarketAway({ children }: { children: ReactNode }) {
-  const { useMarketplaceStore } = useHostScope()
-  const away = useWindowHostAway() !== null
-  const read = useMarketplaceStore((s) => s.catalog !== null || s.skills !== null)
+  const { hostId, useMarketplaceStore } = useHostScope()
+  const away = useHostAway(hostId) !== null
+  const read = useMarketplaceStore(
+    (s) => s.catalog !== null || s.skills !== null || s.plugins !== null,
+  )
   return (
     <>
-      <WindowHostAway read={read} className="mb-4" />
+      <WindowHostAway hostId={hostId} read={read} className="mb-4" />
       <AwayContent away={away}>{children}</AwayContent>
     </>
   )

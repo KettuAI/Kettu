@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { leaveSessionOffHost } from '@renderer/app/actions'
 import { otherHosts, useHostsStore } from './hosts'
-import { THIS_COMPUTER, useViewStore } from './view'
+import { THIS_COMPUTER, unpinMarketplaceHost, useViewStore } from './view'
 
 interface HostSwitchStore {
   /** The host the window just switched to, and the choice before it, while it connects. */
@@ -20,6 +20,7 @@ export function switchHost(choice: string | null, connecting: boolean): void {
   const from = useViewStore.getState().hostFilter
   if (choice === from) return
   useViewStore.setState({ hostFilter: choice })
+  unpinMarketplaceHost()
   if (connecting && choice !== null) {
     useHostSwitchStore.setState({ switching: { hostId: choice, from } })
     return

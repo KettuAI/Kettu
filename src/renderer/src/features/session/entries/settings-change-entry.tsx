@@ -23,7 +23,7 @@ import { openCatalogRow } from '@renderer/features/marketplace/plugin-landing'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { hostScope, LOCAL_SCOPE, useSettingsHostStore } from '@renderer/stores/host-scope'
+import { hostScope, LOCAL_SCOPE } from '@renderer/stores/host-scope'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { revealWaiting } from './helpers'
 import { useSessionHost } from './session-host'
@@ -56,8 +56,7 @@ export const SettingsChangeEntry = memo(function SettingsChangeEntry({
 function viewInSettings(hostId: string | null, item: SettingChangeItem): void {
   const parsed = parseToolId(item.id)
   const desktop = parsed ? CATALOG[parsed.id].part === 'desktop' : false
-  useSettingsHostStore.setState({ hostId: desktop ? null : hostId })
-  openCatalogRow(item.section, item.item, item.row)
+  openCatalogRow(item.section, item.item, item.row, desktop ? null : hostId)
 }
 
 function SettingsRows({ items }: { items: SettingChangeItem[] }) {
