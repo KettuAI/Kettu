@@ -1,9 +1,19 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { menuCollisionPadding } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
@@ -28,6 +38,13 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
+import {
+  POPOVER_SIDE_OFFSET,
+  resolvePopoverPlacement,
+  viewportBounds,
+  type PopoverKind,
+  type PopoverSide,
+} from './popover-position'
 import { usePromptChips } from './prompt-chips'
 import { ResizeGrip } from './resize-grip'
 import { commandSourceName } from './command-source'
@@ -61,6 +78,17 @@ const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in i
 const isPluginRow = (item: PopoverItem): item is PluginRow => 'plugin' in item
 /** A source with no items still shows a line when it is searching or failed. */
 const shownNote = (group: PluginMentionGroup) => group.error !== null || group.searching
+
+// Confine the portaled popup to the viewport instead of clipping ancestors such as New session's
+// ColumnScroller, which starts below the top bar.
+const VIEWPORT_BOUNDARY: Element[] = []
+// Side placement is decided by `resolvePopoverPlacement` so normal New session boxes stay clear of
+// Send while tall composers fall back to the trigger line; `align: 'shift'` keeps mentions in view.
+const POPOVER_COLLISION_AVOIDANCE = {
+  side: 'none',
+  align: 'shift',
+  fallbackAxisSide: 'none',
+} as const
 
 /** The prompt box: what shows on its top edge, the attachments, then the text and its popovers. */
 export function PromptBox({
@@ -167,26 +195,75 @@ export function PromptBox({
   // What the popup shows, kept after it closes so it fades out as it was.
   const showing = slashOpen || slashNote ? 'slash' : mentionOpen ? mentions : popover
   if (showing !== popover) setPopover(showing)
-  // The mention list starts at its `@`, over the box, and stays there while it fades out.
+  // Keep the trigger index (`@` or `/`) so the popup stays put while it fades out.
   const [atStart, setAtStart] = useState(0)
   if (mentionOpen && mention!.start !== atStart) setAtStart(mention!.start)
-  const atMention = useMemo(
-    () => ({
-      getBoundingClientRect: () => {
-        const box = group.current?.getBoundingClientRect() ?? new DOMRect()
-        const left = editor.current?.leftOf(atStart) ?? box.left
-        return new DOMRect(left, box.top, box.right - left, box.height)
-      },
-      get contextElement() {
-        return group.current ?? undefined
-      },
-    }),
-    [atStart, editor],
-  )
+  const [slashStart, setSlashStart] = useState(0)
+  if (slashOpen && slash!.start !== slashStart) setSlashStart(slash!.start)
+  else if (slashNote !== null && slash && slash.start !== slashStart) setSlashStart(slash.start)
   const listing = typeof showing === 'object' ? showing : null
   const open = slashOpen || slashNote !== null || mentionOpen
   const rows: PopoverItem[] =
     showing === 'slash' ? slashMatches : listing ? [...listing.rows, ...listing.plugins.rows] : []
+  const popoverKind: PopoverKind = showing === 'slash' ? 'slash' : 'mention'
+  const triggerStart = popoverKind === 'slash' ? slashStart : atStart
+  const popoverCompact = popoverKind === 'slash' && rows.length === 0 && noteShown !== null
+  const [popoverSide, setPopoverSide] = useState<PopoverSide>('top')
+  // Bumped when the editor's inner scroller moves while open so Floating UI re-reads the line.
+  const [scrollTick, setScrollTick] = useState(0)
+  useEffect(() => {
+    if (!open) return
+    const scroller = editor.current?.scrollElement()
+    if (!scroller) return
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        setScrollTick((n) => n + 1)
+      })
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(frame)
+    }
+  }, [open, editor])
+  const measurePlacement = useCallback(() => {
+    const boxRect = group.current?.getBoundingClientRect() ?? new DOMRect()
+    const triggerRect = editor.current?.rectOf(triggerStart) ?? null
+    return resolvePopoverPlacement({
+      kind: popoverKind,
+      box: boxRect,
+      trigger: triggerRect,
+      viewport: viewportBounds(window.innerHeight, menuCollisionPadding),
+      sideOffset: POPOVER_SIDE_OFFSET,
+      compact: popoverCompact,
+    })
+  }, [editor, popoverCompact, popoverKind, triggerStart])
+  useLayoutEffect(() => {
+    if (!open) return
+    const sync = () => {
+      const next = measurePlacement()
+      setPopoverSide((current) => (current === next.side ? current : next.side))
+    }
+    sync()
+  }, [open, measurePlacement, scrollTick])
+  const popoverAnchor = useMemo(() => {
+    // Reading `scrollTick` makes a new virtual anchor on inner editor scrolls so Base UI updates.
+    const tick = scrollTick
+    return {
+      getBoundingClientRect: () => {
+        void tick
+        const next = measurePlacement()
+        setPopoverSide((current) => (current === next.side ? current : next.side))
+        return new DOMRect(next.anchor.x, next.anchor.y, next.anchor.width, next.anchor.height)
+      },
+      get contextElement() {
+        return group.current ?? undefined
+      },
+    }
+  }, [measurePlacement, scrollTick])
   // A list opens, and a new query starts, on its first row.
   const listKey = slashOpen
     ? `/${slash.start}:${slash.query}`
@@ -386,13 +463,13 @@ export function PromptBox({
       <Popover.Root open={open} onOpenChange={openChange}>
         <Popover.Portal>
           <Popover.Positioner
-            anchor={showing === 'slash' ? group : atMention}
-            side="top"
+            anchor={popoverAnchor}
+            side={popoverSide}
             align="start"
-            sideOffset={6}
-            // Shorter over the box rather than flipped under it, where it would hide Send: New
-            // session's box can sit high with little room above.
-            collisionAvoidance={{ side: 'none' }}
+            sideOffset={POPOVER_SIDE_OFFSET}
+            collisionBoundary={VIEWPORT_BOUNDARY}
+            collisionPadding={menuCollisionPadding}
+            collisionAvoidance={POPOVER_COLLISION_AVOIDANCE}
             className="isolate z-(--layer-menu) outline-none app-region-no-drag"
           >
             <Popover.Popup
