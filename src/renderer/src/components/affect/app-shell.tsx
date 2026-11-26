@@ -62,6 +62,7 @@ import {
 import { FilterMenu, type FilterGroup, type FilterValue } from "./filter-menu";
 import { SetupGuide, type SetupGroup } from "./setup-guide";
 import { CommandMenu, defaultGroups, type CommandGroup } from "./command-menu";
+import { intersectClipAxes, resolveHorizontalPlacement, resolvePopoverLayout, type PopoverRect } from "../../lib/affect-popover";
 
 /*
  * App Shell – the frame every affectUI screen sits in, in a single file.
@@ -1242,18 +1243,27 @@ export function SearchField({
   );
 }
 
-/** The nearest ancestor that cuts off what sticks out (a scroll area), or the screen itself */
-function clipBox(el: HTMLElement) {
+const CLIP_OVERFLOW = /(auto|scroll|hidden|clip)/;
+
+/** Intersection of the viewport and every ancestor that clips or bounds the popover */
+function clipBox(el: HTMLElement): PopoverRect {
+  let box: PopoverRect = { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 };
   for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node === document.body || node === document.documentElement) continue;
     const style = getComputedStyle(node);
-    if (/(auto|scroll|hidden|clip)/.test(style.overflow + style.overflowY + style.overflowX) || node.classList.contains("ui-as")) return node.getBoundingClientRect();
+    const isShell = node.classList.contains("ui-as");
+    const clipX = isShell || CLIP_OVERFLOW.test(style.overflowX || style.overflow);
+    const clipY = isShell || CLIP_OVERFLOW.test(style.overflowY || style.overflow);
+    if (clipX || clipY) {
+      box = intersectClipAxes(box, node.getBoundingClientRect(), clipX, clipY);
+    }
   }
-  return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+  return box;
 }
 
 /**
- * Small floating panel attached to its trigger. Opens on the preferred side and flips to the other side
- * (or edge) when it would stick out of the screen or its scroll area – it is always fully reachable.
+ * Small floating panel attached to its trigger. Opens on the preferred side, flips to the side
+ * with more room when constrained, and clamps its height so long menus scroll inside the box.
  * Closes on a click outside or Escape; fades and scales in from the side it is attached to.
  */
 export function Popover({
@@ -1274,30 +1284,107 @@ export function Popover({
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState({ side, align });
 
-  // Measure before paint: flip up when there is no room below, flip sideways at the right or left edge
+  // Measure before paint and re-clamp when the viewport resizes, an ancestor scrolls, or content changes
   useLayoutEffect(() => {
     const el = ref.current;
     if (!open || !el) return;
-    let next = { side, align };
-    el.dataset.side = side;
-    el.dataset.align = align;
-    const box = clipBox(el);
-    const r = el.getBoundingClientRect();
-    if (side === "bottom" && r.bottom > box.bottom - 6) next = { ...next, side: "top" };
-    if (side === "top" && r.top < box.top + 6) next = { ...next, side: "bottom" };
-    if (align === "start" && r.right > box.right - 6) next = { ...next, align: "end" };
-    if (align === "end" && r.left < box.left + 6) next = { ...next, align: "start" };
-    // Still sticking out on a narrow screen (neither edge fits): slide it sideways until it is inside
-    el.dataset.side = next.side;
-    el.dataset.align = next.align;
-    el.style.translate = "";
-    const r2 = el.getBoundingClientRect();
-    const scale = r2.width / el.offsetWidth || 1;
-    let dx = 0;
-    if (r2.right > box.right - 6) dx = box.right - 6 - r2.right;
-    if (r2.left + dx < box.left + 6) dx = box.left + 6 - r2.left;
-    if (dx) el.style.translate = `${dx / scale}px 0`;
-    setPlace(next);
+
+    const update = () => {
+      const anchor = el.parentElement;
+      if (!anchor) return;
+      const list = el.querySelector<HTMLElement>(":scope > .ui-as-menu__list");
+      const savedListScroll = list?.scrollTop ?? 0;
+      const savedElScroll = el.scrollTop;
+
+      el.dataset.side = side;
+      el.dataset.align = align;
+      el.style.translate = "";
+      el.style.removeProperty("--as-popover-max-h");
+      el.removeAttribute("data-overflow");
+
+      const box = clipBox(el);
+      const anchorRect = anchor.getBoundingClientRect();
+      const scaleX = anchor.offsetWidth > 0 ? anchorRect.width / anchor.offsetWidth : 1;
+      const scaleY = anchor.offsetHeight > 0 ? anchorRect.height / anchor.offsetHeight : 1;
+      const elRect = el.getBoundingClientRect();
+      const contentWidth = el.offsetWidth || (scaleX > 0 ? elRect.width / scaleX : elRect.width);
+      const contentHeight = el.offsetHeight || (scaleY > 0 ? elRect.height / scaleY : elRect.height);
+
+      const layout = resolvePopoverLayout({
+        preferredSide: side,
+        preferredAlign: align,
+        anchor: anchorRect,
+        clip: box,
+        contentWidth,
+        contentHeight,
+        scaleX,
+        scaleY,
+      });
+
+      el.dataset.side = layout.side;
+      el.dataset.align = layout.align;
+      if (layout.maxHeight !== null) {
+        el.style.setProperty("--as-popover-max-h", `${layout.maxHeight}px`);
+      }
+      el.toggleAttribute("data-overflow", layout.overflow);
+
+      // Classic scrollbars can slightly widen a constrained menu; re-check horizontal offset after clamping
+      let dx = layout.dx;
+      if (layout.overflow) {
+        const constrainedWidth = el.offsetWidth || contentWidth;
+        if (Math.abs(constrainedWidth - contentWidth) > 0.5) {
+          dx = resolveHorizontalPlacement({
+            preferredAlign: layout.align,
+            side: layout.side,
+            anchor: anchorRect,
+            clip: box,
+            contentWidth: constrainedWidth,
+            scaleX,
+          }).dx;
+        }
+      }
+
+      if (dx || layout.dy) {
+        el.style.translate = `${dx}px ${layout.dy}px`;
+      }
+
+      if (list && savedListScroll > 0) list.scrollTop = savedListScroll;
+      if (savedElScroll > 0) el.scrollTop = savedElScroll;
+
+      setPlace((prev) =>
+        prev.side === layout.side && prev.align === layout.align ? prev : { side: layout.side, align: layout.align },
+      );
+    };
+
+    update();
+
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        update();
+      });
+    };
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      // Ignore scroll events from inside the popover (e.g. scrolling `.ui-as-menu__list`)
+      if (target instanceof Node && el.contains(target)) return;
+      if (target === window || target === document || (target instanceof Node && target.contains(el))) {
+        schedule();
+      }
+    };
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", onScroll, true);
+    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
+    mo?.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-open", "hidden"] });
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", onScroll, true);
+      mo?.disconnect();
+    };
   }, [open, side, align]);
 
   // A menu takes the focus on its first item (or the checked one); its trigger gets it back when Escape closes it
@@ -1386,10 +1473,24 @@ export type MenuItem = {
 const menuItems = (menu: Element | null) =>
   menu ? [...menu.querySelectorAll<HTMLElement>(':scope > [role^="menuitem"]:not(:disabled), :scope > .ui-as-menu__sub > [role^="menuitem"]')] : [];
 
-/** Focuses a menu's checked item, or its first one */
+/** Focuses a menu's checked item, or its first one, revealing it inside the menu list without scrolling ancestors */
 function focusMenu(menu: HTMLElement | null) {
   const items = menuItems(menu);
-  (items.find((i) => i.getAttribute("aria-checked") === "true") ?? items[0])?.focus({ preventScroll: true });
+  const target = items.find((i) => i.getAttribute("aria-checked") === "true") ?? items[0];
+  if (!target) return;
+  target.focus({ preventScroll: true });
+  if (menu && menu.scrollHeight > menu.clientHeight) {
+    const itemTop =
+      target.offsetParent === menu
+        ? target.offsetTop
+        : target.getBoundingClientRect().top - menu.getBoundingClientRect().top + menu.scrollTop;
+    const itemBottom = itemTop + target.offsetHeight;
+    if (itemTop < menu.scrollTop) {
+      menu.scrollTop = itemTop;
+    } else if (itemBottom > menu.scrollTop + menu.clientHeight) {
+      menu.scrollTop = itemBottom - menu.clientHeight;
+    }
+  }
 }
 
 /**
@@ -3283,6 +3384,8 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
   z-index: 30;
   top: calc(100% + 6px);
   left: 0;
+  box-sizing: border-box;
+  max-height: var(--as-popover-max-h, none);
   transform-origin: top left;
   animation: ui-as-popover 220ms var(--ease);
 }
@@ -3290,20 +3393,41 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
 .ui-as-popover[data-side="top"] { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; animation-name: ui-as-popover-up; }
 .ui-as-popover[data-side="top"][data-align="end"] { transform-origin: bottom right; }
 .ui-as-popover[data-side="right"] { top: auto; bottom: 0; left: calc(100% + 12px); transform-origin: bottom left; }
+.ui-as-popover[data-overflow]:not(:has(> .ui-as-menu__list)) { overflow-y: auto; overscroll-behavior: contain; }
 @keyframes ui-as-popover-up { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: none; } }
 /* The Filter Menu at its own size – 13px rows like every other menu, no shrinking */
 .ui-as-popover--filter .ui-fmc { width: 300px; }
 .ui-as-popover--filter .ui-fmc__title { font-size: 13px; line-height: 20px; }
 
 .ui-as-menu {
+  display: flex;
+  flex-direction: column;
   min-width: 168px;
   padding: 4px;
   border-radius: 12px;
   background: var(--card);
   box-shadow: 0 0 0 0.5px var(--line-strong), 0 12px 32px -8px rgba(0, 0, 0, 0.16);
 }
+.ui-as-menu > :not(.ui-as-menu__list) { flex: none; }
 .ui-as-menu__title { display: block; padding: 6px 10px 4px; font-size: 12px; font-weight: 500; color: var(--faint); }
-.ui-as-menu__list { display: grid; gap: 1px; }
+.ui-as-menu__list {
+  position: relative;
+  display: grid;
+  align-content: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 1px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Unconstrained menus with side-opening submenus keep overflow visible so subpanels are not clipped */
+.ui-as-popover:not([data-overflow]) .ui-as-menu__list:has(> .ui-as-menu__sub) { overflow: visible; }
+/* If a menu with submenus overflows vertically, expand subpanels inline so every item stays reachable */
+.ui-as-popover[data-overflow] .ui-as-menu__subpanel { position: static; display: none; min-width: 0 !important; margin: 2px 0 4px; padding: 0 0 0 14px; border-radius: 0; background: none; box-shadow: none; }
+.ui-as-popover[data-overflow] .ui-as-menu__subpanel::before { display: none; }
+.ui-as-popover[data-overflow] .ui-as-menu__sub:is(:focus-within, [data-open]) > .ui-as-menu__subpanel { display: block; }
+.ui-as-popover[data-overflow] .ui-as-menu__sub:is(:focus-within, [data-open]) > .ui-as-menu__item > svg:last-child { transform: rotate(90deg); }
 .ui-as-menu__item {
   display: flex;
   align-items: center;
