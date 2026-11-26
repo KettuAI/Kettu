@@ -9,19 +9,16 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
-import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { BrowserIcon as DefaultBrowserIcon } from '@renderer/features/session/markdown/web-link'
-import { errorMessage } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
-import { fileManagerName, isWeb } from '@renderer/lib/platform'
+import { fileManagerName } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { FileTypeIcon } from './file-type-icon'
 import type { AgentFileRef, FileRef } from './file-refs'
 import { isHtmlFile, openHtmlInBrowser, previewHtml, useHtmlPreview } from './html-preview'
-import { hostFilePath } from './operations'
+import { copyFilePathText, hostFilePath, isLocalProject, showFileInManager } from './operations'
 import { nameOf } from './paths'
 
 /** An HTML file's page, in a tab of the session's browser or in the default one. */
@@ -55,7 +52,7 @@ function FileChip({
 }) {
   const { t } = useTranslation('files')
   const target = line ? `${path}:${line}` : path
-  const local = !isWeb && hostOfPath(projectPath) === null
+  const local = isLocalProject(projectPath)
   const chip = (
     <ContextMenu>
       <ContextMenuTrigger
@@ -84,25 +81,12 @@ function FileChip({
       <ContextMenuContent className="min-w-56">
         {page && <PageItems page={page} onOpen={onOpen} />}
         {local && (
-          <ContextMenuItem
-            onClick={() =>
-              void window.kettu.shell
-                .showItem(hostFile)
-                .catch((failure: unknown) => toast(errorMessage(failure)))
-            }
-          >
+          <ContextMenuItem onClick={() => showFileInManager(hostFile)}>
             <HugeiconsIcon icon={FolderOpenIcon} strokeWidth={1.9} aria-hidden />
             {t('preview.showIn', { name: fileManagerName() })}
           </ContextMenuItem>
         )}
-        <ContextMenuItem
-          onClick={() =>
-            void navigator.clipboard.writeText(hostFile).then(
-              () => toast(t('tree.copiedPath', { count: 1 })),
-              (failure: unknown) => toast(errorMessage(failure)),
-            )
-          }
-        >
+        <ContextMenuItem onClick={() => copyFilePathText(hostFile)}>
           <HugeiconsIcon icon={Link01Icon} strokeWidth={1.9} aria-hidden />
           {t('tree.copyPath')}
         </ContextMenuItem>

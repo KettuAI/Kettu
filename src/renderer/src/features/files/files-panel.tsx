@@ -47,7 +47,6 @@ import {
   PanelButton,
 } from '@renderer/features/shell/panel-button'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import {
   diffId,
@@ -63,6 +62,7 @@ import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
 import { columnOf, saveColumn } from './column'
+import { isLocalProject } from './operations'
 import { FileTree, type TreeEdit } from './file-tree'
 import { openInEditor } from './open-in-editor'
 import { FileTypeIcon } from './file-type-icon'
@@ -102,7 +102,7 @@ function FilesPane({ projectPath, panel }: FilesPanelProps) {
   const openPath = useViewStore((s) => fileOfKey(s.sideDoc[panel]))
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // Editors open folders on this computer only.
-  const local = !isWeb && hostOfPath(projectPath) === null
+  const local = isLocalProject(projectPath)
   const [query, setQuery] = useState(() => columnOf(columnKey).query)
   const [searching, setSearching] = useState(() => columnOf(columnKey).searching)
   const changes = useFileChanges(projectPath)

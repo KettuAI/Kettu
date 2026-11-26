@@ -2,7 +2,10 @@ import { memo, useMemo, useState } from 'react'
 import {
   ArrowDown01Icon,
   BrowserIcon,
+  File01Icon,
+  FolderOpenIcon,
   GitPullRequestIcon,
+  Link01Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -14,27 +17,43 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@renderer/components/ui/context-menu'
+import { relativeToRoot } from '@renderer/features/files/file-location'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { isHtmlFile, previewHtml, useHtmlPreview } from '@renderer/features/files/html-preview'
-import { relativePath } from '@renderer/lib/format'
-import { cn } from '@renderer/lib/utils'
-import { openDiff } from '@renderer/stores/files'
+import { OpenInEditorMenu } from '@renderer/features/files/open-in-editor-menu'
+import {
+  copyFilePathText,
+  isLocalProject,
+  showFileInManager,
+} from '@renderer/features/files/operations'
 import { openGitPane } from '@renderer/features/git/pane/open-pane'
+import { useDeletedGitPaths } from '@renderer/features/git/use-git-data'
+import { MenuGlyph } from '@renderer/features/shell/glyph'
+import { relativePath } from '@renderer/lib/format'
+import { fileManagerName } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
+import { openDiff, openFile } from '@renderer/stores/files'
 import { useGitStore } from '@renderer/stores/git'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { turnChanges } from '../turn-work'
+import { turnChanges, type TurnChange } from '../turn-work'
+import { changeRowMenuModel, isChangeDeleted, type ChangeRowMenuModel } from './change-row-menu'
 import { DiffBlock } from './diff-block'
 import { PANEL } from './helpers'
 import { cachedStats, diffsSettled, useDiffStats } from './use-diff-stats'
-
-type Change = ReturnType<typeof turnChanges>[number]
 
 /** Files listed before the rest are folded away. */
 const SHOWN = 3
 
 /** The files with the most changed lines first, the turn's order among equals. */
-function byChangedLines(changes: Change[]): Change[] {
-  const lines = (change: Change): number => {
+function byChangedLines(changes: TurnChange[]): TurnChange[] {
+  const lines = (change: TurnChange): number => {
     const stats = cachedStats(change.diffs)
     return stats ? stats.insertions + stats.deletions : 0
   }
@@ -42,13 +61,6 @@ function byChangedLines(changes: Change[]): Change[] {
     .map((change) => ({ change, lines: lines(change) }))
     .sort((a, b) => b.lines - a.lines)
     .map(({ change }) => change)
-}
-
-/** A path inside `root`, relative to it, or null for one outside. */
-function within(path: string, root: string): string | null {
-  if (!/^(?:[\\/]|[a-z]:[\\/]|~)/i.test(path)) return path
-  const relative = relativePath(path, root)
-  return relative === path ? null : relative
 }
 
 /** A turn's recorded diffs, with repository actions for its current worktree. */
@@ -79,32 +91,45 @@ export const ChangesCard = memo(function ChangesCard({
   const ordered = useMemo(() => (counted ? byChangedLines(changes) : changes), [changes, counted])
   const [allShown, setAllShown] = useState(false)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
+  const gitDeleted = useDeletedGitPaths(projectPath)
+  const local = isLocalProject(projectPath)
   const previewable = useHtmlPreview(sessionId, projectPath)
   if (changes.length === 0) return null
   const hidden = ordered.length - SHOWN
 
-  const review = (path: string): (() => void) | null => {
-    const file = within(path, projectPath)
-    const tracked = root === null ? null : within(path, root)
+  const deletedOf = (change: TurnChange): boolean =>
+    isChangeDeleted({
+      changeDeleted: change.deleted,
+      path: change.path,
+      projectPath,
+      repoRoot: root,
+      gitDeleted,
+    })
+
+  const review = (change: TurnChange): (() => void) | null => {
+    const file = relativeToRoot(change.path, projectPath)
+    const tracked = root === null ? null : relativeToRoot(change.path, root)
     if (file === null || tracked === null) return null
+    const deleted = deletedOf(change)
     return () =>
       openDiff(
         projectPath,
-        { path: tracked, oldPath: null, ref: null, projectFile: file },
+        { path: tracked, oldPath: null, ref: null, projectFile: deleted ? null : file },
         { preview: true },
       )
   }
-  const first = ordered.map((change) => review(change.path)).find((open) => open !== null)
-  const page = (path: string): (() => void) | null => {
-    const file = previewable ? within(path, projectPath) : null
+  const first = ordered.map((change) => review(change)).find((open) => open !== null)
+  const page = (change: TurnChange): (() => void) | null => {
+    if (deletedOf(change)) return null
+    const file = previewable ? relativeToRoot(change.path, projectPath) : null
     return file === null || !isHtmlFile(file) ? null : () => void previewHtml(sessionId, file)
   }
   // Every row keeps the room of a Preview button when one has it, so the counts stay in a column.
-  const pages = ordered.some((change) => page(change.path) !== null)
+  const pages = ordered.some((change) => page(change) !== null)
   const committable =
     root === null
       ? []
-      : changes.map((change) => within(change.path, root)).filter((path) => path !== null)
+      : changes.map((change) => relativeToRoot(change.path, root)).filter((path) => path !== null)
 
   return (
     <section aria-label={t('changes.label')} className={cn('ks-changes', className)}>
@@ -151,8 +176,10 @@ export const ChangesCard = memo(function ChangesCard({
           key={change.path}
           change={change}
           projectPath={projectPath}
+          local={local}
+          deleted={deletedOf(change)}
           counting={!settled}
-          onPage={page(change.path)}
+          onPage={page(change)}
           pages={pages}
         />
       ))}
@@ -181,18 +208,23 @@ function Counts({ insertions, deletions }: { insertions: number; deletions: numb
 }
 
 /**
- * A changed file; a click unfolds its diffs under it. An HTML file's page has a Preview at its end,
- * whose room the other rows keep while `pages`.
+ * A changed file; a left click unfolds its diffs under it and a right click offers file actions
+ * (open in Files, open in an external editor, reveal in the file manager, and copy path). An HTML
+ * file's page has a Preview at its end, whose room the other rows keep while `pages`.
  */
 function ChangeRow({
   change,
   projectPath,
+  local,
+  deleted,
   counting,
   onPage,
   pages,
 }: {
-  change: Change
+  change: TurnChange
   projectPath: string
+  local: boolean
+  deleted: boolean
   counting: boolean
   onPage: (() => void) | null
   pages: boolean
@@ -201,6 +233,10 @@ function ChangeRow({
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   const cut = shown.lastIndexOf('/') + 1
+  const menu = useMemo(
+    () => changeRowMenuModel({ projectPath, path: change.path, local, deleted }),
+    [projectPath, change.path, local, deleted],
+  )
   const trigger = (
     <CollapsibleTrigger
       className={cn('ks-file focus-ring', counting && !pages && 'invisible')}
@@ -214,31 +250,35 @@ function ChangeRow({
       {stats && <Counts insertions={stats.insertions} deletions={stats.deletions} />}
     </CollapsibleTrigger>
   )
+  const row = pages ? (
+    <div className={cn('ks-file-row', counting && 'invisible')}>
+      {trigger}
+      {onPage ? (
+        <button
+          type="button"
+          className="ks-page-btn focus-ring"
+          title={t('htmlPreview.inKettu')}
+          onClick={onPage}
+        >
+          <Icon icon={BrowserIcon} size={13} />
+          {t('htmlPreview.preview')}
+        </button>
+      ) : (
+        <span aria-hidden className="ks-page-btn invisible">
+          <Icon icon={BrowserIcon} size={13} />
+          {t('htmlPreview.preview')}
+        </span>
+      )}
+    </div>
+  ) : (
+    trigger
+  )
   return (
     <Collapsible>
-      {pages ? (
-        <div className={cn('ks-file-row', counting && 'invisible')}>
-          {trigger}
-          {onPage ? (
-            <button
-              type="button"
-              className="ks-page-btn focus-ring"
-              title={t('htmlPreview.inKettu')}
-              onClick={onPage}
-            >
-              <Icon icon={BrowserIcon} size={13} />
-              {t('htmlPreview.preview')}
-            </button>
-          ) : (
-            <span aria-hidden className="ks-page-btn invisible">
-              <Icon icon={BrowserIcon} size={13} />
-              {t('htmlPreview.preview')}
-            </span>
-          )}
-        </div>
-      ) : (
-        trigger
-      )}
+      <ContextMenu>
+        <ContextMenuTrigger render={row} />
+        <ChangeRowMenu projectPath={projectPath} menu={menu} />
+      </ContextMenu>
       <CollapsibleContent className={PANEL} keepMounted={false}>
         <div className="flex flex-col gap-2 px-1.5 pt-1 pb-2">
           {change.diffs.map((diff, index) => (
@@ -247,5 +287,42 @@ function ChangeRow({
         </div>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+function ChangeRowMenu({ projectPath, menu }: { projectPath: string; menu: ChangeRowMenuModel }) {
+  const { t } = useTranslation(['session', 'files'])
+  const hasOpenActions = menu.filesTarget !== null || menu.localTarget !== null
+  return (
+    <ContextMenuContent className="min-w-56">
+      {menu.filesTarget !== null && (
+        <ContextMenuItem
+          onClick={() => openFile(projectPath, menu.filesTarget!, null, { preview: true })}
+        >
+          <MenuGlyph icon={File01Icon} />
+          {t('session:changes.openInFiles')}
+        </ContextMenuItem>
+      )}
+      {menu.localTarget !== null && (
+        <>
+          <OpenInEditorMenu path={menu.localTarget} />
+          <ContextMenuItem onClick={() => showFileInManager(menu.localTarget!)}>
+            <MenuGlyph icon={FolderOpenIcon} />
+            {t('files:preview.showIn', { name: fileManagerName() })}
+          </ContextMenuItem>
+        </>
+      )}
+      {hasOpenActions && <ContextMenuSeparator />}
+      <ContextMenuItem onClick={() => copyFilePathText(menu.copyPath)}>
+        <MenuGlyph icon={Link01Icon} />
+        {t('files:tree.copyPath')}
+      </ContextMenuItem>
+      {menu.copyRelativePath !== null && (
+        <ContextMenuItem onClick={() => copyFilePathText(menu.copyRelativePath!)}>
+          <MenuGlyph icon={Link01Icon} />
+          {t('files:tree.copyRelativePath')}
+        </ContextMenuItem>
+      )}
+    </ContextMenuContent>
   )
 }

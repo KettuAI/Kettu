@@ -47,7 +47,6 @@ import {
 import { toast } from '@renderer/components/ui/toast'
 import { chooseFiles } from '@renderer/features/session/composer/attachments'
 import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
-import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { fileManagerName, formatShortcut, isMac, isMod, isWeb } from '@renderer/lib/platform'
 import {
@@ -78,6 +77,7 @@ import {
   pasteInto,
   putOnClipboard,
   renameEntry,
+  showFileInManager,
 } from './operations'
 import {
   folderOf,
@@ -511,10 +511,7 @@ export function FileTree({
   }
   const fileDrop = useUploadDrop(folderAt, upload)
 
-  const reveal = (path: string) =>
-    void window.kettu.shell
-      .showItem(hostFilePath(projectPath, path))
-      .catch((failure: unknown) => toast(errorMessage(failure)))
+  const reveal = (path: string) => showFileInManager(hostFilePath(projectPath, path))
 
   const mention = (paths: string[]) => {
     if (!sessionId) return

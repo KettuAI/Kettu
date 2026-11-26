@@ -55,7 +55,7 @@ import { useWebHostStore } from '@renderer/stores/web-host'
 import { bytes, clock } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { fileManagerName, formatShortcut, isMod, isWeb, isWindows } from '@renderer/lib/platform'
+import { fileManagerName, formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Markdown } from '@renderer/features/session/markdown'
 import { playerFailure } from '@renderer/features/session/media/failure'
@@ -92,7 +92,8 @@ import { PathCopy, PreviewEditToggle } from './file-header'
 import { isHtmlFile, previewHtml, useHtmlPreview } from './html-preview'
 import { fileQuote, selectedPassage, type FilePassage } from './file-quote'
 import { mentionPaths, quoteInComposer } from './mention-lines'
-import { copyPaths } from './operations'
+import { resolveFilePath } from './file-location'
+import { copyPaths, isLocalProject } from './operations'
 import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
 import type { DocumentFailure } from './document-failure'
@@ -142,7 +143,7 @@ export function FilePreview({
     )
   }, [])
   const markdown = isMarkdown(file.path) && file.content?.kind === 'text'
-  const local = isLocal(projectPath)
+  const local = isLocalProject(projectPath)
   const sessionId = panelSession(panel)
   const page = useHtmlPreview(sessionId, projectPath) && !file.agent && isHtmlFile(file.path)
   const root = useRef<HTMLDivElement>(null)
@@ -463,19 +464,10 @@ function NextStep({
   )
 }
 
-/** Editors and the file manager reach files on this computer only. */
-const isLocal = (projectPath: string): boolean => !isWeb && hostOfPath(projectPath) === null
-
-/** The file's own path on this computer, from its path in the project; an agent's is absolute. */
-function pathOnDisk(projectPath: string, path: string): string {
-  if (/^(?:\/|[a-z]:[\\/])/i.test(path)) return path
-  const sep = isWindows ? '\\' : '/'
-  return `${projectPath.replace(/[\\/]+$/, '')}${sep}${path.split('/').join(sep)}`
-}
-
 /** Shows the file in the editor or the file manager; a failure says why in a toast. */
 function openOutside(open: (path: string) => Promise<void>, projectPath: string, path: string) {
-  open(pathOnDisk(projectPath, path)).catch((failure: unknown) => toast(errorMessage(failure)))
+  const target = resolveFilePath(projectPath, path).absolutePath ?? path
+  open(target).catch((failure: unknown) => toast(errorMessage(failure)))
 }
 
 /** The bar goes once answered, and its button with it, so the text takes the focus back. */
@@ -505,7 +497,7 @@ function Body({
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const { content, error } = file
-  const local = isLocal(projectPath)
+  const local = isLocalProject(projectPath)
   if (error && !content) {
     return (
       <Notice title={t('preview.openFailed')} description={error}>
@@ -639,7 +631,7 @@ function BinaryFile({
       title={t('preview.binaryTitle')}
       description={t('preview.binaryDescription', { size: bytes(size) })}
     >
-      {isLocal(projectPath) && (
+      {isLocalProject(projectPath) && (
         <button
           type="button"
           className="kp-btn"

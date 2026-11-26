@@ -606,7 +606,8 @@
     "review": "查看",
     "commit": "提交并创建 PR",
     "more_other": "再显示 {{count}} 个文件",
-    "fewer": "收起"
+    "fewer": "收起",
+    "openInFiles": "在文件面板中打开"
   },
   "queue": {
     "label": "排队中的消息：{{count}} 条",

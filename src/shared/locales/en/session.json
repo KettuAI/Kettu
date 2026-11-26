@@ -630,7 +630,8 @@
     "commit": "Commit and open PR",
     "more_one": "Show {{count}} more file",
     "more_other": "Show {{count}} more files",
-    "fewer": "Show fewer files"
+    "fewer": "Show fewer files",
+    "openInFiles": "Open in Files"
   },
   "queue": {
     "label": "Queued messages: {{count}}",
