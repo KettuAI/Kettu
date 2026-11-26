@@ -105,6 +105,21 @@ describe('tool digests', () => {
     expect(digestEntry(waiting)).toBe(waiting)
   })
 
+  it('keeps inline card tool calls (plans, questions, elicitations, workflows) whole', () => {
+    const plan = tool({
+      planVersion: 1,
+      rawInput: 'x'.repeat(DIGEST_INPUT_BYTES * 2),
+      content: [{ type: 'markdown', markdown: 'x'.repeat(DIGEST_OUTPUT_BYTES * 2) }],
+    })
+    const workflow = tool({
+      title: 'kettu:suggest_workflow',
+      rawInput: 'x'.repeat(DIGEST_INPUT_BYTES * 2),
+      content: [{ type: 'markdown', markdown: 'x'.repeat(DIGEST_OUTPUT_BYTES * 2) }],
+    })
+    expect(digestEntry(plan)).toBe(plan)
+    expect(digestEntry(workflow)).toBe(workflow)
+  })
+
   it('digests every entry of a page and keeps the rest of it', () => {
     const long = tool({ rawInput: 'x'.repeat(DIGEST_INPUT_BYTES + 1) })
     const page = { entries: [long], older: 3 }

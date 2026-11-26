@@ -811,8 +811,60 @@
     }
   }
 }
+
+/* Top and bottom fades drawn as compositor-only overlays rather than masking the scroller:
+   Chromium repaints a masked scroller on every scroll frame. Goes on the scroller's positioned
+   parent sitting on --background; the scroller sets scroll-timeline: --scroll-fade-y y. */
+@utility scroll-fade-y-overlay {
+  timeline-scope: --scroll-fade-y;
+  &::before,
+  &::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset-inline: 0;
+    z-index: 1;
+    height: var(--scroll-fade-size);
+    opacity: 0;
+  }
+  &::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--background), transparent);
+    @supports (animation-timeline: scroll()) {
+      animation-name: scroll-fade-top-reveal;
+      animation-duration: 1ms;
+      animation-timing-function: ease-in-out;
+      animation-fill-mode: both;
+      animation-timeline: --scroll-fade-y;
+      animation-range: 0 calc(var(--spacing) * 24);
+    }
+  }
+  &::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--background), transparent);
+    @supports (animation-timeline: scroll()) {
+      animation-name: scroll-fade-bottom-reveal;
+      animation-duration: 1ms;
+      animation-timing-function: ease-in-out;
+      animation-fill-mode: both;
+      animation-timeline: --scroll-fade-y;
+      animation-range: calc(100% - var(--spacing) * 24) 100%;
+    }
+  }
+}
 @keyframes scroll-fade-top-reveal {
   from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scroll-fade-bottom-reveal {
+  from {
+    opacity: 1;
+  }
+  to {
     opacity: 0;
   }
 }

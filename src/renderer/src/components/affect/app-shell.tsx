@@ -1284,6 +1284,27 @@ export function Popover({
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState({ side, align });
 
+  // Mark enclosing virtualized thread items while a popover is open so paint containment lifts
+  // without relying on a per-item `:has(.ui-as-popover)` selector across heavy thread subtrees.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!open || !el) return;
+    const item = el.closest<HTMLElement>('[data-slot="message-scroller-item"]');
+    if (!item) return;
+    const count = Number(item.dataset.popoverOpenCount ?? "0") + 1;
+    item.dataset.popoverOpenCount = String(count);
+    item.setAttribute("data-popover-open", "");
+    return () => {
+      const next = Number(item.dataset.popoverOpenCount ?? "1") - 1;
+      if (next <= 0) {
+        delete item.dataset.popoverOpenCount;
+        item.removeAttribute("data-popover-open");
+      } else {
+        item.dataset.popoverOpenCount = String(next);
+      }
+    };
+  }, [open]);
+
   // Measure before paint and re-clamp when the viewport resizes, an ancestor scrolls, or content changes
   useLayoutEffect(() => {
     const el = ref.current;
