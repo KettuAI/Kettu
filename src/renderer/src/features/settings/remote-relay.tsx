@@ -84,10 +84,10 @@ export function RelayRegions() {
       {relay.relays.map((entry) => (
         <li key={entry.url} className="k-list__row">
           <span className="k-list__name">
+            {/* 官方中继仅展示友好区域名称，不暴露底层域名、IP 或端口 */}
             {entry.id === 'main'
               ? t('remote.relay.regionMain')
-              : t('remote.relay.region', { id: entry.id.toUpperCase() })}
-            <span className="k-mono text-tertiary"> {new URL(entry.url).host}</span>
+              : (entry.name ?? t('remote.relay.region', { id: entry.id.toUpperCase() }))}
           </span>
           <RegionPill relay={entry} />
         </li>

@@ -88,14 +88,27 @@ describe('a host on the relay regions', () => {
     const t = await host()
     expect(t.relay.relays).toEqual([
       { id: 'main', url: MAIN },
-      { id: 'hk-1', url: HK },
-      { id: 'sh-1', url: SH, pin: PIN },
+      { id: 'hk-1', url: HK, name: 'Hong Kong' },
+      { id: 'sh-1', url: SH, name: 'Shanghai', pin: PIN },
     ])
     for (const url of [MAIN, HK, SH]) expect(t.relays.relay(url).hosts.has(t.id)).toBe(true)
     expect(t.relays.pins.get(`wss://203.0.113.7:7443/v1/hosts/${t.id}`)).toBe(PIN)
     expect([...t.relays.pins.keys()].every((url) => url.includes('203.0.113.7'))).toBe(true)
     // The first ping goes out as each signs in, for the host's leg.
     await expect.poll(() => t.relay.legs().map((leg) => leg.hostRtt)).toEqual([7, 7, 7])
+  })
+
+  it('节点仅更改展示名称时直接更新状态而不重建连接', async () => {
+    const t = await host()
+    const before = t.relays.relay(SH).hosts.get(t.id)
+    expect(before).toBeDefined()
+    t.relay.setPlan([
+      { id: 'main', url: MAIN },
+      { id: 'hk-1', url: HK, name: 'Hong Kong' },
+      { id: 'sh-1', url: SH, name: '上海一区', pin: PIN },
+    ])
+    expect(t.relay.status.find((r) => r.id === 'sh-1')?.name).toBe('上海一区')
+    expect(t.relays.relay(SH).hosts.get(t.id)).toBe(before)
   })
 
   it('leaves a region that drains at once when no device is joined through it', async () => {
