@@ -47,8 +47,9 @@ import {
 } from '@renderer/components/ui/select'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
-import { closeGitDialog, useGitStore, type GitDialog } from '@renderer/stores/git'
+import { closeGitDialog, gitToolsOf, useGitStore, type GitDialog } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import { dialogReturn } from './dialog-focus'
 import { runStep } from './steps'
@@ -482,7 +483,7 @@ function folderName(root: string): string {
 
 function PublishRepoForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
   const { t } = useTranslation(['git', 'common'])
-  const gh = useGitStore((s) => s.tools?.gh ?? null)
+  const gh = useGitStore((s) => gitToolsOf(s, hostOfPath(status.projectPath))?.gh ?? null)
   const busy = useGitStore((s) => s.running[status.projectPath]?.kind === 'publishRepo')
   const failed = useGitStore((s) =>
     s.failed[status.projectPath]?.kind === 'publishRepo' ? s.failed[status.projectPath] : null,

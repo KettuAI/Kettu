@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { githubReferenceOf } from '@shared/git'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { useGitStore } from '@renderer/stores/git'
 import { ReferenceHoverCard } from './gh-reference'
 import { PrIcon } from './pr-icon'
@@ -34,5 +35,7 @@ export function PrBarChip({ projectPath }: { projectPath: string }) {
     </a>
   )
   if (!reference) return chip
-  return <ReferenceHoverCard reference={reference} trigger={chip} />
+  return (
+    <ReferenceHoverCard reference={reference} hostId={hostOfPath(projectPath)} trigger={chip} />
+  )
 }

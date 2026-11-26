@@ -98,6 +98,7 @@ function Made({
   onOpen?: () => void
 }) {
   const { t } = useTranslation('sidebar')
+  const hostId = hostOfSession(summary)
   const artifacts = useLiveArtifacts(summary, outputs)
   const refs = useMemo(() => referencesOf(summary, outputs), [summary, outputs])
   const tiles = artifacts.slice(0, TILES)
@@ -134,7 +135,7 @@ function Made({
       {rows.length > 0 && (
         <div className="flex flex-col">
           {rows.map((ref) => (
-            <ReferenceRow key={ref.url} reference={ref} onOpen={onOpen} />
+            <ReferenceRow key={ref.url} reference={ref} hostId={hostId} onOpen={onOpen} />
           ))}
           {refs.length > rows.length && (
             <span className="flex h-[22px] items-center pl-[22px] text-small text-tertiary">
@@ -230,9 +231,17 @@ function ArtifactTile({
  * A pull request or issue as the sidebar's list writes one: its state, repo#number and title; a
  * click opens it on GitHub.
  */
-function ReferenceRow({ reference, onOpen }: { reference: GitHubReference; onOpen?: () => void }) {
-  const { data } = useReferenceData(reference)
-  useEffect(() => loadReference(reference), [reference])
+function ReferenceRow({
+  reference,
+  hostId,
+  onOpen,
+}: {
+  reference: GitHubReference
+  hostId: string | null
+  onOpen?: () => void
+}) {
+  const { data } = useReferenceData(reference, hostId)
+  useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
   const title = data ? (data.kind === 'pull' ? data.pr.title : data.issue.title) : null
   return (
     <a

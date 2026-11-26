@@ -10,7 +10,7 @@ import {
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
-import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { hostOfPath } from '@renderer/lib/host-paths'
 
@@ -114,9 +114,8 @@ export const EMPTY_PULL_REQUEST_FORM: PullRequestForm = {
   draftError: null,
 }
 
-interface GitStore {
-  status: Record<string, GitStatus>
-  currentPr: Record<string, PullRequest | null>
+/** Per-host GitHub reference cache, avatars, and git/gh tool detection state. */
+export interface HostGitState {
   pullRequests: Record<string, PullRequest> // by URL, for references
   issues: Record<string, Issue> // by URL, for references
   /** By issue URL, the pull request URL GitHub said it really is. */
@@ -128,6 +127,34 @@ interface GitStore {
   tools: GitTools | null
   /** Why the last tools check failed; cleared while a new check runs. */
   toolsError: string | null
+}
+
+const EMPTY_HOST_GIT: HostGitState = {
+  pullRequests: {},
+  issues: {},
+  pullRequestAliases: {},
+  referenceErrors: {},
+  avatars: {},
+  tools: null,
+  toolsError: null,
+}
+
+const LOCAL_HOST_KEY = ''
+
+/** The store key for a host: empty string for this computer, or the remote host id. */
+export function gitHostKey(hostId: string | null): string {
+  return hostId ?? LOCAL_HOST_KEY
+}
+
+function scopedKey(hostId: string | null, item: string): string {
+  return `${gitHostKey(hostId)}\0${item}`
+}
+
+export interface GitStore {
+  status: Record<string, GitStatus>
+  currentPr: Record<string, PullRequest | null>
+  /** Per-host GitHub references, avatars, and git/gh tools, keyed by `gitHostKey(hostId)`. */
+  byHost: Record<string, HostGitState>
   /** By project, the fetch, pull, push or publish that is running. */
   running: Record<string, RunningOperation>
   /** By project, the last operation that failed, until the next one starts. */
@@ -148,13 +175,7 @@ interface GitStore {
 export const useGitStore = create<GitStore>()(() => ({
   status: {},
   currentPr: {},
-  pullRequests: {},
-  issues: {},
-  pullRequestAliases: {},
-  referenceErrors: {},
-  avatars: {},
-  tools: null,
-  toolsError: null,
+  byHost: {},
   running: {},
   failed: {},
   dialogs: {},
@@ -164,6 +185,72 @@ export const useGitStore = create<GitStore>()(() => ({
   commitAsk: {},
   pullRequestForm: {},
 }))
+
+/** The GitHub reference cache and tool status of `hostId` (null for this computer). */
+export function hostGitOf(s: Pick<GitStore, 'byHost'>, hostId: string | null): HostGitState {
+  return s.byHost[gitHostKey(hostId)] ?? EMPTY_HOST_GIT
+}
+
+/** The detected git/gh tools of `hostId` (null for this computer). */
+export function gitToolsOf(s: Pick<GitStore, 'byHost'>, hostId: string | null): GitTools | null {
+  return hostGitOf(s, hostId).tools
+}
+
+/** The GitHub CLI state of `hostId` (null for this computer), or null before detection completes. */
+export function ghStateOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+): GitTools['gh']['state'] | null {
+  return hostGitOf(s, hostId).tools?.gh.state ?? null
+}
+
+/** A cached pull request on `hostId` by URL (following issue-to-PR aliases). */
+export function pullRequestOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): PullRequest | undefined {
+  const hostState = hostGitOf(s, hostId)
+  return hostState.pullRequests[hostState.pullRequestAliases[url] ?? url]
+}
+
+/** A cached issue on `hostId` by URL. */
+export function issueOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): Issue | undefined {
+  return hostGitOf(s, hostId).issues[url]
+}
+
+/** Why loading a reference on `hostId` last failed, or null. */
+export function referenceErrorOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): string | null {
+  return hostGitOf(s, hostId).referenceErrors[url] ?? null
+}
+
+/** A cached GitHub author avatar data URL on `hostId`, null when none exists, or undefined. */
+export function avatarOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  login: string,
+): string | null | undefined {
+  return hostGitOf(s, hostId).avatars[login]
+}
+
+function updateHostGit(
+  hostId: string | null,
+  patch: (current: HostGitState) => Partial<HostGitState>,
+): void {
+  const key = gitHostKey(hostId)
+  useGitStore.setState((s) => {
+    const current = s.byHost[key] ?? EMPTY_HOST_GIT
+    return { byHost: { ...s.byHost, [key]: { ...current, ...patch(current) } } }
+  })
+}
 
 export function receiveGitStatus(status: GitStatus): void {
   useGitStore.setState((s) => ({ status: { ...s.status, [status.projectPath]: status } }))
@@ -214,7 +301,34 @@ export function rewatchGit(hostId: string | null = null): void {
   const paths = livePaths
   livePaths = paths.filter((path) => hostOfPath(path) !== hostId)
   showProjects(paths)
-  if (hostId === null) syncReferences(true)
+  syncReferences(true, hostId)
+}
+
+/** Clears sent-watch tracking when a remote host connection closes, so reconnect re-subscribes. */
+export function gitHostClosed(hostId: string): void {
+  sentReferencesByHost.delete(hostId)
+}
+
+/** Drops all cached GitHub references, avatars, tools, and watches for a removed remote host. */
+export function forgetHostGit(hostId: string): void {
+  const prefix = `${gitHostKey(hostId)}\0`
+  for (const key of referenceLoads.keys()) {
+    if (key.startsWith(prefix)) referenceLoads.delete(key)
+  }
+  loadedAtByHost.delete(gitHostKey(hostId))
+  for (const key of avatarLoads) {
+    if (key.startsWith(prefix)) avatarLoads.delete(key)
+  }
+  avatarFailuresByHost.delete(gitHostKey(hostId))
+  shownReferencesByHost.delete(hostId)
+  sentReferencesByHost.delete(hostId)
+  toolsInFlight.delete(hostId)
+  toolsSeq.delete(hostId)
+  useGitStore.setState((s) => {
+    const key = gitHostKey(hostId)
+    if (!(key in s.byHost)) return s
+    return { byHost: without(s.byHost, key) }
+  })
 }
 
 const RETRY_MS = 60_000
@@ -223,9 +337,15 @@ const STALE_MS = 60_000
 const MAX_CACHED_REFS = 200
 const MAX_CACHED_AVATARS = 200
 const referenceLoads = new Map<string, Promise<unknown>>()
-const loadedAt = new Map<string, number>()
+const loadedAtByHost = new Map<string, Map<string, number>>()
 
-function setLoadedAt(url: string, at: number): void {
+function setLoadedAt(hostId: string | null, url: string, at: number): void {
+  const hostKey = gitHostKey(hostId)
+  let loadedAt = loadedAtByHost.get(hostKey)
+  if (!loadedAt) {
+    loadedAt = new Map()
+    loadedAtByHost.set(hostKey, loadedAt)
+  }
   loadedAt.delete(url)
   loadedAt.set(url, at)
   while (loadedAt.size > MAX_CACHED_REFS) {
@@ -253,126 +373,160 @@ function setCapped<T>(
   return next
 }
 
-function receivePullRequest(pr: PullRequest, asked: string): void {
-  setLoadedAt(asked, Date.now())
-  useGitStore.setState((s) => ({
-    pullRequests: setCapped(s.pullRequests, pr.url, pr, MAX_CACHED_REFS),
+function receivePullRequest(pr: PullRequest, asked: string, hostId: string | null = null): void {
+  setLoadedAt(hostId, asked, Date.now())
+  updateHostGit(hostId, (h) => ({
+    pullRequests: setCapped(h.pullRequests, pr.url, pr, MAX_CACHED_REFS),
     pullRequestAliases:
       asked === pr.url
-        ? s.pullRequestAliases
-        : setCapped(s.pullRequestAliases, asked, pr.url, MAX_CACHED_REFS),
-    referenceErrors: without(s.referenceErrors, asked),
+        ? h.pullRequestAliases
+        : setCapped(h.pullRequestAliases, asked, pr.url, MAX_CACHED_REFS),
+    referenceErrors: without(h.referenceErrors, asked),
   }))
 }
 
-// One load per URL at a time; a failure is kept and asked again a minute later, or by a retry.
-function loadOnce(url: string, run: () => Promise<void>): Promise<void> {
-  let load = referenceLoads.get(url) as Promise<void> | undefined
+// One load per (host, URL) at a time; a failure is kept and asked again a minute later, or by a retry.
+function loadOnce(hostId: string | null, url: string, run: () => Promise<void>): Promise<void> {
+  const key = scopedKey(hostId, url)
+  let load = referenceLoads.get(key) as Promise<void> | undefined
   if (!load) {
     const started: Promise<void> = run()
       .catch((error: unknown) => {
         const message = errorMessage(error)
-        useGitStore.setState((s) => ({
-          referenceErrors: setCapped(s.referenceErrors, url, message, MAX_CACHED_REFS),
+        updateHostGit(hostId, (h) => ({
+          referenceErrors: setCapped(h.referenceErrors, url, message, MAX_CACHED_REFS),
         }))
       })
       .finally(() =>
         setTimeout(() => {
-          if (referenceLoads.get(url) === started) referenceLoads.delete(url)
+          if (referenceLoads.get(key) === started) referenceLoads.delete(key)
         }, RETRY_MS),
       )
     load = started
-    referenceLoads.set(url, load)
+    referenceLoads.set(key, load)
   }
   return load
 }
 
 /** A pull request's details for a reference or a card; resolves to null when they did not load. */
-export async function loadPullRequest(url: string, fresh = false): Promise<PullRequest | null> {
-  const cached = useGitStore.getState().pullRequests[url]
+export async function loadPullRequest(
+  url: string,
+  fresh = false,
+  hostId: string | null = null,
+): Promise<PullRequest | null> {
+  const cached = hostGitOf(useGitStore.getState(), hostId).pullRequests[url]
   if (cached && !fresh) return cached
-  await loadOnce(url, async () => receivePullRequest(await host('git.pullRequest', { url }), url))
-  return useGitStore.getState().pullRequests[url] ?? null
+  await loadOnce(hostId, url, async () =>
+    receivePullRequest(await hostAt(hostId, 'git.pullRequest', { url }), url, hostId),
+  )
+  return hostGitOf(useGitStore.getState(), hostId).pullRequests[url] ?? null
 }
 
 /** An issue's details; GitHub may answer that the address is a pull request. */
-function loadIssue(url: string, fresh = false): Promise<void> {
-  const s = useGitStore.getState()
-  if (!fresh && (s.issues[url] || s.pullRequestAliases[url])) return Promise.resolve()
-  return loadOnce(url, async () => {
-    receiveReference(url, await host('git.issue', { url }))
+function loadIssue(url: string, fresh = false, hostId: string | null = null): Promise<void> {
+  const h = hostGitOf(useGitStore.getState(), hostId)
+  if (!fresh && (h.issues[url] || h.pullRequestAliases[url])) return Promise.resolve()
+  return loadOnce(hostId, url, async () => {
+    receiveReference(url, await hostAt(hostId, 'git.issue', { url }), hostId)
   })
 }
 
 /** What the host says a reference now is, read for a request or pushed because it changed. */
-export function receiveReference(url: string, found: IssueLookup): void {
+export function receiveReference(
+  url: string,
+  found: IssueLookup,
+  hostId: string | null = null,
+): void {
   if (found.kind === 'pull') {
-    receivePullRequest(found.pullRequest, url)
+    receivePullRequest(found.pullRequest, url, hostId)
     return
   }
-  setLoadedAt(url, Date.now())
-  useGitStore.setState((s) => ({
-    issues: setCapped(s.issues, url, found.issue, MAX_CACHED_REFS),
-    referenceErrors: without(s.referenceErrors, url),
+  setLoadedAt(hostId, url, Date.now())
+  updateHostGit(hostId, (h) => ({
+    issues: setCapped(h.issues, url, found.issue, MAX_CACHED_REFS),
+    referenceErrors: without(h.referenceErrors, url),
   }))
 }
 
 /** Loads what a reference names, once; a card asks with `fresh` to read a live one again. */
-export function loadReference(ref: GitHubReference, fresh = false): void {
-  const again = fresh && isStale(ref.url)
-  if (again) forget(ref.url)
-  void (ref.kind === 'pull' ? loadPullRequest(ref.url, again) : loadIssue(ref.url, again))
+export function loadReference(
+  ref: GitHubReference,
+  fresh = false,
+  hostId: string | null = null,
+): void {
+  const again = fresh && isStale(hostId, ref.url)
+  if (again) forget(hostId, ref.url)
+  void (ref.kind === 'pull'
+    ? loadPullRequest(ref.url, again, hostId)
+    : loadIssue(ref.url, again, hostId))
 }
 
-export function retryReference(ref: GitHubReference): Promise<void> {
-  forget(ref.url)
+export function retryReference(ref: GitHubReference, hostId: string | null = null): Promise<void> {
+  forget(hostId, ref.url)
+  if (!gitToolsOf(useGitStore.getState(), hostId)) void loadGitTools(hostId)
   return ref.kind === 'pull'
-    ? loadPullRequest(ref.url, true).then(() => {})
-    : loadIssue(ref.url, true)
+    ? loadPullRequest(ref.url, true, hostId).then(() => {})
+    : loadIssue(ref.url, true, hostId)
 }
 
 // Merged and closed pull requests and closed issues do not change enough to read again.
-function isStale(url: string): boolean {
-  const at = loadedAt.get(url)
+function isStale(hostId: string | null, url: string): boolean {
+  const at = loadedAtByHost.get(gitHostKey(hostId))?.get(url)
   if (at === undefined || Date.now() - at < STALE_MS) return false
-  const s = useGitStore.getState()
-  const pr = s.pullRequests[s.pullRequestAliases[url] ?? url]
+  const h = hostGitOf(useGitStore.getState(), hostId)
+  const pr = h.pullRequests[h.pullRequestAliases[url] ?? url]
   if (pr) return pr.state === 'open' || pr.state === 'draft'
-  return s.issues[url]?.state === 'open'
+  return h.issues[url]?.state === 'open'
 }
 
 // Lets the next load ask gh again; what is shown stays until the new answer replaces it.
-function forget(url: string): void {
-  loadedAt.delete(url)
-  referenceLoads.delete(url)
+function forget(hostId: string | null, url: string): void {
+  loadedAtByHost.get(gitHostKey(hostId))?.delete(url)
+  referenceLoads.delete(scopedKey(hostId, url))
 }
 
 /** Whether a reference's state is final, so the host need not read it again. */
-export function isReferenceSettled(s: GitStore, ref: GitHubReference): boolean {
-  const pr = s.pullRequests[s.pullRequestAliases[ref.url] ?? ref.url]
+export function isReferenceSettled(
+  s: GitStore,
+  ref: GitHubReference,
+  hostId: string | null = null,
+): boolean {
+  const h = hostGitOf(s, hostId)
+  const pr = h.pullRequests[h.pullRequestAliases[ref.url] ?? ref.url]
   if (pr) return pr.state === 'merged' || pr.state === 'closed'
-  const issue = ref.kind === 'issue' ? s.issues[ref.url] : undefined
+  const issue = ref.kind === 'issue' ? h.issues[ref.url] : undefined
   return issue !== undefined && issue.state !== 'open'
 }
 
-// The references on screen, counted once for each place that shows one.
-const shownReferences = new Map<string, number>()
-let sentReferences = ''
+// The references on screen, counted once per host for each place that shows one.
+const shownReferencesByHost = new Map<string | null, Map<string, number>>()
+const sentReferencesByHost = new Map<string | null, string>()
 let referenceSync: ReturnType<typeof setTimeout> | null = null
 
 /** Tells the host a reference is on screen, so it keeps its state current, until released. */
-export function watchReference(url: string): () => void {
-  shownReferences.set(url, (shownReferences.get(url) ?? 0) + 1)
+export function watchReference(url: string, hostId: string | null = null): () => void {
+  let shown = shownReferencesByHost.get(hostId)
+  if (!shown) {
+    shown = new Map()
+    shownReferencesByHost.set(hostId, shown)
+  }
+  shown.set(url, (shown.get(url) ?? 0) + 1)
   scheduleReferenceSync()
+  let released = false
   return () => {
-    const left = (shownReferences.get(url) ?? 1) - 1
-    if (left > 0) shownReferences.set(url, left)
-    else shownReferences.delete(url)
+    if (released) return
+    released = true
+    const current = shownReferencesByHost.get(hostId)
+    if (!current) return
+    const left = (current.get(url) ?? 1) - 1
+    if (left > 0) current.set(url, left)
+    else current.delete(url)
+    if (current.size === 0) shownReferencesByHost.delete(hostId)
     scheduleReferenceSync()
   }
 }
 
-// Scrolling shows and hides many at once, so one request carries the settled set.
+// Scrolling shows and hides many at once, so one request per host carries the settled set.
 function scheduleReferenceSync(): void {
   if (referenceSync !== null) return
   referenceSync = setTimeout(() => {
@@ -381,64 +535,122 @@ function scheduleReferenceSync(): void {
   }, 300)
 }
 
-/**
- * Sends the shown references to the host, none while the window is hidden. `again` sends them
- * though they did not change, which makes the host read the stale ones at once: on focus, on
- * showing the window, and after the host restarted.
- */
-export function syncReferences(again: boolean): void {
-  const urls = document.visibilityState === 'visible' ? [...shownReferences.keys()] : []
+function syncHostReferences(hostId: string | null, again: boolean): void {
+  const visible = typeof document === 'undefined' || document.visibilityState === 'visible'
+  const shown = shownReferencesByHost.get(hostId)
+  const urls = visible && shown ? [...shown.keys()] : []
   const key = urls.join('\n')
-  if (key === sentReferences && (!again || key === '')) return
-  sentReferences = key
-  void host('git.watchReferences', { urls }).catch(() => {})
+  const sent = sentReferencesByHost.get(hostId) ?? ''
+  if (key === sent && (!again || key === '')) return
+  if (key === '') sentReferencesByHost.delete(hostId)
+  else sentReferencesByHost.set(hostId, key)
+  void hostAt(hostId, 'git.watchReferences', { urls }).catch(() => {
+    if (key !== '' && sentReferencesByHost.get(hostId) === key) {
+      sentReferencesByHost.delete(hostId)
+    }
+  })
+}
+
+/**
+ * Sends the shown references to each host (or only `targetHost` when given), none while the
+ * window is hidden. `again` sends them though they did not change, which makes the host read the
+ * stale ones at once: on focus, on showing the window, and after the host restarted or reconnected.
+ */
+export function syncReferences(again: boolean, targetHost?: string | null): void {
+  if (targetHost !== undefined) {
+    syncHostReferences(targetHost, again)
+    return
+  }
+  const hosts = new Set<string | null>([
+    ...shownReferencesByHost.keys(),
+    ...sentReferencesByHost.keys(),
+  ])
+  for (const hostId of hosts) syncHostReferences(hostId, again)
 }
 
 const avatarLoads = new Set<string>()
-const avatarFailures = new Map<string, number>()
+const avatarFailuresByHost = new Map<string, Map<string, number>>()
 
-/** Looks up a chip author's avatar once, and again a minute after it failed to load. */
-export function loadAvatar(login: string): void {
-  if (!GITHUB_LOGIN.test(login) || login in useGitStore.getState().avatars) return
-  const failedAt = avatarFailures.get(login)
-  if (avatarLoads.has(login) || (failedAt !== undefined && Date.now() - failedAt < RETRY_MS)) return
-  avatarLoads.add(login)
+function recordAvatarFailure(hostId: string | null, login: string): void {
+  const hostKey = gitHostKey(hostId)
+  let failures = avatarFailuresByHost.get(hostKey)
+  if (!failures) {
+    failures = new Map()
+    avatarFailuresByHost.set(hostKey, failures)
+  }
+  failures.delete(login)
+  failures.set(login, Date.now())
+  if (failures.size > MAX_CACHED_AVATARS) {
+    failures.delete(failures.keys().next().value!)
+  }
+}
+
+/** Looks up a chip author's avatar once on `hostId`, and again a minute after it failed to load. */
+export function loadAvatar(login: string, hostId: string | null = null): void {
+  if (!GITHUB_LOGIN.test(login) || login in hostGitOf(useGitStore.getState(), hostId).avatars) {
+    return
+  }
+  const loadKey = scopedKey(hostId, login)
+  const failures = avatarFailuresByHost.get(gitHostKey(hostId))
+  const failedAt = failures?.get(login)
+  if (avatarLoads.has(loadKey) || (failedAt !== undefined && Date.now() - failedAt < RETRY_MS)) {
+    return
+  }
+  avatarLoads.add(loadKey)
   void (async () => {
     try {
-      const url = await host('git.avatarUrl', { login })
+      const url = await hostAt(hostId, 'git.avatarUrl', { login })
       // No URL means GitHub has no picture; a URL whose picture did not load is asked again.
       const picture = url === null ? null : await window.kettu.avatars.load(url)
       if (url !== null && picture === null) {
-        avatarFailures.delete(login)
-        avatarFailures.set(login, Date.now())
-        if (avatarFailures.size > MAX_CACHED_AVATARS) {
-          avatarFailures.delete(avatarFailures.keys().next().value!)
-        }
+        recordAvatarFailure(hostId, login)
       } else {
-        avatarFailures.delete(login)
-        useGitStore.setState((s) => ({
-          avatars: setCapped(s.avatars, login, picture, MAX_CACHED_AVATARS),
+        avatarFailuresByHost.get(gitHostKey(hostId))?.delete(login)
+        updateHostGit(hostId, (h) => ({
+          avatars: setCapped(h.avatars, login, picture, MAX_CACHED_AVATARS),
         }))
       }
     } catch {
-      avatarFailures.delete(login)
-      avatarFailures.set(login, Date.now())
-      if (avatarFailures.size > MAX_CACHED_AVATARS) {
-        avatarFailures.delete(avatarFailures.keys().next().value!)
-      }
+      recordAvatarFailure(hostId, login)
     } finally {
-      avatarLoads.delete(login)
+      avatarLoads.delete(loadKey)
     }
   })()
 }
 
-export async function loadGitTools(): Promise<void> {
-  useGitStore.setState({ toolsError: null })
-  try {
-    useGitStore.setState({ tools: await host('git.tools', undefined) })
-  } catch (error) {
-    useGitStore.setState({ tools: null, toolsError: errorMessage(error) })
-  }
+const toolsInFlight = new Map<string | null, Promise<void>>()
+const toolsSeq = new Map<string | null, number>()
+
+/** Applies a `git.tools` push event from `hostId` (null for this computer). */
+export function receiveGitTools(hostId: string | null, tools: GitTools): void {
+  toolsSeq.set(hostId, (toolsSeq.get(hostId) ?? 0) + 1)
+  updateHostGit(hostId, () => ({ tools, toolsError: null }))
+}
+
+export function loadGitTools(hostId: string | null = null): Promise<void> {
+  const pending = toolsInFlight.get(hostId)
+  if (pending) return pending
+  const seq = (toolsSeq.get(hostId) ?? 0) + 1
+  toolsSeq.set(hostId, seq)
+  updateHostGit(hostId, () => ({ toolsError: null }))
+  const run: Promise<void> = hostAt(hostId, 'git.tools', undefined)
+    .then(
+      (tools) => {
+        if (toolsSeq.get(hostId) === seq) {
+          updateHostGit(hostId, () => ({ tools, toolsError: null }))
+        }
+      },
+      (error: unknown) => {
+        if (toolsSeq.get(hostId) === seq) {
+          updateHostGit(hostId, () => ({ tools: null, toolsError: errorMessage(error) }))
+        }
+      },
+    )
+    .finally(() => {
+      if (toolsInFlight.get(hostId) === run) toolsInFlight.delete(hostId)
+    })
+  toolsInFlight.set(hostId, run)
+  return run
 }
 
 function without<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -524,7 +736,7 @@ export async function createPullRequest(
 ): Promise<PullRequest> {
   const pr = await host('git.createPullRequest', { projectPath, ...draft })
   receiveCurrentPr(projectPath, pr)
-  useGitStore.setState((s) => ({ pullRequests: { ...s.pullRequests, [pr.url]: pr } }))
+  receivePullRequest(pr, pr.url, hostOfPath(projectPath))
   return pr
 }
 
@@ -535,7 +747,8 @@ export function refreshGitProject(projectPath: string): void {
     (current) => receiveCurrentPr(projectPath, current),
     () => {},
   )
-  if (!useGitStore.getState().tools) void loadGitTools()
+  const hostId = hostOfPath(projectPath)
+  if (!gitToolsOf(useGitStore.getState(), hostId)) void loadGitTools(hostId)
 }
 
 export function setGitPaneTab(panel: string, tab: GitPaneTab): void {

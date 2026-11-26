@@ -203,7 +203,9 @@ export const TaskRow = memo(function TaskRow({
         <span className="ui-as-side__text" dir="auto">
           {task.title}
         </span>
-        {prs.length > 0 && <PullRequestsBadge prs={prs} onOpen={() => setCardOpen(false)} />}
+        {prs.length > 0 && (
+          <PullRequestsBadge prs={prs} hostId={hostId} onOpen={() => setCardOpen(false)} />
+        )}
         {progress && (
           <span
             aria-label={t('row.stepOf', progress)}

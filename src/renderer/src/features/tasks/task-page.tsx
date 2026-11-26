@@ -326,8 +326,9 @@ function EndedLine({ task, view }: { task: TaskSummary; view: TaskView | undefin
 }
 
 function PullLine({ task, reference }: { task: TaskSummary; reference: GitHubReference }) {
-  const { data } = useReferenceData(reference)
-  useEffect(() => loadReference(reference), [reference])
+  const hostId = hostOfPath(task.projectPath)
+  const { data } = useReferenceData(reference, hostId)
+  useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
   return <EndedText task={task} merged={data?.kind === 'pull' && data.pr.state === 'merged'} />
 }
 

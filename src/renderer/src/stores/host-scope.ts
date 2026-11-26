@@ -32,11 +32,11 @@ import {
 import type { HarnessId } from '@shared/thread'
 import type { UsageStatus } from '@shared/usage'
 import { copyPath } from '@renderer/lib/copy-path'
-import { errorMessage, host, hostAt, type HostRequest } from '@renderer/lib/host'
+import { host, hostAt, type HostRequest } from '@renderer/lib/host'
 import { folderOf, homeStart } from '@renderer/web/host-path'
 import { askHostPath, type HostPathPurpose } from '@renderer/web/host-path-request'
 import { createAgentsStore, useAgentsStore, type AgentsStoreHook } from './agents'
-import { loadGitTools, useGitStore } from './git'
+import { hostGitOf, loadGitTools, receiveGitTools, useGitStore } from './git'
 import { otherHosts, useHostsStore } from './hosts'
 import {
   createMarketplaceStore,
@@ -93,6 +93,20 @@ export interface HostScope {
   useMcpStore: McpStoreHook
 }
 
+function gitToolsStore(
+  hostId: string | null,
+): ReadStore<{ tools: GitTools | null; toolsError: string | null }> {
+  const useScopedGitStore = <T>(
+    selector: (state: { tools: GitTools | null; toolsError: string | null }) => T,
+  ): T => useGitStore((s) => selector(hostGitOf(s, hostId)))
+  return Object.assign(useScopedGitStore, {
+    getState: () => {
+      const { tools, toolsError } = hostGitOf(useGitStore.getState(), hostId)
+      return { tools, toolsError }
+    },
+  })
+}
+
 /** This computer's own, which the rest of the window shows too. */
 export const LOCAL_SCOPE: HostScope = {
   hostId: null,
@@ -119,8 +133,8 @@ export const LOCAL_SCOPE: HostScope = {
   useRemoteStore,
   sharing: localSharing,
   useUsageStore,
-  useGitStore,
-  loadGitTools,
+  useGitStore: gitToolsStore(null),
+  loadGitTools: () => loadGitTools(null),
   useInfoStore: useWebHostStore,
   useMarketplaceStore,
   useMcpStore,
@@ -138,7 +152,6 @@ interface OtherScope {
   part: UseBoundStore<StoreApi<{ part: HostSettingsPart | null }>>
   remote: UseBoundStore<StoreApi<RemoteStore>>
   usage: UseBoundStore<StoreApi<{ status: UsageStatus | null }>>
-  git: UseBoundStore<StoreApi<{ tools: GitTools | null; toolsError: string | null }>>
   info: UseBoundStore<StoreApi<{ info: HostInfo | null }>>
   adminListeners: Set<(event: HostAdminEvent) => void>
 }
@@ -173,7 +186,7 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
       agents.setState({ environment: event.info })
       break
     case 'git.tools':
-      other.git.setState({ tools: event.tools, toolsError: null })
+      receiveGitTools(hostId, event.tools)
       break
     case 'usage.status':
       other.usage.setState({ status: event.status })
@@ -287,10 +300,6 @@ function createScope(hostId: string): OtherScope {
   const part = create<{ part: HostSettingsPart | null }>()(() => ({ part: null }))
   const remote = create<RemoteStore>()(() => ({ status: null }))
   const usage = create<{ status: UsageStatus | null }>()(() => ({ status: null }))
-  const git = create<{ tools: GitTools | null; toolsError: string | null }>()(() => ({
-    tools: null,
-    toolsError: null,
-  }))
   const info = create<{ info: HostInfo | null }>()(() => ({ info: null }))
   const adminListeners = new Set<(event: HostAdminEvent) => void>()
   const listen = <T extends HostAdminEvent['type']>(
@@ -460,22 +469,15 @@ function createScope(hostId: string): OtherScope {
     useRemoteStore: remote,
     sharing: createSharing(() => sharingApi),
     useUsageStore: usage,
-    useGitStore: git,
-    loadGitTools: async () => {
-      git.setState({ toolsError: null })
-      try {
-        git.setState({ tools: await request('git.tools', undefined) })
-      } catch (error) {
-        git.setState({ tools: null, toolsError: errorMessage(error) })
-      }
-    },
+    useGitStore: gitToolsStore(hostId),
+    loadGitTools: () => loadGitTools(hostId),
     useInfoStore: info,
     useMarketplaceStore: createMarketplaceStore(request, (patch) =>
       admin('marketplace.setKeys', { patch }),
     ),
     useMcpStore: createMcpStore(request),
   }
-  return { scope, part, remote, usage, git, info, adminListeners }
+  return { scope, part, remote, usage, info, adminListeners }
 }
 
 /** Which host Settings' host sections show; null for this computer. */

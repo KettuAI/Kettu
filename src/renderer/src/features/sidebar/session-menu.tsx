@@ -74,7 +74,7 @@ import { i18n } from '@renderer/lib/i18n'
 import { fileManagerName, formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentsOn, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useGitStore } from '@renderer/stores/git'
+import { pullRequestOf, useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { clearSelection } from '@renderer/stores/session-selection'
 import {
@@ -454,7 +454,7 @@ export function SessionMenuItems({
                     <span className="shrink-0 text-tertiary tabular-nums">
                       {pr.repo}#{pr.number}
                     </span>
-                    <PrTitle url={pr.url} />
+                    <PrTitle url={pr.url} hostId={hostId} />
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuSubContent>
@@ -1229,7 +1229,7 @@ function DeleteSessionDialogInner({
 }
 
 /** A pull request's title in the menu, once its details have loaded somewhere. */
-function PrTitle({ url }: { url: string }) {
-  const title = useGitStore((s) => s.pullRequests[url]?.title ?? '')
+function PrTitle({ url, hostId }: { url: string; hostId: string | null }) {
+  const title = useGitStore((s) => pullRequestOf(s, hostId, url)?.title ?? '')
   return <span className="min-w-0 flex-1 truncate">{title}</span>
 }

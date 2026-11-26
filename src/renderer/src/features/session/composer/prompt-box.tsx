@@ -330,6 +330,7 @@ export function PromptBox({
   const chips = usePromptChips({
     draft,
     sessionId: box.sessionId,
+    hostId,
     source,
     attachments,
     commands,

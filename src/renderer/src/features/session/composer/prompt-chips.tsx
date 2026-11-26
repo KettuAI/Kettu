@@ -66,6 +66,7 @@ export function projectOf(paths: readonly string[], known: ReadonlySet<string>) 
 export function usePromptChips({
   draft,
   sessionId,
+  hostId,
   source,
   attachments,
   commands,
@@ -78,6 +79,7 @@ export function usePromptChips({
 }: {
   draft: string
   sessionId: string | null
+  hostId: string | null
   source: BoxText
   attachments: readonly DraftAttachment[]
   commands: readonly SlashCommand[]
@@ -222,8 +224,9 @@ export function usePromptChips({
       onMentionDeleted: (keys) => handlers.current.onMentionDeleted(keys),
       highlight: pasted,
       projectPath,
+      hostId,
     }),
-    [names, resolve, pasted, projectPath],
+    [names, resolve, pasted, projectPath, hostId],
   )
 
   const keyDown = (event: KeyboardEvent): boolean => {
@@ -278,6 +281,7 @@ export function usePromptChips({
                     (a) => 'attachmentKey' in hover.chip && a.key === hover.chip.attachmentKey,
                   )}
                   projectPath={projectPath}
+                  hostId={hostId}
                   inSession={!!sessionId && !isWeb}
                 />
               )}

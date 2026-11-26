@@ -14,10 +14,13 @@ import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { ReferenceIcon } from '@renderer/features/git/gh-reference'
 import {
+  GitHostContext,
   shortReference,
+  useGitHostId,
   useProjectRepository,
   useReferenceData,
 } from '@renderer/features/git/gh-reference-data'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import { loadReference } from '@renderer/stores/git'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
@@ -75,9 +78,10 @@ function SiteIcon({ url }: { url: string }) {
 
 /** A GitHub issue or pull request as the thread's reference: its state, number and title. */
 function ReferenceBody({ reference }: { reference: GitHubReference }) {
-  const { data } = useReferenceData(reference)
+  const hostId = useGitHostId()
+  const { data } = useReferenceData(reference, hostId)
   const repo = useProjectRepository()
-  useEffect(() => loadReference(reference), [reference])
+  useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
   const title = data?.kind === 'pull' ? data.pr.title : data?.issue.title
   return (
     <>
@@ -171,17 +175,22 @@ export function RenderedChip({
   chip,
   state,
   projectPath,
+  hostId,
   onRendered,
 }: {
   chip: Chip
   state: ChipState
   projectPath: string | null
+  hostId?: string | null
   onRendered: () => void
 }) {
   useLayoutEffect(onRendered)
+  const gitHostId = hostId ?? (projectPath ? hostOfPath(projectPath) : null)
   return (
-    <ProjectPathContext value={projectPath}>
-      <ChipView chip={chip} state={state} />
-    </ProjectPathContext>
+    <GitHostContext value={gitHostId}>
+      <ProjectPathContext value={projectPath}>
+        <ChipView chip={chip} state={state} />
+      </ProjectPathContext>
+    </GitHostContext>
   )
 }
