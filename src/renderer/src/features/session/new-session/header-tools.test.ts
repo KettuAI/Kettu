@@ -130,6 +130,7 @@ vi.mock('@renderer/features/session/composer/drafts', () => ({
   NEW_SESSION_DRAFT: 'new',
   hasMessage: () => false,
   readDraft: () => '',
+  readDraftArtifacts: () => [],
   readDraftAttachments: () => [],
 }))
 
@@ -155,6 +156,12 @@ vi.mock('@renderer/features/session/composer/mention-surfaces', () => ({
 
 vi.mock('@renderer/features/session/composer/use-prompt-box', () => ({
   usePromptBox: () => ({
+    artifacts: [],
+    artifactPickerOpen: false,
+    setArtifactPickerOpen: () => undefined,
+    openArtifactPicker: () => undefined,
+    attachArtifact: () => undefined,
+    removeArtifact: () => undefined,
     attachments: [],
     editor: { current: null },
     source: { text: '' },
