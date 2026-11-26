@@ -15,6 +15,7 @@ import {
   type UserContent,
 } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
+import { forgetOutline, invalidateOutlines } from '@renderer/features/session/outline/outline-cache'
 
 // The renderer's replicas of the sessions it shows. Each starts from a snapshot of the latest
 // page of the thread, takes older pages as the thread scrolls back, and applies patch batches in
@@ -492,8 +493,10 @@ export function focusSession(sessionId: string): Promise<void> {
  * `only`, the sessions it picks, as those on a host whose connection opened again.
  */
 export function rewatchAll(only?: (sessionId: string) => boolean): void {
+  invalidateOutlines(only)
   for (const sessionId of watched) {
     if (only && !only(sessionId)) continue
+    forgetOutline(sessionId)
     void host('sessions.watch', { sessionId })
       .catch(() => {})
       .then(() => fetchSnapshot(sessionId, 'sessions.snapshot'))
@@ -504,6 +507,7 @@ export function forgetSession(sessionId: string): void {
   const at = watched.indexOf(sessionId)
   if (at >= 0) watched.splice(at, 1)
   clearSessionBuffers(sessionId)
+  forgetOutline(sessionId)
   useThreadsStore.setState((s) => {
     if (!(sessionId in s.replicas)) return s
     const replicas = { ...s.replicas }

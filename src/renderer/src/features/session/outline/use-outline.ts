@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { OutlineEntry } from '@shared/agent-host'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { firstLine, outlineText } from '@shared/outline'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
+import {
+  beginOutlineFetch,
+  commitCachedOutline,
+  getCachedOutline,
+  outlineCacheEpoch,
+  patchCachedOutlineTitles,
+  subscribeOutline,
+  touchCachedOutline,
+} from './outline-cache'
 
 /** A row of the outline; `pos` is null for a message the host has not listed yet. */
 export interface OutlineRow {
@@ -16,7 +24,9 @@ export interface OutlineRow {
 
 /**
  * The session's user messages: the host's list, which reaches pages not loaded yet, joined with
- * those the replica holds that it does not list yet, such as one just sent.
+ * those the replica holds that it does not list yet, such as one just sent. Cached across session
+ * switches so clicking back and forth does not re-query SQLite unless entries changed or the list
+ * is explicitly opened.
  */
 export function useOutline(sessionId: string): {
   rows: OutlineRow[]
@@ -24,6 +34,8 @@ export function useOutline(sessionId: string): {
   opened: () => void
 } {
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
+  const older = useThreadsStore((s) => s.replicas[sessionId]?.older ?? null)
+  const hasState = order !== undefined
   // A user message stays one, so the kinds are read when the order changes, not on every patch.
   const userIds = useMemo(() => {
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
@@ -32,14 +44,24 @@ export function useOutline(sessionId: string): {
       return entry?.kind === 'user' && !entry.from && !entry.approval && !entry.kettu
     })
   }, [sessionId, order])
-  const [listed, setListed] = useState<OutlineEntry[] | null>(null)
-  const latest = useRef(0)
+  const userIdSet = useMemo(() => new Set(userIds), [userIds])
+
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeOutline(sessionId, listener),
+    [sessionId],
+  )
+  const getSnapshot = useCallback(() => getCachedOutline(sessionId), [sessionId])
+  const listed = useSyncExternalStore(subscribe, getSnapshot)
+
+  useEffect(() => {
+    touchCachedOutline(sessionId)
+  }, [sessionId])
 
   const refresh = useCallback(() => {
-    const request = ++latest.current
+    const ticket = beginOutlineFetch(sessionId)
     host('sessions.outline', { sessionId })
       .then(({ entries }) => {
-        if (request === latest.current) setListed(entries)
+        commitCachedOutline(sessionId, entries, ticket)
       })
       .catch((error: unknown) => {
         console.warn(`Could not list the outline of ${sessionId}: ${errorMessage(error)}`)
@@ -47,10 +69,15 @@ export function useOutline(sessionId: string): {
   }, [sessionId])
 
   const known = useMemo(() => new Set(listed?.map((entry) => entry.entryId)), [listed])
-  const unlisted = listed === null || userIds.some((id) => !known.has(id))
+  const hasUnlisted = listed === null || userIds.some((id) => !known.has(id))
+  const hasRemoved =
+    hasState &&
+    listed !== null &&
+    listed.some((entry) => (older === null || entry.pos >= older) && !userIdSet.has(entry.entryId))
+  const needsRefresh = hasUnlisted || hasRemoved
   useEffect(() => {
-    if (unlisted) refresh()
-  }, [unlisted, userIds, refresh])
+    if (needsRefresh) refresh()
+  }, [needsRefresh, userIds, refresh])
 
   const rows = useMemo(() => {
     const out: OutlineRow[] = (listed ?? []).map((entry) => ({
@@ -79,17 +106,10 @@ export function useOutline(sessionId: string): {
     refresh()
     if (!useSettingsStore.getState().settings.thread.outlineSummaries) return
     if (rows.every((row) => row.titled || row.label === '')) return
+    const epoch = outlineCacheEpoch(sessionId)
     host('sessions.outlineTitles', { sessionId })
       .then(({ titles }) => {
-        if (titles.length === 0) return
-        const byPos = new Map(titles.map(({ pos, title }) => [pos, title]))
-        setListed(
-          (current) =>
-            current?.map((entry) => {
-              const title = byPos.get(entry.pos)
-              return title === undefined ? entry : { ...entry, title }
-            }) ?? current,
-        )
+        patchCachedOutlineTitles(sessionId, titles, epoch)
       })
       .catch((error: unknown) => {
         console.warn(`Could not title the outline of ${sessionId}: ${errorMessage(error)}`)
