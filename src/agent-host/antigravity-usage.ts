@@ -17,6 +17,23 @@ import {
 /** The line agy 1.5.9 prints as it opens its browser sign-in. */
 const SIGN_IN_PROMPT = /Authentication required/i
 
+/**
+ * agy's print mode spawns a detached `--bg-updater` every 15 minutes, which flashes a terminal
+ * window on Windows when it checks `--version`. agy checks this variable for the exact value
+ * `'true'` (not `'1'`), so silent background polls always disable it.
+ */
+const DISABLE_AUTO_UPDATE = 'AGY_CLI_DISABLE_AUTO_UPDATE'
+
+function pollEnv(env: Env, platform: Platform): Env {
+  const next: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (platform === 'win32' && key.toUpperCase() === DISABLE_AUTO_UPDATE) continue
+    next[key] = value
+  }
+  next[DISABLE_AUTO_UPDATE] = 'true'
+  return next
+}
+
 export interface AntigravityUsageDeps {
   /** The agent's name, for the errors. */
   name: string
@@ -42,7 +59,7 @@ async function ask(deps: AntigravityUsageDeps, command: 'usage' | 'credits'): Pr
     program: deps.program,
     args: [...deps.args, '-p', `/${command}`, '--output-format', 'json'],
     cwd: deps.cwd,
-    env: deps.env,
+    env: pollEnv(deps.env, deps.platform),
     platform: deps.platform,
     timeoutMs: deps.timeoutMs,
     signal: abort.signal,
