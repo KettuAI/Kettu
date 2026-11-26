@@ -2437,6 +2437,145 @@ describe('speed tiers (Fast and Ultrafast)', () => {
     const reply = t.entries().at(-1)
     expect(reply).toMatchObject({ kind: 'agent' })
     expect(reply?.kind === 'agent' && reply.markdown).toContain('gpt-6.1-sol')
+
+    // Also verify manual /ultrafast on a model with no speed tiers at all.
+    await connection.setConfigOption(opened.sessionId, 'model', 'gpt-5.6-luna')
+    const noSpeedResult = await connection.prompt(opened.sessionId, [
+      { type: 'text', text: '/ultrafast on' },
+    ])
+    expect(noSpeedResult.stopReason).toBe('end_turn')
+    expect(server.sent('turn/start')).toEqual([])
+    const lunaReply = t.entries().at(-1)
+    expect(lunaReply).toMatchObject({ kind: 'agent' })
+    expect(lunaReply?.kind === 'agent' && lunaReply.markdown).toContain('gpt-5.6-luna')
+  })
+
+  it('aligns /fast and /ultrafast command visibility with active model serviceTiers on open, resume, and model switch', async () => {
+    const { server, connection } = await connect()
+    server.skills = [
+      {
+        name: 'build',
+        description: 'Run build',
+        path: '/project/.codex/skills/build/SKILL.md',
+        enabled: true,
+      },
+    ]
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+
+    // 1. Model with no speed tiers -> neither /fast nor /ultrafast in emitted commands.
+    server.on('thread/start', () =>
+      threadResponse('thread-cmd-none', { model: 'gpt-5.6-luna', reasoningEffort: 'low' }),
+    )
+    const openedNone = await connection.newSession('/project')
+    const noneTarget = threadTarget()
+    connection.register(openedNone.sessionId, noneTarget.target)
+    await until(() => noneTarget.thread().session.commands.some((c) => c.name === 'compact'))
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).not.toContain('fast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).not.toContain('ultrafast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('$build')
+
+    // 2. Switch to Fast-only model -> /fast appears, /ultrafast stays absent, skills preserved.
+    await connection.setConfigOption(openedNone.sessionId, 'model', 'gpt-6.1-sol')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('fast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).not.toContain('ultrafast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('$build')
+
+    // 3. Switch to Fast + Ultrafast model -> both /fast and /ultrafast appear.
+    await connection.setConfigOption(openedNone.sessionId, 'model', ULTRA_MODEL.id)
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('fast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('ultrafast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('$build')
+
+    // 4. Switch back to no-speed model -> both /fast and /ultrafast are removed.
+    await connection.setConfigOption(openedNone.sessionId, 'model', 'gpt-5.6-luna')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).not.toContain('fast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).not.toContain('ultrafast')
+    expect(noneTarget.thread().session.commands.map((c) => c.name)).toContain('$build')
+
+    // 5. Resume a session on a Fast-only model -> /fast present, /ultrafast absent.
+    server.on('thread/resume', (params) =>
+      threadResponse(params.threadId as string, { model: 'gpt-6.1-sol', serviceTier: 'default' }),
+    )
+    await connection.resumeSession('thread-cmd-resume', '/project')
+    const resumeTarget = threadTarget()
+    connection.register('thread-cmd-resume', resumeTarget.target)
+    await until(() => resumeTarget.thread().session.commands.some((c) => c.name === 'compact'))
+    expect(resumeTarget.thread().session.commands.map((c) => c.name)).toContain('fast')
+    expect(resumeTarget.thread().session.commands.map((c) => c.name)).not.toContain('ultrafast')
+  })
+
+  it('refreshes active session commands when model/list updates advertised serviceTiers', async () => {
+    const { server, connection } = await connect()
+    const dynamicModel = {
+      ...ULTRA_MODEL,
+      serviceTiers: [{ id: 'priority', name: 'Fast', description: '2x speed' }],
+    }
+    server.on('model/list', () => ({ data: [dynamicModel], nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-cmd-refresh', { model: dynamicModel.id, serviceTier: 'default' }),
+    )
+
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    connection.register(opened.sessionId, t.target)
+    await until(() => t.thread().session.commands.some((c) => c.name === 'fast'))
+    expect(t.thread().session.commands.map((c) => c.name)).not.toContain('ultrafast')
+
+    // Catalog later advertises ultrafast for the same model; refreshing options updates commands.
+    server.on('model/list', () => ({ data: [ULTRA_MODEL], nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-hidden-options', { model: ULTRA_MODEL.id, serviceTier: 'default' }),
+    )
+    await connection.newSession('/project', { hidden: 'options' })
+    expect(t.thread().session.commands.map((c) => c.name)).toContain('fast')
+    expect(t.thread().session.commands.map((c) => c.name)).toContain('ultrafast')
+  })
+
+  it('emits commands for the newly selected model even when model changes while skills/list is in flight', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-cmd-race', { model: 'gpt-6.1-sol', serviceTier: 'default' }),
+    )
+    let releaseSkills: (() => void) | null = null
+    let skillsCalls = 0
+    server.on('skills/list', async () => {
+      skillsCalls++
+      if (skillsCalls === 2) {
+        await new Promise<void>((resolve) => {
+          releaseSkills = resolve
+        })
+      }
+      return {
+        data: [
+          {
+            cwd: '/project',
+            skills: [
+              {
+                name: 'deploy',
+                description: 'Deploy app',
+                path: '/project/.codex/skills/deploy/SKILL.md',
+                enabled: true,
+              },
+            ],
+            errors: [],
+          },
+        ],
+      }
+    })
+
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    connection.register(opened.sessionId, t.target)
+    await until(() => releaseSkills !== null)
+
+    // Switch to Ultrafast model before the register's skills/list call resolves.
+    await connection.setConfigOption(opened.sessionId, 'model', ULTRA_MODEL.id)
+    releaseSkills!()
+    await until(() => t.thread().session.commands.some((c) => c.name === 'ultrafast'))
+    expect(t.thread().session.commands.map((c) => c.name)).toContain('fast')
+    expect(t.thread().session.commands.map((c) => c.name)).toContain('ultrafast')
+    expect(t.thread().session.commands.map((c) => c.name)).toContain('$deploy')
   })
 
   it('reads initial and resumed ultrafast serviceTier including legacy additionalSpeedTiers', async () => {

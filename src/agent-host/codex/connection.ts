@@ -391,6 +391,10 @@ interface ThreadRecord {
   prompting: Prompting | null
   /** The latest token use Codex reported. */
   usage: ThreadTokenUsage | null
+  /** The skills last read for this thread's folder; null until the first read completes. */
+  skills: SkillMetadata[] | null
+  /** Monotonic sequence for `skills/list` reads so an older response never overwrites a newer one. */
+  skillsSeq: number
   /** The commands last sent to the session, as JSON. */
   commands: string | null
   /** A command that answers without a turn, while it runs. */
@@ -415,6 +419,8 @@ function threadRecord(
     running: null,
     prompting: null,
     usage: null,
+    skills: null,
+    skillsSeq: 0,
     commands: null,
     command: null,
     watch: null,
@@ -689,6 +695,10 @@ export class CodexConnection implements AgentConnection {
       } while (cursor)
       this.knownModels = models
       this.modelsReadAt = Date.now()
+      for (const id of this.targets.keys()) {
+        const record = this.threads.get(id)
+        if (record && record.skills !== null) this.emitCommands(record, models)
+      }
       return models
     })()
       .catch((error: unknown) => {
@@ -1138,6 +1148,8 @@ export class CodexConnection implements AgentConnection {
     if (target && this.targets.get(sessionId) !== target) return
     this.targets.delete(sessionId)
     this.pending.delete(sessionId)
+    const record = this.threads.get(sessionId)
+    if (record) record.commands = null
     this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_THREADS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -1744,6 +1756,7 @@ export class CodexConnection implements AgentConnection {
       throw new AgentRequestError('agent_error', t('agentRun.noSession', { id: sessionId }))
     }
     const models = await this.listModels()
+    const previousModel = record.settings.model
     try {
       record.settings = applyOption(record.settings, models, optionId, value)
     } catch (error) {
@@ -1752,28 +1765,53 @@ export class CodexConnection implements AgentConnection {
       }
       throw error
     }
+    if (record.settings.model !== previousModel) {
+      if (record.skills !== null) this.emitCommands(record, models)
+      else if (record.skillsSeq === 0) void this.publishCommands(sessionId)
+    }
     return buildConfig(record.settings, models)
   }
 
   // Commands: Codex's own, which run through app-server instead of going to the model as text.
 
-  /** Sends the session its commands, Codex's and a `$name` for each skill, when they changed. */
+  /** Emits the session's commands for its active model and last read skills, when they changed. */
+  private emitCommands(record: ThreadRecord, models: readonly Model[]): void {
+    if (record.hidden || record.cwd === null || this.parents.has(record.id)) return
+    const target = this.targets.get(record.id)
+    if (!target || this.threads.get(record.id) !== record) return
+    const model = models.find((item) => item.id === record.settings.model)
+    const commands = commandList(record.skills ?? [], model)
+    const key = JSON.stringify(commands)
+    if (record.commands === key) return
+    record.commands = key
+    target.apply({ patches: [{ op: 'session.update', changes: { commands } }], effects: [] })
+  }
+
+  /**
+   * Sends the session its commands, Codex's for the active model and a `$name` for each skill,
+   * when they changed.
+   */
   private async publishCommands(threadId: string): Promise<void> {
     const record = this.threads.get(threadId)
     if (!record || record.hidden || record.cwd === null || this.parents.has(threadId)) return
-    let skills: SkillMetadata[] = []
-    try {
-      skills = await this.skills(record.cwd)
-    } catch (error) {
-      if (this.isClosed) return
-      this.hooks.log('warn', `Could not list Codex's skills: ${(error as Error).message}`)
+    const seq = ++record.skillsSeq
+    const [models, skills] = await Promise.all([
+      this.listModels(),
+      this.skills(record.cwd).catch((error: unknown) => {
+        if (!this.isClosed) {
+          this.hooks.log('warn', `Could not list Codex's skills: ${(error as Error).message}`)
+        }
+        return null
+      }),
+    ])
+    if (this.isClosed || this.threads.get(threadId) !== record) return
+    if (seq === record.skillsSeq) {
+      if (skills !== null) record.skills = skills
+      else if (record.skills === null) record.skills = []
     }
-    const commands = commandList(skills)
-    const key = JSON.stringify(commands)
-    const target = this.targets.get(threadId)
-    if (!target || this.threads.get(threadId) !== record || record.commands === key) return
-    record.commands = key
-    target.apply({ patches: [{ op: 'session.update', changes: { commands } }], effects: [] })
+    // Prefer the latest catalog in case a model list refresh completed while skills were loading.
+    const currentModels = this.knownModels.length > 0 ? this.knownModels : models
+    this.emitCommands(record, currentModels)
   }
 
   private async skills(cwd: string | null): Promise<SkillMetadata[]> {
