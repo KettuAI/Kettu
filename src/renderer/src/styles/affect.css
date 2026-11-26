@@ -1178,6 +1178,16 @@ li[data-row-exit='dust'] > * {
   height: 24px;
   border-radius: 6px;
 }
+.kp-ctx .kp-size-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .kp-ctx__place {
   display: flex;
   align-items: center;

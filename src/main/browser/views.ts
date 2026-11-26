@@ -7,7 +7,8 @@ import type { HandlerDetails, Input, WebContents, WindowOpenHandlerResponse } fr
 import {
   AGENT_VIEWPORT,
   BROWSER_PARTITION,
-  fitViewport,
+  desktopViewportFor,
+  fitPageViewport,
   MAX_SESSION_TABS,
   PAGE_SIZES,
   samePageSize,
@@ -19,7 +20,7 @@ import {
   type BrowserState,
   type BrowserTab,
   type PageSize,
-  type PageSizeName,
+  type PanePageSizeMode,
 } from '@shared/browser'
 import {
   IDLE_CONTROL,
@@ -82,6 +83,9 @@ export interface AgentTabInfo {
   usable: boolean
 }
 
+/** The viewport mode chosen for a tab: native pane fill, responsive desktop, or a fixed device size. */
+type TabSizeChoice = { kind: 'fit' } | { kind: 'desktop' } | { kind: 'fixed'; size: PageSize }
+
 interface Tab {
   id: string
   sessionId: string
@@ -100,13 +104,15 @@ interface Tab {
   asking: boolean
   /** Restarts the pending navigation's time limit, which a site's wait extends. */
   restartWait: (() => void) | null
-  /** An agent used it, so its page keeps a size of its own for good. */
+  /** An agent used it at least once. */
   used: boolean
+  /** The size mode the agent or the user picked for this tab. */
+  choice: TabSizeChoice
   /**
-   * The size the agent or the user picked for it; null for the desktop's, which only a tab an
-   * agent used keeps.
+   * The resolved desktop viewport frozen while an agent actively drives this tab, so resizing the
+   * panel mid-turn scales the view without reflowing the page or shifting click coordinates.
    */
-  size: PageSize | null
+  frozenDesktop: PageSize | null
   /** What its page was last told: the size it keeps and the scale it draws at; null for none. */
   told: { size: PageSize; scale: number } | null
   /** The latest size or scale its page was told and has not confirmed yet. */
@@ -301,6 +307,8 @@ export class BrowserViews {
   /** Lets the overlay's page go once no turn has used a page for a while. */
   private overlayDrop: ReturnType<typeof setTimeout> | null = null
   private cover: Cover | null = null
+  /** Last real pane bounds reported by any session, used as initial desktop layout hint before a new browser is framed. */
+  private lastBounds: BrowserBounds | null = null
 
   constructor(private readonly deps: BrowserViewsDeps) {
     this.policy = new BrowserPolicy(this.browserSession, {
@@ -449,12 +457,24 @@ export class BrowserViews {
   setBounds(sessionId: string, bounds: BrowserBounds): void {
     const browser = this.browser(sessionId)
     const first = !browser.framed
+    const selectedBefore = this.selectedTab(browser)
+    const viewportBefore = selectedBefore ? this.viewportOf(selectedBefore) : null
     browser.bounds = bounds
     browser.framed = true
-    for (const tab of this.tabsOf(browser)) this.place(tab)
+    this.lastBounds = bounds
+    for (const tab of this.tabsOf(browser)) {
+      // Lock the first real pane frame for an agent turn that started before the pane mounted.
+      if (first) this.freezeDesktopIfNeeded(tab)
+      this.place(tab)
+    }
     if (first) {
       this.present(browser)
       this.syncOverlay()
+    }
+    const selectedAfter = this.selectedTab(browser)
+    const viewportAfter = selectedAfter ? this.viewportOf(selectedAfter) : null
+    if (first || !samePageSize(viewportBefore, viewportAfter)) {
+      this.emit(browser)
     }
   }
 
@@ -610,7 +630,7 @@ export class BrowserViews {
    */
   async steady<T>(tabId: string, capture: () => Promise<T>): Promise<T> {
     const tab = this.tabs.get(tabId)
-    if (!tab || !this.viewportOf(tab)) return capture()
+    if (!tab || !tab.told) return capture()
     await this.coverPage(tab)
     try {
       return await capture()
@@ -665,6 +685,7 @@ export class BrowserViews {
     const follow = this.following(browser)
     browser.strip.setAgent(tabId)
     if (follow) browser.strip.select(tabId)
+    this.syncDesktopFreeze(browser)
     this.present(browser)
     this.emit(browser)
     this.syncOverlay()
@@ -673,14 +694,20 @@ export class BrowserViews {
   }
 
   /**
-   * The user picked a size for the selected tab's page. The desktop's lets a page an agent never
-   * used fill the pane again, and keeps one it used at the agent's size.
+   * The user picked a page size mode for the selected tab: native pane fill (`fit`), responsive
+   * desktop (`desktop`), or a fixed device preset (`tablet`, `phone`).
    */
-  async setPageSize(sessionId: string, name: PageSizeName): Promise<void> {
+  async setPageSize(sessionId: string, mode: PanePageSizeMode): Promise<void> {
     const tab = this.selected(sessionId)
     if (!tab) return
     await this.resize(tab, () => {
-      tab.size = name === 'desktop' ? null : PAGE_SIZES[name]
+      tab.frozenDesktop = null
+      tab.choice =
+        mode === 'fit'
+          ? { kind: 'fit' }
+          : mode === 'desktop'
+            ? { kind: 'desktop' }
+            : { kind: 'fixed', size: PAGE_SIZES[mode] }
     })
   }
 
@@ -690,7 +717,13 @@ export class BrowserViews {
     if (!tab) throw new Error('The tab closed.')
     await this.resize(tab, () => {
       tab.used = true
-      tab.size = size.name === 'desktop' ? null : size
+      tab.frozenDesktop = null
+      if (size.name === 'desktop') {
+        tab.choice = { kind: 'desktop' }
+        this.freezeDesktopIfNeeded(tab)
+      } else {
+        tab.choice = { kind: 'fixed', size }
+      }
     })
     return this.viewportOf(tab) ?? AGENT_VIEWPORT
   }
@@ -855,7 +888,8 @@ export class BrowserViews {
       asking: false,
       restartWait: null,
       used: how.agent,
-      size: null,
+      choice: how.agent ? { kind: 'desktop' } : { kind: 'fit' },
+      frozenDesktop: null,
       told: null,
       sizing: null,
     }
@@ -1134,18 +1168,68 @@ export class BrowserViews {
     if (at && this.overlayTab === tab.id) this.overlay.move(at)
   }
 
-  /** The size the tab's page keeps; null while it fills the pane's frame. */
-  private viewportOf(tab: Tab): PageSize | null {
-    return tab.size ?? (tab.used ? AGENT_VIEWPORT : null)
+  /** The pane frame used to lay out `tab`: its browser's real frame once reported, else the last known frame. */
+  private frameFor(tab: Tab): BrowserBounds {
+    const browser = this.browsers.get(tab.sessionId)
+    if (browser?.framed) return browser.bounds
+    return this.lastBounds ?? DEFAULT_BOUNDS
   }
 
-  /** The pane's frame for a page that fills it; a page of a fixed size fits inside it, scaled. */
-  private fitOf(tab: Tab): { bounds: BrowserBounds; scale: number } {
-    const frame = this.browsers.get(tab.sessionId)?.bounds ?? DEFAULT_BOUNDS
+  /** Whether `tab`'s desktop viewport should stay frozen against panel resizes right now. */
+  private shouldFreezeDesktop(tab: Tab): boolean {
+    if (tab.choice.kind !== 'desktop') return false
+    if (!this.agentDrives(tab.sessionId)) return false
+    return this.browsers.get(tab.sessionId)?.strip.agent === tab.id
+  }
+
+  /** Freezes `tab`'s resolved desktop dimensions once its browser has a real frame. */
+  private freezeDesktopIfNeeded(tab: Tab): boolean {
+    if (!this.shouldFreezeDesktop(tab) || tab.frozenDesktop !== null) return false
+    const browser = this.browsers.get(tab.sessionId)
+    if (!browser?.framed) return false
+    tab.frozenDesktop = desktopViewportFor(browser.bounds)
+    return true
+  }
+
+  /** Updates desktop viewport freeze/unfreeze for every tab in `browser` when agent control changes. */
+  private syncDesktopFreeze(browser: Browser): void {
+    for (const tab of this.tabsOf(browser)) {
+      if (this.shouldFreezeDesktop(tab)) {
+        if (this.freezeDesktopIfNeeded(tab)) this.size(tab)
+      } else if (tab.frozenDesktop !== null) {
+        tab.frozenDesktop = null
+        this.place(tab)
+      }
+    }
+  }
+
+  /** The logical viewport the tab's page uses; null when it fills the pane natively (`fit`). */
+  private viewportOf(tab: Tab): PageSize | null {
+    switch (tab.choice.kind) {
+      case 'fit':
+        return null
+      case 'fixed':
+        return tab.choice.size
+      case 'desktop':
+        return tab.frozenDesktop ?? desktopViewportFor(this.frameFor(tab))
+    }
+  }
+
+  /** Fits `tab`'s viewport in its pane frame; desktop fills the full frame with no bottom caption strip. */
+  private fitOf(tab: Tab): { bounds: BrowserBounds; scale: number; showSizeLine: boolean } {
+    const frame = this.frameFor(tab)
     const viewport = this.viewportOf(tab)
-    if (!viewport) return { bounds: frame, scale: 1 }
-    // The pane's size line goes under the page, in the renderer's zoomed pixels.
-    return fitViewport(frame, viewport, Math.round(SIZE_LINE_ROOM * this.overlayZoom()))
+    // Fixed device presets keep room below for their size caption, in the renderer's zoomed pixels.
+    return fitPageViewport(frame, viewport, Math.round(SIZE_LINE_ROOM * this.overlayZoom()))
+  }
+
+  /** Whether `tab` needs CDP device metrics emulation for its current viewport and scale. */
+  private needsEmulation(tab: Tab, viewport: PageSize | null, scale: number): boolean {
+    if (!viewport) return false
+    // A desktop page in a wide pane fills natively at 1:1; only emulate when frozen mid-turn so
+    // shrinking the panel during an agent turn never reflows the page.
+    if (viewport.name === 'desktop' && scale === 1 && tab.frozenDesktop === null) return false
+    return true
   }
 
   private boundsOf(tab: Tab): BrowserBounds {
@@ -1154,52 +1238,63 @@ export class BrowserViews {
 
   /** The scale the tab's page was last told to draw at. */
   private drawnScale(tab: Tab): number {
-    return this.viewportOf(tab) && tab.told ? tab.told.scale : 1
+    return tab.told ? tab.told.scale : 1
   }
 
-  /** A tab an agent uses keeps a size of its own from then on, however the pane's frame changes. */
+  /**
+   * Readies a tab for agent use: on its first use a native-fill tab switches to responsive desktop
+   * width, and while an agent actively drives it its desktop dimensions stay frozen.
+   */
   private async fix(tab: Tab): Promise<void> {
     await this.resize(tab, () => {
+      const wasUsed = tab.used
       tab.used = true
+      if (!wasUsed && tab.choice.kind === 'fit') tab.choice = { kind: 'desktop' }
+      this.freezeDesktopIfNeeded(tab)
     })
   }
 
   /**
-   * Changes the size a tab's page keeps. A page given a size takes it before its view shrinks to
-   * fit, so it never lays out at the smaller box; one that fills the frame again grows with it.
+   * Changes the size a tab's page keeps. A page entering emulation takes its metrics before its
+   * view shrinks to fit, so it never lays out at the smaller box; one returning to native fill
+   * grows with the frame first and clears emulation cleanly.
    */
   private async resize(tab: Tab, change: () => void): Promise<void> {
     const before = this.viewportOf(tab)
+    const emulateBefore = this.needsEmulation(tab, before, this.fitOf(tab).scale)
     change()
     const after = this.viewportOf(tab)
-    if (samePageSize(before, after)) return
-    if (after) {
+    const emulateAfter = this.needsEmulation(tab, after, this.fitOf(tab).scale)
+    if (samePageSize(before, after) && emulateBefore === emulateAfter) return
+    if (after && emulateAfter) {
       this.size(tab, true)
       await tab.sizing
     }
     this.place(tab)
+    if (!emulateAfter && tab.sizing) await tab.sizing
     this.emitTab(tab)
   }
 
   /**
    * Tells a page how large to lay out and how small to draw in its view, when either changed or
-   * `again` asks, and a page that fills the frame again to lay out at its view. It goes through
-   * the page's debugger, whose overrides every later navigation of the page keeps. `afresh` clears
-   * them first, since Chromium does not send a size it was told already again.
+   * `again` asks, and clears emulation when a page fills the frame natively. It goes through the
+   * page's debugger, whose overrides every later navigation of the page keeps. `afresh` clears
+   * them first, since Chromium does not re-send a size it already holds.
    */
   private size(tab: Tab, again: boolean | 'afresh' = false): void {
     const contents = this.contentsOf(tab)
     if (!contents?.debugger.isAttached()) return
     const viewport = this.viewportOf(tab)
+    const { scale } = this.fitOf(tab)
+    const emulate = this.needsEmulation(tab, viewport, scale)
     const told = tab.told
     const commands: [string, Record<string, unknown>][] = []
-    if (!viewport) {
+    if (!emulate || !viewport) {
       if (!told) return
       tab.told = null
       commands.push(['Emulation.clearDeviceMetricsOverride', {}])
       if (told.size.mobile) commands.push(...deviceCommands(null))
     } else {
-      const { scale } = this.fitOf(tab)
       if (!again && told?.scale === scale && samePageSize(told.size, viewport)) return
       tab.told = { size: viewport, scale }
       if (again === 'afresh') commands.push(['Emulation.clearDeviceMetricsOverride', {}])
@@ -1766,10 +1861,13 @@ export class BrowserViews {
     })
   }
 
-  /** Who uses a session's browser changed: its state goes out again, and the overlay follows. */
+  /** Who uses a session's browser changed: sync desktop freeze state, emit, and update overlay. */
   controlChanged(sessionId: string): void {
     const browser = this.browsers.get(sessionId)
-    if (browser) this.emit(browser)
+    if (browser) {
+      this.syncDesktopFreeze(browser)
+      this.emit(browser)
+    }
     this.syncOverlay()
   }
 }

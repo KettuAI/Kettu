@@ -19,9 +19,13 @@ export interface BrowserViewport {
   height: number
 }
 
-/** The sizes a page can be given by name, by an agent's `browser_resize` or the pane's menu. */
+/** The sizes a page can be given by name, by an agent's `browser_resize`. */
 export const PAGE_SIZE_NAMES = ['desktop', 'tablet', 'phone'] as const
 export type PageSizeName = (typeof PAGE_SIZE_NAMES)[number]
+
+/** The size modes the pane's menu offers: native pane fill, or a named device size. */
+export const PANE_PAGE_SIZE_MODES = ['fit', ...PAGE_SIZE_NAMES] as const
+export type PanePageSizeMode = (typeof PANE_PAGE_SIZE_MODES)[number]
 
 /** A size a page keeps, and whether it lays out there as a phone or a tablet does. */
 export interface PageSize extends BrowserViewport {
@@ -81,6 +85,31 @@ export function samePageSize(a: PageSize | null, b: PageSize | null): boolean {
   return a.name === b.name && a.width === b.width && a.height === b.height && a.mobile === b.mobile
 }
 
+/** Whether a viewport keeps a fixed aspect frame with a caption underneath rather than filling the pane. */
+export function isFixedFrameViewport(viewport: PageSize | null): viewport is PageSize {
+  return viewport !== null && viewport.name !== 'desktop'
+}
+
+/**
+ * The logical desktop viewport that fills `frame` with zero empty space: native `frame` dimensions
+ * when the pane is at least desktop-wide, otherwise 1280px wide scaled to fit `frame.width` with
+ * its height expanded to cover `frame.height`.
+ */
+export function desktopViewportFor(frame: BrowserBounds): PageSize {
+  const width = Math.max(1, Math.round(frame.width))
+  const height = Math.max(1, Math.round(frame.height))
+  if (width >= PAGE_SIZES.desktop.width) {
+    return { name: 'desktop', width, height, mobile: false }
+  }
+  const scale = width / PAGE_SIZES.desktop.width
+  return {
+    name: 'desktop',
+    width: PAGE_SIZES.desktop.width,
+    height: Math.max(1, Math.round(height / scale)),
+    mobile: false,
+  }
+}
+
 /** The room kept under a page of a fixed size for the line with its size, in CSS pixels. */
 export const SIZE_LINE_ROOM = 36
 
@@ -95,6 +124,24 @@ export function fitViewport(
   below = 0,
 ): { bounds: BrowserBounds; scale: number } {
   const room = Math.max(1, frame.height - below)
+  // Avoid shrinking width by 1px when a viewport's rounded height already matches `room` at the
+  // width-derived scale (e.g. a desktop viewport computed by `desktopViewportFor`).
+  const widthScale = Math.min(1, frame.width / viewport.width)
+  if (Math.round(viewport.height * widthScale) <= room) {
+    const width = Math.max(1, Math.min(frame.width, Math.round(viewport.width * widthScale)))
+    const scale = width / viewport.width
+    const height = Math.max(1, Math.min(room, Math.round(viewport.height * scale)))
+    return {
+      bounds: {
+        x: frame.x + Math.floor((frame.width - width) / 2),
+        y: frame.y,
+        width,
+        height,
+        radius: frame.radius,
+      },
+      scale,
+    }
+  }
   const fit = Math.min(1, frame.width / viewport.width, room / viewport.height)
   const width = Math.max(1, Math.floor(viewport.width * fit))
   const scale = width / viewport.width
@@ -109,6 +156,22 @@ export function fitViewport(
     },
     scale,
   }
+}
+
+/**
+ * Fits `viewport` inside `frame`: desktop pages fill the full frame with no bottom caption strip,
+ * while fixed-aspect presets (tablet, phone, custom) reserve `sizeLineRoom` below for their size
+ * caption.
+ */
+export function fitPageViewport(
+  frame: BrowserBounds,
+  viewport: PageSize | null,
+  sizeLineRoom = SIZE_LINE_ROOM,
+): { bounds: BrowserBounds; scale: number; showSizeLine: boolean } {
+  if (!viewport) return { bounds: frame, scale: 1, showSizeLine: false }
+  const fixed = isFixedFrameViewport(viewport)
+  const { bounds, scale } = fitViewport(frame, viewport, fixed ? sizeLineRoom : 0)
+  return { bounds, scale, showSizeLine: fixed }
 }
 
 /**
