@@ -593,6 +593,7 @@ export class RemoteHost {
     link: string,
     model: string,
     listener: HostPairingListener,
+    hostId?: string,
   ): Promise<number | null> {
     if (!(await this.loadDevice())) return null
     const pairId = this.nextPair++
@@ -600,7 +601,15 @@ export class RemoteHost {
     await this.deps.relayTokenReady?.()
     await this.reconcile()
     if (!this.hostPairings.has(pairId)) return pairId
-    if (!this.host?.post({ type: 'remote-host:pair-host', pairId, link, model })) {
+    if (
+      !this.host?.post({
+        type: 'remote-host:pair-host',
+        pairId,
+        link,
+        model,
+        ...(hostId ? { hostId } : {}),
+      })
+    ) {
       this.finishPairing(pairId, { state: 'failed', reason: 'unreachable' })
     }
     return pairId

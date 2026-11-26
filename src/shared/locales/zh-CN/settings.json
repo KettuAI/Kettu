@@ -1456,7 +1456,8 @@
       "relay": "Kettu 中继",
       "relayAt": "Kettu 中继 · {{region}}",
       "ownRelay": "自己的中继",
-      "ownRelayAt": "自己的中继 · {{host}}"
+      "ownRelayAt": "自己的中继 · {{host}}",
+      "noRelay": "无中继 · 仅直连"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -1503,11 +1504,14 @@
       "other_account": "这台电脑属于另一个 Kettu 账号，用那个账号登录后才能用。",
       "signed_out": "这个配对码要经 Kettu 中继连那台电脑，需要 Kettu 账号。先在设置 › 账号里登录，再试一次。",
       "self": "这是本机自己的配对码。要让别的设备连这台电脑，在那台设备上扫码或粘贴。",
+      "other_host": "这个配对链接属于另一台电脑，不是 {{name}}。请在 {{name}} 上打开添加设备，粘贴那里的链接。",
       "update_client": "这台电脑的 Kettu 太旧，连不了那台电脑。更新 Kettu 后再试。",
       "update_host": "那台电脑上的 Kettu 太旧，这台电脑连不了。在那台电脑上更新 Kettu 后再试。",
       "retry": "重试",
       "newLink": "粘贴新链接",
       "added": "已添加 {{name}}",
+      "updated": "已更新 {{name}}",
+      "updatedBody": "{{name}} 之前已经配对过，已更新它的中继和地址并重新连接。",
       "nameLabel": "这台电脑在 {{name}} 上的名字",
       "nameHint": "{{name}} 的设备列表里显示这个名字，以后在 设置 › 电脑 › {{name}} 里改。",
       "done": "完成",
@@ -1590,9 +1594,18 @@
       "gone": "这台电脑已经不在列表里了。",
       "connection": "连接",
       "route": "怎么连",
+      "notConnected": "未连接",
+      "relay": "中继",
       "addresses": "地址",
+      "noAddresses": "无",
       "edit": "编辑…",
-      "addressesNote": "{{name}} 连上时会告诉这台电脑最新的地址；它换了端口又一直没连上时，在这里改。",
+      "addressesNote": "{{name}} 连上时会自动更新中继和地址。如果它在离线时切换了中继或换了端口，粘贴它的新配对链接更新连接，或在这里编辑地址。",
+      "updateRelay": {
+        "button": "更新…",
+        "title": "更新 {{name}} 的中继",
+        "hint": "在 {{name}} 的 Kettu 里打开 设置 › 远程访问 › 添加设备，或在上面运行 <code>kettu pair</code>，把显示的链接粘贴到这里。这会更新 {{name}} 的中继和地址，不用先移除。",
+        "submit": "更新"
+      },
       "sshTarget": "SSH 地址",
       "sshNote": "Kettu 用你自己的 SSH 配置和 agent 连 {{name}}，和在终端里运行 ssh {{target}} 一样。",
       "self": "这台电脑在 {{name}} 上",
@@ -2124,12 +2137,25 @@
         }
       },
       "note": {
-        "switch": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；其余的下次在同一网络连到这台电脑时跟过去，或者重新添加。",
+        "switch": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到这台电脑时跟过去，或在设备上粘贴新的配对链接更新。",
         "own": "一次只用一个中继。你的 Kettu 账号照旧把这台电脑的通知发到 iPhone。",
         "pinned": "电脑和 iPhone 上的 Kettu 应用连得上它。浏览器没法按指纹认证书，要用有域名的中继。",
         "local": "本地模式下 Kettu 不向自己的服务发送任何东西。中继是你自己的，所以照用。",
-        "switch_web": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；其余的下次在同一网络连到 {{host}} 时跟过去，或者重新添加。",
+        "switch_web": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到 {{host}} 时跟过去，或在设备上粘贴新的配对链接更新。",
         "own_web": "一次只用一个中继。你的 Kettu 账号照旧把 {{host}} 的通知发到 iPhone。"
+      },
+      "confirm": {
+        "offTitle": "切换到不用中继？",
+        "offBody_other": "已配对的 {{count}} 台设备之后只能在同一网络、经 VPN 或 SSH 直接连到这台电脑。不在线的设备不会自动跟随后面的中继切换。",
+        "offBody_web_other": "已配对的 {{count}} 台设备之后只能在同一网络、经 VPN 或 SSH 直接连到 {{host}}。不在线的设备不会自动跟随后面的中继切换。",
+        "offConfirm": "切换到不用中继",
+        "kettuTitle": "切换到 Kettu 中继？",
+        "kettuBody_other": "有 {{count}} 台设备当前不在线，不会自动跟着切换到 Kettu 中继。它们之后需要在同一网络直连这台电脑，或在设备上粘贴新的配对链接来更新中继。",
+        "kettuBody_web_other": "有 {{count}} 台设备当前不在线，不会自动跟着切换到 Kettu 中继。它们之后需要在同一网络直连 {{host}}，或在设备上粘贴新的配对链接来更新中继。",
+        "kettuConfirm": "切换到 Kettu 中继",
+        "offlineTitle_other": "{{count}} 台离线设备不会自动跟随",
+        "offlineBody_other": "只有现在在线的设备会马上收到新中继。不在线的设备之后需要在同一网络直连这台电脑，或在设备上粘贴新的配对链接来更新中继。",
+        "offlineBody_web_other": "只有现在在线的设备会马上收到新中继。不在线的设备之后需要在同一网络直连 {{host}}，或在设备上粘贴新的配对链接来更新中继。"
       },
       "own": {
         "address": "地址",

@@ -40,7 +40,7 @@ export type AddHostStep =
   | { kind: 'connecting' }
   | { kind: 'confirm' }
   | { kind: 'failed'; reason: LinkFailure }
-  | { kind: 'added'; host: HostStatus }
+  | { kind: 'added'; host: HostStatus; updated?: boolean }
 
 /** How the machine is reached: a pairing link pasted, or over SSH. */
 export type AddHostTab = 'link' | 'ssh'
@@ -132,8 +132,9 @@ function AddHostFlow({
 
   const takeLink = (state: HostPairingState): void => {
     if (state.state === 'added' || state.state === 'failed') linkPairing.current = null
-    if (state.state === 'added') setStep({ kind: 'added', host: state.host })
-    else if (state.state === 'failed') {
+    if (state.state === 'added') {
+      setStep({ kind: 'added', host: state.host, updated: state.updated })
+    } else if (state.state === 'failed') {
       // Only adding over SSH fails for ssh.
       const reason = state.reason.startsWith('ssh_') ? 'unreachable' : state.reason
       setStep({ kind: 'failed', reason: reason as LinkFailure })
@@ -327,6 +328,10 @@ export function AddHostBody({
   onAgain,
   onDone,
   tabs,
+  title,
+  hint,
+  submitLabel,
+  targetName,
 }: {
   step: AddHostStep
   draft: string
@@ -339,10 +344,20 @@ export function AddHostBody({
   onDone: () => void
   /** The ways to reach a machine, over the body. */
   tabs?: ReactNode
+  /** Custom dialog title when updating a specific host's relay rather than adding any host. */
+  title?: string
+  /** Custom hint paragraph above the link input. */
+  hint?: ReactNode
+  /** Custom primary button label for submitting a pasted link. */
+  submitLabel?: string
+  /** Target host name, used in mismatch error messages. */
+  targetName?: string
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const errorId = useId()
-  if (step.kind === 'added') return <Added host={step.host} onDone={onDone} />
+  if (step.kind === 'added') {
+    return <Added host={step.host} updated={step.updated} title={title} onDone={onDone} />
+  }
   const pasting = step.kind === 'paste'
   const invalid = pasting && step.invalid
   const failure = step.kind === 'failed' ? step.reason : null
@@ -356,17 +371,19 @@ export function AddHostBody({
   }
   return (
     <>
-      <SettingsDialogHeader title={t('hosts.add.title')} />
+      <SettingsDialogHeader title={title ?? t('hosts.add.title')} />
       <SettingsDialogBody>
         {tabs}
         <p className="kettu-sd__text">
-          <Trans
-            t={t}
-            i18nKey="hosts.add.hint"
-            components={{
-              code: <code className="k-code" />,
-            }}
-          />
+          {hint ?? (
+            <Trans
+              t={t}
+              i18nKey="hosts.add.hint"
+              components={{
+                code: <code className="k-code" />,
+              }}
+            />
+          )}
         </p>
         <input
           ref={inputRef}
@@ -390,7 +407,9 @@ export function AddHostBody({
         />
         {problem && (
           <p id={errorId} role="alert" className="kettu-sd__error">
-            {problem === 'unavailable' ? t('hosts.keyFailed') : t(`hosts.add.${problem}`)}
+            {problem === 'unavailable'
+              ? t('hosts.keyFailed')
+              : t(`hosts.add.${problem}`, targetName ? { name: targetName } : undefined)}
           </p>
         )}
         {step.kind === 'confirm' && (
@@ -437,7 +456,7 @@ export function AddHostBody({
                 disabled={!parsePairingLink(draft.trim())}
                 onClick={() => onSubmit(draft)}
               >
-                {t('hosts.add.add')}
+                {submitLabel ?? t('hosts.add.add')}
               </SetButton>
             )}
           </>

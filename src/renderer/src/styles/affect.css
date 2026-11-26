@@ -4428,6 +4428,9 @@ li[data-row-exit='dust'] > * {
   gap: 14px;
   padding-block: 12px 14px;
 }
+.kettu-settings .k-relay-form .k-notice {
+  margin: 0;
+}
 .kettu-settings .k-relay-docs {
   display: inline-flex;
   align-items: center;

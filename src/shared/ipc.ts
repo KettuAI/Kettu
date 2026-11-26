@@ -475,7 +475,8 @@ export interface IpcInvokeContract {
   'remote:use-own-relay': { args: [input: OwnRelayInput]; result: OwnRelayCheck }
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
-  'hosts:pair': { args: [link: string]; result: HostPairStart }
+  // When `hostId` is given, only a link for that host is accepted, updating its relay and addresses.
+  'hosts:pair': { args: [link: string, hostId: string | null]; result: HostPairStart }
   // The machines of the user's SSH config Add host may add, read again on each call.
   'hosts:ssh-config': { args: []; result: SshConfigHosts }
   // Adds the machine at an SSH address, its progress as `hosts:pairing` under the id; several
@@ -884,8 +885,11 @@ export interface KettuApi {
   /** Other hosts this computer connects to as a device. */
   hosts: {
     status(): Promise<HostsStatus>
-    /** Pairs with the host of a pasted link, unless it is no link or this computer's own. */
-    pair(link: string): Promise<HostPairStart>
+    /**
+     * Pairs with the host of a pasted link, unless it is no link or this computer's own. When
+     * `hostId` is given, rejects links belonging to any other host.
+     */
+    pair(link: string, hostId?: string): Promise<HostPairStart>
     /** The machines of the user's SSH config, resolved by the system's ssh. */
     sshConfig(): Promise<SshConfigHosts>
     /** Adds the machine at an SSH address over the system's ssh, unless it is no SSH address. */

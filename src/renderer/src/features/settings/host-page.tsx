@@ -1,14 +1,16 @@
-import { useId, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { addressKey, addressText, parseAddress } from '@shared/remote/address'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import {
   MAX_HOST_ADDRESSES,
+  type HostPairingState,
   type HostStatus,
   type SshAddress,
   type SshRoute,
 } from '@shared/remote/hosts'
+import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
 import {
   AlertDialog,
@@ -26,7 +28,7 @@ import { isAway, useHostsStore } from '@renderer/stores/hosts'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError, DangerButton, IconAction, SetButton, SetInput } from './controls'
-import { AddHostDialog } from './host-add'
+import { AddHostBody, AddHostDialog, type AddHostStep } from './host-add'
 import {
   ChangeSshAddress,
   KettuRow,
@@ -35,7 +37,7 @@ import {
   RemoveSshHost,
 } from './host-ssh-manage'
 import { openHostSettings } from './host-sections'
-import { changeHost, platformName, routeName, routeText } from './host-text'
+import { changeHost, configuredRelay, platformName, routeName, routeText } from './host-text'
 import { HostLoadGroup } from './host-load'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
@@ -149,15 +151,33 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
               </>
             ) : (
               <>
-                <Fact name={t('hosts.page.route')}>{routeText(t, host)}</Fact>
+                <Fact name={t('hosts.page.route')}>
+                  {host.connection.state === 'online'
+                    ? routeText(t, host)
+                    : t('hosts.page.notConnected')}
+                </Fact>
+                <RowFrame
+                  text={
+                    <RowText
+                      name={t('hosts.page.relay')}
+                      description={<ConfiguredRelayText host={host} />}
+                    />
+                  }
+                >
+                  <UpdateHostRelay host={host} />
+                </RowFrame>
                 <RowFrame
                   text={
                     <RowText
                       name={t('hosts.page.addresses')}
                       description={
-                        <span data-selectable="" className="k-mono">
-                          {host.addresses.map(addressText).join('　')}
-                        </span>
+                        host.addresses.length > 0 ? (
+                          <span data-selectable="" className="k-mono">
+                            {host.addresses.map(addressText).join('　')}
+                          </span>
+                        ) : (
+                          t('hosts.page.noAddresses')
+                        )
                       }
                     />
                   }
@@ -299,6 +319,165 @@ function DeviceNameField({ host }: { host: HostStatus }) {
         onKeyDown={onKeyDown}
       />
     </>
+  )
+}
+
+/** The relay configured for a non-SSH host, shown whether the host is online or offline. */
+function ConfiguredRelayText({ host }: { host: HostStatus }) {
+  const { t } = useTranslation('settings')
+  const configured = configuredRelay(host)
+  if (configured.kind === 'none') return t('hosts.via.noRelay')
+  if (configured.kind === 'kettu') return t('hosts.via.relay')
+  return (
+    <>
+      {t('hosts.via.ownRelay')} ·{' '}
+      <span data-selectable="" className="k-mono">
+        {configured.host}
+      </span>
+    </>
+  )
+}
+
+/** Update… beside Relay: pastes a new pairing link from this host to refresh its relay and addresses. */
+function UpdateHostRelay({ host }: { host: HostStatus }) {
+  const { t } = useTranslation('settings')
+  const [open, setOpen] = useState(false)
+  const [round, setRound] = useState(0)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const onOpenChange = (next: boolean): void => {
+    if (next) setRound((n) => n + 1)
+    setOpen(next)
+  }
+  return (
+    <>
+      <SetButton ref={trigger} onClick={() => onOpenChange(true)}>
+        {t('hosts.page.updateRelay.button')}
+      </SetButton>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <SettingsDialogContent finalFocus={trigger}>
+          <UpdateHostRelayFlow key={round} host={host} open={open} onDone={() => setOpen(false)} />
+        </SettingsDialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function UpdateHostRelayFlow({
+  host,
+  open,
+  onDone,
+}: {
+  host: HostStatus
+  open: boolean
+  onDone: () => void
+}) {
+  const { t } = useTranslation('settings')
+  const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
+  const [draft, setDraft] = useState('')
+  const [link, setLink] = useState('')
+  const pairRef = useRef<number | null>(null)
+  const attempt = useRef(0)
+  const early = useRef(new Map<number, HostPairingState[]>())
+  const input = useRef<HTMLInputElement>(null)
+
+  const take = (state: HostPairingState): void => {
+    if (state.state === 'added' || state.state === 'failed') pairRef.current = null
+    if (state.state === 'added') {
+      setStep({ kind: 'added', host: state.host, updated: state.updated })
+    } else if (state.state === 'failed') {
+      const reason = state.reason.startsWith('ssh_') ? 'unreachable' : state.reason
+      setStep({
+        kind: 'failed',
+        reason: reason as Extract<AddHostStep, { kind: 'failed' }>['reason'],
+      })
+    } else if (state.state === 'connecting' || state.state === 'confirm') {
+      setStep({ kind: state.state })
+    }
+  }
+
+  const closeCurrent = (): void => {
+    const pairId = pairRef.current
+    pairRef.current = null
+    if (pairId !== null) void window.kettu.hosts.closePairing(pairId)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const off = window.kettu.hosts.onPairing(({ pairId, pairing: state }) => {
+      if (pairId === pairRef.current) take(state)
+      else early.current.set(pairId, [...(early.current.get(pairId) ?? []), state])
+    })
+    return () => {
+      off()
+      attempt.current++
+      closeCurrent()
+    }
+    // One subscription for each opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const start = (text: string): void => {
+    const trimmed = text.trim()
+    if (!parsePairingLink(trimmed)) {
+      setStep({ kind: 'paste', invalid: true })
+      return
+    }
+    closeCurrent()
+    const run = ++attempt.current
+    setLink(trimmed)
+    setStep({ kind: 'connecting' })
+    window.kettu.hosts.pair(trimmed, host.id).then(
+      (started) => {
+        if (run !== attempt.current) {
+          if (started.kind === 'pairing') void window.kettu.hosts.closePairing(started.pairId)
+          return
+        }
+        if (started.kind === 'invalid') return setStep({ kind: 'paste', invalid: true })
+        if (started.kind !== 'pairing') return setStep({ kind: 'failed', reason: started.kind })
+        pairRef.current = started.pairId
+        const waiting = early.current.get(started.pairId) ?? []
+        early.current.delete(started.pairId)
+        for (const state of waiting) take(state)
+      },
+      () => {
+        if (run === attempt.current) setStep({ kind: 'failed', reason: 'unreachable' })
+      },
+    )
+  }
+
+  const again = (): void => {
+    attempt.current++
+    setDraft('')
+    setStep({ kind: 'paste', invalid: false })
+    requestAnimationFrame(() => input.current?.focus())
+  }
+
+  return (
+    <AddHostBody
+      step={step}
+      draft={draft}
+      link={link}
+      inputRef={input}
+      title={t('hosts.page.updateRelay.title', { name: host.name })}
+      hint={
+        <Trans
+          t={t}
+          i18nKey="hosts.page.updateRelay.hint"
+          values={{ name: host.name }}
+          components={{ code: <code className="k-code" /> }}
+        />
+      }
+      submitLabel={t('hosts.page.updateRelay.submit')}
+      targetName={host.name}
+      onDraft={(text) => {
+        setDraft(text)
+        if (step.kind === 'paste' && step.invalid) setStep({ kind: 'paste', invalid: false })
+      }}
+      onSubmit={start}
+      onRetry={() => start(link)}
+      onAgain={again}
+      onDone={onDone}
+    />
   )
 }
 

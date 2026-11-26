@@ -879,15 +879,24 @@ export function registerIpcHandlers({
     })
     return { kind: 'pairing', pairId }
   }
-  handle('hosts:pair', 1, async ({ event }, value): Promise<HostPairStart> => {
+  handle('hosts:pair', 2, async ({ event }, value, target): Promise<HostPairStart> => {
     const link = typeof value === 'string' && value.length <= MAX_PAIRING_LINK ? value.trim() : ''
     const payload = parsePairingLink(link)
     if (!payload) return { kind: 'invalid' }
-    if (Buffer.from(payload.hostKey).toString('base64') === remoteHost.publicKey) {
+    if (target !== null && target !== undefined) hostIdArg(target)
+    const hostId = typeof target === 'string' ? target : undefined
+    const publicKey = Buffer.from(payload.hostKey).toString('base64')
+    if (publicKey === remoteHost.publicKey) {
       return { kind: 'self' }
     }
+    if (hostId !== undefined) {
+      const existing = remoteHost.knownHosts.find((entry) => entry.id === hostId)
+      if (!existing || existing.publicKey !== publicKey) {
+        return { kind: 'other_host' }
+      }
+    }
     const model = await computerModel()
-    return pairFor(event.sender, (listener) => remoteHost.pairHost(link, model, listener))
+    return pairFor(event.sender, (listener) => remoteHost.pairHost(link, model, listener, hostId))
   })
   handle('hosts:ssh-config', 0, () => listSshConfigHosts({ known: remoteHost.hosts ?? [] }))
   handle('hosts:add-ssh', 1, async ({ event }, value): Promise<HostPairStart> => {

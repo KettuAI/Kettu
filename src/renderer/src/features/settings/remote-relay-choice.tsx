@@ -8,14 +8,24 @@ import { useTranslation } from 'react-i18next'
 import { parseRelayLink, type OwnRelayCheck, type OwnRelayProblem } from '@shared/remote/own-relay'
 import type { OwnRelayReport } from '@shared/remote/status'
 import type { RelayChoice } from '@shared/settings'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { TextField } from '@renderer/components/affect/text-field'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { ControlError, Segmented, SetButton } from './controls'
+import { CONFIRM, ControlError, Segmented, SetButton } from './controls'
 import { RelayRegions, RetryRelay } from './remote-relay'
-import { BlockLine, GroupNote, RowGroup, RowLine, RowShell, RowText } from './rows'
+import { BlockLine, GroupNote, Notice, RowGroup, RowLine, RowShell, RowText } from './rows'
 import { errorGroup, relayHostName } from './relay-text'
 import { useApply } from './use-apply'
 import { useCloudOffHere } from './use-cloud-off-here'
@@ -50,14 +60,21 @@ function useKeptKeyEnd(): string | null {
  * form or rows, or the Kettu relay's regions. In Local mode the Kettu relay is left out.
  */
 export function RelayCard() {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'common'])
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const choice = useSettingsStore((s) => s.settings.remote.relay)
   const cloudOff = useCloudOffHere()
   const onHost = useHostContext()
   const canOwn = useHostHas('ownRelay') !== false
   const [editing, setEditing] = useState<FormMode | null>(null)
+  const [confirm, setConfirm] = useState<'off' | 'kettu' | null>(null)
   const [apply, error] = useApply()
+  const deviceCount = useRemoteStore((s) => s.status?.devices.length ?? 0)
+  const offlineCount = useRemoteStore((s) => {
+    const status = s.status
+    if (!status) return 0
+    return status.devices.filter((device) => !status.online.includes(device.id)).length
+  })
   // The regions show once the host signed in to them; before, the status line says why not.
   const regions = useRemoteStore(
     (s) =>
@@ -73,9 +90,29 @@ export function RelayCard() {
       if (current !== 'own') setEditing('new')
       return
     }
+    if (next === current) {
+      setEditing(null)
+      return
+    }
+    if (next === 'off' && deviceCount > 0) {
+      setConfirm('off')
+      return
+    }
+    if (next === 'kettu' && offlineCount > 0) {
+      setConfirm('kettu')
+      return
+    }
     setEditing(null)
     // A boolean, which every host takes: true is the Kettu relay, false none.
-    if (next !== current) apply({ remote: { relay: next === 'kettu' } })
+    apply({ remote: { relay: next === 'kettu' } })
+  }
+
+  const settle = (proceed: boolean): void => {
+    const pending = confirm
+    setConfirm(null)
+    if (!proceed || !pending) return
+    setEditing(null)
+    apply({ remote: { relay: pending === 'kettu' } })
   }
 
   const description = t(
@@ -86,60 +123,87 @@ export function RelayCard() {
   )
 
   return (
-    <RowGroup>
-      <RowShell id="relay">
-        <RowLine
-          text={
-            <RowText
-              name={t('remote.relay.group')}
-              description={
-                canOwn ? description : `${description} ${t('remote.relay.choice.own.older')}`
-              }
-            />
-          }
-        >
-          <ControlError error={error} />
-          <Segmented
-            label={t('remote.relay.group')}
-            value={value}
-            options={options.map((option) => ({
-              value: option,
-              label: t(`remote.relay.choice.${option}.short`),
-              disabled: option === 'own' && !canOwn,
-            }))}
-            onChange={pick}
-          />
-        </RowLine>
-      </RowShell>
-      {editing ? (
-        <RowShell>
-          <OwnRelayForm
-            mode={editing}
-            onCancel={() => setEditing(null)}
-            onDone={() => setEditing(null)}
-          />
-        </RowShell>
-      ) : current === 'own' ? (
-        <OwnRelayInUse onEdit={setEditing} />
-      ) : (
-        current === 'kettu' &&
-        regions && (
-          <RowShell id="relay-regions">
-            <div className="k-block">
-              <BlockLine
-                text={
-                  <RowText
-                    name={t('remote.relay.regions')}
-                    description={t('remote.relay.regionsDescription')}
-                  />
+    <>
+      <RowGroup>
+        <RowShell id="relay">
+          <RowLine
+            text={
+              <RowText
+                name={t('remote.relay.group')}
+                description={
+                  canOwn ? description : `${description} ${t('remote.relay.choice.own.older')}`
                 }
               />
-              <RelayRegions />
-            </div>
+            }
+          >
+            <ControlError error={error} />
+            <Segmented
+              label={t('remote.relay.group')}
+              value={value}
+              options={options.map((option) => ({
+                value: option,
+                label: t(`remote.relay.choice.${option}.short`),
+                disabled: option === 'own' && !canOwn,
+              }))}
+              onChange={pick}
+            />
+          </RowLine>
+        </RowShell>
+        {editing ? (
+          <RowShell>
+            <OwnRelayForm
+              mode={editing}
+              offlineCount={offlineCount}
+              onCancel={() => setEditing(null)}
+              onDone={() => setEditing(null)}
+            />
           </RowShell>
-        )
-      )}
-    </RowGroup>
+        ) : current === 'own' ? (
+          <OwnRelayInUse onEdit={setEditing} />
+        ) : (
+          current === 'kettu' &&
+          regions && (
+            <RowShell id="relay-regions">
+              <div className="k-block">
+                <BlockLine
+                  text={
+                    <RowText
+                      name={t('remote.relay.regions')}
+                      description={t('remote.relay.regionsDescription')}
+                    />
+                  }
+                />
+                <RelayRegions />
+              </div>
+            </RowShell>
+          )
+        )}
+      </RowGroup>
+      <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && settle(false)}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm === 'kettu'
+                ? t('remote.relay.confirm.kettuTitle')
+                : t('remote.relay.confirm.offTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === 'kettu'
+                ? t('remote.relay.confirm.kettuBody', { count: offlineCount, ...onHost })
+                : t('remote.relay.confirm.offBody', { count: deviceCount, ...onHost })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => settle(true)}>
+              {confirm === 'kettu'
+                ? t('remote.relay.confirm.kettuConfirm')
+                : t('remote.relay.confirm.offConfirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -301,10 +365,12 @@ function withScheme(text: string): string {
  */
 function OwnRelayForm({
   mode,
+  offlineCount,
   onCancel,
   onDone,
 }: {
   mode: FormMode
+  offlineCount: number
   onCancel: () => void
   onDone: () => void
 }) {
@@ -325,6 +391,11 @@ function OwnRelayForm({
   // The key kept now is used again when the field is left empty, unless it is being replaced.
   const keepsKey = mode !== 'replace' && keptEnd !== null
   const checking = phase.kind === 'checking'
+  const savedUrl = saved?.url ?? ''
+  const savedPin = saved?.pin ?? null
+  // Replacing the access key for the same relay address does not strand offline devices.
+  const addressChanged = url !== '' && (url !== savedUrl || pin !== savedPin)
+  const warnsOffline = offlineCount > 0 && (mode === 'new' || mode === 'change' || addressChanged)
 
   /** Splits a pasted link into its address, key and pin; other text is typed as it is. */
   const take = (text: string, into: 'address' | 'key'): void => {
@@ -418,6 +489,14 @@ function OwnRelayForm({
         error={keyProblem && problemText(keyProblem)}
         onChange={(event) => take(event.target.value, 'key')}
       />
+      {warnsOffline && (
+        <Notice
+          variant="warning"
+          title={t('remote.relay.confirm.offlineTitle', { count: offlineCount })}
+        >
+          {t('remote.relay.confirm.offlineBody', { count: offlineCount, ...onHost })}
+        </Notice>
+      )}
       {phase.kind === 'error' && <ControlError error={phase.message} wrap />}
       <div className="k-block-foot">
         <a
