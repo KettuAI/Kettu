@@ -295,6 +295,8 @@ export type HostPairingFailure =
   | 'host_offline'
   /** The host is signed in to another Kettu account than this computer. */
   | 'other_account'
+  /** The pasted pairing link belongs to a different host than the one being updated. */
+  | 'other_host'
   | SshAddFailure
 
 /** Where adding a machine over SSH is, in order; installing or updating only when needed. */
@@ -321,8 +323,9 @@ export type HostPairingState =
   /**
    * `reverse`, when this computer asked to let the host use it in turn: whether the host now
    * may, or why not, `unsupported` for a host without a client of its own, as a daemon.
+   * `updated` is true when the pairing link updated an already-paired host in place.
    */
-  | { state: 'added'; host: HostStatus; reverse?: ReverseOutcome }
+  | { state: 'added'; host: HostStatus; reverse?: ReverseOutcome; updated?: true }
   /** `detail`: output to show beside the reason, as the end of a failed install's. */
   | { state: 'failed'; reason: HostPairingFailure; detail?: string }
 
@@ -337,6 +340,8 @@ export type HostPairStart =
   | { kind: 'invalid' }
   /** This computer's own code. */
   | { kind: 'self' }
+  /** The pasted link belongs to a different host than the one being updated. */
+  | { kind: 'other_host' }
   /** The device key cannot be read. */
   | { kind: 'unavailable' }
 
@@ -490,6 +495,7 @@ const FAILURES: readonly string[] = [
   'cooling_down',
   'host_offline',
   'other_account',
+  'other_host',
   'ssh_missing',
   'ssh_unreachable',
   'ssh_auth',
@@ -539,10 +545,15 @@ export function parseHostPairingState(value: unknown): HostPairingState | null {
   if (state === 'added') {
     const parsed = parseHostStatus(host)
     if (!parsed) return null
-    const { reverse } = fields
-    return typeof reverse === 'string' && REVERSE_OUTCOMES.includes(reverse)
-      ? { state, host: parsed, reverse: reverse as ReverseOutcome }
-      : { state, host: parsed }
+    const { reverse, updated } = fields
+    return {
+      state,
+      host: parsed,
+      ...(typeof reverse === 'string' && REVERSE_OUTCOMES.includes(reverse)
+        ? { reverse: reverse as ReverseOutcome }
+        : {}),
+      ...(updated === true ? { updated: true as const } : {}),
+    }
   }
   if (state === 'failed' && FAILURES.includes(reason as string)) {
     const failed = { state, reason: reason as HostPairingFailure } as const

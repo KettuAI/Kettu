@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   foldedHost,
+  parseHostPairingState,
   parseIdentityFile,
   parseHostStatus,
   parseKnownHost,
@@ -173,5 +174,38 @@ describe('foldedHost', () => {
   it('folds nothing while this computer is signed in to no account', () => {
     expect(foldedHost({ account: 'acc_b' }, null)).toBe(false)
     expect(foldedHost({ account: 'acc_b', otherAccount: 'acc_a' }, null)).toBe(false)
+  })
+})
+
+describe('parseHostPairingState', () => {
+  const host = {
+    id: '0123456789abcdef0123456789abcdef',
+    publicKey: 'AAAA',
+    name: 'Studio',
+    platform: 'darwin',
+    version: '0.1.25',
+    addresses: [],
+    deviceName: 'Mac',
+    addedAt: 1,
+    lastOnlineAt: null,
+    removed: false,
+    connection: { state: 'online', relay: 'https://relay.example.com', own: true },
+  }
+
+  it('keeps updated: true on an added state and drops non-boolean values', () => {
+    expect(parseHostPairingState({ state: 'added', host, updated: true })).toMatchObject({
+      state: 'added',
+      updated: true,
+    })
+    expect(parseHostPairingState({ state: 'added', host, updated: 'yes' })).not.toHaveProperty(
+      'updated',
+    )
+  })
+
+  it('accepts other_host as a pairing failure reason', () => {
+    expect(parseHostPairingState({ state: 'failed', reason: 'other_host' })).toEqual({
+      state: 'failed',
+      reason: 'other_host',
+    })
   })
 })

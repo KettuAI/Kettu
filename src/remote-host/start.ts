@@ -18,7 +18,7 @@ import { isLocale } from '@shared/locale'
 import { writeLog } from '@shared/log/process-log'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import { isPortError } from '@shared/port-rpc'
-import type { PortDevice } from '@shared/remote/device'
+import { DEVICE_ID, type PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { isAccountId } from '@shared/remote/protocol'
 import { importKeyPair } from '@shared/remote/noise'
@@ -966,18 +966,24 @@ export function startRemoteHost(
         break
       }
       case 'remote-host:pair-host': {
-        const { pairId, link, model } = message
+        const { pairId, link, model, hostId } = message
         if (!Number.isSafeInteger(pairId) || typeof link !== 'string') break
+        const target =
+          hostId === undefined
+            ? undefined
+            : typeof hostId === 'string' && DEVICE_ID.test(hostId)
+              ? hostId
+              : null
         const payload = parsePairingLink(link)
-        if (!payload) {
+        if (!payload || target === null) {
           send({
             type: 'remote-host:host-pairing',
             pairId,
-            pairing: { state: 'failed', reason: 'void' },
+            pairing: { state: 'failed', reason: target === null ? 'other_host' : 'void' },
           })
           break
         }
-        withClient((c) => c.pair(pairId, payload, typeof model === 'string' ? model : ''))
+        withClient((c) => c.pair(pairId, payload, typeof model === 'string' ? model : '', target))
         break
       }
       case 'remote-host:add-ssh-host': {

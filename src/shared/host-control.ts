@@ -667,9 +667,10 @@ export type MainToRemoteHost =
   | { type: 'remote-host:stop-serving'; requestId: number }
   // The answer to remote-host:open-host-port: the port travels in the transfer list.
   | { type: 'remote-host:host-port'; requestId: number }
-  // Pairs with the host of a pairing link, suggesting this computer's model; its progress comes
-  // back as remote-host:host-pairing under the same id.
-  | { type: 'remote-host:pair-host'; pairId: number; link: string; model: string }
+  // Pairs with the host of a pasted link, suggesting this computer's model; its progress comes
+  // back as remote-host:host-pairing under the same id. When `hostId` is set, only a link for that
+  // host is accepted.
+  | { type: 'remote-host:pair-host'; pairId: number; link: string; model: string; hostId?: string }
   // Adds the machine at an SSH address, the same way, and is closed as a pairing is; several
   // run at once under their own ids.
   | { type: 'remote-host:add-ssh-host'; pairId: number; address: SshAddress; model: string }

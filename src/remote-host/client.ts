@@ -11,7 +11,7 @@ import type { PortChannel } from '@shared/port-channel'
 import { Acknowledger } from '@shared/remote/acks'
 import type { ChannelMessage } from '@shared/remote/channel'
 import { addressKey } from '@shared/remote/address'
-import { normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
+import { deviceId, normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import {
   DISCOVER_PROLOGUE,
@@ -650,6 +650,7 @@ class HostLink {
   adopt(session: HostSession): void {
     this.cancel()
     this.drop()
+    this.lastRelay = 'relay' in session.via ? session.via.relay : null
     this.session = session
     // Welcomed first, so what came after the welcome counts on the new session.
     if (session.open) this.welcomed(session, session.welcome!, false)
@@ -1168,7 +1169,7 @@ class HostLink {
       deviceName: welcome.device.name,
       addresses: ssh ? [] : merged(session.via, welcome.addresses, this.host?.addresses ?? []),
       // A host that no longer uses the relay says none, and is reached directly alone.
-      relay: welcome.relay,
+      relay: welcome.relay ?? ('relay' in session.via ? this.host?.relay : undefined),
       lastOnlineAt: (now ?? Date.now)(),
       removed: false,
       account: welcome.account ?? null,
@@ -1451,10 +1452,28 @@ class Pairing {
     readonly pairId: number,
   ) {}
 
-  async run(payload: PairingPayload, model: string): Promise<void> {
+  async run(payload: PairingPayload, model: string, expectedHostId?: string): Promise<void> {
     const { options } = this.client
+    const publicKey = Buffer.from(payload.hostKey).toString('base64')
+    const hostId = await deviceId(payload.hostKey)
+    if (this.done) return
+    const existing = options.hosts.get(hostId)
+    if (
+      expectedHostId !== undefined &&
+      (hostId !== expectedHostId || !existing || existing.publicKey !== publicKey)
+    ) {
+      return this.fail('other_host')
+    }
     this.say({ state: 'connecting' })
     const relay = this.client.relayRoute(payload.relay, null)
+    // For an already-paired host, try the known-device Noise IK handshake over the link's relay
+    // and addresses first so the host welcomes immediately without needing owner re-approval.
+    const known =
+      existing !== null && !existing.removed && !existing.ssh && existing.publicKey === publicKey
+    if (known) {
+      const outcome = await this.tryKnown(payload, publicKey, relay)
+      if (outcome === 'done' || this.done) return
+    }
     const result = await dial({
       addresses: payload.addresses,
       connect: this.client.connect,
@@ -1483,7 +1502,6 @@ class Pairing {
       return this.fail('unreachable')
     }
     this.say({ state: 'confirm' })
-    const publicKey = Buffer.from(payload.hostKey).toString('base64')
     const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
     this.session = session
     session.start(
@@ -1506,6 +1524,80 @@ class Pairing {
     )
   }
 
+  /**
+   * Verifies an already-paired host over the link's relay/addresses with a known-device Noise IK
+   * handshake. Returns `'done'` once updated, aborted or failed on a non-auth error; `'fallback'`
+   * when the host no longer knows this device and the pairing PSK handshake should run instead.
+   */
+  private async tryKnown(
+    payload: PairingPayload,
+    publicKey: string,
+    relay: RelayRoute | RelayProblem | null,
+  ): Promise<'done' | 'fallback'> {
+    const { options } = this.client
+    const result = await dial({
+      addresses: payload.addresses,
+      connect: this.client.connect,
+      relay: typeof relay === 'function' ? relay : null,
+      start: (transport) =>
+        startDeviceChannel({
+          transport,
+          hostKey: payload.hostKey,
+          key: options.key,
+          hello: null,
+        }),
+      hello: this.client.hello(),
+      timeoutMs: this.client.timeoutMs,
+      signal: this.aborting.signal,
+    })
+    if (result.kind === 'aborted') return 'done'
+    if (this.done) {
+      if (result.kind === 'open') result.channel.close()
+      return 'done'
+    }
+    // The host dropped the IK handshake because it no longer holds this device's key.
+    if (result.kind === 'dropped') return 'fallback'
+    if (result.kind === 'unreachable') {
+      const problem = result.relay ?? (typeof relay === 'string' ? relay : null)
+      if (problem === 'wrong_account' || problem === 'signed_out') this.fail(problem)
+      else this.fail('unreachable')
+      return 'done'
+    }
+    const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
+    this.session = session
+    const answer = await new Promise<
+      { kind: 'welcomed'; welcome: Welcome } | { kind: 'ended'; reason: ClosingReason | null }
+    >((resolve) => {
+      session.start(
+        {
+          welcomed: (welcome) => resolve({ kind: 'welcomed', welcome }),
+          addresses: () => {},
+          renamed: () => {},
+          hostRenamed: () => {},
+          ended: ({ reason }) => resolve({ kind: 'ended', reason }),
+        },
+        WELCOME_TIMEOUT_MS,
+      )
+    })
+    if (answer.kind === 'welcomed') {
+      await this.added(session, publicKey, payload, answer.welcome)
+      return 'done'
+    }
+    if (this.session === session) this.session = null
+    if (this.done) return 'done'
+    if (answer.reason === 'removed') return 'fallback'
+    if (
+      answer.reason === 'update_client' ||
+      answer.reason === 'update_host' ||
+      answer.reason === 'other_account'
+    ) {
+      this.fail(answer.reason)
+      return 'done'
+    }
+    this.fail('unreachable')
+    return 'done'
+  }
+
   /** Add host closed: a pairing the host has not added ends, and the host frees its code. */
   close(): void {
     if (this.done) return
@@ -1522,15 +1614,19 @@ class Pairing {
     payload: PairingPayload,
     welcome: Welcome,
   ): Promise<void> {
-    const status = await keepHost(this.client, session, welcome, publicKey, {
+    const kept = await keepHost(this.client, session, welcome, publicKey, {
       addresses: payload.addresses,
       relay: payload.relay,
     })
-    if (!status) return this.fail('void')
+    if (!kept) return this.fail('void')
     if (this.done) return
     this.done = true
     this.client.ended(this)
-    this.say({ state: 'added', host: status })
+    this.say({
+      state: 'added',
+      host: kept.status,
+      ...(kept.updated ? { updated: true as const } : {}),
+    })
   }
 
   private fail(reason: HostPairingFailure): void {
@@ -1548,7 +1644,9 @@ class Pairing {
 
 /**
  * Keeps a host that welcomed this computer after a pairing, as its link's connection; null when
- * it could not be kept. `paired`: the addresses and relay the pairing knew it by.
+ * it could not be kept. `paired`: the addresses and relay the pairing knew it by. When the key
+ * matches an already-paired non-SSH host (not removed), updates its relay and addresses in place
+ * while preserving `addedAt`.
  */
 async function keepHost(
   client: HostClient,
@@ -1556,25 +1654,49 @@ async function keepHost(
   welcome: Welcome,
   publicKey: string,
   paired: { addresses: DirectAddress[]; relay: HostRelay | undefined },
-): Promise<HostStatus | null> {
+): Promise<{ status: HostStatus; updated: boolean } | null> {
   // Its end until the link takes it is the link's to handle, as it reconnects.
   session.handOver(IGNORED)
-  const relay = welcome.relay ?? paired.relay
-  const host = await client.options.hosts.add({
-    publicKey,
-    name: welcome.host.name,
-    platform: welcome.host.platform,
-    version: welcome.host.version,
-    addresses: merged(session.via, welcome.addresses, paired.addresses),
-    deviceName: welcome.device.name,
-    ...(relay ? { relay } : {}),
-  })
+  const key = publicKeyBytes(publicKey)
+  const id = key ? await deviceId(key) : null
+  const existing = id ? client.options.hosts.get(id) : null
+  const updating =
+    existing !== null && !existing.removed && !existing.ssh && existing.publicKey === publicKey
+  const relay = welcome.relay ?? ('relay' in session.via ? paired.relay : undefined)
+  const addresses = merged(session.via, welcome.addresses, paired.addresses)
+  let host: KnownHost | null
+  if (updating) {
+    host = client.options.hosts.update(existing.id, {
+      name: welcome.host.name,
+      platform: welcome.host.platform,
+      version: welcome.host.version,
+      addresses,
+      deviceName: welcome.device.name,
+      relay,
+      lastOnlineAt: (client.options.now ?? Date.now)(),
+      removed: false,
+      account: welcome.account ?? null,
+      otherAccount: undefined,
+    })
+    if (host) await client.options.hosts.flush()
+  } else {
+    host = await client.options.hosts.add({
+      publicKey,
+      name: welcome.host.name,
+      platform: welcome.host.platform,
+      version: welcome.host.version,
+      addresses,
+      deviceName: welcome.device.name,
+      ...(relay ? { relay } : {}),
+      account: welcome.account ?? null,
+    })
+  }
   if (!host) {
     client.options.log('warn', 'A host that welcomed this computer could not be kept')
     session.close()
     return null
   }
-  return client.adopt(host, session)
+  return { status: client.adopt(host, session), updated: updating }
 }
 
 /** Why pairing with a host of the account ended, from the host's closing reason. */
@@ -1715,20 +1837,22 @@ class DiscoveryPairing {
   }
 
   private async added(session: HostSession, found: AccountHost, welcome: Welcome): Promise<void> {
-    const status = await keepHost(this.client, session, welcome, found.publicKey, {
+    const kept = await keepHost(this.client, session, welcome, found.publicKey, {
       addresses: [],
       relay: { id: found.relayId, urls: found.relays },
     })
-    if (!status) return this.fail('void')
+    if (!kept) return this.fail('void')
     if (this.done) return
     this.done = true
     this.client.ended(this)
-    if (!this.reverse) return this.say({ state: 'added', host: status })
+    const { status, updated } = kept
+    const extra = updated ? { updated: true as const } : {}
+    if (!this.reverse) return this.say({ state: 'added', host: status, ...extra })
     // The channel was verified by the codes, so the host takes this computer's own host on it.
     const reverse = welcome.features.includes(REVERSE_HOST_FEATURE)
       ? await this.client.grantReverse(status.id)
       : 'unsupported'
-    this.say({ state: 'added', host: this.client.statusOf(status.id) ?? status, reverse })
+    this.say({ state: 'added', host: this.client.statusOf(status.id) ?? status, reverse, ...extra })
   }
 
   private fail(reason: HostPairingFailure): void {
@@ -2320,12 +2444,15 @@ export class HostClient {
     return { ...hello, device: { name, model: isDeviceModel(model) ? model : '' } }
   }
 
-  /** Pairs with the host a link names; its progress goes to `options.pairing` under `pairId`. */
-  pair(pairId: number, payload: PairingPayload, model: string): void {
+  /**
+   * Pairs with the host a link names; its progress goes to `options.pairing` under `pairId`.
+   * When `expectedHostId` is given, rejects links belonging to any other host.
+   */
+  pair(pairId: number, payload: PairingPayload, model: string, expectedHostId?: string): void {
     if (this.stopped || this.pairings.has(pairId)) return
     const pairing = new Pairing(this, pairId)
     this.pairings.set(pairId, pairing)
-    void pairing.run(payload, model)
+    void pairing.run(payload, model, expectedHostId)
   }
 
   /**
