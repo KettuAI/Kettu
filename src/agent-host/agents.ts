@@ -148,6 +148,7 @@ import { readAccountBalance, type AccountBalance } from './dsh/balance'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
+import { withCodexOriginator } from './codex/originator'
 import type { CodexRequest } from './codex/rpc'
 import { takesSkills } from './marketplace/skill-tools'
 import {
@@ -1419,6 +1420,14 @@ export class AgentManager {
     if (this.driver(slot).kind === 'hosted' && !slot.h.detection?.cli) {
       await slot.h.binaryVersionAsked
     }
+    const baseEnv = this.startEnv(slot)
+    const env =
+      protocolFor(slot.def, this.deps, slot.protocol) === 'codex-app-server'
+        ? await withCodexOriginator(baseEnv, {
+            platform: this.deps.platform,
+            specEnv: spec.env,
+          })
+        : baseEnv
     this.registeredSlot(agentId)
     this.assertEnabled(agentId)
     if (this.stopped) throw new Error(t('agent.hostStopping', { agent: slot.name }))
@@ -1427,7 +1436,6 @@ export class AgentManager {
     slot.progress.clear()
     slot.intentionalStop = false
     slot.launchSpec = spec
-    const env = this.startEnv(slot)
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
