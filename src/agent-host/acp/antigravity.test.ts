@@ -549,7 +549,8 @@ describe("agy's plans in Plan mode", () => {
     await session.connection.prompt(sessionId, [{ type: 'text', text: 'Add add(a, b)' }])
 
     await vi.waitFor(() => expect(session.events).toHaveLength(1))
-    expect(session.configs).toEqual([{ sessionId, configId: 'mode', value: 'auto' }])
+    // 托管 Auto 模式下退出 Plan 时底层切回 default，由 Kettu 接管 Auto 审批；界面展示仍为 auto。
+    expect(session.configs).toEqual([{ sessionId, configId: 'mode', value: 'default' }])
     expect(session.mode()).toBe('auto')
     expect(session.events).toEqual(['send [Approved] implementation_plan.md'])
     expect(session.approvals).toEqual(['[Approved] implementation_plan.md'])
@@ -1062,12 +1063,8 @@ describe("agy's full access", () => {
     sent.length = 0
 
     const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
-    expect(agy.methods()).toEqual([
-      'resume',
-      'set model=claude',
-      'set thought_level=low',
-      'set mode=auto',
-    ])
+    // 重启退出完全访问后 agy 底层即位于 default，Kettu 直接托管 Auto，无需多余 set mode=auto。
+    expect(agy.methods()).toEqual(['resume', 'set model=claude', 'set thought_level=low'])
     expect(
       (sent[0]!.params._meta as Record<string, unknown> | undefined)?.['sh.kettu/session-flag'],
     ).toBeUndefined()
@@ -1089,7 +1086,7 @@ describe("agy's full access", () => {
     await connection.setConfigOption(sessionId, 'mode', FULL)
     expect(agy.methods()).toEqual([])
     const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
-    expect(agy.methods()).toEqual(['resume', 'set mode=auto'])
+    expect(agy.methods()).toEqual(['resume'])
     expect(valueOf(auto, 'mode')).toBe('auto')
     connection.close()
   })
@@ -1802,5 +1799,230 @@ describe("agy's metrics and context estimates", () => {
     })
     expect(other.readContextEstimates).toBeUndefined()
     other.close()
+  })
+})
+
+describe('agy 托管 Auto 模式、本会话总是允许与插件预检', () => {
+  const OPTIONS = [
+    { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+    { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+  ]
+
+  it('切入托管 Auto 保持底层 default，切换模型或收到配置更新时保留 Auto，切回 default 不发多余 RPC', async () => {
+    const agy = flaggedAgy('1.5.17', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId, config: opened } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    target.apply({ patches: [{ op: 'session.update', changes: { config: opened } }], effects: [] })
+    connection.register(sessionId, target)
+    sent.length = 0
+
+    // 从 default 切入 Auto：底层已在 default，0 次 RPC。
+    const autoConfig = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(agy.methods()).toEqual([])
+    expect(valueOf(autoConfig, 'mode')).toBe('auto')
+
+    // 切换模型时 agy 回传底层 default，Kettu 必须保持对外展示为 auto。
+    const afterModel = await connection.setConfigOption(sessionId, 'model', 'claude')
+    expect(agy.methods()).toEqual(['set model=claude'])
+    expect(valueOf(afterModel, 'mode')).toBe('auto')
+    expect(valueOf(afterModel, 'model')).toBe('claude')
+    sent.length = 0
+
+    // 切回 default：底层仍在 default，0 次 RPC 且对外恢复为 default。
+    const backDefault = await connection.setConfigOption(sessionId, 'mode', 'default')
+    expect(agy.methods()).toEqual([])
+    expect(valueOf(backDefault, 'mode')).toBe('default')
+
+    // 进入 plan 再切入 Auto：需要发 set mode=default 让底层退出 Plan 模式。
+    await connection.setConfigOption(sessionId, 'mode', 'plan')
+    sent.length = 0
+    const exitPlanAuto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(agy.methods()).toEqual(['set mode=default'])
+    expect(valueOf(exitPlanAuto, 'mode')).toBe('auto')
+    connection.close()
+  })
+
+  it('当 agy 自身未返回 auto 选项（如企业账号/无沙箱环境）时，由 Kettu 补齐 auto 模式', async () => {
+    const app = agent({ name: 'agy-no-auto' })
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {} } },
+        agentInfo: { name: 'Antigravity ACP Server', version: '1.5.17' },
+        authMethods: [],
+      }))
+      .onRequest(methods.agent.session.new, () => ({
+        sessionId: 's-no-auto',
+        configOptions: [
+          {
+            id: 'mode',
+            name: 'Mode',
+            category: 'mode',
+            type: 'select' as const,
+            currentValue: 'default',
+            options: [
+              { value: 'default', name: 'Default' },
+              { value: 'plan', name: 'Plan' },
+            ],
+          },
+        ],
+      }))
+    const connection = AcpConnection.connect(inProcessTransport(app), {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+      agentId: 'antigravity',
+      name: 'Google Antigravity',
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId, config } = await connection.newSession('/repo')
+    const modeOption = config.find((o) => o.id === 'mode')!
+    expect(modeOption.choices!.map((c) => c.value)).toEqual(['default', 'auto', 'plan'])
+    const switched = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(valueOf(switched, 'mode')).toBe('auto')
+    connection.close()
+  })
+
+  it('托管 Auto 放行日常操作、拦截删核心文件与改 .env 并透传 destructive 风险与原因，支持本会话总是允许', async () => {
+    const requestsSeen: PermissionRequest[] = []
+    const answersSent: unknown[] = []
+    const { connection } = connect('1.5.17', async (client, sessionId) => {
+      const ask = async (
+        toolCallId: string,
+        name: string,
+        rawInput: Record<string, unknown>,
+        kind: ToolCallUpdate['kind'] = 'other',
+      ) => {
+        const tc = {
+          sessionUpdate: 'tool_call',
+          toolCallId,
+          name,
+          kind,
+          status: 'pending',
+          title: `Run ${name}`,
+          rawInput,
+        }
+        await client.notify(methods.client.session.update, update(sessionId, tc))
+        answersSent.push(
+          await client.request(methods.client.session.requestPermission, {
+            sessionId,
+            toolCall: tc,
+            options: OPTIONS,
+          } as never),
+        )
+      }
+      // 1. 工作区常规编辑、写 /tmp、安全命令、只读外部 MCP -> 全部自动放行（不弹窗）
+      await ask('tc-edit-ok', 'edit_file', { Path: '/repo/src/app.ts' }, 'edit')
+      await ask('tc-tmp-ok', 'write_file', { Path: '/tmp/driver/verify.mjs' }, 'edit')
+      await ask(
+        'tc-cmd-ok',
+        'run_command',
+        { CommandLine: 'du -sh /tmp/ 2>/dev/null | head -n 5' },
+        'execute',
+      )
+      await ask('tc-mcp-ok', 'mcp_github_get_commit', { owner: 'a', repo: 'b', sha: '1' })
+      // 2. 删除核心文件 & 修改 .env -> destructive 拦截，且不提供本会话总是允许
+      await ask('tc-rm-core', 'run_command', { CommandLine: 'rm -f package.json' }, 'execute')
+      await ask('tc-edit-env', 'edit_file', { Path: '/repo/.env' }, 'edit')
+      // 3. 工作区外普通目录写入 -> risky 拦截 + 合成「本会话总是允许」，选中后同目录第二次 0 弹窗
+      await ask('tc-outside-1', 'write_file', { Path: '/Users/dev/Desktop/a.txt' }, 'edit')
+      await ask('tc-outside-2', 'write_file', { Path: '/Users/dev/Desktop/b.txt' }, 'edit')
+    })
+
+    await connection.initialize('1.0.0')
+    const { sessionId, config } = await connection.newSession('/repo')
+    const base = threadTarget()
+    const target: SessionTarget = {
+      ...base.target,
+      requestPermission: async (req) => {
+        requestsSeen.push(req)
+        base.target.apply(req.output)
+        // 对工作区外普通目录写入选择合成的「本会话总是允许」选项。
+        const always = req.options.find((o) => o.kind === 'allow_always')
+        if (req.toolCallId === 'tc-outside-1' && always) return { optionId: always.id }
+        return { optionId: 'deny' }
+      },
+    }
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    await connection.setConfigOption(sessionId, 'mode', 'auto')
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    // 只有 rm-core、edit-env 和首次 outside 写入弹出审批卡；其余全部自动放行。
+    expect(requestsSeen.map((r) => r.toolCallId)).toEqual([
+      'tc-rm-core',
+      'tc-edit-env',
+      'tc-outside-1',
+    ])
+    // 删除核心文件与改 .env 均为 destructive，带拦截原因，且禁止 allow_always。
+    expect(requestsSeen[0]).toMatchObject({ risk: 'destructive' })
+    expect(requestsSeen[0]!.reason).toContain('package.json')
+    expect(requestsSeen[0]!.options.some((o) => o.kind === 'allow_always')).toBe(false)
+
+    expect(requestsSeen[1]).toMatchObject({ risk: 'destructive' })
+    expect(requestsSeen[1]!.reason).toContain('.env')
+    expect(requestsSeen[1]!.options.some((o) => o.kind === 'allow_always')).toBe(false)
+
+    // 首次工作区外写入为 risky，并带有合成的 allow_always 选项；回传给 agy 的必须是原 allow_once ID。
+    expect(requestsSeen[2]).toMatchObject({ risk: 'risky' })
+    expect(requestsSeen[2]!.options.some((o) => o.kind === 'allow_always')).toBe(true)
+
+    expect(answersSent).toEqual([
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'deny' } },
+      { outcome: { outcome: 'selected', optionId: 'deny' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+    ])
+    connection.close()
+  })
+
+  it('遵循 PLUG-7：即便在 Auto 模式下命中自动放行，插件预检钩子仍可拒绝工具调用', async () => {
+    const answersSent: unknown[] = []
+    const { connection } = connect('1.5.17', async (client, sessionId) => {
+      const tc = {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-plugin-block',
+        name: 'edit_file',
+        kind: 'edit' as const,
+        status: 'pending' as const,
+        title: 'Edit src/app.ts',
+        rawInput: { Path: '/repo/src/app.ts' },
+      }
+      await client.notify(methods.client.session.update, update(sessionId, tc))
+      answersSent.push(
+        await client.request(methods.client.session.requestPermission, {
+          sessionId,
+          toolCall: tc,
+          options: OPTIONS,
+        } as never),
+      )
+    })
+
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const base = threadTarget()
+    const pluginChecks: string[] = []
+    const target: SessionTarget = {
+      ...base.target,
+      hasPermissionPlugins: () => true,
+      checkPermissionPlugin: async (req) => {
+        pluginChecks.push(req.toolCallId)
+        return { optionId: 'deny' }
+      },
+    }
+    connection.register(sessionId, target)
+    await connection.setConfigOption(sessionId, 'mode', 'auto')
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    expect(pluginChecks).toEqual(['tc-plugin-block'])
+    expect(base.asked).toEqual([])
+    expect(answersSent).toEqual([{ outcome: { outcome: 'selected', optionId: 'deny' } }])
+    connection.close()
   })
 })

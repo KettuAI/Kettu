@@ -660,7 +660,7 @@
       },
       "auto": {
         "name": "自动",
-        "description": "改动和安全的命令不问，不可撤回的操作先问"
+        "description": "常规改动、安全命令与可逆工具自动放行，删除核心文件等敏感操作先问"
       },
       "plan": {
         "name": "计划",
@@ -669,6 +669,46 @@
       "fullAccess": {
         "name": "完全访问",
         "description": "什么都不问。两轮之间、它在跑的命令结束后生效，会重启 agy"
+      }
+    },
+    "auto": {
+      "allowSessionMcp": "本会话允许使用 `{{tool}}`",
+      "allowSessionDir": "本会话允许修改 `{{dir}}` 目录",
+      "allowSessionCommand": "本会话允许运行 `{{command}}`",
+      "reason": {
+        "userRule": "命中你在 Antigravity 设置中配置的询问规则",
+        "deleteCore": "尝试删除核心文件或目录：{{target}}",
+        "deleteRecursive": "尝试递归删除文件或目录",
+        "deleteFiles": "尝试删除文件或目录",
+        "moveCore": "尝试移走核心文件或目录：{{target}}",
+        "sensitiveWrite": "尝试修改受保护的敏感文件：{{target}}",
+        "sensitiveRead": "尝试读取敏感凭据或密钥文件：{{target}}",
+        "outsideWrite": "尝试修改工作区外的文件：{{target}}",
+        "sensitiveUrl": "尝试访问非公开或受限地址",
+        "sensitiveEnv": "尝试覆盖敏感环境变量：{{name}}",
+        "privilegedCommand": "尝试执行提权或系统级命令：{{command}}",
+        "systemMutation": "尝试修改系统权限或终止进程：{{command}}",
+        "opaqueCommand": "包含无法静态判定的脚本或外部执行：{{command}}",
+        "complexCommand": "包含复杂控制流或无法静态判定的命令语法",
+        "remoteScript": "尝试从网络下载并直接执行脚本",
+        "destructiveCommand": "尝试执行破坏性命令：{{command}}",
+        "destructiveScript": "内联脚本包含删除或破坏性操作：{{command}}",
+        "sensitiveScript": "内联脚本包含写入或敏感路径访问：{{command}}",
+        "gitConfigFlag": "Git 命令带有可改变执行行为的配置参数",
+        "gitDestructive": "不可逆的 Git 破坏性操作：{{command}}",
+        "gitForcePush": "尝试强制推送覆盖远端提交历史",
+        "gitPush": "尝试向远端仓库推送提交",
+        "gitDiscard": "尝试丢弃本地未提交的改动",
+        "gitRewrite": "涉及改写分支或历史的操作：{{command}}",
+        "remoteIrreversible": "不可逆的远端或发布操作：{{command}}",
+        "remoteWrite": "涉及外部写操作：{{command}}",
+        "mcpDestructive": "破坏性或不可逆的 MCP 工具：{{tool}}",
+        "mcpSensitive": "涉及外部发送或权限变更的 MCP 工具：{{tool}}",
+        "mcpUnknown": "外部 MCP 工具：{{tool}}",
+        "deleteArtifact": "尝试删除 Artifact",
+        "terminalInput": "尝试向交互式终端发送输入",
+        "computerControl": "尝试操控本机桌面应用",
+        "writeArtifactData": "尝试写入 Artifact 持久化数据"
       }
     },
     "fullAccess": {

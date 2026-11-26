@@ -1126,6 +1126,10 @@ export interface PendingPermission {
   // Whether the card labels the request Risky, as the host judged it; a request stored without
   // it is judged by its tool kind alone.
   risky?: boolean
+  /** 三档风险等级（存在时优先于旧版 boolean `risky`）。 */
+  risk?: 'safe' | 'risky' | 'destructive'
+  /** 主进程给出的拦截原因说明（例如 Auto 模式下解释为何需要确认）。 */
+  reason?: string
 }
 
 export interface PermissionOption {

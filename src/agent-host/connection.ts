@@ -40,6 +40,10 @@ export interface PermissionRequest {
   elicitation?: PendingElicitation
   /** The shell a command runs in, when it is not a POSIX one. */
   shell?: Shell
+  /** 权限卡片风险等级：高危或破坏性操作显式标红并禁止永久放行。 */
+  risk?: 'safe' | 'risky' | 'destructive'
+  /** 面向用户的拦截原因说明（例如 Auto 模式下解释为何需要审批）。 */
+  reason?: string
   /**
    * The agent does not wait for the answer, so its turn goes on or ends and the card stays until
    * the user answers it or the session closes.
@@ -67,6 +71,16 @@ export interface SessionTarget {
   apply(output: MapperOutput): void
   /** Resolves with the user's answer; rejects with `signal.reason` once the agent withdraws it. */
   requestPermission(request: PermissionRequest, signal: AbortSignal): Promise<PermissionAnswer>
+  /** 当前会话是否存在订阅 `session.permissionRequested` 预检钩子的插件（用于 0 开销跳过未装插件会话）。 */
+  hasPermissionPlugins?(): boolean
+  /**
+   * 在自动放行前执行已安装插件的权限预检钩子（PLUG-7）：插件可拒绝但不能批准。
+   * 未被插件拒绝时返回 null，被拒绝时记录插件拒绝条目并返回拒绝答复。
+   */
+  checkPermissionPlugin?(
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer | null>
   /**
    * Sends `text` as the user's own message, such as the note that sends a plan back: at once when
    * the session can start a turn, else behind its queue. With `approval`, the message is the

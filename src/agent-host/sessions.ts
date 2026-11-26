@@ -3894,6 +3894,11 @@ export class SessionManager {
       }),
       apply: (output) => this.applyOutput(live, output),
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
+      hasPermissionPlugins: () =>
+        Boolean(
+          this.deps.plugins?.wants('session.permissionRequested') && live.record.origin === 'user',
+        ),
+      checkPermissionPlugin: (request, signal) => this.checkPermissionPlugin(live, request, signal),
       send: (text, options) => this.sendForUser(live, text, options),
       requeue: (texts) => this.requeue(live, texts),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
@@ -11047,16 +11052,16 @@ export class SessionManager {
   }
 
   /**
-   * Lets the plugins that hold `requests.check` look at a request to use a tool before anything
-   * else answers or shows it; one of them may deny it and none can allow it. Null when no plugin
-   * would look, so the request goes on at once. A question, a plan or a request of an MCP server
-   * asks for no authorization, so it is not checked.
+   * 仅执行插件的 `session.permissionRequested` 预检钩子（PLUG-7）：
+   * - 未安装监听插件、非用户会话或非工具授权请求时直接返回 null；
+   * - 若插件拒绝，确保工具条目可见并追加 `plugin_denial` 条目后返回拒绝答复；
+   * - 若插件未拒绝，返回 null 交由调用方继续处理（自动放行或展示审批卡）。
    */
-  private pluginCheck(
+  private checkPermissionPlugin(
     live: Live,
     request: PermissionRequest,
     signal: AbortSignal,
-  ): Promise<PermissionAnswer> | null {
+  ): Promise<PermissionAnswer | null> {
     const plugins = this.deps.plugins
     const deny = request.options.find((option) => option.kind === 'reject_once')
     if (
@@ -11067,15 +11072,21 @@ export class SessionManager {
       request.elicitation ||
       !deny
     ) {
-      return null
+      return Promise.resolve(null)
     }
-    const entry = live.thread.byId[request.toolEntryId]
+    const existing = live.thread.byId[request.toolEntryId]
+    const added = request.output.patches.find(
+      (patch): patch is Extract<typeof patch, { op: 'entry.add' }> =>
+        patch.op === 'entry.add' && patch.entry.id === request.toolEntryId,
+    )?.entry
+    const entry = existing ?? added
     const tool = entry?.kind === 'tool' ? entry : undefined
     const facts = requestFacts(tool)
     return plugins.check(this.summary(live.id), facts).then((denial) => {
       if (signal.aborted) throw signal.reason
       if (live.closing || live.turn?.cancelRequested) return 'cancelled'
-      if (!denial) return this.askPermission(live, request, signal)
+      if (!denial) return null
+      if (!live.thread.byId[request.toolEntryId]) this.applyOutput(live, request.output)
       this.emit(live, [
         {
           op: 'entry.update',
@@ -11102,6 +11113,34 @@ export class SessionManager {
       // The agent hears who denied it and why, where its option takes a note.
       return denialAnswer(deny, denial)
     })
+  }
+
+  /**
+   * Lets the plugins that hold `requests.check` look at a request to use a tool before anything
+   * else answers or shows it; one of them may deny it and none can allow it. Null when no plugin
+   * would look, so the request goes on at once. A question, a plan or a request of an MCP server
+   * asks for no authorization, so it is not checked.
+   */
+  private pluginCheck(
+    live: Live,
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer> | null {
+    const plugins = this.deps.plugins
+    const deny = request.options.find((option) => option.kind === 'reject_once')
+    if (
+      !plugins?.wants('session.permissionRequested') ||
+      live.record.origin !== 'user' ||
+      request.questions ||
+      request.plan !== undefined ||
+      request.elicitation ||
+      !deny
+    ) {
+      return null
+    }
+    return this.checkPermissionPlugin(live, request, signal).then(
+      (denied) => denied ?? this.askPermission(live, request, signal),
+    )
   }
 
   private askPermission(
@@ -11149,8 +11188,10 @@ export class SessionManager {
     const { elicitation } = request
     const plan = request.plan === undefined ? null : planRevision(live.thread, request.toolEntryId)
     const asked = live.thread.byId[request.toolEntryId]
-    const risky =
+    const heuristicRisky =
       asked?.kind === 'tool' && riskyRequest(asked.toolKind, asked.rawInput, request.shell)
+    const computedRisk = request.risk ?? (heuristicRisky ? 'risky' : 'safe')
+    const risky = computedRisk !== 'safe'
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
         this.settlePermission(live, requestId, 'withdrawn')
@@ -11189,6 +11230,8 @@ export class SessionManager {
               ...(plan ? { plan: { markdown: request.plan!, previous: plan.previous } } : {}),
               ...(elicitation ? { elicitation } : {}),
               risky,
+              ...(request.risk ? { risk: request.risk } : {}),
+              ...(request.reason ? { reason: request.reason } : {}),
             },
             permissionResult: null,
             ...(plan ? { planVersion: plan.version } : {}),
