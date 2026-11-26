@@ -128,6 +128,53 @@ describe('tool digests', () => {
     expect(digested.entries[0]).toHaveProperty('rawInputDigest')
     expect(page.entries[0]).toBe(long)
   })
+
+  it('keeps workflow suggestion and create_workflow entries whole across all harness title formats', () => {
+    const longOutput = `The user sees your suggestion in card wfs-abcdefghij23.\n${'x'.repeat(DIGEST_OUTPUT_BYTES * 2)}`
+    const longInput = JSON.stringify({ workflow_id: 'w1', task: 't'.repeat(DIGEST_INPUT_BYTES) })
+    for (const title of [
+      'mcp__kettu__suggest_workflow',
+      'kettu: suggest_workflow',
+      'kettu：suggest_workflow',
+      'kettu.suggest_workflow',
+      'mcp_kettu_suggest_workflow',
+      'kettu.list_workflows, kettu.suggest_workflow',
+      'mcp__kettu__create_workflow',
+    ]) {
+      const entry = tool({
+        title,
+        rawInput: longInput,
+        content: [{ type: 'markdown', markdown: longOutput }],
+      })
+      expect(digestEntry(entry), title).toBe(entry)
+    }
+  })
+
+  it('keeps report_step and pick_step_agents entries completely whole for remote cards', () => {
+    const longOutput = `Report accepted. Facts:\n${'f'.repeat(DIGEST_OUTPUT_BYTES * 2)}`
+    const longInput = JSON.stringify({
+      outcome: 'Done',
+      note: 'n'.repeat(DIGEST_INPUT_BYTES * 2),
+    })
+    for (const title of ['mcp__kettu__report_step', 'kettu: pick_step_agents']) {
+      const entry = tool({
+        title,
+        rawInput: longInput,
+        content: [{ type: 'markdown', markdown: longOutput }],
+      })
+      expect(digestEntry(entry), title).toBe(entry)
+    }
+  })
+
+  it('still digests third-party MCP tools that share a workflow tool name', () => {
+    const entry = tool({
+      title: 'mcp__other__suggest_workflow',
+      content: [{ type: 'markdown', markdown: 'x'.repeat(DIGEST_OUTPUT_BYTES + 10) }],
+    })
+    expect(digestEntry(entry)).toMatchObject({
+      content: [{ type: 'digest', of: 'markdown' }],
+    })
+  })
 })
 
 describe('diff counts', () => {

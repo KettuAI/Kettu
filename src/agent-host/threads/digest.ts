@@ -1,7 +1,7 @@
 // A device that draws tool calls folded gets their long outputs and inputs as digests in the pages
 // it reads, which are most of their bytes; `sessions.entry` reads an entry whole when it opens one.
 
-import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
+import { workflowToolOfTitle } from '@shared/mcp-call'
 import type {
   DigestedThreadEntry,
   DigestedToolEntry,
@@ -12,26 +12,16 @@ import type {
   ToolInputDigest,
 } from '@shared/thread'
 
-// Workflow card calls read their own rawInput and content inline instead of unfolding a ToolBody.
-const WORKFLOW_CARD_TOOLS = new Set([
-  'suggest_workflow',
-  'create_workflow',
-  'report_step',
-  'pick_step_agents',
-])
-
+// Inline card calls (permissions, plans, questions, elicitations, and Kettu's workflow cards)
+// read their own rawInput and content inline instead of unfolding a ToolBody.
 function isInlineCardTool(entry: ToolEntry): boolean {
-  if (
+  return (
     entry.permission !== null ||
     entry.planVersion !== undefined ||
     entry.question !== undefined ||
-    entry.elicitation !== undefined
-  ) {
-    return true
-  }
-  const call = mcpCallOf(entry.title)
-  const name = call ? (call.server === KETTU_SERVER ? call.tool : null) : entry.title.trim()
-  return name !== null && WORKFLOW_CARD_TOOLS.has(name)
+    entry.elicitation !== undefined ||
+    workflowToolOfTitle(entry.title) !== null
+  )
 }
 
 /** An input this long or shorter, in UTF-8 bytes, stays whole: nearly every command. */

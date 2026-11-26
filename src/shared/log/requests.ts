@@ -66,6 +66,8 @@ const READS = new Set([
   'search',
   'snapshot',
   'status',
+  'suggestionFile',
+  'suggestions',
   'summary',
   'taskOutput',
   'tools',

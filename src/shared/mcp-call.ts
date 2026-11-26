@@ -38,3 +38,47 @@ export function mcpCallsOf(title: string): McpCall[] | null {
   const calls = title.split(',').map(mcpCallOf)
   return calls.every((call) => call !== null) ? calls : null
 }
+
+/** The workflow tools on Kettu's MCP server that render as dedicated cards in a thread. */
+export const WORKFLOW_CARD_TOOLS = {
+  start: 'suggest_workflow',
+  create: 'create_workflow',
+  report: 'report_step',
+  pick: 'pick_step_agents',
+} as const
+
+export type WorkflowCardTool = keyof typeof WORKFLOW_CARD_TOOLS
+
+const WORKFLOW_CARD_BY_NAME = new Map<string, WorkflowCardTool>(
+  Object.entries(WORKFLOW_CARD_TOOLS).map(([tool, name]) => [name, tool as WorkflowCardTool]),
+)
+
+const AGY_KETTU_PREFIX = `mcp_${KETTU_SERVER}_`
+
+/**
+ * The Kettu workflow card tool a tool call title names, or null for any other call (including
+ * identically named tools on third-party MCP servers).
+ */
+export function workflowToolOfTitle(title: string): WorkflowCardTool | null {
+  const trimmed = title.trim()
+  const single = mcpCallOf(trimmed)
+  if (single) {
+    return single.server === KETTU_SERVER ? (WORKFLOW_CARD_BY_NAME.get(single.tool) ?? null) : null
+  }
+  const multi = mcpCallsOf(trimmed)
+  if (multi) {
+    // A script calling several Kettu tools (e.g. list_workflows then suggest_workflow): take the last card tool.
+    for (let i = multi.length - 1; i >= 0; i--) {
+      const call = multi[i]!
+      if (call.server !== KETTU_SERVER) continue
+      const tool = WORKFLOW_CARD_BY_NAME.get(call.tool)
+      if (tool) return tool
+    }
+    return null
+  }
+  if (trimmed.startsWith(AGY_KETTU_PREFIX)) {
+    return WORKFLOW_CARD_BY_NAME.get(trimmed.slice(AGY_KETTU_PREFIX.length)) ?? null
+  }
+  // A bare tool name, as some agents title a call, is Kettu's: no other tool has these names.
+  return WORKFLOW_CARD_BY_NAME.get(trimmed) ?? null
+}
