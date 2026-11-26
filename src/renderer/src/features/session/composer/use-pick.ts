@@ -81,7 +81,11 @@ export function useSelectPicks(onSelect: Select) {
   const [pending, setPending] = useState<Record<string, string>>({})
   const valueOf = (option: ConfigOption): string => {
     const actual = String(option.value)
-    return option.id in pending ? pending[option.id]! : actual
+    const picked = pending[option.id]
+    if (picked === undefined) return actual
+    // Ignore an optimistic value if switching models replaced the option with incompatible choices.
+    if (option.choices && !option.choices.some((c) => c.value === picked)) return actual
+    return picked
   }
   const settle = (id: string, value: string) =>
     setPending((p) => {
