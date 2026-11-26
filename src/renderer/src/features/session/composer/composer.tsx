@@ -789,7 +789,12 @@ export function Composer({
             )}
             <span className="kettu-tray__group kettu-tray__group--end">
               <SpeedButton speed={session.speed} />
-              <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
+              <CacheButton
+                cache={timed}
+                lastRequest={session.lastRequest}
+                running={running}
+                used={session.usage?.used ?? 0}
+              />
               <AgentMarkHost.Provider value={hostId}>
                 <ContextButton
                   sessionId={sessionId}

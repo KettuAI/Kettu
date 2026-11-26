@@ -179,7 +179,14 @@
       "estimateLastsMinutes_other": "约有效 {{count}} 分钟",
       "estimateLastsHours_other": "约有效 {{count}} 小时",
       "leftLine": "剩余 <time>{{time}}</time> · 已缓存 {{tokens}} tokens",
-      "leftLineAbout": "约剩 <time>{{time}}</time> · 已缓存 {{tokens}} tokens"
+      "leftLineAbout": "约剩 <time>{{time}}</time> · 已缓存 {{tokens}} tokens",
+      "hitShort": "<word>缓存 </word>{{percent}}%",
+      "hitButton": "提示词缓存：命中率 {{percent}}%",
+      "hitLine": "命中 <hit>{{percent}}%</hit> · {{cached}} / {{total}} tokens",
+      "uncachedInput": "未缓存输入",
+      "dynamicNote": "该模型的缓存生命周期由服务端动态管理，没有固定倒计时。",
+      "lastRequest": "上次请求 {{time}}",
+      "dynamicLifetime": "动态时长"
     },
     "speed": {
       "title": "输出速度",

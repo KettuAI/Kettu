@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  Database02Icon,
   RefreshIcon,
   Timer02Icon,
 } from '@hugeicons/core-free-icons'
@@ -13,9 +14,12 @@ import {
   type ContextEstimates,
   type ContextReport,
 } from '@shared/context'
+import type { LastRequest } from '@shared/model-requests'
 import {
+  cacheHitOf,
   knownExpiry,
   type CacheExpiry,
+  type CacheHit,
   type CachePhase,
   type KnownExpiry,
 } from '@shared/prompt-cache'
@@ -130,15 +134,19 @@ export function Ring({
 }
 
 /**
- * The prompt cache's time left on the composer's tray, for a harness that says when its cache
- * expires; amber in the last minute. It opens what the cache saves and when it last wrote.
+ * The prompt cache on the composer's tray: a countdown when the cache's lifetime is known (amber
+ * in the last minute), or the latest request's real cache hit rate when the model has no fixed
+ * documented TTL. Clicking opens the matching breakdown popover.
  */
 export function CacheButton({
   cache,
+  lastRequest,
   running,
   used,
 }: {
   cache: CacheExpiry | null
+  /** Latest main-thread request, used for real hit rate when there is no fixed countdown. */
+  lastRequest?: LastRequest
   /** A turn runs, which keeps the cache in use, so the time is not a warning yet. */
   running: boolean
   /** The context the next message reads again once the cache has expired. */
@@ -148,33 +156,80 @@ export function CacheButton({
   const timed = knownExpiry(cache)
   const phase = useCachePhase(timed)
   const time = useCacheLeft(timed?.expiresAt ?? null, countdown, true)
-  if (!timed || !phase) return null
-  const expired = phase === 'expired'
-  const label = expired
-    ? t(timed.estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')
-    : timed.estimate
-      ? t('usage.cache.about', { time })
-      : time
+  if (timed && phase) {
+    const expired = phase === 'expired'
+    const label = expired
+      ? t(timed.estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')
+      : timed.estimate
+        ? t('usage.cache.about', { time })
+        : time
+    return (
+      <Popover>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t('usage.cache.button', { time: label })}
+              data-tone={phase === 'ending' && !running ? 'warn' : undefined}
+              data-expired={expired ? '' : undefined}
+              className="ui-as-tray-link kettu-tray-link--meter kettu-tray-link--cache"
+            />
+          }
+        >
+          <Glyph icon={Timer02Icon} size={14} className="kettu-tray-cache__icon" />
+          <span className="tabular kettu-tray-cache__label">{label}</span>
+        </PopoverTrigger>
+        <PopoverContent side="top" align="end" sideOffset={8} className="kettu-pop w-70">
+          <CachePart cache={timed} phase={phase} used={used} />
+        </PopoverContent>
+      </Popover>
+    )
+  }
+  const hit = cacheHitOf(lastRequest)
+  if (!hit) return null
+  const percent = Math.round(hit.share * 100)
   return (
     <Popover>
       <PopoverTrigger
         render={
           <button
             type="button"
-            aria-label={t('usage.cache.button', { time: label })}
-            data-tone={phase === 'ending' && !running ? 'warn' : undefined}
-            data-expired={expired ? '' : undefined}
+            aria-label={t('usage.cache.hitButton', { percent })}
             className="ui-as-tray-link kettu-tray-link--meter kettu-tray-link--cache"
           />
         }
       >
-        <Glyph icon={Timer02Icon} size={14} className="kettu-tray-cache__icon" />
-        <span className="tabular kettu-tray-cache__label">{label}</span>
+        <Glyph icon={Database02Icon} size={14} className="kettu-tray-cache__icon" />
+        <span className="tabular kettu-tray-cache__label">
+          <Trans
+            t={t}
+            i18nKey="usage.cache.hitShort"
+            values={{ percent }}
+            components={{ word: <span className="kettu-tray-meter__word" /> }}
+          />
+        </span>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" sideOffset={8} className="kettu-pop w-70">
-        <CachePart cache={timed} phase={phase} used={used} />
+        <CacheHitPart hit={hit} />
       </PopoverContent>
     </Popover>
+  )
+}
+
+function CacheArc({ share }: { share: number }) {
+  const clamped = Math.min(1, Math.max(0, share))
+  return (
+    <svg className="kettu-cache__arc" viewBox="0 0 64 36" aria-hidden>
+      <path d="M6 32a26 26 0 0 1 52 0" pathLength={100} className="kettu-cache__track" />
+      {clamped > 0 && (
+        <path
+          d="M6 32a26 26 0 0 1 52 0"
+          pathLength={100}
+          className="kettu-cache__fill"
+          strokeDasharray={`${clamped * 100} 100`}
+        />
+      )}
+    </svg>
   )
 }
 
@@ -197,15 +252,7 @@ function CachePart({
   const share = Math.min(1, Math.max(0, left / cache.ttl))
   return (
     <div className="kettu-cache">
-      <svg className="kettu-cache__arc" viewBox="0 0 64 36" aria-hidden>
-        <path d="M6 32a26 26 0 0 1 52 0" pathLength={100} className="kettu-cache__track" />
-        <path
-          d="M6 32a26 26 0 0 1 52 0"
-          pathLength={100}
-          className="kettu-cache__fill"
-          strokeDasharray={`${share * 100} 100`}
-        />
-      </svg>
+      <CacheArc share={share} />
       <b>{t('usage.cache.title')}</b>
       <span className="kettu-cache__line tabular">
         {expired ? (
@@ -240,6 +287,47 @@ function CachePart({
             { count },
           )}
         </span>
+      </span>
+    </div>
+  )
+}
+
+/** Real cache hit rate and token breakdown from the latest request when no fixed TTL exists. */
+function CacheHitPart({ hit }: { hit: CacheHit }) {
+  const { t } = useTranslation('composer')
+  const percent = Math.round(hit.share * 100)
+  return (
+    <div className="kettu-cache">
+      <CacheArc share={hit.share} />
+      <b>{t('usage.cache.title')}</b>
+      <span className="kettu-cache__line tabular">
+        <Trans
+          t={t}
+          i18nKey="usage.cache.hitLine"
+          values={{
+            percent,
+            cached: tokens(hit.cacheRead),
+            total: tokens(hit.totalInput),
+          }}
+          components={{ hit: <b /> }}
+        />
+      </span>
+      <dl className="kettu-cache__rows tabular">
+        <dt>{t('usage.context.cacheRead')}</dt>
+        <dd>{tokens(hit.cacheRead)}</dd>
+        {hit.cacheWrite !== null && hit.cacheWrite > 0 && (
+          <>
+            <dt>{t('usage.context.cacheWrite')}</dt>
+            <dd>{tokens(hit.cacheWrite)}</dd>
+          </>
+        )}
+        <dt>{t('usage.cache.uncachedInput')}</dt>
+        <dd>{tokens(hit.uncachedInput)}</dd>
+      </dl>
+      <span className="kettu-cache__note">{t('usage.cache.dynamicNote')}</span>
+      <span className="kettu-cache__foot tabular">
+        <span>{t('usage.cache.lastRequest', { time: clockTime(hit.at) })}</span>
+        <span>{t('usage.cache.dynamicLifetime')}</span>
       </span>
     </div>
   )

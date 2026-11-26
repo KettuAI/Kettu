@@ -184,7 +184,14 @@
       "estimateLastsHours_one": "Lasts about {{count}} hour",
       "estimateLastsHours_other": "Lasts about {{count}} hours",
       "leftLine": "<time>{{time}}</time> left · {{tokens}} tokens cached",
-      "leftLineAbout": "About <time>{{time}}</time> left · {{tokens}} tokens cached"
+      "leftLineAbout": "About <time>{{time}}</time> left · {{tokens}} tokens cached",
+      "hitShort": "<word>Cache </word>{{percent}}%",
+      "hitButton": "Prompt cache: {{percent}}% hit",
+      "hitLine": "<hit>{{percent}}%</hit> hit · {{cached}} of {{total}} input tokens",
+      "uncachedInput": "Uncached input",
+      "dynamicNote": "This model’s cache lifetime is managed dynamically by the server, with no fixed countdown.",
+      "lastRequest": "Last request {{time}}",
+      "dynamicLifetime": "Dynamic lifetime"
     },
     "speed": {
       "title": "Output speed",
