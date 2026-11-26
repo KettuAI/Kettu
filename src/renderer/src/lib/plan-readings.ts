@@ -4,10 +4,19 @@
 import type { AgentStatus, PlanLimit, PlanResets, ResetsError } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 
+/** What picking an account's newest plan limit reading inspects on each agent. */
+export type PlanReadingAgent = Pick<AgentStatus, 'harnessId' | 'account' | 'limits'>
+
 /** A computer's agents, null being this computer. */
 export interface HostAgentList {
   hostId: string | null
   agents: readonly AgentStatus[]
+}
+
+/** One host's agents for picking each account's newest reading, null being this computer. */
+export interface HostPlanList {
+  hostId: string | null
+  agents: readonly PlanReadingAgent[]
 }
 
 /** When the limits were read, the latest window's; null while there are none. */
@@ -19,7 +28,7 @@ export const readAtOf = (limits: readonly PlanLimit[]): number | null =>
  * tier. Null when the agent signs in some other way or reports no email, so its account cannot be
  * told.
  */
-export function accountKey(agent: AgentStatus): string | null {
+export function accountKey(agent: Pick<AgentStatus, 'harnessId' | 'account'>): string | null {
   const account = agent.account
   if (account?.kind !== 'account') return null
   const email = account.email?.trim().toLowerCase()
@@ -39,7 +48,7 @@ export interface PlanReading {
  * signed in on several computers shows one reading everywhere; windows of two readings are never
  * mixed, so a window only an older one has does not come back.
  */
-export function newestReadings(hosts: readonly HostAgentList[]): Map<string, PlanReading> {
+export function newestReadings(hosts: readonly HostPlanList[]): Map<string, PlanReading> {
   const readings = new Map<string, PlanReading>()
   for (const { hostId, agents } of hosts) {
     for (const agent of agents) {
@@ -57,7 +66,7 @@ export function newestReadings(hosts: readonly HostAgentList[]): Map<string, Pla
 /** The agent's limits as last read of its account on any host; its own when its account cannot be told. */
 export function newestLimits(
   readings: ReadonlyMap<string, PlanReading>,
-  agent: AgentStatus,
+  agent: PlanReadingAgent,
 ): PlanLimit[] {
   const key = accountKey(agent)
   return (key === null ? undefined : readings.get(key)?.limits) ?? agent.limits

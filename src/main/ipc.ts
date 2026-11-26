@@ -84,6 +84,7 @@ import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
 import type { RemoteOffers } from './remote-offer'
 import { isRendererUrl, rendererPage } from './renderer'
+import type { TrayHostAgentsFeed } from './tray-host-agents'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
@@ -179,6 +180,7 @@ const PANEL_CHANNELS = new Set<string>([
   'tray:quit',
   'tray:hide',
   'tray:resize',
+  'tray:host-agents',
 ])
 
 /**
@@ -1127,7 +1129,7 @@ export function registerIpcHandlers({
 }
 
 /** The menu bar panel's calls, taken from the panel's own page alone. */
-export function registerTrayIpc(panel: TrayPanel): void {
+export function registerTrayIpc(panel: TrayPanel, hostAgents: TrayHostAgentsFeed): void {
   on('tray:open', (event, target) => {
     if (panel.owns(event.sender) && isTrayTarget(target)) panel.open(target)
   })
@@ -1139,6 +1141,12 @@ export function registerTrayIpc(panel: TrayPanel): void {
   })
   on('tray:resize', (event, height) => {
     if (panel.owns(event.sender)) panel.resize(height)
+  })
+  handle('tray:host-agents', 0, ({ event }) => {
+    if (!panel.owns(event.sender)) {
+      throw new Error('Rejected "tray:host-agents" call from untrusted sender')
+    }
+    return hostAgents.snapshot()
   })
 }
 

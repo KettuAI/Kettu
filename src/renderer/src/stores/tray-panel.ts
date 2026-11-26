@@ -6,7 +6,7 @@ import { isPortError, type PortConnectionState } from '@shared/port-rpc'
 import type { RemoteStatus } from '@shared/remote/status'
 import { pendingRequests } from '@shared/pending-requests'
 import { groupSessions, limitReaders, needsYou } from '@shared/session-groups'
-import type { TrayPanelApi } from '@shared/tray'
+import type { TrayHostAgents, TrayPanelApi } from '@shared/tray'
 import {
   changedFiles,
   stale,
@@ -14,6 +14,7 @@ import {
   type SessionDetail,
   type TrayRequest,
 } from '@renderer/features/tray/model'
+import { newestLimits, newestReadings } from '@renderer/lib/plan-readings'
 
 /** How soon a session is read again while it changes, so a busy turn reads it seldom. */
 const READ_INTERVAL_MS = 1500
@@ -29,6 +30,8 @@ interface TrayPanelStore {
   sessions: Record<string, SessionSummary>
   details: Record<string, SessionDetail>
   agents: AgentStatus[]
+  /** Other connected hosts' agents, for picking each account's newest plan limit reading. */
+  hostAgents: TrayHostAgents[]
   remote: RemoteStatus | null
   /** The request the panel answers, null while it lists. */
   reviewing: Reviewed | null
@@ -49,6 +52,7 @@ export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
   sessions: {},
   details: {},
   agents: [],
+  hostAgents: [],
   remote: null,
   reviewing: null,
   shown: 0,
@@ -195,10 +199,26 @@ function readLimits(): void {
   }
 }
 
+/**
+ * This computer's agents with each identified account's newest plan limit reading across all
+ * connected hosts; an agent whose account cannot be told keeps its own reading.
+ */
+export function agentsWithNewestLimits(
+  localAgents: readonly AgentStatus[],
+  remoteHosts: readonly TrayHostAgents[],
+): AgentStatus[] {
+  const readings = newestReadings([{ hostId: null, agents: localAgents }, ...remoteHosts])
+  return localAgents.map((agent) => {
+    const limits = newestLimits(readings, agent)
+    return limits === agent.limits ? agent : { ...agent, limits }
+  })
+}
+
 /** Follows the host and remote access, and reads what changed whenever the panel comes forward. */
-export async function initTrayPanel(): Promise<void> {
+export async function initTrayPanel(): Promise<() => void> {
   const api = trayApi()
-  api.agents.onEvent((event) => {
+  let hostAgentsUpdated = false
+  const unsubEvents = api.agents.onEvent((event) => {
     switch (event.type) {
       case 'session.summary':
         receiveSummary(event.summary)
@@ -217,14 +237,18 @@ export async function initTrayPanel(): Promise<void> {
         }))
     }
   })
-  api.agents.onConnection((connection) => {
+  const unsubConnection = api.agents.onConnection((connection) => {
     useTrayPanelStore.setState({ connection })
     if (connection === 'connected') {
       load().catch((error: unknown) => console.warn('Could not list the sessions', error))
     }
   })
-  api.remote.onChanged((remote) => useTrayPanelStore.setState({ remote }))
-  api.tray.onShown(() => {
+  const unsubRemote = api.remote.onChanged((remote) => useTrayPanelStore.setState({ remote }))
+  const unsubHostAgents = api.tray.onHostAgentsChanged((hostAgents) => {
+    hostAgentsUpdated = true
+    useTrayPanelStore.setState({ hostAgents })
+  })
+  const unsubShown = api.tray.onShown(() => {
     useTrayPanelStore.setState((state) => ({
       reviewing: null,
       shown: state.shown + 1,
@@ -233,7 +257,25 @@ export async function initTrayPanel(): Promise<void> {
     readLimits()
   })
   document.addEventListener('visibilitychange', readListed)
-  useTrayPanelStore.setState({ remote: await api.remote.status() })
+  const [remote, hostAgents] = await Promise.all([
+    api.remote.status(),
+    api.tray.hostAgents().catch((error: unknown) => {
+      console.warn('Could not read other hosts agents', error)
+      return [] as TrayHostAgents[]
+    }),
+  ])
+  useTrayPanelStore.setState((state) => ({
+    remote,
+    hostAgents: hostAgentsUpdated ? state.hostAgents : hostAgents,
+  }))
+  return () => {
+    unsubEvents()
+    unsubConnection()
+    unsubRemote()
+    unsubHostAgents()
+    unsubShown()
+    document.removeEventListener('visibilitychange', readListed)
+  }
 }
 
 /** Reviews the first request a session waits on, or lists again with null. */
