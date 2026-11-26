@@ -4,7 +4,7 @@
 // are granted, to that session and the device's session with the host, and go with the latter.
 
 import net from 'node:net'
-import { isBrowserForward, type BrowserForward } from '@shared/browser'
+import { isBrowserForward, MAX_COMPANION_FORWARDS, type BrowserForward } from '@shared/browser'
 import { portError, t } from '@shared/hosts-text'
 import type { PortError } from '@shared/port-rpc'
 import { MAX_FORWARDS, type StreamCancel, type StreamEnd } from '@shared/remote/streams'
@@ -56,14 +56,27 @@ export class HostForwards {
 
   constructor(private readonly options: HostForwardsOptions) {}
 
-  /** A message from the agent host to the device: a call that names a forward grants its port. */
+  /** A message from the agent host to the device: a call that names a forward grants its port(s). */
   observe(data: unknown): void {
     const { type, event } = (data ?? {}) as { type?: unknown; event?: unknown }
     if (type !== 'event' || typeof event !== 'object' || event === null) return
     const { type: name, call } = event as { type?: unknown; call?: unknown }
     if (name !== 'browser.call' || typeof call !== 'object' || call === null) return
-    const { sessionId, forward } = call as { sessionId?: unknown; forward?: unknown }
+    const { sessionId, forward, forwards } = call as {
+      sessionId?: unknown
+      forward?: unknown
+      forwards?: unknown
+    }
     if (typeof sessionId !== 'string' || !isBrowserForward(forward)) return
+    this.grant(sessionId, forward)
+    if (Array.isArray(forwards)) {
+      for (const extra of forwards.slice(0, MAX_COMPANION_FORWARDS)) {
+        if (isBrowserForward(extra)) this.grant(sessionId, extra)
+      }
+    }
+  }
+
+  private grant(sessionId: string, forward: BrowserForward): void {
     if (this.grants.size >= MAX_GRANTS) return
     this.grants.add(grantKey(sessionId, forward.host, forward.port))
   }

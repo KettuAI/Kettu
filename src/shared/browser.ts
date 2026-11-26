@@ -289,12 +289,25 @@ export interface BrowserForward {
   port: number
 }
 
+/** The lowest port a client forward tries to bind directly on loopback; privileged ports stay ephemeral. */
+export const MIN_PREFERRED_FORWARD_PORT = 1024
+
+/** The most companion dev server ports one `browser_navigate` call may request alongside its page. */
+export const MAX_COMPANION_FORWARDS = 8
+
+/** Whether a value is a valid TCP port number for a dev server forward. */
+export function isBrowserForwardPort(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value < 65_536
+}
+
 /**
  * A call for the desktop app that sent the turn, on another host than the agent's: a navigation to
  * a dev server there names the forward it needs, which the host grants that app's session.
  */
 export interface BrowserDeviceCall extends BrowserCallRequest {
   forward?: BrowserForward
+  /** Additional local dev server ports on the host explicitly requested alongside `forward`. */
+  forwards?: BrowserForward[]
 }
 
 /** The forward an address needs to reach a dev server on the agent's host; null for others. */
@@ -325,9 +338,6 @@ export function isBrowserForward(value: unknown): value is BrowserForward {
   if (typeof value !== 'object' || value === null) return false
   const { host, port } = value as Record<string, unknown>
   return (
-    (host === 'localhost' || host === '127.0.0.1' || host === '::1') &&
-    Number.isSafeInteger(port) &&
-    (port as number) > 0 &&
-    (port as number) < 65_536
+    (host === 'localhost' || host === '127.0.0.1' || host === '::1') && isBrowserForwardPort(port)
   )
 }

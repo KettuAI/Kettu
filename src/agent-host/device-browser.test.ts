@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { answerOf } from './device-browser'
+import { describe, expect, it, vi } from 'vitest'
+import type { HostEvent } from '@shared/agent-host'
+import { answerOf, DeviceBrowserCalls } from './device-browser'
 
 describe('answerOf', () => {
   it('keeps the codes that tell the agent how a wait on the user ended', () => {
@@ -32,5 +33,62 @@ describe('answerOf', () => {
     expect(answerOf(undefined, { code: 'made_up', message: 'x' })).toEqual({
       error: { code: 'invalid', message: 'Main gave no answer to the call.' },
     })
+  })
+})
+
+describe('DeviceBrowserCalls forwards', () => {
+  it('attaches deduplicated companion forwards matching the navigated loopback host', async () => {
+    const sent: { portId: string; event: HostEvent }[] = []
+    const calls = new DeviceBrowserCalls({
+      send: (portId, event) => sent.push({ portId, event }),
+      servicePort: () => 41234,
+    })
+
+    const pending = calls.call('port-1', {
+      callId: 1,
+      sessionId: 's1',
+      tool: 'browser_navigate',
+      args: { url: 'http://localhost:3100/', forward_ports: [3100, 8080, 8080, 9000] },
+      projectPath: '/proj',
+    })
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.event).toEqual({
+      type: 'browser.call',
+      call: expect.objectContaining({
+        forward: { host: 'localhost', port: 3100 },
+        forwards: [
+          { host: 'localhost', port: 8080 },
+          { host: 'localhost', port: 9000 },
+        ],
+      }),
+    })
+
+    calls.answer('port-1', 1, { result: { text: 'ok', value: {} } })
+    expect(await pending).toEqual({ result: { text: 'ok', value: {} } })
+  })
+
+  it('refuses Kettu’s own service port in either url or forward_ports', async () => {
+    const send = vi.fn()
+    const calls = new DeviceBrowserCalls({ send, servicePort: () => 41234 })
+
+    const mainBlocked = await calls.call('port-1', {
+      callId: 2,
+      sessionId: 's1',
+      tool: 'browser_navigate',
+      args: { url: 'http://127.0.0.1:41234/' },
+      projectPath: '/proj',
+    })
+    expect(mainBlocked).toMatchObject({ error: { code: 'not_allowed' } })
+
+    const companionBlocked = await calls.call('port-1', {
+      callId: 3,
+      sessionId: 's1',
+      tool: 'browser_navigate',
+      args: { url: 'http://localhost:3100/', forward_ports: [8080, 41234] },
+      projectPath: '/proj',
+    })
+    expect(companionBlocked).toMatchObject({ error: { code: 'not_allowed' } })
+    expect(send).not.toHaveBeenCalled()
   })
 })

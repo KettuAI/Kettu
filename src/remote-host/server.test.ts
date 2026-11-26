@@ -1565,6 +1565,79 @@ describe("a desktop app's browser", () => {
     expect(await app.closing).toEqual({ type: 'closing', reason: 'invalid' })
   })
 
+  it('grants explicit companion forward_ports while still refusing undeclared ports', async () => {
+    const t = await setup()
+    const app = await t.connect(undefined, {
+      client: { kind: 'desktop', version: '1.0.0', platform: 'macOS 26.1' },
+      features: ['browser'],
+    })
+    await app.first
+    const created = await app.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+      prompt: [{ type: 'text', text: 'Open the full-stack app' }],
+    })
+    await app.port.untilStatus(created.id, 'ready')
+
+    const frontendPort = await devServer('frontend-ok')
+    const backendPort = await devServer('backend-ok')
+    const unapprovedPort = await devServer('secret-service')
+
+    const answered = t.agent.host.browserCall({
+      callId: 23,
+      sessionId: created.id,
+      tool: 'browser_navigate',
+      args: {
+        url: `http://127.0.0.1:${frontendPort}/`,
+        forward_ports: [backendPort],
+      },
+      projectPath: t.agent.project,
+    })
+    await app.port.until(() => app.port.events.some((event) => event.type === 'browser.call'))
+
+    // Undeclared port stays forbidden even when companion ports are present.
+    await app.send({
+      type: 'forward.open',
+      stream: 1,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: unapprovedPort,
+    })
+    await expect.poll(() => app.cancels.map((cancel) => cancel.stream)).toEqual([1])
+    expect(app.cancels[0]!.error).toMatchObject({ code: 'forbidden' })
+
+    // Both the main port and the explicitly declared companion port work.
+    await app.send({
+      type: 'forward.open',
+      stream: 3,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: frontendPort,
+    })
+    await app.sendBytes(3, new TextEncoder().encode('GET / HTTP/1.0\r\n\r\n'))
+    expect(new TextDecoder().decode(await app.download(3))).toBe(
+      'HTTP/1.0 200 OK\r\n\r\nfrontend-ok',
+    )
+
+    await app.send({
+      type: 'forward.open',
+      stream: 5,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: backendPort,
+    })
+    await app.sendBytes(5, new TextEncoder().encode('GET /api HTTP/1.0\r\n\r\n'))
+    expect(new TextDecoder().decode(await app.download(5))).toBe(
+      'HTTP/1.0 200 OK\r\n\r\nbackend-ok',
+    )
+
+    await app.port.request('browser.answer', {
+      callId: 23,
+      answer: { result: { text: 'Opened.', value: {} } },
+    })
+    expect(await answered).toEqual({ result: { text: 'Opened.', value: {} } })
+  })
+
   it('is not one a phone’s port serves', async () => {
     const t = await setup()
     const phone = await t.connect()

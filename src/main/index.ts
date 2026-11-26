@@ -380,7 +380,10 @@ async function start(): Promise<void> {
     systemLocale,
     created: (tabId, contents) => browserTools?.watch(tabId, contents),
     closed: (tabId) => browserTools?.forgetTab(tabId),
-    ended: (sessionId) => browserTools?.forget(sessionId),
+    ended: (sessionId) => {
+      browserTools?.forget(sessionId)
+      remoteBrowser.pageClosed(sessionId)
+    },
     failed: (sessionId, kind, message) => browserTools?.pageFailed(sessionId, kind, message),
     origins: browserOrigins,
     originAsked: (request) => {
@@ -408,11 +411,19 @@ async function start(): Promise<void> {
     log: (level, message) => log[level](`browser: ${message}`),
     waiting: (callId, waiting) => hostRef.current?.browserWaiting(callId, waiting),
   })
+  // Local artifacts service port; browser forwards never bind directly onto it.
+  let localServicePort: number | null = null
   // Other hosts' agents drive the pages of the turns this computer sends them.
   const remoteBrowser = new RemoteBrowser({
     run: (callId, sessionId, tool, args, projectPath, waiting, allowTab) =>
       browserTools!.call(callId, sessionId, tool, args, projectPath, waiting, allowTab),
-    forward: (hostId, sessionId, forward) => remoteHost.forward(hostId, sessionId, forward),
+    forward: (hostId, sessionId, forward) =>
+      remoteHost.forward(
+        hostId,
+        sessionId,
+        forward,
+        localServicePort === null ? undefined : [localServicePort],
+      ),
     closeForwards: (hostId, sessionId) => remoteHost.closeForwards(hostId, sessionId),
     answerOrigin: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
@@ -596,7 +607,10 @@ async function start(): Promise<void> {
     onBrowserAskAnswer: (sessionId, outcome) => {
       if (!remoteBrowser.isRemote(sessionId)) browserTools?.answerAsk(sessionId, outcome)
     },
-    onServicePort: (port) => browserViews.setServicePort(port),
+    onServicePort: (port) => {
+      localServicePort = port
+      browserViews.setServicePort(port)
+    },
     onOriginDecided: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
     onComputerAppAllowed: (app) => settings.allowComputerApp(app),
