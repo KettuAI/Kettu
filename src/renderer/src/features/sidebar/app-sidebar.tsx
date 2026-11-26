@@ -68,6 +68,7 @@ import {
 import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
+import { BotsGroup } from './bot-group'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
@@ -171,6 +172,7 @@ export function SidebarList() {
         ) : hosts ? (
           <>
             <NeedsYouGroup hosts={hosts} away={away} />
+            <BotsGroup />
             <PinnedGroup
               projects={projects}
               stop={stop}
@@ -198,6 +200,7 @@ export function SidebarList() {
           </>
         ) : (
           <>
+            <BotsGroup />
             <PinnedGroup projects={projects} stop={stop} onImport={importSessions} />
             <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
               <div className="ui-as-side__label kettu-projects-label">

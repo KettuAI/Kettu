@@ -28,6 +28,7 @@ import {
 } from '@renderer/features/split/layout'
 import { newSessionProject } from '@renderer/features/split/new-session-project'
 import type { RoutineExampleId } from '@renderer/features/routines/examples'
+import type { BotExampleId } from '@shared/bots'
 import { NARROW_WINDOW, PHONE_WINDOW } from '@renderer/features/shell/narrow'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
@@ -56,6 +57,9 @@ type PageView =
   // example on the empty Routines page fills in.
   | { kind: 'routines' }
   | { kind: 'routine'; routineId: string | null; example?: RoutineExampleId }
+  // Bot 主工作台与新建/编辑配置页。
+  | { kind: 'bot'; botId: string }
+  | { kind: 'bot-edit'; botId: string | null; example?: BotExampleId }
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
   // The Marketplace, opened from the sidebar: its directory on a tab, or with `item`, the listing
@@ -766,6 +770,31 @@ export function openRoutine(
   const open = () =>
     useViewStore.setState((s) => ({
       main: example ? { kind: 'routine', routineId, example } : { kind: 'routine', routineId },
+      settings: { ...s.settings, open: false },
+    }))
+  if (replace) inPlace(open)
+  else open()
+}
+
+/** 打开指定 Bot 的主工作台页面。 */
+export function openBot(botId: string, { replace = false }: { replace?: boolean } = {}): void {
+  const open = () =>
+    useViewStore.setState((s) => ({
+      main: { kind: 'bot', botId },
+      settings: { ...s.settings, open: false },
+    }))
+  if (replace) inPlace(open)
+  else open()
+}
+
+/** 打开新建或编辑 Bot 配置页（botId 为 null 表示新建）。 */
+export function openBotEditor(
+  botId: string | null,
+  { replace = false, example }: { replace?: boolean; example?: BotExampleId } = {},
+): void {
+  const open = () =>
+    useViewStore.setState((s) => ({
+      main: example ? { kind: 'bot-edit', botId, example } : { kind: 'bot-edit', botId },
       settings: { ...s.settings, open: false },
     }))
   if (replace) inPlace(open)
@@ -1486,6 +1515,10 @@ export function viewKey(view: HistoryView): string {
       return `new:${view.parentId ?? ''}`
     case 'routine':
       return `routine:${view.routineId ?? view.example ?? ''}`
+    case 'bot':
+      return `bot:${view.botId}`
+    case 'bot-edit':
+      return `bot-edit:${view.botId ?? view.example ?? 'new'}`
     case 'artifacts':
       return view.deleted ? 'artifacts:deleted' : 'artifacts'
     case 'marketplace':

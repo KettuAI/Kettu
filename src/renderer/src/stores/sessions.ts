@@ -49,9 +49,14 @@ function listed(summary: SessionSummary): SessionSummary {
   return shown.parentId === null ? shown : { ...shown, parentId: null }
 }
 
-/** Sessions listed under their projects: a routine's runs and a task's steps are listed elsewhere. */
+/** 列在项目列表中的会话：定时任务、工作流步骤与 Bot 主/工作会话分别挂在各自区域，不淹没项目列表。 */
 export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
-  return summary.origin !== 'routine' && summary.origin !== 'task'
+  return (
+    summary.origin !== 'routine' &&
+    summary.origin !== 'task' &&
+    summary.origin !== 'bot_main' &&
+    summary.origin !== 'bot_work'
+  )
 }
 
 export const useSessionsStore = create<SessionsStore>()((set, get) => ({
@@ -204,7 +209,7 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   return (
     buildTree(
       byId,
-      (s) => listedOrigin(s),
+      (s) => listedOrigin(s) || s.origin === 'bot_work' || s.origin === 'bot_main',
       (s) => !s.archivedAt,
     )
       .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')

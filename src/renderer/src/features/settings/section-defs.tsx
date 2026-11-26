@@ -71,6 +71,7 @@ import { usePluginChannelRows } from './plugin-channels'
 import { useIslandDescription } from './island-state'
 import { useStartedSessionRows } from './started-sessions'
 import { useWorkflowRows } from './workflow-settings'
+import { useBotSettingsRows } from './bot-settings'
 import {
   AgentListItem,
   AgentPage,
@@ -688,6 +689,7 @@ export function useAgentsSection(): SectionDef {
   const idleRows = useIdleSessionRows()
   const startedRows = useStartedSessionRows()
   const workflowRows = useWorkflowRows()
+  const botRows = useBotSettingsRows()
   // The footer goes under the list, so the workflow groups after it keep their own notes.
   const list: GroupDef =
     agents.length === 0
@@ -752,6 +754,7 @@ export function useAgentsSection(): SectionDef {
       ...idleRows,
       ...startedRows,
       ...workflowRows,
+      ...botRows,
     ],
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
   }

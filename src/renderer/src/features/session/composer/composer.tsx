@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { parseLeadingBotMention } from '@shared/bots'
 import { cacheExpiry, knownExpiry } from '@shared/prompt-cache'
 import {
   QUEUED_COMMENTS_TEXT,
@@ -10,6 +11,7 @@ import {
   type UserContent,
 } from '@shared/thread'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
+import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { BranchTrayLink } from '@renderer/features/git/git-status'
@@ -85,6 +87,8 @@ import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
 import { limitsForModel } from '@shared/plan-limits'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
+import { botByHandle, useBotsStore } from '@renderer/stores/bots'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -121,8 +125,10 @@ export function Composer({
   agentName: string
   mustSwitch?: boolean
 }) {
-  const { t } = useTranslation(['composer', 'session'])
+  const { t } = useTranslation(['composer', 'session', 'bots'])
   const sessionId = session.id
+  const isBotMain = session.origin === 'bot_main'
+  const botsById = useBotsStore((s) => s.byId)
   // A task this conversation started still runs; what is said here goes to this agent alone.
   const taskRunning = useTasksStore((s) => taskFrom(s.summaries, sessionId)?.status === 'running')
   // Another agent picked to take the session over with the next message, shown as its own.
@@ -219,6 +225,13 @@ export function Composer({
   const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments)) || commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
+  const leadingBotHandle = useBoxText(box, (text) =>
+    isBotMain ? null : (parseLeadingBotMention(text)?.handle ?? null),
+  )
+  const mentionedBot = useMemo(
+    () => (leadingBotHandle ? botByHandle(botsById, leadingBotHandle) : null),
+    [leadingBotHandle, botsById],
+  )
   const { canSend, canQueue } = can(holdsMessage, blocked)
   // Starting a message, not opening the session with a draft in it, attaches a closed session.
   const held = useRef(holdsMessage)
@@ -316,10 +329,39 @@ export function Composer({
     if (document.activeElement === document.body) box.editor.current?.focus()
   }, [starting, ready, focused, box.editor, phone])
 
+  // 普通会话以 @handle 开头且命中已配置的 Bot 时，直接将上下文与请求交接给该 Bot。
+  const handoffToBot = (): boolean => {
+    if (isBotMain) return false
+    const raw = box.editor.current?.text() ?? box.source.text
+    const parsed = parseLeadingBotMention(raw)
+    if (!parsed || !parsed.body) return false
+    const target = botByHandle(useBotsStore.getState().byId, parsed.handle)
+    if (!target) return false
+    const taken = box.take()
+    useBotsStore
+      .getState()
+      .handoff({
+        botId: target.id,
+        sessionId,
+        text: parsed.body,
+        ...(session.title ? { contextSummary: session.title } : {}),
+      })
+      .then(() => {
+        toast(t('bots:handoff.sent', { name: target.name, handle: target.handle }), undefined, {
+          tone: 'success',
+        })
+      })
+      .catch((reason: unknown) => {
+        box.restore(taken)(reason)
+      })
+    return true
+  }
+
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.
   const send = (now = { canSend, canQueue }) => {
     if (askBeside()) return
+    if (handoffToBot()) return
     if (pending && now.canSend) handOver()
     else if (now.canSend || now.canQueue) queue(false, now.canSend)
   }
@@ -705,6 +747,23 @@ export function Composer({
                 </AnimatePresence>
                 {selection && (
                   <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
+                )}
+                {mentionedBot && (
+                  <div className="mb-1.5 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-2.5 py-1.5 text-xs text-foreground">
+                    <BotAvatar
+                      botId={mentionedBot.id}
+                      avatar={mentionedBot.avatar}
+                      name={mentionedBot.name}
+                      size={20}
+                      status={mentionedBot.status}
+                    />
+                    <span className="min-w-0 truncate">
+                      {t('bots:handoff.banner', {
+                        name: mentionedBot.name,
+                        handle: mentionedBot.handle,
+                      })}
+                    </span>
+                  </div>
                 )}
               </>
             }

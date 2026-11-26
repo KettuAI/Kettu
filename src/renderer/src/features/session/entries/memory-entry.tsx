@@ -16,6 +16,7 @@ import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { memoryErrorText, memoryRefusal } from '@renderer/lib/memory-errors'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { openBot } from '@renderer/stores/view'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -96,21 +97,25 @@ export function MemoryStep({
   card: StepCardProps
 }) {
   const { t } = useTranslation('session')
-  const projectPath = useSessionsStore((s) => s.byId[sessionId]?.projectPath ?? null)
+  const session = useSessionsStore((s) => s.byId[sessionId] ?? null)
+  const projectPath = session?.projectPath ?? null
   const [undoing, setUndoing] = useState(false)
   const undone = entry.status === 'undone'
   // The entry is there after a remember or an update that stands, or a forget taken back.
   const exists = entry.action === 'forget' ? undone : !undone
   const memoryId = entry.memoryId
+  const botId = session?.bot?.botId ?? null
   const open =
-    exists && memoryId !== null && projectPath !== null
-      ? () =>
-          openMemoryItem(
-            hostOfPath(projectPath),
-            { layer: 'project', project: hostPath(projectPath) },
-            memoryId,
-          )
-      : undefined
+    exists && entry.layer === 'bot' && botId !== null
+      ? () => openBot(botId)
+      : exists && memoryId !== null && projectPath !== null
+        ? () =>
+            openMemoryItem(
+              hostOfPath(projectPath),
+              { layer: 'project', project: hostPath(projectPath) },
+              memoryId,
+            )
+        : undefined
 
   const undo = async (): Promise<void> => {
     setUndoing(true)

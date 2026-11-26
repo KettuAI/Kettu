@@ -1,4 +1,4 @@
-import { BotIcon } from '@hugeicons/core-free-icons'
+import { GitBranchIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import {
@@ -62,7 +62,7 @@ export function SubagentBadge({
           />
         }
       >
-        <Glyph icon={BotIcon} size={11} className="size-[11px]! text-tertiary" />
+        <Glyph icon={GitBranchIcon} size={11} className="size-[11px]! text-tertiary" />
         {count}
         {running > 0 && <RingSpinner aria-hidden className="size-[9px] border-[1.25px]" />}
       </HoverCardTrigger>
@@ -116,7 +116,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
         }
       >
         <span className="grid size-[22px] shrink-0 place-items-center rounded-tile bg-subtle text-secondary">
-          <Glyph icon={BotIcon} size={13} />
+          <Glyph icon={GitBranchIcon} size={13} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col leading-[1.3]">
           <span className="truncate text-[13px] text-primary">

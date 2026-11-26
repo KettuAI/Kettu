@@ -17,7 +17,8 @@ export function firstWaiting(sessionId: string): string | null {
       (entry?.kind === 'control_ask' && entry.outcome === null) ||
       (entry?.kind === 'market_publish' && entry.outcome === null) ||
       (entry?.kind === 'settings_change' && entry.outcome === null) ||
-      (entry?.kind === 'routine_change' && entry.outcome === null)
+      (entry?.kind === 'routine_change' && entry.outcome === null) ||
+      (entry?.kind === 'bot_change' && entry.outcome === null)
     if (waiting) return id
   }
   // A suggestion to start a task waits below the work, so the requests above go first.

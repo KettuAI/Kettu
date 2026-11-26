@@ -6,6 +6,9 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
+import type { BotView } from '@shared/bots'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
+import { sortedBots, useBotsStore } from '@renderer/stores/bots'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
@@ -46,16 +49,19 @@ import { useBoxText, type PromptBoxState } from './use-prompt-box'
 // popovers and the attachments, kept in a draft, inside the Chat Composer's writing area. What
 // sends, and how, is each one's own.
 
-type PopoverItem = SlashCommand | MentionRow | PluginRow
+type BotMentionRow = { kind: 'bot'; bot: BotView }
+type PopoverItem = SlashCommand | BotMentionRow | MentionRow | PluginRow
 
-/** What the mention list shows: the project's files and what the plugins offer. */
+/** What the mention list shows: matching Bots, the project's files and what the plugins offer. */
 interface MentionView extends MentionList {
+  bots: BotMentionRow[]
   plugins: PluginMentions
 }
 
 /** Why there are no commands to list yet: none reported so far, or no project chosen. */
 export type SlashNote = 'loading' | 'chooseProject'
 
+const isBotRow = (item: PopoverItem): item is BotMentionRow => 'kind' in item && item.kind === 'bot'
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 const isPluginRow = (item: PopoverItem): item is PluginRow => 'plugin' in item
 /** A source with no items still shows a line when it is searching or failed. */
@@ -149,16 +155,29 @@ export function PromptBox({
   }, [mentionKey])
   if (mentionDismissed !== null && mention?.start !== mentionDismissed) setMentionDismissed(null)
   const shown = mentionShown(mention, mentionDismissed, composition)
+  const botsById = useBotsStore((s) => s.byId)
+  const botRows = useMemo<BotMentionRow[]>(() => {
+    if (!shown || !mention) return []
+    const q = mention.query.trim().toLowerCase()
+    return sortedBots(botsById)
+      .filter((b) => !q || b.handle.includes(q) || b.name.toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((bot) => ({ kind: 'bot', bot }))
+  }, [shown, mention, botsById])
   const files = useMentionList(draft, projectPath, shown ? mention!.query : null)
   const plugins = usePluginMentions(hostId, shown ? mention!.query : null)
-  const mentions = useMemo<MentionView>(() => ({ ...files, plugins }), [files, plugins])
+  const mentions = useMemo<MentionView>(
+    () => ({ ...files, bots: botRows, plugins }),
+    [files, botRows, plugins],
+  )
   const filesReady = !!files.files && !(files.files.error && !files.files.paths.length)
   // With nothing typed it shows the files the session used and how many there are to search;
   // typed, only while something matches. With no project it says to choose one. What a plugin
   // offers opens it too, but a plugin still searching never does.
   const mentionOpen =
     shown &&
-    (files.noProject ||
+    (botRows.length > 0 ||
+      files.noProject ||
       files.used ||
       files.rows.length > 0 ||
       plugins.visible ||
@@ -185,7 +204,11 @@ export function PromptBox({
   const listing = typeof showing === 'object' ? showing : null
   const open = slashOpen || slashNote !== null || mentionOpen
   const rows: PopoverItem[] =
-    showing === 'slash' ? slashMatches : listing ? [...listing.rows, ...listing.plugins.rows] : []
+    showing === 'slash'
+      ? slashMatches
+      : listing
+        ? [...listing.bots, ...listing.rows, ...listing.plugins.rows]
+        : []
   // A list opens, and a new query starts, on its first row.
   const listKey = slashOpen
     ? `/${slash.start}:${slash.query}`
@@ -227,9 +250,15 @@ export function PromptBox({
     const next = replaceMention(source.text, mention, word)
     update(next.text, next.caret)
   }
+  const chooseBot = (row: BotMentionRow) => {
+    if (!mention) return
+    const next = replaceMention(source.text, mention, row.bot.handle)
+    update(next.text, next.caret)
+  }
   const chooseItem = (item: PopoverItem | undefined) => {
     if (!item) return
-    if (isPluginRow(item)) choosePlugin(item)
+    if (isBotRow(item)) chooseBot(item)
+    else if (isPluginRow(item)) choosePlugin(item)
     else if (isMentionRow(item)) choose(item)
     else if (slash) {
       const next = placeCommand(
@@ -278,7 +307,7 @@ export function PromptBox({
       modified,
       slashOpen,
       mentionOpen,
-      mentionRows: files.rows.length > 0 || plugins.rows.length > 0,
+      mentionRows: botRows.length > 0 || files.rows.length > 0 || plugins.rows.length > 0,
     })
     // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
     if (handling === 'block') return false
@@ -436,8 +465,40 @@ export function PromptBox({
                   rows.length === 0 && !listing?.plugins.groups.some(shownNote) && 'hidden',
                 )}
               >
+                {listing && listing.bots.length > 0 && (
+                  <div role="group" className="mb-1 border-b border-subtle pb-1">
+                    <div className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary">
+                      Bots
+                    </div>
+                    {listing.bots.map((row, index) => (
+                      <div
+                        key={row.bot.id}
+                        role="option"
+                        id={optionId(index)}
+                        aria-selected={index === active}
+                        data-highlighted={index === active ? '' : undefined}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onMouseMove={() => highlightRow(index)}
+                        onClick={() => chooseBot(row)}
+                        className="flex min-h-7.5 cursor-default items-center gap-2 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
+                      >
+                        <BotAvatar
+                          avatar={row.bot.avatar}
+                          name={row.bot.name}
+                          botId={row.bot.id}
+                          size={20}
+                          status={row.bot.status}
+                        />
+                        <span className="truncate font-medium text-primary">{row.bot.name}</span>
+                        <span className="shrink-0 font-mono text-hint text-tertiary">
+                          @{row.bot.handle}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {rows.map((item, index) =>
-                  isPluginRow(item) ? null : isMentionRow(item) ? (
+                  isBotRow(item) || isPluginRow(item) ? null : isMentionRow(item) ? (
                     <MentionItem
                       key={`${item.folder ? 'd' : 'f'}:${item.path}`}
                       id={optionId(index)}
@@ -459,7 +520,8 @@ export function PromptBox({
                   ),
                 )}
                 {listing?.plugins.groups.map((group, g) => {
-                  const start = listing.rows.length + listing.plugins.starts[g]!
+                  const start =
+                    listing.bots.length + listing.rows.length + listing.plugins.starts[g]!
                   if (group.items.length === 0 && !shownNote(group)) return null
                   return (
                     <div
@@ -492,7 +554,12 @@ export function PromptBox({
                   )
                 })}
               </div>
-              {listing && <MentionFooter list={listing} more={listing.plugins.rows.length} />}
+              {listing && (
+                <MentionFooter
+                  list={listing}
+                  more={listing.bots.length + listing.plugins.rows.length}
+                />
+              )}
               {showing === 'slash' && rows.length === 0 && noteShown && (
                 <p className="shrink-0 px-3 pt-1 pb-1.5 text-small text-tertiary">
                   {noteShown === 'loading' ? (

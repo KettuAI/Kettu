@@ -92,6 +92,23 @@
   --agent-rose: #c0466c;
   --agent-green: #4b8a39;
   --agent-slate: #66707e;
+  /* Bot 专属头像 8 套柔和双色令牌（严禁使用厂商 Logo 配色）。 */
+  --bot-avatar-fox-bg: #fff0e8;
+  --bot-avatar-fox-fg: #c2410c;
+  --bot-avatar-slate-bg: #eff1f5;
+  --bot-avatar-slate-fg: #3b4656;
+  --bot-avatar-sage-bg: #eaf4ee;
+  --bot-avatar-sage-fg: #266945;
+  --bot-avatar-indigo-bg: #eef0ff;
+  --bot-avatar-indigo-fg: #3e47b8;
+  --bot-avatar-amber-bg: #fdf5e4;
+  --bot-avatar-amber-fg: #8c5c00;
+  --bot-avatar-rose-bg: #fdeef2;
+  --bot-avatar-rose-fg: #ab2e52;
+  --bot-avatar-cyan-bg: #e8f5f8;
+  --bot-avatar-cyan-fg: #146375;
+  --bot-avatar-plum-bg: #f5effa;
+  --bot-avatar-plum-fg: #6b3d96;
   /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   /* Running work, in the ink's grays: blue is kept for data and code. */
@@ -775,6 +792,23 @@
     --agent-rose: #da6489;
     --agent-green: #6aac55;
     --agent-slate: #8d96a4;
+    /* Bot 专属头像 8 套深色模式柔和双色令牌（与 [data-theme='dark'] 严格一致）。 */
+    --bot-avatar-fox-bg: #362219;
+    --bot-avatar-fox-fg: #ff9a6c;
+    --bot-avatar-slate-bg: #252a32;
+    --bot-avatar-slate-fg: #c2cbd6;
+    --bot-avatar-sage-bg: #1c2e24;
+    --bot-avatar-sage-fg: #7fd4a0;
+    --bot-avatar-indigo-bg: #22253a;
+    --bot-avatar-indigo-fg: #9ca8ff;
+    --bot-avatar-amber-bg: #312819;
+    --bot-avatar-amber-fg: #ebbd62;
+    --bot-avatar-rose-bg: #361f27;
+    --bot-avatar-rose-fg: #f08ca9;
+    --bot-avatar-cyan-bg: #192d33;
+    --bot-avatar-cyan-fg: #72cfe0;
+    --bot-avatar-plum-bg: #2c2136;
+    --bot-avatar-plum-fg: #cca2f0;
     --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
     --info: #aeb6c1;
     --warning: #d9b463;
@@ -1184,6 +1218,23 @@
   --agent-rose: #da6489;
   --agent-green: #6aac55;
   --agent-slate: #8d96a4;
+  /* Bot 专属头像 8 套深色模式柔和双色令牌（与 prefers-color-scheme: dark 严格一致）。 */
+  --bot-avatar-fox-bg: #362219;
+  --bot-avatar-fox-fg: #ff9a6c;
+  --bot-avatar-slate-bg: #252a32;
+  --bot-avatar-slate-fg: #c2cbd6;
+  --bot-avatar-sage-bg: #1c2e24;
+  --bot-avatar-sage-fg: #7fd4a0;
+  --bot-avatar-indigo-bg: #22253a;
+  --bot-avatar-indigo-fg: #9ca8ff;
+  --bot-avatar-amber-bg: #312819;
+  --bot-avatar-amber-fg: #ebbd62;
+  --bot-avatar-rose-bg: #361f27;
+  --bot-avatar-rose-fg: #f08ca9;
+  --bot-avatar-cyan-bg: #192d33;
+  --bot-avatar-cyan-fg: #72cfe0;
+  --bot-avatar-plum-bg: #2c2136;
+  --bot-avatar-plum-fg: #cca2f0;
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   --info: #aeb6c1;
   --warning: #d9b463;
