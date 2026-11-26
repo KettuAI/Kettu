@@ -1,8 +1,7 @@
 name: Update contributors
 
-# Refreshes the community contributors avatar wall in README.md and README.zh-CN.md from public
-# merged pull requests and accepted/completed public issues. Main is protected by a ruleset, so
-# updates are proposed on a dedicated pull request branch rather than pushed directly to main.
+# 按代码提交、已合并 PR 与被采纳/已解决公开 Issue 的综合贡献值刷新 README.md 与 README.zh-CN.md 中的贡献者墙。
+# main 分支受保护，因此通过独立分支提 PR 更新而非直接推送到 main。
 on:
   schedule:
     - cron: '0 2 * * 1'
@@ -100,8 +99,8 @@ jobs:
           pr_output="$(gh pr create \
             --base main \
             --head "$branch" \
-            --title "docs(readme): refresh community contributors wall" \
-            --body "Automatically refreshes the community contributors avatar wall in README.md and README.zh-CN.md from public merged pull requests and accepted/completed public issues." 2>&1)"
+            --title "docs(readme): refresh contributors wall" \
+            --body "Automatically refreshes the contributors avatar wall in README.md and README.zh-CN.md ranked by contribution score from public commits, merged pull requests, and accepted/completed public issues." 2>&1)"
           pr_status=$?
           set -e
 
