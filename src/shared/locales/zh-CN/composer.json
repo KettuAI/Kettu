@@ -251,6 +251,7 @@
     "add": "添加文件、照片或文件夹",
     "addFiles": "添加文件或照片…",
     "addFolder": "添加文件夹…",
+    "attachArtifact": "添加产物…",
     "screenshot": "截取浏览器画面",
     "noPage": "未打开网页",
     "openBrowser": "先打开浏览器",
@@ -341,5 +342,20 @@
     "remove": "移除第 {{number}} 条评论",
     "edit": "修改第 {{number}} 条评论",
     "show": "在对话里显示第 {{number}} 段"
+  },
+  "artifacts": {
+    "pickerTitle": "添加产物",
+    "searchPlaceholder": "搜索产物…",
+    "loading": "正在加载产物…",
+    "emptyProject": "这个项目里还没有产物",
+    "empty": "还没有产物",
+    "allAttached": "所有产物都已添加",
+    "noMatch": "没有匹配的产物",
+    "allProjects": "全部项目",
+    "noProject": "不属于项目",
+    "attachedLabel": "已添加的产物",
+    "remove": "移除 {{title}}",
+    "open": "打开 {{title}}",
+    "sentLabel": "引用的产物"
   }
 }

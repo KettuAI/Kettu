@@ -4,6 +4,7 @@ import {
   BubbleChatQuestionIcon,
   Camera01Icon,
   CommandLineIcon,
+  DashboardSquare02Icon,
   FolderAddIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -78,6 +79,11 @@ export function useAddMenu({
               },
             ]
           : []),
+        {
+          id: 'artifact',
+          label: t('attachments.attachArtifact'),
+          icon: <Glyph icon={DashboardSquare02Icon} />,
+        },
         // The session's own browser tab, which New session and the web client have none of.
         ...(!isWeb && sessionId
           ? [
@@ -136,6 +142,7 @@ export function useAddMenu({
   }
   const onAttach = (id: string) => {
     if (id === 'files' || id === 'folder') box.pick(id)
+    else if (id === 'artifact') box.openArtifactPicker()
     else if (id === 'screenshot') box.screenshot()
     else if (id === 'mention') startWord('@')
     else if (id === 'commands') startWord('/')

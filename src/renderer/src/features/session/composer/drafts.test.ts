@@ -5,9 +5,12 @@ import {
   flushDraft,
   parseDraft,
   readDraft,
+  readDraftArtifacts,
   readDraftComments,
   writeDraft,
+  writeDraftArtifacts,
   writeDraftComments,
+  type AttachedArtifact,
   type DraftComment,
 } from './drafts'
 
@@ -85,5 +88,40 @@ describe('a draft with comments', () => {
     clearDraft('s2')
     expect(readDraftComments('s2')).toEqual([])
     expect(draftedSessions()).toEqual([])
+  })
+})
+
+describe('a draft with attached artifacts', () => {
+  const artifact: AttachedArtifact = {
+    id: 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D1',
+    title: 'Design Spec',
+    kind: 'document',
+  }
+
+  it('saves attached artifacts with the draft and loads them back', () => {
+    writeDraft('s1', 'Review this')
+    writeDraftArtifacts('s1', [artifact])
+    flushDraft('s1')
+    expect(readDraft('s1')).toBe('Review this')
+    expect(readDraftArtifacts('s1')).toEqual([artifact])
+  })
+
+  it('keeps an artifact-only draft and drops malformed or duplicate entries on parse', () => {
+    writeDraftArtifacts('s1', [artifact])
+    flushDraft('s1')
+    expect(draftedSessions()).toEqual(['s1'])
+
+    const raw = JSON.stringify({
+      text: '',
+      attachments: [],
+      artifacts: [
+        artifact,
+        artifact,
+        { id: '', title: 'bad', kind: 'document' },
+        { id: 'x', title: 'bad', kind: 'unknown' },
+      ],
+    })
+    expect(parseDraft(raw).artifacts).toEqual([artifact])
+    expect(parseDraft(JSON.stringify({ text: 'old', attachments: [] })).artifacts).toEqual([])
   })
 })

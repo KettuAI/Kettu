@@ -22,6 +22,7 @@ import { openAttachmentPath } from '../attachments/open-attachment'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
+import { splitAttachedArtifactsPrompt } from '../composer/artifact-attachments'
 import { ChipView } from '../composer/chip-view'
 import {
   isSurfaceMention,
@@ -34,8 +35,10 @@ import {
 } from '../composer/chips'
 import { useLinkOpener } from '../composer/link-opener'
 import { projectOf } from '../composer/prompt-chips'
+import { ArtifactLink } from '../markdown/artifact-link'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
+import { SessionIdContext } from '../media/grants'
 import { attachmentKey } from '../media/viewer-items'
 
 const SentMarkdown = lazy(() => import('./sent-markdown'))
@@ -58,7 +61,11 @@ export function UserContentView({
   sessionId?: string
   entryId?: string
 }) {
-  const text = textOf(content)
+  const { t } = useTranslation('composer')
+  const rawText = textOf(content)
+  const parsedArtifacts = splitAttachedArtifactsPrompt(rawText)
+  const text = parsedArtifacts ? parsedArtifacts.text : rawText
+  const attachedArtifacts = parsedArtifacts?.artifacts ?? []
   // A command of Kettu's is no name the session's agent lists, but its text starts with it.
   const ran = content.some((c) => c.type === 'text' && c.command)
   const command = ran ? (/^\/(\S+)/.exec(text)?.[1] ?? null) : null
@@ -76,6 +83,27 @@ export function UserContentView({
             <ChipText text={text} command={command} sessionId={sessionId} entryId={entryId} />
           </Clamp>
         </div>
+      )}
+      {attachedArtifacts.length > 0 && (
+        <SessionIdContext value={sessionId ?? null}>
+          <div
+            role="list"
+            aria-label={t('artifacts.sentLabel')}
+            className="flex flex-wrap items-center gap-1.5"
+          >
+            {attachedArtifacts.map((artifact) => (
+              <span
+                key={artifact.id}
+                role="listitem"
+                className="inline-flex max-w-64 items-center overflow-hidden rounded-md bg-background/60 px-2 py-0.5 text-xs text-secondary shadow-card [&_[data-artifact-ref]]:max-w-full [&_[data-artifact-ref]]:truncate"
+              >
+                <ArtifactLink location={{ artifactId: artifact.id, place: null }}>
+                  {artifact.title}
+                </ArtifactLink>
+              </span>
+            ))}
+          </div>
+        </SessionIdContext>
       )}
       {refs.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -359,9 +387,11 @@ function ChipText({
   }
   return (
     <div data-selectable="">
-      <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
-        <SentMarkdown text={text} context={context} renderChip={renderChip} />
-      </Suspense>
+      <SessionIdContext value={sessionId ?? null}>
+        <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
+          <SentMarkdown text={text} context={context} renderChip={renderChip} />
+        </Suspense>
+      </SessionIdContext>
       {links.dialog}
     </div>
   )

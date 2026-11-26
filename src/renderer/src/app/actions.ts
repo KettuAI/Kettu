@@ -13,6 +13,14 @@ import {
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
 import {
+  draftArtifactAttachments,
+  formatAttachedArtifactsPrompt,
+  restoreDraftArtifactAttachments,
+  setDraftArtifactAttachments,
+  splitAttachedArtifactsPrompt,
+  type AttachedArtifact,
+} from '@renderer/features/session/composer/artifact-attachments'
+import {
   attachmentContent,
   contentAttachments,
   dropAttachments,
@@ -152,15 +160,21 @@ const promptText = (content: readonly UserContent[]): string =>
 function draftIsPrompt(prompt: readonly UserContent[]): boolean {
   const ids = contentAttachments(prompt).map((a) => a.id)
   const items = draftAttachments(NEW_SESSION_DRAFT).filter((item) => item.status !== 'failed')
+  const composed = formatAttachedArtifactsPrompt(
+    readDraft(NEW_SESSION_DRAFT),
+    draftArtifactAttachments(NEW_SESSION_DRAFT),
+  )
   return (
-    readDraft(NEW_SESSION_DRAFT).trim() === promptText(prompt).trim() &&
+    composed.trim() === promptText(prompt).trim() &&
     items.length === ids.length &&
     items.every((item, i) => item.attachment?.id === ids[i])
   )
 }
 
 const draftIsEmpty = (draft = NEW_SESSION_DRAFT) =>
-  !readDraft(draft).trim() && draftAttachments(draft).length === 0
+  !readDraft(draft).trim() &&
+  draftAttachments(draft).length === 0 &&
+  draftArtifactAttachments(draft).length === 0
 
 /**
  * Puts a message whose send failed back in its draft: its text above what was written since,
@@ -213,10 +227,15 @@ export async function createSession(
   // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again; a retry
   // leaves alone a draft written since. The host keeps the attachments' records for the message.
   let held: DraftAttachment[] | null = null
+  let heldText = ''
+  let heldArtifacts: readonly AttachedArtifact[] = []
   if (prompt !== null && draftIsPrompt(prompt)) {
+    heldText = readDraft(NEW_SESSION_DRAFT)
     held = draftAttachments(NEW_SESSION_DRAFT)
+    heldArtifacts = draftArtifactAttachments(NEW_SESSION_DRAFT)
     clearDraft(NEW_SESSION_DRAFT)
     setDraftAttachments(NEW_SESSION_DRAFT, [])
+    setDraftArtifactAttachments(NEW_SESSION_DRAFT, [])
   }
   try {
     const summary = await host('sessions.create', {
@@ -257,9 +276,17 @@ export async function createSession(
     // since a quit can close the window before a later write. The tiles it left with keep their
     // pixel sizes; a retry that left a draft written since alone puts back only into an empty one.
     if (prompt !== null && held) {
-      putBackDraft(NEW_SESSION_DRAFT, promptText(prompt), held)
+      putBackDraft(NEW_SESSION_DRAFT, heldText, held)
+      if (heldArtifacts.length > 0) {
+        restoreDraftArtifactAttachments(NEW_SESSION_DRAFT, heldArtifacts)
+      }
     } else if (prompt !== null && draftIsEmpty()) {
-      writeDraft(NEW_SESSION_DRAFT, promptText(prompt))
+      const raw = promptText(prompt)
+      const parsed = splitAttachedArtifactsPrompt(raw)
+      writeDraft(NEW_SESSION_DRAFT, parsed ? parsed.text : raw)
+      if (parsed && parsed.artifacts.length > 0) {
+        restoreDraftArtifactAttachments(NEW_SESSION_DRAFT, parsed.artifacts)
+      }
       restoreAttachments(NEW_SESSION_DRAFT, prompt)
       flushDraft(NEW_SESSION_DRAFT)
     }
@@ -292,15 +319,23 @@ export async function createSession(
  */
 export async function editFromMessage(sessionId: string, entryId: string): Promise<void> {
   const held = draftAttachments(sessionId).filter((item) => item.status === 'ready')
-  const text = readDraft(sessionId)
+  const text = formatAttachedArtifactsPrompt(
+    readDraft(sessionId),
+    draftArtifactAttachments(sessionId),
+  )
   const draft: UserContent[] = [
     ...(text.trim() ? [{ type: 'text' as const, text }] : []),
     ...attachmentContent(held),
   ]
   const { content } = await host('sessions.rewind', { sessionId, entryId, draft })
-  const message = promptText(content)
+  const rawMessage = promptText(content)
+  const parsed = splitAttachedArtifactsPrompt(rawMessage)
+  const message = parsed ? parsed.text : rawMessage
   const written = readDraft(sessionId)
   writeDraft(sessionId, !message ? written : written.trim() ? `${message}\n\n${written}` : message)
+  if (parsed && parsed.artifacts.length > 0) {
+    restoreDraftArtifactAttachments(sessionId, parsed.artifacts)
+  }
   const items = draftAttachments(sessionId)
   restoreAttachments(sessionId, content)
   // The message's attachments go in front of those the composer held.
@@ -313,7 +348,10 @@ export async function editFromMessage(sessionId: string, entryId: string): Promi
 /** Put back: the turns an edit set aside return, and the composer holds what it did before it. */
 export async function putBackRewound(sessionId: string): Promise<void> {
   const { draft } = await host('sessions.putBack', { sessionId })
-  writeDraft(sessionId, promptText(draft))
+  const raw = promptText(draft)
+  const parsed = splitAttachedArtifactsPrompt(raw)
+  writeDraft(sessionId, parsed ? parsed.text : raw)
+  setDraftArtifactAttachments(sessionId, parsed ? parsed.artifacts : [])
   resetAttachments(sessionId, draft)
   flushDraft(sessionId)
   emitAppEvent({ kind: 'draft-written', draft: sessionId })
@@ -327,9 +365,14 @@ export async function retryTurn(sessionId: string, content: readonly UserContent
   await host('sessions.retry', { sessionId })
   const ids = new Set(contentAttachments(content).map((a) => a.id))
   const items = draftAttachments(sessionId)
-  if (draftIsEmpty(sessionId) || readDraft(sessionId).trim() !== promptText(content).trim()) return
+  const composed = formatAttachedArtifactsPrompt(
+    readDraft(sessionId),
+    draftArtifactAttachments(sessionId),
+  )
+  if (draftIsEmpty(sessionId) || composed.trim() !== promptText(content).trim()) return
   if (!items.every((item) => item.attachment && ids.has(item.attachment.id))) return
   clearDraft(sessionId)
+  setDraftArtifactAttachments(sessionId, [])
   releaseResent(sessionId, content)
   emitAppEvent({ kind: 'draft-written', draft: sessionId })
 }
@@ -355,10 +398,15 @@ export async function takeReturnedMessages(
   }
   for (const { sessionId, content } of messages) {
     const draft = sessionId ?? NEW_SESSION_DRAFT
-    const text = promptText(content)
+    const raw = promptText(content)
+    const parsed = splitAttachedArtifactsPrompt(raw)
+    const text = parsed ? parsed.text : raw
     const written = readDraft(draft)
     const next = draftIsEmpty(draft) || !written ? text : text ? `${written}\n\n${text}` : written
     writeDraft(draft, next)
+    if (parsed && parsed.artifacts.length > 0) {
+      restoreDraftArtifactAttachments(draft, parsed.artifacts)
+    }
     restoreAttachments(draft, content)
     flushDraft(draft)
     emitAppEvent({ kind: 'draft-written', draft })
@@ -504,6 +552,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await host('sessions.delete', { sessionId })
   forgetSession(sessionId)
   clearDraft(sessionId)
+  setDraftArtifactAttachments(sessionId, [])
   dropAttachments(sessionId)
   useSessionsStore.getState().remove(sessionId)
   closeSessionInSplit(sessionId)
@@ -514,6 +563,7 @@ export function sessionRemoved(sessionId: string): void {
   useSessionsStore.getState().remove(sessionId)
   forgetSession(sessionId)
   clearDraft(sessionId)
+  setDraftArtifactAttachments(sessionId, [])
   dropAttachments(sessionId)
   closeSessionInSplit(sessionId)
 }

@@ -19,6 +19,7 @@ import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { useOverlayPresence } from '@renderer/stores/overlays'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
+import { ArtifactPickerPopover, AttachedArtifactChips } from './artifact-picker'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
@@ -423,6 +424,7 @@ export function PromptBox({
       <div ref={group} className="kettu-prompt" data-disabled={disabled || undefined}>
         <ResizeGrip editor={editor} />
         {top}
+        <AttachedArtifactChips draft={draft} sessionId={box.sessionId} onLeave={box.focus} />
         <AttachmentTray
           draft={draft}
           sessionId={box.sessionId}
@@ -590,6 +592,16 @@ export function PromptBox({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
+      <ArtifactPickerPopover
+        open={box.artifactPickerOpen}
+        onOpenChange={box.setArtifactPickerOpen}
+        anchor={group}
+        draft={draft}
+        projectPath={box.artifactProjectPath}
+        noProject={box.noProject}
+        hostId={hostId}
+        onPicked={() => requestAnimationFrame(() => box.focus())}
+      />
       {chips.overlays}
       <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
