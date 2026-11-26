@@ -52,6 +52,9 @@ import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
+import type { BotHostTarget, BotRemoteAnswer, BotRemoteCall } from '@shared/bots'
+import type { AgentStatus, HostEvent, Project, SessionSummary } from '@shared/agent-host'
+import type { SessionSnapshot } from '@shared/thread'
 import { locale as currentLocale, islandHelperStrings, islandT, setLocale, t } from './i18n'
 import { IslandBridge } from './island/bridge'
 import { appUpdate } from './island/notices'
@@ -525,6 +528,11 @@ async function start(): Promise<void> {
   nativeTheme.on('updated', () => island.appearanceChanged())
   nativeTheme.on('updated', () => agentHost.pushColorMode(colorMode()))
   app.on('will-quit', () => island.quit())
+  let botRemoteHandler: (call: BotRemoteCall) => Promise<BotRemoteAnswer> = async () => ({
+    ok: false,
+    code: 'offline',
+    message: 'Remote host sessions are still starting.',
+  })
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     colorMode,
@@ -587,6 +595,7 @@ async function start(): Promise<void> {
     onDeviceTurnEnded: (sessionId) => deviceHost.turnEnded(sessionId),
     onTerminalTurnEnded: (sessionId) => terminalHost.turnEnded(sessionId),
     terminal: (call) => terminalHost.call(call),
+    botRemote: (call) => botRemoteHandler(call),
     onBrowserTurnEnded: (sessionId) => {
       if (!remoteBrowser.isRemote(sessionId)) browserTools?.turnEnded(sessionId)
     },
@@ -839,9 +848,34 @@ async function start(): Promise<void> {
       remoteBrowser.hostClosed(hostId)
       remoteArtifacts.ended(hostId)
       island.remoteClosed(hostId)
+      agentHost.pushBotRemoteEvent({ kind: 'host_offline', hostId })
     },
-    opened: (hostId) => island.remoteOpened(hostId),
-    event: (hostId, event) => island.remoteEvent(hostId, event),
+    opened: (hostId) => {
+      island.remoteOpened(hostId)
+      const known = remoteHost.hosts?.find((h) => h.id === hostId)
+      agentHost.pushBotRemoteEvent({
+        kind: 'host_online',
+        hostId,
+        hostName: known?.name ?? hostId,
+      })
+    },
+    event: (hostId, event) => {
+      island.remoteEvent(hostId, event)
+      const typed = event as HostEvent
+      if (typed?.type === 'session.summary') {
+        const s = typed.summary
+        agentHost.pushBotRemoteEvent({
+          kind: 'session_update',
+          hostId,
+          sessionId: s.id,
+          status: s.status,
+          permissionCount: s.permissionCount,
+          title: s.title,
+          branch: s.branch,
+          archivedAt: s.archivedAt,
+        })
+      }
+    },
     resync: (hostId) => island.remoteResync(hostId),
     artifactEvent: (hostId, event) => {
       if (event.type === 'artifacts.runtime') remoteArtifacts.streamed(hostId, event)
@@ -851,6 +885,113 @@ async function start(): Promise<void> {
     },
     media: hostMedia,
   })
+  botRemoteHandler = async (call: BotRemoteCall): Promise<BotRemoteAnswer> => {
+    const open = new Set(hostSessions.openHosts())
+    if (call.kind === 'list_targets') {
+      const known = (remoteHost.hosts ?? []).filter((h) => !h.removed)
+      const targets: BotHostTarget[] = await Promise.all(
+        known.map(async (h) => {
+          const online = open.has(h.id)
+          if (!online) {
+            return {
+              hostId: h.id,
+              name: h.name,
+              platform: h.platform,
+              online: false,
+              self: false,
+              projects: [],
+              agents: [],
+              load: null,
+            }
+          }
+          const [projRes, agentRes, sessRes] = await Promise.allSettled([
+            hostSessions.call(h.id, 'projects.list', undefined) as Promise<Project[]>,
+            hostSessions.call(h.id, 'agents.list', undefined) as Promise<AgentStatus[]>,
+            hostSessions.call(h.id, 'sessions.list', {}) as Promise<SessionSummary[]>,
+          ])
+          const projects =
+            projRes.status === 'fulfilled' && Array.isArray(projRes.value)
+              ? projRes.value.filter((p) => !p.missing).map((p) => ({ path: p.path, name: p.name }))
+              : []
+          const agents =
+            agentRes.status === 'fulfilled' && Array.isArray(agentRes.value)
+              ? agentRes.value
+                  .filter((a) => !a.disabled && !a.uninstalled)
+                  .map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                    ready: a.state === 'ready' || a.state === 'available',
+                    mcp: a.kettuServer?.runs !== false && a.capabilities?.mcpHttp !== false,
+                  }))
+              : []
+          const workingSessions =
+            sessRes.status === 'fulfilled' && Array.isArray(sessRes.value)
+              ? sessRes.value.filter(
+                  (s) => s.status === 'running' || s.status === 'awaiting_permission',
+                ).length
+              : 0
+          return {
+            hostId: h.id,
+            name: h.name,
+            platform: h.platform,
+            online: true,
+            self: false,
+            projects,
+            agents,
+            load: { cpuPct: null, memPct: null, workingSessions },
+          }
+        }),
+      )
+      return { ok: true, data: targets }
+    }
+    if (!open.has(call.hostId)) {
+      return { ok: false, code: 'offline', message: `Host ${call.hostId} is offline.` }
+    }
+    try {
+      if (call.kind === 'dispatch_session') {
+        const created = (await hostSessions.call(call.hostId, 'sessions.create', {
+          agentId: call.agentId,
+          projectPath: call.projectPath,
+          prompt: [{ type: 'text', text: call.prompt }],
+          title: call.title,
+          ...(call.model ? { options: { model: call.model } } : {}),
+          ...(call.worktree ? { worktree: { base: 'HEAD' } } : {}),
+        })) as SessionSummary
+        return { ok: true, data: { sessionId: created.id, branch: created.branch } }
+      }
+      if (call.kind === 'send_session') {
+        await hostSessions.call(call.hostId, 'sessions.queue', {
+          sessionId: call.sessionId,
+          content: [{ type: 'text', text: call.text }],
+        })
+        return { ok: true, data: null }
+      }
+      if (call.kind === 'archive_session') {
+        await hostSessions.call(call.hostId, 'sessions.archive', {
+          sessionId: call.sessionId,
+          subSessions: true,
+        })
+        return { ok: true, data: null }
+      }
+      if (call.kind === 'read_session_reply') {
+        const snap = (await hostSessions.call(call.hostId, 'sessions.snapshot', {
+          sessionId: call.sessionId,
+        })) as SessionSnapshot
+        const lastAgent = [...(snap.entries ?? [])]
+          .reverse()
+          .find((entry) => entry.kind === 'agent' && entry.markdown.trim().length > 0)
+        return {
+          ok: true,
+          data: lastAgent && lastAgent.kind === 'agent' ? lastAgent.markdown : null,
+        }
+      }
+      return { ok: false, code: 'failed', message: 'Unknown remote Bot call' }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const offline = /offline|closed|disconnect|unavailable|not open/i.test(message)
+      return { ok: false, code: offline ? 'offline' : 'failed', message }
+    }
+  }
   const remoteArtifactsDir = join(userDataPath, 'artifacts', 'remote')
   const remoteArtifacts = new RemoteArtifacts({
     call: (hostId, method, params) => hostSessions.call(hostId, method, params),

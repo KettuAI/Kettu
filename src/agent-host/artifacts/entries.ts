@@ -28,6 +28,9 @@ type OwnEntry = Extract<
       | 'market_publish'
       | 'settings_change'
       | 'routine_change'
+      | 'bot_change'
+      | 'bot_dispatch'
+      | 'bot_handoff'
       | 'task_delivery'
       | 'plugin_denial'
       | 'takeover'
@@ -164,6 +167,9 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
     case 'market_publish':
     case 'settings_change':
     case 'routine_change':
+    case 'bot_change':
+    case 'bot_dispatch':
+    case 'bot_handoff':
     case 'task_delivery':
     case 'plugin_denial':
     case 'session_started':

@@ -19,6 +19,20 @@ import {
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { CanvasError, parseCanvasOps, type CanvasOp } from '@shared/canvas-doc'
 import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
+import {
+  BOT_AVATAR_MIME_TYPES,
+  BOT_DESCRIPTION_CHARS,
+  BOT_MAX_TARGETS,
+  BOT_NAME_CHARS,
+  BOT_ROLE_CHARS,
+  isBotAvatar,
+  isBotHandle,
+  isBotTargetRef,
+  normalizeBotLimits,
+  type BotAvatarMimeType,
+  type BotChanges,
+  type BotDraft,
+} from '@shared/bots'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isControlOutcome, isSurfaceAccessDecision } from '@shared/control'
 import { isComputerAppDecision } from '@shared/computer-use'
@@ -829,6 +843,129 @@ function routineChanges(value: unknown, platform: Platform): RoutineChanges {
   return changes
 }
 
+/** 允许为空的字符串字段校验（带长度上限）。 */
+function boundedText(o: Fields, key: string, max: number): string {
+  const value = o[key]
+  if (typeof value !== 'string' || value.length > max) {
+    throw invalidParams(`${key} must be a string of at most ${max} characters`)
+  }
+  return value
+}
+
+/** 校验创建 Bot 的输入参数。 */
+function botDraft(value: unknown): BotDraft {
+  const o = fields(value)
+  const name = string(o, 'name', BOT_NAME_CHARS)
+  const handle = string(o, 'handle', 32).toLowerCase()
+  if (!isBotHandle(handle)) {
+    throw invalidParams('handle must start with a letter or digit and use a-z, 0-9, -, _')
+  }
+  const description =
+    o.description === undefined ? undefined : boundedText(o, 'description', BOT_DESCRIPTION_CHARS)
+  if (o.avatar !== undefined && !isBotAvatar(o.avatar)) {
+    throw invalidParams('avatar is invalid')
+  }
+  if (
+    o.targets !== undefined &&
+    (!Array.isArray(o.targets) ||
+      o.targets.length > BOT_MAX_TARGETS ||
+      !o.targets.every(isBotTargetRef))
+  ) {
+    throw invalidParams('targets must be a list of valid computer/project references')
+  }
+  if (o.scope !== undefined && !isPermissionScope(o.scope)) {
+    throw invalidParams('scope is invalid')
+  }
+  const limits =
+    o.limits === undefined
+      ? undefined
+      : normalizeBotLimits(fields(o.limits) as Partial<BotDraft['limits']>)
+  const roleMarkdown =
+    o.roleMarkdown === undefined ? undefined : boundedText(o, 'roleMarkdown', BOT_ROLE_CHARS)
+  return {
+    name,
+    handle,
+    ...(description === undefined ? {} : { description }),
+    ...(o.avatar === undefined ? {} : { avatar: o.avatar }),
+    agentId: agentId(o),
+    ...(o.model === undefined ? {} : { model: o.model === null ? null : string(o, 'model', 200) }),
+    ...(o.effort === undefined
+      ? {}
+      : { effort: o.effort === null ? null : string(o, 'effort', 200) }),
+    ...(o.targets === undefined ? {} : { targets: o.targets }),
+    ...(o.scope === undefined ? {} : { scope: o.scope }),
+    ...(limits === undefined ? {} : { limits }),
+    ...(roleMarkdown === undefined ? {} : { roleMarkdown }),
+  }
+}
+
+/** 校验编辑 Bot 的增量参数。 */
+function botChanges(value: unknown): BotChanges {
+  const o = fields(value)
+  const known = new Set([
+    'name',
+    'handle',
+    'description',
+    'avatar',
+    'agentId',
+    'model',
+    'effort',
+    'targets',
+    'scope',
+    'limits',
+    'paused',
+    'roleMarkdown',
+  ])
+  for (const key of Object.keys(o)) {
+    if (!known.has(key)) throw invalidParams(`Unknown Bot change "${key}"`)
+  }
+  const changes: BotChanges = {}
+  if (o.name !== undefined) changes.name = string(o, 'name', BOT_NAME_CHARS)
+  if (o.handle !== undefined) {
+    const handle = string(o, 'handle', 32).toLowerCase()
+    if (!isBotHandle(handle)) {
+      throw invalidParams('handle must start with a letter or digit and use a-z, 0-9, -, _')
+    }
+    changes.handle = handle
+  }
+  if (o.description !== undefined) {
+    changes.description = boundedText(o, 'description', BOT_DESCRIPTION_CHARS)
+  }
+  if (o.avatar !== undefined) {
+    if (!isBotAvatar(o.avatar)) throw invalidParams('avatar is invalid')
+    changes.avatar = o.avatar
+  }
+  if (o.agentId !== undefined) changes.agentId = agentId(o)
+  if (o.model !== undefined) {
+    changes.model = o.model === null ? null : string(o, 'model', 200)
+  }
+  if (o.effort !== undefined) {
+    changes.effort = o.effort === null ? null : string(o, 'effort', 200)
+  }
+  if (o.targets !== undefined) {
+    if (
+      !Array.isArray(o.targets) ||
+      o.targets.length > BOT_MAX_TARGETS ||
+      !o.targets.every(isBotTargetRef)
+    ) {
+      throw invalidParams('targets must be a list of valid computer/project references')
+    }
+    changes.targets = o.targets
+  }
+  if (o.scope !== undefined) {
+    if (!isPermissionScope(o.scope)) throw invalidParams('scope is invalid')
+    changes.scope = o.scope
+  }
+  if (o.limits !== undefined) {
+    changes.limits = fields(o.limits) as BotChanges['limits']
+  }
+  if (o.paused !== undefined) changes.paused = flag(o, 'paused')
+  if (o.roleMarkdown !== undefined) {
+    changes.roleMarkdown = boundedText(o, 'roleMarkdown', BOT_ROLE_CHARS)
+  }
+  return changes
+}
+
 function sessionId(o: Fields): string {
   return string(o, 'sessionId', ID_CHARS)
 }
@@ -1366,9 +1503,12 @@ const MEMORY_IMPORT_KEYS = 10_000
 
 function memoryScope(value: unknown, platform: Platform): MemoryScope {
   if (!isMemoryScope(value)) {
-    throw invalidParams('scope must be { layer: global } or { layer: project, project }')
+    throw invalidParams(
+      'scope must be { layer: global }, { layer: project, project }, or { layer: bot, botId }',
+    )
   }
   if (value.layer === 'global') return { layer: 'global' }
+  if (value.layer === 'bot') return { layer: 'bot', botId: value.botId }
   return { layer: 'project', project: absolutePath(value, 'project', platform) }
 }
 
@@ -2203,6 +2343,129 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
+    'bots.list': none,
+    'bots.get': (params) => ({ botId: string(fields(params), 'botId', ID_CHARS) }),
+    'bots.create': (params) => botDraft(params),
+    'bots.update': (params) => {
+      const o = fields(params)
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        changes: botChanges(o.changes),
+      }
+    },
+    'bots.delete': (params) => {
+      const o = fields(params)
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        ...(o.keepSessions === undefined ? {} : { keepSessions: flag(o, 'keepSessions') }),
+      }
+    },
+    'bots.setPaused': (params) => {
+      const o = fields(params)
+      return { botId: string(o, 'botId', ID_CHARS), paused: flag(o, 'paused') }
+    },
+    'bots.sendMain': (params) => {
+      const o = fields(params)
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        text: boundedText(o, 'text', TEXT_CHARS),
+        ...(o.content === undefined ? {} : { content: promptContent(o.content) }),
+        ...(o.sourceSessionId === undefined
+          ? {}
+          : { sourceSessionId: string(o, 'sourceSessionId', ID_CHARS) }),
+        ...(o.sourceHostId === undefined
+          ? {}
+          : {
+              sourceHostId: o.sourceHostId === null ? null : string(o, 'sourceHostId', ID_CHARS),
+            }),
+      }
+    },
+    'bots.resetMain': (params) => ({ botId: string(fields(params), 'botId', ID_CHARS) }),
+    'bots.dispatch': (params) => {
+      const o = fields(params)
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        targetHostId: o.targetHostId === null ? null : string(o, 'targetHostId', ID_CHARS),
+        projectPath: string(o, 'projectPath', PATH_CHARS),
+        title: string(o, 'title', 160),
+        prompt: string(o, 'prompt', 40_000),
+        ...(o.agentId === undefined ? {} : { agentId: agentId(o) }),
+        ...(o.model === undefined
+          ? {}
+          : { model: o.model === null ? null : string(o, 'model', 200) }),
+        ...(o.worktree === undefined ? {} : { worktree: flag(o, 'worktree') }),
+        ...(o.sourceSessionId === undefined
+          ? {}
+          : { sourceSessionId: string(o, 'sourceSessionId', ID_CHARS) }),
+        ...(o.sourceHostId === undefined
+          ? {}
+          : {
+              sourceHostId: o.sourceHostId === null ? null : string(o, 'sourceHostId', ID_CHARS),
+            }),
+      }
+    },
+    'bots.retryPending': (params) => ({ requestId: string(fields(params), 'requestId', ID_CHARS) }),
+    'bots.cancelRequest': (params) => ({
+      requestId: string(fields(params), 'requestId', ID_CHARS),
+    }),
+    'bots.archiveDone': (params) => ({ botId: string(fields(params), 'botId', ID_CHARS) }),
+    'bots.answerChange': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'confirm' && o.decision !== 'decline') {
+        throw invalidParams('decision must be confirm or decline')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+        ...(o.keepSessions === undefined ? {} : { keepSessions: flag(o, 'keepSessions') }),
+      }
+    },
+    'bots.uploadAvatar': (params) => {
+      const o = fields(params)
+      const mime = o.mimeType
+      if (
+        typeof mime !== 'string' ||
+        !(BOT_AVATAR_MIME_TYPES as readonly string[]).includes(mime)
+      ) {
+        throw invalidParams('mimeType must be image/webp, image/png or image/jpeg')
+      }
+      const dataBase64 = string(o, 'dataBase64', 120_000)
+      let crop: { x: number; y: number; scale: number } | undefined
+      if (o.crop !== undefined) {
+        const c = fields(o.crop)
+        if (
+          typeof c.x !== 'number' ||
+          typeof c.y !== 'number' ||
+          typeof c.scale !== 'number' ||
+          !Number.isFinite(c.x) ||
+          !Number.isFinite(c.y) ||
+          !Number.isFinite(c.scale)
+        ) {
+          throw invalidParams('crop must have numeric x, y and scale')
+        }
+        crop = { x: c.x, y: c.y, scale: c.scale }
+      }
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        mimeType: mime as BotAvatarMimeType,
+        dataBase64,
+        ...(crop ? { crop } : {}),
+      }
+    },
+    'bots.readAvatar': (params) => ({ botId: string(fields(params), 'botId', ID_CHARS) }),
+    'bots.listTargets': none,
+    'bots.handoff': (params) => {
+      const o = fields(params)
+      return {
+        botId: string(o, 'botId', ID_CHARS),
+        sessionId: sessionId(o),
+        text: string(o, 'text', TEXT_CHARS),
+        ...(o.contextSummary === undefined
+          ? {}
+          : { contextSummary: boundedText(o, 'contextSummary', 8_000) }),
+      }
+    },
     'plugins.list': none,
     'plugins.inspect': (params) => ({ source: pluginSource(fields(params).source, platform) }),
     'plugins.install': pluginToken,

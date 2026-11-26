@@ -262,6 +262,9 @@ export function settled(entry: ThreadEntry): ThreadEntry {
     case 'routine_change':
       // A card still waiting ended with the turn that asked, and did nothing.
       return entry.outcome === null ? { ...entry, outcome: { kind: 'ended' } } : entry
+    case 'bot_change':
+      // Bot 创建/修改/删除确认卡片随回合结束未答复则自动结束，不做任何变更。
+      return entry.outcome === null ? { ...entry, outcome: { kind: 'ended' } } : entry
     case 'tool': {
       const open = entry.status === 'pending' || entry.status === 'in_progress'
       if (!open && entry.permission === null) return entry

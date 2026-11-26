@@ -35,6 +35,7 @@ import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import type { BotRemoteAnswer, BotRemoteCall, BotRemoteEvent } from '@shared/bots'
 import {
   siteOf,
   type BrowserCallAnswer,
@@ -172,6 +173,8 @@ import { PublishDrafts } from './marketplace/publish-drafts'
 import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import { ROUTINE_WAIT_MS, RoutineTools } from './routines/tools'
+import { BotManager } from './bots/manager'
+import { BotTools } from './bots/tools'
 import {
   SETTINGS_WAIT_MS,
   SettingsTools,
@@ -549,6 +552,8 @@ export class AgentHost {
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
   private readonly terminalCalls = new Map<number, (answer: TerminalCallAnswer) => void>()
+  private readonly botRemoteCalls = new Map<number, (answer: BotRemoteAnswer) => void>()
+  private nextBotRemoteCall = 1
   private nextTerminalCall = 1
   // Sessions whose running turn used a terminal, told to the terminal host when the turn ends.
   private readonly terminalTurns = new Set<string>()
@@ -610,6 +615,9 @@ export class AgentHost {
   /** The settings tools of Kettu's MCP service. */
   private readonly settingsTools: SettingsTools
   private readonly routineTools: RoutineTools
+  /** Kettu Bot 跨电脑角色管理器与 MCP 工具组。 */
+  readonly bots: BotManager
+  private readonly botTools: BotTools
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -859,6 +867,43 @@ export class AgentHost {
       ask: (sessionId, ask) => this.sessions.routineAsked(sessionId, ask, ROUTINE_WAIT_MS),
       settle: (sessionId, entryId, outcome) =>
         this.sessions.routineSettled(sessionId, entryId, outcome),
+    })
+    this.botTools = new BotTools({
+      list: () => this.bots.list(),
+      get: (botId) => this.bots.get(botId),
+      findByHandle: (handle) => {
+        const found = this.bots.findByHandle(handle)
+        return found
+          ? {
+              ...found,
+              roleMarkdown: this.bots.roleOf(found.id),
+              status: 'idle',
+              activeCount: 0,
+              needsYouCount: 0,
+              pendingHostCount: 0,
+              todayCount: 0,
+              memoryCount: 0,
+              lastActivityAt: null,
+            }
+          : null
+      },
+      create: (draft) => this.bots.create(draft),
+      update: (botId, changes) => this.bots.update(botId, changes),
+      delete: (botId, keepSessions) => this.bots.delete(botId, keepSessions),
+      listTargets: () => this.bots.listTargets(),
+      dispatch: (params) => this.bots.dispatch(params),
+      workOf: (botId) => this.bots.workOf(botId),
+      sendToWorkSession: (requestId, text) => this.bots.sendToWorkSession(requestId, text),
+      archiveRequest: (requestId) => this.bots.archiveRequest(requestId),
+      handoff: (params) => this.bots.handoff(params),
+      countSessions: (botId) => this.bots.countSessions(botId),
+      allowAgentHandoff: () => this.settings.bots?.allowAgentHandoff !== false,
+      botIdOfSession: (sessionId) => this.bots.botIdOfMainSession(sessionId),
+      sessionAgent: (sessionId) => this.sessions.sessionAgent(sessionId),
+      agents: () => this.agents.statuses(),
+      ask: (sessionId, ask, waitMs) => this.sessions.botAsked(sessionId, ask, waitMs),
+      settle: (sessionId, entryId, outcome) =>
+        this.sessions.botSettled(sessionId, entryId, outcome),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -1159,6 +1204,7 @@ export class AgentHost {
       memory: {
         service: this.memory,
         projectOf: (caller) => this.projects.find(caller.project)?.path ?? null,
+        botOf: (caller) => this.bots.botIdOfMainSession(caller.sessionId),
         written: (sessionId, write) => this.sessions.memoryWritten(sessionId, write),
         proposed: (sessionId, proposal) => this.sessions.memoryProposed(sessionId, proposal),
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
@@ -1211,6 +1257,7 @@ export class AgentHost {
       market: this.marketTools,
       settings: this.settingsTools,
       routines: this.routineTools,
+      bots: this.botTools,
       plugins: this.pluginTools,
       skills: {
         of: (sessionId) => {
@@ -1577,6 +1624,13 @@ export class AgentHost {
           }
           this.hub.broadcast({ type: 'session.summary', summary })
           if (summary.scratch || summary.worktree) this.sendFolders()
+          void this.bots.onLocalSessionUpdate({
+            sessionId: summary.id,
+            status: summary.status,
+            permissionCount: summary.permissionCount,
+            branch: summary.branch,
+            archivedAt: summary.archivedAt,
+          })
         },
         removed: (sessionId, portIds) => {
           if (portIds) {
@@ -1670,6 +1724,37 @@ export class AgentHost {
         paused: (agentId, title, body) =>
           this.attend({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
+    })
+    this.bots = new BotManager({
+      userDataPath: options.userDataPath,
+      platform,
+      hostName: () => os.hostname(),
+      settings: () => this.settings,
+      projects: () => this.projects.list(),
+      agents: () => this.agents.statuses(),
+      sessions: {
+        createMainSession: (params) => this.sessions.createBotMainSession(params),
+        createWorkSession: (params) => this.sessions.createBotWorkSession(params),
+        sendMessage: async (sessionId, content) => {
+          await this.sessions.queue(sessionId, content)
+        },
+        readLatestReply: (sessionId) => this.sessions.lastReply(sessionId),
+        archiveSession: (sessionId) => this.sessions.archive(sessionId, true),
+        deleteSession: (sessionId) => this.sessions.delete(sessionId),
+        detachBotSessions: async (botId) => this.sessions.detachBotSessions(botId),
+        countBotWorkSessions: (botId) => this.sessions.countBotWorkSessions(botId),
+        isSessionRunning: (sessionId) => this.sessions.isSessionWorking(sessionId),
+        upsertDispatchEntry: (sessionId, entry) =>
+          this.sessions.upsertBotDispatchEntry(sessionId, entry),
+        addHandoffEntry: (sessionId, params) => this.sessions.addBotHandoffEntry(sessionId, params),
+        updateHandoffEntry: (sessionId, entryId, changes) =>
+          this.sessions.updateBotHandoffEntry(sessionId, entryId, changes),
+      },
+      remote: (call) => this.botRemoteCall(call),
+      memoryCount: async (botId) => (await this.memory.list({ layer: 'bot', botId })).length,
+      memoryIndex: (botId) => this.memory.botIndex(botId),
+      emit: (event) => this.broadcast(event),
+      log,
     })
     routineHooks.current = this.routines.hooks
     const threads = this.threads
@@ -1881,6 +1966,7 @@ export class AgentHost {
       host.attachments.load(),
       host.artifactService.start(),
       host.routines.load(),
+      host.bots.load(),
       host.memory.load(),
       host.workflowLibrary.load(),
       host.plugins.load(),
@@ -3446,6 +3532,28 @@ export class AgentHost {
     resolve(answer)
   }
 
+  /** 向主进程发起 Bot 跨电脑远端主机桥接调用。 */
+  botRemoteCall(call: BotRemoteCall): Promise<BotRemoteAnswer> {
+    const callId = this.nextBotRemoteCall++
+    return new Promise<BotRemoteAnswer>((resolve) => {
+      this.botRemoteCalls.set(callId, resolve)
+      this.options.send({ type: 'host:bot-remote-call', callId, call })
+    })
+  }
+
+  /** `bot-remote-result`：接收主进程返回的跨电脑桥接调用结果。 */
+  botRemoteResult(callId: number, answer: BotRemoteAnswer): void {
+    const resolve = this.botRemoteCalls.get(callId)
+    if (!resolve) return
+    this.botRemoteCalls.delete(callId)
+    resolve(answer)
+  }
+
+  /** `host:bot-remote-event`：接收主进程推送的远端主机上下线与远端会话状态更新。 */
+  botRemoteEvent(event: BotRemoteEvent): void {
+    void this.bots.onRemoteEvent(event)
+  }
+
   /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
   terminalHandedBack(sessionId: string, durationMs: number): void {
     this.sessions.controlHandedBack(sessionId, 'terminal', durationMs)
@@ -3492,6 +3600,14 @@ export class AgentHost {
       })
     }
     this.terminalCalls.clear()
+    for (const resolve of this.botRemoteCalls.values()) {
+      resolve({
+        ok: false,
+        code: 'offline',
+        message: 'Kettu stopped before the remote host answered.',
+      })
+    }
+    this.botRemoteCalls.clear()
     for (const resolve of this.marketCalls.values()) {
       resolve({
         error: { code: 'network', status: null, message: 'Kettu stopped before it answered.' },
@@ -3509,6 +3625,7 @@ export class AgentHost {
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
       await this.routines.shutdown()
+      this.bots.dispose()
       this.sessions.shutdown()
       this.idleRelease.stop()
       this.plugins.stop()
@@ -3952,6 +4069,41 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'bots.list': () => this.bots.list(),
+      'bots.get': ({ botId }) => this.bots.get(botId),
+      'bots.create': (draft) => this.bots.create(draft),
+      'bots.update': ({ botId, changes }) => this.bots.update(botId, changes),
+      'bots.delete': ({ botId, keepSessions }) => this.bots.delete(botId, keepSessions ?? true),
+      'bots.setPaused': ({ botId, paused }) => this.bots.setPaused(botId, paused),
+      'bots.sendMain': (params) => this.bots.sendMain(params),
+      'bots.resetMain': ({ botId }) => this.bots.resetMain(botId),
+      'bots.dispatch': (params) =>
+        this.bots.dispatch({
+          ...params,
+          source: params.sourceSessionId
+            ? {
+                kind: 'mention',
+                sessionId: params.sourceSessionId,
+                hostId: params.sourceHostId ?? null,
+              }
+            : { kind: 'main' },
+        }),
+      'bots.retryPending': ({ requestId }) => this.bots.retryPending(requestId),
+      'bots.cancelRequest': ({ requestId }) => this.bots.cancelRequest(requestId),
+      'bots.archiveDone': ({ botId }) => this.bots.archiveDone(botId),
+      'bots.answerChange': ({ sessionId, entryId, decision, keepSessions }, { device }) =>
+        this.sessions.answerBotChange(
+          sessionId,
+          entryId,
+          decision,
+          keepSessions,
+          fromDevice(device),
+        ),
+      'bots.uploadAvatar': ({ botId, mimeType, dataBase64, crop }) =>
+        this.bots.uploadAvatar(botId, mimeType, dataBase64, crop),
+      'bots.readAvatar': ({ botId }) => this.bots.readAvatar(botId),
+      'bots.listTargets': async () => ({ targets: await this.bots.listTargets() }),
+      'bots.handoff': (params) => this.bots.handoff(params),
       'plugins.list': async () => ({ plugins: await this.plugins.list() }),
       'plugins.inspect': ({ source }) => this.plugins.inspect(source),
       'plugins.install': ({ token }) => this.plugins.install(token),

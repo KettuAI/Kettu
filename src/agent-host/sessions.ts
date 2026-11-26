@@ -70,6 +70,7 @@ import type { Platform } from '@shared/platform'
 import { pluginStarter, type PluginHookEvent } from '@shared/plugins'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { PortDevice } from '@shared/remote/device'
+import type { Bot, BotChangeAction, BotSessionRef } from '@shared/bots'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
 import {
@@ -132,6 +133,10 @@ import {
   type RoutineAction,
   type RoutineChangeEntry,
   type RoutineChangeOutcome,
+  type BotChangeEntry,
+  type BotChangeOutcome,
+  type BotDispatchEntry,
+  type BotHandoffEntry,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -164,6 +169,7 @@ import { riskyRequest } from './command-safety'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
 import type { RoutineAnswer, RoutineAsk } from './routines/tools'
+import type { BotAnswer, BotAsk } from './bots/tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
@@ -547,9 +553,9 @@ export interface SessionMemoryDeps {
   undo(undoId: string): Promise<'undone' | 'changed' | 'gone'>
 }
 
-/** A project memory write an agent made, as its thread records it. */
+/** A project or bot memory write an agent made, as its thread records it. */
 export interface MemoryWritten {
-  layer: 'project'
+  layer: 'project' | 'bot'
   action: MemoryAction
   memoryId: string
   title: string
@@ -1006,6 +1012,13 @@ const ROUTINE_ATTENTION = {
   run: 'attention.routineRun',
 } as const satisfies Record<RoutineAction, HostKey>
 
+const BOT_ATTENTION: Record<BotChangeAction, HostKey> = {
+  create: 'attention.botCreate',
+  update: 'attention.botUpdate',
+  delete: 'attention.botDelete',
+  role_edit: 'attention.botRoleEdit',
+}
+
 /** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
 function waitingCount(live: Live): number {
   return (
@@ -1304,6 +1317,8 @@ export class SessionManager {
   private readonly settingsWaits = new Map<string, (answer: SettingsAnswer) => void>()
   /** Routine cards that wait for the user, by entry id. */
   private readonly routineWaits = new Map<string, (answer: RoutineAnswer) => void>()
+  /** Bot 创建/修改/删除强制确认卡片的等待回调，按 entryId 索引。 */
+  private readonly botWaits = new Map<string, (answer: BotAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
@@ -1619,6 +1634,7 @@ export class SessionManager {
       origin: record.origin,
       routine: record.routine ?? null,
       task: record.task ?? null,
+      bot: record.bot ?? null,
       description: record.description,
       missing: this.missing.has(record.id),
       branch: record.branch,
@@ -2776,6 +2792,356 @@ export class SessionManager {
     resolve?.(answer)
   }
 
+  /** Bot 创建/修改/删除或修改职责：任何模式（含完全访问）下均弹出强制确认卡片。 */
+  botAsked(
+    sessionId: string,
+    ask: BotAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<BotAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: BotChangeEntry = {
+      kind: 'bot_change',
+      id: this.nextId(live),
+      ...ask,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`bot:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready') {
+      this.update(live, { status: 'awaiting_permission' })
+    }
+    this.touch(live.id)
+    this.updateBadge()
+    const body = t(BOT_ATTENTION[ask.action], { name: ask.bot.name })
+    this.deps.events.attention(live.id, 'permission', this.titleOf(live), body, { id: entry.id })
+    const answer = new Promise<BotAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleBot(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.botWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /** 用户在渲染端或配对设备上点击 Bot 确认卡片。 */
+  answerBotChange(
+    sessionId: string,
+    entryId: string,
+    decision: 'confirm' | 'decline',
+    keepSessions?: boolean,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'bot_change') throw notFound(t('session.waiting.bot.gone'))
+    if (entry.outcome !== null || !this.botWaits.has(entryId)) {
+      throw new HostError('not_found', t('session.waiting.bot.answered'), {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleBot(
+      sessionId,
+      entryId,
+      decision === 'confirm' ? { decision: 'confirm', keepSessions } : { decision: 'decline' },
+      device,
+    )
+  }
+
+  /** 回写 Bot 确认卡片执行后的最终结果。 */
+  botSettled(sessionId: string, entryId: string, outcome: BotChangeOutcome): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'bot_change') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  private settleBot(
+    sessionId: string,
+    entryId: string,
+    answer: BotAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.botWaits.get(entryId)
+    this.botWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`bot:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'bot_change' && entry.outcome === null) {
+        if (answer.decision !== 'confirm') {
+          const outcome: BotChangeOutcome = {
+            kind: answer.decision === 'decline' ? 'declined' : answer.decision,
+          }
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: entryId,
+              changes: { outcome, ...(device ? { device } : {}) },
+            },
+          ])
+        } else if (device) {
+          this.emit(live, [{ op: 'entry.update', id: entryId, changes: { device } }])
+        }
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
+  }
+
+  /** 在物理隔离空目录为 Bot 创建主对话会话（不写入用户的项目列表）。 */
+  async createBotMainSession(params: {
+    bot: Bot
+    workspaceDir: string
+    readOnly: boolean
+    title: string
+  }): Promise<{ sessionId: string }> {
+    const { agents } = this.deps
+    if (!agents.has(params.bot.agentId)) {
+      throw invalidParams(t('agent.unknown', { agent: params.bot.agentId }))
+    }
+    agents.assertEnabled(params.bot.agentId)
+    await mkdir(params.workspaceDir, { recursive: true })
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.bot.agentId,
+      acpSessionId: '',
+      projectPath: params.workspaceDir,
+      title: params.title,
+      titleSource: 'written',
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'bot_main',
+      bot: {
+        botId: params.bot.id,
+        role: 'main',
+        homeHostId: null,
+        botName: params.bot.name,
+        botHandle: params.bot.handle,
+      },
+      description: null,
+      branch: null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    if (params.readOnly) {
+      live.routineScope = { level: 'read', web: params.bot.scope.web }
+    }
+    this.touch(live.id)
+    try {
+      live.startValues = {
+        ...this.startModeOf(params.bot.agentId),
+        ...this.deps.options?.rememberedOf(params.bot.agentId),
+        ...(params.bot.model ? { model: params.bot.model } : {}),
+        ...(params.bot.effort ? { thought_level: params.bot.effort } : {}),
+      }
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return { sessionId: live.id }
+  }
+
+  /** 在本机目标项目创建 Bot 派发的普通工作会话（支持 worktree 与权限范围）。 */
+  async createBotWorkSession(params: {
+    projectPath: string
+    agentId: AgentId
+    model: string | null
+    prompt: string
+    title: string
+    scope: PermissionScope
+    worktree: boolean
+    bot: BotSessionRef
+  }): Promise<{ sessionId: string; branch: string | null }> {
+    const { agents, projects, scratch } = this.deps
+    if (!agents.has(params.agentId)) {
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
+    }
+    agents.assertEnabled(params.agentId)
+    const projectPath = await projects.resolveDirectory(params.projectPath)
+    if (!scratch.contains(projectPath)) await projects.add(projectPath)
+    let worktree: WorktreeRecord | undefined
+    let newWorktree = false
+    if (params.worktree && !scratch.contains(projectPath) && this.deps.worktrees) {
+      worktree = await this.deps.worktrees.create(projectPath, {
+        base: 'HEAD',
+        text: params.title,
+      })
+      newWorktree = true
+    }
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.agentId,
+      acpSessionId: '',
+      projectPath,
+      ...(worktree ? { worktree } : {}),
+      title: params.title,
+      titleSource: 'written',
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'bot_work',
+      bot: params.bot,
+      description: null,
+      branch: worktree?.branch ?? null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    const content: UserContent[] = [{ type: 'text', text: params.prompt }]
+    live.first = { content, entryId: this.addPrompt(live, content, now) }
+    this.touch(live.id)
+    if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
+    try {
+      live.startValues = {
+        ...this.startModeOf(params.agentId),
+        ...this.deps.options?.rememberedOf(params.agentId),
+        ...(params.model ? { model: params.model } : {}),
+      }
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return { sessionId: live.id, branch: live.record.branch }
+  }
+
+  /** 在 Bot 主对话中插入或更新一张跨机派发卡片。 */
+  upsertBotDispatchEntry(sessionId: string, draft: Omit<BotDispatchEntry, 'id' | 'after'>): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const existing = Object.values(live.thread.byId).find(
+      (entry): entry is BotDispatchEntry =>
+        entry.kind === 'bot_dispatch' && entry.requestId === draft.requestId,
+    )
+    if (existing) {
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: existing.id,
+          changes: {
+            status: draft.status,
+            sessionId: draft.sessionId,
+            branch: draft.branch,
+            summary: draft.summary,
+            error: draft.error,
+          },
+        },
+      ])
+    } else {
+      const entry: BotDispatchEntry = {
+        ...draft,
+        id: this.nextId(live),
+        after: agentEntryBefore(live.thread),
+      }
+      this.emit(live, [{ op: 'entry.add', entry }])
+    }
+    this.touch(live.id)
+  }
+
+  /** 在普通会话中追加一条 @Bot 交接事件行。 */
+  addBotHandoffEntry(
+    sessionId: string,
+    params: {
+      botId: string
+      botName: string
+      botHandle: string
+      botSessionId: string | null
+      prompt: string
+    },
+  ): string | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: BotHandoffEntry = {
+      kind: 'bot_handoff',
+      id: this.nextId(live),
+      botId: params.botId,
+      botName: params.botName,
+      botHandle: params.botHandle,
+      botSessionId: params.botSessionId,
+      prompt: params.prompt,
+      status: 'sent',
+      summary: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    this.touch(live.id)
+    return entry.id
+  }
+
+  /** 更新普通会话中的 @Bot 交接事件行（回流摘要）。 */
+  updateBotHandoffEntry(
+    sessionId: string,
+    entryId: string,
+    changes: { status: 'sent' | 'completed' | 'failed'; summary: string | null },
+  ): void {
+    const live = this.live.get(sessionId)
+    if (!live || live.thread.byId[entryId]?.kind !== 'bot_handoff') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
+    this.touch(live.id)
+  }
+
+  /** 删除 Bot 时默认保留其工作会话并转为普通用户会话。 */
+  detachBotSessions(botId: string): number {
+    let detached = 0
+    for (const record of this.records.values()) {
+      if (record.origin === 'bot_work' && record.bot?.botId === botId) {
+        record.origin = 'user'
+        delete record.bot
+        detached++
+        const live = this.live.get(record.id)
+        if (live) {
+          this.update(live, { origin: 'user', bot: null })
+          this.touch(live.id)
+        } else {
+          this.deps.events.summary(this.summary(record.id))
+        }
+      }
+    }
+    if (detached > 0) this.saveIndex()
+    return detached
+  }
+
+  /** 统计属于某 Bot 的本机工作会话数。 */
+  countBotWorkSessions(botId: string): number {
+    let count = 0
+    for (const record of this.records.values()) {
+      if (record.origin === 'bot_work' && record.bot?.botId === botId) count++
+    }
+    return count
+  }
+
+  /** 查询本机会话当前是否仍在运行中。 */
+  isSessionWorking(sessionId: string): boolean {
+    const live = this.live.get(sessionId)
+    if (!live) return false
+    const status = live.thread.session.status
+    return status === 'starting' || status === 'running' || status === 'awaiting_permission'
+  }
+
   /**
    * The agent asked the user to do a step on the session's page: the thread shows it, waiting, and
    * the session waits as for a permission. A call made again for the same step adds nothing.
@@ -3857,6 +4223,7 @@ export class SessionManager {
       parentId: record.parentId,
       origin: record.origin,
       routine: record.routine ?? null,
+      bot: record.bot ?? null,
       subagent:
         record.origin === 'subagent'
           ? {
@@ -11261,6 +11628,11 @@ export class SessionManager {
       // So does a Routine card.
       if (requestId.startsWith('routine:')) {
         this.settleRoutine(live.id, entryId, { decision: 'ended' })
+        continue
+      }
+      // Bot 建/改/删确认卡片在回合结束未答复时一并结束，不做变更。
+      if (requestId.startsWith('bot:')) {
+        this.settleBot(live.id, entryId, { decision: 'ended' })
         continue
       }
       live.origins.delete(requestId)

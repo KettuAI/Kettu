@@ -97,6 +97,17 @@ describe('the servers a session attaches with', () => {
       'update_routine',
       'delete_routine',
       'run_routine',
+      // Every change of a Bot asks the user in Kettu's own card, in every mode.
+      'list_bots',
+      'list_bot_targets',
+      'dispatch_bot_session',
+      'read_bot_work',
+      'send_to_bot_session',
+      'archive_bot_session',
+      'handoff_to_bot',
+      'create_bot',
+      'update_bot',
+      'delete_bot',
       'read_kettu_guide',
       // They only read the skills the user turned on for the session's agent.
       'list_skills',
