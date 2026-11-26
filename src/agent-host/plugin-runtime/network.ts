@@ -1,13 +1,18 @@
 // `network.fetch`: the one way a plugin's script reaches the network. It reaches only the domains
 // its `network:<domain>` permissions name, over https on the default port, with no redirect
 // followed and no address on this computer or a private network, so what the plugin was granted
-// is all it can reach. The standard `fetch` cannot refuse an address at connect time, so the
-// request goes through `node:https` with its own lookup.
+// is all it can reach. Direct connections filter resolved addresses through `publicLookup`;
+// proxied connections honor Settings › Advanced or environment proxy variables (and `NO_PROXY`)
+// via Node.js's proxy agent while still rejecting loopback, private IP, and local/internal hosts
+// before tunneling.
 
 import dns from 'node:dns'
 import https from 'node:https'
 import { BlockList, isIP, type LookupFunction } from 'node:net'
+import type { Platform } from '@shared/platform'
 import { domainCovers } from '@shared/plugins'
+import type { Env } from '../find-command'
+import { proxyEnvFor } from '../proxy-fetch'
 import { grantedDomains, type PluginApiCall } from './call'
 
 export const FETCH_URL_CHARS = 2048
@@ -28,9 +33,22 @@ const FORBIDDEN_HEADERS = new Set([
   'trailer',
   'keep-alive',
   'expect',
+  'proxy-authorization',
+  'proxy-connection',
 ])
 // As the manifest writes a domain: lowercase labels and a letters-only last one.
 const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+// Reserved and local-only host suffixes that never name a public internet service, so a plugin
+// cannot reach local or internal hosts even when a proxy resolves names for it.
+const PRIVATE_HOST_SUFFIXES = [
+  'localhost',
+  'local',
+  'internal',
+  'localdomain',
+  'home.arpa',
+  'in-addr.arpa',
+  'ip6.arpa',
+] as const
 
 export interface HttpRequest {
   url: URL
@@ -49,6 +67,16 @@ export interface HttpResponse {
 }
 
 export type HttpTransport = (request: HttpRequest) => Promise<HttpResponse>
+
+export interface HttpsTransportOptions {
+  /** Reads the agents' environment (Settings › Advanced proxy or shell env) at each request. */
+  env?: () => Env
+  platform?: Platform
+  /** Overrides direct DNS resolution; `publicLookup()` by default. */
+  lookup?: LookupFunction
+  /** Extra CA certificates for TLS verification (used in tests with a local HTTPS server). */
+  ca?: string | Buffer | Array<string | Buffer>
+}
 
 // 198.18/15 is left out: proxy tools in fake-IP mode answer every name from it and route what
 // follows, so blocking it would cut off every user of one.
@@ -84,6 +112,26 @@ export function isPublicAddress(address: string): boolean {
   return !PRIVATE.check(address, family === 4 ? 'ipv4' : 'ipv6')
 }
 
+function normalizeHost(hostname: string): string {
+  return hostname
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '')
+    .toLowerCase()
+}
+
+/**
+ * Whether a host name itself may be reached by a plugin: neither a loopback/private IP literal
+ * nor a reserved local/internal name. Direct connections also filter resolved addresses through
+ * `publicLookup`; proxied connections rely on this check because the proxy resolves the name.
+ */
+export function isPublicHost(hostname: string): boolean {
+  const host = normalizeHost(hostname)
+  if (host === '') return false
+  const address = host.split('%', 1)[0]!
+  if (isIP(address) !== 0) return isPublicAddress(address)
+  return !PRIVATE_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))
+}
+
 type Resolve = (
   hostname: string,
   options: dns.LookupOptions & { all: true },
@@ -110,53 +158,110 @@ export function publicLookup(resolve: Resolve = dns.lookup): LookupFunction {
   }
 }
 
-/** Sends the request over https, to a public address, and reads at most `FETCH_RESPONSE_BYTES`. */
-export const httpsTransport: HttpTransport = (request) =>
-  new Promise((resolve, reject) => {
-    const outgoing = https.request(
-      request.url,
-      {
-        method: request.method,
-        headers: request.headers,
-        lookup: publicLookup(),
-        agent: false,
-        signal: request.signal,
-      },
-      (response) => {
-        const chunks: Buffer[] = []
-        let size = 0
-        const tooLarge = (): void => {
-          response.destroy()
-          reject(new Error(`The response is larger than ${FETCH_RESPONSE_BYTES / 1024} KB`))
-        }
-        if (Number(response.headers['content-length']) > FETCH_RESPONSE_BYTES) return tooLarge()
-        const encoding = response.headers['content-encoding']
-        if (typeof encoding === 'string' && encoding.toLowerCase() !== 'identity') {
-          response.destroy()
-          return reject(new Error(`The response is encoded as ${encoding.slice(0, 40)}`))
-        }
-        response.on('data', (chunk: Buffer) => {
-          size += chunk.length
-          if (size > FETCH_RESPONSE_BYTES) return tooLarge()
-          chunks.push(chunk)
-        })
-        response.on('error', reject)
-        response.on('end', () => {
-          const headers: Record<string, string> = {}
-          for (const [name, value] of Object.entries(response.headers)) {
-            if (value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value
+/**
+ * Sends the request over https, through the agents' proxy when one applies (from Settings ›
+ * Advanced or the environment) and directly to a public address otherwise, reading at most
+ * `FETCH_RESPONSE_BYTES`.
+ */
+export function createHttpsTransport(options: HttpsTransportOptions = {}): HttpTransport {
+  const platform = options.platform ?? (process.platform as Platform)
+  const lookup = options.lookup ?? publicLookup()
+  return (request) => {
+    // Node.js skips `lookup` when connecting directly to an IP literal, so reject non-public IP
+    // literals up front regardless of proxy settings.
+    const hostAddress = normalizeHost(request.url.hostname).split('%', 1)[0]!
+    if (isIP(hostAddress) !== 0 && !isPublicAddress(hostAddress)) {
+      return Promise.reject(
+        new Error(`${request.url.hostname} is on this computer or a private network`),
+      )
+    }
+    const proxyEnv = options.env ? proxyEnvFor(request.url, options.env(), platform) : null
+    if (proxyEnv && !isPublicHost(request.url.hostname)) {
+      return Promise.reject(
+        new Error(`${request.url.hostname} is on this computer or a private network`),
+      )
+    }
+    if (request.signal.aborted) {
+      return Promise.reject(request.signal.reason)
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false
+      // Node.js's https.Agent({ proxyEnv }) honors NO_PROXY per request: proxied targets tunnel
+      // through the proxy (which resolves the target name, while connecting to the proxy itself
+      // without our `lookup`), and bypassed targets fall back to a direct TLS connection using
+      // `lookup` (so `publicLookup` still blocks loopback and private-network resolutions).
+      const agent = proxyEnv ? new https.Agent({ proxyEnv, keepAlive: false }) : false
+      const finish = (callback: () => void): void => {
+        if (settled) return
+        settled = true
+        request.signal.removeEventListener('abort', onAbort)
+        if (agent) agent.destroy()
+        callback()
+      }
+      const onAbort = (): void => {
+        const reason = request.signal.reason
+        outgoing.destroy(reason instanceof Error ? reason : undefined)
+        finish(() => reject(reason))
+      }
+      const outgoing = https.request(
+        request.url,
+        {
+          method: request.method,
+          headers: request.headers,
+          lookup,
+          agent,
+          signal: request.signal,
+          ...(options.ca !== undefined ? { ca: options.ca } : {}),
+        },
+        (response) => {
+          const chunks: Buffer[] = []
+          let size = 0
+          const tooLarge = (): void => {
+            response.destroy()
+            finish(() =>
+              reject(new Error(`The response is larger than ${FETCH_RESPONSE_BYTES / 1024} KB`)),
+            )
           }
-          resolve({
-            status: response.statusCode ?? 0,
-            headers,
-            body: Buffer.concat(chunks).toString('utf8'),
+          if (Number(response.headers['content-length']) > FETCH_RESPONSE_BYTES) return tooLarge()
+          const encoding = response.headers['content-encoding']
+          if (typeof encoding === 'string' && encoding.toLowerCase() !== 'identity') {
+            response.destroy()
+            return finish(() =>
+              reject(new Error(`The response is encoded as ${encoding.slice(0, 40)}`)),
+            )
+          }
+          response.on('data', (chunk: Buffer) => {
+            size += chunk.length
+            if (size > FETCH_RESPONSE_BYTES) return tooLarge()
+            chunks.push(chunk)
           })
-        })
-      },
-    )
-    outgoing.on('error', reject)
-    outgoing.end(request.body ?? undefined)
-  })
+          response.on('error', (error) => finish(() => reject(error)))
+          response.on('end', () => {
+            const headers: Record<string, string> = {}
+            for (const [name, value] of Object.entries(response.headers)) {
+              if (value !== undefined) {
+                headers[name] = Array.isArray(value) ? value.join(', ') : value
+              }
+            }
+            finish(() =>
+              resolve({
+                status: response.statusCode ?? 0,
+                headers,
+                body: Buffer.concat(chunks).toString('utf8'),
+              }),
+            )
+          })
+        },
+      )
+      request.signal.addEventListener('abort', onAbort, { once: true })
+      outgoing.on('error', (error) => finish(() => reject(error)))
+      outgoing.end(request.body ?? undefined)
+    })
+  }
+}
+
+/** Sends the request directly over https, to a public address, and reads at most `FETCH_RESPONSE_BYTES`. */
+export const httpsTransport: HttpTransport = createHttpsTransport()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -202,6 +307,9 @@ export function networkFetch(transport: HttpTransport): PluginApiCall {
           `${host} is not among the domains this plugin may reach (${domains.join(', ')}). ` +
             `It needs the permission "network:${host}".`,
         )
+      }
+      if (!isPublicHost(host)) {
+        throw new Error(`${host} is on this computer or a private network`)
       }
       if (init !== undefined && !isRecord(init)) throw new Error('The options must be an object')
       const options = init ?? {}
