@@ -151,6 +151,53 @@
   line-height: inherit;
   color: inherit;
 }
+.ks-user-text {
+  min-width: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+/* An explicit fenced code block inside a user message bubble: a crisp card with a copy action,
+   resetting the bubble's anywhere-wrapping so code lines scroll cleanly. */
+.ks-user-code {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-code);
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: normal;
+  overflow-wrap: normal;
+  user-select: text;
+}
+.ks-user-code__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 4px 0 12px;
+  box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--border-default);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.ks-user-code__pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: calc(var(--prose-size) - 2.5px);
+  font-variant-ligatures: none;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+}
 /* A message another session's agent sent: a quoted card on the agent's side, not the user's bubble.
    Its time and Copy sit under it at the left. */
 .ks-user--agent {

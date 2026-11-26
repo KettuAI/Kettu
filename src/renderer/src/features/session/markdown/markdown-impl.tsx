@@ -16,7 +16,6 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react'
-import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from './code-plugin'
 import { Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -64,7 +63,7 @@ import { githubAlerts } from './github-alerts'
 import { bareReferenceNumber } from './github-refs'
 import { fenceInlineSvg } from './inline-svg'
 import { fenceBracketMath } from './maths'
-import { remarkPlugins } from './remark'
+import { cjkPlugin, remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
 import { LiveContext } from './live'
@@ -77,7 +76,7 @@ const InlineMath = lazy(() => import('./math').then((m) => ({ default: m.InlineM
 function createPlugins({ light, dark }: CodeThemes) {
   return {
     code: createCodePlugin({ themes: [codeThemeInput(light), codeThemeInput(dark)] }),
-    cjk,
+    cjk: cjkPlugin,
   }
 }
 
