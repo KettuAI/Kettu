@@ -6485,6 +6485,29 @@ button.kettu-ctx__part-row:focus-visible {
     transform 280ms var(--ui-mdpc-ease),
     width 280ms var(--ui-mdpc-ease);
 }
+.kettu-model-picker .ui-mdpc__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ui-mdpc-accent);
+  background: color-mix(in srgb, var(--ui-mdpc-accent) 12%, transparent);
+}
+.kettu-model-picker .ui-mdpc__badge[data-tone='intense'] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+.kettu-model-picker .ui-mdpc__badge > svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
 /* More models: names end in an ellipsis, under a heading per provider when the agent's models come
    from several. */
 .kettu-model-picker .ui-mdpc__fly-row {

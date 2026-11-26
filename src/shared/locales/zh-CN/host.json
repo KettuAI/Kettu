@@ -773,7 +773,16 @@
       "effort": "推理强度",
       "effortDescription": "模型用多少推理",
       "fast": "快速模式",
-      "fastDescription": "1.5 倍速度，用量更多"
+      "fastDescription": "1.5 倍速度，用量更多",
+      "speed": "速度",
+      "speedDescription": "会话的处理速度档位"
+    },
+    "speed": {
+      "standard": "标准",
+      "standardDescription": "标准速度与用量",
+      "fast": "快速",
+      "ultrafast": "极速",
+      "ultrafastDescription": "最快响应速度，用量最高"
     },
     "mode": {
       "read-only": {
@@ -879,6 +888,10 @@
         "description": "切换当前会话的快速模式。",
         "hint": "[on|off|status]"
       },
+      "ultrafast": {
+        "description": "切换当前会话的极速模式。",
+        "hint": "[on|off|status]"
+      },
       "mcp": {
         "description": "查看 MCP 服务器的状态，或重新连接它们。",
         "hint": "[reconnect]"
@@ -973,6 +986,15 @@
       "unsupported": "当前模型（{{model}}）未声明支持快速模式。",
       "unsupportedNoModel": "当前模型未声明支持快速模式。",
       "usage": "命令“/fast”不带参数，或接受 `on`、`off`、`status`。"
+    },
+    "ultrafast": {
+      "on": "已开启极速模式。",
+      "off": "已关闭极速模式。",
+      "statusOn": "极速模式当前已开启。",
+      "statusOff": "极速模式当前已关闭。",
+      "unsupported": "当前模型（{{model}}）未声明支持极速模式。",
+      "unsupportedNoModel": "当前模型未声明支持极速模式。",
+      "usage": "命令“/ultrafast”不带参数，或接受 `on`、`off`、`status`。"
     },
     "noValue": "Codex 的 {{option}} 没有 {{value}} 这个值",
     "cannotSignOut": "这里无法让 Codex 退出登录",

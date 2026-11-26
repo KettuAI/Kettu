@@ -2,6 +2,11 @@ import { useTranslation } from 'react-i18next'
 import { booleanConfigValue, type ConfigOption } from '@shared/thread'
 
 export const isFast = (o: ConfigOption) => /fast/i.test(o.id)
+export const isSpeedSelect = (o: ConfigOption) =>
+  o.category === 'model_config' && o.type === 'select' && o.id === 'service-tier'
+export const isStandardSpeedChoice = (value: string) =>
+  value.trim().toLowerCase() === 'default' || value.trim().toLowerCase() === 'standard'
+export const isUltrafastChoice = (value: string) => /ultra[\s_-]*fast/i.test(value)
 export const isUltracode = (o: ConfigOption) => /ultracode/i.test(o.id)
 
 /** Whether the option has no value of its own and follows the agent's setting. */

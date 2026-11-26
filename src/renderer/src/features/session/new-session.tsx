@@ -648,7 +648,11 @@ function DraftComposer({
   const hasModelMenu =
     !!agentId &&
     !!config?.some(
-      (o) => o.type === 'boolean' || o.category === 'model' || o.category === 'thought_level',
+      (o) =>
+        o.type === 'boolean' ||
+        o.category === 'model' ||
+        o.category === 'model_config' ||
+        o.category === 'thought_level',
     )
 
   return (

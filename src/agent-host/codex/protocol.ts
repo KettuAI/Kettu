@@ -411,6 +411,12 @@ export interface ReasoningEffortOption {
   description: string
 }
 
+export interface ModelServiceTier {
+  id: string
+  name: string
+  description?: string
+}
+
 export interface Model {
   id: string
   displayName: string
@@ -420,9 +426,11 @@ export interface Model {
   upgrade?: string | null
   supportedReasoningEfforts: ReasoningEffortOption[]
   defaultReasoningEffort: ReasoningEffort
-  /** Deprecated for `serviceTiers`; still names `fast`. */
+  /** Deprecated for `serviceTiers`; still names `fast` or `ultrafast`. */
   additionalSpeedTiers?: string[]
-  serviceTiers?: { id: string; name: string; description?: string }[]
+  serviceTiers?: ModelServiceTier[]
+  /** Catalog default service tier id for this model, when one is configured. */
+  defaultServiceTier?: string | null
   isDefault: boolean
 }
 

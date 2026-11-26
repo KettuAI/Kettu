@@ -2253,3 +2253,297 @@ describe('fast mode', () => {
     expect(reply?.kind === 'agent' && reply.markdown).toContain('gpt-5.6-luna')
   })
 })
+
+describe('speed tiers (Fast and Ultrafast)', () => {
+  const ULTRA_MODEL = {
+    id: 'gpt-6.3-ultra',
+    displayName: 'gpt-6.3-ultra',
+    description: 'Model advertising both Fast and Ultrafast service tiers',
+    supportedReasoningEfforts: [
+      { reasoningEffort: 'low', description: 'Quick' },
+      { reasoningEffort: 'medium', description: 'Balanced' },
+      { reasoningEffort: 'high', description: 'Deep' },
+    ],
+    defaultReasoningEffort: 'medium',
+    serviceTiers: [
+      { id: 'priority', name: 'Fast', description: '2x speed, increased usage' },
+      { id: 'ultrafast', name: 'Ultrafast', description: 'Fastest available responses' },
+    ],
+    isDefault: true,
+  }
+
+  const MULTI_MODELS = [ULTRA_MODEL, ...FAKE_MODELS]
+
+  it('switches Standard -> Fast -> Ultrafast -> Standard via service-tier option and sends exact serviceTier', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-ultra-1', { model: ULTRA_MODEL.id, serviceTier: 'default' }),
+    )
+
+    const opened = await connection.newSession('/project')
+    expect(opened.config.find((o) => o.id === 'fast-mode')).toBeUndefined()
+    const initialSpeed = opened.config.find((o) => o.id === 'service-tier')
+    expect(initialSpeed).toMatchObject({
+      id: 'service-tier',
+      category: 'model_config',
+      type: 'select',
+      value: 'default',
+    })
+    expect(initialSpeed?.choices?.map((c) => c.value)).toEqual(['default', 'priority', 'ultrafast'])
+
+    // Standard -> Fast
+    const fastConfig = await connection.setConfigOption(
+      opened.sessionId,
+      'service-tier',
+      'priority',
+    )
+    expect(fastConfig.find((o) => o.id === 'service-tier')?.value).toBe('priority')
+    const turnFast = connection.prompt(opened.sessionId, [{ type: 'text', text: 'fast turn' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).toMatchObject({ serviceTier: 'priority' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await turnFast
+
+    // Fast -> Ultrafast
+    const ultraConfig = await connection.setConfigOption(
+      opened.sessionId,
+      'service-tier',
+      'ultrafast',
+    )
+    expect(ultraConfig.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    const turnUltra = connection.prompt(opened.sessionId, [{ type: 'text', text: 'ultra turn' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-2', 'completed'),
+    })
+    await turnUltra
+
+    // Command turns (e.g. /compact) carry ultrafast in thread/settings/update
+    const compact = connection.prompt(opened.sessionId, [{ type: 'text', text: '/compact' }])
+    await until(() => server.sent('thread/settings/update').length === 1)
+    expect(server.sent('thread/settings/update')[0]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/started', { threadId: opened.sessionId, turn: turn('turn-compact') })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-compact', 'completed'),
+    })
+    await compact
+
+    // Ultrafast -> Standard
+    const standardConfig = await connection.setConfigOption(
+      opened.sessionId,
+      'service-tier',
+      'default',
+    )
+    expect(standardConfig.find((o) => o.id === 'service-tier')?.value).toBe('default')
+    const turnStd = connection.prompt(opened.sessionId, [{ type: 'text', text: 'std turn' }])
+    await until(() => server.sent('turn/start').length === 3)
+    expect(server.sent('turn/start')[2]).toMatchObject({ serviceTier: 'default' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-3', 'completed'),
+    })
+    await turnStd
+  })
+
+  it('supports /ultrafast alongside /fast and switches cleanly between them', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-ultra-cmd', { model: ULTRA_MODEL.id, serviceTier: 'default' }),
+    )
+
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    t.target.apply({
+      patches: [{ op: 'session.update', changes: { config: opened.config } }],
+      effects: [],
+    })
+    connection.register(opened.sessionId, t.target)
+    await until(() => t.thread().session.commands.some((c) => c.name === 'ultrafast'))
+    expect(t.thread().session.commands.find((c) => c.name === 'ultrafast')).toMatchObject({
+      name: 'ultrafast',
+      inputHint: expect.any(String),
+    })
+
+    // Standard -> /ultrafast -> Ultrafast
+    const onUltra = await connection.prompt(opened.sessionId, [
+      { type: 'text', text: '/ultrafast' },
+    ])
+    expect(onUltra.stopReason).toBe('end_turn')
+    expect(server.sent('turn/start')).toEqual([])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+
+    // Next turn uses ultrafast; steering /ultrafast off queues as command
+    const p1 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'go ultra' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/started', { threadId: opened.sessionId, turn: turn('turn-1') })
+    await tick()
+    expect(
+      await connection.steer(opened.sessionId, [{ type: 'text', text: '/ultrafast off' }]),
+    ).toBe('promptRequired')
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await p1
+
+    // Ultrafast -> /fast switches from Ultrafast to Fast
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/fast' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('priority')
+
+    // Fast -> /ultrafast switches from Fast to Ultrafast
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+
+    // /ultrafast status & invalid argument keep state
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast status' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast bogus' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+
+    // /ultrafast toggles back to Standard
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('default')
+
+    // /ultrafast on & /ultrafast off explicitly
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast on' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast off' }])
+    expect(t.thread().session.config.find((o) => o.id === 'service-tier')?.value).toBe('default')
+  })
+
+  it('replies cleanly for /ultrafast on a model that only supports Fast or no speed tiers', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    const t = threadTarget()
+    t.target.apply({
+      patches: [{ op: 'session.update', changes: { config: opened.config } }],
+      effects: [],
+    })
+    connection.register(opened.sessionId, t.target)
+
+    const result = await connection.prompt(opened.sessionId, [{ type: 'text', text: '/ultrafast' }])
+    expect(result.stopReason).toBe('end_turn')
+    expect(server.sent('turn/start')).toEqual([])
+    expect(t.thread().session.config.find((o) => o.id === 'fast-mode')?.value).toBe(false)
+    const reply = t.entries().at(-1)
+    expect(reply).toMatchObject({ kind: 'agent' })
+    expect(reply?.kind === 'agent' && reply.markdown).toContain('gpt-6.1-sol')
+  })
+
+  it('reads initial and resumed ultrafast serviceTier including legacy additionalSpeedTiers', async () => {
+    const { server, connection } = await connect()
+    const legacyUltra = {
+      id: 'gpt-legacy-ultra',
+      displayName: 'gpt-legacy-ultra',
+      description: 'Legacy speed tiers',
+      supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }],
+      defaultReasoningEffort: 'medium',
+      additionalSpeedTiers: ['fast', 'ultrafast'],
+      isDefault: false,
+    }
+    server.on('model/list', () => ({ data: [ULTRA_MODEL, legacyUltra], nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-init-ultra', { model: ULTRA_MODEL.id, serviceTier: 'ultrafast' }),
+    )
+    const opened = await connection.newSession('/project')
+    expect(opened.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    const p1 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'first' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await p1
+
+    server.on('thread/resume', (params) =>
+      threadResponse(params.threadId as string, {
+        model: legacyUltra.id,
+        serviceTier: 'ultra_fast',
+      }),
+    )
+    const resumed = await connection.resumeSession('thread-resume-ultra', '/project')
+    expect(resumed.config.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    const p2 = connection.prompt('thread-resume-ultra', [{ type: 'text', text: 'resumed' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/completed', {
+      threadId: 'thread-resume-ultra',
+      turn: turn('turn-2', 'completed'),
+    })
+    await p2
+  })
+
+  it('omits unsupported ultrafast tier when switching models and restores it when switching back', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-switch-ultra', { model: ULTRA_MODEL.id, serviceTier: 'default' }),
+    )
+
+    const opened = await connection.newSession('/project')
+    await connection.setConfigOption(opened.sessionId, 'service-tier', 'ultrafast')
+
+    // Switch to Fast-only model: ultrafast is unsupported, so fast-mode shows false and turn omits serviceTier.
+    const onFastOnly = await connection.setConfigOption(opened.sessionId, 'model', 'gpt-6.1-sol')
+    expect(onFastOnly.find((o) => o.id === 'service-tier')).toBeUndefined()
+    expect(onFastOnly.find((o) => o.id === 'fast-mode')?.value).toBe(false)
+    const p1 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'on sol' }])
+    await until(() => server.sent('turn/start').length === 1)
+    expect(server.sent('turn/start')[0]).not.toHaveProperty('serviceTier')
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-1', 'completed'),
+    })
+    await p1
+
+    // Switch to model with no speed tiers at all.
+    const onNone = await connection.setConfigOption(opened.sessionId, 'model', 'gpt-5.6-luna')
+    expect(onNone.find((o) => o.id === 'service-tier')).toBeUndefined()
+    expect(onNone.find((o) => o.id === 'fast-mode')).toBeUndefined()
+    const p2 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'on luna' }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).not.toHaveProperty('serviceTier')
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-2', 'completed'),
+    })
+    await p2
+
+    // Switch back to Ultrafast-capable model: ultrafast is restored.
+    const back = await connection.setConfigOption(opened.sessionId, 'model', ULTRA_MODEL.id)
+    expect(back.find((o) => o.id === 'service-tier')?.value).toBe('ultrafast')
+    const p3 = connection.prompt(opened.sessionId, [{ type: 'text', text: 'back on ultra' }])
+    await until(() => server.sent('turn/start').length === 3)
+    expect(server.sent('turn/start')[2]).toMatchObject({ serviceTier: 'ultrafast' })
+    server.notify('turn/completed', {
+      threadId: opened.sessionId,
+      turn: turn('turn-3', 'completed'),
+    })
+    await p3
+  })
+
+  it('stays backward-compatible with legacy fast-mode preference on multi-tier models', async () => {
+    const { server, connection } = await connect()
+    server.on('model/list', () => ({ data: MULTI_MODELS, nextCursor: null }))
+    server.on('thread/start', () =>
+      threadResponse('thread-compat', { model: ULTRA_MODEL.id, serviceTier: 'default' }),
+    )
+
+    const opened = await connection.newSession('/project')
+    const afterOn = await connection.setConfigOption(opened.sessionId, 'fast-mode', true)
+    expect(afterOn.find((o) => o.id === 'service-tier')?.value).toBe('priority')
+
+    const afterOff = await connection.setConfigOption(opened.sessionId, 'fast-mode', 'off')
+    expect(afterOff.find((o) => o.id === 'service-tier')?.value).toBe('default')
+  })
+})

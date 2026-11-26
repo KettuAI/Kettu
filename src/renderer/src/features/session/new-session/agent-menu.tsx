@@ -753,6 +753,8 @@ function Pane({
   const loading = !loaded || startingUp
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
+  const modelSelects =
+    config?.filter((o): o is SelectOption => o.category === 'model_config' && isSelect(o)) ?? []
   const switches = config?.filter((o) => o.type === 'boolean') ?? []
 
   const install = (
@@ -914,22 +916,63 @@ function Pane({
           {t('newSession.agentMenu.noMatch')}
         </p>
       )}
-      {!searching && config && (isSelect(effort) || switches.length > 0) && (
-        <div className="kettu-am-settings">
-          {isSelect(model) && <ComboboxSeparator />}
-          {isSelect(effort) && (
-            <PaneEffort effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
-          )}
-          <SwitchRows
-            options={switches}
-            agent={status.harnessName}
-            valueOf={(o) => booleanConfigValue(o) === true}
-            onFlip={(o, on) => onOption(status.id, o.id, on)}
-            className="kettu-am-switches"
-          />
-        </div>
-      )}
+      {!searching &&
+        config &&
+        (isSelect(effort) || modelSelects.length > 0 || switches.length > 0) && (
+          <div className="kettu-am-settings">
+            {isSelect(model) && <ComboboxSeparator />}
+            {isSelect(effort) && (
+              <PaneEffort effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
+            )}
+            {modelSelects.map((option) => (
+              <PaneSelect
+                key={option.id}
+                option={option}
+                onPick={(v) => onOption(status.id, option.id, v)}
+              />
+            ))}
+            <SwitchRows
+              options={switches}
+              agent={status.harnessName}
+              valueOf={(o) => booleanConfigValue(o) === true}
+              onFlip={(o, on) => onOption(status.id, o.id, on)}
+              className="kettu-am-switches"
+            />
+          </div>
+        )}
     </>
+  )
+}
+
+/** A model-config select (such as Codex Speed tiers) as a segmented row under the model list. */
+function PaneSelect({ option, onPick }: { option: SelectOption; onPick: (value: string) => void }) {
+  const labelId = useId()
+  const value = String(option.value)
+  const active = option.choices.find((c) => c.value === value)
+  return (
+    <div>
+      <div
+        id={labelId}
+        className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground"
+      >
+        {option.name}
+      </div>
+      <div className="px-2 pt-0.5 pb-1.5">
+        <SegmentedControl
+          aria-labelledby={labelId}
+          value={value}
+          segments={option.choices.map((c) => ({ value: c.value, label: c.name }))}
+          onChange={onPick}
+          className="w-full"
+          itemClassName="px-1.5"
+        />
+        {active?.description && (
+          <p className="mt-1 truncate px-0.5 text-[11px] text-muted-foreground">
+            {active.description}
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
