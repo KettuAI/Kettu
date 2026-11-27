@@ -4,12 +4,14 @@ import type { McpConfigSource } from '@shared/mcp-discovery'
 import { isStartMode, START_MODE_CHARS, takesStartMode } from '@shared/agents'
 import {
   AGENT_NAME_CHARS,
+  APP_ICONS,
   applyListEdit,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
   AGENT_COLORS,
   isAgentColor,
   nextAgentColor,
+  normalizeAppIcon,
   isFontFamilyName,
   isLinkSite,
   isSidebarPage,
@@ -144,6 +146,11 @@ const isHostName: Check = (value, path) =>
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
 
+const isAppIconChoice: Check = (value, path) =>
+  normalizeAppIcon(value) !== null
+    ? null
+    : `"${path}" must be one of ${APP_ICONS.map((v) => JSON.stringify(v)).join(', ')}`
+
 const isStopShortcutValue: Check = (value, path) =>
   isStopShortcut(value)
     ? null
@@ -253,6 +260,7 @@ const SECTION_FIELDS = {
   appearance: {
     theme: oneOf('system', 'light', 'dark'),
     colorTheme: isThemeId,
+    appIcon: isAppIconChoice,
     textSize: oneOf('small', 'default', 'large'),
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
@@ -1375,6 +1383,8 @@ export function mergeSettings(
     const changes = patch[section]
     if (changes) Object.assign(next[section], changes)
   }
+  const normalizedAppIcon = normalizeAppIcon(next.appearance.appIcon)
+  if (normalizedAppIcon) next.appearance.appIcon = normalizedAppIcon
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
   if (patch.marketplace?.mcp) {
@@ -1650,6 +1660,8 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
       else target[key] = value[key]
     }
   }
+  const normalizedAppIcon = normalizeAppIcon(settings.appearance.appIcon)
+  if (normalizedAppIcon) settings.appearance.appIcon = normalizedAppIcon
   if (raw.agents !== undefined) {
     if (!isRecord(raw.agents)) problems.push('"agents" must be an object')
     else {

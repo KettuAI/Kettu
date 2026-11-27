@@ -255,6 +255,21 @@
       "light": "浅色",
       "dark": "深色"
     },
+    "appIcon": {
+      "name": "应用图标",
+      "description": "显示在程序坞和 Kettu 应用内。",
+      "descriptionWindows": "显示在任务栏、窗口和 Kettu 应用内。",
+      "descriptionLinux": "显示在任务栏、窗口和 Kettu 应用内。",
+      "keywords": "应用图标 图标 程序坞 任务栏 窗口 标志 app icon dock taskbar kettu 墨黑 素纸 扁平橙 叠纸黑 叠纸白",
+      "options": {
+        "kettu": "Kettu",
+        "ink": "墨黑",
+        "paper": "素纸",
+        "orange-flat": "扁平橙",
+        "ink-sheets": "叠纸黑",
+        "paper-sheets": "叠纸白"
+      }
+    },
     "textSize": {
       "name": "文字大小",
       "description": "输入框：14、15 或 16 px，对话比它小 1 px。",
@@ -303,6 +318,7 @@
     },
     "groups": {
       "theme": "主题",
+      "appIcon": "应用图标",
       "scale": "缩放与文字",
       "sidebar": "侧边栏",
       "motion": "动态效果",

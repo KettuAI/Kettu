@@ -4290,6 +4290,93 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .k-theme__more:has([aria-expanded='true']) {
   opacity: 1;
 }
+
+/* Appearance: the six selectable desktop app icons in a balanced three-column grid */
+:is(.kettu-settings, .kettu-sd) .k-app-icons-wrap {
+  display: grid;
+  gap: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@container ui-as-main (max-width: 420px) {
+  :is(.kettu-settings, .kettu-sd) .k-app-icons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+  cursor: pointer;
+  transition: box-shadow 160ms ease;
+}
+:is(.kettu-settings, .kettu-sd) button.k-app-icon:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--control-on),
+    var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__preview {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 13px;
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__preview > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.067);
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__name {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__name > b {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon[aria-pressed='true'] .k-app-icon__name > b {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-app-icon__check {
+  display: inline-grid;
+  flex: none;
+  color: var(--control-on);
+}
 :is(.kettu-settings, .kettu-sd) .k-warn {
   display: inline-grid;
   flex: none;

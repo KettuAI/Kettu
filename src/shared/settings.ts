@@ -74,6 +74,7 @@ export interface SettingsFile {
   appearance: {
     theme: 'system' | 'light' | 'dark' // the color mode, which picks a theme's variant
     colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
+    appIcon: AppIcon // the app's icon in the Dock, taskbar, windows and in-app brand marks
     textSize: 'small' | 'default' | 'large' // the composer: 14, 15 or 16 px; thread prose a pixel less
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
@@ -285,6 +286,27 @@ export const CONFIG_VARIABLES: Partial<Record<HarnessId, string>> = {
   codebuddy: 'CODEBUDDY_CONFIG_DIR',
 }
 
+/** The six selectable desktop app icons, in picker order. */
+export const APP_ICONS = [
+  'kettu',
+  'ink',
+  'paper',
+  'orange-flat',
+  'ink-sheets',
+  'paper-sheets',
+] as const
+export type AppIcon = (typeof APP_ICONS)[number]
+
+export function isAppIcon(value: unknown): value is AppIcon {
+  return (APP_ICONS as readonly unknown[]).includes(value)
+}
+
+/** Accepts the six icon ids and the legacy `'default'` alias; returns null for anything else. */
+export function normalizeAppIcon(value: unknown): AppIcon | null {
+  if (value === 'default') return 'kettu'
+  return isAppIcon(value) ? value : null
+}
+
 /** Chrome's page zoom steps from 80% to 150%. */
 export const ZOOM_LEVELS = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number]
@@ -318,6 +340,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   appearance: {
     theme: 'system',
     colorTheme: BUILTIN_THEME_ID,
+    appIcon: 'kettu',
     textSize: 'default',
     reduceMotion: 'system',
     zoom: 1.1,

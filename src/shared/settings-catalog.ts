@@ -9,6 +9,7 @@ import { LOCALE_NAMES, LOCALES } from './locale'
 import type { Platform } from './platform'
 import { PLUGIN_SETTING_CHARS } from './plugins'
 import {
+  APP_ICONS,
   isFontFamilyName,
   MAX_FONT_FAMILY_CHARS,
   type UserFontRole,
@@ -559,6 +560,27 @@ const ENTRIES = {
       'theme',
       (file) => file.appearance.theme,
       choices(['system', 'light', 'dark'], (mode) => `appearance.colorMode.${mode}`),
+    ),
+  },
+  'appearance.app-icon': {
+    section: 'appearance',
+    row: 'app-icon',
+    group: 'appearance.groups.appIcon',
+    name: 'appearance.appIcon.name',
+    description: {
+      mac: 'appearance.appIcon.description',
+      windows: 'appearance.appIcon.descriptionWindows',
+      linux: 'appearance.appIcon.descriptionLinux',
+      other: 'appearance.appIcon.descriptionWindows',
+    },
+    keywords: 'appearance.appIcon.keywords',
+    part: 'desktop',
+    access: 'change',
+    ...pick(
+      'appearance',
+      'appIcon',
+      (file) => file.appearance.appIcon,
+      choices(APP_ICONS, (icon) => `appearance.appIcon.options.${icon}`),
     ),
   },
   'appearance.zoom': {

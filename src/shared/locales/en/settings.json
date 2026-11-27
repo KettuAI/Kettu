@@ -256,6 +256,21 @@
       "light": "Light",
       "dark": "Dark"
     },
+    "appIcon": {
+      "name": "App icon",
+      "description": "Shown in the Dock and inside Kettu.",
+      "descriptionWindows": "Shown on the taskbar, window and inside Kettu.",
+      "descriptionLinux": "Shown on the taskbar, window and inside Kettu.",
+      "keywords": "app icon dock taskbar window logo kettu ink paper orange flat sheets",
+      "options": {
+        "kettu": "Kettu",
+        "ink": "Ink",
+        "paper": "Paper",
+        "orange-flat": "Orange Flat",
+        "ink-sheets": "Ink Sheets",
+        "paper-sheets": "Paper Sheets"
+      }
+    },
     "textSize": {
       "name": "Text size",
       "description": "The composer: 14, 15 or 16 px. The thread is a pixel smaller.",
@@ -304,6 +319,7 @@
     },
     "groups": {
       "theme": "Theme",
+      "appIcon": "App icon",
       "scale": "Zoom and text",
       "sidebar": "Sidebar",
       "motion": "Motion",

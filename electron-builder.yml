@@ -10,6 +10,9 @@ extraResources:
   # The tray's images, read from the file system by src/main/tray.ts.
   - from: resources/tray
     to: tray
+  # Selectable app icons, read from the file system by src/main/app-icon.ts.
+  - from: resources/app-icons
+    to: app-icons
   # The device host's helpers and the notch island's, which tools/install/device-helpers.mjs puts
   # in out/helpers.
   - from: out/helpers

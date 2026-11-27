@@ -13,6 +13,11 @@ const SCANNED = /\.(?:css|html|svg)$/i
 // and the glyphs, whose colors only set their masks.
 const BRAND_FILES = [
   'src/renderer/src/assets/kettu-icon.svg',
+  'src/renderer/src/assets/kettu-icon-ink.svg',
+  'src/renderer/src/assets/kettu-icon-paper.svg',
+  'src/renderer/src/assets/kettu-icon-orange-flat.svg',
+  'src/renderer/src/assets/kettu-icon-ink-sheets.svg',
+  'src/renderer/src/assets/kettu-icon-paper-sheets.svg',
   'src/renderer/src/assets/kettu-fox.svg',
   'src/renderer/src/assets/kettu-glyph-on-dark.svg',
   'src/renderer/src/assets/kettu-glyph-on-light.svg',

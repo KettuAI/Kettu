@@ -217,6 +217,86 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
   return svg.replace(/#[0-9A-Fa-f]{6}\b/g, (c) => map.get(c.toUpperCase()) ?? c)
 }
 
+const INK = '#1c1b18'
+const PAPER = '#f4f3ee'
+
+// The five plain app icon variants: the monochrome fox glyph in the fox's place, on either a flat
+// ground or the tile's curling sheets re-toned by slope and per-channel intercepts.
+export const PLAIN_APP_ICONS = {
+  ink: { ground: INK, fox: '#fff', shade: 'dark' },
+  paper: { ground: PAPER, fox: INK, shade: 'light' },
+  'orange-flat': { ground: '#fa5615', fox: '#fff', shade: 'dark' },
+  'ink-sheets': { fox: '#fff', shade: 'dark', tone: [0.3, 0.07, 0.068, 0.06] },
+  'paper-sheets': { fox: INK, shade: 'light', tone: [0.2, 0.78, 0.775, 0.75] },
+}
+
+export const APP_ICON_VARIANTS = ['kettu', ...Object.keys(PLAIN_APP_ICONS)]
+
+const round3 = (v) => +v.toFixed(3)
+
+function foxGlyphFor(framing, fox, shade) {
+  const full = foxSvg(framing)
+  const open = full.indexOf('<g transform=')
+  const outer = full.slice(open, full.indexOf('>', open) + 1)
+  const [inset, scale, tx, ty] = outer
+    .match(/[\d.]+/g)
+    .slice(1)
+    .map(Number)
+  const dx = +full.match(/<g id="fox" transform="translate\(([-\d.]+) 0\)">/)[1]
+  const parts = /id="(?:ear-left|ear-right|forehead|cheek-left|cheek-right)" d="([^"]+)"/g
+  const numbers = [...full.matchAll(parts)].flatMap((m) => m[1].match(/-?[\d.]+/g).map(Number))
+  const xs = numbers.filter((_, i) => i % 2 === 0)
+  const ys = numbers.filter((_, i) => i % 2 === 1)
+  const width = (Math.max(...xs) - Math.min(...xs)) * scale
+  const cx = inset + ((Math.min(...xs) + Math.max(...xs)) / 2 + dx - tx) * scale
+  const cy = inset + ((Math.min(...ys) + Math.max(...ys)) / 2 - ty) * scale
+  return glyphSvg('tray', { size: round3(width), color: fox, ground: shade }).replace(
+    '<svg ',
+    `<svg x="${round3(cx - width / 2)}" y="${round3(cy - width / 2)}" `,
+  )
+}
+
+function sheetsBody(framing, tone) {
+  const full = foxSvg(framing)
+  const open = full.indexOf('<g transform=')
+  const outer = full.slice(open, full.indexOf('>', open) + 1)
+  const defs = full.slice(full.indexOf('<defs>'), full.indexOf('</defs>'))
+  const sheets = full.slice(open + outer.length, full.indexOf('<g id="fox"'))
+  if (!tone) return `${defs}</defs>${outer}${sheets}</g>`
+  const [slope, ...intercepts] = tone
+  const funcs = ['R', 'G', 'B']
+    .map((c, i) => `<feFunc${c} type="linear" slope="${slope}" intercept="${intercepts[i]}"/>`)
+    .join('')
+  const filter = `<filter id="tone" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/><feComponentTransfer>${funcs}</feComponentTransfer></filter>`
+  return `${defs}${filter}</defs>${outer.replace('<g ', '<g filter="url(#tone)" ')}${sheets}</g>`
+}
+
+/** One of the five plain app icons on the 1024 px canvas, in the `tile` or `square` framing. */
+export function plainFoxSvg(variant, framing = 'tile') {
+  const spec = PLAIN_APP_ICONS[variant]
+  if (!spec) throw new Error(`Unknown plain app icon variant: ${variant}`)
+  const full = foxSvg(framing)
+  const open = full.indexOf('<g transform=')
+  const outer = full.slice(open, full.indexOf('>', open) + 1)
+  let glyph = foxGlyphFor(framing, spec.fox, spec.shade)
+  let body
+  if (!spec.tone) {
+    const badgePath = full.match(/<path id="badge" d="[^"]+"\/>/)[0]
+    body = `<defs>${badgePath}</defs>${outer}<use xlink:href="#badge" fill="${spec.ground}"/></g>${glyph}`
+  } else {
+    // Avoid duplicating the fox gradients already present in the tile's <defs>.
+    const glyphDefs = glyph.slice(glyph.indexOf('<defs>') + 6, glyph.indexOf('<filter id="shade"'))
+    glyph = glyph.replace(glyphDefs, '')
+    body = sheetsBody(framing, spec.tone) + glyph
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">${body}</svg>\n`
+}
+
+/** Any of the six app icons (`kettu` or one of the five plain variants) on the 1024 px canvas. */
+export function appIconSvg(variant = 'kettu', framing = 'tile') {
+  return variant === 'kettu' ? foxSvg(framing) : plainFoxSvg(variant, framing)
+}
+
 // The square around the fox in the drawing's coordinates, for the mark.
 const MARK = { x: 300, y: 303, size: 648 }
 
