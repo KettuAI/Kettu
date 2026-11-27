@@ -930,6 +930,8 @@ interface Live {
   idleSince: number | null
   hiddenSince: number | null
   releaseTimer: ReturnType<typeof setTimeout> | null
+  /** Deferred release reason queued while this session was busy or held; released once idle. */
+  releaseAfterIdle: string | null
   /** The version of the harness's program its agent runs, when the agent says. */
   harnessVersion: string | null
   /**
@@ -972,6 +974,8 @@ interface KettuQueuedMeta {
 }
 
 const TITLE_LENGTH = 60
+/** Release reason logged when an agent's sign-in or account changes. */
+const ACCOUNT_CHANGED_REASON = 'account changed'
 // Titles from `session/list`, kept for an import that follows; bounded like every cache here.
 const LISTED_SESSIONS = 1_000
 // The sessions a search of the conversations returns, the most recently changed first.
@@ -1478,6 +1482,7 @@ export class SessionManager {
       liveSessions: (agentId) => this.connectedCount(agentId),
       agentExited: (agentId) => this.agentExited(agentId),
       signedIn: (agentId) => this.agentSignedIn(agentId),
+      accountChanged: (agentId) => this.accountChanged(agentId),
       optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
       optionsSeen: (agentId, config, folder) => {
         deps.options?.started(agentId, config, pathKey(folder, deps.platform))
@@ -4124,6 +4129,7 @@ export class SessionManager {
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
+      releaseAfterIdle: null,
       harnessVersion: null,
       resumeRead: null,
       modelsReadAt: null,
@@ -6833,6 +6839,73 @@ export class SessionManager {
     this.updateBadge()
   }
 
+  /**
+   * The agent's sign-in or account changed: drops prepared sessions, releases every idle live
+   * session of `agentId` so its next turn starts a fresh process with the new credentials, and
+   * defers release of busy or held sessions until they become idle.
+   */
+  private async accountChanged(agentId: AgentId): Promise<void> {
+    const waits: Promise<void>[] = []
+    for (const live of [...this.live.values()]) {
+      if (live.record.agentId !== agentId || live.record.origin === 'subagent') continue
+      if (live.prepared) {
+        waits.push(this.dropPrepared(live).catch(() => {}))
+        continue
+      }
+      if (this.releasing.has(live.id)) {
+        waits.push(this.releasing.get(live.id)!)
+        continue
+      }
+      if (live.closing) continue
+      if (!live.connection && !live.opening && !live.attaching) continue
+      if (!this.canReopen(live)) continue
+      if (
+        live.thread.session.status === 'auth_required' &&
+        !live.turn &&
+        !live.agentTurn &&
+        !live.opening &&
+        !live.attaching &&
+        !live.rewinding &&
+        !live.background &&
+        live.scheduled === 0 &&
+        waitingCount(live) === 0 &&
+        this.workingSubagents(live).length === 0
+      ) {
+        // Detach the stale connection while keeping the auth_required failure so retry reconnects.
+        waits.push(this.detachStale(live))
+        continue
+      }
+      if (live.saved && this.holdReason(live) === null) {
+        live.releaseAfterIdle = null
+        this.release(live, ACCOUNT_CHANGED_REASON)
+        const run = this.releasing.get(live.id)
+        if (run) waits.push(run)
+        continue
+      }
+      live.releaseAfterIdle = ACCOUNT_CHANGED_REASON
+    }
+    if (waits.length > 0) await Promise.all(waits)
+  }
+
+  /** Whether releasing this session lets the next turn attach a fresh process and continue it. */
+  private canReopen(live: Live): boolean {
+    if (live.record.acpSessionId === '') return true
+    const runtime = this.deps.agents.runtime(live.record.agentId)
+    if (!runtime) return true
+    const { resumeSession, loadSession } = runtime.init.capabilities
+    return resumeSession || loadSession
+  }
+
+  /** Closes a stale connection on a live session that stays in memory (e.g. awaiting retry). */
+  private async detachStale(live: Live): Promise<void> {
+    live.releaseAfterIdle = null
+    const parent = this.letGo(live)
+    const children = this.descendants(live.id, 'subagent')
+    if (children.length > 0) await this.closeAll(children, true).catch(() => {})
+    await parent
+    this.deps.agents.sessionsChanged(live.record.agentId)
+  }
+
   private agentSignedIn(agentId: AgentId): void {
     for (const live of [...this.live.values()]) {
       if (live.record.agentId !== agentId) continue
@@ -6940,8 +7013,9 @@ export class SessionManager {
   private holdReason(live: Live): string | null {
     const { status } = live.thread.session
     if (status !== 'ready' && status !== 'closed') return status
-    if (live.turn) return 'turn'
+    if (live.turn || live.agentTurn) return 'turn'
     if (live.opening || live.attaching) return 'attach'
+    if (live.rewinding) return 'rewind'
     if (live.background) return 'background'
     if (live.scheduled > 0) return 'scheduled'
     if (waitingCount(live) > 0) return 'waiting'
@@ -7125,6 +7199,9 @@ export class SessionManager {
    * Claude Code's follow the idle rule, the others `timings`.
    */
   private releaseAt(live: Live, now: number): { due: number; why: string } | null {
+    if (live.releaseAfterIdle !== null) {
+      return { due: now, why: live.releaseAfterIdle }
+    }
     const idleSince = live.idleSince ?? now
     const { releaseHiddenMs, releaseShownMs, releaseUnusedMs } = this.timings
     if (!live.used) return { due: idleSince + releaseUnusedMs, why: 'unused' }
@@ -7280,7 +7357,10 @@ export class SessionManager {
   /** Stores the session's thread, closes its agent's session and its subagents, and drops it. */
   private release(live: Live, why: string): void {
     if (this.releasing.has(live.id)) return
-    if (harnessOf(live.record.agentId) === 'claude-code') this.idleReleased.add(live.id)
+    live.releaseAfterIdle = null
+    if (harnessOf(live.record.agentId) === 'claude-code' && why !== ACCOUNT_CHANGED_REASON) {
+      this.idleReleased.add(live.id)
+    }
     const reason = why === 'unused' && live.typed ? 'typed, nothing sent' : why
     this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${reason}`)
     const run = this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
@@ -9575,6 +9655,20 @@ export class SessionManager {
     }
     let connection: AgentConnection
     try {
+      if (
+        live.releaseAfterIdle !== null &&
+        live.connection !== null &&
+        !live.background &&
+        live.scheduled === 0 &&
+        this.workingSubagents(live).length === 0 &&
+        this.canReopen(live)
+      ) {
+        const why = live.releaseAfterIdle
+        live.releaseAfterIdle = null
+        this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${why}`)
+        await this.detachStale(live)
+        if (turn.ended) return
+      }
       connection = await this.connect(live)
     } catch (error) {
       if (!turn.ended) this.failConnect(live, turn, error)
@@ -10953,6 +11047,7 @@ export class SessionManager {
     if (!live.record.rewound) return Promise.resolve()
     live.rewinding ??= this.cutAgentSession(live).finally(() => {
       live.rewinding = null
+      this.refreshRelease(live)
     })
     return live.rewinding
   }
@@ -12090,7 +12185,10 @@ export class SessionManager {
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
     if (this.blockingWaitingCount(live) > 0) return
-    if (live.thread.session.status !== 'awaiting_permission') return
+    if (live.thread.session.status !== 'awaiting_permission') {
+      if (waitingCount(live) === 0) this.refreshRelease(live)
+      return
+    }
     const nextStatus: SessionStatus = live.turn || live.childRunning ? 'running' : 'ready'
     this.update(live, { status: nextStatus })
     if (nextStatus === 'running' && this.hasQueuedWake(live) && this.canWakeInterruptible(live)) {

@@ -1238,7 +1238,10 @@ export interface HostContract {
     params: { agentId: AgentId; change: CodebuddySiteChange }
     result: void
   }
-  'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
+  'agents.refreshAccount': {
+    params: { agentId: AgentId; force?: boolean; afterSignIn?: boolean }
+    result: void
+  }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string; allFolders?: boolean }
     result: { sessions: ImportableSession[]; nextCursor: string | null }

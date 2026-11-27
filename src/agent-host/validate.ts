@@ -1640,7 +1640,16 @@ export function createValidators(platform: Platform): Validators {
       }
       return { agentId: agentId(o), change: { site: change.site } }
     },
-    'agents.refreshAccount': agentWithForce,
+    'agents.refreshAccount': (params) => {
+      const o = fields(params)
+      const force = optionalFlag(o, 'force')
+      const afterSignIn = optionalFlag(o, 'afterSignIn')
+      return {
+        agentId: agentId(o),
+        ...(force !== undefined ? { force } : {}),
+        ...(afterSignIn !== undefined ? { afterSignIn } : {}),
+      }
+    },
     'agents.options': none,
     'agents.pinModel': (params) => {
       const o = fields(params)

@@ -363,6 +363,8 @@ export interface AgentSessionHooks {
   liveSessions(agentId: AgentId): number
   agentExited(agentId: AgentId, info: ExitInfo): void
   signedIn(agentId: AgentId): void
+  /** The agent's sign-in or account changed: release idle live sessions and defer busy ones. */
+  accountChanged(agentId: AgentId): Promise<void> | void
   /** Whether New session knows the agent's config options already. */
   optionsKnown(agentId: AgentId): boolean
   /** The config options of a hidden session in `folder`, at the agent's own values. */
@@ -682,6 +684,95 @@ function sameSignIn(before: AgentAccount | null, after: AgentAccount): boolean {
   )
 }
 
+interface AccountSnapshot {
+  signIn: AgentStatus['signIn']
+  kind: AgentAccount['kind'] | null
+  email: string | null
+  label: string | null
+  signInMethod: string | null
+  providersKey: string | null
+}
+
+function providersIdentity(slot: Slot): string | null {
+  if (slot.def.id !== 'opencode' || slot.providersReadAt === 0) return null
+  return JSON.stringify(
+    slot.providers.map((provider) => ({
+      id: provider.id,
+      accounts: provider.accounts.map((account) => ({
+        id: account.id,
+        label: account.label,
+        method: account.method,
+        needsAuth: account.needsAuth,
+        active: account.active ?? false,
+      })),
+    })),
+  )
+}
+
+function accountSnapshot(slot: Slot): AccountSnapshot {
+  return {
+    signIn: slot.signIn,
+    kind: slot.account?.kind ?? null,
+    email: slot.account?.email ?? null,
+    label: slot.account?.label ?? null,
+    signInMethod: slot.signInMethod,
+    providersKey: providersIdentity(slot),
+  }
+}
+
+/**
+ * Whether two snapshots represent a real sign-in or account switch rather than an initial
+ * discovery or metadata enrichment (such as filling in an email, tier, or expiry).
+ */
+function accountIdentityChanged(before: AccountSnapshot, after: AccountSnapshot): boolean {
+  if (before.signIn !== after.signIn) {
+    if (
+      (before.signIn === 'signed-in' && after.signIn === 'required') ||
+      (before.signIn === 'required' && after.signIn === 'signed-in') ||
+      (before.signIn === 'unknown' && after.signIn === 'required')
+    ) {
+      return true
+    }
+  }
+  if (
+    before.signInMethod !== null &&
+    after.signInMethod !== null &&
+    before.signInMethod !== after.signInMethod
+  ) {
+    return true
+  }
+  if (
+    before.providersKey !== null &&
+    after.providersKey !== null &&
+    before.providersKey !== after.providersKey
+  ) {
+    return true
+  }
+  const beforeKind = before.kind === 'none' ? null : before.kind
+  const afterKind = after.kind === 'none' ? null : after.kind
+  if (beforeKind !== null && afterKind === null) return true
+  if (beforeKind !== null && afterKind !== null && beforeKind !== afterKind) return true
+  if (beforeKind !== null && afterKind !== null && beforeKind === afterKind) {
+    if (before.email !== null && after.email !== null && before.email !== after.email) return true
+    if (beforeKind === 'external' && before.label && after.label && before.label !== after.label) {
+      return true
+    }
+    if (
+      beforeKind === 'account' &&
+      before.email === null &&
+      after.email === null &&
+      before.label &&
+      after.label &&
+      before.label !== OAUTH_ACCOUNT_LABEL &&
+      after.label !== OAUTH_ACCOUNT_LABEL &&
+      before.label !== after.label
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * The agent's models go through a gateway, which has no plan: a sign-in it keeps, such as Codex's
  * ChatGPT one under a provider of the user's own, still answers for a plan that holds nothing back.
@@ -834,6 +925,7 @@ export class AgentManager {
     liveSessions: () => 0,
     agentExited: () => {},
     signedIn: () => {},
+    accountChanged: () => {},
     optionsKnown: () => true,
     optionsSeen: () => {},
     configChanged: () => {},
@@ -3931,6 +4023,7 @@ export class AgentManager {
         })
       },
       authState: (state) => {
+        const before = accountSnapshot(slot)
         if (state === 'authenticated') slot.signIn = 'signed-in'
         else if (state === 'not_required') slot.signIn = 'signed-in'
         else if (state === 'unauthenticated') {
@@ -3938,6 +4031,9 @@ export class AgentManager {
           slot.account = null
         }
         this.emit(slot)
+        if (accountIdentityChanged(before, accountSnapshot(slot))) {
+          void this.hooks.accountChanged(slot.id)
+        }
       },
       ignored: (sessionId, what) => diagnostics.ignored(agentId, sessionId, what),
       log: (level, message) => diagnostics.log(level, `${slot.name}: ${message}`),
@@ -3950,6 +4046,7 @@ export class AgentManager {
   }
 
   private setAccount(slot: Slot, account: AgentAccount): void {
+    const beforeSnapshot = accountSnapshot(slot)
     const wasRequired = slot.signIn === 'required'
     const before = slot.account
     // Grok's sign-in names no plan: the one its billing gave the same account stays.
@@ -3969,6 +4066,9 @@ export class AgentManager {
     if (throughGateway(slot)) slot.limits.clear()
     slot.signIn = named.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
+    if (accountIdentityChanged(beforeSnapshot, accountSnapshot(slot))) {
+      void this.hooks.accountChanged(slot.id)
+    }
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
     if (slot.def.id === 'claude-code' && account.kind === 'account') {
       void this.readTier(slot, slot.account)
@@ -4645,6 +4745,7 @@ export class AgentManager {
 
   /** The agent says it is signed out: its account and the plan it read are gone. */
   private signedOut(slot: Slot): void {
+    const before = accountSnapshot(slot)
     slot.signIn = 'required'
     slot.account = null
     slot.limits.clear()
@@ -4652,6 +4753,9 @@ export class AgentManager {
     slot.resets = null
     slot.resetsError = null
     this.emit(slot)
+    if (accountIdentityChanged(before, accountSnapshot(slot))) {
+      void this.hooks.accountChanged(slot.id)
+    }
   }
 
   private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {
@@ -4951,18 +5055,65 @@ export class AgentManager {
    * Brings an agent's account and plan limits up to date for Settings › Agents, starting an agent
    * that reports them. Never installs: an agent that would need an install first is left alone.
    */
-  async refreshAccount(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
+  async refreshAccount(
+    agentId: AgentId,
+    options?: { force?: boolean; afterSignIn?: boolean },
+  ): Promise<void> {
     const slot = this.registeredSlot(agentId)
     if (this.isDisabled(agentId)) return
-    if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
+    const before = accountSnapshot(slot)
+    const afterSignIn = options?.afterSignIn === true
+    let failed: unknown
+    let hasError = false
+    try {
+      await this.runRefreshAccount(slot, options?.force === true, afterSignIn)
+    } catch (error) {
+      failed = error
+      hasError = true
+    }
+    if (afterSignIn || accountIdentityChanged(before, accountSnapshot(slot))) {
+      await this.hooks.accountChanged(slot.id)
+    }
+    if (hasError) throw failed
+  }
+
+  private async runRefreshAccount(slot: Slot, force: boolean, afterSignIn: boolean): Promise<void> {
+    const agentId = slot.id
+    if (slot.def.id === 'opencode') return this.refreshProviders(slot, force)
     if (slot.def.id === 'deepseek') {
       // A model route set up in dsh's own pages tells Kettu nothing.
-      if (options?.force === true && slot.signIn === 'required') await this.checkSignIn(slot)
-      return this.refreshBalance(slot, options?.force === true)
-    }
-    const force = options?.force === true
-    if (!slot.def.reportsAccount) {
       if (force && slot.signIn === 'required') await this.checkSignIn(slot)
+      return this.refreshBalance(slot, force)
+    }
+    const wasRequired = slot.signIn === 'required'
+    if (slot.runtime?.init.capabilities.authStatus && slot.runtime.connection.readAuthStatus) {
+      try {
+        await slot.runtime.connection.readAuthStatus()
+      } catch (error) {
+        this.deps.diagnostics.log(
+          'warn',
+          `${slot.name}: auth/status failed: ${(error as Error).message}`,
+        )
+      }
+    }
+    if (!slot.def.reportsAccount) {
+      if (slot.def.id === 'antigravity') {
+        await this.readSignInMethod(slot)
+        if (force && wasRequired && slot.signIn === 'required') {
+          await this.checkSignIn(slot)
+          await this.readSignInMethod(slot)
+        } else if (afterSignIn && antigravityLimitsRead(slot.signInMethod) === 'read') {
+          slot.limitsReadAt = 0
+          this.refreshLimits(agentId, { force: true }).catch((error: unknown) => {
+            this.deps.diagnostics.log(
+              'warn',
+              `${slot.name}: the plan limits read failed: ${agentError(error).message}`,
+            )
+          })
+        }
+        return
+      }
+      if (force && wasRequired && slot.signIn === 'required') await this.checkSignIn(slot)
       else if (slot.def.id === 'pi' && slot.modelProviders === null)
         await this.readModelProviders(slot)
       return
@@ -5019,7 +5170,10 @@ export class AgentManager {
       if (error instanceof HostError && error.code === 'auth_required') return
       throw agentError(error)
     }
-    if (slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
+    if (slot.signIn === 'signed-in') {
+      await this.hooks.accountChanged(slot.id)
+      this.hooks.signedIn(slot.id)
+    }
   }
 
   /**
@@ -5057,6 +5211,7 @@ export class AgentManager {
   }
 
   private async readProviders(slot: Slot): Promise<void> {
+    const before = accountSnapshot(slot)
     try {
       const display = this.display(slot)
       const providers = (await this.openCodeClient(slot).providers()).map((provider) => {
@@ -5104,6 +5259,9 @@ export class AgentManager {
       const wasRequired = slot.signIn === 'required'
       // Free and local models work without a connected account.
       slot.signIn = connected.length > 0 ? 'signed-in' : 'unknown'
+      if (accountIdentityChanged(before, accountSnapshot(slot))) {
+        await this.hooks.accountChanged(slot.id)
+      }
       if (wasRequired && connected.length > 0) this.hooks.signedIn(slot.id)
     } catch {
       slot.providersError = t('agent.providersFailed')
@@ -5252,6 +5410,7 @@ export class AgentManager {
         slot.signIn = 'signed-in'
         slot.accountRefused = false
         this.emit(slot)
+        await this.hooks.accountChanged(slot.id)
         this.hooks.signedIn(slot.id)
         void this.readSignInMethod(slot)
         // The plan and limits shown were read under the method agy refused.
@@ -5347,6 +5506,7 @@ export class AgentManager {
     slot.signIn = 'signed-in'
     slot.accountRefused = false
     this.emit(slot)
+    await this.hooks.accountChanged(agentId)
     this.hooks.signedIn(agentId)
     void this.readSignInMethod(slot)
   }
@@ -5372,6 +5532,7 @@ export class AgentManager {
     slot.limits.clear()
     slot.answeredSignIn = null
     this.emit(slot)
+    await this.hooks.accountChanged(agentId)
     void this.readSignInMethod(slot)
   }
 
@@ -5688,7 +5849,7 @@ export class AgentManager {
     if (failure) throw new HostError('agent_error', failure)
   }
 
-  /** The account and limits belong to the old credentials; an idle process goes with them. */
+  /** The account and limits belong to the old credentials; idle sessions and process go with them. */
   private async credentialsChanged(slot: Slot): Promise<void> {
     slot.account = null
     slot.limits.clear()
@@ -5698,6 +5859,7 @@ export class AgentManager {
     slot.resetsError = null
     slot.resetsReadAt = 0
     slot.signIn = 'unknown'
+    await this.hooks.accountChanged(slot.id)
     if (slot.runtime && this.hooks.liveSessions(slot.id) === 0) await this.stopProcess(slot)
     this.emit(slot)
   }
