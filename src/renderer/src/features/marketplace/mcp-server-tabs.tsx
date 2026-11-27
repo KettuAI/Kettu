@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
-  LockIcon,
   Search01Icon,
+  SquareLock02Icon,
 } from '@hugeicons/core-free-icons'
 import { harnessOf, type AgentId } from '@shared/agents'
 import type { MarketServer } from '@shared/marketplace'
@@ -328,7 +328,7 @@ export function McpToolsTab({
                   aria-label={t('mcp.page.heldLock')}
                   title={t('mcp.page.heldLock')}
                 >
-                  <Icon icon={LockIcon} size={14} />
+                  <Icon icon={SquareLock02Icon} size={16} />
                 </span>
               ) : (
                 <SettingSwitch
