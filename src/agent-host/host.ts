@@ -336,6 +336,8 @@ import type { ImageMode } from './threads/model'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
 import type { LogReader } from './usage/model'
+import { consumeUpdateResume } from './update-resume'
+import type { UpdateResumeFile } from '@shared/update-resume'
 import { LimitNotices, limitNoticeText, type LimitNotice } from './limit-notices'
 import { LOG_READERS } from './usage/readers'
 import { UsageStore, type UsageWorkerFactory } from './usage/store'
@@ -585,6 +587,8 @@ export class AgentHost {
   private readonly lastFailed = new Map<AgentId, { sessionId: string; at: number }>()
   /** The session a used-up window stopped, by the window's key, which its reset opens. */
   private readonly stoppedBy = new Map<string, string>()
+  /** Post-update session recovery run for this launch; resolves immediately when none was pending. */
+  private updateResumePromise: Promise<void> = Promise.resolve()
   readonly env: EnvironmentService
   readonly projects: Projects
   readonly scratch: ScratchFolders
@@ -2395,7 +2399,29 @@ export class AgentHost {
       writeLog('warn', 'host', `Could not clear Claude Code's settings files: ${String(error)}`),
     )
     const host = new AgentHost(options)
-    const [, , , remembered, updates, listing, manifest] = await Promise.all([
+    const [
+      ,
+      ,
+      ,
+      remembered,
+      updates,
+      listing,
+      manifest,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      ,
+      pendingUpdateResume,
+    ] = await Promise.all([
       host.scratch.ready(),
       host.projects.load(),
       host.sessions.load(),
@@ -2416,6 +2442,11 @@ export class AgentHost {
       host.workflowLibrary.load(),
       host.plugins.load(),
       host.workflowSuggestions.load(),
+      // Atomically consume update-resume.json before host:ready so a crash or restart can never
+      // trigger post-update recovery more than once.
+      consumeUpdateResume(options.userDataPath, {
+        log: (level, message) => writeLog(level, 'host', message),
+      }),
     ])
     // After the sessions, whose step sessions it messages when it resumes.
     await host.tasks.load()
@@ -2431,7 +2462,7 @@ export class AgentHost {
     host.pluginScripts.sync(host.plugins.scripts())
     void host.pluginThemes.sync()
     host.sendFolders()
-    void host.sessions.checkWorktrees()
+    const worktreesChecked = host.sessions.checkWorktrees()
     host.usage.start()
     host.artifacts.start()
     host.idleRelease.start()
@@ -2444,11 +2475,15 @@ export class AgentHost {
     host.agents.startLimitReads()
     host.agents.startSignInEndReads()
     void host.agents.removeAntigravityUsageServer()
-    void host.agents.detectAll().then(() => {
+    const agentsDetected = host.agents.detectAll()
+    void agentsDetected.then(() => {
       host.agents.scheduleUpdateChecks()
       host.agents.scheduleRegistryReads()
       host.firstStart()
     })
+    if (pendingUpdateResume) {
+      host.scheduleUpdateResume(pendingUpdateResume, worktreesChecked, agentsDetected)
+    }
     return host
   }
 
@@ -3947,6 +3982,42 @@ export class AgentHost {
 
   busy(requestId: number): void {
     this.options.send({ type: 'host:busy', requestId, sessions: this.sessions.busy() })
+  }
+
+  updateResumeSnapshot(requestId: number): void {
+    this.options.send({
+      type: 'host:update-resume',
+      requestId,
+      sessions: this.sessions.interruptedByUpdate(),
+    })
+  }
+
+  /** Resolves once any post-update session recovery for this launch has finished. */
+  updateResumeReady(): Promise<void> {
+    return this.updateResumePromise
+  }
+
+  private scheduleUpdateResume(
+    pending: UpdateResumeFile,
+    worktreesChecked: Promise<void>,
+    agentsDetected: Promise<void>,
+  ): void {
+    writeLog(
+      'info',
+      'host',
+      `Resuming ${pending.sessions.length} session(s) interrupted by update from ${pending.fromVersion}`,
+    )
+    this.updateResumePromise = Promise.all([
+      worktreesChecked.catch(() => {}),
+      agentsDetected.catch(() => {}),
+    ])
+      .then(() => {
+        if (this.stopping) return
+        return this.sessions.resumeAfterUpdate(pending.sessions)
+      })
+      .catch((error: unknown) => {
+        writeLog('warn', 'host', `Post-update session recovery failed: ${String(error)}`)
+      })
   }
 
   /** The floating label's buttons and the stop shortcut, from main. */

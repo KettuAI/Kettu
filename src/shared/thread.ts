@@ -499,10 +499,15 @@ export type ThreadEntry =
       severity: 'info' | 'warning' | 'error'
       title: string
       description?: string
-      // Each but reports_paused ends the turn: the agent exited mid-turn, its model provider is out
-      // of credit, or the turn of a message failed otherwise. reports_paused: reports from the
-      // sessions it started stopped waking this one.
-      cause?: 'agent_stopped' | 'out_of_credit' | 'turn_failed' | 'reports_paused'
+      // agent_stopped, out_of_credit and turn_failed end the turn; reports_paused pauses started
+      // session reports; update_resumed and update_resume_blocked record post-update recovery.
+      cause?:
+        | 'agent_stopped'
+        | 'out_of_credit'
+        | 'turn_failed'
+        | 'reports_paused'
+        | 'update_resumed'
+        | 'update_resume_blocked'
       model?: string // out_of_credit: the session's model when the turn failed
       // The agent's entry before it, to put it back after a replay: set on the notices Kettu
       // adds itself, never on an agent's, which its replay sends again.
@@ -2015,7 +2020,9 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.cause === 'agent_stopped' ||
           value.cause === 'out_of_credit' ||
           value.cause === 'turn_failed' ||
-          value.cause === 'reports_paused') &&
+          value.cause === 'reports_paused' ||
+          value.cause === 'update_resumed' ||
+          value.cause === 'update_resume_blocked') &&
         (value.model === undefined || typeof value.model === 'string') &&
         (value.after === undefined || value.after === null || typeof value.after === 'string') &&
         (value.configWarning === undefined || isConfigWarningDetail(value.configWarning))

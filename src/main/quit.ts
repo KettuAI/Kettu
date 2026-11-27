@@ -20,6 +20,10 @@ export interface QuitDeps {
   busyTerminals(timeoutMs: number): Promise<BusyTerminal[]>
   /** Stops both hosts and flushes every pending write. */
   shutDown(): Promise<void>
+  /** Captures running user sessions right before stopping hosts for an immediate update restart. */
+  captureUpdateResume?(timeoutMs: number): Promise<void>
+  /** Clears any staged update-resume file when an update restart fails, cancels, or is skipped. */
+  clearUpdateResume?(): Promise<void>
   /** Runs once shutdown is finished and quitting is irreversible, before handing off to quit/update. */
   onCleanExit?(): void
   installUpdate(): Promise<void>
@@ -99,11 +103,14 @@ export class QuitFlow {
   /**
    * Starts quitting, or restarting, unless that is under way already. `confirmed`: the user saw
    * the running work and chose to stop it, so only unsaved files are asked about.
+   * `resumeAfterUpdate`: only true for immediate user-initiated update restarts, never for normal
+   * quits, wait-for-idle restarts, or system shutdowns.
    */
-  request(reason: QuitReason, confirmed = false): boolean {
+  request(reason: QuitReason, confirmed = false, resumeAfterUpdate = reason === 'update'): boolean {
     if (this.phase !== 'idle') return false
-    void this.run(reason, confirmed).catch((error: unknown) => {
+    void this.run(reason, confirmed, resumeAfterUpdate).catch(async (error: unknown) => {
       log.error('Quit failed; quitting anyway', error)
+      await this.deps.clearUpdateResume?.().catch(() => {})
       this.phase = 'done'
       this.deps.onCleanExit?.()
       app.quit()
@@ -206,7 +213,11 @@ export class QuitFlow {
     window.close()
   }
 
-  private async run(reason: QuitReason, confirmed: boolean): Promise<void> {
+  private async run(
+    reason: QuitReason,
+    confirmed: boolean,
+    resumeAfterUpdate: boolean,
+  ): Promise<void> {
     this.phase = 'asking'
     if (!this.systemShuttingDown) {
       // Unsaved edits are lost on quitting, so they ask whatever the setting says.
@@ -256,6 +267,19 @@ export class QuitFlow {
       this.phase = 'idle'
       return
     }
+    const shouldResumeAfterUpdate =
+      reason === 'update' && resumeAfterUpdate && !this.systemShuttingDown
+    let capturedUpdateResume = false
+    if (shouldResumeAfterUpdate) {
+      try {
+        await this.deps.captureUpdateResume?.(BUSY_TIMEOUT_MS)
+        capturedUpdateResume = true
+      } catch (error) {
+        log.warn(`Could not capture sessions to resume after update: ${String(error)}`)
+      }
+    } else {
+      await this.deps.clearUpdateResume?.().catch(() => {})
+    }
     const started = performance.now()
     await this.deps.shutDown()
     log.info(`Hosts stopped and state flushed in ${(performance.now() - started).toFixed(1)} ms`)
@@ -263,8 +287,18 @@ export class QuitFlow {
     this.deps.onCleanExit?.()
     if (reason === 'update') {
       // After the install starts: it may first wait for the update to be prepared.
-      await this.deps.installUpdate()
-      setTimeout(() => app.quit(), INSTALL_FALLBACK_MS).unref()
+      try {
+        await this.deps.installUpdate()
+      } catch (error) {
+        if (capturedUpdateResume) await this.deps.clearUpdateResume?.().catch(() => {})
+        throw error
+      }
+      setTimeout(() => {
+        // If quitAndInstall failed to relaunch the app, drop the manifest before forcing a plain quit.
+        void Promise.resolve(capturedUpdateResume ? this.deps.clearUpdateResume?.() : undefined)
+          .catch(() => {})
+          .finally(() => app.quit())
+      }, INSTALL_FALLBACK_MS).unref()
     } else {
       if (reason === 'restart') app.relaunch(this.relaunch?.())
       app.quit()

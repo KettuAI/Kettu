@@ -126,6 +126,7 @@ import { KettuTray } from './tray'
 import { TrayHostAgentsFeed } from './tray-host-agents'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
+import { clearUpdateResume, saveUpdateResume } from './update-resume'
 import { devUserDataPath } from './user-data'
 import {
   applyVerbose,
@@ -1087,7 +1088,9 @@ async function start(): Promise<void> {
   const updater = new Updater({
     appState,
     settings: () => settings.get(),
-    requestRestart: (confirmed) => quit?.request('update', confirmed) ?? false,
+    requestRestart: (confirmed, resumeAfterUpdate = true) =>
+      quit?.request('update', confirmed, resumeAfterUpdate) ?? false,
+    clearUpdateResume: () => clearUpdateResume(userDataPath),
     waitableSessions: async () => (await agentHost.busy(2000)).filter(restartWaitsFor).length,
     requestMove: () => quit?.request('move'),
     changed: (status) => {
@@ -1118,6 +1121,14 @@ async function start(): Promise<void> {
     settings: () => settings.get(),
     busySessions: (timeoutMs) => agentHost.busy(timeoutMs),
     busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
+    captureUpdateResume: async (timeoutMs) => {
+      const sessions = await agentHost.updateResumeSessions(timeoutMs)
+      await saveUpdateResume(userDataPath, {
+        fromVersion: app.getVersion(),
+        sessions,
+      })
+    },
+    clearUpdateResume: () => clearUpdateResume(userDataPath),
     shutDown: async () => {
       account.stop()
       relayToken.stop()

@@ -61,6 +61,7 @@ import type {
   ComputerSetupOutcome,
   ComputerSetupStep,
 } from '@shared/computer-use'
+import { normalizeUpdateResumeSessions, type UpdateResumeSession } from '@shared/update-resume'
 import type {
   AttentionRequest,
   BackgroundWork,
@@ -1121,6 +1122,10 @@ const CONTINUE_RETRIES = 5
 /** What a session is sent to carry on once the window that stopped it has reset. */
 const CONTINUE_PROMPT =
   'The plan limit that stopped your last turn has reset. Continue the work from where you left off.'
+
+/** What a session is sent when Kettu automatically resumes it after an update restart. */
+const UPDATE_RESUME_PROMPT =
+  'The Kettu desktop app restarted to install an update while you were working. Continue the task from where you left off.'
 
 /** When the session's prompt cache expires, from its main thread's latest request, if any. */
 function cacheExpiresAt(live: Live): number | null {
@@ -15266,6 +15271,225 @@ export class SessionManager {
       }
     }
     return out
+  }
+
+  /**
+   * Local user sessions actively executing work right now that an immediate update restart would
+   * interrupt. Excludes archived sessions, prepared drafts, workflow/routine/subagent sessions,
+   * and idle sessions only holding background commands or scheduled timers.
+   */
+  interruptedByUpdate(): UpdateResumeSession[] {
+    const out: UpdateResumeSession[] = []
+    for (const live of this.live.values()) {
+      if (
+        live.record.origin !== 'user' ||
+        live.prepared !== null ||
+        live.closing ||
+        live.removing ||
+        this.isArchived(live.record) ||
+        this.isProjectArchived(live.record)
+      ) {
+        continue
+      }
+      const { status, waitingBackground } = live.thread.session
+      const subagents = this.workingSubagents(live)
+      const subagentWaiting = subagents.some((item) => item.waiting)
+      const subagentRunning = subagents.some((item) => !item.waiting)
+      const hasActiveTurn = live.turn !== null || live.agentTurn
+      const waitingForUser =
+        (hasActiveTurn &&
+          (status === 'awaiting_permission' || this.blockingWaitingCount(live) > 0)) ||
+        subagentWaiting
+      const activeRunning =
+        (status === 'running' && waitingBackground !== true && hasActiveTurn) ||
+        (status === 'running' && waitingBackground === true && subagentRunning)
+      if (!waitingForUser && !activeRunning) continue
+      out.push({ sessionId: live.id, waitingForUser })
+    }
+    return out
+  }
+
+  /**
+   * Resumes user sessions interrupted by the preceding update restart. Each session is evaluated
+   * independently in parallel; sessions that cannot safely auto-resume receive a status notice
+   * with a manual Continue action instead.
+   */
+  async resumeAfterUpdate(items: readonly UpdateResumeSession[]): Promise<void> {
+    if (this.stopped) return
+    const deduped = normalizeUpdateResumeSessions(items)
+    if (deduped.length === 0) return
+    await Promise.allSettled(deduped.map((item) => this.resumeOneAfterUpdate(item)))
+  }
+
+  private async resumeOneAfterUpdate(item: UpdateResumeSession): Promise<void> {
+    if (this.stopped || !this.has(item.sessionId)) return
+    const record = this.recordOf(item.sessionId)
+    if (record.origin !== 'user') return
+
+    const block = (description: string): Promise<void> =>
+      this.appendUpdateNotice(record, {
+        severity: 'warning',
+        title: t('notice.updateResumeBlocked.title'),
+        description,
+        cause: 'update_resume_blocked',
+      })
+
+    if (this.isArchived(record)) {
+      await block(t('notice.updateResumeBlocked.archived'))
+      return
+    }
+    if (this.isProjectArchived(record)) {
+      await block(t('notice.updateResumeBlocked.projectArchived'))
+      return
+    }
+    if (item.waitingForUser) {
+      await block(t('notice.updateResumeBlocked.awaitingUser'))
+      return
+    }
+    if (!(await isFolder(record.projectPath))) {
+      await block(t('notice.updateResumeBlocked.projectMissing', { path: record.projectPath }))
+      return
+    }
+    if (record.worktree) {
+      const worktreeState = this.worktreeSummary(record.worktree).state
+      const exists =
+        record.worktree.removed === undefined &&
+        worktreeState === 'ready' &&
+        (await isFolder(record.worktree.path))
+      if (!exists) {
+        await block(t('notice.updateResumeBlocked.worktreeMissing', { path: record.worktree.path }))
+        return
+      }
+    }
+    const { agentId } = record
+    if (!this.deps.agents.has(agentId)) {
+      await block(t('notice.updateResumeBlocked.agentUnavailable', { agent: agentId }))
+      return
+    }
+    const agentName = this.deps.agents.name(agentId)
+    if (this.deps.agents.isDisabled(agentId)) {
+      await block(t('notice.updateResumeBlocked.agentDisabled', { agent: agentName }))
+      return
+    }
+    const agentStatus = this.deps.agents.status(agentId)
+    if (
+      agentStatus.uninstalled ||
+      UNUSABLE_STATES.has(agentStatus.state) ||
+      agentStatus.state === 'failed'
+    ) {
+      await block(t('notice.updateResumeBlocked.agentUnavailable', { agent: agentName }))
+      return
+    }
+    if (agentStatus.signIn === 'required') {
+      await block(t('notice.updateResumeBlocked.agentSignIn', { agent: agentName }))
+      return
+    }
+
+    let live: Live
+    try {
+      live = await this.revive(item.sessionId)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not revive session ${item.sessionId} after update: ${(error as Error).message}`,
+      )
+      await block(t('notice.updateResumeBlocked.failed', { reason: agentError(error).message }))
+      return
+    }
+    if (this.stopped || live.closing || live.removing || !this.has(item.sessionId)) return
+    if (live.thread.session.heldOutside) {
+      await block(t('notice.updateResumeBlocked.heldOutside'))
+      return
+    }
+    const { status, queue, queuePaused } = live.thread.session
+    // Respect manual user activity that already started after relaunch.
+    if (!canSend(status) || live.turn !== null || (queue.length > 0 && !queuePaused)) return
+
+    try {
+      await this.attachClosed(live)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not resume session ${item.sessionId} after update: ${(error as Error).message}`,
+      )
+      await block(t('notice.updateResumeBlocked.failed', { reason: agentError(error).message }))
+      return
+    }
+    if (this.stopped || live.closing || live.removing || !this.has(item.sessionId)) return
+    if (!canSend(live.thread.session.status) || live.turn !== null) return
+
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.updateResumed.title'),
+          description: t('notice.updateResumed.description'),
+          cause: 'update_resumed',
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+    this.flushPatches(live)
+    this.touch(live.id)
+    this.sendPrompt(
+      live,
+      [{ type: 'text', text: UPDATE_RESUME_PROMPT }],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    )
+  }
+
+  /**
+   * Appends a post-update recovery notice without starting or attaching the session's agent,
+   * persisting it immediately so opening the session later shows the reason and manual entry.
+   */
+  private async appendUpdateNotice(
+    record: SessionRecord,
+    notice: {
+      severity: 'info' | 'warning'
+      title: string
+      description: string
+      cause: 'update_resumed' | 'update_resume_blocked'
+    },
+  ): Promise<void> {
+    if (this.stopped || !this.has(record.id)) return
+    let live = this.live.get(record.id)
+    if (!live) {
+      const stored = await this.readThread(record)
+      if (this.stopped || !this.has(record.id)) return
+      live = this.live.get(record.id)
+      if (!live) {
+        live = this.makeLive(this.recordOf(record.id), true, 'closed')
+        if (stored) this.fill(live, stored)
+      }
+    }
+    if (live.thread.session.status === 'starting' || live.thread.session.status === 'failed') {
+      this.update(live, { status: 'closed', error: null })
+    }
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: notice.severity,
+          title: notice.title,
+          description: notice.description,
+          cause: notice.cause,
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+    if (!this.inFront(live.id)) live.unread = true
+    this.flushPatches(live)
+    this.checkpoint(live)
+    this.touch(live.id)
   }
 
   summaries(): SessionSummary[] {

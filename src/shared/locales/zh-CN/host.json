@@ -227,6 +227,23 @@
     "fullAccessNotCarried": {
       "title": "没有带上完全访问",
       "description": "这个会话在 Kettu 外面是完全访问。Kettu 不以完全访问接上会话，这里改成了「{{mode}}」。"
+    },
+    "updateResumed": {
+      "title": "更新重启后已自动继续",
+      "description": "此会话因 Kettu 更新重启而被中断，重启后已自动继续执行。"
+    },
+    "updateResumeBlocked": {
+      "title": "更新重启后未能自动继续",
+      "archived": "此会话已归档，请取消归档后再手动继续。",
+      "projectArchived": "此会话所属的项目已归档，请恢复项目后再手动继续。",
+      "awaitingUser": "更新重启前该会话正在等待你的审批或回复，未自动继续。请确认后手动继续。",
+      "projectMissing": "项目目录 {{path}} 不存在，请恢复目录后再手动继续。",
+      "worktreeMissing": "此会话的 Worktree 目录 {{path}} 不存在或不可用，请检查后再手动继续。",
+      "agentDisabled": "{{agent}} 当前已禁用，请在设置中重新启用后再手动继续。",
+      "agentUnavailable": "{{agent}} 未安装或当前不可用，请重新安装或修复后再手动继续。",
+      "agentSignIn": "{{agent}} 需要先登录后才能继续此会话。",
+      "heldOutside": "此会话正在外部终端中打开，请在外部退出后再手动继续。",
+      "failed": "自动恢复失败：{{reason}}"
     }
   },
   "attention": {

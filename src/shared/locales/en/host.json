@@ -228,6 +228,23 @@
     "fullAccessNotCarried": {
       "title": "Full access was not carried over",
       "description": "This session ran in full access outside Kettu. Kettu does not attach a session in it, so it is in {{mode}} here."
+    },
+    "updateResumed": {
+      "title": "Resumed after update restart",
+      "description": "This session was interrupted when Kettu restarted to update, so Kettu continued it automatically."
+    },
+    "updateResumeBlocked": {
+      "title": "Could not resume automatically after update",
+      "archived": "This session is archived. Restore it and continue manually when ready.",
+      "projectArchived": "This session's project is archived. Restore the project and continue manually when ready.",
+      "awaitingUser": "This session was waiting for your approval or input before the update restart. Review the pending step or continue manually.",
+      "projectMissing": "The project folder {{path}} is no longer available. Restore it and continue manually.",
+      "worktreeMissing": "The session worktree {{path}} is no longer available. Restore it or continue manually.",
+      "agentDisabled": "{{agent}} is currently disabled. Re-enable it in Settings, then continue manually.",
+      "agentUnavailable": "{{agent}} is not installed or unavailable. Reinstall or fix it, then continue manually.",
+      "agentSignIn": "{{agent}} requires you to sign in before this session can continue.",
+      "heldOutside": "This session is open in an external terminal. Close it there, then continue manually.",
+      "failed": "Automatic resume failed: {{reason}}"
     }
   },
   "attention": {

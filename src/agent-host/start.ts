@@ -171,6 +171,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break
+      case 'host:update-resume-request':
+        withHost((h) => h.updateResumeSnapshot(message.requestId))
+        break
       case 'host:report-request':
         if (Number.isSafeInteger(message.requestId)) withHost((h) => void h.report(message))
         break

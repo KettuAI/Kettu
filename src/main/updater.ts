@@ -67,9 +67,13 @@ export interface UpdaterDeps {
   settings(): SettingsFile
   /**
    * Restarts through the quit flow, which asks about running work unless `confirmed`, and then
-   * calls `installNow`. False when another quit or restart is in progress.
+   * calls `installNow`. `resumeAfterUpdate` marks an immediate user-initiated update restart whose
+   * interrupted sessions should resume after relaunch. False when another quit or restart is in
+   * progress.
    */
-  requestRestart(confirmed: boolean): boolean
+  requestRestart(confirmed: boolean, resumeAfterUpdate?: boolean): boolean
+  /** Clears any staged update-resume record if installing the update is skipped or fails. */
+  clearUpdateResume?(): Promise<void>
   /** How many sessions are working in a way a restart can wait for. */
   waitableSessions(): Promise<number>
   /** Moves the app through the quit flow, which confirms and then calls `moveNow`. */
@@ -236,14 +240,14 @@ export class Updater {
 
   restart(): void {
     if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
-    this.deps.requestRestart(false)
+    this.deps.requestRestart(false, true)
   }
 
   /** Restart now, from the update dialog, which already showed the work it stops. */
   restartConfirmed(): void {
     if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
     this.stopWaiting()
-    this.deps.requestRestart(true)
+    this.deps.requestRestart(true, true)
   }
 
   /**
@@ -291,7 +295,8 @@ export class Updater {
     const idle = sessions === 0 && kind === 'ready' && !this.squirrelPreparing
     this.idlePolls = idle ? this.idlePolls + 1 : 0
     if (this.idlePolls >= IDLE_POLLS) {
-      if (this.deps.requestRestart(true)) {
+      // Wait-for-idle restarts only once sessions finish, so it never schedules post-update resume.
+      if (this.deps.requestRestart(true, false)) {
         log.info('The working sessions finished: restarting to update')
         this.stopWaiting()
         return
@@ -313,12 +318,20 @@ export class Updater {
   async installNow(): Promise<void> {
     if (this.shuttingDown) {
       log.info('System shutdown: skipping update install')
+      await this.deps.clearUpdateResume?.()
       app.quit()
       return
     }
-    const updater = await this.load()
+    let updater: AppUpdater
+    try {
+      updater = await this.load()
+    } catch (error) {
+      await this.deps.clearUpdateResume?.()
+      throw error
+    }
     if (this.shuttingDown) {
       log.info('System shutdown: skipping update install')
+      await this.deps.clearUpdateResume?.()
       app.quit()
       return
     }
@@ -326,8 +339,13 @@ export class Updater {
       log.info('Waiting for Squirrel.Mac to prepare the update before restarting')
       await this.squirrelPreparing
     }
-    // Silent, and start the new version afterwards.
-    updater.quitAndInstall(true, true)
+    try {
+      // Silent, and start the new version afterwards.
+      updater.quitAndInstall(true, true)
+    } catch (error) {
+      await this.deps.clearUpdateResume?.()
+      throw error
+    }
   }
 
   /** Follows Squirrel.Mac preparing the update just downloaded, which electron-updater asked for. */
@@ -551,7 +569,7 @@ export class Updater {
           // electron-updater adds its quit handler right after this event, so the choice applies
           // once it has.
           queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))
-          if (this.startedBy === 'user') this.deps.requestRestart(false)
+          if (this.startedBy === 'user') this.deps.requestRestart(false, true)
         })
         autoUpdater.on('error', (error) => {
           if (this.downloadActive) return
