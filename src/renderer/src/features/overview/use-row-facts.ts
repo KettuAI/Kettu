@@ -23,7 +23,8 @@ import {
 } from './model'
 
 export type RowOutput =
-  { kind: 'artifact'; id: string; title: string } | { kind: 'pr'; url: string; number: number }
+  | { kind: 'artifact'; id: string; title: string }
+  | { kind: 'pr'; url: string; number: number; sessionId?: string | null }
 
 export interface RowFacts {
   title: string
@@ -101,6 +102,7 @@ export function useRowFacts(row: OverviewRow): RowFacts {
         kind: 'pr',
         url: pr.url,
         number: pr.number,
+        sessionId: summary.id,
       })),
       ...(read?.artifacts ?? []).map((artifact): RowOutput => ({
         kind: 'artifact',

@@ -27,6 +27,7 @@ import type { ChangedFile, GitStatus, GitTools, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { sessionLinkProps, useLinkSessionId } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { longAgo, shortDuration } from '@renderer/lib/format'
 import { useNow, useSeconds } from '@renderer/lib/use-now'
@@ -607,18 +608,16 @@ function ActionButton({
   onRun: () => void
 }): ReactNode {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const mine = running !== null && (RUNS[button.action]?.includes(running.kind) ?? false)
   const className = 'min-w-0 flex-auto'
   const variant = primary ? 'default' : 'outline'
   if (href) {
     return (
       <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
+        {...sessionLinkProps(href, sessionId, { onOpen: onClose })}
         tabIndex={-1}
         data-git-row=""
-        onClick={onClose}
         className={buttonVariants({ variant, size: 'sm', className })}
       >
         <Glyph icon={icon} size={14} />

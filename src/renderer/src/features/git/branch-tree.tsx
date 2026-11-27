@@ -19,6 +19,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { sessionLinkProps, useLinkSessionId } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { fullTime, longAgo } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -331,6 +332,7 @@ export function CommitRow({
   pane?: boolean
 }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const now = useNow()
   const [copied, setCopied] = useState(false)
   const open = cards.open.has(commit.oid)
@@ -452,9 +454,11 @@ export function CommitRow({
               <ContextMenuItem
                 render={
                   <a
-                    href={`https://github.com/${github.owner}/${github.repo}/commit/${commit.oid}`}
-                    target="_blank"
-                    rel="noreferrer"
+                    {...sessionLinkProps(
+                      `https://github.com/${github.owner}/${github.repo}/commit/${commit.oid}`,
+                      sessionId,
+                      { onOpen: onOpened },
+                    )}
                   />
                 }
               >

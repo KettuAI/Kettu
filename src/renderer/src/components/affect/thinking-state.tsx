@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { handleSessionLinkAuxClick, handleSessionLinkClick, useLinkSessionId } from "@renderer/features/session/open-link";
 
 /*
  * Thinking State (Clean) – the "working…" panel of an AI chat, in a single self-contained file.
@@ -226,6 +227,7 @@ export function ThinkingState({
 
 /** A source chip: a link when it has one, with a tooltip on hover and focus */
 function Source({ source, delay }: { source: ThinkingSource; delay: number }) {
+  const sessionId = useLinkSessionId();
   const tip = source.tooltip ?? source.href?.replace(/^https?:\/\//, "");
   const inner = (
     <>
@@ -251,7 +253,14 @@ function Source({ source, delay }: { source: ThinkingSource; delay: number }) {
     style: { animationDelay: `${delay}ms` },
   };
   return source.href ? (
-    <a {...props} href={source.href} target="_blank" rel="noreferrer">
+    <a
+      {...props}
+      href={source.href}
+      target={sessionId ? undefined : "_blank"}
+      rel="noreferrer"
+      onClick={sessionId ? (event) => handleSessionLinkClick(event, source.href!, sessionId) : undefined}
+      onAuxClick={sessionId ? (event) => handleSessionLinkAuxClick(event, source.href!, sessionId) : undefined}
+    >
       {inner}
     </a>
   ) : (

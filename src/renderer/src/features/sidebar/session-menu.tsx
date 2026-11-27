@@ -66,6 +66,7 @@ import { isLocalProject } from '@renderer/features/files/operations'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { modelName } from '@renderer/features/session/conversation-markdown'
 import { exportConversation } from '@renderer/features/session/export-conversation'
+import { sessionLinkProps } from '@renderer/features/session/open-link'
 import { Glyph, MenuGlyph } from '@renderer/features/shell/glyph'
 import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -429,7 +430,7 @@ export function SessionMenuItems({
             <DropdownMenuItem
               key={name}
               {...props}
-              render={<a href={pr.url} target="_blank" rel="noreferrer" />}
+              render={<a {...sessionLinkProps(pr.url, id)} />}
             >
               <PrIcon state={pr.state} />
               {t('row.openPullRequest', { number: pr.number })}
@@ -446,10 +447,7 @@ export function SessionMenuItems({
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-80">
                 {prs.map((pr) => (
-                  <DropdownMenuItem
-                    key={pr.url}
-                    render={<a href={pr.url} target="_blank" rel="noreferrer" />}
-                  >
+                  <DropdownMenuItem key={pr.url} render={<a {...sessionLinkProps(pr.url, id)} />}>
                     <PrIcon state={pr.state} />
                     <span className="shrink-0 text-tertiary tabular-nums">
                       {pr.repo}#{pr.number}

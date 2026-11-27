@@ -2,6 +2,7 @@ import type { ITheme, Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
+import { openSessionLink } from '@renderer/features/session/open-link'
 import { terminals } from '@renderer/lib/host'
 import { isMac, isMod, isWeb } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -154,6 +155,22 @@ function watchOnce(): void {
   })
 }
 
+/**
+ * Opens an http(s) URL Mod-clicked in a terminal through session link routing, using the
+ * terminal's owning session when it has one. Mod-click is the terminal's primary link gesture, so
+ * it opens at the default planned destination (including localhost in the session browser).
+ */
+export function openTerminalLink(
+  terminalId: string,
+  event: Pick<MouseEvent, 'metaKey' | 'ctrlKey'>,
+  uri: string,
+): boolean {
+  if (!isMod(event) || !/^https?:\/\//i.test(uri)) return false
+  const terminal = useTerminalsStore.getState().byId[terminalId]
+  const sessionId = terminal?.sessionId ?? terminal?.owner?.sessionId ?? null
+  return openSessionLink(uri, sessionId, { other: false })
+}
+
 export function getInstance(id: string): Promise<Instance> {
   const existing = instances.get(id)
   if (existing) return existing
@@ -182,7 +199,7 @@ async function create(id: string): Promise<Instance> {
   term.loadAddon(fit)
   term.loadAddon(
     new m.WebLinksAddon((event, uri) => {
-      if (isMod(event) && /^https?:\/\//i.test(uri)) window.open(uri, '_blank', 'noopener')
+      openTerminalLink(id, event, uri)
     }),
   )
   const element = document.createElement('div')

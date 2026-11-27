@@ -22,6 +22,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { sessionLinkProps, useLinkSessionId } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
@@ -88,6 +89,7 @@ export function PaneTop({ status }: { status: GitStatus }) {
 /** Fetch and More, at the end of the Git tab's context bar. */
 export function PaneTools({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
   const name = branchName(status)
   const github = status.remote?.github
@@ -123,9 +125,10 @@ export function PaneTools({ status }: { status: GitStatus }) {
             <DropdownMenuItem
               render={
                 <a
-                  href={`https://github.com/${github.owner}/${github.repo}`}
-                  target="_blank"
-                  rel="noreferrer"
+                  {...sessionLinkProps(
+                    `https://github.com/${github.owner}/${github.repo}`,
+                    sessionId,
+                  )}
                 />
               }
             >

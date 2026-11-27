@@ -12,6 +12,7 @@ import { useThumbnail } from '@renderer/features/artifacts/thumbnails'
 import '@renderer/features/artifacts/artifact-card.css'
 import { ReferenceIcon } from '@renderer/features/git/gh-reference'
 import { useReferenceData } from '@renderer/features/git/gh-reference-data'
+import { sessionLinkProps } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { mediumAgo } from '@renderer/lib/format'
 import { learnArtifactHost } from '@renderer/lib/host'
@@ -135,7 +136,13 @@ function Made({
       {rows.length > 0 && (
         <div className="flex flex-col">
           {rows.map((ref) => (
-            <ReferenceRow key={ref.url} reference={ref} hostId={hostId} onOpen={onOpen} />
+            <ReferenceRow
+              key={ref.url}
+              reference={ref}
+              sessionId={summary.id}
+              hostId={hostId}
+              onOpen={onOpen}
+            />
           ))}
           {refs.length > rows.length && (
             <span className="flex h-[22px] items-center pl-[22px] text-small text-tertiary">
@@ -233,10 +240,12 @@ function ArtifactTile({
  */
 function ReferenceRow({
   reference,
+  sessionId,
   hostId,
   onOpen,
 }: {
   reference: GitHubReference
+  sessionId: string
   hostId: string | null
   onOpen?: () => void
 }) {
@@ -245,11 +254,8 @@ function ReferenceRow({
   const title = data ? (data.kind === 'pull' ? data.pr.title : data.issue.title) : null
   return (
     <a
-      href={reference.url}
-      target="_blank"
-      rel="noreferrer"
+      {...sessionLinkProps(reference.url, sessionId, { onOpen })}
       tabIndex={-1}
-      onClick={onOpen}
       className="-mx-1.5 flex h-6 min-w-0 items-center gap-2 rounded-md px-1.5 text-small no-underline outline-none hover:bg-hover"
     >
       <ReferenceIcon kind={reference.kind} data={data} size={14} />

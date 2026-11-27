@@ -38,7 +38,6 @@ import {
   ReferenceCard,
   ReferenceText,
 } from '@renderer/features/git/gh-reference'
-import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { useNoHover } from '@renderer/hooks/use-no-hover'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -63,7 +62,7 @@ import {
   type LinkContext,
   type LinkPlan,
 } from '../link-open'
-import { openLinkIn, rememberDestination } from '../open-link'
+import { openLinkIn, rememberDestination, useLinkSessionId } from '../open-link'
 import { PluginReferenceCard, PluginReferenceText } from './plugin-link'
 import { usePluginLink, type PluginLink, type PluginLinkFailure } from './use-plugin-link'
 
@@ -81,7 +80,7 @@ export interface LinkConfirmProps {
 
 /** Where a link drawn in this place may open. */
 function useLinkContext(): { sessionId: string | null; context: LinkContext } {
-  const sessionId = useContext(SessionIdContext)
+  const sessionId = useLinkSessionId()
   // Kettu's browser runs in the desktop app only.
   return { sessionId, context: { session: sessionId !== null && !isWeb } }
 }

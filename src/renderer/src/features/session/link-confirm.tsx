@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Globe02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
@@ -21,9 +21,10 @@ import { addressParts, readableRest } from '@renderer/features/browser/address'
 import { CopyButton } from '@renderer/features/git/copy-button'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { useDefaultBrowser, useSiteIcon } from '@renderer/stores/site-icons'
+import { loadSiteIcons, useDefaultBrowser, useSiteIcon } from '@renderer/stores/site-icons'
 import { hasUserinfo, linkHost, linkSite } from './link-open'
 import { BrowserIcon, WebLink, type LinkConfirmProps } from './markdown/web-link'
+import { closeLinkConfirm, confirmLinkOpen, useLinkConfirmStore } from './open-link'
 
 /** The site's icon on a 32 px tile, or a globe where Kettu's browser recorded none. */
 function SiteIcon({ url }: { url: string }) {
@@ -205,6 +206,27 @@ export function LinkConfirm({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/**
+ * Global "Open link?" dialog host, mounted once in App so links triggered from popovers, menus,
+ * sidebars, git views, and terminals can ask even after their trigger unmounts.
+ */
+export function LinkConfirmHost() {
+  const request = useLinkConfirmStore((s) => s.request)
+  useEffect(loadSiteIcons, [])
+  if (!request) return null
+  return (
+    <LinkConfirm
+      key={request.key}
+      url={request.url}
+      open={request.open}
+      destination={request.destination}
+      sessionId={request.sessionId}
+      onClose={closeLinkConfirm}
+      onOpen={confirmLinkOpen}
+    />
   )
 }
 

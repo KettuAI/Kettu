@@ -8,6 +8,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import type { CheckRun, GitStatus, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { sessionLinkProps, useLinkSessionId } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { longAgo, shortDuration } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -37,6 +38,7 @@ export function PullRequestPart({
   onFix: () => void
 }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const gh = useGitStore((s) => ghStateOf(s, hostOfPath(status.projectPath)))
   if (!status.remote?.github) return null
   if (pr) return <PullRequestCard pr={pr} onOpen={onClose} onFix={onFix} />
@@ -51,12 +53,9 @@ export function PullRequestPart({
         action={
           compare && (
             <a
-              href={compare}
-              target="_blank"
-              rel="noreferrer"
+              {...sessionLinkProps(compare, sessionId, { onOpen: onClose })}
               tabIndex={-1}
               data-git-row=""
-              onClick={onClose}
               className={buttonVariants({
                 variant: 'outline',
                 size: 'xs',
@@ -134,6 +133,7 @@ function PullRequestCard({
   onFix: () => void
 }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const now = useNow()
   const done = pr.state === 'merged' || pr.state === 'closed'
   const { checks } = pr
@@ -157,12 +157,9 @@ function PullRequestCard({
         <span>{t('prPart.label')}</span>
         <span className="flex-1" />
         <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
+          {...sessionLinkProps(pr.url, sessionId, { onOpen })}
           tabIndex={-1}
           data-git-row=""
-          onClick={onOpen}
           className="-mr-1.5 inline-flex h-5.5 items-center gap-1 rounded-md px-1.5 font-normal text-tertiary outline-none hover:text-primary focus:bg-hover"
         >
           {t('pr.openOnGitHub')}
@@ -178,13 +175,10 @@ function PullRequestCard({
           <span className="truncate">{when}</span>
         </div>
         <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
+          {...sessionLinkProps(pr.url, sessionId, { onOpen })}
           tabIndex={-1}
           data-git-row=""
           title={pr.title}
-          onClick={onOpen}
           className="mt-1.75 block rounded-sm text-control leading-snug font-medium tracking-[-0.004em] outline-none hover:underline focus:underline"
         >
           <span className="line-clamp-2">{pr.title}</span>
@@ -207,7 +201,7 @@ function PullRequestCard({
             </div>
           </>
         )}
-        {!done && failing && <FailingRow run={failing} onFix={onFix} />}
+        {!done && failing && <FailingRow run={failing} onOpen={onOpen} onFix={onFix} />}
       </div>
     </section>
   )
@@ -235,8 +229,17 @@ export function Segment({ run }: { run: CheckRun }) {
 }
 
 /** The first failing check, with what the agent can do about it. */
-function FailingRow({ run, onFix }: { run: CheckRun; onFix: () => void }) {
+function FailingRow({
+  run,
+  onOpen,
+  onFix,
+}: {
+  run: CheckRun
+  onOpen: () => void
+  onFix: () => void
+}) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const name = <span className="font-medium">{run.name}</span>
   return (
     <div className="mt-2.5 flex items-center gap-1.75 rounded-xl bg-danger-tint py-1.25 pr-1.25 pl-2.5 text-control shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)]">
@@ -244,9 +247,7 @@ function FailingRow({ run, onFix }: { run: CheckRun; onFix: () => void }) {
       <span className="min-w-0 truncate">
         {run.url ? (
           <a
-            href={run.url}
-            target="_blank"
-            rel="noreferrer"
+            {...sessionLinkProps(run.url, sessionId, { onOpen })}
             tabIndex={-1}
             data-git-row=""
             className="rounded-sm outline-none hover:underline focus:underline"

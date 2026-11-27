@@ -178,7 +178,7 @@ export function SessionHeader({
           menu={rename.menu}
         />
         {summary.worktree && <WorktreeBarChip worktree={summary.worktree} />}
-        <PrBarChip projectPath={sessionFolder(summary)} />
+        <PrBarChip projectPath={sessionFolder(summary)} sessionId={summary.id} />
         {session && !archived && summary.origin !== 'subagent' && (
           <PlanChip sessionId={summary.id} status={session.status} />
         )}

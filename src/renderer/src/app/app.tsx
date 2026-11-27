@@ -8,6 +8,7 @@ import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { AutoPublishNotice } from '@renderer/features/artifacts/auto-publish-notice'
 import { ArtifactConsentDialog } from '@renderer/features/artifacts/consent-dialog'
 import { GitDialogsHost } from '@renderer/features/git/git-dialogs'
+import { LinkConfirmHost } from '@renderer/features/session/link-confirm'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { LaunchCover } from '@renderer/features/shell/launch-cover'
@@ -150,6 +151,7 @@ export function App() {
           </Suspense>
         )}
         <GitDialogsHost />
+        <LinkConfirmHost />
         <Toaster />
         <QuitHint />
       </div>

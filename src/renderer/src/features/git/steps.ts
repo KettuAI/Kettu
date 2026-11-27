@@ -3,13 +3,18 @@
 
 import type { GitOperation, GitStatus } from '@shared/git'
 import { toast } from '@renderer/components/ui/toast'
+import { openSessionLink } from '@renderer/features/session/open-link'
+import { focusedPane } from '@renderer/features/split/layout'
 import { i18n } from '@renderer/lib/i18n'
+import { sessionFolder } from '@renderer/lib/session-folder'
 import {
   openGitDialog,
   runGitOperation,
   useGitStore,
   type GitOperationRequest,
 } from '@renderer/stores/git'
+import { useSessionsStore } from '@renderer/stores/sessions'
+import { shownLayoutSessions, useViewStore } from '@renderer/stores/view'
 import { failureNote, successNote, type NextStep, type ResultNote } from './results'
 import { openGitPane } from './pane/open-pane'
 import { pushesToDefault, pushTargetOf, type OperationKind } from './sync'
@@ -105,7 +110,25 @@ function show(projectPath: string, result: ResultNote): void {
   )
 }
 
-function runNext(projectPath: string, next: NextStep): void {
+/** Resolves the shown session working in `projectPath`, preferring the focused pane. */
+function sessionForProject(projectPath: string): string | null {
+  const viewState = useViewStore.getState()
+  const sessions = useSessionsStore.getState().byId
+  const matches = (sessionId: string): boolean => {
+    const summary = sessions[sessionId]
+    return (
+      !!summary && (sessionFolder(summary) === projectPath || summary.projectPath === projectPath)
+    )
+  }
+  const focused = focusedPane(viewState.layout).view
+  if (focused.kind === 'session' && matches(focused.sessionId)) return focused.sessionId
+  for (const sessionId of shownLayoutSessions(viewState)) {
+    if (matches(sessionId)) return sessionId
+  }
+  return null
+}
+
+function runNext(projectPath: string, next: NextStep, sessionId?: string | null): void {
   switch (next) {
     case 'pull':
       void runStep(projectPath, { kind: 'pull' })
@@ -118,7 +141,7 @@ function runNext(projectPath: string, next: NextStep): void {
       return
     case 'openPr': {
       const pr = useGitStore.getState().currentPr[projectPath]
-      if (pr) window.open(pr.url, '_blank', 'noreferrer')
+      if (pr) openSessionLink(pr.url, sessionId ?? sessionForProject(projectPath))
       return
     }
     case 'pullAndRetry':
@@ -133,10 +156,14 @@ function runNext(projectPath: string, next: NextStep): void {
 }
 
 /** Toasts a pull request that was just created, with Open. */
-export function showCreatedPr(projectPath: string, number: number): void {
+export function showCreatedPr(
+  projectPath: string,
+  number: number,
+  sessionId?: string | null,
+): void {
   toast(
     i18n.t('git:result.prCreated', { number }),
-    { label: i18n.t(LABEL.openPr), onClick: () => runNext(projectPath, 'openPr') },
+    { label: i18n.t(LABEL.openPr), onClick: () => runNext(projectPath, 'openPr', sessionId) },
     { tone: 'success' },
   )
 }

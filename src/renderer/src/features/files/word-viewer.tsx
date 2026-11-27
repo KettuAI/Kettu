@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { OFFICE_PREVIEW_LIMIT } from '@shared/media'
 import { readMedia } from '@renderer/lib/media-bytes'
 import { useLinkOpener } from '@renderer/features/session/composer/link-opener'
+import { useLinkSessionId } from '@renderer/features/session/open-link'
 import type { PictureControls } from '@renderer/features/session/media/picture-zoom'
 import { MAX_ZOOM, stepZoom } from '@renderer/features/session/media/zoom'
 import type { DocumentFailure } from './document-failure'
@@ -88,7 +89,8 @@ export default function WordStage({
   const scroll = useRef<HTMLDivElement>(null)
   const host = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
-  const links = useLinkOpener(null)
+  const sessionId = useLinkSessionId()
+  const links = useLinkOpener(sessionId)
   // The page's handlers outlive a render, so they follow the latest ones.
   const latest = useRef({ open: links.open, onPicture, onFailed })
   useEffect(() => {
