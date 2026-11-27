@@ -386,6 +386,9 @@ export interface AgentCli {
   update: { version: string; command: string } | null
   // Whether its newer versions can be read, by how it was installed; absent on older hosts.
   checkable?: boolean
+  // A newer version found by the last check, even when Kettu cannot run an update command for how
+  // the program was installed; null when current or unchecked, absent on older hosts.
+  newerVersion?: string | null
 }
 
 export interface InstalledCli {

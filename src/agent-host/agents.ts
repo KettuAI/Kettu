@@ -116,8 +116,10 @@ import {
   decideUpdate,
   fetchBrewLatest,
   fetchLatest,
+  fetchProgramLatest,
   type LatestFound,
   type LatestOptions,
+  type ProgramLatestOptions,
 } from './agent-updates'
 import {
   installArchive,
@@ -162,6 +164,7 @@ import {
   type ArchiveEntry,
   type GlobalInstall,
   type InstallPlan,
+  type ProgramVersionCheck,
 } from './binary-install'
 import {
   carriesAgents,
@@ -406,6 +409,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   installArchive?(options: ArchiveInstallOptions): Promise<InstalledArchive>
   /** Asks npm for an adapter's newest version and the CLI it carries. */
   fetchLatest?(options: LatestOptions): Promise<LatestFound>
+  /** Reads a vendor's official HTTP release version endpoint for standalone/script installs. */
+  fetchProgramLatest?(options: ProgramLatestOptions): Promise<string>
   /** Reads the ACP Registry's listing, whose versions the harnesses Kettu installs follow. */
   fetchRegistry?(options: RegistryFetchOptions): Promise<RegistryAgents>
   /** Reads the body of Kettu's harness compatibility manifest from its download service. */
@@ -2422,7 +2427,7 @@ export class AgentManager {
   ): { command: string; installed: InstalledCli } | null {
     const { launch, installs, cli } = h.def
     if (launch.kind !== 'binary' || this.release(h)) return null
-    const checked = !!installs?.npm || this.programSource(h)?.kind === 'brew'
+    const checked = !!installs?.npm || !!installs?.versionCheck || this.programSource(h) !== null
     if (cli ? h.detection?.cli : !checked) return null
     const mine = this.userProgram(h)
     if (!mine) return null
@@ -2444,7 +2449,7 @@ export class AgentManager {
   private cliUpdateVersion(h: Harness): string | null {
     const mine = this.userProgram(h)
     const problem = h.detection?.cli?.problem
-    const latest = this.programSource(h) ? h.cliLatest : null
+    const latest = this.canCheckProgram(h) ? h.cliLatest : null
     // A newest version the manifest says does not work is not offered, nor one the harness would
     // not run, such as one an earlier check read before it kept to the range.
     if (latest && !usable(this.programRule(h), latest)) return null
@@ -2527,7 +2532,7 @@ export class AgentManager {
   private checksUpdates(h: Harness): boolean {
     const { launch, installs } = h.def
     if (launch.kind === 'package' || launch.kind === 'uvx') return true
-    if (installs?.npm || installs?.brew || installs?.brewCask) return true
+    if (installs?.npm || installs?.brew || installs?.brewCask || installs?.versionCheck) return true
     return this.targeted(h) && (h.detection === null || !!this.release(h))
   }
 
@@ -2628,28 +2633,36 @@ export class AgentManager {
    * versions. The others Kettu installs follow their target.
    */
   private checkable(): Harness[] {
-    const npm = this.deps.env.nodeProbe().npmPath
     return [...this.harnesses.values()].filter((h) => {
       const detection = h.detection
       const own = h.def.launch.kind === 'package' && !this.targeted(h)
       if (own && detection?.state === 'available' && detection.adapter?.npm) return true
-      const source = this.programSource(h)
-      return source?.kind === 'brew' || (source?.kind === 'npm' && !!npm)
+      return this.canCheckProgram(h)
     })
+  }
+
+  /** Whether this host has both a version source and the local tool needed to check `h`'s program. */
+  private canCheckProgram(h: Harness): boolean {
+    const source = this.programSource(h)
+    if (!source) return false
+    if (source.kind === 'npm') return !!this.deps.env.nodeProbe().npmPath
+    return true
   }
 
   /**
    * Where the user's own program's newer versions are read, by how it was installed: Homebrew for
-   * a formula or cask; npm for a global install of npm, pnpm, bun or yarn, and for any other
-   * program its vendor also publishes on npm, as an install script's is, at the vendor's dist-tag
-   * when its install names one. Null for one whose install route tells none, such as WinGet's,
-   * which gets new versions after npm does.
+   * a formula or cask; the vendor's official HTTP release endpoint for standalone/script installs
+   * that publish one; npm for a global install of npm, pnpm, bun or yarn, and for any other
+   * program its vendor also publishes on npm, at the vendor's dist-tag when its install names one.
+   * Null for one whose install route tells none, such as WinGet's, which gets new versions after
+   * npm does.
    */
   private programSource(
     h: Harness,
   ):
     | { kind: 'npm'; package: string; tag?: string }
     | { kind: 'brew'; name: string; cask: boolean }
+    | { kind: 'http'; check: ProgramVersionCheck; urls: readonly string[] }
     | null {
     if (!this.userProgram(h)) return null
     const installs = h.def.installs
@@ -2659,13 +2672,22 @@ export class AgentManager {
     }
     // WinGet gets new versions after npm does, so npm's would offer an upgrade it cannot make.
     if (h.cliMethod === 'winget') return null
+    const httpUrls = installs?.versionCheck?.urls(this.deps.platform, process.arch) ?? []
+    const httpSource =
+      installs?.versionCheck && httpUrls.length > 0
+        ? ({ kind: 'http', check: installs.versionCheck, urls: httpUrls } as const)
+        : null
+    if (h.cliMethod === 'script' && httpSource) return httpSource
     const npmPackage = h.cliGlobal ? this.programPackage(h) : (installs?.npm ?? null)
-    if (!npmPackage) return null
-    return {
-      kind: 'npm',
-      package: npmPackage,
-      ...(installs?.npm === npmPackage && installs.npmTag ? { tag: installs.npmTag } : {}),
+    const hasNpm = !!this.deps.env.nodeProbe().npmPath
+    if (npmPackage && (h.cliGlobal || hasNpm || !httpSource)) {
+      return {
+        kind: 'npm',
+        package: npmPackage,
+        ...(installs?.npm === npmPackage && installs.npmTag ? { tag: installs.npmTag } : {}),
+      }
     }
+    return httpSource
   }
 
   private checkDue(h: Harness): number {
@@ -2994,7 +3016,9 @@ export class AgentManager {
           })
         : null
     const ownPackage = launch.kind === 'package' && !this.targeted(h) && !!npm
-    if (!ownPackage && !(source?.kind === 'npm' && npm) && !brew) return null
+    if (!ownPackage && !(source?.kind === 'npm' && npm) && !brew && source?.kind !== 'http') {
+      return null
+    }
     const shared = {
       env,
       platform,
@@ -3024,6 +3048,16 @@ export class AgentManager {
           ...(this.deps.runProgram ? { run: this.deps.runProgram } : {}),
         })
       }
+      if (source?.kind === 'http') {
+        return (this.deps.fetchProgramLatest ?? fetchProgramLatest)({
+          name: h.def.name,
+          urls: source.urls,
+          parse: source.check.parse,
+          timeoutMs: this.timings.updateViewMs,
+          signal,
+          fetch: this.net,
+        })
+      }
       return null
     }
     try {
@@ -3051,7 +3085,9 @@ export class AgentManager {
         latest
           ? `${latest.adapterVersion}${latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''}`
           : '',
-        cli && source ? `${source.kind === 'brew' ? source.name : source.package} ${cli}` : '',
+        cli && source
+          ? `${source.kind === 'brew' ? source.name : source.kind === 'npm' ? source.package : h.def.id} ${cli}`
+          : '',
       ]
       this.deps.diagnostics.event(h.def.id, 'update check', found.filter(Boolean).join('; '))
       this.emit(this.home(h))
@@ -6221,7 +6257,8 @@ export class AgentManager {
             installed: detection?.cli ?? own?.installed ?? null,
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
-            checkable: this.programSource(h) !== null,
+            checkable: this.canCheckProgram(h),
+            newerVersion: cliVersion,
           }
         : null,
       configDir: config
@@ -6268,16 +6305,22 @@ export class AgentManager {
   }
 
   /**
-   * When the harness's versions were last checked: npm's check, or for one with a target, the
-   * last read of the Registry's listing or the manifest; null for a harness whose own installer
-   * updates it.
+   * When the harness's versions were last checked: npm/Homebrew/HTTP check, or for one running
+   * Kettu's own install with a target, the last read of the Registry's listing or the manifest;
+   * null for a harness whose own installer updates it without a checkable source.
    */
   private checkedAt(h: Harness): number | null {
     if (!this.checksUpdates(h)) return null
+    const ownsInstall =
+      h.detection === null ||
+      !!this.release(h) ||
+      (h.def.launch.kind === 'package' && !this.replacesInstall(h))
     const reads = [this.listingReadAt, this.manifestReadAt].filter((at) => at !== null)
-    const read = this.targeted(h) && reads.length > 0 ? Math.max(...reads) : null
-    if (read === null || h.checkedAt === null) return read ?? h.checkedAt
-    return Math.max(read, h.checkedAt)
+    const read = ownsInstall && this.targeted(h) && reads.length > 0 ? Math.max(...reads) : null
+    const programChecked =
+      this.userProgram(h) !== null && !this.canCheckProgram(h) && !ownsInstall ? null : h.checkedAt
+    if (read === null || programChecked === null) return read ?? programChecked
+    return Math.max(read, programChecked)
   }
 
   /** How Kettu's own install follows its target, for its page; null for the other harnesses. */

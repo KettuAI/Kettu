@@ -1,3 +1,4 @@
+import { parseJsonVersion } from '../agent-updates'
 import type { AgentDefinition } from '../catalog'
 import { AGY_CLI } from '../installed-cli'
 
@@ -25,7 +26,22 @@ export const ANTIGRAVITY: AgentDefinition = {
     script: 'https://antigravity.google/cli/install.sh',
     scriptBin: ['.local', 'bin'],
     scriptHome: ['.local', 'bin'],
+    scriptHomeWin: ['AppData', 'Local', 'agy', 'bin'],
     selfUpdate: ['update'],
+    // The same release manifest the official install.sh and install.ps1 read.
+    versionCheck: {
+      urls: (platform, arch) => {
+        const osName = platform === 'win32' ? 'windows' : platform
+        const machine = arch === 'x64' ? 'amd64' : arch === 'arm64' ? 'arm64' : null
+        if (!machine || (osName !== 'darwin' && osName !== 'linux' && osName !== 'windows')) {
+          return []
+        }
+        return [
+          `https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/${osName}_${machine}.json`,
+        ]
+      },
+      parse: (body) => parseJsonVersion(body, ['version']),
+    },
     order: ['script'],
   },
   cli: AGY_CLI,

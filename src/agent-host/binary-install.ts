@@ -36,6 +36,17 @@ export interface ArchiveRoute {
   minimum?: string
 }
 
+/**
+ * Where a vendor's official installer reads the program's newest release version, for a copy
+ * installed by its install script or standalone installer rather than npm or Homebrew.
+ */
+export interface ProgramVersionCheck {
+  /** HTTPS endpoints tried in order for this platform and architecture; empty when unsupported. */
+  urls(platform: Platform, arch: string): readonly string[]
+  /** Extracts the newest semver version from the response body, or null when unreadable. */
+  parse(body: string): string | null
+}
+
 /** A harness's install routes, from its vendor's documentation or the registry. */
 export interface BinaryInstalls {
   /** The Homebrew formula. */
@@ -51,8 +62,12 @@ export interface BinaryInstalls {
   scriptBin?: string[]
   /** Where the script keeps the program it installs, from the home directory, which tells it apart. */
   scriptHome?: string[]
+  /** Where the Windows installer keeps the program, from the home directory, when different. */
+  scriptHomeWin?: string[]
   /** The program's own update command, for a script install that has one, such as `claude update`. */
   selfUpdate?: string[]
+  /** Official release version endpoint for standalone/script installs. */
+  versionCheck?: ProgramVersionCheck
   /** The WinGet package id, on Windows. */
   winget?: string
   /** The npm package, installed globally. */
@@ -319,7 +334,9 @@ export function installMethodOf(
     const base = ctx.platform === 'win32' ? folder.toLowerCase().replaceAll('\\', '/') : folder
     return file.startsWith(base.endsWith('/') ? base : `${base}/`)
   }
-  if (installs.scriptHome && under(p.join(ctx.home, ...installs.scriptHome))) return 'script'
+  const scriptHome =
+    ctx.platform === 'win32' ? (installs.scriptHomeWin ?? installs.scriptHome) : installs.scriptHome
+  if (scriptHome && under(p.join(ctx.home, ...scriptHome))) return 'script'
   const global = installs.npm ? globalInstallOf(realPath, installs.npm, ctx.platform) : null
   if (global) return global.manager
   // A formula's keg is named for it, which tells OpenCode 2's formula from OpenCode 1's.

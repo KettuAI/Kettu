@@ -1,3 +1,4 @@
+import { parsePlainVersion } from '../agent-updates'
 import type { AgentDefinition } from '../catalog'
 
 export const GROK: AgentDefinition = {
@@ -25,5 +26,13 @@ export const GROK: AgentDefinition = {
     script: 'https://x.ai/cli/install.sh',
     scriptBin: ['.grok', 'bin'],
     scriptHome: ['.grok'],
+    // The same stable version endpoints the official install.sh probes.
+    versionCheck: {
+      urls: () => [
+        'https://x.ai/cli/stable',
+        'https://storage.googleapis.com/grok-build-public-artifacts/cli/stable',
+      ],
+      parse: parsePlainVersion,
+    },
   },
 }

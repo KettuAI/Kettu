@@ -16,7 +16,9 @@ import {
 } from './adapter-install'
 import type { Env } from './find-command'
 import { t } from './i18n'
-import { compareVersions, highestVersion, isVersion } from './versions'
+import type { Fetch } from './proxy-fetch'
+import { readLimited } from './registry'
+import { compareVersions, highestVersion, isVersion, normalizeVersion } from './versions'
 
 /**
  * An npm version range, as a dependency names it. It reaches npm's command line, through cmd.exe
@@ -196,7 +198,90 @@ export function brewVersion(text: string, cask: boolean): string | null {
   if (!isObject(entry)) return null
   const raw = cask ? entry.version : isObject(entry.versions) ? entry.versions.stable : undefined
   const version = typeof raw === 'string' ? raw.split(',')[0] : undefined
-  return isVersion(version) ? version : null
+  return normalizeVersion(version)
+}
+
+/** Release manifests and version responses are tiny; refuse anything far larger. */
+const MAX_VERSION_BYTES = 256 * 1024
+
+/** Reads a semantic version from a JSON response body at `keyPath` (e.g. `['version']`). */
+export function parseJsonVersion(
+  body: string,
+  keyPath: readonly string[] = ['version'],
+): string | null {
+  let value: unknown = parseJson(body)
+  for (const key of keyPath) {
+    if (!isObject(value)) return null
+    value = value[key]
+  }
+  return normalizeVersion(value)
+}
+
+/** Reads a semantic version from the first non-empty line of a plain-text response body. */
+export function parsePlainVersion(body: string): string | null {
+  const first = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  return normalizeVersion(first)
+}
+
+export interface ProgramLatestOptions {
+  /** Display name of the harness or package, used in error messages. */
+  name: string
+  /** HTTPS endpoints tried in order; falls back to the next URL if one fails. */
+  urls: readonly string[]
+  /** Extracts the newest semver version from the response body, or null when unreadable. */
+  parse(body: string): string | null
+  timeoutMs: number
+  signal?: AbortSignal
+  /** The host's fetch, through the agents' proxy; the platform's by default. */
+  fetch?: Fetch
+}
+
+/**
+ * Reads a vendor's official release version endpoint over HTTPS, trying fallback URLs in order.
+ * Rejects with a user-readable reason when none returns a valid semantic version.
+ */
+export async function fetchProgramLatest(options: ProgramLatestOptions): Promise<string> {
+  const urls = options.urls.filter((url) => url.startsWith('https://'))
+  if (urls.length === 0) throw new Error(t('agent.update.noVersion', { package: options.name }))
+  let lastError: Error | null = null
+  for (const url of urls) {
+    const timeout = AbortSignal.timeout(options.timeoutMs)
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
+    let response: Response
+    try {
+      response = await (options.fetch ?? fetch)(url, { signal, redirect: 'follow' })
+    } catch {
+      if (options.signal?.aborted) throw new Error(t('agent.update.stopped'))
+      lastError = timeout.aborted
+        ? new Error(t('agent.update.timeout', { seconds: String(options.timeoutMs / 1000) }))
+        : new Error(t('agent.update.offline'))
+      continue
+    }
+    if (!response.ok) {
+      void response.body?.cancel()
+      lastError = new Error(
+        t('agent.binaryInstall.downloadFailed', { url, status: String(response.status) }),
+      )
+      continue
+    }
+    let body: string | null
+    try {
+      body = await readLimited(response, MAX_VERSION_BYTES)
+    } catch {
+      if (options.signal?.aborted) throw new Error(t('agent.update.stopped'))
+      lastError = timeout.aborted
+        ? new Error(t('agent.update.timeout', { seconds: String(options.timeoutMs / 1000) }))
+        : new Error(t('agent.update.offline'))
+      continue
+    }
+    const version = body === null ? null : normalizeVersion(options.parse(body))
+    if (version) return version
+    lastError = new Error(t('agent.update.noVersion', { package: options.name }))
+  }
+  throw lastError ?? new Error(t('agent.update.noVersion', { package: options.name }))
 }
 
 /**

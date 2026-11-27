@@ -22,9 +22,23 @@ function parseVersion(text: string): Version | null {
   return { major, minor, patch, prerelease }
 }
 
+function stripPrefix(text: string): string {
+  return text.trim().replace(/^[vV]/, '')
+}
+
 /** A plain `1.2.3` or `1.2.3-beta.1+build` version, nothing a shell could read more into. */
 export function isVersion(text: unknown): text is string {
   return typeof text === 'string' && text.length <= 256 && parseVersion(text) !== null
+}
+
+/**
+ * Trims whitespace and a single leading `v`/`V`, returning a plain semver string or null when the
+ * input is not a valid semantic version.
+ */
+export function normalizeVersion(text: unknown): string | null {
+  if (typeof text !== 'string') return null
+  const clean = stripPrefix(text)
+  return isVersion(clean) ? clean : null
 }
 
 function comparePrerelease(a: (string | number)[], b: (string | number)[]): number {
@@ -46,8 +60,8 @@ function comparePrerelease(a: (string | number)[], b: (string | number)[]): numb
 
 /** Below, at or above zero as `a` is older, the same or newer; non-versions count as oldest. */
 export function compareVersions(a: string, b: string): number {
-  const x = parseVersion(a)
-  const y = parseVersion(b)
+  const x = parseVersion(stripPrefix(a))
+  const y = parseVersion(stripPrefix(b))
   if (!x || !y) return (x ? 1 : 0) - (y ? 1 : 0)
   return (
     x.major - y.major ||
@@ -64,7 +78,9 @@ export function compareVersions(a: string, b: string): number {
 export function versionAtLeast(version: string | null | undefined, checked: string): boolean {
   if (!version) return false
   if (version === checked) return true
-  if (isVersion(version) && isVersion(checked)) return compareVersions(version, checked) >= 0
+  const aSemver = normalizeVersion(version)
+  const bSemver = normalizeVersion(checked)
+  if (aSemver && bSemver) return compareVersions(aSemver, bSemver) >= 0
   const numbers = (text: string): number[] => (text.match(/\d+/g) ?? []).map(Number)
   const a = numbers(version)
   const b = numbers(checked)

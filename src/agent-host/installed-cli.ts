@@ -84,11 +84,13 @@ export interface AdapterCli {
   oldest?: string
 }
 
-const VERSION_TEXT = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`
-const FIRST_VERSION = new RegExp(String.raw`\bv?(${VERSION_TEXT})`)
+const PRERELEASE_TEXT = String.raw`(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)`
+const BUILD_TEXT = String.raw`(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)`
+const VERSION_TEXT = String.raw`\d+\.\d+\.\d+${PRERELEASE_TEXT}?${BUILD_TEXT}?`
+const FIRST_VERSION = new RegExp(String.raw`\b[vV]?(${VERSION_TEXT})`)
 const EXACT_VERSION = new RegExp(`^${VERSION_TEXT}$`)
 
-/** The first `x.y.z` in what `--version` printed, with or without a leading `v`. */
+/** The first `x.y.z` in what `--version` printed, with or without a leading `v`/`V`. */
 export function parseCliVersion(output: string): string | null {
   return FIRST_VERSION.exec(output)?.[1] ?? null
 }

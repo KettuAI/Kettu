@@ -1,3 +1,4 @@
+import { parseJsonVersion } from '../agent-updates'
 import type { AgentDefinition } from '../catalog'
 import { OPENCODE_CLI } from '../installed-cli'
 
@@ -26,6 +27,11 @@ export const OPENCODE: AgentDefinition = {
     scriptBin: ['.opencode', 'bin'],
     // OpenCode 1's script installs here too, and running this script again replaces it.
     scriptHome: ['.opencode', 'bin'],
+    // The same latest-release metadata endpoint the official v2/install script queries.
+    versionCheck: {
+      urls: () => ['https://opencode.ai/update/api/latest/cli/npm'],
+      parse: (body) => parseJsonVersion(body, ['version']),
+    },
     npm: '@opencode/cli',
   },
   cli: OPENCODE_CLI,
