@@ -535,6 +535,8 @@ export interface IpcInvokeContract {
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
   // A URL the renderer normalised; only http(s) ever reaches the page.
   'browser:navigate': { args: [sessionId: string, url: string]; result: void }
+  // Opens a session link: activates a matching tab without reloading, else opens a tab.
+  'browser:open-link': { args: [sessionId: string, url: string]; result: void }
   'browser:back': { args: [sessionId: string]; result: void }
   'browser:forward': { args: [sessionId: string]; result: void }
   'browser:reload': { args: [sessionId: string]; result: void }
@@ -1105,6 +1107,8 @@ export interface KettuApi {
     /** Where the pane's page sits, in device-independent pixels; null while it is not shown. */
     setBounds(sessionId: string, bounds: BrowserBounds): Promise<void>
     navigate(sessionId: string, url: string): Promise<void>
+    /** Opens a link in a matching tab without reloading it, else reuses a blank tab or opens a new one. */
+    openLink(sessionId: string, url: string): Promise<void>
     back(sessionId: string): Promise<void>
     forward(sessionId: string): Promise<void>
     reload(sessionId: string): Promise<void>

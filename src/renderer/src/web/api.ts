@@ -593,6 +593,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       revokeTab: () => unsupported('show the browser'),
       setBounds: async () => {},
       navigate: () => unsupported('show the browser'),
+      openLink: () => unsupported('show the browser'),
       back: () => unsupported('show the browser'),
       forward: () => unsupported('show the browser'),
       reload: () => unsupported('show the browser'),

@@ -213,6 +213,35 @@ export function siteOf(url: unknown): string | null {
   return parsed.host || null
 }
 
+/**
+ * Canonical form of an http(s) URL for matching an already-open session browser tab:
+ * lowercases scheme and host and strips default ports via `URL`, trims redundant trailing slashes
+ * on non-root paths, and drops an empty trailing `#` while preserving query strings and non-empty
+ * fragments so hash-routed pages and distinct anchors remain separate.
+ */
+export function canonicalBrowserUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  const parsed = URL.parse(url)
+  if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null
+  const pathname =
+    parsed.pathname.length > 1 ? parsed.pathname.replace(/\/+$/, '') || '/' : parsed.pathname
+  const auth =
+    parsed.username || parsed.password
+      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ''}@`
+      : ''
+  return `${parsed.protocol}//${auth}${parsed.host}${pathname}${parsed.search}${parsed.hash}`
+}
+
+/** Whether two http(s) URLs match the same session browser tab destination. */
+export function sameBrowserUrl(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const left = canonicalBrowserUrl(a)
+  if (left === null) return false
+  return left === canonicalBrowserUrl(b)
+}
+
 /** An origin without its scheme, as the pane and the thread name it to the user. */
 export function originLabel(origin: string): string {
   return origin.replace(/^[a-z]+:\/\//, '') || origin

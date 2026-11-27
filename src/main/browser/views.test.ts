@@ -1,6 +1,12 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PAGE_SIZES, SIZE_LINE_ROOM, type BrowserBounds, type BrowserState } from '@shared/browser'
+import {
+  MAX_SESSION_TABS,
+  PAGE_SIZES,
+  SIZE_LINE_ROOM,
+  type BrowserBounds,
+  type BrowserState,
+} from '@shared/browser'
 import { IDLE_CONTROL, type SurfaceControl } from '@shared/control'
 
 interface SentCommand {
@@ -44,9 +50,15 @@ class FakeWebContents extends EventEmitter {
   private title = ''
   private destroyed = false
   private zoomFactor = 1
+  readonly loadUrls: string[] = []
+  reloadCount = 0
 
   getURL(): string {
     return this.url
+  }
+
+  setUrl(url: string): void {
+    this.url = url
   }
 
   getTitle(): string {
@@ -68,9 +80,12 @@ class FakeWebContents extends EventEmitter {
   setBackgroundThrottling(): void {}
   setWindowOpenHandler(): void {}
   stop(): void {}
-  reload(): void {}
+  reload(): void {
+    this.reloadCount += 1
+  }
 
   async loadURL(url: string): Promise<void> {
+    this.loadUrls.push(url)
     this.url = url
     this.emit('did-start-loading')
     this.emit('frame-created', {}, { frame: this.mainFrame })
@@ -491,5 +506,149 @@ describe('BrowserViews desktop full-height layout & viewport modes (#2764)', () 
       mobile: false,
     })
     expect(view.bounds).toEqual({ x: 400, y: 64, width: 780, height: 920 })
+  })
+})
+
+describe('BrowserViews.openLink session tab reuse and creation (#2858)', () => {
+  it('activates an existing tab matching the normalized URL without reloading it', () => {
+    const { views, latestState } = makeHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+
+    views.openLink('s1', 'https://example.com/docs/')
+    const firstTabId = latestState()!.selected!
+    const firstView = createdViews[0]!
+
+    views.openLink('s1', 'https://example.com/other')
+    const secondTabId = latestState()!.selected!
+    const secondView = createdViews[1]!
+
+    expect(latestState()?.tabs.map((tab) => tab.id)).toEqual([firstTabId, secondTabId])
+    expect(firstView.visible).toBe(false)
+    expect(secondView.visible).toBe(true)
+
+    // Re-opening via canonical equivalent URLs switches to the first tab without reloading.
+    views.openLink('s1', 'HTTPS://EXAMPLE.COM:443/docs#')
+    expect(latestState()?.selected).toBe(firstTabId)
+    expect(latestState()?.tabs).toHaveLength(2)
+    expect(firstView.visible).toBe(true)
+    expect(secondView.visible).toBe(false)
+    expect(firstView.webContents.loadUrls).toEqual(['https://example.com/docs/'])
+    expect(firstView.webContents.reloadCount).toBe(0)
+
+    // Re-opening the already-selected URL is a no-op with zero reload or new tab.
+    views.openLink('s1', 'https://example.com/docs')
+    expect(latestState()?.selected).toBe(firstTabId)
+    expect(latestState()?.tabs).toHaveLength(2)
+    expect(firstView.webContents.loadUrls).toEqual(['https://example.com/docs/'])
+    expect(firstView.webContents.reloadCount).toBe(0)
+  })
+
+  it('opens a new tab instead of overwriting the current tab when the URL does not match', () => {
+    const { views, latestState } = makeHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+
+    views.openLink('s1', 'https://example.com/page-a')
+    const tabA = latestState()!.selected!
+    const viewA = createdViews[0]!
+
+    // Distinct path, query, or non-empty hash each opens its own tab without overwriting tabA.
+    views.openLink('s1', 'https://example.com/page-a?tab=2')
+    const tabQuery = latestState()!.selected!
+    views.openLink('s1', 'https://example.com/page-a#details')
+    const tabHash = latestState()!.selected!
+
+    expect(latestState()?.tabs.map((tab) => tab.id)).toEqual([tabA, tabQuery, tabHash])
+    expect(latestState()?.tabs.map((tab) => tab.url)).toEqual([
+      'https://example.com/page-a',
+      'https://example.com/page-a?tab=2',
+      'https://example.com/page-a#details',
+    ])
+    expect(latestState()?.selected).toBe(tabHash)
+    expect(viewA.webContents.loadUrls).toEqual(['https://example.com/page-a'])
+    expect(viewA.visible).toBe(false)
+    expect(createdViews[2]!.visible).toBe(true)
+  })
+
+  it('reuses a blank selected user tab without leaving an extra blank tab, and never hijacks an agent tab', () => {
+    const { views, latestState, setControl } = makeHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+
+    // Single blank user tab is reused in place.
+    const blankId = views.newTab('s1')!
+    expect(latestState()?.tabs).toHaveLength(1)
+    views.openLink('s1', 'https://example.com/first')
+    expect(latestState()?.tabs).toHaveLength(1)
+    expect(latestState()?.selected).toBe(blankId)
+    expect(latestState()?.url).toBe('https://example.com/first')
+
+    // A user tab currently on about:blank is also reused.
+    const aboutBlankId = views.newTab('s1')!
+    views.navigate('s1', 'https://example.com/temp')
+    const aboutBlankView = createdViews.at(-1)!
+    aboutBlankView.webContents.setUrl('about:blank')
+    aboutBlankView.webContents.emit('did-navigate', {}, 'about:blank', 200)
+    expect(latestState()?.url).toBeNull()
+
+    views.openLink('s1', 'https://example.com/second')
+    expect(latestState()?.tabs).toHaveLength(2)
+    expect(latestState()?.selected).toBe(aboutBlankId)
+    expect(latestState()?.url).toBe('https://example.com/second')
+
+    // An agent's blank tab must not be taken over when the user clicks a link in the thread.
+    setControl({ kind: 'agent', acting: true })
+    const agentBlankId = views.agentNewTab('s1')!
+    views.selectTab('s1', agentBlankId)
+    views.openLink('s1', 'https://example.com/user-link')
+    expect(latestState()?.tabs).toHaveLength(4)
+    expect(latestState()?.selected).not.toBe(agentBlankId)
+    expect(latestState()?.agentTab).toBe(agentBlankId)
+    expect(latestState()?.url).toBe('https://example.com/user-link')
+  })
+
+  it('falls back to navigating an existing tab when MAX_SESSION_TABS is reached, while still activating matches', async () => {
+    const { views, latestState, setControl } = makeHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+
+    // Open one agent tab first (localhost skips origin confirmation) and fill up to MAX_SESSION_TABS.
+    await views.load('s1', 'http://localhost:3000/agent')
+    const agentTabId = views.agentTab('s1')!
+    for (let i = 1; i < MAX_SESSION_TABS; i++) {
+      views.openLink('s1', `https://example.com/page-${i}`)
+    }
+    expect(latestState()?.tabs).toHaveLength(MAX_SESSION_TABS)
+
+    // Matching a live existing tab at the cap still activates it without reloading.
+    const recentUrl = `https://example.com/page-${MAX_SESSION_TABS - 2}`
+    const recentTab = latestState()!.tabs.find((tab) => tab.url === recentUrl)!
+    const recentView = createdViews.find(
+      (view) => !view.webContents.isDestroyed() && view.webContents.getURL() === recentUrl,
+    )!
+    expect(recentTab.released).toBe(false)
+    views.openLink('s1', `${recentUrl}/`)
+    expect(latestState()?.selected).toBe(recentTab.id)
+    expect(latestState()?.tabs).toHaveLength(MAX_SESSION_TABS)
+    expect(recentView.webContents.loadUrls).toEqual([recentUrl])
+    expect(recentView.webContents.reloadCount).toBe(0)
+
+    // Opening a brand-new URL at the cap falls back to navigating the selected user tab.
+    views.openLink('s1', 'https://example.com/overflow-1')
+    expect(latestState()?.tabs).toHaveLength(MAX_SESSION_TABS)
+    expect(latestState()?.selected).toBe(recentTab.id)
+    expect(latestState()?.url).toBe('https://example.com/overflow-1')
+
+    // At the cap, if the selected tab is actively driven by the agent, fall back to a non-agent tab.
+    setControl({ kind: 'agent', acting: true })
+    views.selectTab('s1', agentTabId)
+    views.openLink('s1', 'https://example.com/overflow-2')
+    expect(latestState()?.tabs).toHaveLength(MAX_SESSION_TABS)
+    expect(latestState()?.selected).not.toBe(agentTabId)
+    expect(latestState()?.url).toBe('https://example.com/overflow-2')
+    expect(latestState()?.tabs.find((tab) => tab.id === agentTabId)?.url).toBe(
+      'http://localhost:3000/agent',
+    )
   })
 })
