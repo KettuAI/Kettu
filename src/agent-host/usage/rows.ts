@@ -8,5 +8,8 @@ import { rowTotal, type UsageRow } from './model'
  */
 export function keepsNewer(stored: UsageRow, next: UsageRow): boolean {
   if (next.output !== stored.output) return next.output > stored.output
-  return rowTotal(next) > rowTotal(stored)
+  const nextTotal = rowTotal(next)
+  const storedTotal = rowTotal(stored)
+  if (nextTotal !== storedTotal) return nextTotal > storedTotal
+  return (stored.cost ?? null) === null && (next.cost ?? null) !== null
 }

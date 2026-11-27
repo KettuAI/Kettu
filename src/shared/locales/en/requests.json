@@ -9,6 +9,7 @@
     "opencode": "OpenCode",
     "cline": "Cline's session file",
     "antigravity": "Antigravity's session file",
+    "pi": "Pi's session file",
     "acp": "messages since Kettu started"
   },
   "totals": {
@@ -37,6 +38,7 @@
     "raw": "the records Claude Code keeps for these",
     "instructions": "Instructions",
     "codexRaw": "the records Codex keeps for these",
+    "piRaw": "the records Pi keeps for these",
     "instructionBlocks_one": "Instructions · {{count}}",
     "instructionBlocks_other": "Instructions · {{count}}"
   },

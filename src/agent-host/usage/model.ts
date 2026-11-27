@@ -32,6 +32,8 @@ export interface UsageRow {
   cacheWrite1h: number
   /** 1 on one row of each of Kettu's turns, else 0. */
   turn: number
+  /** Confirmed USD cost reported by the agent's own log; null or omitted to estimate from PRICES. */
+  cost?: number | null
 }
 
 /** How far a log file, or a reader's database, has been read. */

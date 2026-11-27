@@ -276,6 +276,7 @@ import { clineModelRequests } from './model-requests/cline'
 import { antigravityModelRequests } from './model-requests/antigravity'
 import { codexModelRequests } from './model-requests/codex'
 import { opencodeModelRequests } from './model-requests/opencode'
+import { piModelRequests } from './model-requests/pi'
 import { byHarness } from './model-requests/reader'
 import { AcpMessages, acpModelRequests } from './model-requests/acp-messages'
 import { IdleRelease } from './idle-release'
@@ -2018,6 +2019,14 @@ export class AgentHost {
             },
           }),
           opencode: opencodeModelRequests({ sessions: (agentId) => this.agents.openCode(agentId) }),
+          pi: piModelRequests({
+            platform,
+            home: options.homeDir ?? os.homedir(),
+            env: async (agentId) => {
+              await this.env.ready()
+              return this.env.agentEnv(agentId)
+            },
+          }),
           cline: clineModelRequests({
             home: options.homeDir ?? os.homedir(),
             env: async () => {
