@@ -41,7 +41,7 @@ export function ArchiveProjectDialog({
   const hostId = hostOfPath(project.path)
   const hostName = useHostLabel(hostId)
   const projects = useProjectsStore((s) => s.projects)
-  const [sessions, running, sessionIds] = useSessionsStore(
+  const [sessions, running, sessionIdsKey] = useSessionsStore(
     useShallow((s) => {
       const own = Object.values(s.byId).filter(
         (x) =>
@@ -50,10 +50,17 @@ export function ArchiveProjectDialog({
           !x.prepared &&
           findProjectForSession(projects, x)?.path === project.path,
       )
-      return [own.length, own.filter(isRunning).length, own.map((x) => x.id)]
+      // Return only primitives so useShallow's top-level comparison stays stable across renders.
+      return [
+        own.length,
+        own.filter(isRunning).length,
+        own
+          .map((x) => x.id)
+          .sort()
+          .join('\n'),
+      ] as const
     }),
   )
-  const sessionIdsKey = sessionIds.join('\n')
   const [workState, setWorkState] = useState<{ key: string; items: WorkItem[] }>({
     key: '',
     items: [],

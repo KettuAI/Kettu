@@ -561,9 +561,23 @@ export async function archiveProject(path: string): Promise<void> {
   const hostId = hostOfPath(path)
   const fallbackProject =
     remaining.find((p) => hostOfPath(p.path) === hostId)?.path ?? remaining[0]?.path ?? null
-  const { projectPath: selected } = useViewStore.getState()
-  if (selected && (selected === path || (target && projectOwnsPath(target, selected)))) {
-    useViewStore.setState({ projectPath: fallbackProject })
+  const ownsPath = (candidate: string | null | undefined): boolean =>
+    !!candidate && (candidate === path || (!!target && projectOwnsPath(target, candidate)))
+  useViewStore.setState((s) => {
+    const selectedOwns = ownsPath(s.projectPath)
+    const draftOwns = s.newSessionDraft !== null && ownsPath(s.newSessionDraft.projectPath)
+    if (!selectedOwns && !draftOwns) return s
+    return {
+      ...(selectedOwns ? { projectPath: fallbackProject } : {}),
+      ...(draftOwns
+        ? { newSessionDraft: { ...s.newSessionDraft!, projectPath: fallbackProject } }
+        : {}),
+    }
+  })
+  // Close split panes first so a split containing only this project's sessions leaves the final
+  // pane cleanly via New session below.
+  for (const id of ownIds) {
+    if (!sessionArchived(byId, id)) closeSessionInSplit(id)
   }
   const { main, layout } = useViewStore.getState()
   if (
@@ -573,9 +587,6 @@ export async function archiveProject(path: string): Promise<void> {
     !sessionArchived(byId, main.sessionId)
   ) {
     newSessionInPlace(fallbackProject)
-  }
-  for (const id of ownIds) {
-    if (!sessionArchived(byId, id)) closeSessionInSplit(id)
   }
 }
 
