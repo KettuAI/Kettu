@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { findChips, type ChipContext } from './chips'
 
@@ -74,5 +76,41 @@ describe('findChips with exclusive commands and stackable skills', () => {
         local: false,
       },
     ])
+  })
+
+  it('recognizes skill chips immediately before or after CJK text without spaces', () => {
+    const text = '请用/code-review检查并结合/security-audit复核'
+    expect(findChips(text, ctx())).toEqual([
+      { kind: 'skill', from: 2, to: 14, name: 'code-review' },
+      { kind: 'skill', from: 19, to: 34, name: 'security-audit' },
+    ])
+  })
+})
+
+describe('composer skill feedback and popover dismissal wiring', () => {
+  const promptBox = readFileSync(join(import.meta.dirname, 'prompt-box.tsx'), 'utf8')
+  const usePromptBoxSource = readFileSync(join(import.meta.dirname, 'use-prompt-box.ts'), 'utf8')
+  const promptChips = readFileSync(join(import.meta.dirname, 'prompt-chips.tsx'), 'utf8')
+  const chipView = readFileSync(join(import.meta.dirname, 'chip-view.tsx'), 'utf8')
+  const editorChips = readFileSync(join(import.meta.dirname, 'editor-chips.tsx'), 'utf8')
+
+  it('dismisses the slash popover atomically on skill choice without stale-caret flicker', () => {
+    expect(promptBox).toContain('slashPopoverAt(text, caret, commands, completedSlash)')
+    expect(promptBox).toContain('setCompletedSlash({ start: insertedStart, name: item.name })')
+    expect(promptBox).toContain('setSlashDismissed(insertedStart)')
+    // update() must set editor text and source caret together instead of calling changed(next) with a stale caret.
+    expect(usePromptBoxSource).toMatch(
+      /const update = \(next: string, at = next\.length\) => \{\s*closeHistory\(\)\s*writeDraft\(draft, next\)\s*editor\.current\?\.setText\(next, at\)\s*source\.set\(next, at\)/,
+    )
+  })
+
+  it('does not keep a persistent floating strip open for selected skills', () => {
+    expect(promptChips).toMatch(/const strip = activeCommand !== null && focused && !popoverOpen/)
+  })
+
+  it('renders skill chips with distinct tinted badge styling and exits typing mode after CJK separators', () => {
+    expect(chipView).toContain("chip.kind === 'skill'")
+    expect(chipView).toContain('SparklesIcon')
+    expect(editorChips).toContain('findSkillTokens(line.text, hooks.skills)')
   })
 })

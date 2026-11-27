@@ -41,3 +41,35 @@ describe('ComposerEditor right-click hit-testing wiring', () => {
     expect(source).not.toMatch(/onContextMenu\w*=\{[^}]*preventDefault/)
   })
 })
+
+describe('ComposerEditor multiline Tab suggestion layout (#2874)', () => {
+  const source = readFileSync(join(import.meta.dirname, 'editor.tsx'), 'utf8')
+
+  it('keeps plain placeholders single-line truncated so ordinary placeholders stay compact', () => {
+    expect(source).toMatch(
+      /['"]\.cm-placeholder['"]:\s*\{[\s\S]*?overflow:\s*['"]hidden['"][\s\S]*?textOverflow:\s*['"]ellipsis['"][\s\S]*?whiteSpace:\s*['"]nowrap['"]/,
+    )
+  })
+
+  it('renders Tab suggestions inline so long suggestions wrap without stretching empty caret height', () => {
+    expect(source).toMatch(
+      /['"]\.cm-placeholder:has\(\.cm-suggestion\)['"]:\s*\{[\s\S]*?display:\s*['"]inline['"][\s\S]*?whiteSpace:\s*['"]normal['"][\s\S]*?overflowWrap:\s*['"]anywhere['"]/,
+    )
+    expect(source).toMatch(/['"]\.cm-suggestion['"]:\s*\{\s*display:\s*['"]inline['"],?\s*\}/)
+    expect(source).toMatch(
+      /['"]\.cm-suggestion-text['"]:\s*\{[\s\S]*?display:\s*['"]inline['"][\s\S]*?whiteSpace:\s*['"]pre-wrap['"][\s\S]*?overflowWrap:\s*['"]anywhere['"]/,
+    )
+    // Inline-flex on `.cm-suggestion` turned the placeholder into a tall inline-block box that
+    // stretched the empty editor's native caret across multiple lines.
+    expect(source).not.toMatch(/['"]\.cm-suggestion['"]:\s*\{[\s\S]*?inline-flex/)
+  })
+
+  it('caps wrapped suggestions to a bounded number of lines and keeps the Tab keycap inline', () => {
+    expect(source).toMatch(
+      /['"]\.cm-line:has\(\.cm-suggestion\)['"]:\s*\{[\s\S]*?WebkitLineClamp:\s*['"]4['"][\s\S]*?overflow:\s*['"]hidden['"]/,
+    )
+    expect(source).toContain('cm-suggestion-key')
+    expect(source).toContain('suggestionOf.of(suggestion)')
+    expect(source).toContain('suggestionPreviewText(suggestion)')
+  })
+})

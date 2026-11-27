@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MarketSkill } from '@shared/marketplace'
 import type { HostSettings } from '@shared/settings'
 import { mapCommands as mapAcpCommands } from './acp/mapper'
+import { scanClaudeSkillsOnDisk } from './claude/connection'
 import { mapCommands as mapClaudeCommands } from './claude/mapper'
 import {
   commandList as codexCommandList,
@@ -86,6 +87,62 @@ describe('harness skill classification', () => {
       { name: 'compact', description: 'Compact conversation' },
       { name: 'code-review', description: 'Review changes', kind: 'skill' },
       { name: 'security-audit', description: 'Audit security', kind: 'skill' },
+    ])
+  })
+
+  it('discovers Claude skills on disk and in local plugins before system.init arrives', async () => {
+    const root = await tempFolder('kettu-claude-disk-skills-')
+    const cwd = path.join(root, 'repo')
+    const home = path.join(root, 'home')
+    const configDir = path.join(home, '.claude')
+    const pluginDir = path.join(root, 'plugin-kettu')
+
+    // Project skill, user skill, shared .agents skill, and local plugin skill (with plugin.json).
+    await mkdir(path.join(cwd, '.claude', 'skills', 'proj-skill'), { recursive: true })
+    await writeFile(
+      path.join(cwd, '.claude', 'skills', 'proj-skill', 'SKILL.md'),
+      '---\nname: project-audit\ndescription: Audit repo\n---\n',
+    )
+    await mkdir(path.join(configDir, 'skills', 'user-skill'), { recursive: true })
+    await writeFile(
+      path.join(configDir, 'skills', 'user-skill', 'SKILL.md'),
+      '---\nname: user-helper\ndescription: Help user\n---\n',
+    )
+    await mkdir(path.join(home, '.agents', 'skills', 'shared-skill'), { recursive: true })
+    await writeFile(
+      path.join(home, '.agents', 'skills', 'shared-skill', 'SKILL.md'),
+      '---\nname: frontend-design\ndescription: Design UI\n---\n',
+    )
+    await mkdir(path.join(pluginDir, '.claude-plugin'), { recursive: true })
+    await writeFile(
+      path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'kettu', version: '1.0.0' }),
+    )
+    await mkdir(path.join(pluginDir, 'skills', 'market-skill'), { recursive: true })
+    await writeFile(
+      path.join(pluginDir, 'skills', 'market-skill', 'SKILL.md'),
+      '---\nname: market-lint\ndescription: Market lint\n---\n',
+    )
+
+    const discovered = await scanClaudeSkillsOnDisk(cwd, home, configDir, [pluginDir])
+    const mapped = mapClaudeCommands(
+      [
+        { name: 'compact', description: 'Compact conversation' },
+        { name: 'project-audit', description: 'Audit repo' },
+        { name: 'user-helper', description: 'Help user' },
+        { name: 'frontend-design', description: 'Design UI' },
+        { name: 'kettu:market-lint', description: 'Market lint' },
+      ],
+      new Set(),
+      discovered,
+    )
+
+    expect(mapped).toEqual([
+      { name: 'compact', description: 'Compact conversation' },
+      { name: 'project-audit', description: 'Audit repo', kind: 'skill' },
+      { name: 'user-helper', description: 'Help user', kind: 'skill' },
+      { name: 'frontend-design', description: 'Design UI', kind: 'skill' },
+      { name: 'kettu:market-lint', description: 'Market lint', kind: 'skill' },
     ])
   })
 

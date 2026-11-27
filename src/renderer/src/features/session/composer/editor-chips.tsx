@@ -21,6 +21,7 @@ import {
 } from '@codemirror/view'
 import type { EditorState, Line } from '@codemirror/state'
 import { createRoot, type Root } from 'react-dom/client'
+import { findSkillTokens } from '@shared/slash'
 import { RenderedChip, type ChipState } from './chip-view'
 import { findChips, findLinks, mentionEndingAt, type Chip, type ChipContext } from './chips'
 import { slashAt } from './slash'
@@ -280,13 +281,23 @@ function mentionAt(view: EditorView, head: number): { from: number; to: number }
   return start < 0 ? null : { from: line.from + start, to: head }
 }
 
-/** The `/word` the caret is currently typing, which stays text until the caret leaves it. */
+/**
+ * The `/word` the caret is currently typing, which stays text until the caret leaves it. Once a
+ * complete known skill token is followed by a non-whitespace separator (such as CJK prose or
+ * sentence punctuation), the caret has moved past the skill and it renders as a chip immediately.
+ */
 function slashTypingAt(view: EditorView, head: number): { from: number; to: number } | null {
   const line = view.state.doc.lineAt(head)
-  const found = slashAt(line.text, head - line.from)
-  return found
-    ? { from: line.from + found.start, to: line.from + found.start + 1 + found.query.length }
-    : null
+  const rel = head - line.from
+  const found = slashAt(line.text, rel)
+  if (!found) return null
+  const hooks = view.state.facet(chipHooks)
+  if (hooks?.skills && hooks.skills.length > 0) {
+    for (const token of findSkillTokens(line.text, hooks.skills)) {
+      if (token.from === found.start && rel > token.to) return null
+    }
+  }
+  return { from: line.from + found.start, to: line.from + found.start + 1 + found.query.length }
 }
 
 /** The link, mention or slash token the caret is typing: the one it is in or at the end of, if any. */

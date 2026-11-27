@@ -34,6 +34,14 @@ export interface Slash {
   query: string
 }
 
+/** A slash token that was just chosen from the completion list, suppressed from reopening it. */
+export interface CompletedSlash {
+  /** Where the `/` of the chosen token starts. */
+  start: number
+  /** The chosen command or skill name without its leading `/`. */
+  name: string
+}
+
 /**
  * The `/word` the caret is in: the nearest `/` before it in its word that starts a word, with the
  * rest of the word as the query; null otherwise.
@@ -47,6 +55,45 @@ export function slashAt(text: string, caret: number | null): Slash | null {
     return { start: at, query: text.slice(at + 1, end) }
   }
   return null
+}
+
+/**
+ * Whether a recently chosen slash token still stands at its position and the caret has not moved
+ * into a different `/word`.
+ */
+export function keepsCompletedSlash(
+  text: string,
+  completed: CompletedSlash | null,
+  rawSlash: Slash | null,
+): boolean {
+  if (!completed) return false
+  if (rawSlash && rawSlash.start !== completed.start) return false
+  const token = `/${completed.name}`
+  return text.startsWith(token, completed.start)
+}
+
+/**
+ * The `/word` that should open the slash completion popover, or null when the caret sits on a
+ * recently chosen token or on the trailing-whitespace boundary of an already-completed skill or
+ * leading command (such as `/code-review| `).
+ */
+export function slashPopoverAt(
+  text: string,
+  caret: number | null,
+  commands: readonly SlashCommand[],
+  completed: CompletedSlash | null = null,
+): Slash | null {
+  const found = slashAt(text, caret)
+  if (!found || caret === null) return null
+  if (completed && found.start === completed.start && found.query === completed.name) {
+    return null
+  }
+  const end = found.start + 1 + found.query.length
+  if (caret === end && end < text.length && /\s/.test(text[end]!)) {
+    const exact = commands.find((command) => command.name === found.query)
+    if (exact && (isSkillCommand(exact) || found.start === 0)) return null
+  }
+  return found
 }
 
 /**

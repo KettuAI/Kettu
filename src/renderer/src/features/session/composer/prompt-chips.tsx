@@ -38,8 +38,6 @@ import { useBoxText, type BoxText } from './use-prompt-box'
 const PREVIEW_DELAY = 350
 // "Pasted as a link" stays this long, or until the text changes again.
 const PASTED_FOR = 6000
-// Show at most this many detail rows in the active command/skill strip before summarizing the rest.
-const MAX_STRIP_ROWS = 4
 
 const NO_KEYS: ReadonlySet<string> = new Set()
 
@@ -243,49 +241,33 @@ export function usePromptChips({
     return true
   }
 
-  // Track active leading exclusive command and distinct inline skills as a stable string key so
-  // typing ordinary prose never re-renders the strip.
-  const activeKey = useBoxText({ source }, (text) => {
-    const active = activeSlashItems(text, commands)
-    if (!active.command && active.skills.length === 0) return ''
-    return `${active.command?.name ?? ''}\n${active.skills.map((s) => s.name).join('\n')}`
-  })
-  const active = useMemo(() => {
-    if (!activeKey) return { command: null as SlashCommand | null, skills: [] as SlashCommand[] }
-    const [cmdName, ...pickedSkills] = activeKey.split('\n')
-    const command = cmdName
-      ? (commands.find((c) => !isSkillCommand(c) && c.name === cmdName) ?? null)
-      : null
-    const skills = pickedSkills
-      .filter(Boolean)
-      .map((name) => commands.find((c) => isSkillCommand(c) && c.name === name))
-      .filter((c): c is SlashCommand => c !== undefined)
-    return { command, skills }
-  }, [activeKey, commands])
-  const stripItems = useMemo(() => {
-    const items: { kind: 'command' | 'skill'; command: SlashCommand; chip: Chip }[] = []
-    if (active.command) {
-      items.push({
-        kind: 'command',
-        command: active.command,
-        chip: {
-          kind: 'command',
-          from: 0,
-          to: active.command.name.length + 1,
-          name: active.command.name,
-        },
-      })
-    }
-    for (const skill of active.skills) {
-      items.push({
-        kind: 'skill',
-        command: skill,
-        chip: { kind: 'skill', from: 0, to: skill.name.length + 1, name: skill.name },
-      })
-    }
-    return items
-  }, [active])
-  const strip = stripItems.length > 0 && focused && !popoverOpen && !hover && !pasted
+  // Track the leading exclusive command for the passive command strip. Stackable skills render
+  // directly as inline chips with hover previews (like file mentions), so selecting a skill does
+  // not keep a persistent floating box open above the composer.
+  const commandName = useBoxText(
+    { source },
+    (text) => activeSlashItems(text, commands).command?.name ?? '',
+  )
+  const activeCommand = useMemo(
+    () =>
+      commandName
+        ? (commands.find((c) => !isSkillCommand(c) && c.name === commandName) ?? null)
+        : null,
+    [commandName, commands],
+  )
+  const commandChip = useMemo<Chip | null>(
+    () =>
+      activeCommand
+        ? {
+            kind: 'command',
+            from: 0,
+            to: activeCommand.name.length + 1,
+            name: activeCommand.name,
+          }
+        : null,
+    [activeCommand],
+  )
+  const strip = activeCommand !== null && focused && !popoverOpen && !hover && !pasted
 
   // Passive previews and status strips can overlap the native browser view, but do not dismiss on
   // outside clicks and must not suspend window drag regions.
@@ -374,58 +356,21 @@ export function usePromptChips({
               finalFocus={false}
               className={cn(
                 POPUP,
-                'pointer-events-none flex flex-col gap-1.5 rounded-code px-2.5 py-1.75 text-hint text-secondary',
+                'pointer-events-none flex items-center gap-2 rounded-code px-2.5 py-1.75 text-hint text-secondary',
               )}
             >
-              {stripItems.length === 1 && stripItems[0] && (
-                <div className="flex items-center gap-2">
-                  <ChipView chip={stripItems[0].chip} surface={stripItems[0].kind === 'skill'} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {stripItems[0].command.description}
-                  </span>
+              {activeCommand && commandChip && (
+                <>
+                  <ChipView chip={commandChip} />
+                  <span className="min-w-0 flex-1 truncate">{activeCommand.description}</span>
                   <span className="shrink-0 text-tertiary">
                     {[
-                      commandSourceName(stripItems[0].command.source, t) ?? agentName,
-                      stripItems[0].command.inputHint,
+                      commandSourceName(activeCommand.source, t) ?? agentName,
+                      activeCommand.inputHint,
                     ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
-                </div>
-              )}
-              {stripItems.length > 1 && (
-                <>
-                  <div className="flex items-center justify-between gap-2 text-caption font-medium text-tertiary">
-                    <span>
-                      {active.command
-                        ? t('slash.activeCommandAndSkills', { count: active.skills.length })
-                        : t('slash.activeSkills', { count: active.skills.length })}
-                    </span>
-                    {stripItems.length > MAX_STRIP_ROWS && (
-                      <span>
-                        {t('slash.moreSkills', { count: stripItems.length - MAX_STRIP_ROWS })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {stripItems.slice(0, MAX_STRIP_ROWS).map((item) => (
-                      <div
-                        key={`${item.kind}:${item.command.name}`}
-                        className="flex items-center gap-2"
-                      >
-                        <ChipView chip={item.chip} surface />
-                        <span className="min-w-0 flex-1 truncate">{item.command.description}</span>
-                        <span className="shrink-0 text-tertiary">
-                          {[
-                            commandSourceName(item.command.source, t) ?? agentName,
-                            item.command.inputHint,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 </>
               )}
             </Popover.Popup>
