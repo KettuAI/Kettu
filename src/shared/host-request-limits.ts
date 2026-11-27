@@ -339,6 +339,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'artifacts.comment': HOST_MS,
   'artifacts.reply': HOST_MS,
   'artifacts.resolve': HOST_MS,
+  'artifacts.deleteComment': HOST_MS,
   'artifacts.markSent': AGENT_MS,
   'artifacts.repin': HOST_MS,
   'artifacts.editElement': AGENT_MS,

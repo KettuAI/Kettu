@@ -676,6 +676,7 @@ function prepareAll(db: DatabaseSync) {
     setSent: sql(
       'UPDATE artifact_threads SET sent_at = ?, sent_to = ? WHERE artifact_id = ? AND id = ?',
     ),
+    deleteArtifactThread: sql('DELETE FROM artifact_threads WHERE artifact_id = ? AND id = ?'),
     setAnchor: sql('UPDATE artifact_threads SET anchor = ? WHERE artifact_id = ? AND id = ?'),
     versionType: sql('SELECT type, format FROM artifact_types WHERE artifact_id = ? AND n = ?'),
     insertType: sql(
@@ -1906,6 +1907,18 @@ export class ThreadDb {
       else sql.reopenThread.run(id, threadId)
       return this.threadNow(sql, id, threadId)
     })
+  }
+
+  /** Permanently deletes a thread and cascades removal of all comments in it. */
+  deleteThread({ id, project, threadId }: ArtifactCalls['deleteThread']['params']): null {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        this.artifactIn(sql, id, project, true)
+        this.threadRow(sql, id, threadId)
+        sql.deleteArtifactThread.run(id, threadId)
+        return null
+      }),
+    )
   }
 
   markThreadsSent({ id, threadIds, sessionId, at }: ArtifactCalls['markSent']['params']): null {

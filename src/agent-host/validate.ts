@@ -2968,6 +2968,10 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { id: artifactId(o), threadId: threadId(o), resolved: flag(o, 'resolved') }
     },
+    'artifacts.deleteComment': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), threadId: threadId(o) }
+    },
     'artifacts.repin': (params) => {
       const o = fields(params)
       return { id: artifactId(o), threadId: threadId(o), anchor: commentAnchor(o.anchor) }

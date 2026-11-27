@@ -163,6 +163,11 @@ export interface ArtifactCalls {
     params: { id: string; project: string | null; threadId: string; resolved: boolean; at: number }
     result: CommentThread
   }
+  /** Permanently deletes one comment thread and its comments. */
+  deleteThread: {
+    params: { id: string; project: string | null; threadId: string }
+    result: null
+  }
   /** The owner had `version` open in a viewer; the newer of it and the record, up to the latest. */
   see: {
     params: { id: string; version: number }

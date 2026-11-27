@@ -1372,6 +1372,14 @@ describe('comment and direct edit requests', () => {
     )
   })
 
+  it('validates artifact and thread ids when deleting a comment thread', () => {
+    const threadId = 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+    expect(posix['artifacts.deleteComment']({ id, threadId })).toEqual({ id, threadId })
+    rejects(() => posix['artifacts.deleteComment']({ id: 'art_bad', threadId }))
+    rejects(() => posix['artifacts.deleteComment']({ id, threadId: 'thr_bad' }))
+    rejects(() => posix['artifacts.deleteComment']({ id }))
+  })
+
   it('takes an edit of the editable properties only, to values that stay in the attribute', () => {
     const edit = { id, baseVersion: 3, path: 'index.html', offset: 0, text: null }
     expect(posix['artifacts.editElement']({ ...edit, style: { color: '#ffffff' } })).toEqual({

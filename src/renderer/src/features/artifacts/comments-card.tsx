@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Comment01Icon,
+  Delete02Icon,
   FilterHorizontalIcon,
+  Location01Icon,
   MoreHorizontalIcon,
+  RotateLeft01Icon,
   SentIcon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { isPending, type ArtifactComment, type CommentThread } from '@shared/artifact-comments'
 import type { VersionSummary } from '@shared/artifacts'
-import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
+import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -23,8 +26,8 @@ import { anchorLabel } from './anchors'
 import { sendThreads, type CommentsArtifact } from './comment-send'
 import {
   openOrder,
-  rowSendKind,
   threadNumbers,
+  threadRowMenuKinds,
   threadState,
   type ThreadState,
 } from './comment-threads'
@@ -122,6 +125,9 @@ export function CommentsCard({
   onTab,
   pageFiles,
   onFocus,
+  canResolve = true,
+  onResolve,
+  onDelete = null,
   hint,
   emptyText,
 }: {
@@ -139,6 +145,12 @@ export function CommentsCard({
   /** The files of the page on screen, for This page; null where there is one page. */
   pageFiles: ReadonlySet<string> | null
   onFocus: (thread: CommentThread) => void
+  /** Whether the artifact allows resolving or reopening threads; false in Recently deleted. */
+  canResolve?: boolean
+  /** Marks a thread resolved or reopens it; falls back to calling the host directly. */
+  onResolve?: (thread: CommentThread, resolved: boolean) => void
+  /** Requests deleting a thread with confirmation; null when unavailable. */
+  onDelete?: ((thread: CommentThread) => void) | null
   /** What a click on the content does, under the title. */
   hint: string
   /** What the empty card says, for the kind shown. */
@@ -213,8 +225,72 @@ export function CommentsCard({
       </p>
     )
   } else {
+    const resolveThread = (thread: CommentThread, nextResolved: boolean) => {
+      if (onResolve) {
+        onResolve(thread, nextResolved)
+        return
+      }
+      void host('artifacts.resolve', {
+        id: artifact.id,
+        threadId: thread.id,
+        resolved: nextResolved,
+      }).then(() => {
+        if (!nextResolved) onTab('open')
+      })
+    }
     body = list.map((thread) => {
-      const sendKind = rowSendKind(thread, tab)
+      const kinds = threadRowMenuKinds(thread, tab, {
+        canResolve,
+        canDelete: onDelete !== null,
+      })
+      const menuItems: MenuItem[] = kinds.map((kind) => {
+        switch (kind) {
+          case 'locate':
+            return {
+              label: t('comments.locate'),
+              icon: Location01Icon,
+              onSelect: () => onFocus(thread),
+            }
+          case 'view':
+            return {
+              label: t('comments.viewThread'),
+              icon: Comment01Icon,
+              onSelect: () => onFocus(thread),
+            }
+          case 'sendOnly':
+            return {
+              label: t('comments.sendOnly'),
+              icon: SentIcon,
+              onSelect: () => send([thread]),
+            }
+          case 'sendAgain':
+            return {
+              label: t('comments.sendAgain'),
+              icon: SentIcon,
+              onSelect: () => send([thread]),
+            }
+          case 'resolve':
+            return {
+              label: t('comments.resolve'),
+              icon: Tick02Icon,
+              onSelect: () => resolveThread(thread, true),
+            }
+          case 'reopen':
+            return {
+              label: t('comments.reopen'),
+              icon: RotateLeft01Icon,
+              onSelect: () => resolveThread(thread, false),
+            }
+          case 'delete':
+            return {
+              label: t('comments.delete'),
+              icon: Delete02Icon,
+              danger: true,
+              divider: true,
+              onSelect: () => onDelete?.(thread),
+            }
+        }
+      })
       return (
         <ThreadRow
           key={thread.id}
@@ -224,24 +300,9 @@ export function CommentsCard({
           selected={thread.id === selected}
           compact={tab === 'resolved'}
           onFocus={() => onFocus(thread)}
-          sendAction={
-            sendKind
-              ? {
-                  label: t(sendKind === 'sendOnly' ? 'comments.sendOnly' : 'comments.sendAgain'),
-                  onSelect: () => send([thread]),
-                }
-              : null
-          }
-          onReopen={
-            tab === 'resolved'
-              ? () =>
-                  void host('artifacts.resolve', {
-                    id: artifact.id,
-                    threadId: thread.id,
-                    resolved: false,
-                  }).then(() => onTab('open'))
-              : null
-          }
+          menuItems={menuItems}
+          onResolve={tab === 'open' && canResolve ? () => resolveThread(thread, true) : null}
+          onReopen={tab === 'resolved' && canResolve ? () => resolveThread(thread, false) : null}
         />
       )
     })
@@ -362,7 +423,8 @@ function ThreadRow({
   selected,
   compact,
   onFocus,
-  sendAction,
+  menuItems,
+  onResolve,
   onReopen,
 }: {
   thread: CommentThread
@@ -371,7 +433,8 @@ function ThreadRow({
   selected: boolean
   compact: boolean
   onFocus: () => void
-  sendAction: { label: string; onSelect: () => void } | null
+  menuItems: MenuItem[]
+  onResolve: (() => void) | null
   onReopen: (() => void) | null
 }) {
   const { t } = useTranslation('artifacts')
@@ -404,14 +467,26 @@ function ThreadRow({
           {longAgo(first.createdAt, now)}
         </time>
         <span className="k-vt-row__act" onClick={(event) => event.stopPropagation()}>
-          {onReopen ? (
+          {onResolve && (
+            <button
+              type="button"
+              aria-label={t('comments.resolve')}
+              title={t('comments.resolve')}
+              onClick={onResolve}
+              className="k-vt-icon"
+            >
+              <Icon icon={Tick02Icon} size={14} />
+            </button>
+          )}
+          {onReopen && (
             <Button variant="secondary" size="sm" onClick={onReopen}>
               {t('comments.reopen')}
             </Button>
-          ) : sendAction ? (
+          )}
+          {menuItems.length > 0 && (
             <Dropdown
               align="end"
-              items={[{ label: sendAction.label, icon: SentIcon, onSelect: sendAction.onSelect }]}
+              items={menuItems}
               trigger={({ open, toggle }) => (
                 <button
                   type="button"
@@ -425,7 +500,7 @@ function ThreadRow({
                 </button>
               )}
             />
-          ) : null}
+          )}
         </span>
       </span>
       <p className="k-vt-row__text">{first.body}</p>

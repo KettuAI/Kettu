@@ -41,7 +41,7 @@ import {
   useArtifactUnsavedStore,
 } from '@renderer/stores/artifact-unsaved'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
-import { threadNumbers } from './comment-threads'
+import { matchingOpenThread, threadNumbers } from './comment-threads'
 import { FrameLink } from './frame-link'
 import { OutlineCard } from './outline-card'
 import type { PlaceAsk, SheetWalk } from './change-walk'
@@ -96,7 +96,12 @@ export interface DocComments {
   /** The comment being written under a block, pinned to `anchor`, until it saves or `close`. */
   draft: (anchor: CommentAnchor, close: () => void) => ReactNode
   /** What opens under a block for one of its threads, numbered as its pin. */
-  thread: (thread: CommentThread, number: number, close: () => void) => ReactNode
+  thread: (
+    thread: CommentThread,
+    number: number,
+    close: () => void,
+    onNewThread?: (() => void) | null,
+  ) => ReactNode
 }
 
 /** A box in the window, for a popover beside it. */
@@ -322,10 +327,31 @@ export function DocumentSheet({
           // Reports reach this window, so the viewer can lay the whole document out for it.
           setEmbedded(true)
           return
-        case 'pick':
-          setOpenThread(null)
-          setDraft({ at: doc.at, tag: doc.tag, text: doc.text, box: doc.box })
+        case 'pick': {
+          const existing = comments.blocks
+            ? matchingOpenThread(
+                comments.threads ?? [],
+                {
+                  version,
+                  path: DOCUMENT_ENTRY,
+                  page: null,
+                  offset: doc.at,
+                  tag: doc.tag,
+                  text: doc.text,
+                  missing: false,
+                },
+                openThread,
+              )
+            : null
+          if (existing) {
+            setDraft(null)
+            setOpenThread(existing.id)
+          } else {
+            setOpenThread(null)
+            setDraft({ at: doc.at, tag: doc.tag, text: doc.text, box: doc.box })
+          }
           return
+        }
         case 'select':
           setSelection(doc.at === null ? null : (doc as Selection))
           return
@@ -600,7 +626,23 @@ export function DocumentSheet({
                       className="ads-pop"
                       style={{ top: place.y + place.height + 8, right: pinRight }}
                     >
-                      {comments.thread(open.thread, open.n, () => setOpenThread(null))}
+                      {comments.thread(
+                        open.thread,
+                        open.n,
+                        () => setOpenThread(null),
+                        () => {
+                          const at = open.thread.anchor.offset
+                          if (at === null) return
+                          setOpenThread(null)
+                          if (mode !== 'comment') onMode('comment')
+                          setDraft({
+                            at,
+                            tag: open.thread.anchor.tag ?? 'p',
+                            text: open.thread.anchor.text,
+                            box: { x: 0, y: place.y, width: g.width, height: place.height },
+                          })
+                        },
+                      )}
                     </div>
                   )
                 })()}
