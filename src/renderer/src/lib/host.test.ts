@@ -165,4 +165,67 @@ describe('project update and multi-folder host path qualification', () => {
       })
     }
   })
+
+  it('routes remote session import and worktree settings RPCs and qualifies importedProjectPath', () => {
+    const listParams = {
+      agentId: 'codex' as const,
+      projectPath: onHost(HOST_A, '/srv/app'),
+      allFolders: true,
+    }
+    expect(routeOf('agents.listSessions', listParams)).toBe(HOST_A)
+    expect(toHost('agents.listSessions', listParams, 0)).toEqual({
+      agentId: 'codex',
+      projectPath: '/srv/app',
+      allFolders: true,
+    })
+
+    const listed = fromHost(HOST_A, 'agents.listSessions', {
+      sessions: [
+        {
+          acpSessionId: 'acp-1',
+          title: 'Remote work',
+          updatedAt: '2026-11-27T00:00:00Z',
+          imported: true,
+          cwd: '/srv/app',
+          importedProjectPath: '/srv/other',
+        },
+      ],
+      nextCursor: null,
+    })
+    expect(listed).toEqual({
+      sessions: [
+        {
+          acpSessionId: 'acp-1',
+          title: 'Remote work',
+          updatedAt: '2026-11-27T00:00:00Z',
+          imported: true,
+          cwd: '/srv/app',
+          importedProjectPath: onHost(HOST_A, '/srv/other'),
+        },
+      ],
+      nextCursor: null,
+    })
+
+    const importParams = {
+      agentId: 'codex' as const,
+      projectPath: onHost(HOST_A, '/srv/app'),
+      acpSessionId: 'acp-1',
+    }
+    expect(routeOf('sessions.import', importParams)).toBe(HOST_A)
+    expect(toHost('sessions.import', importParams, 0)).toEqual({
+      agentId: 'codex',
+      projectPath: '/srv/app',
+      acpSessionId: 'acp-1',
+    })
+
+    const worktreeParams = { path: onHost(HOST_A, '/srv/app') }
+    expect(routeOf('projects.worktreeSettings', worktreeParams)).toBe(HOST_A)
+    expect(toHost('projects.worktreeSettings', worktreeParams, 0)).toEqual({ path: '/srv/app' })
+    expect(
+      routeOf('projects.setWorktreeSettings', {
+        path: onHost(HOST_A, '/srv/app'),
+        settings: { branchTemplate: 'kettu/{slug}', copy: [], setup: null, waitForSetup: true },
+      }),
+    ).toBe(HOST_A)
+  })
 })

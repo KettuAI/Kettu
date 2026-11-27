@@ -610,7 +610,8 @@
     "wait": "First message waits for setup",
     "waitHint": "The agent starts once the files are copied and the command has finished.",
     "save": "Save",
-    "forbidden": "Only the owner of this host can change these from here, unless they let paired devices use its terminal."
+    "forbidden": "Only the owner of this host can change these from here, unless they let paired devices use its terminal.",
+    "unsupported": "Update Kettu on this host to configure worktree settings."
   },
   "remoteOffer": {
     "text": "Your {{name}} is signed in to this account too. Let it use this computer?",

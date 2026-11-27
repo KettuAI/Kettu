@@ -359,6 +359,12 @@ function qualify(hostId: string, value: unknown, depth: number): void {
   if (typeof record.projectOwner === 'string' && hostOfPath(record.projectOwner) === null) {
     record.projectOwner = onHost(hostId, record.projectOwner)
   }
+  if (
+    typeof record.importedProjectPath === 'string' &&
+    hostOfPath(record.importedProjectPath) === null
+  ) {
+    record.importedProjectPath = onHost(hostId, record.importedProjectPath)
+  }
   // A session's worktrees are folders of its host too, which its panels open.
   for (const key of ['worktree', 'agentWorktree']) {
     const folder = record[key] as { path?: unknown } | null | undefined
