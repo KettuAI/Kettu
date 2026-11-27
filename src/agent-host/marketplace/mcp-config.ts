@@ -52,8 +52,16 @@ function stringMap(value: unknown): [string, string][] {
   })
 }
 
-function inputs(values: [string, string][], secrets: Record<string, string>): McpValue[] {
-  return [...new Map(values)].map(([name, value]) => {
+function inputs(
+  values: [string, string][],
+  secrets: Record<string, string>,
+  caseInsensitive = false,
+): McpValue[] {
+  const unique = new Map<string, [string, string]>()
+  for (const [name, value] of values) {
+    unique.set(caseInsensitive ? name.toLowerCase() : name, [name, value])
+  }
+  return [...unique.values()].map(([name, value]) => {
     if (SHELL_REFERENCE.test(value)) return { name, value }
     secrets[name] = value
     return { name, input: true, secret: true, required: true }
@@ -85,18 +93,27 @@ export function configuredMcp(
     ) {
       return invalid()
     }
-    const references = Object.entries(object(server.env_http_headers) ?? {}).map(
+    const references = stringMap(server.env_http_headers).map(
       ([header, variable]): [string, string] => {
-        if (typeof variable !== 'string' || !/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(variable))
-          return invalid()
+        if (!/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(variable)) return invalid()
         return [header, '${' + variable + '}']
       },
     )
-    if (typeof server.bearer_token_env_var === 'string') {
-      if (!/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(server.bearer_token_env_var)) return invalid()
+    if (server.bearer_token_env_var !== undefined) {
+      if (
+        typeof server.bearer_token_env_var !== 'string' ||
+        !/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(server.bearer_token_env_var)
+      ) {
+        return invalid()
+      }
       references.push(['Authorization', 'Bearer ${' + server.bearer_token_env_var + '}'])
     }
-    const headers = inputs([...stringMap(server.headers), ...references], secrets)
+    // Codex writes literal headers in `http_headers`; merge over `headers` so neither drops keys.
+    const headers = inputs(
+      [...stringMap(server.headers), ...stringMap(server.http_headers), ...references],
+      secrets,
+      true,
+    )
     return {
       name,
       source,

@@ -37,7 +37,7 @@ describe('the servers a folder declares for every harness', () => {
     await put('.cursor/mcp.json', JSON.stringify({ mcpServers: { same: marker } }))
     await put(
       '.codex/config.toml',
-      '[mcp_servers.web]\nurl = "https://mcp.example/x"\nbearer_token_env_var = "MY_TOKEN"\n',
+      '[mcp_servers.web]\nurl = "https://mcp.example/x"\nbearer_token_env_var = "MY_TOKEN"\nhttp_headers = { "X-Api-Key" = "codex-project-secret" }\n',
     )
     await put('opencode.json', JSON.stringify({ mcp: { oc: { type: 'local', command: ['x'] } } }))
     const servers = await folderServers(repo, process.platform === 'win32' ? 'win32' : 'darwin')
@@ -47,10 +47,11 @@ describe('the servers a folder declares for every harness', () => {
       ['oc', ['opencode.json']],
     ])
     // What the card shows never holds a value.
-    expect(JSON.stringify(servers.map(({ name, target }) => ({ name, target })))).not.toContain(
-      'secret-value',
-    )
+    const shown = JSON.stringify(servers.map(({ name, target }) => ({ name, target })))
+    expect(shown).not.toContain('secret-value')
+    expect(shown).not.toContain('codex-project-secret')
     expect(servers[0]!.secrets).toEqual({ TOKEN: 'secret-value' })
+    expect(servers[1]!.secrets).toEqual({ 'X-Api-Key': 'codex-project-secret' })
   })
 
   it('reads .mcp.json from the folders above too, the nearer one winning a name', async () => {

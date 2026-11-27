@@ -549,4 +549,84 @@ describe('importing a discovered MCP server', () => {
       service.stop()
     }
   })
+
+  it('moves Codex http_headers secrets into the key store and serves them on outbound requests', async () => {
+    const { McpDiscoveryService } = await import('../agent-host/marketplace/mcp-discovery')
+    const { parseMarketKeys, serverHeaders } = await import('../agent-host/marketplace/servers')
+    const { SettingsStore } = await import('./settings')
+    const { installDiscoveredMcp } = await import('./mcp-install')
+    const codexFile = {
+      agentId: 'codex' as const,
+      path: join(dir, 'config.toml'),
+      layout: 'codex' as const,
+    }
+    const settings = await SettingsStore.load(dir)
+    servers = settings.get().marketplace.mcp
+    settings.onChange((current) => {
+      servers = current.marketplace.mcp
+    })
+    const service = new McpDiscoveryService({
+      files: () => [codexFile],
+      library: () => servers,
+      changed: () => {},
+    })
+    try {
+      await writeFile(
+        codexFile.path,
+        [
+          '[mcp_servers.cloud]',
+          'url = "https://mcp.example.com/mcp"',
+          'bearer_token_env_var = "CLOUD_TOKEN"',
+          '',
+          '[mcp_servers.cloud.http_headers]',
+          'authorization = "Bearer overridden-secret"',
+          '"X-Api-Key" = "codex-keychain-secret"',
+          '',
+          '[mcp_servers.cloud.env_http_headers]',
+          '"X-Tenant" = "CLOUD_TENANT"',
+        ].join('\n'),
+      )
+      const summary = await service.scan()
+      expect(JSON.stringify(summary)).not.toContain('codex-keychain-secret')
+      expect(JSON.stringify(summary)).not.toContain('overridden-secret')
+      const row = summary.servers[0]!
+      expect(row.sources[0]?.keys).toEqual(['X-Api-Key'])
+
+      const entries = service.prepare([{ id: row.id, name: 'cloud', agents: ['codex'] }])
+      const keys = await load()
+      expect(await installDiscoveredMcp(settings, keys, entries)).toBeNull()
+      await settings.flush()
+
+      const id = entries[0]!.server.id
+      const reloadedKeys = await load()
+      expect(reloadedKeys.values()).toEqual({ [id]: { 'X-Api-Key': 'codex-keychain-secret' } })
+      expect(await fileText()).not.toContain('codex-keychain-secret')
+      expect(await readFile(join(dir, 'settings.json'), 'utf8')).not.toContain(
+        'codex-keychain-secret',
+      )
+      const saved = settings.get().marketplace.mcp.find((entry) => entry.id === id)!
+      expect(saved.spec).toMatchObject({
+        type: 'http',
+        url: 'https://mcp.example.com/mcp',
+        headers: [
+          { name: 'Authorization', value: 'Bearer ${CLOUD_TOKEN}' },
+          { name: 'X-Api-Key', input: true, secret: true, required: true },
+          { name: 'X-Tenant', value: '${CLOUD_TENANT}' },
+        ],
+      })
+      const runtimeKeys = parseMarketKeys(reloadedKeys.values())!
+      expect(
+        serverHeaders(saved, runtimeKeys, {
+          env: { CLOUD_TOKEN: 'live-bearer', CLOUD_TENANT: 'acme' },
+          platform: 'darwin',
+        }),
+      ).toEqual({
+        'X-Api-Key': 'codex-keychain-secret',
+        'X-Tenant': 'acme',
+        Authorization: 'Bearer live-bearer',
+      })
+    } finally {
+      service.stop()
+    }
+  })
 })
