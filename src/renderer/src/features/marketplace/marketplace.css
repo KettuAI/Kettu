@@ -2209,7 +2209,37 @@
 }
 
 .k-mcp-dialog.kettu-sd {
+  display: flex;
+  flex-direction: column;
   max-width: min(42rem, calc(100% - 2rem));
+  overflow: hidden;
+}
+
+.k-mcp-dialog-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.k-mcp-dialog .kettu-sd__head,
+.k-mcp-dialog .kettu-sd__foot {
+  flex: none;
+}
+
+.k-mcp-dialog .kettu-sd__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.k-mcp-agent-picker > summary {
+  cursor: pointer;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-tile);
+  background: var(--bg-subtle);
+}
+
+.k-mcp-agent-picker[open] > summary {
+  margin-block-end: 0.5rem;
 }
 
 .k-mcp-review-row,

@@ -82,6 +82,7 @@ function ReviewRow({
   add: boolean
 }) {
   const { t } = useTranslation('marketplace')
+  const agentName = useAgentName()
   const conflict = row.differentKeys.length > 0
   const chosen = row.sources.find((source) => source.id === choice.sourceId)
   const keyCount = row.sources.length
@@ -163,11 +164,19 @@ function ReviewRow({
       {row.nameConflict && !add && !choice.copy && (
         <p className="k-mcp-warning">{t('mcp.renameConflict')}</p>
       )}
-      <AgentPicker
-        value={choice.agents}
-        onChange={(agents) => change({ agents })}
-        label={t('install.useIn')}
-      />
+      <details className="k-mcp-agent-picker">
+        <summary className="focus-ring">
+          {t('install.useIn')} ·{' '}
+          {choice.agents === 'all'
+            ? t('install.allAgents')
+            : choice.agents.map(agentName).join(', ')}
+        </summary>
+        <AgentPicker
+          value={choice.agents}
+          onChange={(agents) => change({ agents })}
+          label={t('install.useIn')}
+        />
+      </details>
     </section>
   )
 }
@@ -395,7 +404,7 @@ export function McpAddDialog({
 }) {
   const { t } = useTranslation('marketplace')
   return (
-    <McpConfirmation open={open} onOpenChange={onOpenChange} title={t('add.mcp')}>
+    <McpConfirmation open={open} onOpenChange={onOpenChange} title={t('mcp.addTitle')}>
       <AddInput
         close={() => onOpenChange(false)}
         onAdded={() => {

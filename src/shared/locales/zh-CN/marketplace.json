@@ -1222,6 +1222,7 @@
     "hours_other": "{{count}} 小时"
   },
   "mcp": {
+    "addTitle": "添加 MCP 服务器",
     "yourServers": "你的服务器",
     "found": "在别处发现的",
     "foundNote": "导入会保留它们自己的设置。",

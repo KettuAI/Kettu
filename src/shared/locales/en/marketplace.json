@@ -1246,6 +1246,7 @@
     "hours_other": "{{count}} hours"
   },
   "mcp": {
+    "addTitle": "Add MCP server",
     "yourServers": "Your servers",
     "found": "Found elsewhere",
     "foundNote": "Importing leaves their own config alone.",
