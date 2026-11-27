@@ -55,6 +55,8 @@ export class FakeQuery implements Query {
   readonly process: unknown
   /** The flag settings Claude Code reads from the `settings` file as it starts. */
   readonly flagSettings: Record<string, unknown> | undefined
+  /** The MCP servers Claude Code reads from `--mcp-config` or `options.mcpServers` as it starts. */
+  readonly mcpServers: Record<string, McpServerConfig> | undefined
 
   constructor(
     readonly sdk: FakeClaudeSdk,
@@ -66,14 +68,24 @@ export class FakeQuery implements Query {
       settings === undefined
         ? undefined
         : (JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>)
-    // The SDK starts its Claude Code process as the query starts, with the settings option on its
-    // command line.
+    const mcpConfig = options.extraArgs?.['mcp-config'] ?? undefined
+    this.mcpServers =
+      mcpConfig !== undefined
+        ? (
+            JSON.parse(readFileSync(mcpConfig, 'utf8')) as {
+              mcpServers?: Record<string, McpServerConfig>
+            }
+          ).mcpServers
+        : options.mcpServers
+    // The SDK starts its Claude Code process as the query starts, with the settings and MCP
+    // config file paths on its command line.
     this.process = options.spawnClaudeCodeProcess({
       command: options.pathToClaudeCodeExecutable,
       args: [
         '--output-format',
         'stream-json',
         ...(settings === undefined ? [] : ['--settings', settings]),
+        ...(mcpConfig === undefined ? [] : ['--mcp-config', mcpConfig]),
       ],
       cwd: options.cwd,
       env: options.env,

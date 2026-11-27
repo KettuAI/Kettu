@@ -14,7 +14,7 @@ import {
 import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
-import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
+import { cp, mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
 import type {
   AgentOptions,
   AgentStatus,
@@ -215,7 +215,7 @@ import {
   seenMcpFile,
   type PreparedMcpImport,
 } from './marketplace/mcp-discovery'
-import { mcpConfigPaths } from './marketplace/mcp-config-paths'
+import { claudeProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
 import { parseMcpPaste } from './marketplace/mcp-paste'
 import { importedServer, type ConfiguredMcp } from './marketplace/mcp-config'
 import { findCommand, isExecutableFile, type Env } from './find-command'
@@ -1581,22 +1581,33 @@ export class AgentHost {
           this.sessionMcp.set(sessionId, handed)
           const library = this.settings.marketplace.mcp
           if (library.length === 0) return []
+          const folder =
+            record.worktree && record.worktree.removed !== 'branch'
+              ? record.worktree.path
+              : record.projectPath
+          const realFolder = folder ? await realpath(folder).catch(() => null) : null
+          const projects = [...new Set([folder, realFolder].filter((p): p is string => Boolean(p)))]
           const own = await readOwnMcpServers(
             mcpConfigPaths(
               platform,
               home,
               this.agents.mcpDiscoveryAgents().filter(({ id }) => id === record.agentId),
-              record.projectPath ? [record.projectPath] : [],
+              projects,
               (name, agent) => this.env.get(name, agent),
               true,
             ),
           )
+          const projectOwn =
+            folder && harnessOf(record.agentId) === 'claude-code'
+              ? await readOwnMcpServers(claudeProjectMcpPaths(folder, platform))
+              : []
           return libraryServers(library, this.marketKeys, record.agentId, transports, {
             platform,
             taken,
             project: record.projectPath,
             handed: (server, name, how) => handed.set(server.id, { name, how }),
             own,
+            ...(projectOwn.length > 0 ? { projectOwn } : {}),
             conflict: (server, name) =>
               this.diagnostics.log(
                 'warn',

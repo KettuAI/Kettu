@@ -73,7 +73,9 @@ async function readMcpConfigs(files: readonly McpConfigFile[]) {
 }
 
 export async function readOwnMcpServers(files: readonly McpConfigFile[]): Promise<OwnServer[]> {
-  const { configured } = await readMcpConfigs(files)
+  const { configured } = await readMcpConfigs(
+    files.map((file) => ({ ...file, respectProjectDisabled: true })),
+  )
   const entries = new Map<string, OwnServer>()
   for (const { name, spec } of configured) entries.set(name, { name, endpoint: endpointOf(spec) })
   return [...entries.values()]

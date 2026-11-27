@@ -161,3 +161,20 @@ export function mcpConfigPaths(
   }
   return files
 }
+
+/**
+ * The `.mcp.json` files Claude Code loads for `cwd`, ordered from farthest ancestor to `cwd` so
+ * nearer declarations win when read in sequence.
+ */
+export function claudeProjectMcpPaths(cwd: string, platform: Platform): McpConfigFile[] {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const files: McpConfigFile[] = []
+  let dir = p.resolve(cwd)
+  for (;;) {
+    files.push({ path: p.join(dir, '.mcp.json'), layout: 'standard', project: dir })
+    const parent = p.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return files.reverse()
+}

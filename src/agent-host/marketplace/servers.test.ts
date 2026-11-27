@@ -225,6 +225,29 @@ describe("libraryServers beside the agent's own servers", () => {
     expect(servers.map((server) => server.name)).toEqual(['gh', 'context7'])
     expect(clashes).toEqual(['context7:context7'])
   })
+
+  it('prefers the exact library name and lists extra same-server aliases and project duplicates in replaces', () => {
+    const { access } = router()
+    const servers = libraryServers([github, context7], held, 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: access,
+      own: [
+        { name: 'gh-alias', endpoint: { type: 'http', url: 'https://api.githubcopilot.com/mcp' } },
+        { name: 'github', endpoint: { type: 'http', url: 'https://api.githubcopilot.com/mcp/' } },
+      ],
+      projectOwn: [
+        {
+          name: 'proj-docs',
+          endpoint: { type: 'stdio', command: 'npx', args: ['-y', '@upstash/context7-mcp@4.6.0'] },
+        },
+      ],
+    })
+    expect(servers.map((server) => ({ name: server.name, replaces: server.replaces }))).toEqual([
+      { name: 'github', replaces: ['gh-alias'] },
+      // Untrusted project `.mcp.json` names never rename the library server; they go in `replaces`.
+      { name: 'context7', replaces: ['proj-docs'] },
+    ])
+  })
 })
 
 describe('serverCommand', () => {

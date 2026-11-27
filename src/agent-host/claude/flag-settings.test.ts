@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { clearFlagSettings, removeFlagSettings, writeFlagSettings } from './flag-settings'
+import {
+  clearFlagSettings,
+  removeFlagSettings,
+  writeFlagSettings,
+  writeMcpConfig,
+} from './flag-settings'
 
 const dirs: string[] = []
 
@@ -33,6 +38,26 @@ describe("Claude Code's flag settings files", () => {
     }
     await removeFlagSettings(first)
     expect(await readdir(dir)).toEqual([path.basename(second)])
+  })
+
+  it('writes MCP server configs as a user-only --mcp-config file', async () => {
+    const dir = await folder()
+    const servers = {
+      github: {
+        type: 'http' as const,
+        url: 'http://127.0.0.1:4567/servers/abc',
+        headers: { Authorization: 'Bearer session-secret' },
+      },
+    }
+    const file = await writeMcpConfig(dir, servers)
+    expect(path.dirname(file)).toBe(dir)
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ mcpServers: servers })
+    if (process.platform !== 'win32') {
+      expect((await stat(dir)).mode & 0o777).toBe(0o700)
+      expect((await stat(file)).mode & 0o777).toBe(0o600)
+    }
+    await removeFlagSettings(file)
+    expect(await readdir(dir)).toEqual([])
   })
 
   it('clears what an earlier run left', async () => {

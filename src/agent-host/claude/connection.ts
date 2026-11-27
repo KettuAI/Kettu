@@ -92,7 +92,7 @@ import {
   QUESTIONS_SKIPPED,
 } from './permissions'
 import { findClaudeTranscript } from '../prompt-cache'
-import { removeFlagSettings, writeFlagSettings } from './flag-settings'
+import { removeFlagSettings, writeFlagSettings, writeMcpConfig } from './flag-settings'
 import { folderHooks, heldEnv, heldHelpers } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
@@ -270,8 +270,6 @@ interface Session {
   stale: boolean
   /** The servers the folder declares itself that the query was started without. */
   held: string[]
-  /** Settles once the servers holding keys, added after the query started, tried to connect. */
-  adding: Promise<void> | null
   /** The hooks the folder declares itself, which the query runs only when `hooksHeld` is false. */
   hooks: FolderHooks | null
   /** The query was started with every hook off, the folder's not being allowed. */
@@ -959,6 +957,16 @@ export class ClaudeConnection implements AgentConnection {
     return await writeFlagSettings(dir, flags)
   }
 
+  /**
+   * The session's MCP servers in a `--mcp-config` file only the user can read, so they override
+   * Claude Code's own configuration at launch without putting tokens or keys on the command line.
+   */
+  private async writeMcpConfig(mcpServers: Record<string, McpServerConfig>): Promise<string> {
+    const dir = this.context.claudeSettingsDir
+    if (!dir) throw new AgentRequestError('agent_error', "No folder for Claude Code's settings")
+    return await writeMcpConfig(dir, mcpServers)
+  }
+
   private removeFlags(file: string): void {
     removeFlagSettings(file).catch((error: unknown) =>
       this.context.hooks.log(
@@ -1024,7 +1032,6 @@ export class ClaudeConnection implements AgentConnection {
       skills: new Set(),
       stale: false,
       held: [],
-      adding: null,
       hooks: settings.hooks,
       hooksHeld: false,
       titleText: options.titled ? null : '',
@@ -1074,13 +1081,29 @@ export class ClaudeConnection implements AgentConnection {
     if (bare || hidden === 'limits') {
       Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
     }
-    // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
-    session.held = bare ? [] : await this.heldServers(cwd, options)
-    if (session.held.length > 0) flags.disabledMcpjsonServers = session.held
     const servers = bare ? [] : (options.mcpServers ?? [])
-    // The SDK writes this option onto Claude Code's command line, which other users can read, so a
-    // server that holds a key comes only through the control channel once the query has started.
-    const mcpServers = claudeServers(servers.filter((server) => !server.secret))
+    const provided = new Set(servers.map((server) => server.name))
+    // Additional copies in Claude Code's own config that share an endpoint under another name are
+    // denied by name; never deny a name Kettu itself provides.
+    const replaced = [
+      ...new Set(
+        servers.flatMap((server) => server.replaces ?? []).filter((name) => !provided.has(name)),
+      ),
+    ]
+    const covered = new Set([...provided, ...replaced])
+    // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
+    const projectMcp = bare
+      ? { held: [], disabled: [] }
+      : await this.heldServers(cwd, options, covered)
+    session.held = projectMcp.held
+    if (projectMcp.disabled.length > 0) flags.disabledMcpjsonServers = projectMcp.disabled
+    if (replaced.length > 0) {
+      flags.deniedMcpServers = replaced.map((serverName) => ({ serverName }))
+    }
+    // Passed via a user-only `--mcp-config` file instead of inline `mcpServers` or a post-init
+    // `setMcpServers`: tokens stay off the command line and Kettu's copies shadow Claude Code's
+    // own configuration before Claude Code spawns any duplicate servers.
+    const mcpServers = claudeServers(servers)
     const allowedTools = servers.flatMap((server) =>
       server.type === 'stdio'
         ? []
@@ -1097,8 +1120,23 @@ export class ClaudeConnection implements AgentConnection {
           ...(options.role ? [options.role] : []),
         ]
     const cli = await this.runnableCli()
-    // Written last, so nothing that could still fail leaves it behind.
-    const settingsFile = Object.keys(flags).length > 0 ? await this.writeFlags(flags) : null
+    // Written last, so nothing that could still fail leaves them behind.
+    const launchFiles: string[] = []
+    let settingsFile: string | null = null
+    let mcpConfigFile: string | null = null
+    try {
+      if (Object.keys(flags).length > 0) {
+        settingsFile = await this.writeFlags(flags)
+        launchFiles.push(settingsFile)
+      }
+      if (Object.keys(mcpServers).length > 0) {
+        mcpConfigFile = await this.writeMcpConfig(mcpServers)
+        launchFiles.push(mcpConfigFile)
+      }
+    } catch (error) {
+      for (const file of launchFiles) this.removeFlags(file)
+      throw error
+    }
     let spawned = false
     const queryOptions: QueryOptions = {
       cwd,
@@ -1114,9 +1152,14 @@ export class ClaudeConnection implements AgentConnection {
         })
         spawned = true
         session.process = child
-        // Kept while the process runs, which hands the path on to the processes it starts.
-        if (settingsFile) {
-          const remove = (): void => this.removeFlags(settingsFile)
+        // Kept while the process runs, which hands the paths on to the processes it starts.
+        if (launchFiles.length > 0) {
+          let removed = false
+          const remove = (): void => {
+            if (removed) return
+            removed = true
+            for (const file of launchFiles) this.removeFlags(file)
+          }
           child.once('exit', remove)
           // An error without a pid is a spawn that failed; with one, 'exit' still follows.
           child.once('error', () => {
@@ -1172,10 +1215,12 @@ export class ClaudeConnection implements AgentConnection {
           },
         ],
       },
-      ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       ...(plugins.length > 0 ? { plugins } : {}),
       ...(settingsFile ? { settings: settingsFile } : {}),
-      extraArgs: { 'replay-user-messages': null },
+      extraArgs: {
+        'replay-user-messages': null,
+        ...(mcpConfigFile ? { 'mcp-config': mcpConfigFile } : {}),
+      },
       ...(hidden ? { persistSession: false } : {}),
       ...(how.from
         ? {
@@ -1192,7 +1237,7 @@ export class ClaudeConnection implements AgentConnection {
     try {
       query = sdk.query({ prompt: input, options: queryOptions })
     } catch (error) {
-      if (settingsFile && !spawned) this.removeFlags(settingsFile)
+      if (!spawned) for (const file of launchFiles) this.removeFlags(file)
       throw error
     }
     session.query = query
@@ -1205,7 +1250,7 @@ export class ClaudeConnection implements AgentConnection {
       session.query = null
       input.close()
       query.close()
-      if (settingsFile && !spawned) this.removeFlags(settingsFile)
+      if (!spawned) for (const file of launchFiles) this.removeFlags(file)
       void reading
       if (how.resume && missingSession(error)) {
         throw new AgentRequestError('agent_error', errorText(error), RESOURCE_NOT_FOUND)
@@ -1215,9 +1260,6 @@ export class ClaudeConnection implements AgentConnection {
     if (this.done) {
       query.close()
       throw this.closedError()
-    }
-    if (servers.some((server) => server.secret)) {
-      session.adding = this.addSecretServers(session, query, servers)
     }
     this.reportAccount(init.account)
     session.models = init.models ?? []
@@ -1246,31 +1288,6 @@ export class ClaudeConnection implements AgentConnection {
       this.publishCommands(session)
     }
     return session
-  }
-
-  /**
-   * Hands the query all its servers, those holding keys among them, in place of the ones its
-   * options started it with. Not awaited by a turn: the answer comes once every server has tried to
-   * connect, and a server that cannot only leaves the session without its tools. Never rejects.
-   */
-  private addSecretServers(
-    session: Session,
-    query: Query,
-    servers: readonly McpServer[],
-  ): Promise<void> {
-    const names = servers.map((server) => server.name)
-    this.context.hooks.traffic('out', { method: 'setMcpServers', sessionId: session.id, names })
-    return query.setMcpServers(claudeServers(servers)).then(
-      (result) => {
-        for (const [name, error] of Object.entries(result.errors)) {
-          this.context.hooks.log('warn', `MCP server ${name} did not connect: ${error}`)
-        }
-      },
-      (error: unknown) => {
-        if (session.query !== query) return
-        this.context.hooks.log('warn', `Could not add MCP servers: ${errorText(error)}`)
-      },
-    )
   }
 
   private reportAccount(info: AccountInfo | undefined): void {
@@ -1712,22 +1729,33 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   /**
-   * The servers `cwd`'s .mcp.json files declare that may not start: all of them without a gate, and
-   * a hidden session asks nobody about the rest.
+   * The servers `cwd`'s .mcp.json files declare that may not start: all uncovered ones without a
+   * gate, and a hidden session asks nobody about the rest. Servers already covered by Kettu's
+   * session MCP config are disabled in `.mcp.json` without prompting the user.
    */
-  private async heldServers(cwd: string, options: SessionOptions): Promise<string[]> {
+  private async heldServers(
+    cwd: string,
+    options: SessionOptions,
+    covered: ReadonlySet<string>,
+  ): Promise<{ held: string[]; disabled: string[] }> {
     const declared = await declaredServers(cwd, (message) =>
       this.context.hooks.log('warn', message),
     )
-    if (declared.length === 0) return []
-    const names = declared.map((server) => server.name)
+    if (declared.length === 0) return { held: [], disabled: [] }
+    const coveredNames = declared
+      .filter((server) => covered.has(server.name))
+      .map((server) => server.name)
+    const uncovered = declared.filter((server) => !covered.has(server.name))
+    if (uncovered.length === 0) return { held: [], disabled: coveredNames }
+    const names = uncovered.map((server) => server.name)
     const gate = options.projectMcp
-    if (!gate) return names
+    if (!gate) return { held: names, disabled: [...names, ...coveredNames] }
     try {
-      return await (options.hidden ? gate.held(cwd, names) : gate.hold(cwd, declared))
+      const held = await (options.hidden ? gate.held(cwd, names) : gate.hold(cwd, uncovered))
+      return { held, disabled: [...held, ...coveredNames] }
     } catch (error) {
       this.context.hooks.log('warn', `Could not read the answers for ${cwd}: ${errorText(error)}`)
-      return names
+      return { held: names, disabled: [...names, ...coveredNames] }
     }
   }
 
@@ -2516,7 +2544,7 @@ export class ClaudeConnection implements AgentConnection {
       : await this.temporary(cwd, { ...options, hidden: 'context' }, sessionId)
     const query = (live ?? temporary)!.query!
     try {
-      if (temporary) await this.serversConnected(temporary, query)
+      if (temporary) await this.serversConnected(query)
       return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now(), {
         cwd,
         home: os.homedir(),
@@ -2530,11 +2558,8 @@ export class ClaudeConnection implements AgentConnection {
    * Waits, up to a bound, for a query just opened to connect its MCP servers: Claude Code connects
    * them after it starts, and its context breakdown leaves out the tools of those still connecting.
    */
-  private async serversConnected(session: Session, query: Query): Promise<void> {
+  private async serversConnected(query: Query): Promise<void> {
     const deadline = Date.now() + MCP_CONNECT_MS
-    if (session.adding) {
-      await Promise.race([session.adding, sleep(MCP_CONNECT_MS, undefined, { ref: false })])
-    }
     while (Date.now() < deadline) {
       try {
         const servers = await query.mcpServerStatus()
