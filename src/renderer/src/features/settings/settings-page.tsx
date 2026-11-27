@@ -9,7 +9,6 @@ import {
   useState,
   type RefObject,
 } from 'react'
-import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
@@ -24,7 +23,6 @@ import { css as generalCss } from '@renderer/components/affect/settings-general'
 import { css as modelsCss } from '@renderer/components/affect/settings-models'
 import { css as prefsCss } from '@renderer/components/affect/settings-preferences'
 import { css as securityCss } from '@renderer/components/affect/settings-security'
-import { Dialog, DialogPortal } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { useCloudOff } from '@renderer/lib/cloud'
@@ -56,6 +54,7 @@ import {
   type SectionDef,
 } from './model'
 import { GroupLabel, PageHeader, RowFrame, RowGroup, RowText, SectionBody } from './rows'
+import { SettingsDialogFrame } from './settings-dialog'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
@@ -90,52 +89,9 @@ export default function SettingsPage() {
   const open = useViewStore((s) => s.settings.open)
   const title = useId()
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next, details) => {
-        if (next) return
-        // Esc steps back from an item's page first, and leaves a field being typed in alone.
-        if (details.reason === 'escape-key') {
-          details.cancel()
-          if (!isEditable(details.event.target)) settingsBack()
-          return
-        }
-        closeSettings()
-      }}
-    >
-      <DialogPortal>
-        <DialogPrimitive.Backdrop className="kettu-settings-scrim app-region-no-drag" />
-        <DialogPrimitive.Popup
-          // The section in the list takes the focus, so Tab starts from it, without scrolling the
-          // list down to a section near its end, which would hide the search above it.
-          initialFocus={() => {
-            const current = document.querySelector<HTMLElement>(
-              '[data-settings-dialog] nav [aria-current=page]',
-            )
-            if (!current) return true
-            current.focus({ preventScroll: true })
-            return false
-          }}
-          aria-labelledby={title}
-          data-overlay-layer=""
-          data-settings-dialog=""
-          className="ui-as kettu-settings app-region-no-drag"
-        >
-          <SettingsContent titleId={title} />
-        </DialogPrimitive.Popup>
-      </DialogPortal>
-    </Dialog>
-  )
-}
-
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return (
-    el.isContentEditable ||
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
+    <SettingsDialogFrame open={open} titleId={title}>
+      <SettingsContent titleId={title} />
+    </SettingsDialogFrame>
   )
 }
 

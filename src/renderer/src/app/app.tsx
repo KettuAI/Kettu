@@ -98,9 +98,9 @@ export function App() {
               onAnimationEnd={(event) => {
                 if (event.animationName === 'kettu-arrive-main') setArriving(false)
               }}
-              // On a phone the corner's controls, raised over the drawer, stay under what opens
-              // over the window.
-              className="absolute inset-0 phone:isolate"
+              // Isolate the workbench's own stacking layers (such as corner controls raised over a
+              // narrow or peeking sidebar) beneath full-window overlays like Settings and dialogs.
+              className="absolute inset-0 isolate"
             >
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
