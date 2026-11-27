@@ -1,6 +1,7 @@
 // A remark plugin for links to local paths, and to addresses Kettu does not open.
 
 import { schemelessGitHubUrl } from '@shared/git'
+import { bareHostUrl } from './bare-host-links'
 
 interface MdNode {
   type: string
@@ -19,11 +20,13 @@ export const INCOMPLETE_LINK = 'streamdown:incomplete-link'
 
 /**
  * Whether a link's URL is a local path or a `file:` URI, which `localLinks` marks. A GitHub pull
- * request or issue written without `https://` is the web link `githubRefs` makes of it.
+ * request or issue written without `https://`, or a bare host:port address, is the web link its
+ * remark plugin makes of it.
  */
 export function isLocalLink(url: string): boolean {
   if (url === '' || url.startsWith('#') || url.startsWith('//')) return false
   if (schemelessGitHubUrl(url)) return false
+  if (bareHostUrl(url)) return false
   return !SCHEME.test(url) || DRIVE.test(url) || FILE_URI.test(url)
 }
 

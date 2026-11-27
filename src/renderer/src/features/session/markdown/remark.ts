@@ -1,6 +1,7 @@
 import remarkBreaks from 'remark-breaks'
 import remarkMath from 'remark-math'
 import type { StreamdownProps } from 'streamdown'
+import { bareHostLinks } from './bare-host-links'
 import { cjkPlugin, defaultRemarkPluginsNoSingleTilde } from './cjk-plugin'
 import { codexCitations } from './codex-citations'
 import { emojiShortcodes } from './emoji-shortcodes'
@@ -26,6 +27,7 @@ export const remarkPlugins: RemarkPlugins = [
   remarkBreaks,
   emojiShortcodes,
   codexCitations,
+  bareHostLinks,
   localLinks,
   localImages,
   githubRefs,
