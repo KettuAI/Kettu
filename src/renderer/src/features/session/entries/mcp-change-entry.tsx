@@ -119,7 +119,9 @@ function AddRows({ server, hostId }: { server: McpAddServer; hostId: string | nu
         ? t('mcpChange.signInOAuth')
         : server.values.length > 0
           ? t('mcpChange.signInHeaders')
-          : t('mcpChange.signInNone'),
+          : server.oauth === null
+            ? t('mcpChange.signInUnknown')
+            : t('mcpChange.signInNone'),
     })
   }
   for (const value of server.values) {

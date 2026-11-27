@@ -20,6 +20,7 @@ import {
   specInputs,
   type CatalogServer,
   type MarketServer,
+  type McpOAuth,
   type McpSpec,
 } from '@shared/marketplace'
 import type { McpCheck } from '@shared/mcp-discovery'
@@ -267,6 +268,8 @@ export interface McpToolsDeps {
   project(path: string): Promise<string | null>
   /** The folder the session works in, for a check; null for none. */
   sessionFolder(sessionId: string): string | null
+  /** How a remote server's address signs in; null when it takes no OAuth; throws when unreachable. */
+  detectSignIn(url: string): Promise<McpOAuth | null>
   /** A server of the Marketplace's catalog by its id; null when the catalog has none. */
   catalogServer(id: string): Promise<CatalogServer | null>
   /** Puts the servers into the library, through the same checks as the Marketplace. */
@@ -812,6 +815,20 @@ export class McpTools {
       }
       server = { ...server, name, ...(server.source === 'manual' ? { title: name } : {}) }
     }
+    // Ask the address how it signs in, as adding by hand does; headers mean it signs in with them.
+    let oauth: boolean | null = server.spec.type === 'http' && server.spec.oauth !== undefined
+    if (server.source === 'manual' && server.spec.type === 'http' && !oauth) {
+      const spec = server.spec
+      if (spec.headers.length === 0) {
+        try {
+          const found = await this.deps.detectSignIn(spec.url)
+          if (found) server = { ...server, spec: { ...spec, oauth: found } }
+          oauth = found !== null
+        } catch {
+          oauth = null
+        }
+      }
+    }
     const card: McpAddServer = {
       serverId: server.id,
       name: server.name,
@@ -819,7 +836,7 @@ export class McpTools {
       type: server.spec.type,
       transport: server.spec.type === 'http' ? server.spec.transport : null,
       target: looksSecret(targetOf(server.spec)),
-      oauth: server.spec.type === 'http' && server.spec.oauth !== undefined,
+      oauth,
       values: valuesOf(server.spec),
       agents: server.agents,
     }

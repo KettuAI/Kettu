@@ -1070,8 +1070,8 @@ export interface McpAddServer {
   transport: 'streamable-http' | 'sse' | null
   /** The program and its arguments, or the remote server's address, with what reads as a key masked. */
   target: string
-  /** A remote server Kettu signs in to with OAuth. */
-  oauth: boolean
+  /** A remote server Kettu signs in to with OAuth; null when the address could not be asked. */
+  oauth: boolean | null
   values: McpAddValue[]
   agents: 'all' | AgentId[]
 }
@@ -2205,7 +2205,7 @@ function isMcpAddServer(value: unknown): value is McpAddServer {
       value.transport === 'streamable-http' ||
       value.transport === 'sse') &&
     typeof value.target === 'string' &&
-    typeof value.oauth === 'boolean' &&
+    (typeof value.oauth === 'boolean' || value.oauth === null) &&
     isListOf(value.values, isMcpAddValue) &&
     (value.agents === 'all' || (Array.isArray(value.agents) && value.agents.every(isAgentId)))
   )

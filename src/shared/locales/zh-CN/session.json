@@ -1821,6 +1821,7 @@
     "signInOAuth": "由 Kettu 用 OAuth 登录",
     "signInHeaders": "用下面的 header",
     "signInNone": "不用登录",
+    "signInUnknown": "检查后才知道",
     "agents": "给",
     "everyAgent": "所有智能体",
     "unset": "没设",

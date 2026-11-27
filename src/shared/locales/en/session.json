@@ -1900,6 +1900,7 @@
     "signInOAuth": "Kettu signs in with OAuth",
     "signInHeaders": "With the headers below",
     "signInNone": "None",
+    "signInUnknown": "Not known until it is checked",
     "agents": "For",
     "everyAgent": "Every agent",
     "unset": "Not set",

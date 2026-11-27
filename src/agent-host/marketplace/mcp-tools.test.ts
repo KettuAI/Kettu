@@ -132,6 +132,7 @@ function harness(start: MarketServer[] = [github()]) {
     agents: () => AGENTS,
     project: async (path) => (path === '/p' || path === '/q' ? path : null),
     sessionFolder: () => '/p',
+    detectSignIn: async () => null,
     catalogServer: async (id) => (id === CATALOG.id ? CATALOG : null),
     put: async (next) => {
       puts.push(next)

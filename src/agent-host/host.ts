@@ -951,6 +951,7 @@ export class AgentHost {
       },
       sessionFolder: (sessionId) =>
         this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId),
+      detectSignIn: (url) => this.marketConnections.detect(url, {}),
       catalogServer: async (id) => {
         const catalog = await this.marketCatalog.catalog(false, true)
         const listed = catalog.sections.flatMap((section) => section.items)
