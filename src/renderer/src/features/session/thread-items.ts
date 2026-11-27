@@ -11,10 +11,10 @@ const entryChars = new WeakMap<ThreadEntry, string>()
 // groupable lookup, t other tool, w tool waiting for permission, r tool whose request was answered,
 // p compaction, n plan, which the thread leaves out for the top bar, v a message Kettu sent as a
 // card's answer, which the thread leaves out as the card shows it, x a finished write to an
-// artifact, which the thread leaves out as its artifact's card stands for it, e turn end, m an
-// agent's write to project memory, which folds as work, o anything else, which a new site's
-// request, an agent's question and a proposed write to global memory are: of their own, never
-// folded into a run.
+// artifact, which the thread leaves out as its artifact's card stands for it, e normal turn end,
+// E abnormal turn end (cancelled, token limit, refusal), m an agent's write to project memory,
+// which folds as work, o anything else, which a new site's request, an agent's question and a
+// proposed write to global memory are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   const cached = stateSignatures.get(state)
@@ -57,7 +57,7 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (!entry) return 'o'
   if (entry.kind === 'user') return entry.approval ? 'v' : entry.steered ? 's' : 'u'
   if (entry.kind === 'agent') return 'a'
-  if (entry.kind === 'turn_end') return 'e'
+  if (entry.kind === 'turn_end') return entry.stopReason === 'end_turn' ? 'e' : 'E'
   if (entry.kind === 'thought') return 'h'
   if (entry.kind === 'plan') return 'n'
   if (entry.kind === 'compaction') return 'p'
@@ -156,8 +156,9 @@ export function buildItems(
   still = false,
 ): Item[] {
   const items: Item[] = []
-  const { replacing, after } = replyFooters(order, signature, live)
+  const { replacing, after, skipped } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
+    if (skipped.has(i)) continue
     const footer = replacing.get(i)
     if (footer) {
       items.push(footer)
@@ -182,7 +183,7 @@ export function buildItems(
     // Compactions in a row read as one divider: the latest stands for them all.
     if (signature[i] === 'p' && signature[i + 1] === 'p') continue
     const id = order[i]!
-    const endId = signature[i] === 'u' && signature[i + 1] === 'e' ? order[i + 1] : undefined
+    const endId = signature[i] === 'u' && isTurnEnd(signature[i + 1]) ? order[i + 1] : undefined
     items.push({
       key: id,
       type: 'entry',
@@ -206,19 +207,22 @@ export function buildItems(
 const isTool = (char: string | undefined): boolean =>
   char === 'g' || char === 't' || char === 'w' || char === 'r'
 
+/** A turn-end marker's character in the signature: normal (`e`) or abnormal (`E`). */
+const isTurnEnd = (char: string | undefined): boolean => char === 'e' || char === 'E'
+
 /**
  * The turns: [start, end) indexes into the signature. Each starts at a user message, or after a
  * turn's end where the agent goes on with no message, as when its background command ended.
  */
 function turnsOf(signature: string): [number, number][] {
   const starts = [0]
-  let ended = -1
+  let ended = isTurnEnd(signature[0]) ? 0 : -1
   for (let i = 1; i < signature.length; i++) {
     const char = signature[i]
     if (char === 'u') {
       starts.push(i)
       ended = -1
-    } else if (char === 'e') {
+    } else if (isTurnEnd(char)) {
       ended = i
     } else if (ended !== -1 && (char === 'a' || isWork(char))) {
       starts.push(ended + 1)
@@ -406,9 +410,10 @@ function replyFooters(
   order: string[],
   signature: string,
   live: boolean,
-): { replacing: Map<number, Item>; after: Map<number, Item> } {
+): { replacing: Map<number, Item>; after: Map<number, Item>; skipped: Set<number> } {
   const replacing = new Map<number, Item>()
   const after = new Map<number, Item>()
+  const skipped = new Set<number>()
   for (const [start, end] of turnsOf(signature)) {
     const latest = end === signature.length
     const messageIds: string[] = []
@@ -418,11 +423,16 @@ function replyFooters(
     let lastWork = -1
     for (let i = start; i < end; i++) if (isWork(signature[i])) lastWork = i
     for (let i = start; i < end; i++) {
-      if (signature[i] === 'a') {
+      const char = signature[i]
+      if (char === 'a') {
         messageIds.push(order[i]!)
         if (i > lastWork) answerIds.push(order[i]!)
-      } else if (signature[i] === 'e') endAt = i
-      else if (isTool(signature[i])) toolIds.push(order[i]!)
+      } else if (isTurnEnd(char)) {
+        // Keep the turn's first ending for its real duration; suppress trailing redundant normal
+        // endings while leaving abnormal stop markers (cancelled, token limit, refusal) visible.
+        if (endAt === -1) endAt = i
+        else if (char === 'e') skipped.add(i)
+      } else if (isTool(char)) toolIds.push(order[i]!)
     }
     if (messageIds.length === 0 || (latest && live && endAt === -1)) continue
     const footer: Item = {
@@ -436,7 +446,7 @@ function replyFooters(
     if (endAt === -1) after.set(end - 1, footer)
     else replacing.set(endAt, footer)
   }
-  return { replacing, after }
+  return { replacing, after, skipped }
 }
 
 /** A run's steps, with consecutive completed lookups grouped. */

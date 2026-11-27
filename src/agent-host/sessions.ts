@@ -709,6 +709,8 @@ interface Turn {
   requested: boolean
   /** The agent started it between the host's turns, with no message, and says when it ends. */
   byAgent: boolean
+  /** Whether the turn added visible output, work, or steered input to the thread. */
+  hadOutput: boolean
   /** Told once it has ended, as an edit from a message waits for the turn it stops. */
   ends: (() => void)[]
   /** The next message the agent's tool suggested in the turn, shown once it ends normally. */
@@ -1180,6 +1182,44 @@ function attachmentIds(content: readonly UserContent[]): string[] {
   return content.flatMap((item) =>
     item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment.id] : [],
   )
+}
+
+/** Thread entry kinds that are external records rather than output of a running turn. */
+const NON_TURN_OUTPUT_KINDS: ReadonlySet<ThreadEntry['kind']> = new Set([
+  'turn_end',
+  'git',
+  'task_delivery',
+  'takeover',
+  'session_message',
+])
+
+/** Whether a patch applied during a turn adds visible output, work, or steered input to it. */
+function isTurnOutputPatch(thread: ThreadState, patch: Patch): boolean {
+  if (patch.op === 'entry.add') {
+    if (NON_TURN_OUTPUT_KINDS.has(patch.entry.kind)) return false
+    if (patch.entry.kind === 'agent') {
+      return patch.entry.markdown !== '' || patch.entry.attachments.length > 0
+    }
+    if (patch.entry.kind === 'thought') return patch.entry.markdown !== ''
+    return true
+  }
+  if (patch.op === 'entry.appendText' && patch.text !== '') {
+    const kind = thread.byId[patch.id]?.kind
+    return kind === 'agent' || kind === 'thought'
+  }
+  if (patch.op === 'entry.update') {
+    const entry = thread.byId[patch.id]
+    if (!entry) return false
+    if (entry.kind === 'plan') return true
+    if (entry.kind === 'agent') {
+      const changes = patch.changes as Partial<Extract<ThreadEntry, { kind: 'agent' }>>
+      return (
+        (typeof changes.markdown === 'string' && changes.markdown !== '') ||
+        (Array.isArray(changes.attachments) && changes.attachments.length > 0)
+      )
+    }
+  }
+  return false
 }
 
 /** Whether the agent added no message, thought, tool call or plan after the user entry `entryId`. */
@@ -1878,6 +1918,14 @@ export class SessionManager {
       // A bug in the mapper, not in the agent: recorded, and the patch is not sent.
       this.deps.diagnostics.log('error', `Session ${live.id}: ${error.message}`)
       return false
+    }
+    if (
+      live.turn &&
+      !live.replaying &&
+      !live.turn.hadOutput &&
+      isTurnOutputPatch(live.thread, patch)
+    ) {
+      live.turn.hadOutput = true
     }
     this.track(live, patch)
     live.queue.push(patch)
@@ -9057,6 +9105,7 @@ export class SessionManager {
       fallback: null,
       requested: false,
       byAgent,
+      hadOutput: false,
       ends: [],
       suggestion: null,
     }
@@ -9923,7 +9972,7 @@ export class SessionManager {
     if (patches.length > 0) this.emit(live, patches)
   }
 
-  /** Settles the turn; returns its `turn_end` entry's id when there is a stop reason. */
+  /** Settles the turn; returns its `turn_end` entry's id when one is appended. */
   private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
     const first = !turn.ended
     turn.ended = true
@@ -9975,6 +10024,9 @@ export class SessionManager {
       }
     }
     if (!stopReason) return null
+    // Background notifications can wake an agent turn that emits nothing and settles normally;
+    // omit the redundant `turn_end` entry so empty durations do not stack between replies.
+    if (turn.byAgent && stopReason === 'end_turn' && !turn.hadOutput) return null
     const id = this.nextId(live)
     const used = live.thread.session.usage?.used
     this.emit(live, [
@@ -10219,14 +10271,14 @@ export class SessionManager {
         ...(cache ? { cache } : {}),
       }
     }
-    if (turnEntryId && this.deps.usage) {
+    if (this.deps.usage && (turnEntryId || (turnTokens && turnTokens.total > 0))) {
       this.deps.usage.record(
         recordRows({
           sessionId: live.id,
           acpSessionId: live.record.acpSessionId,
           agentId: live.record.agentId,
           project: live.record.projectPath,
-          turnEntryId,
+          turnEntryId: turnEntryId ?? `agent-${randomUUID()}`,
           at: now,
           tokens,
           models,
