@@ -817,15 +817,26 @@ describe('the fonts the user picks', () => {
   })
 
   it('keeps stored faces and drops a set that could break out of a font stack on load', async () => {
-    const fonts = { ui: 'Segoe UI', prose: 'Microsoft YaHei', code: 'Maple Mono NF CN' }
+    const fonts = {
+      ui: 'Segoe UI',
+      uiCjk: 'PingFang SC',
+      prose: 'Source Serif 4',
+      proseCjk: '思源宋体 CN',
+      code: 'Maple Mono NF CN',
+      codeCjk: 'LXGW WenKai',
+    }
     await save({ version: 1, appearance: { fonts } })
     expect((await SettingsStore.load(dir)).get().appearance.fonts).toEqual(fonts)
     for (const bad of [
       { code: 'A", evil' },
       { ui: '' },
+      { uiCjk: '' },
       { prose: "A'; x" },
+      { proseCjk: 'A", evil' },
       { code: 7 },
+      { codeCjk: 7 },
       { heading: 'Inter' },
+      { headingCjk: 'PingFang SC' },
       ['Inter'],
       'Inter',
       null,
@@ -836,17 +847,28 @@ describe('the fonts the user picks', () => {
   })
 
   it('takes a set of face names in a change and refuses the rest', () => {
-    expect(validateSettingsPatch({ appearance: { fonts: { code: 'Maple Mono NF CN' } } })).toEqual({
-      appearance: { fonts: { code: 'Maple Mono NF CN' } },
+    expect(
+      validateSettingsPatch({
+        appearance: { fonts: { code: 'Maple Mono NF CN', codeCjk: 'LXGW WenKai' } },
+      }),
+    ).toEqual({
+      appearance: { fonts: { code: 'Maple Mono NF CN', codeCjk: 'LXGW WenKai' } },
+    })
+    expect(validateSettingsPatch({ appearance: { fonts: { uiCjk: 'PingFang SC' } } })).toEqual({
+      appearance: { fonts: { uiCjk: 'PingFang SC' } },
     })
     expect(validateSettingsPatch({ appearance: { fonts: {} } })).toEqual({
       appearance: { fonts: {} },
     })
     for (const bad of [
       { code: 'A, B' },
+      { codeCjk: 'A, B' },
       { ui: 'url(x)' },
+      { uiCjk: 'url(x)' },
       { prose: null },
+      { proseCjk: null },
       { mono: 'Menlo' },
+      { monoCjk: 'PingFang SC' },
       null,
       'Menlo',
     ]) {
@@ -854,19 +876,25 @@ describe('the fonts the user picks', () => {
     }
   })
 
-  it('replaces the whole set in a change', () => {
+  it('replaces the whole set in a change and clears optional Chinese fonts independently', () => {
     const both = mergeSettings(DEFAULT_SETTINGS, {
+      appearance: { fonts: { ui: 'Segoe UI', uiCjk: 'PingFang SC', code: 'Menlo' } },
+    })
+    expect(both.appearance.fonts).toEqual({ ui: 'Segoe UI', uiCjk: 'PingFang SC', code: 'Menlo' })
+    const clearedCjk = mergeSettings(both, {
       appearance: { fonts: { ui: 'Segoe UI', code: 'Menlo' } },
     })
-    expect(both.appearance.fonts).toEqual({ ui: 'Segoe UI', code: 'Menlo' })
-    const one = mergeSettings(both, { appearance: { fonts: { code: 'Menlo' } } })
+    expect(clearedCjk.appearance.fonts).toEqual({ ui: 'Segoe UI', code: 'Menlo' })
+    const one = mergeSettings(clearedCjk, { appearance: { fonts: { code: 'Menlo' } } })
     expect(one.appearance.fonts).toEqual({ code: 'Menlo' })
   })
 
   it('stays with the window that draws them, never on the host', () => {
-    const { host, client } = splitSettingsPatch({ appearance: { fonts: { code: 'Menlo' } } })
+    const { host, client } = splitSettingsPatch({
+      appearance: { fonts: { code: 'Menlo', codeCjk: 'LXGW WenKai' } },
+    })
     expect(host).toBeNull()
-    expect(client).toEqual({ appearance: { fonts: { code: 'Menlo' } } })
+    expect(client).toEqual({ appearance: { fonts: { code: 'Menlo', codeCjk: 'LXGW WenKai' } } })
   })
 })
 

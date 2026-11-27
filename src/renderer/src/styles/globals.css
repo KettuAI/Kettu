@@ -488,13 +488,23 @@
     'Manrope Variable', 'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', system-ui, sans-serif;
 
+  /* Pure-Latin prefixes of the system faces, used only when a custom Chinese face is set while the
+     primary face stays at the theme default so `system-ui` does not intercept Chinese glyphs. */
+  --face-system-latin:
+    'SF Pro Text', 'Helvetica Neue', 'Segoe UI', 'Liberation Sans', 'DejaVu Sans';
+  --face-system-mono-latin:
+    'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono';
+
   --theme-ui-face: var(--face-inter);
+  --theme-ui-latin: 'Inter Variable';
   --theme-prose-face: var(--face-inter);
+  --theme-prose-latin: 'Inter Variable';
   --display-face: var(--ui-face);
   --greeting-face:
     'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
     serif;
   --theme-code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  --theme-code-latin: 'JetBrains Mono Variable', var(--face-system-mono-latin);
   /* A face the user picked in Settings comes first and the theme's fills in what it lacks. */
   --ui-face: var(--user-ui-face, var(--theme-ui-face));
   --prose-face: var(--user-prose-face, var(--theme-prose-face));
@@ -522,37 +532,46 @@
 }
 :root[data-font-ui='system'] {
   --theme-ui-face: var(--face-system);
+  --theme-ui-latin: var(--face-system-latin);
 }
 :root[data-font-ui='inter'] {
   --theme-ui-face: var(--face-inter);
+  --theme-ui-latin: 'Inter Variable';
 }
 :root[data-font-ui='source-serif-4'] {
   --theme-ui-face: var(--face-source-serif-4);
+  --theme-ui-latin: 'Source Serif 4 Variable';
 }
 :root[data-font-ui='jetbrains-mono'] {
   --theme-ui-face: var(--face-jetbrains-mono);
+  --theme-ui-latin: 'JetBrains Mono Variable';
 }
 :root[data-font-ui]:not([data-font-ui='inter']) {
   --ui-features: normal;
 }
 :root[data-font-prose='system'] {
   --theme-prose-face: var(--face-system);
+  --theme-prose-latin: var(--face-system-latin);
 }
 :root[data-font-prose='inter'] {
   --theme-prose-face: var(--face-inter);
+  --theme-prose-latin: 'Inter Variable';
 }
 :root[data-font-prose='source-serif-4'] {
   --theme-prose-face: var(--face-source-serif-4);
+  --theme-prose-latin: 'Source Serif 4 Variable';
   --prose-scale: 1.1;
 }
 :root[data-font-prose='jetbrains-mono'] {
   --theme-prose-face: var(--face-jetbrains-mono);
+  --theme-prose-latin: 'JetBrains Mono Variable';
 }
 :root[data-font-prose]:not([data-font-prose='inter']) {
   --prose-features: normal;
 }
 :root[data-font-code='system'] {
   --theme-code-face: var(--face-system-mono);
+  --theme-code-latin: var(--face-system-mono-latin);
 }
 :root[data-user-font-ui] {
   --ui-features: normal;

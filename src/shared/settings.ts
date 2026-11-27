@@ -222,8 +222,20 @@ export function readSidebarOrder(value: unknown): SidebarPage[] {
 
 export const USER_FONT_ROLES = ['ui', 'prose', 'code'] as const
 export type UserFontRole = (typeof USER_FONT_ROLES)[number]
-/** A face installed on the computer by role, each drawn before the theme's, which fills in. */
-export type UserFonts = Partial<Record<UserFontRole, string>>
+export type UserCjkFontKey = `${UserFontRole}Cjk`
+export const USER_FONT_KEYS = ['ui', 'prose', 'code', 'uiCjk', 'proseCjk', 'codeCjk'] as const
+export type UserFontKey = (typeof USER_FONT_KEYS)[number]
+
+/** The optional Chinese font key paired with a text role. */
+export function cjkFontKey(role: UserFontRole): UserCjkFontKey {
+  return `${role}Cjk`
+}
+
+/**
+ * Faces installed on the computer by role, each drawn before the theme's fallback. An optional
+ * `<role>Cjk` face follows the primary face for Chinese glyphs before falling back to the system.
+ */
+export type UserFonts = Partial<Record<UserFontKey, string>>
 
 /** One face name, safe to put in quotes in a CSS font stack: no quotes, separators or controls. */
 export function isFontFamilyName(value: string): boolean {

@@ -145,7 +145,8 @@ function watchOnce(): void {
     }
     if (
       state.settings.terminal.fontFamily !== previous.settings.terminal.fontFamily ||
-      state.settings.appearance.fonts.code !== previous.settings.appearance.fonts.code
+      state.settings.appearance.fonts.code !== previous.settings.appearance.fonts.code ||
+      state.settings.appearance.fonts.codeCjk !== previous.settings.appearance.fonts.codeCjk
     ) {
       syncFontFamily()
     }
