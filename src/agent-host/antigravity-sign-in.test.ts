@@ -187,6 +187,7 @@ async function manager(holds: boolean, { opensPage = false } = {}) {
     liveSessions: () => 0,
     agentExited: () => {},
     signedIn: (agentId) => signedIn.push(agentId),
+    accountChanged: () => {},
     optionsKnown: () => true,
     optionsSeen: () => {},
     configChanged: () => {},

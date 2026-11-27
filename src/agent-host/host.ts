@@ -4142,7 +4142,8 @@ export class AgentHost {
         agents.setAutoCompact(agentId, change, () => this.appServer(agentId)),
       'agents.codebuddySettings': ({ agentId }) => agents.codebuddySettings(agentId),
       'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
-      'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
+      'agents.refreshAccount': ({ agentId, force, afterSignIn }) =>
+        agents.refreshAccount(agentId, { force, afterSignIn }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'agents.pinModel': ({ agentId, model, pinned }) =>
         this.agentOptions.pin(agentId, model, pinned),

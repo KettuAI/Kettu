@@ -702,6 +702,21 @@ describe('createValidators', () => {
     })
   })
 
+  it('takes refreshAccount flags only as booleans', () => {
+    const refresh = posix['agents.refreshAccount']
+    expect(refresh({ agentId: 'antigravity' })).toEqual({ agentId: 'antigravity' })
+    expect(refresh({ agentId: 'antigravity', force: true, afterSignIn: true })).toEqual({
+      agentId: 'antigravity',
+      force: true,
+      afterSignIn: true,
+    })
+    rejects(() => refresh({ agentId: 'antigravity', afterSignIn: 'yes' }))
+    expect(refresh({ agentId: 'antigravity', afterSignIn: false, extra: 1 })).toEqual({
+      agentId: 'antigravity',
+      afterSignIn: false,
+    })
+  })
+
   it('takes a model to pin only with a model value and a pinned flag', () => {
     const pin = posix['agents.pinModel']
     expect(pin({ agentId: 'opencode', model: 'deepseek/deepseek-v4-pro', pinned: true })).toEqual({

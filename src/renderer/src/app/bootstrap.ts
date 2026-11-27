@@ -501,6 +501,7 @@ export function bootstrap(): Promise<unknown> {
     void hostAt(event.hostId, 'agents.refreshAccount', {
       agentId: event.agentId as AgentId,
       force: true,
+      afterSignIn: true,
     }).catch((error: unknown) =>
       console.warn(`Could not read the account after sign-in: ${errorMessage(error)}`),
     )
