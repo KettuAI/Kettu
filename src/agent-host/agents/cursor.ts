@@ -5,7 +5,9 @@ export const CURSOR: AgentDefinition = {
   name: 'Cursor',
   reportsAccount: true,
   registryId: 'cursor',
-  launch: { kind: 'binary', command: 'cursor-agent', args: ['acp'] },
+  // It reads a folder's own MCP servers and hooks only from its process's folder, the home folder,
+  // and the flag keeps them off even so (read in 2026.11.13's bundle; global options go first).
+  launch: { kind: 'binary', command: 'cursor-agent', args: ['--disable-project-configs', 'acp'] },
   install: {
     hint: 'detect.hint.cursor',
     url: 'https://cursor.com/docs/cli/acp',

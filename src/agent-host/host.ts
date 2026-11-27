@@ -248,6 +248,9 @@ import {
   codexUntrusted,
   folderServers,
   folderSettings,
+  grokTrusted,
+  projectRoots,
+  type FolderDeclared,
   type FolderServer,
 } from './project-settings'
 import { ProjectMcpAnswers } from './project-mcp'
@@ -1650,6 +1653,42 @@ export class AgentHost {
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
       folderDeclared: async (cwd, agentId) => {
+        // Grok loads a repository's own servers only where the user trusts it in Grok, by its
+        // root. Kettu never grants that trust, which Grok would keep for good, so it runs the ones
+        // the user allows, and none Grok starts itself in a repository the user trusted.
+        const grokDeclared = async (agent: AgentId, folder: string): Promise<FolderDeclared> => {
+          const root = (await projectRoots(folder, platform))[0] ?? folder
+          const store = path.join(
+            this.env.get('GROK_HOME', agent)?.trim() || path.join(home, '.grok'),
+            'trusted_folders.toml',
+          )
+          const [atRoot, here, trusted] = await Promise.all([
+            folderServers(root, platform),
+            root === folder ? Promise.resolve([]) : folderServers(folder, platform),
+            grokTrusted(store, folder, platform),
+          ])
+          const own = new Set(
+            harnessProjectMcpPaths('grok', root, platform).map((file) =>
+              path.relative(root, file.path),
+            ),
+          )
+          const selfRun = new Set(
+            trusted
+              ? atRoot
+                  .filter((server) => server.files.some((file) => own.has(file)))
+                  .map((server) => server.digest)
+              : [],
+          )
+          const seen = new Set(atRoot.map((server) => server.digest))
+          const servers = [...atRoot, ...here.filter((server) => !seen.has(server.digest))]
+          return {
+            servers: servers.filter((server) => !selfRun.has(server.digest)),
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+          }
+        }
         const codexUserUntrusted = (agent: AgentId, folder: string): Promise<boolean> => {
           const config = mcpConfigPaths(
             platform,
@@ -1662,6 +1701,7 @@ export class AgentHost {
           return config ? codexUntrusted(config.path, folder, platform) : Promise.resolve(false)
         }
         const harness = harnessOf(agentId)
+        if (harness === 'grok') return grokDeclared(agentId, cwd)
         // The other harnesses start what their own files declare, so Kettu running them too
         // would start them twice.
         if (!FOLDER_HELD_HARNESSES.has(harness)) {

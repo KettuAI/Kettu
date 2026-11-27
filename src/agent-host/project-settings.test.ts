@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { codexUntrusted, folderHandOff, folderServers, folderSettings } from './project-settings'
+import {
+  codexUntrusted,
+  folderHandOff,
+  folderServers,
+  folderSettings,
+  grokTrusted,
+} from './project-settings'
 
 let dir: string
 let repo: string
@@ -201,5 +207,22 @@ describe("the folders the user's own Codex keeps untrusted", () => {
     await write(dir, 'untrusted')
     expect(await codexUntrusted(config, inner)).toBe(false)
     expect(await codexUntrusted(path.join(dir, 'missing.toml'), inner)).toBe(false)
+  })
+})
+
+describe("the repositories the user's own Grok trusts", () => {
+  it('finds a trusted repository root for any folder in it, and nothing untrusted', async () => {
+    const inner = path.join(repo, 'packages', 'app')
+    await mkdir(inner, { recursive: true })
+    const store = path.join(dir, 'trusted_folders.toml')
+    const write = (folder: string, trusted: boolean) =>
+      writeFile(store, `[folders."${folder}"]\ntrusted = ${trusted}\ndecided_at = 1\n`)
+    await write(repo, true)
+    expect(await grokTrusted(store, inner)).toBe(true)
+    await write(repo, false)
+    expect(await grokTrusted(store, inner)).toBe(false)
+    await write(dir, true)
+    expect(await grokTrusted(store, inner)).toBe(false)
+    expect(await grokTrusted(path.join(dir, 'none.toml'), inner)).toBe(false)
   })
 })

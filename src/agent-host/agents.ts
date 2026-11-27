@@ -283,7 +283,11 @@ export interface AgentLauncher {
   launch(def: AgentDefinition, spec: LaunchSpec, env: Env, output: LaunchOutput): LaunchedAgent
 }
 
-/** Spawns real processes, in the home directory; each session's folder travels as `cwd`. */
+/**
+ * Spawns real processes, in the home directory; each session's folder travels as `cwd`. Codebuddy
+ * Code and Cursor read a folder's own settings, hooks and MCP servers from their process's folder,
+ * so it must never be a session's.
+ */
 export function processLauncher(platform: Platform, timings?: StopTimings): AgentLauncher {
   return {
     launch: (_def, spec, env, output) =>

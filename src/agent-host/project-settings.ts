@@ -187,6 +187,36 @@ export async function codexUntrusted(
   return false
 }
 
+/**
+ * Whether the user's own Grok trusts the repository `cwd` is in, by its trust store: Grok keeps a
+ * folder's trust by its repository's root and then loads the folder's MCP servers itself.
+ */
+export async function grokTrusted(
+  storeFile: string,
+  cwd: string,
+  platform: Platform = process.platform as Platform,
+): Promise<boolean> {
+  const text = await readText(storeFile)
+  if (text === null) return false
+  let folders: unknown
+  try {
+    folders = (parseToml(text) as Record<string, unknown>).folders
+  } catch {
+    return false
+  }
+  if (!isRecord(folders)) return false
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const trusted = new Set<string>()
+  for (const [folder, entry] of Object.entries(folders)) {
+    if (isRecord(entry) && entry.trusted === true) trusted.add(p.resolve(folder))
+  }
+  for (const folder of await projectRoots(cwd, platform)) {
+    const real = await realpath(folder).catch(() => folder)
+    if (trusted.has(folder) || trusted.has(real)) return true
+  }
+  return false
+}
+
 async function exists(file: string): Promise<boolean> {
   return lstat(file).then(
     () => true,
