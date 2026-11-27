@@ -385,11 +385,28 @@ export class PushSender {
   }
 }
 
-/** The event without the answers a notification offers, which need its details to be seen. */
+/** The event without details/answers that require showing content on the Lock Screen. */
 export function withoutActions(event: PushEvent): PushEvent {
-  if (event.kind !== 'permission' || !event.actions) return event
-  const { kind, sessionId, requestId } = event
-  return { kind, sessionId, ...(requestId === undefined ? {} : { requestId }) }
+  switch (event.kind) {
+    case 'permission': {
+      const { kind, sessionId, requestId, actionKind } = event
+      return {
+        kind,
+        sessionId,
+        ...(requestId === undefined ? {} : { requestId }),
+        // 仅保留提问类别标记以在隐私模式区分「等待审批」与「Agent 提问」，不暴露任何内容。
+        ...(actionKind === 'question' ? { actionKind } : {}),
+      }
+    }
+    case 'turn-ended':
+      return { kind: 'turn-ended', sessionId: event.sessionId }
+    case 'error':
+      return { kind: 'error', sessionId: event.sessionId }
+    case 'routine-ended':
+      return { kind: 'routine-ended', sessionId: event.sessionId }
+    default:
+      return event
+  }
 }
 
 /** The token a push goes to: the device's, or its Live Activity's; null when it has none. */

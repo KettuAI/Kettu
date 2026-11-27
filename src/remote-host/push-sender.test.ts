@@ -346,4 +346,62 @@ describe('sending a push', () => {
     expect(hidden).not.toHaveProperty('quickOptions')
     expect(hidden).not.toHaveProperty('actionKind')
   })
+
+  it('透传普通锁屏通知元数据（agentId / changedFiles / quickOptions）并在隐藏详情时安全脱敏', async () => {
+    const quickOptions = {
+      target: 'question' as const,
+      total: 2,
+      questionCount: 1,
+      multiSelect: false,
+      items: [
+        { id: '0', label: '仅导出 JSON', style: 'recommended' as const },
+        { id: '1', label: 'CSV + JSON', style: 'normal' as const },
+      ],
+    }
+    const t = await setup([200])
+    t.sender.send({
+      deviceId: 'phone',
+      subject: 's-meta',
+      type: 'alert',
+      title: '导出格式确认',
+      body: '需要同时导出 CSV 吗？',
+      event: {
+        kind: 'permission',
+        sessionId: 's-meta',
+        agentId: 'codex',
+        requestId: 'req-meta',
+        actionKind: 'question',
+        quickOptions,
+      },
+    })
+    await t.finished
+    const shown = await opened(t, t.requests[0]!.body)
+    expect(shown).toMatchObject({
+      kind: 'permission',
+      agentId: 'codex',
+      actionKind: 'question',
+      quickOptions,
+    })
+
+    const tPrivate = await setup([200], { choices: { ...DEFAULT_CHOICES, details: false } })
+    tPrivate.sender.send({
+      deviceId: 'phone',
+      subject: 's-meta',
+      type: 'alert',
+      title: '机密标题',
+      body: '机密正文',
+      event: {
+        kind: 'turn-ended',
+        sessionId: 's-meta',
+        agentId: 'claude-code',
+        changedFiles: 4,
+      },
+    })
+    await tPrivate.finished
+    const redacted = await opened(tPrivate, tPrivate.requests[0]!.body)
+    expect(redacted).toMatchObject({ kind: 'turn-ended', sessionId: 's-meta' })
+    expect(redacted).not.toHaveProperty('title')
+    expect(redacted).not.toHaveProperty('agentId')
+    expect(redacted).not.toHaveProperty('changedFiles')
+  })
 })

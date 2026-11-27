@@ -70,6 +70,7 @@ const KINDS: readonly string[] = [
   'error',
   'routine-ended',
   'routine-paused',
+  'plan-limit',
 ] satisfies AttentionKind[]
 
 const MAX_TEXT = 4000
@@ -129,7 +130,8 @@ function parseQuickOptions(value: unknown): LiveQuickOptions | null {
  */
 export function parseAttention(value: unknown): Attention | null {
   if (typeof value !== 'object' || value === null) return null
-  const { kind, sessionId, agentId, title, body, request, front } = value as Record<string, unknown>
+  const { kind, sessionId, agentId, changedFiles, level, key, title, body, request, front } =
+    value as Record<string, unknown>
   if (typeof kind !== 'string' || !KINDS.includes(kind)) return null
   if (typeof title !== 'string' || typeof body !== 'string') return null
   if (title.length > MAX_TEXT || body.length > MAX_TEXT) return null
@@ -140,12 +142,26 @@ export function parseAttention(value: unknown): Attention | null {
     inFront: false,
     devices: [],
   }
-  if (kind === 'routine-paused') {
+  if (kind === 'routine-paused' || kind === 'plan-limit') {
     if (!isId(agentId)) return null
     attention.agentId = agentId
+    if (kind === 'plan-limit') {
+      if (isId(key)) attention.limitKey = key
+      if (level === 'near') attention.limitLevel = 'warning'
+      else if (level === 'reached' || level === 'reset') attention.limitLevel = level
+    }
   } else {
     if (!isId(sessionId)) return null
     attention.sessionId = sessionId
+    if (isId(agentId)) attention.agentId = agentId
+    if (
+      typeof changedFiles === 'number' &&
+      Number.isInteger(changedFiles) &&
+      changedFiles > 0 &&
+      changedFiles <= 10_000
+    ) {
+      attention.changedFiles = changedFiles
+    }
   }
   if (kind === 'permission' && typeof request === 'object' && request !== null) {
     const { id, allow, deny, actionKind, quickOptions } = request as Record<string, unknown>

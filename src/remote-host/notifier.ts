@@ -69,21 +69,26 @@ export type LiveActivityPayload =
     }
 
 export type AttentionKind =
-  'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
+  'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused' | 'plan-limit'
 
 /** What the agent host says needs the user, as the remote host hears it from its parent. */
 export interface Attention {
   kind: AttentionKind
-  /** Every kind but `routine-paused`, which names its agent instead. */
+  /** Every kind except `routine-paused` and `plan-limit`, which name their agent instead. */
   sessionId?: string
   agentId?: string
+  /** 回合完成时改动的文件数量，供移动端锁屏通知副标题呈现。 */
+  changedFiles?: number
+  /** 套餐额度通知的告警级别与去重键。 */
+  limitLevel?: 'warning' | 'reached' | 'reset'
+  limitKey?: string
   title: string
   body: string
   /** The request that waits, which the waiting list names until it is answered or withdrawn. */
   requestId?: string
   /** The one-time answers a notification may offer, when the request fits in one. */
   actions?: PushActions
-  /** 移动端实时活动的请求语义分类与 2–3 项快捷选项。 */
+  /** 移动端实时活动与锁屏通知的请求语义分类与 2–3 项快捷选项。 */
   actionKind?: 'execute' | 'edit' | 'review' | 'question'
   quickOptions?: LiveQuickOptions
   /** The session was in front of a window or a device when this happened. */
@@ -162,8 +167,11 @@ interface Activity {
 /** Whether a push reaches the device: through APNs or Web Push. */
 const reachable = (push: DevicePush): boolean => push.target !== null || push.web !== undefined
 
-const subjectOf = (attention: Attention): string =>
-  attention.kind === 'routine-paused' ? `routines:${attention.agentId}` : attention.sessionId!
+const subjectOf = (attention: Attention): string => {
+  if (attention.kind === 'routine-paused') return `routines:${attention.agentId}`
+  if (attention.kind === 'plan-limit') return `limit:${attention.limitKey ?? attention.agentId}`
+  return attention.sessionId!
+}
 
 function wants(choices: NotificationChoices, kind: AttentionKind): boolean {
   switch (kind) {
@@ -176,6 +184,8 @@ function wants(choices: NotificationChoices, kind: AttentionKind): boolean {
     case 'routine-ended':
     case 'routine-paused':
       return choices.routines
+    case 'plan-limit':
+      return choices.planLimits === true
   }
 }
 
@@ -185,13 +195,39 @@ function pushEvent(attention: Attention): PushEvent {
       return {
         kind: 'permission',
         sessionId: attention.sessionId!,
+        ...(attention.agentId ? { agentId: attention.agentId } : {}),
         ...(attention.requestId ? { requestId: attention.requestId } : {}),
         ...(attention.actions ? { actions: attention.actions } : {}),
+        ...(attention.actionKind ? { actionKind: attention.actionKind } : {}),
+        ...(attention.quickOptions ? { quickOptions: attention.quickOptions } : {}),
+      }
+    case 'turn-ended':
+      return {
+        kind: 'turn-ended',
+        sessionId: attention.sessionId!,
+        ...(attention.agentId ? { agentId: attention.agentId } : {}),
+        ...(attention.changedFiles ? { changedFiles: attention.changedFiles } : {}),
+      }
+    case 'error':
+      return {
+        kind: 'error',
+        sessionId: attention.sessionId!,
+        ...(attention.agentId ? { agentId: attention.agentId } : {}),
+      }
+    case 'routine-ended':
+      return {
+        kind: 'routine-ended',
+        sessionId: attention.sessionId!,
+        ...(attention.agentId ? { agentId: attention.agentId } : {}),
       }
     case 'routine-paused':
       return { kind: 'routine-paused', agentId: attention.agentId! }
-    default:
-      return { kind: attention.kind, sessionId: attention.sessionId! }
+    case 'plan-limit':
+      return {
+        kind: 'plan-limit',
+        agentId: attention.agentId!,
+        ...(attention.limitLevel ? { limitLevel: attention.limitLevel } : {}),
+      }
   }
 }
 
@@ -222,11 +258,12 @@ export class Notifier {
 
   /** Something needs the user. */
   attention(attention: Attention): void {
-    if (attention.kind === 'routine-paused' ? !attention.agentId : !attention.sessionId) return
+    const agentScoped = attention.kind === 'routine-paused' || attention.kind === 'plan-limit'
+    if (agentScoped ? !attention.agentId : !attention.sessionId) return
     // A turn that ended in front of someone was seen there.
     if (attention.kind === 'turn-ended' && attention.inFront) return
     const subject = subjectOf(attention)
-    if (attention.kind !== 'routine-paused') this.open.set(subject, attention)
+    if (!agentScoped) this.open.set(subject, attention)
     if (attention.kind === 'permission') {
       this.order = [...this.order.filter((id) => id !== subject), subject]
     }
@@ -410,7 +447,7 @@ export class Notifier {
 
   /** Whether the attention still needs the user: its request waits, or its turn was not seen. */
   private applies(subject: string, attention: Attention): boolean {
-    if (attention.kind === 'routine-paused') return true
+    if (attention.kind === 'routine-paused' || attention.kind === 'plan-limit') return true
     if (attention.kind === 'permission') return this.stillWaiting(attention)
     return this.open.get(subject) === attention
   }

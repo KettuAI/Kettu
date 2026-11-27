@@ -396,6 +396,10 @@ export type HostToMain =
       type: 'host:attention'
       sessionId: string
       kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'
+      /** 触发通知的智能体标识，供移动端通知副标题展示。 */
+      agentId?: AgentId
+      /** 回合完成时改动的文件总数，供移动端通知副标题精炼呈现。 */
+      changedFiles?: number
       title: string
       body: string
       // A request the notification may allow once itself, without opening the session.
