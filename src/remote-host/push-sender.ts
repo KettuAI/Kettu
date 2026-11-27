@@ -265,14 +265,96 @@ export class PushSender {
         return sealed ? { type: 'background', sealed } : null
       }
       case 'activity': {
-        const state: PushContent = {
-          ...base,
-          ...(details && job.title ? { title: clip(job.title, MAX_PUSH_TITLE) } : {}),
-          kind: 'waiting',
-          count: job.count,
-          ...(job.sessionId ? { sessionId: job.sessionId } : {}),
+        const buildState = (compact: boolean): PushContent => {
+          const p = job.payload
+          if (!p) {
+            return {
+              ...base,
+              ...(details && job.title ? { title: clip(job.title, MAX_PUSH_TITLE) } : {}),
+              kind: 'waiting',
+              count: job.count,
+              ...(job.sessionId ? { sessionId: job.sessionId } : {}),
+            }
+          }
+          switch (p.kind) {
+            case 'waiting':
+              return {
+                ...base,
+                kind: 'waiting',
+                count: p.count,
+                ...(details && p.sessionId ? { sessionId: p.sessionId } : {}),
+                ...(details && p.title ? { title: clip(p.title, MAX_PUSH_TITLE) } : {}),
+                ...(details && !compact && p.body
+                  ? { body: clip(p.body, MAX_PUSH_BODY_TEXT) }
+                  : {}),
+                ...(details && p.agentId ? { agentId: p.agentId } : {}),
+                ...(details && !compact && p.requestId ? { requestId: p.requestId } : {}),
+                ...(details && !compact && p.actions ? { actions: p.actions } : {}),
+                ...(details && p.since !== undefined ? { since: p.since } : {}),
+                ...(details && !compact && p.actionKind ? { actionKind: p.actionKind } : {}),
+              }
+            case 'running':
+              return {
+                ...base,
+                kind: 'running',
+                sessionId: p.sessionId,
+                ...(details && p.title ? { title: clip(p.title, MAX_PUSH_TITLE) } : {}),
+                ...(details && !compact && p.body
+                  ? { body: clip(p.body, MAX_PUSH_BODY_TEXT) }
+                  : {}),
+                ...(details && p.agentId ? { agentId: p.agentId } : {}),
+                ...(p.turnStartedAt !== undefined ? { turnStartedAt: p.turnStartedAt } : {}),
+                ...(details && p.plan
+                  ? {
+                      plan: compact
+                        ? { done: p.plan.done, total: p.plan.total }
+                        : {
+                            done: p.plan.done,
+                            total: p.plan.total,
+                            ...(p.plan.current ? { current: clip(p.plan.current, 120) } : {}),
+                          },
+                    }
+                  : {}),
+                ...(details && !compact && p.project ? { project: clip(p.project, 80) } : {}),
+              }
+            case 'error':
+              return {
+                ...base,
+                kind: 'error',
+                sessionId: p.sessionId,
+                ...(details && p.title ? { title: clip(p.title, MAX_PUSH_TITLE) } : {}),
+                ...(details && !compact && p.body
+                  ? { body: clip(p.body, MAX_PUSH_BODY_TEXT) }
+                  : {}),
+                ...(details && p.agentId ? { agentId: p.agentId } : {}),
+                ...(details && !compact && p.project ? { project: clip(p.project, 80) } : {}),
+              }
+            case 'turn-ended':
+              return {
+                ...base,
+                kind: 'turn-ended',
+                sessionId: p.sessionId,
+                ...(details && p.title ? { title: clip(p.title, MAX_PUSH_TITLE) } : {}),
+                ...(details && !compact && p.body
+                  ? { body: clip(p.body, MAX_PUSH_BODY_TEXT) }
+                  : {}),
+                ...(details && p.agentId ? { agentId: p.agentId } : {}),
+                ...(details && !compact && p.project ? { project: clip(p.project, 80) } : {}),
+              }
+            case 'limit':
+              return {
+                ...base,
+                kind: 'limit',
+                agentId: p.agentId,
+                ...(p.label ? { label: clip(p.label, 40) } : {}),
+                ...(details && p.planLabel ? { planLabel: clip(p.planLabel, 60) } : {}),
+                ...(p.resetsAt !== undefined ? { resetsAt: p.resetsAt } : {}),
+                ...(p.pausedSessions ? { pausedSessions: p.pausedSessions } : {}),
+              }
+          }
         }
-        const sealed = await seal(state)
+        // 先封装完整状态；若密文超限自动降级裁剪次要文本，保证实时活动必达。
+        const sealed = (await seal(buildState(false))) ?? (await seal(buildState(true)))
         if (!sealed) return null
         if (job.action !== 'start') return { type: 'liveactivity', event: job.action, sealed }
         const attributes = await seal({ ...base, kind: 'activity' })

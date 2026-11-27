@@ -238,6 +238,8 @@ export class RemoteHost {
   private paired: PairedDevice[] = []
   /** What waits for the user and whether they are at the computer, for each process to start with. */
   private waiting: Record<string, string[]> = {}
+  private liveActivity:
+    Extract<MainToRemoteHost, { type: 'remote-host:live-activity' }>['activity'] | null = null
   private present: boolean | null = null
 
   constructor(private readonly deps: RemoteHostDeps) {}
@@ -542,6 +544,14 @@ export class RemoteHost {
   setWaiting(sessions: Record<string, string[]>): void {
     this.waiting = sessions
     this.host?.post({ type: 'remote-host:waiting', sessions })
+  }
+
+  /** 主机实时会话、错误、完成与限额快照，转发给 remote-host 驱动移动端灵动岛。 */
+  setLiveActivity(
+    activity: Extract<MainToRemoteHost, { type: 'remote-host:live-activity' }>['activity'],
+  ): void {
+    this.liveActivity = activity
+    this.host?.post({ type: 'remote-host:live-activity', activity })
   }
 
   /** A session was seen, which withdraws its turn's notifications. */
@@ -920,6 +930,7 @@ export class RemoteHost {
       relay: this.initRelay(identity !== null),
       push: this.deps.pushUrl,
       waiting: this.waiting,
+      ...(this.liveActivity ? { liveActivity: this.liveActivity } : {}),
       ...(this.present === null ? {} : { present: this.present }),
       discoverable: this.initDiscoverable(),
       account: this.initAccount(),

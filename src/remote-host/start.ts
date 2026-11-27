@@ -6,6 +6,7 @@
 import path from 'node:path'
 import type {
   AdminAnswer,
+  HostActivitySnapshot,
   MainToRemoteHost,
   OwnRelayInit,
   OwnRelayStatus,
@@ -56,7 +57,12 @@ import { DiscoveryRequests } from './discovery'
 import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
-import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
+import {
+  DeviceNotifications,
+  parseAttention,
+  parseHostActivity,
+  parseWaiting,
+} from './notifications'
 import { webPushStoreKey } from './web-push'
 import { PairingCodes } from './pairing'
 import { jsonOf, openRelaySocket, readRelayInfo, relayRequest } from './relay-net'
@@ -196,6 +202,7 @@ export function startRemoteHost(
   // a server starting later begins with.
   let pushUrl = PUSH_URL
   let waiting: Record<string, string[]> = {}
+  let liveActivity: HostActivitySnapshot | null = null
   let present: boolean | null = null
   // Whether devices of the account find this host on the relay, while it is signed in to it.
   let discoverable = false
@@ -339,6 +346,7 @@ export function startRemoteHost(
           })
         : null
     notifications?.setWaiting(waiting)
+    if (liveActivity) notifications?.setActivity(liveActivity)
     if (present !== null) notifications?.setPresent(present)
     const relay = new RelaySwitch(() => {
       if (!relayKey || !relayId) return null
@@ -601,6 +609,7 @@ export function startRemoteHost(
     terminal = message.terminal === true
     if (typeof message.push === 'string') pushUrl = message.push
     waiting = parseWaiting(message.waiting) ?? {}
+    liveActivity = parseHostActivity(message.liveActivity)
     if (typeof message.present === 'boolean') present = message.present
     discoverable = message.discoverable === true
     account = isAccountId(message.account) ? message.account : null
@@ -936,6 +945,13 @@ export function startRemoteHost(
         if (!sessions) break
         waiting = sessions
         withServing(({ notifications }) => notifications?.setWaiting(sessions))
+        break
+      }
+      case 'remote-host:live-activity': {
+        const parsed = parseHostActivity(message.activity)
+        if (!parsed) break
+        liveActivity = parsed
+        withServing(({ notifications }) => notifications?.setActivity(parsed))
         break
       }
       case 'remote-host:seen':

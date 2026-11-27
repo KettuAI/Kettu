@@ -4,6 +4,13 @@
 // its Ed25519 key has them, since every push is signed.
 
 import { t } from '@shared/hosts-text'
+import type {
+  HostActivityLimit,
+  HostActivityRecent,
+  HostActivityRunning,
+  HostActivitySnapshot,
+  HostActivityWaitingMeta,
+} from '@shared/host-control'
 import { addLogSecret } from '@shared/log/process-log'
 import type { PairedDevice } from '@shared/remote/device'
 import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
@@ -131,6 +138,119 @@ export function parseWaiting(value: unknown): Record<string, string[]> | null {
     waiting[sessionId] = ids
   }
   return waiting
+}
+
+/** 校验并解析父进程转发的主机实时活动快照，防御跨进程非法字段。 */
+export function parseHostActivity(value: unknown): HostActivitySnapshot | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (!Array.isArray(raw.running) || !Array.isArray(raw.error) || !Array.isArray(raw.ended)) {
+    return null
+  }
+  const running: HostActivityRunning[] = []
+  for (const item of raw.running.slice(0, 20)) {
+    if (typeof item !== 'object' || item === null) continue
+    const r = item as Record<string, unknown>
+    if (
+      !isId(r.sessionId) ||
+      !isId(r.agentId) ||
+      typeof r.title !== 'string' ||
+      typeof r.turnStartedAt !== 'number'
+    ) {
+      continue
+    }
+    const planRaw =
+      typeof r.plan === 'object' && r.plan !== null ? (r.plan as Record<string, unknown>) : null
+    const plan =
+      planRaw &&
+      typeof planRaw.done === 'number' &&
+      typeof planRaw.total === 'number' &&
+      planRaw.total > 0
+        ? {
+            done: planRaw.done,
+            total: planRaw.total,
+            ...(typeof planRaw.current === 'string' && planRaw.current
+              ? { current: planRaw.current.slice(0, 200) }
+              : {}),
+          }
+        : undefined
+    running.push({
+      sessionId: r.sessionId,
+      agentId: r.agentId,
+      title: r.title.slice(0, 200),
+      turnStartedAt: r.turnStartedAt,
+      ...(typeof r.project === 'string' && r.project ? { project: r.project.slice(0, 120) } : {}),
+      ...(typeof r.body === 'string' && r.body ? { body: r.body.slice(0, 300) } : {}),
+      ...(plan ? { plan } : {}),
+      ...(typeof r.parentId === 'string' || r.parentId === null ? { parentId: r.parentId } : {}),
+    })
+  }
+  const parseRecent = (arr: unknown[]): HostActivityRecent[] => {
+    const out: HostActivityRecent[] = []
+    for (const item of arr.slice(0, 10)) {
+      if (typeof item !== 'object' || item === null) continue
+      const r = item as Record<string, unknown>
+      if (
+        !isId(r.sessionId) ||
+        !isId(r.agentId) ||
+        typeof r.title !== 'string' ||
+        typeof r.endedAt !== 'number'
+      ) {
+        continue
+      }
+      out.push({
+        sessionId: r.sessionId,
+        agentId: r.agentId,
+        title: r.title.slice(0, 200),
+        endedAt: r.endedAt,
+        ...(typeof r.body === 'string' && r.body ? { body: r.body.slice(0, 300) } : {}),
+        ...(typeof r.project === 'string' && r.project ? { project: r.project.slice(0, 120) } : {}),
+      })
+    }
+    return out
+  }
+  let limit: HostActivityLimit | null = null
+  if (typeof raw.limit === 'object' && raw.limit !== null) {
+    const l = raw.limit as Record<string, unknown>
+    if (isId(l.agentId) && typeof l.label === 'string' && l.label) {
+      limit = {
+        agentId: l.agentId,
+        label: l.label.slice(0, 60),
+        ...(typeof l.planLabel === 'string' && l.planLabel
+          ? { planLabel: l.planLabel.slice(0, 80) }
+          : {}),
+        ...(typeof l.resetsAt === 'number' ? { resetsAt: l.resetsAt } : {}),
+        ...(typeof l.pausedSessions === 'number' && l.pausedSessions > 0
+          ? { pausedSessions: l.pausedSessions }
+          : {}),
+      }
+    }
+  }
+  const waitingMeta: Record<string, HostActivityWaitingMeta> = {}
+  if (
+    typeof raw.waitingMeta === 'object' &&
+    raw.waitingMeta !== null &&
+    !Array.isArray(raw.waitingMeta)
+  ) {
+    for (const [sid, val] of Object.entries(raw.waitingMeta as Record<string, unknown>)) {
+      if (!isId(sid) || typeof val !== 'object' || val === null) continue
+      const m = val as Record<string, unknown>
+      if (!isId(m.agentId) || typeof m.title !== 'string' || typeof m.since !== 'number') continue
+      waitingMeta[sid] = {
+        agentId: m.agentId,
+        title: m.title.slice(0, 200),
+        since: m.since,
+        ...(typeof m.project === 'string' && m.project ? { project: m.project.slice(0, 120) } : {}),
+      }
+    }
+  }
+  return {
+    running,
+    error: parseRecent(raw.error),
+    ended: parseRecent(raw.ended),
+    limit,
+    waitingMeta,
+  }
 }
 
 export class DeviceNotifications {
@@ -268,6 +388,10 @@ export class DeviceNotifications {
 
   setWaiting(sessions: Record<string, string[]>): void {
     this.notifier.setWaiting(sessions)
+  }
+
+  setActivity(activity: HostActivitySnapshot): void {
+    this.notifier.setActivity(activity)
   }
 
   seen(sessionId: string): void {

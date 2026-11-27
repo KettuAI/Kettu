@@ -141,4 +141,74 @@ describe('sending a push', () => {
     await expect.poll(() => t2.logs.length).toBe(1)
     expect(t2.logs).toEqual(['warn: Gave up a notification for device phone after 3 tries: apns'])
   })
+
+  it('封装运行中实时活动并在关闭详情时自动脱敏', async () => {
+    const startToken = 'b2'.repeat(32)
+    const t = await setup([200], {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { start: startToken },
+      },
+    })
+    t.sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 0,
+      sessionId: 's1',
+      title: 'Fix the login form',
+      payload: {
+        kind: 'running',
+        sessionId: 's1',
+        agentId: 'claude-code',
+        title: 'Fix the login form',
+        turnStartedAt: 1_762_560_000_000,
+        project: 'Kettu',
+        plan: { done: 2, total: 5, current: 'Run tests' },
+      },
+    })
+    await t.finished
+    const content = await opened(t, t.requests[0]!.body)
+    expect(content).toMatchObject({
+      kind: 'running',
+      sessionId: 's1',
+      agentId: 'claude-code',
+      title: 'Fix the login form',
+      project: 'Kettu',
+      plan: { done: 2, total: 5, current: 'Run tests' },
+    })
+
+    const tPrivate = await setup([200], {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { start: startToken },
+      },
+      choices: { ...DEFAULT_CHOICES, details: false },
+    })
+    tPrivate.sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 0,
+      sessionId: 's1',
+      title: 'Secret title',
+      payload: {
+        kind: 'running',
+        sessionId: 's1',
+        agentId: 'claude-code',
+        title: 'Secret title',
+        turnStartedAt: 1_762_560_000_000,
+        project: 'secret-repo',
+        plan: { done: 2, total: 5, current: 'Secret step' },
+      },
+    })
+    await tPrivate.finished
+    const hidden = await opened(tPrivate, tPrivate.requests[0]!.body)
+    expect(hidden).not.toHaveProperty('title')
+    expect(hidden).not.toHaveProperty('project')
+    expect(hidden).not.toHaveProperty('plan')
+    expect(hidden).toMatchObject({ kind: 'running', sessionId: 's1' })
+  })
 })

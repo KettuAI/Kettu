@@ -221,6 +221,8 @@ export class Hosts {
   private readonly attentionListeners = new Set<(message: Attention) => void>()
   /** What waits for the user by session, which each remote host process starts with. */
   private waiting: Record<string, string[]> = {}
+  private liveActivity: Extract<HostToMain, { type: 'host:live-activity' }>['activity'] | null =
+    null
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
@@ -393,6 +395,7 @@ export class Hosts {
         relay: this.initRelay(),
         push: options.pushUrl,
         waiting: this.waiting,
+        ...(this.liveActivity ? { liveActivity: this.liveActivity } : {}),
         account: this.sentAccount(),
         discoverable: this.initDiscoverable(),
       }),
@@ -1276,6 +1279,12 @@ export class Hosts {
         if (typeof message.sessions === 'object' && message.sessions !== null) {
           this.waiting = message.sessions
           this.remote.post({ type: 'remote-host:waiting', sessions: message.sessions })
+        }
+        break
+      case 'host:live-activity':
+        if (typeof message.activity === 'object' && message.activity !== null) {
+          this.liveActivity = message.activity
+          this.remote.post({ type: 'remote-host:live-activity', activity: message.activity })
         }
         break
       case 'host:seen':
