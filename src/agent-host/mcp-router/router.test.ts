@@ -429,6 +429,43 @@ describe('a remote Streamable HTTP server', () => {
   })
 })
 
+describe('a remote server that needs sign-in', () => {
+  it('answers the agent with an error that says to sign in in Kettu, never an HTTP 401', async () => {
+    const remote = await streamableServer('fresh')
+    const notes: MarketServer = {
+      id: 'com.example/notes',
+      name: 'notes',
+      title: 'Notes',
+      source: 'registry',
+      version: '1.0.0',
+      spec: {
+        type: 'http',
+        transport: 'streamable-http',
+        url: remote.url,
+        headers: [],
+        oauth: { flow: 'browser' },
+      },
+      agents: 'all',
+      on: true,
+    }
+    const { access } = await setup([notes])
+    const answer = await fetch(`${access.origin}${serverPath(notes.id)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INIT }),
+    })
+    expect(answer.status).not.toBe(401)
+    expect(await answer.text()).toContain(
+      "notes needs sign-in; sign in to it in Kettu's Marketplace",
+    )
+    expect(remote.seen).toHaveLength(0)
+  })
+})
+
 describe('routingHeaders', () => {
   it("names a stateless request's method and target, and nothing for a legacy one", () => {
     const modern = new Headers()

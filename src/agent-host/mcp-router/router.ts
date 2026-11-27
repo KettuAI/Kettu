@@ -532,20 +532,20 @@ export class McpRouter {
       let token: string | null = null
       if (oauth) {
         token = await this.deps.token(server.id)
-        if (token === null) throw new Error(`${server.name} needs connecting again in Kettu`)
+        if (token === null) throw new Error(signInNeeded(server.name))
         headers.set('Authorization', `Bearer ${token}`)
       }
       let answer = await base(url, { ...init, headers })
       if (answer.status !== 401 || token === null) return answer
       void answer.body?.cancel()
       const renewed = await this.deps.refused(server.id, token)
-      if (renewed === null) throw new Error(`${server.name} needs connecting again in Kettu`)
+      if (renewed === null) throw new Error(signInNeeded(server.name))
       headers.set('Authorization', `Bearer ${renewed}`)
       answer = await base(url, { ...init, headers })
       if (answer.status === 401) {
         void answer.body?.cancel()
         await this.deps.refused(server.id, renewed)
-        throw new Error(`${server.name} needs connecting again in Kettu`)
+        throw new Error(signInNeeded(server.name))
       }
       return answer
     }
@@ -767,6 +767,14 @@ export class McpRouter {
     }
     return counts
   }
+}
+
+/**
+ * What an agent hears from a server whose sign-in Kettu does not hold: an error that says where to
+ * fix it, rather than an HTTP 401 that would send its own client to sign in at Kettu's address.
+ */
+function signInNeeded(name: string): string {
+  return `${name} needs sign-in; sign in to it in Kettu's Marketplace`
 }
 
 /** Whether a caller is, or takes in, the session. */
