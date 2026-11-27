@@ -1421,7 +1421,42 @@
       "copy": "复制",
       "copied": "已复制日志",
       "emptyLog": "这个进程还没有输出。",
-      "logsMasked": "日志进问题报告时会遮住密钥。"
+      "logsMasked": "日志进问题报告时会遮住密钥。",
+      "held": "扣下的",
+      "heldLock": "接受过以后变了，接受变化以后才交给智能体",
+      "change": {
+        "added": "新的",
+        "changed": "变了"
+      },
+      "heldDot": "有扣下的工具变化",
+      "heldBanner": "{{count}} 个工具在 {{date}} 变了，接受之前不交给智能体",
+      "noteBanner": "{{count}} 个工具在 {{date}} 变了。来源可信，只提示，智能体照常能用。",
+      "byAgentBanner": "{{count}} 个工具在 {{date}} 变了。这个服务器由各个智能体自己跑，Kettu 拦不住。",
+      "reviewChanges": "查看变化"
+    },
+    "heldTag": "{{count}} 个工具有变化，已扣下",
+    "changedTag": "{{count}} 个工具有变化",
+    "review": "查看",
+    "changes": {
+      "title": "{{name}} 的工具变化",
+      "descriptionHold": "勾上的接受以后交给智能体，没勾的照旧扣下。",
+      "descriptionNote": "接受以后不再提示；不管接不接受，智能体都照常能用这些工具。",
+      "loading": "正在读取变化…",
+      "none": "已经没有要接受的变化了。",
+      "kind": {
+        "added": "新的",
+        "changed": "变了",
+        "removed": "没了"
+      },
+      "removedNote": "服务器上已经没有了，不用接受。",
+      "description": "说明",
+      "parameters": "参数",
+      "noDescription": "没有说明",
+      "select": "接受 {{name}}",
+      "keepAll": "全部留着",
+      "accept": "接受 {{count}} 个",
+      "failed": "没能接受：{{error}}",
+      "readFailed": "没能读取变化：{{error}}"
     }
   }
 }

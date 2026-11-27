@@ -1,4 +1,5 @@
 import type { McpCheck, McpDiscovery } from '@shared/mcp-discovery'
+import type { McpToolChanges } from '@shared/mcp-insight'
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
 import type { HostEvent } from '@shared/agent-host'
@@ -85,8 +86,12 @@ export interface MarketplaceStore {
   discoveryError: boolean
   discoveryLoading: boolean
   mcpChecks: Record<string, McpCheck>
+  /** How each server's tools differ from those the user accepted, for those that do. */
+  mcpToolChanges: Record<string, McpToolChanges>
   loadDiscovery(): Promise<void>
   loadMcpChecks(): Promise<void>
+  loadMcpToolChanges(): Promise<void>
+  mcpToolsChanged(serverId: string, changes: McpToolChanges | null): void
   /** The MCP catalog the host last answered with; null until it has. */
   catalog: MarketCatalog | null
   /** Why the host could not be asked for the catalog; the last one it gave stays. */
@@ -209,6 +214,7 @@ export function createMarketplaceStore(
     discoveryError: false,
     discoveryLoading: false,
     mcpChecks: {},
+    mcpToolChanges: {},
     async loadDiscovery() {
       const read = ++discoveryRead
       set({ discoveryLoading: true, discoveryError: false })
@@ -228,6 +234,22 @@ export function createMarketplaceStore(
       } catch {
         // Hosts without connection checks still show their installed entries.
       }
+    },
+    async loadMcpToolChanges() {
+      try {
+        const list = await request('market.mcpToolChanges', undefined)
+        set({ mcpToolChanges: Object.fromEntries(list.map((item) => [item.serverId, item])) })
+      } catch {
+        // A host from before tool changes were held has none to show.
+      }
+    },
+    mcpToolsChanged(serverId, changes) {
+      set((state) => {
+        const next = { ...state.mcpToolChanges }
+        if (changes) next[serverId] = changes
+        else delete next[serverId]
+        return { mcpToolChanges: next }
+      })
     },
     catalog: null,
     catalogError: null,

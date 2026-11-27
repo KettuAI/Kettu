@@ -160,9 +160,16 @@ const INSIGHT_MS = 5_000
 
 /** The server's insight from its host, read again while the page shows it and when it changes. */
 export function useMcpInsight(server: MarketServer): McpServerInsight | null {
-  const { request } = useHostScope()
+  const { request, useMarketplaceStore } = useHostScope()
   const [insight, setInsight] = useState<McpServerInsight | null>(null)
-  const changed = JSON.stringify([server.toolsOff, server.agents, server.spec, server.run])
+  const toolChanges = useMarketplaceStore((s) => s.mcpToolChanges[server.id])
+  const changed = JSON.stringify([
+    server.toolsOff,
+    server.agents,
+    server.spec,
+    server.run,
+    toolChanges ?? null,
+  ])
   useEffect(() => {
     let live = true
     const read = () =>

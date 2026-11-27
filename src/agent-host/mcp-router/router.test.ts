@@ -15,6 +15,7 @@ import type { MarketServer } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
 import { ArtifactService, type ArtifactServiceDeps } from '../artifacts/service'
 import { Answers } from './answers'
+import { ToolChanges } from './tool-changes'
 import {
   BRIDGE_UPGRADE,
   McpRouter,
@@ -146,6 +147,7 @@ async function setup(
   servers: MarketServer[],
   tokens: { token?: string; renewed?: string } = {},
   given: readonly MarketServer[] = servers,
+  tools?: ToolChanges,
 ) {
   const dir = await mkdtemp(path.join(tmpdir(), 'kettu-router-'))
   closers.push(() => rm(dir, { recursive: true, force: true }))
@@ -172,6 +174,7 @@ async function setup(
       env: { PATH: process.env.PATH ?? '', ECHO_KEY: 'k-secret' },
     }),
     answers: new Answers(null),
+    ...(tools ? { tools } : {}),
     appVersion: '0.0.0',
     home: dir,
     log: () => {},
@@ -343,6 +346,63 @@ describe('what an agent may use of a server', () => {
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
     expect(router.logsOf(echo.id)).toMatchObject([{ serverId: echo.id, text: 'erased\n' }])
+  })
+})
+
+describe('tools that changed since the user accepted them', () => {
+  /** What the user accepted of echo: `where` with another description, and no `erase`. */
+  function accepted(serverId: string): ToolChanges {
+    const tools = new ToolChanges(null)
+    tools.seen(
+      serverId,
+      [{ name: 'where', description: 'Says where.', inputSchema: { type: 'object' } }],
+      'list',
+    )
+    return tools
+  }
+
+  it('leaves a changed and a new tool of an untrusted server out of the list and refuses them', async () => {
+    const tools = accepted(echo.id)
+    const { access, calls } = await setup([echo], {}, [echo], tools)
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    expect((await client.listTools()).tools).toEqual([])
+    await expect(client.callTool({ name: 'where', arguments: {} })).rejects.toThrow(
+      /changed since the user accepted it/,
+    )
+    await expect(client.callTool({ name: 'erase', arguments: {} })).rejects.toThrow(/is new/)
+    expect(calls.map((call) => call.outcome.result)).toEqual(['refused', 'refused'])
+    expect(tools.changes(echo.id, 'hold')).toMatchObject({ added: ['erase'], changed: ['where'] })
+  })
+
+  it('hands a tool on once the user accepts it, the rest still held', async () => {
+    const tools = accepted(echo.id)
+    const { access } = await setup([echo], {}, [echo], tools)
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    expect((await client.listTools()).tools).toEqual([])
+    tools.accept(echo.id, ['where'])
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['where'])
+    const result = await client.callTool({ name: 'where', arguments: {} })
+    expect(result.isError).not.toBe(true)
+    await expect(client.callTool({ name: 'erase', arguments: {} })).rejects.toThrow(/is new/)
+  })
+
+  it('only notes the change for a registry server, whose tools agents keep', async () => {
+    const registry: MarketServer = { ...echo, id: 'com.example/echo', source: 'registry' }
+    const tools = accepted(registry.id)
+    const { access } = await setup([registry], {}, [registry], tools)
+    const client = await agentClient(`${access.origin}${serverPath(registry.id)}`, access.token)
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['where', 'erase'])
+    await client.callTool({ name: 'erase', arguments: {} })
+    expect(tools.changes(registry.id, 'note')).toMatchObject({ added: ['erase'] })
+  })
+
+  it('takes the first list it sees of a server as accepted', async () => {
+    const tools = new ToolChanges(null)
+    const { access } = await setup([echo], {}, [echo], tools)
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['where', 'erase'])
+    expect(tools.changes(echo.id, 'hold')).toBeNull()
+    await client.callTool({ name: 'erase', arguments: {} })
   })
 })
 

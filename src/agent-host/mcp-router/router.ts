@@ -2,8 +2,8 @@
 // token: the service checks `Origin`, `Host` and the token, and this only lets a caller reach the
 // servers its session was handed. Every server goes through the engine, which runs commands in the
 // caller's folder with their keys, speaks Streamable HTTP to agents whatever the server speaks,
-// leaves the tools turned off out of lists and refuses calls to them, and records each call's
-// metadata. Keys and tokens stay here: agents only ever hold the caller's token.
+// leaves the tools turned off, and those of an untrusted server that changed since the user
+// accepted them, out of lists and refuses calls to them, and records each call's metadata. Keys and tokens stay here: agents only ever hold the caller's token.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
@@ -40,6 +40,7 @@ import {
   readMessage,
   type Message,
 } from './jsonrpc'
+import { toolGuard, type ToolChanges } from './tool-changes'
 import { LineTransport, StatelessTransport } from './transports'
 
 export const SERVER_PREFIX = '/servers/'
@@ -108,6 +109,8 @@ export interface RouterDeps {
   /** The server refused `used`: a renewed token, or null. */
   refused(serverId: string, used: string): Promise<string | null>
   answers: Answers
+  /** The tools each server's user accepted, which changed ones are held back against. */
+  tools?: ToolChanges
   /** A tool call through the router ended. */
   called?(call: RouterCall): void
   appVersion: string
@@ -406,8 +409,18 @@ export class McpRouter {
           .find((item) => item.id === serverId)
           ?.toolsOff?.includes(name) === true,
       serverOff: () => this.offFor(caller, serverId),
+      heldTool: (tool) =>
+        this.holds(serverId) ? (this.deps.tools?.change(serverId, tool) ?? null) : null,
+      heldCall: (name) =>
+        this.holds(serverId) ? (this.deps.tools?.changeByName(serverId, name) ?? null) : null,
       called: (outcome) => this.deps.called?.({ serverId, sessionId: sessionOf(caller), outcome }),
     }
+  }
+
+  /** Whether the server's changed tools wait for the user, as its source is now. */
+  private holds(serverId: string): boolean {
+    const server = this.deps.servers().find((item) => item.id === serverId)
+    return server !== undefined && toolGuard(server) === 'hold'
   }
 
   /** A folder's token loses a server only once every session that uses it turned it off. */
@@ -457,6 +470,7 @@ export class McpRouter {
       startMs: run.startSeconds * 1000,
       open: () => this.open(server.id, folder, log),
       answers: this.deps.answers,
+      listed: (tools, first) => this.deps.tools?.seen(server.id, tools, first ? 'list' : 'page'),
       client: { name: 'kettu', version: this.deps.appVersion },
       log: this.deps.log,
       status: (error) => {
@@ -621,6 +635,7 @@ export class McpRouter {
   serversChanged(changed: ReadonlySet<string> = new Set()): void {
     const servers = new Map(this.deps.servers().map((server) => [server.id, server]))
     this.deps.answers.keep(new Set(servers.keys()))
+    this.deps.tools?.keep(new Set(servers.keys()))
     for (const [key, instance] of [...this.instances]) {
       const server = servers.get(instance.options.serverId)
       const same =
@@ -654,6 +669,11 @@ export class McpRouter {
       if (linked.serverId !== serverId || !which(linked.caller)) continue
       linked.link.notify({ jsonrpc: '2.0', method: LIST_CHANGED_TOOLS })
     }
+  }
+
+  /** What a server may hand agents changed, as the user accepted tools: every agent lists again. */
+  heldChanged(serverId: string): void {
+    this.toolsChanged(serverId, () => true)
   }
 
   /** Turns a server off or on for one session; its agent hears its tools changed. */
@@ -756,6 +776,7 @@ export class McpRouter {
     await Promise.all([...this.instances.values()].map((instance) => instance.stop('removed')))
     this.instances.clear()
     await this.deps.answers.flush()
+    await this.deps.tools?.flush()
   }
 
   /** How many processes run, by server id, for the server's page. */

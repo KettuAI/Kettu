@@ -14,6 +14,7 @@ import { homeShort, type Listing } from './model'
 import { ExternalLink } from './parts'
 import { RunSettings } from './run-settings'
 import { McpCallsTab, McpLogsTab, McpRunning, McpToolsTab, McpWhoGets } from './mcp-server-tabs'
+import { useMcpToolChanges } from './mcp-tool-changes'
 
 export function McpServerPageBody({
   server,
@@ -29,6 +30,7 @@ export function McpServerPageBody({
   const transport = useTransportName(server.spec)
   const agentName = useAgentName()
   const insight = useMcpInsight(server)
+  const held = useMcpToolChanges(server.id)?.guard === 'hold'
   const toolCount = insight?.tools?.length ?? (check?.state === 'connected' ? check.tools : null)
   const tabs = [
     'overview',
@@ -54,6 +56,14 @@ export function McpServerPageBody({
             <TabsTrigger key={tab} value={tab}>
               {t(`mcp.tabs.${tab}`)}
               {tab === 'tools' && toolCount !== null && <span>{toolCount}</span>}
+              {tab === 'tools' && held && (
+                <span
+                  className="k-mcp-held-dot"
+                  role="img"
+                  aria-label={t('mcp.page.heldDot')}
+                  title={t('mcp.page.heldDot')}
+                />
+              )}
             </TabsTrigger>
           ))}
         </TabsList>

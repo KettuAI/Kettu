@@ -28,6 +28,7 @@ import {
 } from './hooks'
 import { keptItemKey, type Listing } from './model'
 import { McpFileErrors, McpImportDialog } from './mcp-review'
+import { McpToolChangesDialog, McpToolChangesTag, useMcpToolChanges } from './mcp-tool-changes'
 import { ItemRow, QuietNote, SkeletonRows } from './rows'
 import { serverSubject } from './tile-art'
 
@@ -153,10 +154,14 @@ function LibraryRow({ server, listing }: { server: MarketServer; listing: Listin
   const agentName = useAgentName()
   const agents = server.agents === 'all' ? allAgents.map(({ id }) => id) : server.agents
   const open = () => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'mcp' })
+  const changes = useMcpToolChanges(server.id)
+  const [reviewing, setReviewing] = useState(false)
   return (
+    <>
     <ItemRow
       title={server.title}
       subject={serverSubject({ ...listing, spec: server.spec })}
+      tag={changes ? <McpToolChangesTag changes={changes} /> : undefined}
       meta={
         <>
           <McpState server={server} check={check} />
@@ -182,6 +187,11 @@ function LibraryRow({ server, listing }: { server: MarketServer; listing: Listin
           </span>
           {check?.state === 'needs-sign-in' && <McpSignIn server={server} />}
           {check?.state === 'error' && <McpCheckButton server={server} />}
+          {changes && (
+            <Button size="sm" variant="secondary" onClick={() => setReviewing(true)}>
+              {t('mcp.review')}
+            </Button>
+          )}
           <SettingSwitch
             label={t('listing.switch', { name: server.title })}
             checked={server.on}
@@ -198,6 +208,13 @@ function LibraryRow({ server, listing }: { server: MarketServer; listing: Listin
         </>
       }
     />
+    <McpToolChangesDialog
+      server={server}
+      changes={changes}
+      open={reviewing}
+      onOpenChange={setReviewing}
+    />
+    </>
   )
 }
 

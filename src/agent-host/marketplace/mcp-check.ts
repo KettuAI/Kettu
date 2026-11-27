@@ -26,6 +26,8 @@ interface CheckOptions {
   platform: Platform
   node?: NodeRuntime
   bearer?: string
+  /** Every tool the server listed, once all pages were read. */
+  listed?(tools: readonly unknown[]): void
 }
 
 async function publicRequest(url: URL, init: RequestInit): Promise<Response> {
@@ -197,7 +199,7 @@ export async function checkMcp(
     let tools = 0
     if (client.getServerCapabilities()?.tools) {
       tools = await run(async (signal) => {
-        let count = 0
+        const listed: unknown[] = []
         let cursor: string | undefined
         const seen = new Set<string>()
         do {
@@ -205,12 +207,13 @@ export async function checkMcp(
             timeout: timeout + 1000,
             signal,
           })
-          count += page.tools.length
+          listed.push(...page.tools)
           cursor = page.nextCursor
           if (cursor && seen.has(cursor)) throw new Error('MCP tools pagination repeated a cursor')
           if (cursor) seen.add(cursor)
         } while (cursor)
-        return count
+        options.listed?.(listed)
+        return listed.length
       })
     }
     return {
