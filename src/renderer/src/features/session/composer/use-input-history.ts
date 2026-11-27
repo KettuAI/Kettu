@@ -45,10 +45,38 @@ function recalled(state: ThreadState, id: string): Recalled | null {
 }
 
 /**
- * Browsing a session's sent messages from its composer. Up at the box's first line puts the newest
- * message in the box and Down at its last line moves to newer ones; past the newest, or on
- * `leave`, the draft comes back. Typing in a recalled message ends the browsing and the text
- * stays as an ordinary draft, so `close` is the box's cue that it was edited.
+ * Whether Up (`forward = false`) or Down (`forward = true`) should navigate input history instead
+ * of letting the editor move the caret.
+ *
+ * Outside history browsing, Down never hijacks moving to the line end and Up only enters history
+ * from a collapsed single caret at offset 0 (which also holds when the box is empty), so pressing
+ * Up mid-line or at the end of the first line moves the caret to the start first. While already
+ * browsing history, Up on the first visual line and Down on the last visual line keep stepping
+ * across entries.
+ */
+export function canMoveInputHistory({
+  forward,
+  browsing,
+  selection,
+  atBoundary,
+}: {
+  forward: boolean
+  browsing: boolean
+  selection: { from: number; to: number }
+  atBoundary: boolean
+}): boolean {
+  if (!atBoundary || selection.from !== selection.to) return false
+  if (!browsing) return !forward && selection.from === 0
+  return true
+}
+
+/**
+ * Browsing a session's sent messages from its composer. Up from an empty box or offset 0 puts the
+ * newest message in the box; while browsing, Up on the first visual line and Down on the last
+ * visual line step through older and newer messages, and past the newest (or on `leave`) the draft
+ * comes back. Outside browsing, Up from non-zero offsets and Down stay with the editor. Typing in a
+ * recalled message ends the browsing and the text stays as an ordinary draft, so `close` is the
+ * box's cue that it was edited.
  */
 export function useInputHistory({
   sessionId,
@@ -86,14 +114,28 @@ export function useInputHistory({
 
   const move = (forward: boolean): boolean => {
     const input = editor.current
-    if (!sessionId || disabled || !input?.atBoundary(forward)) return false
+    if (!sessionId || disabled || !input) return false
+    const current = browsing.current
+    const selection = input.selection()
+    if (
+      !canMoveInputHistory({
+        forward,
+        browsing: current !== null,
+        selection,
+        atBoundary: input.atBoundary(forward),
+      })
+    ) {
+      if (forward && pending.current) {
+        pending.current = false
+        generation.current++
+      }
+      return false
+    }
     if (pending.current && !forward) return true
     pending.current = false
     const request = ++generation.current
     const text = input.text()
-    const selection = input.selection()
     const focused = document.activeElement
-    const current = browsing.current
 
     const seek = (): boolean => {
       const replica = useThreadsStore.getState().replicas[sessionId]

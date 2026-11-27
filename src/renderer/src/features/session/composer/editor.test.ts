@@ -82,3 +82,22 @@ describe('ComposerEditor multiline Tab suggestion layout (#2874)', () => {
     expect(composerSource).toContain('unshow?.({ restoreSuggestion: true })')
   })
 })
+
+describe('ComposerEditor and PromptBox input-history guards (#2921)', () => {
+  const editorSource = readFileSync(join(import.meta.dirname, 'editor.tsx'), 'utf8')
+  const promptBoxSource = readFileSync(join(import.meta.dirname, 'prompt-box.tsx'), 'utf8')
+
+  it('requires a single collapsed caret in atBoundary and short-circuits exact document edges', () => {
+    expect(editorSource).toContain(
+      'if (selection.ranges.length !== 1 || !selection.main.empty) return false',
+    )
+    expect(editorSource).toContain('if (selection.main.head === target) return true')
+  })
+
+  it('guards PromptBox history navigation against IME composition, popovers, and modifier keys', () => {
+    expect(promptBoxSource).toContain("if (handling === 'block') return false")
+    expect(promptBoxSource).toMatch(
+      /if\s*\(\s*!open\s*&&\s*!modified\s*&&\s*\(event\.key === 'ArrowUp' \|\| event\.key === 'ArrowDown'\)\s*&&\s*box\.moveHistory\(event\.key === 'ArrowDown'\)\s*\)/,
+    )
+  })
+})
