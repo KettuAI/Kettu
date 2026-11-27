@@ -554,8 +554,8 @@
     inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 28%),
     0 4px 12px rgb(0 0 0 / 6%);
 
-  /* settings: the Settings modal, in affectUI's look. */
-  --settings-scrim: rgb(0 0 0 / 12%);
+  /* settings: the Settings modal, over the shared modal scrim. */
+  --settings-scrim: var(--scrim);
   --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
   --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 25%);
   --settings-warn-bg: rgb(217 119 6 / 10%);
@@ -998,9 +998,9 @@
       inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
       0 4px 12px rgb(0 0 0 / 30%);
 
-    /* settings: the Settings modal, in affectUI's look. */
-    --settings-scrim: rgb(0 0 0 / 45%);
-    --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+    /* settings: the Settings modal, over the shared modal scrim. */
+    --settings-scrim: var(--scrim);
+    --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 60%), 0 4px 12px rgb(0 0 0 / 30%);
     --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
     --settings-warn-bg: rgb(251 191 36 / 12%);
     --settings-warn-ink: #fbbf24;
@@ -1406,9 +1406,9 @@
     inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
     0 4px 12px rgb(0 0 0 / 30%);
 
-  /* settings: the Settings modal, in affectUI's look. */
-  --settings-scrim: rgb(0 0 0 / 45%);
-  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  /* settings: the Settings modal, over the shared modal scrim. */
+  --settings-scrim: var(--scrim);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 60%), 0 4px 12px rgb(0 0 0 / 30%);
   --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
   --settings-warn-bg: rgb(251 191 36 / 12%);
   --settings-warn-ink: #fbbf24;

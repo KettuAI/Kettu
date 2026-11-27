@@ -2870,7 +2870,7 @@ li[data-row-exit='dust'] > * {
   opacity: 1;
 }
 
-/* settings: the Settings modal over the app, drawn as the hi-fi draws it: the command menu's scrim,
+/* settings: the Settings modal over the app, drawn as the hi-fi draws it: the shared modal scrim,
    a box with the section list on the left in the sidebar's rows, and the section on the right in
    affectUI's settings cards of rows. The box carries .ui-as, so the shell's variables hold inside
    it wherever it is mounted. Rules sit under .kettu-settings to outrank the vendored sheets,

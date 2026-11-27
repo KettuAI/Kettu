@@ -1,15 +1,85 @@
 import { useId, type ReactNode } from 'react'
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import {
+  Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogPortal,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
 import { RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { cn } from '@renderer/lib/utils'
+import { closeSettings, settingsBack } from '@renderer/stores/view'
+
+function isEditable(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  return (
+    el.isContentEditable ||
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT'
+  )
+}
+
+/**
+ * The modal frame around Settings: full-window dimmed backdrop scrim, focus entry, outside-click
+ * dismiss and Esc step-back behavior.
+ */
+export function SettingsDialogFrame({
+  open,
+  titleId,
+  children,
+}: {
+  open: boolean
+  titleId: string
+  children: ReactNode
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) return
+        // Esc steps back from an item's page first, and leaves a field being typed in alone.
+        if (details.reason === 'escape-key') {
+          details.cancel()
+          if (!isEditable(details.event.target)) settingsBack()
+          return
+        }
+        closeSettings()
+      }}
+    >
+      <DialogPortal>
+        <DialogPrimitive.Backdrop
+          data-overlay-layer=""
+          className="kettu-settings-scrim app-region-no-drag"
+        />
+        <DialogPrimitive.Popup
+          // The section in the list takes the focus, so Tab starts from it, without scrolling the
+          // list down to a section near its end, which would hide the search above it.
+          initialFocus={() => {
+            const current = document.querySelector<HTMLElement>(
+              '[data-settings-dialog] nav [aria-current=page]',
+            )
+            if (!current) return true
+            current.focus({ preventScroll: true })
+            return false
+          }}
+          aria-labelledby={titleId}
+          data-overlay-layer=""
+          data-settings-dialog=""
+          className="ui-as kettu-settings app-region-no-drag"
+        >
+          {children}
+        </DialogPrimitive.Popup>
+      </DialogPortal>
+    </Dialog>
+  )
+}
 
 /**
  * A dialog over Settings, on the settings' panel: 132 px from the top of the window rather than
