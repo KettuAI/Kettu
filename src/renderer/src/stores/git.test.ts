@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { GitHubReference, GitStatus, GitTools, Issue, PullRequest } from '@shared/git'
+import type {
+  GitHubReference,
+  GitStatus,
+  GitTools,
+  Issue,
+  PullRequest,
+  PullRequestStack,
+} from '@shared/git'
 import { onHost } from '@renderer/lib/host-paths'
 
 // Avoid parsing the multi-megabyte icon bundle transitively pulled in by bootstrap.ts.
@@ -466,4 +473,89 @@ describe('host-scoped GitHub gh routing in git store (#2699)', () => {
     expect(git.ghStateOf(afterForget, REMOTE_A)).toBeNull()
     expect(git.ghStateOf(afterForget, null)).toBe('not-installed')
   }, 15_000)
+
+  it('loads, isolates, settles, retries, and gracefully degrades GitHub stacks per host (#2844)', async () => {
+    const { env, git } = await setupGitOnly()
+    const STACK_URL = 'https://github.com/acme/private-repo/stacks/7'
+    const STACK_REF: GitHubReference = {
+      kind: 'stack',
+      owner: 'acme',
+      repo: 'private-repo',
+      number: 7,
+      url: STACK_URL,
+    }
+    const openStack: PullRequestStack = {
+      url: STACK_URL,
+      owner: 'acme',
+      repo: 'private-repo',
+      number: 7,
+      title: 'Auth stack',
+      state: 'open',
+      base: 'main',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      pullRequests: [
+        {
+          number: 11,
+          url: 'https://github.com/acme/private-repo/pull/11',
+          state: 'open',
+          head: 'feat/auth-1',
+          title: null,
+        },
+      ],
+    }
+
+    env.localRequest.mockImplementation(async (method: string) => {
+      if (method === 'git.stack') throw new Error('Unknown method: git.stack')
+      if (method === 'git.tools') return makeTools('ready', 'local-dev')
+      return undefined
+    })
+    env.remoteRequest.mockImplementation(
+      async (hostId: string, method: string, params?: unknown) => {
+        if (method === 'git.stack') {
+          if (hostId === REMOTE_A) return { kind: 'stack', stack: openStack }
+          const fresh = (params as { fresh?: boolean } | undefined)?.fresh
+          return fresh
+            ? { kind: 'stack', stack: { ...openStack, state: 'closed' } }
+            : { kind: 'unavailable', reason: 'not-found' }
+        }
+        if (method === 'git.tools') return makeTools('ready', 'remote-dev')
+        return undefined
+      },
+    )
+
+    // Local RPC error degrades cleanly to stackUnavailable without populating referenceErrors.
+    git.loadReference(STACK_REF, false, null)
+    git.loadReference(STACK_REF, false, REMOTE_A)
+    git.loadReference(STACK_REF, false, REMOTE_B)
+    await flushAsync()
+
+    const s1 = git.useGitStore.getState()
+    expect(git.stackOf(s1, null, STACK_URL)).toBeUndefined()
+    expect(git.stackUnavailableOf(s1, null, STACK_URL)).toBe('unavailable')
+    expect(git.referenceErrorOf(s1, null, STACK_URL)).toBeNull()
+
+    expect(git.stackOf(s1, REMOTE_A, STACK_URL)).toEqual(openStack)
+    expect(git.isReferenceSettled(s1, STACK_REF, REMOTE_A)).toBe(false)
+
+    expect(git.stackOf(s1, REMOTE_B, STACK_URL)).toBeUndefined()
+    expect(git.stackUnavailableOf(s1, REMOTE_B, STACK_URL)).toBe('not-found')
+    expect(git.isReferenceSettled(s1, STACK_REF, REMOTE_B)).toBe(true)
+
+    // Explicit retry sends fresh: true and updates cached stack state.
+    await git.retryReference(STACK_REF, REMOTE_B)
+    const s2 = git.useGitStore.getState()
+    expect(env.remoteRequest).toHaveBeenLastCalledWith(REMOTE_B, 'git.stack', {
+      url: STACK_URL,
+      fresh: true,
+    })
+    expect(git.stackOf(s2, REMOTE_B, STACK_URL)?.state).toBe('closed')
+    expect(git.stackUnavailableOf(s2, REMOTE_B, STACK_URL)).toBeNull()
+    expect(git.isReferenceSettled(s2, STACK_REF, REMOTE_B)).toBe(true)
+
+    // Signing in to gh clears prior auth-related stack fallbacks.
+    git.receiveReference(STACK_URL, { kind: 'unavailable', reason: 'gh-signed-out' }, REMOTE_A)
+    git.receiveGitTools(REMOTE_A, makeTools('ready', 'remote-dev'))
+    expect(git.stackUnavailableOf(git.useGitStore.getState(), REMOTE_A, STACK_URL)).toBeNull()
+  })
 })

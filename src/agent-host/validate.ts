@@ -2650,6 +2650,17 @@ export function createValidators(platform: Platform): Validators {
       if (githubReferenceOf(url)?.kind !== 'issue') throw invalidParams('url is not a GitHub issue')
       return { url }
     },
+    'git.stack': (params) => {
+      const o = fields(params)
+      const url = string(o, 'url', URL_CHARS)
+      if (githubReferenceOf(url)?.kind !== 'stack') {
+        throw invalidParams('url is not a GitHub pull request stack')
+      }
+      if (o.fresh !== undefined && typeof o.fresh !== 'boolean') {
+        throw invalidParams('fresh must be a boolean')
+      }
+      return o.fresh === undefined ? { url } : { url, fresh: o.fresh }
+    },
     'git.watchReferences': (params) => {
       const value = fields(params).urls
       if (!Array.isArray(value) || value.length > WATCHED_REFERENCES) {

@@ -74,6 +74,22 @@
       "completed": "已完成",
       "notPlanned": "不计划"
     },
+    "stack": "PR 栈",
+    "stackIcon": "PR 栈{{state}}",
+    "stackTitle": "Stack #{{number}}",
+    "stackState": {
+      "open": "打开",
+      "closed": "已关闭"
+    },
+    "stackPrCount_one": "{{count}} 个 PR",
+    "stackPrCount_other": "{{count}} 个 PR",
+    "stackSummary_one": "{{count}} 个 PR → {{base}}",
+    "stackSummary_other": "{{count}} 个 PR → {{base}}",
+    "stackEmpty": "该栈中暂无 PR。",
+    "stackUnavailable": "当前无法读取该栈链详情，可在 GitHub 上打开查看。",
+    "stackLoadFailed": "暂时无法加载栈链详情。",
+    "stackInstallGh": "安装 <cli>GitHub CLI</cli> 后即可查看此栈链中的 PR。",
+    "stackSignInGh": "登录 GitHub CLI 后即可查看此栈链中的 PR：",
     "closedBy": "关闭它的是",
     "files_one": "{{count}} 个文件",
     "files_other": "{{count}} 个文件",

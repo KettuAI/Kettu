@@ -65,6 +65,7 @@ const READS = new Set([
   'runs',
   'search',
   'snapshot',
+  'stack',
   'status',
   'suggestionFile',
   'suggestions',

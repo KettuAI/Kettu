@@ -5,6 +5,7 @@ import {
   Comment01Icon,
   File01Icon,
   GitPullRequestIcon,
+  Layers01Icon,
   RadioButtonIcon,
   RotateClockwiseIcon,
   UnavailableIcon,
@@ -18,6 +19,9 @@ import {
   type IssueState,
   type PullRequest,
   type PullRequestAuthor,
+  type PullRequestStack,
+  type PullRequestStackState,
+  type StackUnavailableReason,
 } from '@shared/git'
 import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
 import { Badge } from '@renderer/components/ui/badge'
@@ -47,6 +51,7 @@ import {
 } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import {
+  referenceTitleOf,
   shortReference,
   useGitHostId,
   useProjectRepository,
@@ -74,6 +79,16 @@ const ISSUE_STATE_KEY = {
   not_planned: 'ref.issueState.notPlanned',
 } as const
 
+const STACK_STATE_KEY = {
+  open: 'ref.stackState.open',
+  closed: 'ref.stackState.closed',
+} as const
+
+const STACK_COLOR = {
+  open: 'text-success',
+  closed: 'text-icon',
+} as const
+
 /** The state's icon in its color; gray, of the reference's kind, until gh has answered. */
 export function ReferenceIcon({
   kind,
@@ -89,6 +104,25 @@ export function ReferenceIcon({
   const { t } = useTranslation('git')
   if (data?.kind === 'pull')
     return <PrIcon state={data.pr.state} size={size} className={className} />
+  if (kind === 'stack' || data?.kind === 'stack') {
+    const state: PullRequestStackState | null = data?.kind === 'stack' ? data.stack.state : null
+    const label = state ? t('ref.stackIcon', { state: t(STACK_STATE_KEY[state]) }) : t('ref.stack')
+    return (
+      <HugeiconsIcon
+        icon={Layers01Icon}
+        size={size}
+        strokeWidth={STROKE}
+        role="img"
+        aria-label={label}
+        className={cn(
+          'shrink-0',
+          ICON_SIZE[size],
+          state ? STACK_COLOR[state] : 'text-icon',
+          className,
+        )}
+      />
+    )
+  }
   const state: IssueState | null = data?.kind === 'issue' ? data.issue.state : null
   const icon = state ? ISSUE[state].Icon : kind === 'pull' ? GitPullRequestIcon : RadioButtonIcon
   const label = state
@@ -109,11 +143,6 @@ export function ReferenceIcon({
       )}
     />
   )
-}
-
-function titleOf(data: ReferenceData | null): string | null {
-  if (!data) return null
-  return data.kind === 'pull' ? data.pr.title : data.issue.title
 }
 
 function clip(title: string): string {
@@ -168,11 +197,12 @@ export function ReferenceText({
   hostId?: string | null
   children: ReactNode
 }) {
+  const { t } = useTranslation('git')
   const hostId = useGitHostId(explicitHostId)
   const target = useReferenceOnScreen(reference, hostId)
   const { data } = useReferenceData(reference, hostId)
   const repo = useProjectRepository()
-  const title = bare ? titleOf(data) : null
+  const title = bare ? referenceTitleOf(data, t) : null
   return (
     <>
       <span ref={target} className="whitespace-nowrap">
@@ -257,7 +287,9 @@ function Head({
         </Pill>
       )}
       <span className="min-w-0 truncate text-xs text-tertiary">
-        {reference.owner}/{reference.repo} #{reference.number}
+        {reference.kind === 'stack'
+          ? `${reference.owner}/${reference.repo} · Stack #${reference.number}`
+          : `${reference.owner}/${reference.repo} #${reference.number}`}
       </span>
       {when && (
         <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-tertiary tabular">
@@ -465,6 +497,159 @@ function IssueDetails({
   )
 }
 
+function StackDetails({
+  reference,
+  stack,
+}: {
+  reference: GitHubReference
+  stack: PullRequestStack
+}) {
+  const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
+  const now = useNow()
+  const at = stack.createdAt ?? stack.updatedAt
+  const when = at ? longAgo(at, now) : null
+  const tone = stack.state === 'open' ? 'open' : 'gray'
+  const heading = stack.title ?? t('ref.stackTitle', { number: stack.number })
+  return (
+    <>
+      <Head
+        reference={reference}
+        data={{ kind: 'stack', stack }}
+        when={when}
+        pill={
+          <Pill tone={tone}>
+            <ReferenceIcon
+              kind="stack"
+              data={{ kind: 'stack', stack }}
+              size={13}
+              className="text-current"
+            />
+            {t(STACK_STATE_KEY[stack.state])}
+          </Pill>
+        }
+      />
+      <Title url={stack.url} title={heading} />
+      {(stack.base || stack.pullRequests.length > 0) && (
+        <div className="-mt-1.5 flex items-center gap-2 text-xs text-tertiary">
+          {stack.base && (
+            <span className="min-w-0 truncate">
+              → <span className="font-mono text-meta">{stack.base}</span>
+            </span>
+          )}
+          {stack.pullRequests.length > 0 && (
+            <span className="ml-auto shrink-0 tabular">
+              {t('ref.stackPrCount', { count: stack.pullRequests.length })}
+            </span>
+          )}
+        </div>
+      )}
+      {stack.pullRequests.length > 0 ? (
+        <div className="-mx-1.5 flex max-h-52 flex-col gap-0.5 overflow-y-auto border-t border-subtle pt-2">
+          {stack.pullRequests.map((item) => {
+            const label = item.title ?? item.head ?? prStateText(item.state)
+            return (
+              <a
+                key={item.number}
+                {...sessionLinkProps(item.url, sessionId)}
+                title={item.title && item.head ? `${item.title} (${item.head})` : label}
+                className="flex min-w-0 items-center gap-1.75 rounded-md px-1.5 py-1 text-xs text-secondary no-underline outline-none focus-ring hover:bg-hover hover:text-primary"
+              >
+                <PrIcon state={item.state} size={13} />
+                <span className="shrink-0 font-medium text-primary tabular">#{item.number}</span>
+                <span
+                  className={cn(
+                    'min-w-0 truncate',
+                    !item.title && item.head ? 'font-mono text-meta' : undefined,
+                  )}
+                >
+                  {label}
+                </span>
+              </a>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-tertiary">{t('ref.stackEmpty')}</p>
+      )}
+    </>
+  )
+}
+
+function StackUnavailable({
+  reference,
+  reason,
+  hostId,
+}: {
+  reference: GitHubReference
+  reason: StackUnavailableReason
+  hostId: string | null
+}) {
+  const { t } = useTranslation('git')
+  const [retrying, setRetrying] = useState(false)
+  const heading = t('ref.stackTitle', { number: reference.number })
+  return (
+    <>
+      <Head reference={reference} data={null} pill={null} when={null} />
+      <Title url={reference.url} title={heading} />
+      {reason === 'gh-missing' ? (
+        <p className="text-small text-secondary">
+          <Trans
+            t={t}
+            i18nKey="ref.stackInstallGh"
+            components={{
+              cli: (
+                <a
+                  href="https://cli.github.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-border-strong underline-offset-2 hover:text-primary hover:decoration-current"
+                />
+              ),
+            }}
+          />
+        </p>
+      ) : reason === 'gh-signed-out' ? (
+        <div className="flex flex-col items-start gap-2 text-small text-secondary">
+          <p>{t('ref.stackSignInGh')}</p>
+          <span className="inline-flex items-center gap-1">
+            <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-meta text-code-inline">
+              gh auth login
+            </code>
+            <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
+          </span>
+        </div>
+      ) : reason === 'not-found' || reason === 'forbidden' ? (
+        <p className="text-small text-secondary">{t('ref.stackUnavailable')}</p>
+      ) : (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-small text-secondary">{t('ref.stackLoadFailed')}</p>
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true)
+              void retryReference(reference, hostId).finally(() => setRetrying(false))
+            }}
+          >
+            {retrying ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <HugeiconsIcon
+                icon={RotateClockwiseIcon}
+                strokeWidth={STROKE}
+                data-icon="inline-start"
+              />
+            )}
+            {t('prCard.retry')}
+          </Button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function Loading() {
   return (
     <>
@@ -570,7 +755,7 @@ export function ReferenceCard({
   sessionId?: string | null
 }) {
   const hostId = useGitHostId(explicitHostId)
-  const { data, error } = useReferenceData(reference, hostId)
+  const { data, error, stackUnavailable } = useReferenceData(reference, hostId)
   const gh = useGitStore((s) => ghStateOf(s, hostId))
   // Shown again a while later, a live one is read again behind what it shows.
   useEffect(() => {
@@ -578,11 +763,26 @@ export function ReferenceCard({
     const state = hostGitOf(useGitStore.getState(), hostId)
     if (!state.tools && !state.toolsError) void loadGitTools(hostId)
   }, [reference, hostId])
+  const stackReason: StackUnavailableReason | null =
+    reference.kind !== 'stack'
+      ? null
+      : (stackUnavailable ??
+        (gh === 'not-installed'
+          ? 'gh-missing'
+          : gh === 'signed-out'
+            ? 'gh-signed-out'
+            : error !== null
+              ? 'unavailable'
+              : null))
   const content =
     data?.kind === 'pull' ? (
       <PullRequestDetails reference={reference} pr={data.pr} hostId={hostId} />
     ) : data?.kind === 'issue' ? (
       <IssueDetails reference={reference} issue={data.issue} hostId={hostId} />
+    ) : data?.kind === 'stack' ? (
+      <StackDetails reference={reference} stack={data.stack} />
+    ) : stackReason !== null ? (
+      <StackUnavailable reference={reference} reason={stackReason} hostId={hostId} />
     ) : error !== null || gh === 'not-installed' || gh === 'signed-out' ? (
       <Missing reference={reference} error={error} hostId={hostId} />
     ) : (

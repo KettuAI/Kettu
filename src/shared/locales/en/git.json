@@ -74,6 +74,22 @@
       "completed": "Completed",
       "notPlanned": "Not planned"
     },
+    "stack": "Pull request stack",
+    "stackIcon": "Pull request stack {{state}}",
+    "stackTitle": "Stack #{{number}}",
+    "stackState": {
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "stackPrCount_one": "{{count}} PR",
+    "stackPrCount_other": "{{count}} PRs",
+    "stackSummary_one": "{{count}} PR → {{base}}",
+    "stackSummary_other": "{{count}} PRs → {{base}}",
+    "stackEmpty": "No pull requests in this stack.",
+    "stackUnavailable": "Stack details aren't available here. Open it on GitHub to view.",
+    "stackLoadFailed": "Couldn't load stack details right now.",
+    "stackInstallGh": "Install the <cli>GitHub CLI</cli> to see this stack's pull requests.",
+    "stackSignInGh": "Sign in to the GitHub CLI to see this stack's pull requests:",
     "closedBy": "Closed by",
     "files_one": "{{count}} file",
     "files_other": "{{count}} files",

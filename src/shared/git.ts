@@ -198,6 +198,8 @@ export const GITHUB_PULL_REQUEST_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.
 
 export const GITHUB_ISSUE_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)$/
 
+export const GITHUB_STACK_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/stacks\/(\d+)$/
+
 /** `completed` and `not_planned` are the two ways GitHub closes an issue. */
 export type IssueState = 'open' | 'completed' | 'not_planned'
 
@@ -226,28 +228,71 @@ export interface Issue {
 export type IssueLookup =
   { kind: 'issue'; issue: Issue } | { kind: 'pull'; pullRequest: PullRequest }
 
-/** A pull request or an issue a reply names, by its canonical URL. */
+export type PullRequestStackState = 'open' | 'closed'
+
+export interface PullRequestStackItem {
+  number: number
+  url: string
+  state: PullRequestState
+  /** Head branch name of this layer in the stack, when GitHub returns it. */
+  head: string | null
+  /** Pull request title, when returned by the endpoint. */
+  title: string | null
+}
+
+export interface PullRequestStack {
+  url: string
+  owner: string
+  repo: string
+  number: number
+  /** Optional title if GitHub includes one in the stack payload. */
+  title: string | null
+  state: PullRequestStackState
+  /** Target base branch at the bottom of the stack, such as `main`. */
+  base: string | null
+  /** Ordered pull requests in the stack, from bottom to top. */
+  pullRequests: PullRequestStackItem[]
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+/** Why a pull request stack could not be read without treating it as a hard failure. */
+export type StackUnavailableReason =
+  'gh-missing' | 'gh-signed-out' | 'not-found' | 'forbidden' | 'timeout' | 'unavailable'
+
+/** What a pull request stack lookup returned: its chain, or why it fell back cleanly. */
+export type PullRequestStackLookup =
+  | { kind: 'stack'; stack: PullRequestStack }
+  | { kind: 'unavailable'; reason: StackUnavailableReason }
+
+/** What any watched GitHub reference lookup produces for the renderer cache. */
+export type ReferenceLookup = IssueLookup | PullRequestStackLookup
+
+/** A pull request, issue, or pull request stack a reply names, by its canonical URL. */
 export interface GitHubReference {
-  kind: 'pull' | 'issue'
+  kind: 'pull' | 'issue' | 'stack'
   owner: string
   repo: string
   number: number
   url: string
 }
 
-/** The reference a github.com pull request or issue URL names; null for anything else. */
+/** The reference a github.com pull request, issue, or stack URL names; null for anything else. */
 export function githubReferenceOf(url: string): GitHubReference | null {
   const pull = GITHUB_PULL_REQUEST_URL.exec(url)
-  const match = pull ?? GITHUB_ISSUE_URL.exec(url)
+  const issue = pull ? null : GITHUB_ISSUE_URL.exec(url)
+  const stack = pull || issue ? null : GITHUB_STACK_URL.exec(url)
+  const match = pull ?? issue ?? stack
   if (!match || !isRepositoryName(match[2]!) || !GITHUB_LOGIN.test(match[1]!)) return null
   const number = Number(match[3])
   if (!Number.isSafeInteger(number) || number < 1) return null
-  return { kind: pull ? 'pull' : 'issue', owner: match[1]!, repo: match[2]!, number, url }
+  const kind: GitHubReference['kind'] = pull ? 'pull' : issue ? 'issue' : 'stack'
+  return { kind, owner: match[1]!, repo: match[2]!, number, url }
 }
 
 /**
- * The pull request or issue a github.com link points into, such as its files tab or one of its
- * comments, by its canonical URL; null for any other link.
+ * The pull request, issue, or pull request stack a github.com link points into, such as its files
+ * tab or one of its comments, by its canonical URL; null for any other link.
  */
 export function githubReferenceFromLink(href: string): GitHubReference | null {
   const url = URL.parse(href)
@@ -255,7 +300,8 @@ export function githubReferenceFromLink(href: string): GitHubReference | null {
   if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return null
   if (url.username || url.password) return null
   const [owner, repo, kind, number] = url.pathname.split('/').slice(1)
-  if (!owner || !repo || !number || (kind !== 'pull' && kind !== 'issues')) return null
+  if (!owner || !repo || !number || (kind !== 'pull' && kind !== 'issues' && kind !== 'stacks'))
+    return null
   if (!/^\d+$/.test(number)) return null
   return githubReferenceOf(`https://github.com/${owner}/${repo}/${kind}/${Number(number)}`)
 }
@@ -265,7 +311,7 @@ export function githubReferenceFromLink(href: string): GitHubReference | null {
 // holds, so `gist.github.com`, a path such as `src/github.com/...`, an email and an address
 // inside another link stay out; in ASCII, so CJK punctuation right after it stays out too.
 const SCHEMELESS_GITHUB_LINK =
-  /(?<![\w.@/:=?&%#~+-])(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+(?:[/?#][\w\-./?#=&%~+:@!$*,;]*)?(?![\w-])/g
+  /(?<![\w.@/:=?&%#~+-])(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull|stacks)\/\d+(?:[/?#][\w\-./?#=&%~+:@!$*,;]*)?(?![\w-])/g
 
 /** Where text writes a link, and the full address it stands for. */
 export interface TextLink {

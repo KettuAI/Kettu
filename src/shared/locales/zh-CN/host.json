@@ -556,10 +556,12 @@
     "notPullRequestUrl": "不是 GitHub PR 的链接：{{url}}",
     "notIssueUrl": "不是 GitHub issue 的链接",
     "noIssue": "GitHub 上没有这个地址对应的 issue，或者读不到它",
+    "notStackUrl": "不是 GitHub PR 栈的链接",
     "unexpected": {
       "pullRequestObject": "gh 的输出不符合预期：不是一个 PR 对象",
       "pullRequestUrl": "PR 的链接不符合预期：{{url}}",
       "issue": "gh 的输出不符合预期：不是一个 issue",
+      "stack": "gh 的输出不符合预期：不是一个 PR 栈",
       "pullRequestList": "gh 的输出不符合预期：不是 PR 列表",
       "revList": "rev-list 的计数输出不符合预期：{{output}}",
       "show": "git show 对 {{oid}} 的输出不符合预期"

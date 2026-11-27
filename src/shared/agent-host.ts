@@ -110,8 +110,10 @@ import type {
   IssueLookup,
   LogCommit,
   PullRequest,
+  PullRequestStackLookup,
   PullRequestState,
   ProjectWorktreeSettings,
+  ReferenceLookup,
   RepositoryVisibility,
   SessionWorktree,
   WorktreeInspection,
@@ -1992,6 +1994,8 @@ export interface HostContract {
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   // A github.com issue URL, which may turn out to be a pull request.
   'git.issue': { params: { url: string }; result: IssueLookup }
+  // A github.com pull request stack URL; degrades cleanly when unsupported or unreadable.
+  'git.stack': { params: { url: string; fresh?: boolean }; result: PullRequestStackLookup }
   'git.watchReferences': { params: { urls: string[] }; result: void }
   // A chip's author; null when GitHub's avatar host has no picture for the login.
   'git.avatarUrl': { params: { login: string }; result: string | null }
@@ -2654,6 +2658,7 @@ export const HOST_METHODS = [
   'git.discardChanges',
   'git.pullRequest',
   'git.issue',
+  'git.stack',
   'git.watchReferences',
   'git.avatarUrl',
   'git.currentPullRequest',
@@ -2774,7 +2779,7 @@ export type HostEvent =
   | { type: 'environment.changed'; info: EnvironmentInfo }
   | { type: 'git.changed'; status: GitStatus }
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
-  | { type: 'git.reference'; url: string; found: IssueLookup } // to the ports watching `url`
+  | { type: 'git.reference'; url: string; found: ReferenceLookup } // to the ports watching `url`
   | { type: 'git.tools'; tools: GitTools }
   // To the ports watching the project's files, by the path each named it: list and read them again.
   | { type: 'files.changed'; projectPath: string }

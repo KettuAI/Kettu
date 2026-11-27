@@ -1,6 +1,12 @@
 // Runs the read-only GitHub CLI commands. Nothing here ever writes to GitHub.
 
-import type { GitTools, Issue, PullRequest } from '@shared/git'
+import type {
+  GitTools,
+  Issue,
+  PullRequest,
+  PullRequestStackLookup,
+  StackUnavailableReason,
+} from '@shared/git'
 import { t, tEnglish } from '../i18n'
 import { logText } from '../localized-error'
 import type { BranchPullRequest } from './api'
@@ -20,6 +26,8 @@ import {
   mapBranchPullRequests,
   mapIssue,
   mapPullRequest,
+  mapPullRequestStack,
+  stackArgs,
   userArgs,
   viewArgs,
 } from './github'
@@ -120,6 +128,49 @@ export async function viewAvatarUrl(
   const result = await exec('gh', userArgs(login), { cwd, timeoutMs: GH_TIMEOUT_MS })
   if (result.failure !== null || result.code !== 0) return failure(result)
   return mapped(result, mapAvatarUrl)
+}
+
+/** Classifies a failed `gh api` stack lookup into a clean, non-throwing fallback reason. */
+export function classifyStackFailure(result: ExecResult): StackUnavailableReason {
+  if (result.failure === 'not-found') return 'gh-missing'
+  if (result.failure === 'timeout') return 'timeout'
+  const detail = `${result.stderr}\n${result.stdout}\n${result.message}`
+  if (
+    /\bHTTP 401\b|not logged into|authentication failed|bad credentials|gh auth login/i.test(detail)
+  ) {
+    return 'gh-signed-out'
+  }
+  if (/\bHTTP 404\b|"status"\s*:\s*"404"|\bNot Found\b/i.test(detail)) {
+    return 'not-found'
+  }
+  if (
+    /\bHTTP 403\b|"status"\s*:\s*"403"|\bForbidden\b|Resource not accessible|SAML enforcement/i.test(
+      detail,
+    )
+  ) {
+    return 'forbidden'
+  }
+  return 'unavailable'
+}
+
+/**
+ * Reads a GitHub pull request stack at `url` (which matches GITHUB_STACK_URL) via read-only
+ * `gh api`. Always degrades to `{ kind: 'unavailable', reason }` on 404/403/auth/timeout/schema
+ * mismatches so unsupported repositories never surface raw errors.
+ */
+export async function viewPullRequestStackByUrl(
+  exec: Exec,
+  url: string,
+  cwd: string,
+): Promise<PullRequestStackLookup> {
+  const args = stackArgs(url)
+  const result = await exec('gh', args, { cwd, timeoutMs: GH_TIMEOUT_MS })
+  if (result.failure !== null || result.code !== 0) {
+    return { kind: 'unavailable', reason: classifyStackFailure(result) }
+  }
+  const parsed = mapped(result, (json) => mapPullRequestStack(json, url))
+  if (!parsed.ok) return { kind: 'unavailable', reason: 'unavailable' }
+  return { kind: 'stack', stack: parsed.value }
 }
 
 /** Whether git and gh can be used, and which account gh is signed in as. */

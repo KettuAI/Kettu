@@ -1539,10 +1539,29 @@ describe('computer use requests', () => {
     rejects(() => posix['git.issue']({ url: `${url}\n` }))
   })
 
-  it('watches only github.com pull request and issue addresses, a bounded number', () => {
+  it('reads pull request stacks only from github.com stack addresses', () => {
+    const url = 'https://github.com/KettuAI/Kettu/stacks/42'
+    expect(posix['git.stack']({ url })).toEqual({ url })
+    expect(posix['git.stack']({ url, fresh: true })).toEqual({ url, fresh: true })
+    rejects(() => posix['git.stack']({}))
+    rejects(() => posix['git.stack']({ url, fresh: 'yes' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.com/KettuAI/Kettu/pull/42' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.com/KettuAI/Kettu/issues/42' }))
+    rejects(() => posix['git.stack']({ url: 'http://github.com/KettuAI/Kettu/stacks/42' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.example.com/a/b/stacks/1' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.com/a/b/stacks/1?x=--repo' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.com/a/b/stacks/0' }))
+    rejects(() => posix['git.stack']({ url: 'https://github.com/a/b/stacks/new' }))
+    rejects(() => posix['git.stack']({ url: `${url}\n` }))
+  })
+
+  it('watches only github.com pull request, issue, and stack addresses, a bounded number', () => {
     const pull = 'https://github.com/KettuAI/Kettu/pull/546'
     const issue = 'https://github.com/KettuAI/Kettu/issues/546'
-    expect(posix['git.watchReferences']({ urls: [pull, issue] })).toEqual({ urls: [pull, issue] })
+    const stack = 'https://github.com/KettuAI/Kettu/stacks/42'
+    expect(posix['git.watchReferences']({ urls: [pull, issue, stack] })).toEqual({
+      urls: [pull, issue, stack],
+    })
     expect(posix['git.watchReferences']({ urls: [] })).toEqual({ urls: [] })
     rejects(() => posix['git.watchReferences']({}))
     rejects(() => posix['git.watchReferences']({ urls: pull }))

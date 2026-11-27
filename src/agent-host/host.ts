@@ -4813,6 +4813,7 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.discardChanges(p, paths)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
       'git.issue': ({ url }) => this.gitCall((g) => g.issue(url)),
+      'git.stack': ({ url, fresh }) => this.gitCall((g) => g.stack(url, fresh)),
       // Its first sweep probes gh, so it waits for the environment as every other git call does.
       'git.watchReferences': ({ urls }, { portId }) =>
         this.gitCall(async (g) => {

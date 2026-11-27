@@ -465,7 +465,7 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
             <HugeiconsIcon icon={Link01Icon} strokeWidth={1.9} aria-hidden />
             {t('link.copyMarkdown')}
           </ContextMenuItem>
-          {reference && (
+          {reference && reference.kind !== 'stack' && (
             <ContextMenuItem
               onClick={() => copy(`${reference.owner}/${reference.repo}#${reference.number}`)}
             >

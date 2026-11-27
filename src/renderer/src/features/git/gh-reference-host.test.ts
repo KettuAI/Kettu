@@ -2,7 +2,13 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StateCreator } from 'zustand'
-import type { GitHubReference, GitStatus, GitTools, PullRequest } from '@shared/git'
+import type {
+  GitHubReference,
+  GitStatus,
+  GitTools,
+  PullRequest,
+  PullRequestStack,
+} from '@shared/git'
 import { onHost } from '@renderer/lib/host-paths'
 
 vi.mock(
@@ -300,5 +306,116 @@ describe('GitHub UI components and hooks use the target host state (#2699)', () 
       }),
     )
     expect(remotePartSignedOut).toContain('gh auth login')
+  }, 15_000)
+})
+
+describe('GitHub stacked pull requests reference chip and hover card (#2844)', () => {
+  const STACK_URL = 'https://github.com/acme/app/stacks/42'
+  const STACK_REF: GitHubReference = {
+    kind: 'stack',
+    owner: 'acme',
+    repo: 'app',
+    number: 42,
+    url: STACK_URL,
+  }
+
+  function makeStack(overrides: Partial<PullRequestStack> = {}): PullRequestStack {
+    return {
+      url: STACK_URL,
+      owner: 'acme',
+      repo: 'app',
+      number: 42,
+      title: null,
+      state: 'open',
+      base: 'main',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      pullRequests: [
+        {
+          number: 101,
+          url: 'https://github.com/acme/app/pull/101',
+          state: 'merged',
+          head: 'feat/model',
+          title: null,
+        },
+        {
+          number: 102,
+          url: 'https://github.com/acme/app/pull/102',
+          state: 'open',
+          head: 'feat/api',
+          title: 'Expose API',
+        },
+      ],
+      ...overrides,
+    }
+  }
+
+  it('renders stack chip text and hover card chain with clickable PR links and no target=_blank', async () => {
+    const { gitStore, fileRefs, ghRef, refData } = await loadUiModules()
+    gitStore.receiveGitTools(null, makeTools('ready', 'octocat'))
+    gitStore.receiveGitStatus(makeStatus('/local/repo'))
+    gitStore.receiveReference(STACK_URL, { kind: 'stack', stack: makeStack() }, null)
+
+    expect(refData.shortReference(STACK_REF, { owner: 'acme', repo: 'app' })).toBe('Stack #42')
+    expect(refData.shortReference(STACK_REF, { owner: 'other', repo: 'repo' })).toBe(
+      'acme/app Stack #42',
+    )
+
+    const chipHtml = renderToStaticMarkup(
+      createElement(
+        fileRefs.ProjectPathContext,
+        { value: '/local/repo' },
+        createElement(ghRef.ReferenceText, {
+          reference: STACK_REF,
+          bare: true,
+          children: STACK_URL,
+        }),
+      ),
+    )
+    expect(chipHtml).toContain('Stack #42')
+    expect(chipHtml).toContain('2 PRs → main')
+
+    const cardHtml = renderToStaticMarkup(
+      createElement(ghRef.ReferenceCard, { reference: STACK_REF, sessionId: 'sess-1' }),
+    )
+    expect(cardHtml).toContain('Open')
+    expect(cardHtml).toContain('acme/app · Stack #42')
+    expect(cardHtml).toContain('→')
+    expect(cardHtml).toContain('main')
+    expect(cardHtml).toContain('#101')
+    expect(cardHtml).toContain('feat/model')
+    expect(cardHtml).toContain('#102')
+    expect(cardHtml).toContain('Expose API')
+    expect(cardHtml).toContain('href="https://github.com/acme/app/pull/101"')
+    expect(cardHtml).toContain('href="https://github.com/acme/app/pull/102"')
+    expect(cardHtml).toContain(`href="${STACK_URL}"`)
+    expect(cardHtml).not.toContain('target="_blank"')
+  }, 15_000)
+
+  it('degrades cleanly on 404/403, signed-out gh, and timeout without raw error output', async () => {
+    const { gitStore, ghRef } = await loadUiModules()
+    gitStore.receiveGitTools(null, makeTools('ready', 'octocat'))
+
+    gitStore.receiveReference(STACK_URL, { kind: 'unavailable', reason: 'not-found' }, null)
+    const notFoundHtml = renderToStaticMarkup(
+      createElement(ghRef.ReferenceCard, { reference: STACK_REF }),
+    )
+    expect(notFoundHtml).toContain('Stack #42')
+    expect(notFoundHtml).toContain('Stack details aren&#x27;t available here')
+    expect(notFoundHtml).not.toContain('HTTP 404')
+    expect(notFoundHtml).not.toContain('Retry')
+
+    gitStore.receiveReference(STACK_URL, { kind: 'unavailable', reason: 'timeout' }, null)
+    const timeoutHtml = renderToStaticMarkup(
+      createElement(ghRef.ReferenceCard, { reference: STACK_REF }),
+    )
+    expect(timeoutHtml).toContain('Couldn&#x27;t load stack details right now.')
+    expect(timeoutHtml).toContain('Retry')
+
+    gitStore.receiveReference(STACK_URL, { kind: 'unavailable', reason: 'gh-signed-out' }, null)
+    const signedOutHtml = renderToStaticMarkup(
+      createElement(ghRef.ReferenceCard, { reference: STACK_REF }),
+    )
+    expect(signedOutHtml).toContain('gh auth login')
   }, 15_000)
 })

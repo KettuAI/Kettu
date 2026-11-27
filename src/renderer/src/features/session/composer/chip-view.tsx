@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Alert02Icon,
   BrowserIcon,
@@ -16,6 +17,7 @@ import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { ReferenceIcon } from '@renderer/features/git/gh-reference'
 import {
   GitHostContext,
+  referenceTitleOf,
   shortReference,
   useGitHostId,
   useProjectRepository,
@@ -78,13 +80,14 @@ function SiteIcon({ url }: { url: string }) {
   return <SiteIconImage src={icon} className="size-3.5 shrink-0 rounded-sm object-contain" />
 }
 
-/** A GitHub issue or pull request as the thread's reference: its state, number and title. */
+/** A GitHub issue, pull request, or stack as the thread's reference: its state, number and title. */
 function ReferenceBody({ reference }: { reference: GitHubReference }) {
+  const { t } = useTranslation('git')
   const hostId = useGitHostId()
   const { data } = useReferenceData(reference, hostId)
   const repo = useProjectRepository()
   useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
-  const title = data?.kind === 'pull' ? data.pr.title : data?.issue.title
+  const title = referenceTitleOf(data, t)
   return (
     <>
       <ReferenceIcon kind={reference.kind} data={data} size={14} />

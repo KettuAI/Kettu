@@ -43,6 +43,9 @@ describe('GitHub links without https:// in a reply', () => {
     expect(render('看一下github.com/o/r/pull/45，然后合并')).toBe(
       '看一下[github.com/o/r/pull/45](https://github.com/o/r/pull/45)，然后合并',
     )
+    expect(render('See github.com/o/r/stacks/42 and www.github.com/o/r/stacks/7.')).toBe(
+      'See [github.com/o/r/stacks/42](https://github.com/o/r/stacks/42) and [www.github.com/o/r/stacks/7](https://www.github.com/o/r/stacks/7).',
+    )
   })
 
   it('opens a www. address over https, as the full link does', () => {
@@ -57,6 +60,9 @@ describe('GitHub links without https:// in a reply', () => {
     )
     expect(render('[the fix](www.github.com/o/r/pull/45)')).toBe(
       '[the fix](https://www.github.com/o/r/pull/45)',
+    )
+    expect(render('[the stack](github.com/o/r/stacks/42)')).toBe(
+      '[the stack](https://github.com/o/r/stacks/42)',
     )
   })
 
