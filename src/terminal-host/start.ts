@@ -14,7 +14,8 @@ import { readCommandLine } from './command-title'
 import { readTtyModes } from './password'
 import { ProjectRegistry } from './projects'
 import { PortServer } from './server'
-import { type PtyProcess, type PtySpawn, TerminalManager } from './terminals'
+import { type PtySpawn, TerminalManager } from './terminals'
+import { listWindowsProcesses } from './windows-busy'
 
 export interface StartedTerminalHost {
   /**
@@ -42,16 +43,6 @@ async function loadPty(): Promise<PtySpawn> {
   return (file, args, options) => pty.spawn(file, args, options)
 }
 
-// node-pty lists a ConPTY's attached processes for its own kill(); it is not public API, so a
-// missing method means "unknown" rather than "idle".
-type WindowsPty = { _agent?: { _getConsoleProcessList?: () => Promise<number[]> } }
-
-function consoleProcesses(pty: PtyProcess): Promise<number[] | null> {
-  const agent = (pty as unknown as WindowsPty)._agent
-  if (typeof agent?._getConsoleProcessList !== 'function') return Promise.resolve(null)
-  return agent._getConsoleProcessList().catch(() => null)
-}
-
 export function startTerminalHost(
   control: ControlChannel<MainToTerminalHost, TerminalHostToMain>,
   options: TerminalHostOptions = {},
@@ -72,7 +63,8 @@ export function startTerminalHost(
       env: process.env,
       projects,
       loadPty: options.loadPty ?? loadPty,
-      consoleProcesses,
+      windowsProcesses:
+        message.platform === 'win32' ? () => listWindowsProcesses(process.env) : undefined,
       warn,
       isDevicePort: (port) => server?.isDevice(port) ?? false,
       handedBack: (sessionId, durationMs) =>

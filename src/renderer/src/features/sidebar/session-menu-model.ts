@@ -19,6 +19,7 @@ export type SessionMenuItem =
   | 'openInEditor'
   | 'showInFolder'
   | 'openTerminal'
+  | 'closeTerminals'
   | 'copyResume'
   | 'copySessionId'
   | 'exportConversation'
@@ -75,6 +76,8 @@ export interface SessionMenuContext {
   local: boolean
   /** The terminal may open in its folder. */
   terminal: boolean
+  /** The session currently has at least one open terminal. */
+  hasTerminals?: boolean
   /** Its harness has a command that resumes it. */
   resume: boolean
   /** The menu's place has a title field to rename it in; true when left out. */
@@ -102,6 +105,7 @@ export function sessionMenuGroups(
     place = 'row',
     local,
     terminal,
+    hasTerminals = false,
     resume,
     rename = true,
     worktree = false,
@@ -116,6 +120,7 @@ export function sessionMenuGroups(
     return [
       running ? ['open', 'stop'] : ['open'],
       summary.parentId ? ['showInParent'] : [],
+      terminal && hasTerminals ? ['closeTerminals'] : [],
       place === 'more' && leave ? ['leave'] : [],
     ].filter((group) => group.length > 0) as SessionMenuItem[][]
   }
@@ -124,6 +129,7 @@ export function sessionMenuGroups(
   const forks: SessionMenuItem[] =
     topLevel && canFork ? (worktree ? ['fork', 'forkSame'] : ['fork']) : []
   const ending: SessionMenuItem[] = [
+    ...(place === 'row' ? (['closeTerminals'] as const) : []),
     ...(place === 'more' && leave ? (['leave'] as const) : []),
     ...(removeWorktree ? (['removeWorktree'] as const) : []),
     ...(topLevel ? (['archive'] as const) : []),
@@ -139,7 +145,7 @@ export function sessionMenuGroups(
       ? [
           state,
           ['rename', ...(topLevel ? (['pin'] as const) : []), ...forks],
-          ['openInEditor', 'showInFolder', 'openTerminal'],
+          ['openInEditor', 'showInFolder', 'openTerminal', 'closeTerminals'],
           ['copyResume', 'copySessionId', 'exportConversation'],
           ending,
         ]
@@ -161,6 +167,7 @@ export function sessionMenuGroups(
   const missing = new Set<SessionMenuItem>([
     ...(local ? [] : (['openInEditor', 'showInFolder'] as const)),
     ...(terminal ? [] : (['openTerminal'] as const)),
+    ...(terminal && hasTerminals ? [] : (['closeTerminals'] as const)),
     ...(resume ? [] : (['copyResume'] as const)),
     ...(rename ? [] : (['rename'] as const)),
   ])

@@ -78,6 +78,7 @@ import { markOf, rowOf, statusOf, useAddable } from '@renderer/features/devices/
 import { DeviceRow } from '@renderer/features/devices/device-row'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
+import { requestCloseAllTerminals } from '@renderer/features/terminal/close-all-terminals-model'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { hasBand, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -913,6 +914,9 @@ export function SurfaceTabs({
                 onCloseRight={
                   index < items.length - 1 ? () => closeMany(items.slice(index + 1), item) : null
                 }
+                onCloseAllTerminals={
+                  item.kind === 'terminal' ? () => void requestCloseAllTerminals(panel) : null
+                }
               />
             ))}
             {starting && (
@@ -988,6 +992,7 @@ function SurfaceTab({
   onClose,
   onCloseOthers,
   onCloseRight,
+  onCloseAllTerminals,
 }: {
   panel: string
   projectPath: string
@@ -998,6 +1003,8 @@ function SurfaceTab({
   /** Null where the row has no other tab, or none after this one. */
   onCloseOthers: (() => void) | null
   onCloseRight: (() => void) | null
+  /** Present on terminal tabs to close every terminal belonging to this panel. */
+  onCloseAllTerminals: (() => void) | null
 }) {
   const { t } = useTranslation(['terminal', 'browser', 'devices', 'common', 'shell'])
   const [editing, setEditing] = useState(false)
@@ -1191,6 +1198,12 @@ function SurfaceTab({
           <PaneIcon icon={ArrowRight01Icon} size={16} />
           {t('shell:surfaces.closeRight')}
         </ContextMenuItem>
+        {onCloseAllTerminals && (
+          <ContextMenuItem onClick={onCloseAllTerminals}>
+            <PaneIcon icon={CancelCircleIcon} size={16} />
+            {t('terminal:tab.closeAll')}
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )

@@ -241,6 +241,7 @@
     "noEditors": "No editors found",
     "chooseApp": "Choose app…",
     "openTerminal": "Open terminal here",
+    "closeTerminals": "Close all terminals",
     "copyResume": "Copy resume command",
     "copiedResume": "Copied the resume command",
     "copySessionId": "Copy session ID",
