@@ -9,6 +9,8 @@ import {
   folderName,
   listSessionFiles,
   piFolders,
+  piSessionsDir,
+  piSessionsLocation,
   type PiFolders,
 } from './session-files'
 
@@ -55,6 +57,15 @@ describe("pi's folders", () => {
     expect((await piFolders(named, 'darwin')).sessions).toBe(path.join(root, 'elsewhere'))
     expect((await piFolders(env, 'darwin')).adapterMap).toBe(
       path.join(root, '.pi', 'pi-acp', 'session-map.json'),
+    )
+    expect(piSessionsLocation(env, root, 'darwin')).toBe(path.join(agent, 'kept'))
+    expect(piSessionsLocation(named, root, 'darwin')).toBe(path.join(root, 'elsewhere'))
+    expect(await piSessionsDir(env, root, 'darwin')).toBe(path.join(agent, 'kept'))
+    // An explicit chosen configDir overrides PI_CODING_AGENT_DIR.
+    const chosen = path.join(root, 'chosen-agent')
+    expect(piSessionsLocation(env, root, 'darwin', chosen)).toBe(path.join(chosen, 'sessions'))
+    expect((await piFolders(env, 'darwin', root, chosen)).sessions).toBe(
+      path.join(chosen, 'sessions'),
     )
   })
 })

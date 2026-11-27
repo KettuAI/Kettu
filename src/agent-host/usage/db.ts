@@ -17,7 +17,7 @@ import { transaction } from '../sqlite'
 import { PRICES, type FileCursor, type UsageRow } from './model'
 import { keepsNewer } from './rows'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Every time zone's offset is a multiple of 15 minutes, so a local day is a range of these. */
 export const QUARTER_MS = 900_000
@@ -37,7 +37,8 @@ const SCHEMA = `
     cache_read  INTEGER NOT NULL,
     cache_write INTEGER NOT NULL,
     cache_write_1h INTEGER NOT NULL,
-    turn        INTEGER NOT NULL
+    turn        INTEGER NOT NULL,
+    cost        REAL
   ) STRICT, WITHOUT ROWID;
   CREATE INDEX usage_by_agent ON usage (source, agent_id);
   CREATE TABLE buckets (
@@ -46,6 +47,7 @@ const SCHEMA = `
     agent_id    TEXT NOT NULL,
     model       TEXT NOT NULL,
     project     TEXT NOT NULL,
+    reported    INTEGER NOT NULL DEFAULT 0,
     rows        INTEGER NOT NULL,
     input       INTEGER NOT NULL,
     output      INTEGER NOT NULL,
@@ -54,7 +56,8 @@ const SCHEMA = `
     cache_write INTEGER NOT NULL,
     cache_write_1h INTEGER NOT NULL,
     turns       INTEGER NOT NULL,
-    PRIMARY KEY (quarter, source, agent_id, model, project)
+    cost        REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (quarter, source, agent_id, model, project, reported)
   ) STRICT, WITHOUT ROWID;
   CREATE TABLE cursors (
     id        TEXT PRIMARY KEY,
@@ -69,8 +72,8 @@ const SCHEMA = `
   CREATE INDEX cursors_by_agent ON cursors (agent_id);
 `
 
-/** Kettu's buckets summed again from its rows. */
-const KETTU_BUCKETS = `
+/** Kettu's buckets summed again from its rows on the pre-v4 schema (used by upgrades 1 and 2). */
+const KETTU_BUCKETS_V3 = `
   DELETE FROM buckets WHERE source = 'kettu';
   INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output, reasoning,
     cache_read, cache_write, cache_write_1h, turns)
@@ -96,7 +99,7 @@ const UPGRADE_1 = `
     SELECT MIN(key) FROM usage WHERE source = 'kettu'
     GROUP BY substr(key, 1, length(key) - length(model))
   );
-  ${KETTU_BUCKETS}
+  ${KETTU_BUCKETS_V3}
 `
 
 /**
@@ -113,7 +116,38 @@ const UPGRADE_2 = `
     AND substr(agent_id, 1, instr(agent_id || '~', '~') - 1)
       IN (${CACHE_IN_INPUT.map((harness) => `'${harness}'`).join(', ')})
     AND cache_read + cache_write > 0 AND input >= cache_read + cache_write;
-  ${KETTU_BUCKETS}
+  ${KETTU_BUCKETS_V3}
+`
+
+// Version 3 stored no log-reported USD cost; every existing row and bucket continues to be priced
+// from the model price list (reported = 0, cost = 0).
+const UPGRADE_3 = `
+  ALTER TABLE usage ADD COLUMN cost REAL;
+  CREATE TABLE buckets_v4 (
+    quarter     INTEGER NOT NULL,
+    source      TEXT NOT NULL,
+    agent_id    TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    project     TEXT NOT NULL,
+    reported    INTEGER NOT NULL DEFAULT 0,
+    rows        INTEGER NOT NULL,
+    input       INTEGER NOT NULL,
+    output      INTEGER NOT NULL,
+    reasoning   INTEGER NOT NULL,
+    cache_read  INTEGER NOT NULL,
+    cache_write INTEGER NOT NULL,
+    cache_write_1h INTEGER NOT NULL,
+    turns       INTEGER NOT NULL,
+    cost        REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (quarter, source, agent_id, model, project, reported)
+  ) STRICT, WITHOUT ROWID;
+  INSERT INTO buckets_v4 (quarter, source, agent_id, model, project, reported, rows, input, output,
+    reasoning, cache_read, cache_write, cache_write_1h, turns, cost)
+  SELECT quarter, source, agent_id, model, project, 0, rows, input, output,
+    reasoning, cache_read, cache_write, cache_write_1h, turns, 0
+  FROM buckets;
+  DROP TABLE buckets;
+  ALTER TABLE buckets_v4 RENAME TO buckets;
 `
 
 /** The price list the queries join, in a temporary table of this connection. */
@@ -219,14 +253,15 @@ const SUMS = `
   SUM(b.reasoning) AS reasoning,
   SUM(b.cache_read) AS cache_read,
   SUM(b.cache_write) AS cache_write,
-  SUM(CASE WHEN ${PRICED} THEN
-    b.input * ${INPUT_PRICE}
-    + (b.output + b.reasoning) * ${OUTPUT_PRICE}
-    + b.cache_read * ${READ_PRICE}
-    + (b.cache_write - b.cache_write_1h) * ${WRITE_PRICE}
-    + b.cache_write_1h * ${HOUR_PRICE}
+  SUM(CASE WHEN b.reported = 1 THEN b.cost
+    WHEN ${PRICED} THEN
+      b.input * ${INPUT_PRICE}
+      + (b.output + b.reasoning) * ${OUTPUT_PRICE}
+      + b.cache_read * ${READ_PRICE}
+      + (b.cache_write - b.cache_write_1h) * ${WRITE_PRICE}
+      + b.cache_write_1h * ${HOUR_PRICE}
     ELSE NULL END) AS cost,
-  SUM(CASE WHEN ${PRICED} THEN 0
+  SUM(CASE WHEN b.reported = 1 OR ${PRICED} THEN 0
     ELSE b.input + b.output + b.reasoning + b.cache_read + b.cache_write END) AS unpriced_tokens,
   SUM(CASE WHEN ${PRICED} THEN b.cache_read * (${INPUT_PRICE} - ${READ_PRICE}) ELSE 0 END)
     AS cache_saved`
@@ -241,17 +276,17 @@ function prepareAll(db: DatabaseSync) {
     row: sql('SELECT * FROM usage WHERE key = ?'),
     insertRow: sql(`
       INSERT INTO usage (key, source, agent_id, session_id, project, model, at, input, output,
-        reasoning, cache_read, cache_write, cache_write_1h, turn)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        reasoning, cache_read, cache_write, cache_write_1h, turn, cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     updateRow: sql(`
       UPDATE usage SET session_id = ?, project = ?, model = ?, at = ?, input = ?, output = ?,
-        reasoning = ?, cache_read = ?, cache_write = ?, cache_write_1h = ?, turn = ?
+        reasoning = ?, cache_read = ?, cache_write = ?, cache_write_1h = ?, turn = ?, cost = ?
       WHERE key = ?`),
     addBucket: sql(`
-      INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output,
-        reasoning, cache_read, cache_write, cache_write_1h, turns)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (quarter, source, agent_id, model, project) DO UPDATE SET
+      INSERT INTO buckets (quarter, source, agent_id, model, project, reported, rows, input, output,
+        reasoning, cache_read, cache_write, cache_write_1h, turns, cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (quarter, source, agent_id, model, project, reported) DO UPDATE SET
         rows = rows + excluded.rows,
         input = input + excluded.input,
         output = output + excluded.output,
@@ -259,10 +294,12 @@ function prepareAll(db: DatabaseSync) {
         cache_read = cache_read + excluded.cache_read,
         cache_write = cache_write + excluded.cache_write,
         cache_write_1h = cache_write_1h + excluded.cache_write_1h,
-        turns = turns + excluded.turns`),
+        turns = turns + excluded.turns,
+        cost = cost + excluded.cost`),
     dropEmptyBucket: sql(
       `DELETE FROM buckets
-      WHERE quarter = ? AND source = ? AND agent_id = ? AND model = ? AND project = ? AND rows <= 0`,
+      WHERE quarter = ? AND source = ? AND agent_id = ? AND model = ? AND project = ? AND reported = ?
+        AND rows <= 0`,
     ),
     putCursor: sql(`
       INSERT INTO cursors (id, agent_id, size, mtime_ns, offset, tail, state, seen_at)
@@ -376,9 +413,15 @@ export class UsageDb {
 
   /** Brings an older file to `SCHEMA_VERSION` in one transaction. */
   private upgrade(db: DatabaseSync, from: number): void {
+    const hasColumn = (table: string, column: string): boolean =>
+      db
+        .prepare(`PRAGMA table_info(${table})`)
+        .all()
+        .some((info) => info.name === column)
     transaction(db, () => {
       if (from === 1) db.exec(UPGRADE_1)
       if (from <= 2) db.exec(UPGRADE_2)
+      if (from <= 3 && !hasColumn('usage', 'cost')) db.exec(UPGRADE_3)
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   }
@@ -423,12 +466,15 @@ export class UsageDb {
     const quarter = quarterOf(row.at)
     // A key column cannot be null; '' stands for no project.
     const project = row.project ?? ''
+    const cost = rowCost(row.cost)
+    const reported = cost === null ? 0 : 1
     sql.addBucket.run(
       quarter,
       row.source,
       row.agentId,
       row.model,
       project,
+      reported,
       sign,
       sign * row.input,
       sign * row.output,
@@ -437,8 +483,11 @@ export class UsageDb {
       sign * row.cacheWrite,
       sign * row.cacheWrite1h,
       sign * row.turn,
+      sign * (cost ?? 0),
     )
-    if (sign < 0) sql.dropEmptyBucket.run(quarter, row.source, row.agentId, row.model, project)
+    if (sign < 0) {
+      sql.dropEmptyBucket.run(quarter, row.source, row.agentId, row.model, project, reported)
+    }
   }
 
   /**
@@ -450,6 +499,7 @@ export class UsageDb {
       let changed = 0
       this.transaction(db, () => {
         for (const row of rows) {
+          const cost = rowCost(row.cost)
           const stored = sql.row.get(row.key)
           if (!stored) {
             sql.insertRow.run(
@@ -467,13 +517,15 @@ export class UsageDb {
               row.cacheWrite,
               row.cacheWrite1h,
               row.turn,
+              cost,
             )
-            this.bucket(sql, row, 1)
+            this.bucket(sql, { ...row, cost }, 1)
             changed++
             continue
           }
           const previous = fromRow(stored)
-          if (!keepsNewer(previous, row)) continue
+          const nextRow = { ...row, cost }
+          if (!keepsNewer(previous, nextRow)) continue
           sql.updateRow.run(
             row.sessionId,
             row.project,
@@ -486,10 +538,11 @@ export class UsageDb {
             row.cacheWrite,
             row.cacheWrite1h,
             row.turn,
+            cost,
             row.key,
           )
           this.bucket(sql, previous, -1)
-          this.bucket(sql, { ...row, source: previous.source, agentId: previous.agentId }, 1)
+          this.bucket(sql, { ...nextRow, source: previous.source, agentId: previous.agentId }, 1)
           changed++
         }
         if (cursor) {
@@ -685,6 +738,10 @@ function addParts(sum: TokenParts, add: TokenParts): void {
   if (add.cost !== null) sum.cost = (sum.cost ?? 0) + add.cost
 }
 
+function rowCost(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
 function fromRow(row: Row): UsageRow {
   return {
     key: String(row.key),
@@ -701,5 +758,6 @@ function fromRow(row: Row): UsageRow {
     cacheWrite: num(row.cache_write),
     cacheWrite1h: num(row.cache_write_1h),
     turn: num(row.turn),
+    cost: row.cost === null || row.cost === undefined ? null : num(row.cost),
   }
 }

@@ -101,12 +101,12 @@ export function configLocations(
       return layout(folder, xdg ? 'XDG_CONFIG_HOME' : null, settings, 'AGENTS.md')
     }
     case 'pi': {
-      const moved = variable('PI_CODING_AGENT_DIR')
+      const moved = chosen ?? variable('PI_CODING_AGENT_DIR')
       const folder = moved ?? p.join(home, '.pi', 'agent')
       return [
         ...layout(
           folder,
-          moved ? 'PI_CODING_AGENT_DIR' : null,
+          chosen ? null : moved ? 'PI_CODING_AGENT_DIR' : null,
           { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
           'AGENTS.md',
         ).map((location) =>

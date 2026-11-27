@@ -9,6 +9,7 @@
     "opencode": "OpenCode 的会话记录",
     "cline": "Cline 的会话记录",
     "antigravity": "Antigravity 的会话记录",
+    "pi": "Pi 的会话记录",
     "acp": "Kettu 这次启动以来的消息"
   },
   "totals": {
@@ -37,6 +38,7 @@
     "raw": "Claude Code 为它们记的记录",
     "instructions": "Instructions",
     "codexRaw": "Codex 为它们记的记录",
+    "piRaw": "Pi 为它们记的记录",
     "instructionBlocks_one": "Instructions · {{count}} 段",
     "instructionBlocks_other": "Instructions · {{count}} 段"
   },

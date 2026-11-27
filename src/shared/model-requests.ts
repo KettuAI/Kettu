@@ -2,7 +2,8 @@
 // record of the session when the pane opens. Kettu keeps none of it and logs none of it.
 
 /** Where a session's requests are read from. */
-export type RequestsSource = 'claude' | 'codex' | 'opencode' | 'cline' | 'antigravity' | 'acp'
+export type RequestsSource =
+  'claude' | 'codex' | 'opencode' | 'cline' | 'antigravity' | 'pi' | 'acp'
 
 /** How many requests a page holds, counted back from where it starts. */
 export const REQUESTS_PAGE = 50
