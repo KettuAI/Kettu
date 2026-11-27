@@ -288,6 +288,11 @@ export async function buildReportFiles(parts: ReportParts): Promise<Map<string, 
       'sessions.json',
       json(host.sessions.map((session) => sessionForReport(session, extras.has('titles')))),
     )
+    for (const log of host.mcpLogs ?? []) {
+      if (log.text === '') continue
+      const name = `${log.server}-${log.instance}`.replace(/[^A-Za-z0-9._~-]+/g, '_')
+      text(`mcp/${name}.log`, log.text)
+    }
     if (extras.has('messages')) {
       for (const agent of host.agents) {
         if (agent.traffic.length === 0 && agent.stderr === '') continue

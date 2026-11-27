@@ -4,6 +4,7 @@
 
 import type { AgentId } from './agents'
 import type { McpConfigSource } from './mcp-discovery'
+import type { McpProjects } from './mcp-insight'
 
 /** A header or environment variable: a fixed value, or one the user fills in when installing. */
 export type McpValue =
@@ -88,6 +89,10 @@ export interface MarketServer {
   on: boolean
   // How Kettu runs it; absent means each default of McpRun.
   run?: McpRun
+  // Tools the router leaves out of its lists and refuses, for every agent, by name.
+  toolsOff?: string[]
+  // Which projects' sessions get it; absent means every project.
+  projects?: McpProjects
 }
 
 /**

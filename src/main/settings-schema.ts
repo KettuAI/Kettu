@@ -55,6 +55,7 @@ import {
   type McpSpec,
   type McpValue,
 } from '@shared/marketplace'
+import { MAX_MCP_PROJECTS, MAX_TOOLS_OFF, type McpProjects } from '@shared/mcp-insight'
 import { PLUGIN_NAME, pluginItem } from '@shared/plugins'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -391,6 +392,8 @@ export const MAX_MARKET_SERVERS = 200
 const MAX_MARKET_ID = 200
 const MAX_MARKET_TITLE = 200
 const MAX_MARKET_VERSION = 100
+// The protocol caps a tool's name at 128 characters.
+const MAX_TOOL_NAME = 128
 const MAX_SPEC_TEXT = 4096
 const MAX_SPEC_ARGS = 200
 const MAX_SPEC_VALUES = 64
@@ -662,6 +665,8 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
     'importedFrom',
     'importedWith',
     'run',
+    'toolsOff',
+    'projects',
   ]
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
@@ -720,6 +725,14 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
       ? undefined
       : parseMcpOrigin(raw.importedWith, `${path}.importedWith`, strict)
   if (typeof importedWith === 'string') return importedWith
+  const toolsOff =
+    raw.toolsOff === undefined ? undefined : parseToolsOff(raw.toolsOff, `${path}.toolsOff`)
+  if (typeof toolsOff === 'string') return toolsOff
+  const projects =
+    raw.projects === undefined
+      ? undefined
+      : parseMcpProjects(raw.projects, `${path}.projects`, strict)
+  if (typeof projects === 'string') return projects
   return {
     id,
     name,
@@ -732,7 +745,45 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
     agents: served.agents,
     on: on as boolean,
     ...(run && Object.keys(run).length > 0 ? { run } : {}),
+    ...(toolsOff && toolsOff.length > 0 ? { toolsOff } : {}),
+    ...(projects ? { projects } : {}),
   }
+}
+
+/** The names of a server's tools turned off, each once. */
+function parseToolsOff(raw: unknown, path: string): string[] | string {
+  if (!Array.isArray(raw) || raw.length > MAX_TOOLS_OFF) {
+    return `"${path}" must be a list of at most ${MAX_TOOLS_OFF} tool names`
+  }
+  for (const name of raw) {
+    if (!isText(name, MAX_TOOL_NAME)) {
+      return `"${path}" must hold tool names of 1 to ${MAX_TOOL_NAME} characters`
+    }
+  }
+  return [...new Set(raw as string[])]
+}
+
+/** Which projects a server goes to, by their absolute paths. */
+function parseMcpProjects(raw: unknown, path: string, strict: boolean): McpProjects | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const extra = extraKey(raw, ['mode', 'paths'], path, strict)
+  if (extra) return extra
+  const problem = oneOf('only', 'except')(raw.mode, `${path}.mode`)
+  if (problem) return problem
+  const { paths } = raw
+  if (!Array.isArray(paths) || paths.length > MAX_MCP_PROJECTS) {
+    return `"${path}.paths" must be a list of at most ${MAX_MCP_PROJECTS} folders`
+  }
+  for (const item of paths) {
+    if (
+      typeof item !== 'string' ||
+      item.length > MAX_PATH_LENGTH ||
+      !isAbsolutePath(item, process.platform)
+    ) {
+      return `"${path}.paths" must hold absolute folder paths`
+    }
+  }
+  return { mode: raw.mode as McpProjects['mode'], paths: [...new Set(paths as string[])] }
 }
 
 /** How a server runs, or why it is not that; a file drops what it does not know. */

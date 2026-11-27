@@ -79,6 +79,14 @@ import type {
 } from './plugin-views'
 import type { InstalledKettuPlugin, PluginPlan, PluginResource, PluginSource } from './plugins'
 import type { MediaAuthorization, MediaOpenResult } from './media'
+import type {
+  McpCallQuery,
+  McpCallRecord,
+  McpInstanceInfo,
+  McpServerInsight,
+  McpServerLog,
+  SessionMcpServer,
+} from './mcp-insight'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
 import type {
   MemoryDecision,
@@ -1147,6 +1155,8 @@ export interface DiagnosticsBundle {
   agents: AgentDiagnostics[]
   sessions: SessionSummary[]
   log: { at: number; level: 'info' | 'warn' | 'error'; message: string }[]
+  /** The last stderr of each MCP server instance, keys masked; absent from older hosts. */
+  mcpLogs?: (McpServerLog & { server: string })[]
 }
 
 /** Every request the agent host accepts, keyed by method name. */
@@ -1287,6 +1297,16 @@ export interface HostContract {
   // Clears a server's tokens and keeps the server; every agent loses it at once.
   'market.disconnect': { params: { serverId: string }; result: void }
   'market.connections': { params: void; result: MarketConnections }
+  // Each library server's state, tools and per-agent context as the router knows them, or one's.
+  'market.mcpInsight': { params: { serverId?: string }; result: McpServerInsight[] }
+  // The processes and connections a server has now.
+  'market.mcpInstances': { params: { serverId: string }; result: McpInstanceInfo[] }
+  // A server's recent calls, newest first: metadata only.
+  'market.mcpCalls': { params: McpCallQuery; result: { calls: McpCallRecord[] } }
+  // The last stderr of each instance of a command server, its keys masked.
+  'market.mcpLogs': { params: { serverId: string }; result: McpServerLog[] }
+  // Stops one instance; the next request of its sessions starts it again.
+  'market.mcpStop': { params: { serverId: string; instance: string }; result: void }
   // The plugins each Claude Code and Codex agent has of its own, which Kettu only lists.
   'market.ownPlugins': { params: { refresh?: boolean }; result: AgentOwnPlugins }
   // The skills catalog and each agent's own skills.
@@ -1832,6 +1852,13 @@ export interface HostContract {
    * library's MCP servers as they are.
    */
   'sessions.applyMcp': { params: { sessionId: string }; result: void }
+  // The library servers the session's agent was handed, with their state.
+  'sessions.mcpServers': { params: { sessionId: string }; result: SessionMcpServer[] }
+  // Reconnects one, or turns it off or on for this session alone.
+  'sessions.mcpServer': {
+    params: { sessionId: string; serverId: string; action: 'reconnect' | 'off' | 'on' }
+    result: void
+  }
   // title null: back to the agent's title.
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
@@ -2384,6 +2411,11 @@ export const HOST_METHODS = [
   'market.cancelConnect',
   'market.disconnect',
   'market.connections',
+  'market.mcpInsight',
+  'market.mcpInstances',
+  'market.mcpCalls',
+  'market.mcpLogs',
+  'market.mcpStop',
   'market.ownPlugins',
   'market.skills',
   'market.skillRepository',
@@ -2482,6 +2514,8 @@ export const HOST_METHODS = [
   'sessions.setConfigOption',
   'sessions.refreshModels',
   'sessions.applyMcp',
+  'sessions.mcpServers',
+  'sessions.mcpServer',
   'sessions.rename',
   'sessions.close',
   'sessions.pin',

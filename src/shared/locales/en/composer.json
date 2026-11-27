@@ -247,7 +247,26 @@
       "changed_other": "{{names}} were added or changed since this session started.",
       "useNow": "Use now",
       "afterTurn": "Available once the turn ends",
-      "applyFailed": "Could not use the servers now: {{error}}"
+      "applyFailed": "Could not use the servers now: {{error}}",
+      "manage": "Manage",
+      "state": {
+        "running": "Connected",
+        "idle": "Idle",
+        "starting": "Starting…",
+        "signIn": "Needs sign-in",
+        "byAgent": "Run by the agent"
+      },
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "perTurn": "{{tokens}} / turn",
+      "offHere": "Off for this session",
+      "turnOn": "Turn on",
+      "signIn": "Sign in",
+      "more": "More for {{name}}",
+      "reconnect": "Reconnect",
+      "turnOff": "Turn off for this session",
+      "openPage": "Open server page",
+      "actionFailed": "{{name}}: {{error}}"
     }
   },
   "attachments": {

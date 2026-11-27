@@ -177,6 +177,42 @@ describe('buildReportFiles', () => {
   })
 })
 
+describe('buildReportFiles and MCP servers', () => {
+  it("writes each server instance's stderr as a log of its own, masked like the rest", async () => {
+    const base = await parts([])
+    const files = await buildReportFiles({
+      ...base,
+      host: {
+        ...host,
+        mcpLogs: [
+          {
+            instance: 'i3',
+            serverId: 'manual:files',
+            server: 'files',
+            sessionId: 's1',
+            folder: '~/work',
+            running: true,
+            text: `listening in /Users/ann/work, key ${KEY}\n`,
+          },
+          {
+            instance: 'i4',
+            serverId: 'manual:files',
+            server: 'files',
+            sessionId: null,
+            folder: '~',
+            running: false,
+            text: '',
+          },
+        ],
+      },
+    })
+    const log = files.get('mcp/files-i3.log') as string
+    expect(log).toContain('listening in ~/work')
+    expect(log).not.toContain('sk-ant-')
+    expect(files.has('mcp/files-i4.log')).toBe(false)
+  })
+})
+
 describe('buildReportFiles and personal details', () => {
   const EMAIL = 'ann.lee@example.com'
   const at = (minutesAgo: number): number => NOW - minutesAgo * 60_000

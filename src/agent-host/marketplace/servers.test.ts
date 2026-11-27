@@ -9,6 +9,7 @@ import {
   libraryServers,
   parseMarketKeys,
   serverCommand,
+  serverMasker,
 } from './servers'
 
 const github: MarketServer = {
@@ -285,5 +286,60 @@ describe('parseMarketKeys', () => {
     expect(parseMarketKeys({ a: { X: 1 } })).toBeNull()
     expect(parseMarketKeys({ '': { X: 'x' } })).toBeNull()
     expect(parseMarketKeys({ a: { X: 'x'.repeat(20_000) } })).toBeNull()
+  })
+})
+
+describe('libraryServers by project', () => {
+  const held = keys({ [github.id]: { Authorization: 'ghp_secret' } })
+  const names = (server: MarketServer, project: string) =>
+    libraryServers([server], held, 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: router().access,
+      project,
+    }).map((entry) => entry.name)
+
+  it('hands a server set to some projects only to sessions of those, and the rest the others', () => {
+    const only: MarketServer = { ...github, projects: { mode: 'only', paths: ['/work/app'] } }
+    expect(names(only, '/work/app')).toEqual(['github'])
+    expect(names(only, '/work/other')).toEqual([])
+    const except: MarketServer = { ...github, projects: { mode: 'except', paths: ['/work/app'] } }
+    expect(names(except, '/work/app')).toEqual([])
+    expect(names(except, '/work/other')).toEqual(['github'])
+    expect(names(github, '/anywhere')).toEqual(['github'])
+  })
+
+  it('still hands a server a workflow step names, whatever its projects', () => {
+    const only: MarketServer = { ...github, projects: { mode: 'only', paths: ['/work/app'] } }
+    const servers = libraryServers([only], held, 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      router: router().access,
+      project: '/work/other',
+      also: ['github'],
+    })
+    expect(servers.map((entry) => entry.name)).toEqual(['github'])
+  })
+})
+
+describe('serverMasker', () => {
+  it("masks a server's key values and fixed values in what its process printed", () => {
+    const server: MarketServer = {
+      ...context7,
+      spec: {
+        type: 'stdio',
+        command: 'npx',
+        args: [],
+        env: [
+          { name: 'CONTEXT7_API_KEY', input: true, secret: true, required: false },
+          { name: 'DATABASE_URI', value: 'postgres://app:hunter2hunter2@db/app' },
+        ],
+      },
+    }
+    const mask = serverMasker(server, keys({ [server.id]: { CONTEXT7_API_KEY: 'c7-key-value' } }))
+    const out = mask(
+      'auth with c7-key-value failed\nconnecting to postgres://app:hunter2hunter2@db/app',
+    )
+    expect(out).not.toContain('c7-key-value')
+    expect(out).not.toContain('hunter2hunter2')
+    expect(out).toContain('auth with')
   })
 })
