@@ -320,6 +320,50 @@ export interface AttentionRequest {
   deny?: AttentionAnswer
 }
 
+/** 主机上报给 remote-host 驱动移动端灵动岛的实时会话与限额轻量快照。 */
+export interface HostActivityRunning {
+  sessionId: string
+  agentId: string
+  title: string
+  turnStartedAt: number
+  project?: string
+  body?: string
+  plan?: { done: number; total: number; current?: string }
+  parentId?: string | null
+}
+
+export interface HostActivityRecent {
+  sessionId: string
+  agentId: string
+  title: string
+  endedAt: number
+  body?: string
+  project?: string
+}
+
+export interface HostActivityLimit {
+  agentId: string
+  label: string
+  planLabel?: string
+  resetsAt?: number
+  pausedSessions?: number
+}
+
+export interface HostActivityWaitingMeta {
+  agentId: string
+  title: string
+  since: number
+  project?: string
+}
+
+export interface HostActivitySnapshot {
+  running: HostActivityRunning[]
+  error: HostActivityRecent[]
+  ended: HostActivityRecent[]
+  limit: HostActivityLimit | null
+  waitingMeta: Record<string, HostActivityWaitingMeta>
+}
+
 /** Who had the session in front when it happened: any window or device, and which devices. */
 export interface AttentionFront {
   any: boolean
@@ -391,6 +435,8 @@ export type HostToMain =
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
   // What waits for the user, by session: the ids of the requests, new sites, apps and setups.
   | { type: 'host:waiting'; sessions: Record<string, string[]> }
+  // 供移动端实时活动（灵动岛 / 锁屏卡片）消费的运行中会话、最近错误/完成与限额快照。
+  | { type: 'host:live-activity'; activity: HostActivitySnapshot }
   // A window or device showed the session, or it was marked read: its turn was seen.
   | { type: 'host:seen'; sessionId: string }
   | ({ type: 'host:busy-changed' } & BusyCounts) // for the tray's state line
@@ -587,6 +633,7 @@ export type MainToRemoteHost =
       push?: string
       /** What waits for the user and whether they are at the computer, as last told. */
       waiting?: Record<string, string[]>
+      liveActivity?: HostActivitySnapshot
       present?: boolean
       /**
        * Devices of the same Kettu account find this host on the relay and ask to be added;
@@ -742,6 +789,7 @@ export type MainToRemoteHost =
   // notifications.
   | { type: 'remote-host:attention'; attention: Extract<HostToMain, { type: 'host:attention' }> }
   | { type: 'remote-host:waiting'; sessions: Record<string, string[]> }
+  | { type: 'remote-host:live-activity'; activity: HostActivitySnapshot }
   | { type: 'remote-host:seen'; sessionId: string }
   // The desktop app's user is at the computer: its screen unlocked and input in the last two
   // minutes. The daemon sends none, since it cannot tell.

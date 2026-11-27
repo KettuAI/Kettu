@@ -579,6 +579,7 @@ async function start(): Promise<void> {
       remoteHost.attention(message)
     },
     onWaiting: (sessions) => remoteHost.setWaiting(sessions),
+    onLiveActivity: (activity) => remoteHost.setLiveActivity(activity),
     onSeen: (sessionId) => remoteHost.seen(sessionId),
     onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),

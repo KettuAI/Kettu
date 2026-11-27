@@ -278,6 +278,13 @@ export interface PushActions {
   deny?: { optionId: string; label: string }
 }
 
+/** 实时活动运行中携带的 Plan 步数进度摘要。 */
+export interface LiveActivityPlan {
+  done: number
+  total: number
+  current?: string
+}
+
 /** What the host notifies about, as the sealed content says it. */
 export type PushEvent =
   /** A request waits: `requestId` answers it with `permissions.respond`, `actions` when they fit. */
@@ -287,7 +294,21 @@ export type PushEvent =
       requestId?: string
       actions?: PushActions
     }
-  | { kind: 'turn-ended' | 'error' | 'routine-ended'; sessionId: string }
+  | {
+      kind: 'turn-ended'
+      sessionId: string
+      agentId?: string
+      workedMs?: number
+      project?: string
+    }
+  | {
+      kind: 'error'
+      sessionId: string
+      agentId?: string
+      exitCode?: number
+      project?: string
+    }
+  | { kind: 'routine-ended'; sessionId: string }
   /** An agent's routines paused near a plan limit; it opens the Routines page. */
   | { kind: 'routine-paused'; agentId: string }
   /** A device of the account asks to be added; it opens the request's card. */
@@ -297,7 +318,36 @@ export type PushEvent =
   /** Removes the notification of the same tag, which no longer applies. */
   | { kind: 'withdraw'; sessionId?: string }
   /** A Live Activity's state: how many requests wait, and the session of the latest. */
-  | { kind: 'waiting'; count: number; sessionId?: string }
+  | {
+      kind: 'waiting'
+      count: number
+      sessionId?: string
+      agentId?: string
+      requestId?: string
+      actions?: PushActions
+      since?: number
+      actionKind?: 'execute' | 'edit' | 'review'
+      diffAdded?: number
+      diffRemoved?: number
+    }
+  /** 实时活动运行中态：当前焦点会话、启动时刻与可选 Plan 进度。 */
+  | {
+      kind: 'running'
+      sessionId: string
+      agentId?: string
+      turnStartedAt?: number
+      plan?: LiveActivityPlan
+      project?: string
+    }
+  /** 实时活动限额用完态：达到上限的智能体窗口与重置时刻。 */
+  | {
+      kind: 'limit'
+      agentId: string
+      label?: string
+      planLabel?: string
+      resetsAt?: number
+      pausedSessions?: number
+    }
   /** A Live Activity's attributes, fixed while it runs. */
   | { kind: 'activity' }
 

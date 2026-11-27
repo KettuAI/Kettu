@@ -67,6 +67,11 @@ import type {
   ArtifactExportResult,
   ArtifactListResult,
   ComputerControlAction,
+  HostActivityLimit,
+  HostActivityRecent,
+  HostActivityRunning,
+  HostActivitySnapshot,
+  HostActivityWaitingMeta,
   HostToMain,
   MainToHost,
   NodeRuntime,
@@ -858,6 +863,8 @@ export class AgentHost {
   })
   private lastProcesses = '[]'
   private sentFolders: string | null = null
+  private activityTimer: NodeJS.Timeout | null = null
+  private lastActivityJson = ''
   private stopping: Promise<void> | null = null
   private readonly stopStorageWatch: () => void
   private readonly catalog: readonly AgentDefinition[]
@@ -1616,6 +1623,7 @@ export class AgentHost {
         this.limitsNoticed(status)
         this.routines.limitsChanged(status.id)
         this.tasks?.recheck()
+        this.scheduleActivity()
       },
       removed: (agentId) => this.hub.broadcast({ type: 'agent.removed', agentId }),
       processes: (processes) => this.reportProcesses(processes),
@@ -2065,6 +2073,7 @@ export class AgentHost {
           }
           this.hub.broadcast({ type: 'session.summary', summary })
           if (summary.scratch || summary.worktree) this.sendFolders()
+          this.scheduleActivity()
         },
         removed: (sessionId, portIds) => {
           if (portIds) {
@@ -2073,6 +2082,7 @@ export class AgentHost {
           }
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
+          this.scheduleActivity()
         },
         ended: (sessionIds) => {
           this.htmlPreviews.end(sessionIds)
@@ -2112,8 +2122,14 @@ export class AgentHost {
           )
         },
         badge: (count) => options.send({ type: 'host:badge', count }),
-        waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
-        seen: (sessionId) => options.send({ type: 'host:seen', sessionId }),
+        waiting: (sessions) => {
+          options.send({ type: 'host:waiting', sessions })
+          this.scheduleActivity()
+        },
+        seen: (sessionId) => {
+          options.send({ type: 'host:seen', sessionId })
+          this.scheduleActivity()
+        },
         busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
         completed: () => void this.star.turnCompleted(),
       },
@@ -4523,8 +4539,158 @@ export class AgentHost {
     this.pluginSecretCalls.clear()
   }
 
+  /** 250ms 防抖合并实时活动快照上报，仅在摘要内容实际变化时发往父进程与 remote-host。 */
+  private scheduleActivity(): void {
+    if (this.stopping || this.activityTimer) return
+    this.activityTimer = setTimeout(() => {
+      this.activityTimer = null
+      this.reportActivity()
+    }, 250)
+    this.activityTimer.unref?.()
+  }
+
+  private reportActivity(): void {
+    if (this.stopping) return
+    const now = Date.now()
+    const summaries = this.sessions.list().filter((s) => s.archivedAt === null && !s.prepared)
+
+    const running: HostActivityRunning[] = []
+    const error: HostActivityRecent[] = []
+    const ended: HostActivityRecent[] = []
+    const waitingMeta: Record<string, HostActivityWaitingMeta> = {}
+    let limitPausedCount = 0
+    let latestLimitSession: (typeof summaries)[number] | null = null
+
+    for (const s of summaries) {
+      const title = s.title?.trim() || 'Session'
+      const project = s.scratch ? undefined : path.basename(s.projectPath) || undefined
+      if (s.permissionCount > 0) {
+        waitingMeta[s.id] = {
+          agentId: s.agentId,
+          title,
+          since: s.updatedAt,
+          ...(project ? { project } : {}),
+        }
+      }
+      if (s.status === 'running' || s.status === 'awaiting_permission') {
+        const activityBody = s.activity?.detail ? s.activity.detail : s.activity?.title || undefined
+        running.push({
+          sessionId: s.id,
+          agentId: s.agentId,
+          title,
+          turnStartedAt: s.turnStartedAt ?? s.updatedAt,
+          ...(project ? { project } : {}),
+          ...(activityBody ? { body: activityBody } : {}),
+          ...(s.plan && s.plan.total > 0
+            ? {
+                plan: {
+                  done: s.plan.done,
+                  total: s.plan.total,
+                  ...(s.plan.current?.text ? { current: s.plan.current.text } : {}),
+                },
+              }
+            : {}),
+          parentId: s.parentId,
+        })
+      }
+      if (s.lastTurn?.reason === 'limit' && now - s.lastTurn.endedAt <= 30 * 60_000) {
+        limitPausedCount++
+        if (
+          !latestLimitSession ||
+          s.lastTurn.endedAt > (latestLimitSession.lastTurn?.endedAt ?? 0)
+        ) {
+          latestLimitSession = s
+        }
+      } else if (
+        s.attention === 'error' &&
+        s.lastTurn?.reason !== 'limit' &&
+        now - (s.lastTurn?.endedAt ?? s.updatedAt) <= 15 * 60_000
+      ) {
+        error.push({
+          sessionId: s.id,
+          agentId: s.agentId,
+          title,
+          endedAt: s.lastTurn?.endedAt ?? s.updatedAt,
+          ...(s.lastTurn?.error ? { body: s.lastTurn.error } : {}),
+          ...(project ? { project } : {}),
+        })
+      } else if (
+        s.attention === 'unread' &&
+        s.lastTurn &&
+        s.lastTurn.reason !== 'failed' &&
+        s.lastTurn.reason !== 'limit' &&
+        s.lastTurn.reason !== 'cancelled' &&
+        now - s.lastTurn.endedAt <= 2 * 60_000
+      ) {
+        ended.push({
+          sessionId: s.id,
+          agentId: s.agentId,
+          title,
+          endedAt: s.lastTurn.endedAt,
+          ...(project ? { project } : {}),
+        })
+      }
+    }
+
+    running.sort((a, b) => {
+      const aTop = a.parentId ? 1 : 0
+      const bTop = b.parentId ? 1 : 0
+      if (aTop !== bTop) return aTop - bTop
+      return b.turnStartedAt - a.turnStartedAt
+    })
+    error.sort((a, b) => b.endedAt - a.endedAt)
+    ended.sort((a, b) => b.endedAt - a.endedAt)
+
+    let limit: HostActivityLimit | null = null
+    if (latestLimitSession?.lastTurn?.limit) {
+      const lim = latestLimitSession.lastTurn.limit
+      limit = {
+        agentId: latestLimitSession.agentId,
+        label: lim.label,
+        ...(lim.account ? { planLabel: lim.account } : {}),
+        ...(lim.resetsAt !== null ? { resetsAt: lim.resetsAt } : {}),
+        pausedSessions: limitPausedCount,
+      }
+    } else {
+      for (const agent of this.agents.statuses()) {
+        const reached = agent.limits.find(
+          (l) => l.state === 'reached' && l.resetsAt !== null && l.resetsAt > now,
+        )
+        if (reached) {
+          limit = {
+            agentId: agent.id,
+            label: reached.label,
+            ...(agent.account?.kind === 'account' && agent.account.label
+              ? { planLabel: agent.account.label }
+              : agent.name
+                ? { planLabel: agent.name }
+                : {}),
+            ...(reached.resetsAt !== null ? { resetsAt: reached.resetsAt } : {}),
+          }
+          break
+        }
+      }
+    }
+
+    const activity: HostActivitySnapshot = {
+      running: running.slice(0, 10),
+      error: error.slice(0, 3),
+      ended: ended.slice(0, 3),
+      limit,
+      waitingMeta,
+    }
+    const json = JSON.stringify(activity)
+    if (json === this.lastActivityJson) return
+    this.lastActivityJson = json
+    this.options.send({ type: 'host:live-activity', activity })
+  }
+
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
   shutdown(): Promise<void> {
+    if (this.activityTimer) {
+      clearTimeout(this.activityTimer)
+      this.activityTimer = null
+    }
     this.stopping ??= (async () => {
       await this.routines.shutdown()
       this.sessions.shutdown()

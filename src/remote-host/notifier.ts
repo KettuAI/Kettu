@@ -8,7 +8,63 @@
 // Devices joining the host are notices of their own: a device of the account that asks to be
 // added, until it is answered, and a device that joined, to every device that is not in front.
 
-import type { DevicePush, NotificationChoices, PushActions, PushEvent } from '@shared/remote/push'
+import type { HostActivitySnapshot } from '@shared/host-control'
+import type {
+  DevicePush,
+  LiveActivityPlan,
+  NotificationChoices,
+  PushActions,
+  PushEvent,
+} from '@shared/remote/push'
+
+/** 推送到移动端灵动岛与锁屏实时活动的 5 态语义负载。 */
+export type LiveActivityPayload =
+  | {
+      kind: 'waiting'
+      count: number
+      sessionId: string | null
+      title: string | null
+      body?: string
+      agentId?: string
+      requestId?: string
+      actions?: PushActions
+      since?: number
+      actionKind?: 'execute' | 'edit' | 'review'
+    }
+  | {
+      kind: 'error'
+      sessionId: string
+      title: string | null
+      body?: string
+      agentId?: string
+      project?: string
+    }
+  | {
+      kind: 'running'
+      sessionId: string
+      title: string | null
+      body?: string
+      agentId?: string
+      turnStartedAt?: number
+      plan?: LiveActivityPlan
+      project?: string
+    }
+  | {
+      kind: 'turn-ended'
+      sessionId: string
+      title: string | null
+      body?: string
+      agentId?: string
+      project?: string
+    }
+  | {
+      kind: 'limit'
+      agentId: string
+      label?: string
+      planLabel?: string
+      resetsAt?: number
+      pausedSessions?: number
+    }
 
 export type AttentionKind =
   'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
@@ -45,6 +101,7 @@ export type PushJob = {
       count: number
       sessionId: string | null
       title: string | null
+      payload?: LiveActivityPayload
     }
 )
 
@@ -94,8 +151,7 @@ interface Told {
 
 interface Activity {
   running: boolean
-  count: number
-  sessionId: string | null
+  fingerprint: string
 }
 
 /** Whether a push reaches the device: through APNs or Web Push. */
@@ -151,6 +207,8 @@ export class Notifier {
   private readonly activityTimers = new Map<string, NodeJS.Timeout>()
   /** Per device, the subjects of the device notices it was sent. */
   private readonly noticed = new Map<string, Set<string>>()
+  /** 主机最近一次上报的实时会话与限额摘要，用于驱动 5 态灵动岛。 */
+  private hostActivity: HostActivitySnapshot | null = null
   private readonly mergeMs: number
 
   constructor(private readonly options: NotifierOptions) {
@@ -266,6 +324,12 @@ export class Notifier {
     this.activitiesChanged()
   }
 
+  /** 主机实时会话、错误、完成或限额状态变化时同步更新各设备的灵动岛。 */
+  setActivity(activity: HostActivitySnapshot): void {
+    this.hostActivity = activity
+    this.activitiesChanged()
+  }
+
   /** A device was removed: nothing more goes to it. */
   forget(deviceId: string): void {
     this.told.delete(deviceId)
@@ -374,48 +438,154 @@ export class Notifier {
     }
   }
 
+  private pickActivityPayload(choices: NotificationChoices): LiveActivityPayload | null {
+    const snap = this.hostActivity
+    const now = Date.now()
+    const isMuted = (sessionId: string): boolean => choices.muted.includes(sessionId)
+
+    // P1：等待审批请求（优先级最高）
+    if (choices.permission) {
+      let count = 0
+      for (const [sessionId, ids] of this.waiting) {
+        if (!isMuted(sessionId)) count += ids.size
+      }
+      if (count > 0) {
+        const latest =
+          this.order.findLast((sessionId) => !isMuted(sessionId)) ??
+          [...this.waiting.keys()].find((sessionId) => !isMuted(sessionId)) ??
+          null
+        const att = latest ? this.open.get(latest) : undefined
+        const meta = latest ? snap?.waitingMeta[latest] : undefined
+        const body = att?.body
+        const actionKind: 'execute' | 'edit' | 'review' | undefined =
+          body === undefined
+            ? undefined
+            : /^(?:Wants to run|Run)\b/i.test(body)
+              ? 'execute'
+              : /^(?:Wants to (?:edit|delete|move)|Edit)\b/i.test(body)
+                ? 'edit'
+                : 'review'
+        return {
+          kind: 'waiting',
+          count,
+          sessionId: latest,
+          title: att?.title ?? meta?.title ?? null,
+          ...(body ? { body } : {}),
+          ...(meta?.agentId ? { agentId: meta.agentId } : {}),
+          ...(att?.requestId ? { requestId: att.requestId } : {}),
+          ...(att?.actions ? { actions: att.actions } : {}),
+          ...(meta?.since ? { since: meta.since } : {}),
+          ...(actionKind ? { actionKind } : {}),
+        }
+      }
+    }
+
+    if (!snap) return null
+
+    // P2：最近 15 分钟内未读出错会话
+    if (choices.errors) {
+      const err = snap.error.find(
+        (item) => !isMuted(item.sessionId) && now - item.endedAt <= 15 * 60_000,
+      )
+      if (err) {
+        return {
+          kind: 'error',
+          sessionId: err.sessionId,
+          title: err.title,
+          agentId: err.agentId,
+          ...(err.body ? { body: err.body } : {}),
+          ...(err.project ? { project: err.project } : {}),
+        }
+      }
+    }
+
+    // P3：正在运行中的会话（优先顶层主会话）
+    const activeRunning = snap.running.filter((item) => !isMuted(item.sessionId))
+    if (activeRunning.length > 0) {
+      const top = activeRunning.find((item) => !item.parentId) ?? activeRunning[0]!
+      return {
+        kind: 'running',
+        sessionId: top.sessionId,
+        title: top.title,
+        agentId: top.agentId,
+        turnStartedAt: top.turnStartedAt,
+        ...(top.body ? { body: top.body } : {}),
+        ...(top.plan ? { plan: top.plan } : {}),
+        ...(top.project ? { project: top.project } : {}),
+      }
+    }
+
+    // P4：套餐限额到达且尚未重置
+    if (snap.limit && (snap.limit.resetsAt === undefined || snap.limit.resetsAt > now)) {
+      return {
+        kind: 'limit',
+        agentId: snap.limit.agentId,
+        label: snap.limit.label,
+        ...(snap.limit.planLabel ? { planLabel: snap.limit.planLabel } : {}),
+        ...(snap.limit.resetsAt !== undefined ? { resetsAt: snap.limit.resetsAt } : {}),
+        ...(snap.limit.pausedSessions ? { pausedSessions: snap.limit.pausedSessions } : {}),
+      }
+    }
+
+    // P5：最近 2 分钟内正常完成且未读的回合
+    if (choices.turnEnded) {
+      const done = snap.ended.find(
+        (item) => !isMuted(item.sessionId) && now - item.endedAt <= 2 * 60_000,
+      )
+      if (done) {
+        return {
+          kind: 'turn-ended',
+          sessionId: done.sessionId,
+          title: done.title,
+          agentId: done.agentId,
+          ...(done.body ? { body: done.body } : {}),
+          ...(done.project ? { project: done.project } : {}),
+        }
+      }
+    }
+
+    return null
+  }
+
   private updateActivity(deviceId: string): void {
     const device = this.options.devices().find((entry) => entry.id === deviceId)
-    const state = this.activities.get(deviceId) ?? { running: false, count: 0, sessionId: null }
+    const state = this.activities.get(deviceId) ?? { running: false, fingerprint: '' }
     const target = device?.push.target
     const tokens = target?.activity
     const choices = device?.push.choices
-    const enabled = Boolean(target && choices?.permission && (tokens?.start || tokens?.update))
-    let count = 0
-    let latest: string | null = null
-    if (enabled && choices) {
-      for (const [sessionId, ids] of this.waiting) {
-        if (!choices.muted.includes(sessionId)) count += ids.size
-      }
-      latest = this.order.findLast((sessionId) => !choices.muted.includes(sessionId)) ?? null
-    }
-    const title = latest ? (this.open.get(latest)?.title ?? null) : null
-    const send = (action: 'start' | 'update' | 'end'): void =>
+    const enabled = Boolean(target && choices && (tokens?.start || tokens?.update))
+    const payload = enabled && choices ? this.pickActivityPayload(choices) : null
+    // 若设备已回传 update token（如在 iPhone 本地启动灵动岛后切回后台），主机直接接管后续更新与结束。
+    const hasLiveActivity = state.running || Boolean(tokens?.update)
+
+    const send = (action: 'start' | 'update' | 'end', next: LiveActivityPayload | null): void =>
       this.options.send({
         deviceId,
         subject: ACTIVITY_SUBJECT,
         type: 'activity',
         action,
-        count,
-        sessionId: latest,
-        title,
+        count: next?.kind === 'waiting' ? next.count : 0,
+        sessionId: next && 'sessionId' in next ? (next.sessionId ?? null) : null,
+        title: next && 'title' in next ? (next.title ?? null) : null,
+        ...(next ? { payload: next } : {}),
       })
-    if (count > 0) {
-      if (!state.running) {
+
+    if (payload) {
+      const fingerprint = JSON.stringify(payload)
+      if (!hasLiveActivity) {
         if (!tokens?.start || this.held(choices!)) return
-        send('start')
+        send('start', payload)
       } else {
-        if (count === state.count && latest === state.sessionId) return
-        // The activity's own token comes from the device after it starts; the update waits for it.
+        if (state.running && fingerprint === state.fingerprint) return
         if (!tokens?.update) return
-        send('update')
+        send('update', payload)
       }
-      this.activities.set(deviceId, { running: true, count, sessionId: latest })
+      this.activities.set(deviceId, { running: true, fingerprint })
       return
     }
-    if (!state.running) return
-    // Without the activity's own token it cannot be ended by push; the app ends it when it opens.
-    if (tokens?.update) send('end')
+
+    if (!hasLiveActivity) return
+    if (tokens?.update) send('end', null)
     this.activities.delete(deviceId)
   }
 }

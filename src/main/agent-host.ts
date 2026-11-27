@@ -119,6 +119,7 @@ export interface AgentHostDeps {
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
+  onLiveActivity?(activity: Extract<HostToMain, { type: 'host:live-activity' }>['activity']): void
   onSeen?(sessionId: string): void
   onBadge(count: number): void
   onBusy(counts: BusyCounts): void
@@ -953,6 +954,11 @@ export class AgentHost {
       case 'host:waiting':
         if (typeof message.sessions === 'object' && message.sessions !== null) {
           this.deps.onWaiting?.(message.sessions)
+        }
+        break
+      case 'host:live-activity':
+        if (typeof message.activity === 'object' && message.activity !== null) {
+          this.deps.onLiveActivity?.(message.activity)
         }
         break
       case 'host:seen':
