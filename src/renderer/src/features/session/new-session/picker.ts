@@ -1,11 +1,17 @@
 // What New session's agent picker and its list of recent sessions show.
 
-import { isActivelyRunning, type AgentStatus, type SessionSummary } from '@shared/agent-host'
+import {
+  isActivelyRunning,
+  type AgentStatus,
+  type Project,
+  type SessionSummary,
+} from '@shared/agent-host'
 import { tightestLimit } from '@shared/session-groups'
 import { harnessProblem, programCopy, shortLabel } from '@renderer/features/agents/harness-problem'
 import { limitPhrase } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
+import { isSessionInArchivedProject } from '@renderer/stores/projects'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { agentNeed } from './start-options'
 
@@ -102,6 +108,7 @@ export function pickupSessions(
   byId: Readonly<Record<string, SessionSummary | undefined>>,
   hosts: readonly (string | null)[] | null,
   count = PICKUP,
+  projects?: readonly Project[],
 ): SessionSummary[] {
   return Object.values(byId)
     .filter(
@@ -111,7 +118,8 @@ export function pickupSessions(
         s.parentId === null &&
         s.archivedAt === null &&
         !s.prepared &&
-        (!hosts || hosts.includes(hostOfSession(s))),
+        (!hosts || hosts.includes(hostOfSession(s))) &&
+        (!projects || !isSessionInArchivedProject(s, projects)),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, count)

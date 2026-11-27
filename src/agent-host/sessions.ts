@@ -13537,10 +13537,36 @@ export class SessionManager {
     }
   }
 
+  /** Whether the session belongs to an archived project. */
+  private isProjectArchived(record: Pick<SessionRecord, 'projectPath' | 'projectOwner'>): boolean {
+    const { projectPath } = record
+    if (this.deps.scratch.contains(projectPath)) return false
+    const { projects, platform } = this.deps
+    if (typeof projects.find === 'function') {
+      const owner =
+        projects.find(projectPath) ??
+        (record.projectOwner !== undefined ? projects.findPrimary(record.projectOwner) : undefined)
+      return owner?.archivedAt !== undefined
+    }
+    const owner = projects
+      .list()
+      .find(
+        (project) =>
+          samePath(project.path, projectPath, platform) ||
+          (project.folders?.some((folder) => samePath(folder, projectPath, platform)) ?? false) ||
+          (record.projectOwner !== undefined &&
+            samePath(project.path, record.projectOwner, platform)),
+      )
+    return owner?.archivedAt != null
+  }
+
   /** A message from the user does not bring an archived session back; restoring it does. */
   private refuseIfCannotSend(sessionId: string): void {
     const record = this.recordOf(sessionId)
     if (this.isArchived(record)) throw new HostError('restricted', t('session.archived'))
+    if (this.isProjectArchived(record)) {
+      throw new HostError('restricted', t('session.projectArchived'))
+    }
     if (record.worktree?.removed === 'branch') {
       throw new HostError('restricted', t('session.worktreeGone'))
     }
@@ -13975,26 +14001,35 @@ export class SessionManager {
       }
       if (record.archivedAt === undefined) return
     }
-    // The sidebar lists only the projects in the list, which the user may have removed it from.
+    // The sidebar lists only active projects, so restore or re-add the owning project if needed.
     const { projectPath } = record
     const { projects, platform } = this.deps
-    const listed =
-      typeof projects.find === 'function'
-        ? projects.find(projectPath) !== undefined ||
-          (record.projectOwner !== undefined &&
-            projects.findPrimary(record.projectOwner) !== undefined)
-        : projects
-            .list()
-            .some(
-              (project) =>
-                samePath(project.path, projectPath, platform) ||
-                (project.folders?.some((folder) => samePath(folder, projectPath, platform)) ??
-                  false) ||
-                (record.projectOwner !== undefined &&
-                  samePath(project.path, record.projectOwner, platform)),
-            )
-    if (!listed && !this.deps.scratch.contains(projectPath)) {
-      await this.deps.projects.add(projectPath)
+    if (typeof projects.find === 'function') {
+      const owner =
+        projects.find(projectPath) ??
+        (record.projectOwner !== undefined ? projects.findPrimary(record.projectOwner) : undefined)
+      if (!owner && !this.deps.scratch.contains(projectPath)) {
+        await this.deps.projects.add(projectPath)
+      } else if (
+        owner &&
+        owner.archivedAt !== undefined &&
+        typeof projects.unarchive === 'function'
+      ) {
+        projects.unarchive(owner)
+      }
+    } else {
+      const listed = projects
+        .list()
+        .some(
+          (project) =>
+            samePath(project.path, projectPath, platform) ||
+            (project.folders?.some((folder) => samePath(folder, projectPath, platform)) ?? false) ||
+            (record.projectOwner !== undefined &&
+              samePath(project.path, record.projectOwner, platform)),
+        )
+      if (!listed && !this.deps.scratch.contains(projectPath)) {
+        await this.deps.projects.add(projectPath)
+      }
     }
     delete record.archivedAt
     this.takeBackSubSessions(record)
@@ -14208,6 +14243,36 @@ export class SessionManager {
     for (const id of ids) this.forget(id)
     this.saveIndex()
     this.removeThreads([...ids])
+  }
+
+  /**
+   * Stops live and prepared sessions belonging to a project while keeping its session index,
+   * thread history, and per-session archive state intact.
+   */
+  async archiveProject(projectPath: string, extraFolders: readonly string[] = []): Promise<void> {
+    const primaryKey = pathKey(projectPath, this.deps.platform)
+    const keys = new Set([
+      primaryKey,
+      ...extraFolders.map((folder) => pathKey(folder, this.deps.platform)),
+    ])
+    const belongs = (item: Pick<SessionRecord, 'projectPath' | 'projectOwner'>): boolean =>
+      keys.has(pathKey(item.projectPath, this.deps.platform)) ||
+      (item.projectOwner !== undefined &&
+        pathKey(item.projectOwner, this.deps.platform) === primaryKey)
+    await Promise.all(
+      [...this.live.values()]
+        .filter((l) => l.prepared && belongs(l.record))
+        .map((l) => this.dropPrepared(l)),
+    )
+    const inProject = this.list().filter((s) => belongs(s))
+    await Promise.all(inProject.map((summary) => this.settled(summary.id)))
+    const records = inProject
+      .map((summary) => this.live.get(summary.id)?.record ?? this.records.get(summary.id))
+      .filter((record): record is SessionRecord => record !== undefined)
+    if (records.length === 0) return
+    await this.closeAll(records, true)
+    for (const record of records) this.dropContinue(record.id)
+    this.deps.events.ended(records.map((record) => record.id))
   }
 
   /** Removes a project's sessions from the index, closing live ones first. */

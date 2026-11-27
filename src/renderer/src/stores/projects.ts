@@ -52,6 +52,41 @@ export function findProjectForSession(
   )
 }
 
+/** Whether a project is currently archived (hidden from the sidebar, history kept). */
+export function isProjectArchived(project: Pick<Project, 'archivedAt'>): boolean {
+  return project.archivedAt != null
+}
+
+/** Whether the host that owns this project supports project archiving. */
+export function canArchiveProject(project: Pick<Project, 'archivedAt'>): boolean {
+  return project.archivedAt !== undefined
+}
+
+/** Projects that stay visible in the sidebar and active project pickers. */
+export function activeProjects(projects: readonly Project[]): Project[] {
+  return projects.filter((project) => !isProjectArchived(project))
+}
+
+/** Archived projects, optionally scoped to one host, newest archived first. */
+export function archivedProjects(projects: readonly Project[], hostId?: string | null): Project[] {
+  return projects
+    .filter(
+      (project) =>
+        isProjectArchived(project) && (hostId === undefined || hostOfPath(project.path) === hostId),
+    )
+    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0) || a.name.localeCompare(b.name))
+}
+
+/** Whether a session belongs to an archived project. */
+export function isSessionInArchivedProject(
+  session: Pick<SessionSummary, 'scratch' | 'projectPath' | 'projectOwner'>,
+  projects: readonly Project[],
+): boolean {
+  if (session.scratch) return false
+  const owner = findProjectForSession(projects, session)
+  return owner !== undefined && isProjectArchived(owner)
+}
+
 interface ProjectsStore {
   /** This computer's projects, then each other host's, each host's most recently opened first. */
   projects: Project[]
@@ -70,6 +105,8 @@ interface ProjectsStore {
   refresh(): Promise<void>
   add(path: string): Promise<Project>
   update(path: string, patch: ProjectUpdatePatch): Promise<Project>
+  archive(path: string): Promise<Project>
+  unarchive(path: string): Promise<Project>
   remove(path: string): Promise<void>
   /** Puts a project just before another of its host's, or last with null, as its host keeps it. */
   move(path: string, before: string | null): Promise<void>
@@ -123,7 +160,7 @@ export function pinnedFolders(
   const folders: PinnedFolder[] = []
   for (const project of projects) {
     const hostId = hostOfPath(project.path)
-    if (project.pinnedAt != null && hosts.includes(hostId)) {
+    if (project.pinnedAt != null && !isProjectArchived(project) && hosts.includes(hostId)) {
       folders.push({ project, hostId, pinnedAt: project.pinnedAt })
     }
   }
@@ -199,6 +236,20 @@ export const useProjectsStore = create<ProjectsStore>()((set) => ({
       projects: state.projects.map((p) => (p.path === updated.path ? updated : p)),
     }))
     return updated
+  },
+  async archive(path) {
+    const archived = await host('projects.archive', { path })
+    set((state) => ({
+      projects: state.projects.map((p) => (p.path === archived.path ? archived : p)),
+    }))
+    return archived
+  },
+  async unarchive(path) {
+    const restored = await host('projects.unarchive', { path })
+    set((state) => ({
+      projects: state.projects.map((p) => (p.path === restored.path ? restored : p)),
+    }))
+    return restored
   },
   async remove(path) {
     await host('projects.remove', { path })

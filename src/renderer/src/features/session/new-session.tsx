@@ -55,7 +55,12 @@ import {
 } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
-import { findProjectForSession, isFolderMissing, useProjectsStore } from '@renderer/stores/projects'
+import {
+  activeProjects,
+  findProjectForSession,
+  isFolderMissing,
+  useProjectsStore,
+} from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useKettuRoles } from '@renderer/stores/kettu-roles'
@@ -633,7 +638,7 @@ function DraftComposer({
   // The host's most recent project comes with it, as the first project does when none is chosen.
   const projects = useProjectsStore((s) => s.projects)
   const chooseHost = (next: string | null) => {
-    const first = projects.find((p) => hostOfPath(p.path) === next && !p.missing)
+    const first = activeProjects(projects).find((p) => hostOfPath(p.path) === next && !p.missing)
     chooseNewSessionHost(next, first?.path ?? null)
     requestAnimationFrame(() => editor.current?.focus())
   }
@@ -1065,11 +1070,17 @@ function PickUp({ hidden }: { hidden: boolean }) {
   const byId = useSessionsStore((s) => s.byId)
   const others = useOtherHosts()
   const hostFilter = useViewStore((s) => s.hostFilter)
-  const sessions = useMemo(
-    () => pickupSessions(byId, others.length > 0 ? shownHosts(others, hostFilter) : null),
-    [byId, others, hostFilter],
-  )
   const projects = useProjectsStore((s) => s.projects)
+  const sessions = useMemo(
+    () =>
+      pickupSessions(
+        byId,
+        others.length > 0 ? shownHosts(others, hostFilter) : null,
+        undefined,
+        projects,
+      ),
+    [byId, others, hostFilter, projects],
+  )
   const now = useNow()
   if (sessions.length === 0) return null
   return (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { ConversationHit, SessionSummary } from '@shared/agent-host'
+import type { ConversationHit, Project, SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
 import { settingRow } from '@renderer/features/marketplace/plugin-model'
 import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
@@ -26,6 +26,8 @@ import {
 import {
   findProjectForPath,
   findProjectForSession,
+  isProjectArchived,
+  isSessionInArchivedProject,
   projectFolders,
   useProjectsStore,
 } from '@renderer/stores/projects'
@@ -74,12 +76,17 @@ const ACTION_SHORTCUT: Partial<Record<SearchAction, ShortcutAction>> = {
  * Sessions Search can find, as the sidebar lists them: no subagents, no prepared or missing
  * sessions, and nothing archived itself or under an archived parent.
  */
-function findable(summary: SessionSummary, byId: Record<string, SessionSummary>): boolean {
+function findable(
+  summary: SessionSummary,
+  byId: Record<string, SessionSummary>,
+  projects: readonly Project[],
+): boolean {
   return (
     summary.origin !== 'subagent' &&
     !summary.prepared &&
     !summary.missing &&
-    !sessionArchived(byId, summary.id)
+    !sessionArchived(byId, summary.id) &&
+    !isSessionInArchivedProject(summary, projects)
   )
 }
 
@@ -160,12 +167,15 @@ function useSessionLine(): (summary: SessionSummary) => {
 
 function useSessionEntries(): SearchEntry[] {
   const byId = useSessionsStore((s) => s.byId)
+  const projects = useProjectsStore(useShallow((s) => s.projects))
   const lineOf = useSessionLine()
   const only = useOnlyHost()
 
   return useMemo(() => {
     return Object.values(byId)
-      .filter((summary) => findable(summary, byId) && onHost(only, hostOfSession(summary)))
+      .filter(
+        (summary) => findable(summary, byId, projects) && onHost(only, hostOfSession(summary)),
+      )
       .map((summary): SearchEntry => {
         const { title, project, host, meta } = lineOf(summary)
         const hostId = hostOfSession(summary)
@@ -183,19 +193,20 @@ function useSessionEntries(): SearchEntry[] {
           hostId,
         }
       })
-  }, [byId, lineOf, only])
+  }, [byId, projects, lineOf, only])
 }
 
 /** The sessions the hosts found by what was said in them, as Search's rows. */
 export function useConversationEntries(hits: readonly ConversationHit[]): SearchEntry[] {
   const { t } = useTranslation('sidebar')
   const byId = useSessionsStore((s) => s.byId)
+  const projects = useProjectsStore(useShallow((s) => s.projects))
   const lineOf = useSessionLine()
   return useMemo(
     () =>
       hits.flatMap((hit): SearchEntry[] => {
         const summary = byId[hit.sessionId]
-        if (!summary || !findable(summary, byId)) return []
+        if (!summary || !findable(summary, byId, projects)) return []
         const { title, meta } = lineOf(summary)
         const matches = hit.matches ?? 1
         return [
@@ -218,7 +229,7 @@ export function useConversationEntries(hits: readonly ConversationHit[]): Search
           },
         ]
       }),
-    [hits, byId, lineOf, t],
+    [hits, byId, projects, lineOf, t],
   )
 }
 
@@ -298,13 +309,16 @@ function useProjectEntries(): SearchEntry[] {
   return useMemo(() => {
     const counts = new Map<string, number>()
     for (const summary of Object.values(byId)) {
-      if (findable(summary, byId) && !summary.scratch) {
+      if (findable(summary, byId, projects) && !summary.scratch) {
         const owner = findProjectForSession(projects, summary)?.path ?? summary.projectPath
         counts.set(owner, (counts.get(owner) ?? 0) + 1)
       }
     }
     return projects
-      .filter((project) => !project.missing && onHost(only, hostOfPath(project.path)))
+      .filter(
+        (project) =>
+          !project.missing && !isProjectArchived(project) && onHost(only, hostOfPath(project.path)),
+      )
       .map((project): SearchEntry => {
         const hostId = hostOfPath(project.path)
         const folder = dirname(hostPath(project.path))

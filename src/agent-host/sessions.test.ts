@@ -12,7 +12,7 @@ import type { OwnTitles, SessionOptions, SessionTarget } from './connection'
 import { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import { preparedFile, PreparedRecords, type PreparedFile } from './prepared'
-import type { Projects } from './projects'
+import { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
 import {
@@ -21,7 +21,13 @@ import {
   type SessionManagerDeps,
   type SessionTimings,
 } from './sessions'
-import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
+import {
+  projectsFile,
+  returnedFile,
+  sessionsFile,
+  type SessionRecord,
+  type SessionsFile,
+} from './storage'
 import { FakeChild, FakeClaudeSdk } from './testing/fake-claude-sdk'
 import { EMPTY_SESSION, type StoredThread } from './threads/model'
 import type { ThreadStore } from './threads/store'
@@ -73,14 +79,16 @@ function manager(
       runtime: () => null,
       ...extra.agents,
     } as unknown as AgentManager,
-    projects: {
-      list: () => [],
-      resolveDirectory: async (folder: string) => folder,
-      add: async (folder: string) => {
-        added.push(folder)
-      },
-      ...projects,
-    } as unknown as Projects,
+    projects: (projects instanceof Projects
+      ? projects
+      : {
+          list: () => [],
+          resolveDirectory: async (folder: string) => folder,
+          add: async (folder: string) => {
+            added.push(folder)
+          },
+          ...projects,
+        }) as unknown as Projects,
     scratch: { contains: () => false } as unknown as ScratchFolders,
     file: sessionsFile(dir, log),
     returned: returnedFile(dir, log),
@@ -616,6 +624,143 @@ describe('restoring an archived session', () => {
     await sessions.load()
     await sessions.unarchive('s1')
     expect(added).toEqual(['/repo'])
+  })
+
+  it('unarchives the owning project when restoring one of its archived sessions', async () => {
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [archived] })
+    await store.flush()
+    const registry = new Projects({
+      file: projectsFile(dir, log),
+      platform: 'darwin',
+      now: () => 50,
+      realpath: async (value) => value,
+      isDirectory: async () => true,
+    })
+    await registry.load()
+    await registry.add('/repo')
+    registry.archive(registry.matchPrimary('/repo'))
+    expect(registry.list()[0]?.archivedAt).toBe(50)
+
+    const { sessions } = manager(registry as unknown as Partial<Projects>)
+    await sessions.load()
+    await sessions.unarchive('s1')
+    expect(registry.list()[0]?.archivedAt).toBeNull()
+    expect(sessions.summary('s1').archivedAt).toBeNull()
+  })
+})
+
+describe('archiving a project while preserving session history', () => {
+  it('keeps active and archived session records intact and blocks prompts until unarchived', async () => {
+    const activeRecord: SessionRecord = {
+      id: 'active-1',
+      agentId: 'claude-code',
+      acpSessionId: 'acp-active-1',
+      projectPath: '/work/repo',
+      title: 'Active thread',
+      createdAt: 1,
+      updatedAt: 20,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: 'main',
+    }
+    const extraFolderRecord: SessionRecord = {
+      id: 'extra-1',
+      agentId: 'claude-code',
+      acpSessionId: 'acp-extra-1',
+      projectPath: '/work/repo-docs',
+      projectOwner: '/work/repo',
+      title: 'Docs thread',
+      createdAt: 2,
+      updatedAt: 25,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: null,
+    }
+    const previouslyArchived: SessionRecord = {
+      id: 'old-archived',
+      agentId: 'claude-code',
+      acpSessionId: 'acp-old',
+      projectPath: '/work/repo',
+      title: 'Old archived thread',
+      createdAt: 3,
+      updatedAt: 10,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: null,
+      archivedAt: 15,
+    }
+    const otherProject: SessionRecord = {
+      id: 'other-1',
+      agentId: 'claude-code',
+      acpSessionId: 'acp-other',
+      projectPath: '/work/other',
+      title: 'Other project thread',
+      createdAt: 4,
+      updatedAt: 30,
+      lastViewedAt: null,
+      parentId: null,
+      origin: 'user',
+      description: null,
+      branch: null,
+    }
+
+    const store = sessionsFile(dir, log)
+    store.save({
+      version: 1,
+      sessions: [activeRecord, extraFolderRecord, previouslyArchived, otherProject],
+    })
+    await store.flush()
+
+    const registry = new Projects({
+      file: projectsFile(dir, log),
+      platform: 'darwin',
+      now: () => 100,
+      realpath: async (value) => value,
+      isDirectory: async () => true,
+    })
+    await registry.load()
+    await registry.add('/work/repo')
+    await registry.update(registry.matchPrimary('/work/repo'), {
+      folders: ['/work/repo', '/work/repo-docs'],
+    })
+    await registry.add('/work/other')
+
+    const { sessions } = manager(registry as unknown as Partial<Projects>)
+    await sessions.load()
+
+    const projectRecord = registry.matchPrimary('/work/repo')
+    await sessions.archiveProject(projectRecord.path, projectRecord.folders)
+    registry.archive(projectRecord)
+
+    // All historical sessions stay in the index with their original per-session archive states.
+    expect(sessions.has('active-1')).toBe(true)
+    expect(sessions.has('extra-1')).toBe(true)
+    expect(sessions.has('old-archived')).toBe(true)
+    expect(sessions.has('other-1')).toBe(true)
+    expect(sessions.summary('active-1').archivedAt).toBeNull()
+    expect(sessions.summary('extra-1').archivedAt).toBeNull()
+    expect(sessions.summary('old-archived').archivedAt).toBe(15)
+
+    // Sending a prompt to a session inside an archived project is refused until restored.
+    await expect(sessions.prompt('active-1', [{ type: 'text', text: 'hi' }])).rejects.toMatchObject(
+      { code: 'restricted' },
+    )
+    await expect(sessions.prompt('extra-1', [{ type: 'text', text: 'hi' }])).rejects.toMatchObject({
+      code: 'restricted',
+    })
+
+    // Unarchiving the project restores its state without unarchiving individually archived sessions.
+    registry.unarchive(projectRecord)
+    expect(registry.matchPrimary('/work/repo').archivedAt).toBeUndefined()
+    expect(sessions.summary('active-1').archivedAt).toBeNull()
+    expect(sessions.summary('old-archived').archivedAt).toBe(15)
   })
 })
 

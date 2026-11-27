@@ -111,8 +111,9 @@
       "unpinNoProject": "取消置顶",
       "openInTerminal": "在终端中打开",
       "showIn": "在{{name}}中显示",
-      "showArchived": "显示已归档的会话",
+      "showArchived": "显示已归档",
       "worktreeSettings": "工作树设置…",
+      "archive": "归档项目…",
       "remove": "移除项目…"
     },
     "edit": {
@@ -133,6 +134,20 @@
       "errorNotAbsolute": "请输入完整的绝对路径。",
       "errorDuplicate": "该文件夹已在当前项目中。",
       "errorOtherProject": "该文件夹已属于项目 {{name}}。"
+    },
+    "archive": {
+      "title": "归档 {{name}}？",
+      "sessions_other": "它的 {{count}} 个历史会话会完整保留，可随时在「设置 › 已归档」中查看并恢复项目。",
+      "noSessions": "项目会从侧边栏隐藏，可随时在「设置 › 已归档」中恢复。",
+      "running_other": "正在运行的 {{count}} 个会话会先停止。",
+      "runningWork": "归档会停止以下正在运行的工作：",
+      "folderStays": "本地文件夹和文件不会被删除。",
+      "folderStaysOn": "{{host}} 上的文件夹和文件不会被删除。",
+      "separator": "",
+      "confirm": "归档项目",
+      "confirmStop": "停止并归档",
+      "archived": "已归档项目 {{name}}",
+      "restored": "已恢复项目 {{name}}"
     },
     "remove": {
       "title": "移除 {{name}}？",

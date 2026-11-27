@@ -1105,7 +1105,10 @@ export class AgentHost {
           platform,
           home,
           this.agents.mcpDiscoveryAgents(),
-          this.projects.list().map(({ path }) => path),
+          this.projects
+            .list()
+            .filter((project) => project.archivedAt == null)
+            .map(({ path }) => path),
           (name, agent) => this.env.get(name, agent),
         ),
       library: () => this.settings.marketplace.mcp,
@@ -4747,6 +4750,12 @@ export class AgentHost {
         projects.remove(record)
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
+      'projects.archive': async ({ path }) => {
+        const record = projects.matchPrimary(path)
+        await sessions.archiveProject(record.path, record.folders)
+        return projects.archive(record)
+      },
+      'projects.unarchive': ({ path }) => projects.unarchive(projects.matchPrimary(path)),
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'projects.pin': ({ path, pinned }) =>
         path === null

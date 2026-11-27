@@ -33,7 +33,7 @@ import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
-import { projectFolders, useProjectsStore } from '@renderer/stores/projects'
+import { activeProjects, projectFolders, useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
 import { projectNameHints } from '../project-names'
 import { HostFolderDialog } from './host-folder-dialog'
@@ -126,7 +126,8 @@ export function ProjectMenu({
 }) {
   const { t } = useTranslation('session')
   const choose = onChoose ?? chooseNewSessionProject
-  const projects = useProjectsStore((s) => s.projects)
+  const allProjects = useProjectsStore((s) => s.projects)
+  const projects = useMemo(() => activeProjects(allProjects), [allProjects])
   const hosts = useOtherHosts()
   const { contains } = useComboboxFilter()
   const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])

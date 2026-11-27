@@ -6,7 +6,7 @@ import { SplitView } from '@renderer/features/split/split-view'
 import { focusedPane } from '@renderer/features/split/layout'
 import { cn } from '@renderer/lib/utils'
 import { showProjects } from '@renderer/stores/git'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { activeProjects, useProjectsStore } from '@renderer/stores/projects'
 import {
   paneProjectPath,
   panelOf,
@@ -170,7 +170,7 @@ export function MainArea() {
     focusedFolder ||
     paneProjectPath(view, selected, projects) ||
     selected ||
-    projects[0]?.path ||
+    activeProjects(projects)[0]?.path ||
     null
   if (!panelPath) {
     return (

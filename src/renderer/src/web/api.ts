@@ -466,8 +466,11 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     dialogs: {
       // Beside the project opened last, as projects tend to share a folder.
       openProject: async () => {
-        const { useProjectsStore } = await import('@renderer/stores/projects')
-        return askPath('project', useProjectsStore.getState().projects[0]?.path ?? null)
+        const { activeProjects, useProjectsStore } = await import('@renderer/stores/projects')
+        return askPath(
+          'project',
+          activeProjects(useProjectsStore.getState().projects)[0]?.path ?? null,
+        )
       },
       chooseAgentFolder: () => askPath('agentFolder', null),
       chooseAgentBinary: (harnessId) =>

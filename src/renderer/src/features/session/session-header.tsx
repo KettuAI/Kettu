@@ -26,6 +26,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
+import { isSessionInArchivedProject, useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
 import {
@@ -107,7 +108,9 @@ export function SessionHeader({
   )
   const title = originTask ? tt('row.startedHere') : (stepTitle ?? sessionTitle(summary))
   const pane = usePane()
-  const archived = useSessionsStore((s) => sessionArchived(s.byId, summary.id))
+  const sessionIsArchived = useSessionsStore((s) => sessionArchived(s.byId, summary.id))
+  const projectIsArchived = useProjectsStore((s) => isSessionInArchivedProject(summary, s.projects))
+  const archived = sessionIsArchived || projectIsArchived
 
   return (
     <TopBar cornered={pane?.cornered}>

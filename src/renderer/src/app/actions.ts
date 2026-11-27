@@ -41,7 +41,12 @@ import {
   setDraftAttachments,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
-import { useProjectsStore } from '@renderer/stores/projects'
+import {
+  activeProjects,
+  findProjectForSession,
+  projectOwnsPath,
+  useProjectsStore,
+} from '@renderer/stores/projects'
 import {
   hostOfSession,
   isScratchFolder,
@@ -536,6 +541,46 @@ export async function archiveSession(sessionId: string, subSessions = true): Pro
 
 export async function unarchiveSession(sessionId: string): Promise<void> {
   await host('sessions.unarchive', { sessionId })
+}
+
+/**
+ * Archives a project so it leaves the sidebar while keeping its sessions and history.
+ * Closes split panes showing its active sessions and moves a single pane off them.
+ */
+export async function archiveProject(path: string): Promise<void> {
+  const before = useProjectsStore.getState().projects
+  const target = before.find((p) => p.path === path)
+  const { byId } = useSessionsStore.getState()
+  const ownIds = Object.values(byId)
+    .filter((summary) => !summary.scratch && findProjectForSession(before, summary)?.path === path)
+    .map((summary) => summary.id)
+  await useProjectsStore.getState().archive(path)
+  for (const id of ownIds) forgetSession(id)
+  const ownSet = new Set(ownIds)
+  const remaining = activeProjects(useProjectsStore.getState().projects)
+  const hostId = hostOfPath(path)
+  const fallbackProject =
+    remaining.find((p) => hostOfPath(p.path) === hostId)?.path ?? remaining[0]?.path ?? null
+  const { projectPath: selected } = useViewStore.getState()
+  if (selected && (selected === path || (target && projectOwnsPath(target, selected)))) {
+    useViewStore.setState({ projectPath: fallbackProject })
+  }
+  const { main, layout } = useViewStore.getState()
+  if (
+    !isSplit(layout) &&
+    main.kind === 'session' &&
+    ownSet.has(main.sessionId) &&
+    !sessionArchived(byId, main.sessionId)
+  ) {
+    newSessionInPlace(fallbackProject)
+  }
+  for (const id of ownIds) {
+    if (!sessionArchived(byId, id)) closeSessionInSplit(id)
+  }
+}
+
+export async function unarchiveProject(path: string): Promise<void> {
+  await useProjectsStore.getState().unarchive(path)
 }
 
 export async function markSessionUnread(sessionId: string, unread: boolean): Promise<void> {

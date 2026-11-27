@@ -26,6 +26,11 @@ import { useMissingCopy } from '@renderer/features/settings/harness-install'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
+import {
+  findProjectForSession,
+  isProjectArchived,
+  useProjectsStore,
+} from '@renderer/stores/projects'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
 import {
@@ -46,6 +51,7 @@ import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
   ArchivedComposer,
+  ArchivedProjectComposer,
   ColumnScroller,
   ComposerPlaceholder,
   FailedState,
@@ -93,7 +99,13 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const agentOff = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.disabled === true,
   )
-  const archived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
+  const sessionIsArchived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
+  const archivedProject = useProjectsStore((s) => {
+    if (summary.scratch) return null
+    const owner = findProjectForSession(s.projects, summary)
+    return owner && isProjectArchived(owner) ? owner : null
+  })
+  const archived = sessionIsArchived || archivedProject !== null
   const otherHost = useOtherHost(hostId)
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
@@ -380,8 +392,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                       session && <HostAway host={away} inline />
                     ) : summary.origin === 'subagent' ? (
                       <SubagentBar summary={summary} session={session} />
-                    ) : archived ? (
+                    ) : sessionIsArchived ? (
                       <ArchivedComposer sessionId={sessionId} />
+                    ) : archivedProject ? (
+                      <ArchivedProjectComposer project={archivedProject} />
                     ) : summary.worktree?.state === 'gone' ? (
                       // Its history stays readable; nothing more can run without the branch.
                       <WorktreeGoneComposer />

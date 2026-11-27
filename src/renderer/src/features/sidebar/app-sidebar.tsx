@@ -34,6 +34,10 @@ import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import { useInsecureState } from '@renderer/stores/insecure-notice'
 import {
+  activeProjects,
+  findProjectForPath,
+  isProjectArchived,
+  isSessionInArchivedProject,
   noProjectKey,
   noProjectPinned,
   pinnedFolders,
@@ -72,6 +76,7 @@ import {
 import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
+import { ArchiveProjectDialog } from './archive-project'
 import { EditProjectDialog } from './edit-project'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
@@ -100,6 +105,7 @@ import { TaskRow } from './task-row'
 export function SidebarList() {
   const { t } = useTranslation(['sidebar', 'common'])
   const projects = useProjectsStore((s) => s.projects)
+  const visibleProjects = useMemo(() => activeProjects(projects), [projects])
   const noProjects = useProjectsStore((s) => s.noProjects)
   const projectsLoaded = useProjectsStore((s) => s.loaded)
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
@@ -141,9 +147,11 @@ export function SidebarList() {
   // One dialog each serves every project; they mount the first time a project asks for them.
   const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
   const [editing, setEditing] = useState<{ path: string; open: boolean } | null>(null)
+  const [archiving, setArchiving] = useState<{ project: Project; open: boolean } | null>(null)
   const [removing, setRemoving] = useState<{ project: Project; open: boolean } | null>(null)
   const importSessions = (project: Project) => setImporting({ project, open: true })
   const editProject = (project: Project) => setEditing({ path: project.path, open: true })
+  const archiveProject = (project: Project) => setArchiving({ project, open: true })
   const removeProject = (project: Project) => setRemoving({ project, open: true })
   const editingProject = editing
     ? (projects.find((item) => item.path === editing.path) ?? null)
@@ -185,12 +193,14 @@ export function SidebarList() {
           <>
             <NeedsYouGroup hosts={hosts} away={away} />
             <PinnedGroup
-              projects={projects}
+              projects={visibleProjects}
+              allProjects={projects}
               stop={stop}
               hosts={hosts}
               away={away}
               onEdit={editProject}
               onImport={importSessions}
+              onArchive={archiveProject}
               onRemove={removeProject}
             />
             <SortableList
@@ -204,10 +214,11 @@ export function SidebarList() {
                   hostId={hostId}
                   index={index}
                   movable={hosts.length > 1}
-                  projects={projects}
+                  projects={visibleProjects}
                   stop={stop}
                   onEdit={editProject}
                   onImport={importSessions}
+                  onArchive={archiveProject}
                   onRemove={removeProject}
                 />
               ))}
@@ -216,10 +227,12 @@ export function SidebarList() {
         ) : (
           <>
             <PinnedGroup
-              projects={projects}
+              projects={visibleProjects}
+              allProjects={projects}
               stop={stop}
               onEdit={editProject}
               onImport={importSessions}
+              onArchive={archiveProject}
               onRemove={removeProject}
             />
             <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
@@ -227,7 +240,7 @@ export function SidebarList() {
                 <span>{t('nav.projects')}</span>
                 <AddProjectButton />
               </div>
-              {projects.length === 0 && !scratch && (
+              {visibleProjects.length === 0 && !scratch && (
                 <span className="ui-as-side__empty">{t('nav.empty')}</span>
               )}
               {!noProjectPinned(noProjects, null) && (
@@ -236,14 +249,16 @@ export function SidebarList() {
                   stop={stop}
                   onEdit={editProject}
                   onImport={importSessions}
+                  onArchive={archiveProject}
                   onRemove={removeProject}
                 />
               )}
               <ProjectList
-                projects={projects}
+                projects={visibleProjects}
                 stop={stop}
                 onEdit={editProject}
                 onImport={importSessions}
+                onArchive={archiveProject}
                 onRemove={removeProject}
               />
             </div>
@@ -263,6 +278,13 @@ export function SidebarList() {
           open={editing.open}
           onOpenChange={(open) => setEditing(open ? editing : { ...editing, open: false })}
           onRequestRemove={removeProject}
+        />
+      )}
+      {archiving && (
+        <ArchiveProjectDialog
+          project={archiving.project}
+          open={archiving.open}
+          onOpenChange={(open) => setArchiving({ ...archiving, open })}
         />
       )}
       {removing && (
@@ -298,6 +320,7 @@ function ProjectList({
   stop,
   onEdit,
   onImport,
+  onArchive,
   onRemove,
   hostId = null,
   away = false,
@@ -306,6 +329,7 @@ function ProjectList({
   stop: SidebarTabStop | null
   onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onArchive: (project: Project) => void
   onRemove: (project: Project) => void
   hostId?: string | null
   away?: boolean
@@ -331,6 +355,7 @@ function ProjectList({
               stop={stop}
               onEdit={onEdit}
               onImport={onImport}
+              onArchive={onArchive}
               onRemove={onRemove}
               hostId={hostId}
               away={away}
@@ -352,6 +377,7 @@ function HostSection({
   stop,
   onEdit,
   onImport,
+  onArchive,
   onRemove,
 }: {
   hostId: string | null
@@ -361,6 +387,7 @@ function HostSection({
   stop: SidebarTabStop | null
   onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onArchive: (project: Project) => void
   onRemove: (project: Project) => void
 }) {
   const away = isAway(useOtherHost(hostId)?.connection ?? null)
@@ -399,6 +426,7 @@ function HostSection({
                   stop={stop}
                   onEdit={onEdit}
                   onImport={onImport}
+                  onArchive={onArchive}
                   onRemove={onRemove}
                   hostId={hostId}
                   away={away}
@@ -409,6 +437,7 @@ function HostSection({
                 stop={stop}
                 onEdit={onEdit}
                 onImport={onImport}
+                onArchive={onArchive}
                 onRemove={onRemove}
                 hostId={hostId}
                 away={away}
@@ -431,6 +460,7 @@ function ProjectGroup({
   stop,
   onEdit,
   onImport,
+  onArchive,
   onRemove,
   hostId = null,
   away = false,
@@ -441,6 +471,7 @@ function ProjectGroup({
   stop: SidebarTabStop | null
   onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onArchive: (project: Project) => void
   onRemove: (project: Project) => void
   hostId?: string | null
   away?: boolean
@@ -452,10 +483,11 @@ function ProjectGroup({
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
   const allProjects = useProjectsStore((s) => s.projects)
+  const visibleProjects = useMemo(() => activeProjects(allProjects), [allProjects])
   // What tells the project from another of the same display name, as New session's project menu shows it.
   const hint = useMemo(
-    () => (project ? projectNameHints(allProjects).get(project.path) : undefined),
-    [allProjects, project],
+    () => (project ? projectNameHints(visibleProjects).get(project.path) : undefined),
+    [visibleProjects, project],
   )
   const hostName = useHostLabel(hostId)
   const open = useViewStore((s) => !s.collapsedProjects[key])
@@ -604,6 +636,7 @@ function ProjectGroup({
       onEdit={() => onEdit(project)}
       onPin={pin}
       onImport={() => onImport(project)}
+      onArchive={() => onArchive(project)}
       onRemove={() => onRemove(project)}
     />
   ) : (
@@ -760,19 +793,23 @@ function toggleGroup(key: string): void {
  */
 function PinnedGroup({
   projects,
+  allProjects,
   stop,
   hosts,
   away,
   onEdit,
   onImport,
+  onArchive,
   onRemove,
 }: {
   projects: readonly Project[]
+  allProjects: readonly Project[]
   stop: SidebarTabStop | null
   hosts?: readonly (string | null)[]
   away?: readonly string[]
   onEdit: (project: Project) => void
   onImport: (project: Project) => void
+  onArchive: (project: Project) => void
   onRemove: (project: Project) => void
 }) {
   const { t } = useTranslation('sidebar')
@@ -782,16 +819,20 @@ function PinnedGroup({
     useMemo(
       () =>
         pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter(
-          (node) => !hosts || hosts.includes(hostOfSession(node.summary)),
+          (node) =>
+            (!hosts || hosts.includes(hostOfSession(node.summary))) &&
+            !isSessionInArchivedProject(node.summary, allProjects),
         ),
-      [summaries, hosts],
+      [summaries, hosts, allProjects],
     ),
   )
   const tasks = useTasksStore(
     useShallow((s) =>
-      pinnedTasks(s.summaries).filter(
-        (task) => !hosts || hosts.includes(hostOfPath(task.projectPath)),
-      ),
+      pinnedTasks(s.summaries).filter((task) => {
+        if (hosts && !hosts.includes(hostOfPath(task.projectPath))) return false
+        const owner = findProjectForPath(allProjects, task.projectPath)
+        return !(owner && isProjectArchived(owner))
+      }),
     ),
   )
   const rows = useMemo(() => sidebarRows(tree, tasks, byPin), [tree, tasks])
@@ -842,6 +883,7 @@ function PinnedGroup({
               stop={stop}
               onEdit={onEdit}
               onImport={onImport}
+              onArchive={onArchive}
               onRemove={onRemove}
               hostId={hostId}
               away={hostId !== null && away?.includes(hostId)}

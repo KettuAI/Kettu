@@ -1,11 +1,12 @@
 import type { Project } from '@shared/agent-host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { findProjectForPath, projectFolders } from '@renderer/stores/projects'
+import { activeProjects, findProjectForPath, projectFolders } from '@renderer/stores/projects'
 import type { PaneView } from './layout'
 
 /**
  * The project a New session pane starts in: its own, else the one selected, else the first on the
  * host chosen; none for No project. A host chosen before a project limits it to that host's.
+ * Archived projects are excluded so new sessions default to active projects.
  * Matches both primary paths and additional source folders.
  */
 export function newSessionProject(
@@ -14,11 +15,12 @@ export function newSessionProject(
   projects: readonly Project[],
 ): Project | null {
   if (view.noProject) return null
+  const listed = activeProjects(projects)
   const onHost = (path: string) => view.hostId === undefined || hostOfPath(path) === view.hostId
   const path = [view.projectPath, selected].find((p) => p && onHost(p)) ?? null
   return path
-    ? (findProjectForPath(projects, path) ?? null)
-    : (projects.find((p) => onHost(p.path)) ?? null)
+    ? (findProjectForPath(listed, path) ?? listed.find((p) => onHost(p.path)) ?? null)
+    : (listed.find((p) => onHost(p.path)) ?? null)
 }
 
 /**
