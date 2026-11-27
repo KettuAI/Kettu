@@ -114,8 +114,8 @@ export function hostInspector(name: string, url: string | null): void {
 export function prepareRelaunch(debug: boolean): RelaunchOptions {
   // A development run keeps its own debugging port.
   const switches = app.isPackaged
-    ? /^--(debug|remote-debugging-port|remote-debugging-pipe)(=|$)/
-    : /^--debug(=|$)/
+    ? /^--(debug|remote-debugging-port|remote-debugging-pipe|updated)(=|$)/
+    : /^--(debug|updated)(=|$)/
   const args = process.argv.slice(1).filter((arg) => !switches.test(arg))
   if (app.isPackaged) {
     if (debug) args.push('--debug')

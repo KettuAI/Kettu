@@ -5,6 +5,7 @@ import { app, crashReporter, type WebContents } from 'electron'
 import { promises as fs, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  flushLogSync,
   logProcessFailures,
   openProcessLog,
   setLogLevel,
@@ -13,12 +14,14 @@ import {
   writeLog,
 } from '@shared/log/process-log'
 import { createLogger } from './log'
+import { compareVersions } from './update-state'
 
 const log = createLogger('app')
 
 const MAX_DUMPS = 10
 const DUMP_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const RUNNING_MARKER = 'running'
+const UPDATED_ARG = '--updated'
 
 let verboseRun = false
 // A debug run logs at the debug level, without the detailed records.
@@ -27,8 +30,62 @@ let verboseUntil: number | null = null
 let verboseTimer: NodeJS.Timeout | null = null
 let lastExit: number | null = null
 let noticeClosed = false
-// Set once Kettu quits on purpose, so the next run does not report an unexpected end.
+// Set once Kettu enters an irreversible clean exit or OS shutdown, so the next run does not
+// report an unexpected end even if the OS or an installer terminates the process before exit.
 let quitCleanly = false
+let runningMarker: string | null = null
+let exitListenerAttached = false
+
+/** Encodes the current process id and app version into the running marker file. */
+export function formatRunningMarker(pid: number, version: string): string {
+  return `${pid}\n${version}`
+}
+
+/** Parses the app version recorded in a running marker, or null for legacy PID-only markers. */
+export function parseRunningMarkerVersion(content: string): string | null {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+  return lines.length >= 2 ? lines[1] : null
+}
+
+/**
+ * Whether a leftover running marker belongs to an older version that the NSIS updater terminated
+ * while installing this newer release. Same-version markers and launches without `--updated` are
+ * never ignored so real crashes are still reported.
+ */
+export function isStaleUpdateMarker(
+  content: string,
+  currentVersion: string,
+  argv: readonly string[],
+): boolean {
+  if (!argv.includes(UPDATED_ARG)) return false
+  const previousVersion = parseRunningMarkerVersion(content)
+  if (previousVersion === null) return true
+  return compareVersions(previousVersion, currentVersion) < 0
+}
+
+function removeRunningMarkerSync(): void {
+  if (!runningMarker) return
+  try {
+    rmSync(runningMarker, { force: true })
+  } catch {
+    // The next run reports an unexpected end, which is better than none.
+  }
+}
+
+/**
+ * Marks this run as exiting cleanly, removes the running marker immediately, and flushes buffered
+ * main-process logs. Calling this on `session-end`, `will-quit`, and once `QuitFlow` completes
+ * shutdown avoids false unexpected-exit warnings when Windows shutdown or an updater ends the
+ * process before Node's `exit` event fires.
+ */
+export function markCleanExit(): void {
+  quitCleanly = true
+  removeRunningMarkerSync()
+  flushLogSync()
+}
 
 /**
  * Opens main's log before anything else runs. A run with a data folder of its own, a development
@@ -60,24 +117,37 @@ export function openAppLog(ownUserData: string | null, debug: boolean): void {
 }
 
 /** Remembers whether the last run ended without quitting, and marks this one as running. */
-export async function markRunning(): Promise<void> {
+export async function markRunning(argv: readonly string[] = process.argv): Promise<void> {
   const marker = join(app.getPath('userData'), RUNNING_MARKER)
+  runningMarker = marker
   const stat = await fs.stat(marker).catch(() => null)
   if (stat) {
-    lastExit = stat.mtimeMs
-    log.warn('The last run ended unexpectedly', { since: new Date(stat.mtimeMs).toISOString() })
-  }
-  await fs.writeFile(marker, String(process.pid))
-  // Synchronous at exit only: nothing runs after it.
-  process.once('exit', () => {
-    if (quitCleanly) {
-      try {
-        rmSync(marker, { force: true })
-      } catch {
-        // The next run reports an unexpected end, which is better than none.
-      }
+    const content = await fs.readFile(marker, 'utf8').catch(() => '')
+    if (isStaleUpdateMarker(content, app.getVersion(), argv)) {
+      log.info('Ignoring running marker left by previous version during update', {
+        since: new Date(stat.mtimeMs).toISOString(),
+      })
+    } else {
+      lastExit = stat.mtimeMs
+      log.warn('The last run ended unexpectedly', { since: new Date(stat.mtimeMs).toISOString() })
     }
-  })
+  }
+  if (quitCleanly) {
+    removeRunningMarkerSync()
+    return
+  }
+  await fs.writeFile(marker, formatRunningMarker(process.pid, app.getVersion()))
+  if (quitCleanly) {
+    removeRunningMarkerSync()
+    return
+  }
+  if (!exitListenerAttached) {
+    exitListenerAttached = true
+    // Fallback cleanup at process exit in case anything still needs a final synchronous removal.
+    process.once('exit', () => {
+      if (quitCleanly) removeRunningMarkerSync()
+    })
+  }
 }
 
 /** When the last run ended unexpectedly, as far as this run knows; null after a clean quit. */
@@ -96,8 +166,11 @@ export function dismissUnexpectedExit(): void {
 }
 
 export function watchProcesses(): void {
-  app.on('will-quit', () => {
-    quitCleanly = true
+  app.on('will-quit', (event) => {
+    if (!event.defaultPrevented) markCleanExit()
+  })
+  app.on('quit', () => {
+    markCleanExit()
   })
   app.on('render-process-gone', (_event, webContents, details) => {
     log.error(

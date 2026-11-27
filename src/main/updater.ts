@@ -86,6 +86,8 @@ export class Updater {
   private status: UpdateStatus
   private readonly mode: UpdateMode
   private updater: Promise<AppUpdater> | null = null
+  /** Resolved electron-updater instance, so shutdown hooks can update it synchronously. */
+  private loadedUpdater: AppUpdater | null = null
   private manual = false
   private lastCheckedAt: number | null = null
   private lastAvailable: string | null = null
@@ -309,7 +311,17 @@ export class Updater {
 
   /** The last step of a restart to update, after the hosts stopped and files were flushed. */
   async installNow(): Promise<void> {
+    if (this.shuttingDown) {
+      log.info('System shutdown: skipping update install')
+      app.quit()
+      return
+    }
     const updater = await this.load()
+    if (this.shuttingDown) {
+      log.info('System shutdown: skipping update install')
+      app.quit()
+      return
+    }
     if (this.squirrelPreparing) {
       log.info('Waiting for Squirrel.Mac to prepare the update before restarting')
       await this.squirrelPreparing
@@ -345,6 +357,11 @@ export class Updater {
   /** The system is shutting down, which could kill an installer halfway. */
   systemShutdown(): void {
     this.shuttingDown = true
+    if (this.loadedUpdater) {
+      this.loadedUpdater.autoInstallOnAppQuit = false
+      log.info('System shutdown: the update installs at the next quit instead')
+      return
+    }
     if (!this.updater) return
     void this.updater.then((updater) => {
       updater.autoInstallOnAppQuit = false
@@ -492,6 +509,8 @@ export class Updater {
         autoUpdater.allowDowngrade = false
         // The updater starts downloads itself, so a failed source hands the download on.
         autoUpdater.autoDownload = false
+        autoUpdater.disableWebInstaller = true
+        this.loadedUpdater = autoUpdater
         this.applyInstallOnQuit(autoUpdater, settings)
         // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
         autoUpdater.disableDifferentialDownload = process.platform === 'win32'
