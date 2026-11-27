@@ -2,6 +2,7 @@
 // for all models and for each model, and the prompt cache duration. Nothing else in the file is
 // read, and every other key stays as the user left it.
 
+import path from 'node:path'
 import type { ClaudeCompactRow, ClaudeSettingChange, ClaudeSettings } from '@shared/agent-host'
 import {
   AUTO_COMPACT_MAX,
@@ -13,6 +14,8 @@ import {
 import type { ConfigOption } from '@shared/thread'
 import { t } from '../i18n'
 import { isObject, readSettings, writeSettings } from '../settings-file'
+import { availableModes, defaultModeFromSettings } from './config'
+import type { PermissionMode } from './sdk'
 
 /** A model the agent lists: its id as the settings key it, and the name it shows. */
 export interface ListedModel {
@@ -177,4 +180,51 @@ export async function writeClaudeSetting(file: string, input: ClaudeSettingChang
         ? withDefaultWindow(settings, change.value)
         : withWindow(file, settings, change.model, change.value)
   if (next) await writeSettings(file, next)
+}
+
+const CLAUDE_MODE_RANK: Readonly<Record<PermissionMode, number>> = {
+  plan: 1,
+  default: 1,
+  dontAsk: 1,
+  acceptEdits: 2,
+  auto: 3,
+  bypassPermissions: 4,
+}
+
+async function readSettingsQuiet(file: string): Promise<Record<string, unknown>> {
+  try {
+    return await readSettings(file)
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Reads the effective `permissions.defaultMode` for a Claude Code agent from its user settings
+ * file and optional project settings files when no live SDK connection is available yet.
+ * Repository-level settings can narrow the mode but never escalate it above the user's own
+ * setting, matching Claude Code's `filterEscalatingDefaultMode` safeguard.
+ */
+export async function readClaudeDefaultMode(
+  userSettingsFile: string,
+  cwd: string | null = null,
+  allowBypass: boolean = process.getuid?.() !== 0,
+): Promise<PermissionMode> {
+  const modes = availableModes(allowBypass)
+  let current = defaultModeFromSettings(await readSettingsQuiet(userSettingsFile), allowBypass)
+  if (!cwd) return current
+  for (const folderFile of [
+    path.join(cwd, '.claude', 'settings.json'),
+    path.join(cwd, '.claude', 'settings.local.json'),
+  ]) {
+    const raw = await readSettingsQuiet(folderFile)
+    const permissions = isObject(raw.permissions) ? raw.permissions : null
+    const declared = typeof permissions?.defaultMode === 'string' ? permissions.defaultMode : null
+    if (!declared || !modes.includes(declared as PermissionMode)) continue
+    const candidate = declared as PermissionMode
+    if (CLAUDE_MODE_RANK[candidate] <= CLAUDE_MODE_RANK[current]) {
+      current = candidate
+    }
+  }
+  return current
 }

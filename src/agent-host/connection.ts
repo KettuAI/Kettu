@@ -510,6 +510,12 @@ export interface AgentConnection {
   readAuthStatus?(): Promise<void>
   logout(): Promise<void>
 
+  /**
+   * The permission mode a new session in `cwd` opens with when Settings > Agents sets none, read
+   * without opening a session.
+   */
+  defaultMode?(cwd: string): Promise<string>
+
   newSession(cwd: string, options?: SessionOptions): Promise<OpenedSession>
   /** Opens a session again, replaying its history to its target. */
   loadSession(sessionId: string, cwd: string, options?: SessionOptions): Promise<SessionSetup>

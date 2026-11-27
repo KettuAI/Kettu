@@ -64,6 +64,7 @@ import {
   buildConfig,
   DEFAULT_EFFORT,
   DEFAULT_MODEL,
+  defaultModeFromSettings,
   modelInfo,
   OPTION_IDS,
   settingsModel,
@@ -990,6 +991,15 @@ export class ClaudeConnection implements AgentConnection {
     this.unregister(sessionId)
   }
 
+  /**
+   * Resolves the permission mode a new Claude Code session in `cwd` would open with from its
+   * settings files without spawning a query process.
+   */
+  async defaultMode(cwd: string): Promise<PermissionMode> {
+    const settings = await this.settings(cwd, USER_SOURCES)
+    return defaultModeFromSettings(settings.values)
+  }
+
   // Opening a query.
 
   /**
@@ -1067,11 +1077,7 @@ export class ClaudeConnection implements AgentConnection {
     const settings = await this.settings(cwd, sources)
     const allowBypass = process.getuid?.() !== 0
     const modes = availableModes(allowBypass)
-    const permissions = (settings.values.permissions ?? {}) as { defaultMode?: unknown }
-    const wanted = typeof permissions.defaultMode === 'string' ? permissions.defaultMode : 'default'
-    const mode: PermissionMode = modes.includes(wanted as PermissionMode)
-      ? (wanted as PermissionMode)
-      : 'default'
+    const mode = defaultModeFromSettings(settings.values, allowBypass)
     const input = new Input()
     const windowOf = (model: string): number | null =>
       contextWindow(session.compact, model, ownWindow(session.totals, model))

@@ -4755,4 +4755,18 @@ describe('the connection', () => {
     const s = await setup()
     expect(s.connection).toBeInstanceOf(ClaudeConnection)
   })
+
+  it('resolves defaultMode through SDK settings without spawning a query process', async () => {
+    const s = await setup({ CLAUDE_CONFIG_DIR: '/home/ada/.claude-work' })
+    expect(await s.connection.defaultMode?.('/repo')).toBe('default')
+    expect(s.sdk.queries).toEqual([])
+    expect(s.sdk.calls.find((call) => call.method === 'resolveSettings')?.args).toEqual([
+      { cwd: '/repo', settingSources: ['user', 'project', 'local'] },
+      '/home/ada/.claude-work',
+    ])
+
+    s.sdk.settings = { permissions: { defaultMode: 'acceptEdits' } }
+    expect(await s.connection.defaultMode?.('/repo')).toBe('acceptEdits')
+    expect(s.sdk.queries).toEqual([])
+  })
 })

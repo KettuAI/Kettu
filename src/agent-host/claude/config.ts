@@ -46,6 +46,17 @@ export function availableModes(allowBypass: boolean): PermissionMode[] {
   return MODES.filter((id) => allowBypass || id !== 'bypassPermissions')
 }
 
+/** The permission mode resolved from Claude Code's settings values, falling back to `default`. */
+export function defaultModeFromSettings(
+  values: Record<string, unknown>,
+  allowBypass: boolean = process.getuid?.() !== 0,
+): PermissionMode {
+  const modes = availableModes(allowBypass)
+  const permissions = (values.permissions ?? {}) as { defaultMode?: unknown }
+  const wanted = typeof permissions.defaultMode === 'string' ? permissions.defaultMode : 'default'
+  return modes.includes(wanted as PermissionMode) ? (wanted as PermissionMode) : 'default'
+}
+
 export interface SessionChoices {
   mode: string
   model: string

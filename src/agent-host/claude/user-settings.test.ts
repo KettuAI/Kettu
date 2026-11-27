@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ConfigOption } from '@shared/thread'
 import {
   listedModels,
+  readClaudeDefaultMode,
   readClaudeSettings,
   writeClaudeSetting,
   type ListedModel,
@@ -224,5 +225,58 @@ describe('the models a Claude Code agent lists', () => {
   it('are none when the agent has not listed any', () => {
     expect(listedModels(undefined)).toEqual([])
     expect(listedModels([])).toEqual([])
+  })
+})
+
+describe("a Claude Code agent's default permission mode", () => {
+  it('falls back to default when the settings file is missing, unset, invalid, or malformed', async () => {
+    expect(await readClaudeDefaultMode(file)).toBe('default')
+
+    await put({ permissions: {} })
+    expect(await readClaudeDefaultMode(file)).toBe('default')
+
+    await put({ permissions: { defaultMode: 'unknownMode' } })
+    expect(await readClaudeDefaultMode(file)).toBe('default')
+
+    await put('{ not-json')
+    expect(await readClaudeDefaultMode(file)).toBe('default')
+  })
+
+  it('reads a valid permissions.defaultMode from user settings and respects allowBypass', async () => {
+    await put({ permissions: { defaultMode: 'acceptEdits' } })
+    expect(await readClaudeDefaultMode(file, null, true)).toBe('acceptEdits')
+
+    await put({ permissions: { defaultMode: 'auto' } })
+    expect(await readClaudeDefaultMode(file, null, true)).toBe('auto')
+
+    await put({ permissions: { defaultMode: 'bypassPermissions' } })
+    expect(await readClaudeDefaultMode(file, null, true)).toBe('bypassPermissions')
+    expect(await readClaudeDefaultMode(file, null, false)).toBe('default')
+  })
+
+  it('allows project settings to narrow defaultMode but never escalate above user settings', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(path.join(repo, '.claude'), { recursive: true })
+
+    // Repository settings cannot escalate a user default of `default` to `auto` or bypass.
+    await writeFile(
+      path.join(repo, '.claude', 'settings.json'),
+      JSON.stringify({ permissions: { defaultMode: 'auto' } }),
+    )
+    expect(await readClaudeDefaultMode(file, repo, true)).toBe('default')
+
+    // Repository settings can narrow a wider user default (auto -> acceptEdits -> default).
+    await put({ permissions: { defaultMode: 'auto' } })
+    await writeFile(
+      path.join(repo, '.claude', 'settings.json'),
+      JSON.stringify({ permissions: { defaultMode: 'acceptEdits' } }),
+    )
+    expect(await readClaudeDefaultMode(file, repo, true)).toBe('acceptEdits')
+
+    await writeFile(
+      path.join(repo, '.claude', 'settings.local.json'),
+      JSON.stringify({ permissions: { defaultMode: 'plan' } }),
+    )
+    expect(await readClaudeDefaultMode(file, repo, true)).toBe('plan')
   })
 })

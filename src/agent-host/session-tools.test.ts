@@ -225,7 +225,8 @@ function starting(
     carried?: Record<string, string | boolean>
     held?: boolean
     agent?: { id: string; name: string }
-    startMode?: string
+    startMode?: string | Record<string, string | undefined>
+    defaultMode?: string | null | Record<string, string | null | undefined>
     starterRank?: ModeRank | null
     mode?: ToolMode
     roles?: KettuRole[]
@@ -259,6 +260,18 @@ function starting(
         harnessName: other.name,
       }) as unknown as AgentStatus,
   )
+  const startMode = (agentId: string): string | undefined =>
+    typeof opts.startMode === 'object' ? opts.startMode[agentId] : opts.startMode
+  const defaultMode =
+    opts.defaultMode === undefined
+      ? undefined
+      : async (agentId: string): Promise<string | null> => {
+          const value =
+            typeof opts.defaultMode === 'object' && opts.defaultMode !== null
+              ? opts.defaultMode[agentId]
+              : opts.defaultMode
+          return value ?? null
+        }
   const deps = {
     info: (id: string) => sessions.find((item) => item.id === id) ?? null,
     started: () => opts.started ?? [],
@@ -267,7 +280,8 @@ function starting(
     agents: () => [status, ...others],
     roles: async () => opts.roles ?? [],
     role: async (ref: string) => (opts.roles ?? []).find((role) => role.ref === ref) ?? null,
-    startMode: () => opts.startMode,
+    startMode,
+    ...(defaultMode ? { defaultMode } : {}),
     starterRank: () => (opts.starterRank === undefined ? 3 : opts.starterRank),
     carried: () => ({ ...(opts.carried ?? {}) }),
     agentOptions: () => cache,
@@ -475,6 +489,123 @@ describe('start_session mode', () => {
       'narrower than asked: Google Antigravity starts its sessions in Default, and the user ' +
         'set no mode for its new sessions in Settings > Agents.',
     )
+  })
+
+  it('caps Claude Code list_agents modes and explains lowering when no start mode is configured', async () => {
+    const { tools: t } = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      starterRank: 4,
+      mode: { id: 'default', name: 'Ask before edits' },
+    })
+    const listed = await t.call(caller, 'list_agents', {})
+    const agents = (
+      listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+    ).agents
+    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default'])
+
+    const started = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'claude-code',
+      mode: 'auto',
+    })
+    expect(started.structuredContent).toMatchObject({ mode_lowered: true })
+    expect(text(started)).toContain(
+      'narrower than asked: Claude Code starts its sessions in Ask before edits, and the user ' +
+        'set no mode for its new sessions in Settings > Agents.',
+    )
+  })
+
+  it("reflects Claude Code's resolved defaultMode from settings in list_agents and loweredText", async () => {
+    const { tools: t } = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      others: [
+        { id: 'claude-code~work', name: 'Claude Work' },
+        { id: 'codex', name: 'Codex' },
+        { id: 'deepseek', name: 'DeepSeek Harness' },
+        { id: 'antigravity', name: 'Google Antigravity' },
+        { id: 'opencode', name: 'OpenCode' },
+      ],
+      defaultMode: {
+        'claude-code': 'acceptEdits',
+        'claude-code~work': 'bypassPermissions',
+      },
+      starterRank: 4,
+      mode: { id: 'acceptEdits', name: 'Accept edits' },
+    })
+    const listed = await t.call(caller, 'list_agents', {})
+    const byId = Object.fromEntries(
+      (
+        listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+      ).agents.map((item) => [item.id, item.modes.map((m) => m.id)]),
+    )
+    expect(byId).toEqual({
+      'claude-code': ['default', 'acceptEdits'],
+      // Full access from Claude settings is still capped at Auto (rank 3).
+      'claude-code~work': ['default', 'acceptEdits', 'auto'],
+      codex: ['read-only', 'workspace-write', 'agent'],
+      deepseek: ['read-only', 'workspace-write'],
+      antigravity: ['default'],
+      opencode: [],
+    })
+
+    const lowered = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'claude-code',
+      mode: 'auto',
+    })
+    expect(text(lowered)).toContain(
+      'narrower than asked: Claude Code starts its sessions in Accept edits, and the user set ' +
+        'no mode for its new sessions in Settings > Agents.',
+    )
+  })
+
+  it('prefers explicit Settings > Agents startMode over the agent defaultMode in list_agents', async () => {
+    const { tools: t } = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      startMode: { 'claude-code': 'auto' },
+      defaultMode: { 'claude-code': 'default' },
+      starterRank: 3,
+    })
+    const listed = await t.call(caller, 'list_agents', {})
+    const agents = (
+      listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+    ).agents
+    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits', 'auto'])
+
+    // Explicit Settings > Agents startMode of full access is still capped below full access.
+    const fullAccess = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      startMode: { 'claude-code': 'bypassPermissions' },
+      defaultMode: { 'claude-code': 'default' },
+      starterRank: 4,
+    })
+    const listedFull = await fullAccess.tools.call(caller, 'list_agents', {})
+    const fullAgents = (
+      listedFull.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+    ).agents
+    expect(fullAgents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits', 'auto'])
+  })
+
+  it('refuses explicit mode on unranked harnesses like OpenCode, Pi, Gemini, and Cursor', async () => {
+    const { tools: t, start } = starting({
+      agent: { id: 'codex', name: 'Codex' },
+      others: [
+        { id: 'opencode', name: 'OpenCode' },
+        { id: 'pi', name: 'Pi' },
+        { id: 'gemini', name: 'Gemini CLI' },
+        { id: 'cursor', name: 'Cursor' },
+      ],
+    })
+    for (const agentId of ['opencode', 'pi', 'gemini', 'cursor']) {
+      const out = await t.call(caller, 'start_session', {
+        prompt: 'x',
+        agent: agentId,
+        mode: 'default',
+      })
+      expect(out.isError).toBe(true)
+      expect(text(out)).toContain('cannot be chosen here')
+    }
+    expect(start).not.toHaveBeenCalled()
   })
 })
 

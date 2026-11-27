@@ -148,6 +148,11 @@ export interface SessionToolsDeps {
   starterRank(sessionId: string): ModeRank | null
   /** The mode the user set for an agent's new sessions in Settings › Agent. */
   startMode(agentId: AgentId): string | undefined
+  /**
+   * The permission mode an agent's new session starts in when Settings › Agent sets none,
+   * resolved in the caller's working folder; falls back to `defaultMode(harness)`.
+   */
+  defaultMode?(agentId: AgentId, callerId: string): Promise<string | null>
   now?(): number
 }
 
@@ -978,15 +983,17 @@ export class SessionTools {
     if (only !== undefined && first?.state === 'ready' && !this.deps.agentOptions(only)) {
       await this.deps.readOptions(only).catch(() => {})
     }
-    const agents = listed.map(({ status, state }) => ({
-      id: status.id,
-      name: status.name,
-      harness: status.harnessName,
-      is_you: status.id === own,
-      status: state,
-      modes: this.modesOf(status.id, starter),
-      ...offered(this.deps.agentOptions(status.id)),
-    }))
+    const agents = await Promise.all(
+      listed.map(async ({ status, state }) => ({
+        id: status.id,
+        name: status.name,
+        harness: status.harnessName,
+        is_you: status.id === own,
+        status: state,
+        modes: await this.modesOf(status.id, starter, caller.sessionId),
+        ...offered(this.deps.agentOptions(status.id)),
+      })),
+    )
     const roles = (await this.deps.roles()).map((role) => ({
       id: role.ref,
       name: role.title,
@@ -1050,20 +1057,33 @@ export class SessionTools {
   }
 
   /**
-   * The modes a caller can start an agent in now: none for an agent whose modes Kettu cannot rank.
-   * Claude Code reads its own mode at the start, so one of these may still start narrower.
+   * The permission mode a new session of `agentId` would start in, and whether it came from
+   * Settings > Agents (`fromSettings`) or from the agent's own default.
    */
-  private modesOf(
+  private async agentModeOf(
+    agentId: AgentId,
+    callerId: string,
+  ): Promise<{ mode: string; fromSettings: boolean } | null> {
+    const harness = harnessOf(agentId)
+    if (!isRanked(harness)) return null
+    const set = this.deps.startMode(agentId)
+    if (set !== undefined) return { mode: set, fromSettings: true }
+    const own = (await this.deps.defaultMode?.(agentId, callerId)) ?? defaultMode(harness)
+    return { mode: own, fromSettings: false }
+  }
+
+  /**
+   * The modes a caller can start an agent in now: none for an agent whose modes Kettu cannot rank.
+   */
+  private async modesOf(
     agentId: AgentId,
     starter: ModeRank | null,
-  ): { id: string; name: string; description: string }[] {
+    callerId: string,
+  ): Promise<{ id: string; name: string; description: string }[]> {
     const harness = harnessOf(agentId)
     if (!isRanked(harness)) return []
-    const ceiling = startedCeiling(
-      starter,
-      harness,
-      this.deps.startMode(agentId) ?? defaultMode(harness),
-    )
+    const resolved = await this.agentModeOf(agentId, callerId)
+    const ceiling = startedCeiling(starter, harness, resolved?.mode ?? null)
     return startableModes(harness, ceiling).map((id) => ({ id, ...modeLabel(harness, id) }))
   }
 
@@ -1071,23 +1091,22 @@ export class SessionTools {
    * Why a started session got a narrower mode than `wanted`: the caller's own mode, the mode the
    * agent's new sessions start in, or both.
    */
-  private loweredText(callerId: string, agentId: AgentId, wanted: string): string {
+  private async loweredText(callerId: string, agentId: AgentId, wanted: string): Promise<string> {
     const harness = harnessOf(agentId)
     if (!isRanked(harness)) return ' That is narrower than asked.'
     const asked = modeRank(harness, wanted) ?? 1
     const reasons: string[] = []
     const starter = this.deps.starterRank(callerId)
     if (starter !== null && starter < asked) reasons.push('your own mode allows no wider')
-    const set = this.deps.startMode(agentId)
-    const agentMode = set ?? defaultMode(harness)
-    if (agentMode !== null && (modeRank(harness, agentMode) ?? 1) < asked) {
+    const resolved = await this.agentModeOf(agentId, callerId)
+    if (resolved !== null && (modeRank(harness, resolved.mode) ?? 1) < asked) {
       const name = this.deps.agents().find((status) => status.id === agentId)?.name ?? agentId
-      const label = modeLabel(harness, agentMode).name
+      const label = modeLabel(harness, resolved.mode).name
       reasons.push(
-        set === undefined
-          ? `${name} starts its sessions in ${label}, and the user set no mode for its new ` +
-              'sessions in Settings > Agents'
-          : `the user set ${name}'s new sessions to start in ${label} in Settings > Agents`,
+        resolved.fromSettings
+          ? `the user set ${name}'s new sessions to start in ${label} in Settings > Agents`
+          : `${name} starts its sessions in ${label}, and the user set no mode for its new ` +
+              'sessions in Settings > Agents',
       )
     }
     return reasons.length === 0
@@ -1325,6 +1344,7 @@ export class SessionTools {
     const current = await this.deps.mode(started)
     const choices = await this.deps.choices(started)
     const lowered = wanted !== undefined && current !== null && current.id !== wanted
+    const loweredNote = lowered ? await this.loweredText(caller.sessionId, target, wanted) : ''
     const held = this.deps.held(started)
     return result(
       `Started "${titleOf(session)}"${modeText(current)}${choicesText(choices)}.` +
@@ -1333,7 +1353,7 @@ export class SessionTools {
           ? ` The role ${role.title} suggested ${listed(left)}, which is not available here, ` +
             'so the usual values apply.'
           : '') +
-        (lowered ? this.loweredText(caller.sessionId, target, wanted) : '') +
+        loweredNote +
         (held
           ? ' Kettu could not set every value it starts with, so its first message waits for ' +
             'the user in that session, and no report comes until they send it.'
