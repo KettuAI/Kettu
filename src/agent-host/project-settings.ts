@@ -217,6 +217,45 @@ export async function grokTrusted(
   return false
 }
 
+/**
+ * Whether the user's own Gemini CLI trusts `cwd`, as it decides: the user's variables first, then
+ * its folder trust being off in the user's settings, then the most specific rule of its trust
+ * list, a parent rule covering the folder it names the parent of. Unknown is not trusted.
+ */
+export async function geminiTrusted(
+  files: { trustList: string; settings: string },
+  cwd: string,
+  variable: (name: string) => string | undefined,
+): Promise<boolean> {
+  if (variable('GEMINI_RESTRICTED_MODE') === 'true') return false
+  const workspace = variable('GEMINI_CLI_TRUST_WORKSPACE')
+  if (workspace === 'false') return false
+  if (workspace === 'true') return true
+  const settingsText = await readText(files.settings)
+  if (settingsText !== null) {
+    const settings: unknown = parseJsonc(settingsText, [], { allowTrailingComma: true })
+    const security = isRecord(settings) && isRecord(settings.security) ? settings.security : {}
+    if (isRecord(security.folderTrust) && security.folderTrust.enabled === false) return true
+  }
+  const text = await readText(files.trustList)
+  if (text === null) return false
+  const rules: unknown = parseJsonc(text, [], { allowTrailingComma: true })
+  if (!isRecord(rules)) return false
+  const real = async (folder: string) => path.resolve(await realpath(folder).catch(() => folder))
+  const location = await real(cwd)
+  let longest = -1
+  let level: unknown
+  for (const [rule, trust] of Object.entries(rules)) {
+    const effective = await real(trust === 'TRUST_PARENT' ? path.dirname(rule) : rule)
+    const inside = location === effective || location.startsWith(effective + path.sep)
+    if (inside && rule.length > longest) {
+      longest = rule.length
+      level = trust
+    }
+  }
+  return level === 'TRUST_FOLDER' || level === 'TRUST_PARENT'
+}
+
 async function exists(file: string): Promise<boolean> {
   return lstat(file).then(
     () => true,
@@ -283,6 +322,8 @@ export async function folderSettings(
     case 'opencode':
     case 'kilo':
       return openCodeSettings(harness, cwd, platform)
+    case 'qwen':
+      return qwenSettings(cwd, platform)
     default:
       return null
   }
@@ -346,6 +387,69 @@ const OPENCODE_FAMILY = {
     folders: ['.kilo', '.opencode'],
   },
 } as const
+/** The names a dotenv file sets, never their values. */
+function dotenvNames(text: string): string[] {
+  const names: string[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*[=:]/.exec(line)
+    if (match) names.push(match[1]!)
+  }
+  return names
+}
+
+/**
+ * Qwen Code's project config, which it loads only in a folder it trusts: `.env` and `.qwen/.env`
+ * from the repository's root down to `cwd`, with the variables named, and `.qwen/settings.json`
+ * with its `env` named, besides the servers Kettu runs, and the other files under `.qwen`.
+ */
+async function qwenSettings(cwd: string, platform: Platform): Promise<FolderSettings | null> {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const base = p.resolve(cwd)
+  const items: DeclaredItem[] = []
+  const files: string[] = []
+  const parts: unknown[] = []
+  for (const root of await projectRoots(cwd, platform)) {
+    for (const file of [p.join(root, '.env'), p.join(root, '.qwen', '.env')]) {
+      const text = await readText(file)
+      if (text === null) continue
+      const relative = p.relative(base, file)
+      files.push(relative)
+      for (const name of dotenvNames(text)) items.push({ kind: 'env', target: clip(name) })
+      parts.push([relative, sha(text)])
+    }
+    const config = p.join(root, '.qwen', 'settings.json')
+    const text = await readText(config)
+    if (text !== null) {
+      const parsed: unknown = parseJsonc(text, [], { allowTrailingComma: true })
+      const data = isRecord(parsed) ? parsed : {}
+      const rest = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'mcpServers'))
+      if (Object.keys(rest).length > 0 || !isRecord(parsed)) {
+        files.push(p.relative(base, config))
+        if (!isRecord(parsed)) items.push({ kind: 'setting', target: p.relative(base, config) })
+        for (const [key, value] of Object.entries(rest)) {
+          if (key === 'env' && isRecord(value)) {
+            for (const name of Object.keys(value)) items.push({ kind: 'env', target: clip(name) })
+          } else items.push({ kind: 'setting', target: clip(key) })
+        }
+        parts.push([p.relative(base, config), isRecord(parsed) ? rest : sha(text)])
+      }
+    }
+    const folder = p.join(root, '.qwen')
+    const under = (await filesUnder(folder, base, platform)).filter(
+      (file) =>
+        !['settings.json', '.env'].includes(p.basename(file)) ||
+        p.dirname(file) !== p.relative(base, folder),
+    )
+    for (const file of under) {
+      items.push({ kind: 'setting', target: clip(file) })
+      files.push(file)
+    }
+    parts.push(await filesDigest(base, under, platform))
+  }
+  if (items.length === 0) return null
+  return { harness: 'qwen', items, files: [...new Set(files)], digest: sha(parts) }
+}
+
 const OPENCODE_CODE_FOLDERS = new Set(['plugin', 'plugins', 'tool', 'tools'])
 
 /**
@@ -480,6 +584,8 @@ export interface FolderDeclared {
    * Kettu hands it none of them.
    */
   turnsOff: boolean
+  /** Whether the harness loads the folder by the user's own trust in it, with nothing to ask. */
+  ownTrust?: boolean
 }
 
 /**
@@ -504,9 +610,10 @@ export function folderHandOff(
   const own = declared.servers.filter((server) => declared.harnessDigests.includes(server.digest))
   const started = declared.servers.filter((server) => allowed(server) === true)
   const trusted =
-    declared.settings !== null &&
-    settingsAllowed === true &&
-    (declared.turnsOff || own.every((server) => started.includes(server)))
+    declared.ownTrust === true ||
+    (declared.settings !== null &&
+      settingsAllowed === true &&
+      (declared.turnsOff || own.every((server) => started.includes(server))))
   return {
     unanswered,
     askSettings,

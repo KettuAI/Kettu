@@ -248,6 +248,7 @@ import {
   codexUntrusted,
   folderServers,
   folderSettings,
+  geminiTrusted,
   grokTrusted,
   projectRoots,
   type FolderDeclared,
@@ -421,6 +422,7 @@ const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set([
   'codex',
   'opencode',
   'kilo',
+  'qwen',
 ])
 
 export interface HostOptions {
@@ -1702,6 +1704,30 @@ export class AgentHost {
         }
         const harness = harnessOf(agentId)
         if (harness === 'grok') return grokDeclared(agentId, cwd)
+        if (harness === 'gemini') {
+          // Its own folder trust holds the folder; Kettu only keeps its `.env` from where it is
+          // not trusted.
+          const variable = (name: string) => this.env.get(name, agentId)
+          const gemini = path.join(home, '.gemini')
+          const ownTrust = await geminiTrusted(
+            {
+              trustList:
+                variable('GEMINI_CLI_TRUSTED_FOLDERS_PATH')?.trim() ||
+                path.join(gemini, 'trustedFolders.json'),
+              settings: path.join(gemini, 'settings.json'),
+            },
+            cwd,
+            variable,
+          )
+          return {
+            servers: [],
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+            ownTrust,
+          }
+        }
         // The other harnesses start what their own files declare, so Kettu running them too
         // would start them twice.
         if (!FOLDER_HELD_HARNESSES.has(harness)) {

@@ -27,7 +27,7 @@ export const ACP_DRIVER: ProcessDriver = { kind: 'process', connect }
 export const ACP_FOLDERS_DRIVER: HostedDriver = {
   kind: 'hosted',
   connect: (context) => {
-    const off = context.def.folderConfigOff ?? {}
+    const off = context.folderConfigOff ?? {}
     return new FolderConnections({
       make: (held) => {
         const env = held ? { ...context.env, ...off } : context.env

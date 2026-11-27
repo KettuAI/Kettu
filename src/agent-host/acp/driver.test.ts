@@ -22,6 +22,7 @@ describe("Kilo Code's folder config", () => {
       hooks: { traffic: () => {}, account: () => {}, ignored: () => {}, log: () => {} },
       spec: { command: '/bin/kilo', args: ['acp'], env: {}, shell: false, display: {} },
       env: { PATH: '/usr/bin', OPENAI_API_KEY: 'sk-test' },
+      folderConfigOff: KILO.folderConfigOff,
       spawn: (options: HostedSpawnOptions) => {
         spawned.push(options)
         return fakeChild()

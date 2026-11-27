@@ -173,9 +173,12 @@ export interface AgentDefinition {
   protocol?: AgentProtocol
   /**
    * The environment that turns a folder's own config off for every session of its process, which
-   * `acp-folders` runs it with until the user lets a folder's own settings apply.
+   * `acp-folders` runs it with until the user lets a folder's own settings apply; or what writes
+   * the files it names into Kettu's folder `dir` for the agent, before each start.
    */
-  folderConfigOff?: Readonly<Record<string, string>>
+  folderConfigOff?:
+    | Readonly<Record<string, string>>
+    | ((dir: string, env: Env, platform: Platform) => Promise<Record<string, string>>)
   preferred?: PreferredProtocol
   launch: LaunchKind
   requiresNode?: string
