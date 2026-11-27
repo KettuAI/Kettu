@@ -1525,6 +1525,8 @@ export class SessionManager {
       this.deps.returned.flush(),
       this.deps.projectMcp?.flush(),
       this.deps.projectHooks?.flush(),
+      this.deps.options?.flush(),
+      this.deps.prepared?.flush(),
     ])
   }
 
@@ -4958,7 +4960,7 @@ export class SessionManager {
   }
 
   private scheduleCacheRead(live: Live): void {
-    if (!this.deps.cacheTtl || this.cacheReads.has(live.id)) return
+    if (this.stopped || !this.deps.cacheTtl || this.cacheReads.has(live.id)) return
     const timer = setTimeout(() => {
       this.cacheReads.delete(live.id)
       void this.readCacheTtl(live)
@@ -4986,7 +4988,7 @@ export class SessionManager {
       )
       return
     }
-    if (ttl === null || live.closing || this.live.get(live.id) !== live) return
+    if (this.stopped || ttl === null || live.closing || this.live.get(live.id) !== live) return
     const usage = live.thread.session.usage
     if (!usage?.cache || usage.cache.ttl === ttl) return
     this.update(live, { usage: { ...usage, cache: { ...usage.cache, ttl } } })
@@ -5970,6 +5972,7 @@ export class SessionManager {
 
   /** Replaces the prepared session once the agent's settings change on disk. */
   private watchPrepared(live: Live): void {
+    if (this.stopped) return
     const prepared = live.prepared
     const targets =
       prepared && this.deps.settingsTargets?.(live.record.agentId, workDir(live.record))
@@ -5977,6 +5980,7 @@ export class SessionManager {
     prepared.unwatch = watchSettings(
       targets,
       () => {
+        if (this.stopped) return
         const slot = this.preparedSlots.get(prepared.portId)
         if (!slot || live.prepared !== prepared || slot.current !== live) return
         slot.stale = true
@@ -9409,7 +9413,7 @@ export class SessionManager {
    */
   private maybeWriteTitle(live: Live): void {
     const message = live.titlePrompt
-    if (!message || live.titleWriting) return
+    if (this.stopped || !message || live.titleWriting) return
     if (!this.deps.settings().sessionTitles) return
     if (live.record.origin !== 'user' || live.record.titleSource !== undefined) return
     if (live.record.customTitle !== undefined) return
@@ -9432,6 +9436,7 @@ export class SessionManager {
     const name = this.deps.agents.name(target.agentId)
     try {
       const runtime = await this.deps.agents.ensureReady(agentId)
+      if (this.stopped) return
       // Only an agent that titles none has Kettu pay for one.
       if (runtime.init.capabilities.ownTitles !== null) {
         live.titlePrompt = null
@@ -9439,7 +9444,9 @@ export class SessionManager {
       }
       const writer =
         target.agentId === agentId ? runtime : await this.deps.agents.ensureReady(target.agentId)
+      if (this.stopped) return
       const title = await this.askTitle(writer, target.model, message)
+      if (this.stopped) return
       this.applyWrittenTitle(live, title)
     } catch (error) {
       live.titleFailedAt = this.now()
@@ -10638,7 +10645,8 @@ export class SessionManager {
 
   /** Reads the title an agent lists for the session, unless it has a title of its own already. */
   private maybeReadListedTitle(live: Live, afterFirstTurn: boolean): void {
-    if (this.live.get(live.id) !== live || live.record.titleSource !== undefined) return
+    if (this.stopped || this.live.get(live.id) !== live || live.record.titleSource !== undefined)
+      return
     const runtime = this.deps.agents.runtime(live.record.agentId)
     if (!runtime || runtime.init.capabilities.ownTitles !== 'listed') return
     if (!runtime.init.capabilities.listSessions) return
@@ -10664,7 +10672,8 @@ export class SessionManager {
       )
       return
     }
-    if (this.live.get(live.id) !== live || live.record.titleSource !== undefined) return
+    if (this.stopped || this.live.get(live.id) !== live || live.record.titleSource !== undefined)
+      return
     if (title !== null) {
       live.record.titleSource = 'agent'
       live.titlePrompt = null
@@ -11467,7 +11476,7 @@ export class SessionManager {
    */
   private suggestNext(live: Live, turn: Turn, stopReason: StopReason): void {
     // A queued message that went on is the next one already.
-    if (stopReason !== 'end_turn' || live.turn || live.closing) return
+    if (this.stopped || stopReason !== 'end_turn' || live.turn || live.closing) return
     if (!this.deps.settings().promptSuggestions || planModeOn(live.thread.session.config)) return
     const route = this.suggestionRouteOf(live.record, this.deps.agents.runtime(live.record.agentId))
     if (route === 'tool') {
@@ -12490,7 +12499,7 @@ export class SessionManager {
    */
   private afterAnswer(live: Live): void {
     setTimeout(() => {
-      if (this.live.get(live.id) !== live || live.turn || live.closing) return
+      if (this.stopped || this.live.get(live.id) !== live || live.turn || live.closing) return
       this.drainQueue(live)
     }, 0)
   }
@@ -14541,21 +14550,43 @@ export class SessionManager {
    * follows.
    */
   shutdown(): void {
+    this.stopped = true
     for (const live of this.live.values()) {
       this.holdFirst(live)
       this.flushPatches(live)
-      if (live.turn?.fallback) clearTimeout(live.turn.fallback)
-      if (live.releaseTimer) clearTimeout(live.releaseTimer)
-      if (live.contextTimer) clearTimeout(live.contextTimer)
-      this.checkpoint(live, { final: true })
+      if (live.turn?.fallback) {
+        clearTimeout(live.turn.fallback)
+        live.turn.fallback = null
+      }
+      if (live.releaseTimer) {
+        clearTimeout(live.releaseTimer)
+        live.releaseTimer = null
+      }
+      if (live.contextTimer) {
+        clearTimeout(live.contextTimer)
+        live.contextTimer = null
+      }
+      if (live.listedTitleTimer) {
+        clearTimeout(live.listedTitleTimer)
+        live.listedTitleTimer = null
+      }
+      if (live.prepared?.unwatch) {
+        live.prepared.unwatch()
+        live.prepared.unwatch = null
+      }
+      this.checkpoint(live, { afterShutdown: true, final: true })
     }
     for (const timer of this.cacheReads.values()) clearTimeout(timer)
+    this.cacheReads.clear()
     for (const timer of this.continues.values()) clearTimeout(timer)
     this.continues.clear()
     this.continueRetries.clear()
+    for (const run of this.sideRuns.values()) run.abort()
+    this.sideRuns.clear()
+    for (const run of this.suggestRuns.values()) run.abort()
+    this.suggestRuns.clear()
     if (this.followTimer) clearInterval(this.followTimer)
     this.followTimer = null
-    this.stopped = true
   }
 }
 
