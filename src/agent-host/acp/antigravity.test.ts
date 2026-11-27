@@ -907,13 +907,24 @@ describe("agy's ACP mode", () => {
  * `session/resume` starts the session's process again, at agy's own model and in Default, as agy
  * 1.5.9 does. `turn` holds a prompt open until the test lets it end.
  */
-function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
+function flaggedAgy(
+  version: string,
+  flag: string | null,
+  refusesFlag = false,
+  defaults: { model?: string; thought_level?: string; mode?: string } = {},
+) {
   const sent: { method: string; params: Record<string, unknown> }[] = []
   let turn: Promise<void> = Promise.resolve()
   let during: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
   let resuming: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
+  let settingConfig: ((configId: string, value: string) => Promise<void> | void) | null = null
   let stopReason: 'end_turn' | 'cancelled' = 'end_turn'
-  const values = { model: 'gemini', thought_level: 'high', mode: 'default' }
+  const baseValues = {
+    model: defaults.model ?? 'gemini',
+    thought_level: defaults.thought_level ?? 'high',
+    mode: defaults.mode ?? 'default',
+  }
+  const values = { ...baseValues }
   const options = () => [
     {
       id: 'model',
@@ -934,6 +945,7 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
       currentValue: values.thought_level,
       options: [
         { value: 'low', name: 'Low' },
+        { value: 'medium', name: 'Medium' },
         { value: 'high', name: 'High' },
       ],
     },
@@ -961,13 +973,14 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
       if (refusesFlag && meta?.['sh.kettu/session-flag']) {
         throw new RequestError(-32603, 'agy exited')
       }
-      Object.assign(values, { model: 'gemini', thought_level: 'high', mode: 'default' })
+      Object.assign(values, baseValues)
       await resuming?.(ctx.client, ctx.params.sessionId)
       return { configOptions: options() }
     })
-    .onRequest(methods.agent.session.setConfigOption, (ctx) => {
+    .onRequest(methods.agent.session.setConfigOption, async (ctx) => {
       const { configId, value } = ctx.params as { configId: keyof typeof values; value: string }
       sent.push({ method: `set ${configId}=${value}`, params: ctx.params as never })
+      await settingConfig?.(configId, value)
       values[configId] = value
       return { configOptions: options() }
     })
@@ -996,6 +1009,9 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
   const onResume = (run: (client: AgentContext, sessionId: string) => Promise<void>) => {
     resuming = run
   }
+  const onSetConfig = (run: ((configId: string, value: string) => Promise<void> | void) | null) => {
+    settingConfig = run
+  }
   const setStopReason = (reason: 'end_turn' | 'cancelled') => {
     stopReason = reason
   }
@@ -1005,6 +1021,7 @@ function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
     hold,
     send,
     onResume,
+    onSetConfig,
     setStopReason,
     methods: () => sent.map((item) => item.method),
   }
@@ -1309,6 +1326,142 @@ describe("agy's full access", () => {
     const mode = target.context().thread.session.config.find((option) => option.id === 'mode')!
     expect(mode.value).toBe(FULL)
     expect(mode.choices!.at(-1)!.value).toBe(FULL)
+    connection.close()
+  })
+
+  it('serializes thought_level and full access switch so restart restores the new thought_level instead of stale medium', async () => {
+    // Reproduces the concurrent prepare flush race: session starts at medium, user sets
+    // thought_level=high and immediately switches mode=dangerously-skip-permissions before the
+    // first setConfigOption finishes.
+    const agy = flaggedAgy('1.5.18', '--dangerously-skip-permissions', false, {
+      model: 'gemini',
+      thought_level: 'medium',
+      mode: 'default',
+    })
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo', { mcpServers: MCP })
+    sent.length = 0
+
+    let releaseThought: (() => void) | null = null
+    let heldOnce = false
+    agy.onSetConfig(async (configId, value) => {
+      if (configId === 'thought_level' && value === 'high' && !heldOnce) {
+        heldOnce = true
+        await new Promise<void>((resolve) => {
+          releaseThought = resolve
+        })
+      }
+    })
+
+    const settingThought = connection.setConfigOption(sessionId, 'thought_level', 'high')
+    const switchingFull = connection.setConfigOption(sessionId, 'mode', FULL)
+
+    await vi.waitFor(() => expect(releaseThought).not.toBeNull())
+    // session/resume must not start until thought_level=high has answered and updated access.config.
+    expect(agy.methods()).toEqual(['set thought_level=high'])
+
+    releaseThought!()
+    const [afterThought, afterFull] = await Promise.all([settingThought, switchingFull])
+
+    expect(valueOf(afterThought, 'thought_level')).toBe('high')
+    // After resuming at defaults (medium), agy restores thought_level=high rather than stale medium.
+    expect(agy.methods()).toEqual(['set thought_level=high', 'resume', 'set thought_level=high'])
+    expect(valueOf(afterFull, 'thought_level')).toBe('high')
+    expect(valueOf(afterFull, 'mode')).toBe(FULL)
+    connection.close()
+  })
+
+  it('does not block queued full access switch when a prior setConfigOption fails', async () => {
+    const agy = flaggedAgy('1.5.18', '--dangerously-skip-permissions', false, {
+      model: 'gemini',
+      thought_level: 'medium',
+      mode: 'default',
+    })
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    sent.length = 0
+
+    let releaseFailure: (() => void) | null = null
+    agy.onSetConfig(async (configId, value) => {
+      if (configId === 'thought_level' && value === 'high') {
+        await new Promise<void>((resolve) => {
+          releaseFailure = resolve
+        })
+        throw new RequestError(-32603, 'invalid thought level')
+      }
+    })
+
+    const failed = connection.setConfigOption(sessionId, 'thought_level', 'high')
+    const switchingFull = connection.setConfigOption(sessionId, 'mode', FULL)
+
+    await vi.waitFor(() => expect(releaseFailure).not.toBeNull())
+    expect(agy.methods()).toEqual(['set thought_level=high'])
+
+    releaseFailure!()
+    await expect(failed).rejects.toThrow(/invalid thought level/)
+    const afterFull = await switchingFull
+
+    expect(agy.methods()).toEqual(['set thought_level=high', 'resume'])
+    expect(valueOf(afterFull, 'thought_level')).toBe('medium')
+    expect(valueOf(afterFull, 'mode')).toBe(FULL)
+    connection.close()
+  })
+
+  it('waits for an in-flight setConfigOption before running a pending full access switch at turn end', async () => {
+    const agy = flaggedAgy('1.5.18', '--dangerously-skip-permissions', false, {
+      model: 'gemini',
+      thought_level: 'medium',
+      mode: 'default',
+    })
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId, config } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    sent.length = 0
+
+    const releaseTurn = agy.hold()
+    const turn = connection.prompt(sessionId, [{ type: 'text', text: 'work' }])
+    await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
+
+    // Queue full access while the turn is running.
+    await connection.setConfigOption(sessionId, 'mode', FULL)
+
+    let releaseThought: (() => void) | null = null
+    let heldOnce = false
+    agy.onSetConfig(async (configId, value) => {
+      if (configId === 'thought_level' && value === 'high' && !heldOnce) {
+        heldOnce = true
+        await new Promise<void>((resolve) => {
+          releaseThought = resolve
+        })
+      }
+    })
+
+    // Start thought_level=high and finish the turn concurrently so switchPending races requestConfig.
+    const settingThought = connection.setConfigOption(sessionId, 'thought_level', 'high')
+    await vi.waitFor(() => expect(releaseThought).not.toBeNull())
+    releaseTurn()
+
+    // While thought_level=high is still in flight, switchPending must wait instead of resuming early.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(agy.methods()).toEqual(['prompt', 'set thought_level=high'])
+
+    releaseThought!()
+    await Promise.all([settingThought, turn])
+
+    expect(agy.methods()).toEqual([
+      'prompt',
+      'set thought_level=high',
+      'resume',
+      'set thought_level=high',
+    ])
+    const finalConfig = target.context().thread.session.config
+    expect(valueOf(finalConfig, 'thought_level')).toBe('high')
+    expect(valueOf(finalConfig, 'mode')).toBe(FULL)
     connection.close()
   })
 })
