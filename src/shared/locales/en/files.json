@@ -50,6 +50,7 @@
     "missing": "This file is no longer on disk.",
     "readFailed": "Couldn't read this file again: {{message}}",
     "closeTab": "Close tab",
+    "openWithDefault": "Open with default app",
     "showIn": "Show in {{name}}",
     "binaryTitle": "Binary file",
     "binaryDescription": "{{size}}, not shown.",

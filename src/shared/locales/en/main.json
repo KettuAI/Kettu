@@ -262,6 +262,12 @@
     "notFileOrFolder": "“{{path}}” is not a file or folder",
     "openFailed": "Could not open it in {{editor}}: {{reason}}"
   },
+  "shell": {
+    "notFound": "Could not open “{{name}}”: the file no longer exists",
+    "notFile": "Could not open “{{name}}”: only files can be opened with the default app",
+    "executable": "Could not open “{{name}}”: executable files and scripts can’t be opened directly",
+    "openFailed": "Could not open “{{name}}”: {{reason}}"
+  },
   "updates": {
     "notYaml": "{{name}} is not YAML: {{reason}}",
     "noVersion": "{{name}} names no release version",

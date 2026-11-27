@@ -153,6 +153,13 @@ export async function deleteEntries(
   return 'done'
 }
 
+/** Opens an existing local file in the system's default app, toasting on failure. */
+export function openFileInDefaultApp(path: string): void {
+  void window.kettu.shell
+    .openFile(path)
+    .catch((failure: unknown) => toast(errorMessage(failure), undefined, { tone: 'warning' }))
+}
+
 /** Reveals a local file or folder in the system file manager, toasting on failure. */
 export function showFileInManager(path: string): void {
   void window.kettu.shell.showItem(path).catch((failure: unknown) => toast(errorMessage(failure)))
