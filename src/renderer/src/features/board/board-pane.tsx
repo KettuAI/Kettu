@@ -15,6 +15,7 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { ArtifactRow } from './artifact-row'
 import {
   backgroundOrder,
+  boardChildren,
   boardSubagents,
   subagentFailed,
   summaryParts,
@@ -39,13 +40,7 @@ const ROOMY = 6
 export default function BoardPane({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('board')
   const tasks = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background ?? NO_TASKS)
-  const children = useSessionsStore(
-    useShallow((s) =>
-      Object.values(s.byId).filter(
-        (child) => child.parentId === sessionId && child.origin === 'subagent',
-      ),
-    ),
-  )
+  const children = useSessionsStore(useShallow((s) => boardChildren(s.byId, sessionId)))
   const written = useThreadsStore((s) => {
     const state = s.replicas[sessionId]?.state
     return state ? threadArtifacts(state) : NO_ARTIFACTS
@@ -165,19 +160,21 @@ export default function BoardPane({ sessionId }: { sessionId: string }) {
 
   return (
     <PaneBody className="kb-pane" aria-label={t('title')}>
-      <div className="kb-head">
-        <span className="kb-head__sum" aria-live="polite">
-          {parts.running === null && parts.needs === null ? (
-            t('summary.idle')
-          ) : (
-            <>
-              {parts.running}
-              {parts.running !== null && parts.needs !== null && ' · '}
-              {parts.needs !== null && <b className="kb-head__needs">{parts.needs}</b>}
-            </>
-          )}
-        </span>
-      </div>
+      {!empty && (
+        <div className="kb-head">
+          <span className="kb-head__sum" aria-live="polite">
+            {parts.running === null && parts.needs === null ? (
+              t('summary.idle')
+            ) : (
+              <>
+                {parts.running}
+                {parts.running !== null && parts.needs !== null && ' · '}
+                {parts.needs !== null && <b className="kb-head__needs">{parts.needs}</b>}
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <div className="kb-body">{body}</div>
     </PaneBody>
   )
