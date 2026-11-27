@@ -38,7 +38,7 @@ import { startConfig } from '@renderer/features/session/new-session/start-option
 import { runningWorkOf, workItems, type WorkItem } from '@renderer/features/sidebar/running-work'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { showSending, useThreadsStore } from '@renderer/stores/threads'
+import { showSending, suppressSuggestion, useThreadsStore } from '@renderer/stores/threads'
 import { artifactShown, useViewStore } from '@renderer/stores/view'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
 import {
@@ -458,6 +458,7 @@ export function Composer({
     if (!now) return
     const { taken, sent, content, commentIds } = takeContent()
     useSuggestionsStore.getState().stopEditing(sessionId)
+    const releaseSuggestion = suppressSuggestion(sessionId)
     const options = Object.keys(now.values).length > 0 ? { options: now.values } : {}
     host('sessions.switchAgent', {
       sessionId,
@@ -467,10 +468,12 @@ export function Composer({
       ...(now.summarize ? { summarize: true } : {}),
     })
       .then(() => {
+        releaseSuggestion(false)
         setPendingSwitch(sessionId, null)
         removeComments(sessionId, commentIds)
       })
       .catch((reason: unknown) => {
+        releaseSuggestion(true)
         if (sent) setPaneSelection(sent)
         box.restore(taken)(reason)
       })
@@ -499,9 +502,11 @@ export function Composer({
     const { taken, sent, content, commentIds, summary } = takeContent()
     useSuggestionsStore.getState().stopEditing(sessionId)
     const unshow = shown ? showSending(sessionId, content) : null
+    const releaseSuggestion = shown ? null : suppressSuggestion(sessionId)
     host('sessions.queue', { sessionId, content, ...(summary ? { comments: summary } : {}) })
       .then(({ itemId }) => {
         removeComments(sessionId, commentIds)
+        releaseSuggestion?.(false)
         // It waits in the queue after all, which shows it there.
         if (itemId) unshow?.()
         // Once queued, a failed steer leaves the message in the queue, not lost.
@@ -512,7 +517,8 @@ export function Composer({
         }
       })
       .catch((reason: unknown) => {
-        unshow?.()
+        unshow?.({ restoreSuggestion: true })
+        releaseSuggestion?.(true)
         if (sent) setPaneSelection(sent)
         box.restore(taken)(reason)
       })

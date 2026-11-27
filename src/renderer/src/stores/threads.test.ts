@@ -10,7 +10,12 @@ vi.mock('@renderer/lib/host', () => ({
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))
 
-function snapshot(id: string, entries: ThreadEntry[], seq = 1): SessionSnapshot {
+function snapshot(
+  id: string,
+  entries: ThreadEntry[],
+  seq = 1,
+  overrides: Partial<SessionSnapshot['session']> = {},
+): SessionSnapshot {
   return {
     seq,
     older: null,
@@ -37,6 +42,7 @@ function snapshot(id: string, entries: ThreadEntry[], seq = 1): SessionSnapshot 
       routine: null,
       queue: [],
       queuePaused: false,
+      ...overrides,
     },
   }
 }
@@ -968,5 +974,286 @@ describe('threads store performance and digests', () => {
     })
     flushRaf()
     expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['m:old', 'e:new'])
+  })
+
+  it('clears the active session suggestion immediately on send without affecting other sessions (#2903)', async () => {
+    hostMock.mockImplementation((method: string, params: { sessionId?: string }) => {
+      if (method === 'sessions.watch') return Promise.resolve()
+      if (method === 'sessions.open') {
+        if (params.sessionId === 's1') {
+          return Promise.resolve(snapshot('s1', [], 1, { suggestion: 'Run the test suite' }))
+        }
+        return Promise.resolve(snapshot('s2', [], 1, { suggestion: 'Explain the error' }))
+      }
+      if (method === 'sessions.snapshot') {
+        // Stale snapshot taken before the host processed the send.
+        return Promise.resolve(snapshot('s1', [], 2, { suggestion: 'Run the test suite' }))
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, receiveBatch, rewatchAll, showSending, useThreadsStore } =
+      await import('./threads')
+    await focusSession('s1')
+    await focusSession('s2')
+    await focusSession('s1')
+
+    const flushRaf = () => {
+      for (const cb of rafQueue.splice(0)) cb(performance.now())
+    }
+
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Run the test suite',
+    )
+    expect(useThreadsStore.getState().replicas.s2?.state?.session.suggestion).toBe(
+      'Explain the error',
+    )
+
+    // User accepts the Tab suggestion and sends it: bubble appears and suggestion clears at once.
+    showSending('s1', [{ type: 'text', text: 'Run the test suite' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['sending-1'])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    // Other sessions keep their own suggestions intact.
+    expect(useThreadsStore.getState().replicas.s2?.state?.session.suggestion).toBe(
+      'Explain the error',
+    )
+
+    // Switching to another session and back before the host responds never resurrects the old suggestion.
+    await focusSession('s2')
+    expect(useThreadsStore.getState().replicas.s2?.state?.session.suggestion).toBe(
+      'Explain the error',
+    )
+    await focusSession('s1')
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    // Unrelated updates and late stale suggestions arriving before echo stay suppressed.
+    receiveBatch({
+      sessionId: 's1',
+      seq: 2,
+      patches: [{ op: 'session.update', changes: { suggestion: 'Late stale suggestion' } }],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    // A stale snapshot from before the send also keeps the old suggestion hidden.
+    rewatchAll((id) => id === 's1')
+    await vi.waitFor(() => expect(useThreadsStore.getState().replicas.s1?.seq).toBe(2))
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['sending-1'])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+  })
+
+  it('shows a new suggestion after the next turn completes and preserves post-echo suggestions (#2903)', async () => {
+    let snapSeq = 1
+    let snapEntries: ThreadEntry[] = []
+    let snapSuggestion: string | null = 'Run the test suite'
+    hostMock.mockImplementation((method: string) => {
+      if (method === 'sessions.watch') return Promise.resolve()
+      if (method === 'sessions.open' || method === 'sessions.snapshot') {
+        return Promise.resolve(snapshot('s1', snapEntries, snapSeq, { suggestion: snapSuggestion }))
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, receiveBatch, rewatchAll, showSending, useThreadsStore } =
+      await import('./threads')
+    await focusSession('s1')
+
+    const flushRaf = () => {
+      for (const cb of rafQueue.splice(0)) cb(performance.now())
+    }
+
+    // Send 1: Tab-accepted suggestion cleared immediately, then host echoes turn start and produces a new suggestion.
+    showSending('s1', [{ type: 'text', text: 'Run the test suite' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    receiveBatch({
+      sessionId: 's1',
+      seq: 2,
+      patches: [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'user',
+            id: 'e:1',
+            content: [{ type: 'text', text: 'Run the test suite' }],
+            at: Date.now(),
+          },
+        },
+        { op: 'session.update', changes: { status: 'running', suggestion: null } },
+      ],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['e:1'])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    receiveBatch({
+      sessionId: 's1',
+      seq: 3,
+      patches: [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'agent',
+            id: 'e:2',
+            markdown: 'All 42 tests passed.',
+            attachments: [],
+            streaming: false,
+          },
+        },
+        { op: 'session.update', changes: { status: 'ready' } },
+        { op: 'session.update', changes: { suggestion: 'Check coverage report' } },
+      ],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Check coverage report',
+    )
+
+    // Send 2: A stale suggestion coalesced before the echo in the same batch is dropped, while a
+    // fresh suggestion emitted after the echo is kept.
+    showSending('s1', [{ type: 'text', text: 'Check coverage report' }])
+    receiveBatch({
+      sessionId: 's1',
+      seq: 4,
+      patches: [
+        { op: 'session.update', changes: { suggestion: 'Stale before echo' } },
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'user',
+            id: 'e:3',
+            content: [{ type: 'text', text: 'Check coverage report' }],
+            at: Date.now(),
+          },
+        },
+      ],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    // Send 3: Snapshot settling a completed fast turn keeps the fresh suggestion from the snapshot.
+    showSending('s1', [{ type: 'text', text: 'Ship it' }])
+    snapSeq = 10
+    snapEntries = [
+      { kind: 'user', id: 'e:1', content: [{ type: 'text', text: 'Run the test suite' }] },
+      {
+        kind: 'agent',
+        id: 'e:2',
+        markdown: 'All 42 tests passed.',
+        attachments: [],
+        streaming: false,
+      },
+      { kind: 'user', id: 'e:3', content: [{ type: 'text', text: 'Check coverage report' }] },
+      { kind: 'user', id: 'e:4', content: [{ type: 'text', text: 'Ship it' }], at: Date.now() },
+      { kind: 'agent', id: 'e:5', markdown: 'Shipped.', attachments: [], streaming: false },
+    ]
+    snapSuggestion = 'Verify production deploy'
+    rewatchAll((id) => id === 's1')
+    await vi.waitFor(() => expect(useThreadsStore.getState().replicas.s1?.seq).toBe(10))
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Verify production deploy',
+    )
+  })
+
+  it('handles send failure rollback, queue handoff, and suppressSuggestion cleanly (#2903)', async () => {
+    hostMock.mockImplementation((method: string, params: { sessionId?: string }) => {
+      if (method === 'sessions.watch') return Promise.resolve()
+      if (method === 'sessions.open') {
+        if (params.sessionId === 's1') {
+          return Promise.resolve(snapshot('s1', [], 1, { suggestion: 'Run the test suite' }))
+        }
+        return Promise.resolve(snapshot('s2', [], 1, { suggestion: 'Keep other suggestion' }))
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, receiveBatch, showSending, suppressSuggestion, useThreadsStore } =
+      await import('./threads')
+    await focusSession('s1')
+    await focusSession('s2')
+
+    const flushRaf = () => {
+      for (const cb of rafQueue.splice(0)) cb(performance.now())
+    }
+
+    // 1. Failed send rolls back and restores the previous suggestion when still idle and unsuperseded.
+    const unshowFail = showSending('s1', [{ type: 'text', text: 'Run the test suite' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    unshowFail({ restoreSuggestion: true })
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual([])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Run the test suite',
+    )
+
+    // 2. Failed send does not restore a stale suggestion if the host moved the session to running.
+    const unshowSuperseded = showSending('s1', [{ type: 'text', text: 'Run the test suite' }])
+    receiveBatch({
+      sessionId: 's1',
+      seq: 2,
+      patches: [{ op: 'session.update', changes: { status: 'running', suggestion: null } }],
+    })
+    flushRaf()
+    unshowSuperseded({ restoreSuggestion: true })
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    // Return to idle with a suggestion for the next cases.
+    receiveBatch({
+      sessionId: 's1',
+      seq: 3,
+      patches: [
+        { op: 'session.update', changes: { status: 'ready', suggestion: 'Review the diff' } },
+      ],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Review the diff',
+    )
+
+    // 3. Queued send (`unshow()` without restore) drops the optimistic bubble without restoring the old suggestion.
+    const unshowQueued = showSending('s1', [{ type: 'text', text: 'Review the diff' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    unshowQueued()
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual([])
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    // 4. `suppressSuggestion` (used for agent switches) clears immediately, restores on failure,
+    // stays cleared on success, allows subsequent suggestions, and never affects other sessions.
+    receiveBatch({
+      sessionId: 's1',
+      seq: 4,
+      patches: [{ op: 'session.update', changes: { suggestion: 'Switch agent prompt' } }],
+    })
+    flushRaf()
+    const releaseFail = suppressSuggestion('s1')
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    expect(useThreadsStore.getState().replicas.s2?.state?.session.suggestion).toBe(
+      'Keep other suggestion',
+    )
+    releaseFail(true)
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Switch agent prompt',
+    )
+
+    const releaseOk = suppressSuggestion('s1')
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    receiveBatch({
+      sessionId: 's1',
+      seq: 5,
+      patches: [{ op: 'session.update', changes: { suggestion: 'Stale during switch' } }],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+    releaseOk(false)
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBeNull()
+
+    receiveBatch({
+      sessionId: 's1',
+      seq: 6,
+      patches: [{ op: 'session.update', changes: { suggestion: 'Fresh after switch' } }],
+    })
+    flushRaf()
+    expect(useThreadsStore.getState().replicas.s1?.state?.session.suggestion).toBe(
+      'Fresh after switch',
+    )
   })
 })

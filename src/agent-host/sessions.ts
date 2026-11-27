@@ -8910,7 +8910,7 @@ export class SessionManager {
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
       lastRequest: undefined,
-      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
+      suggestion: null,
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
         ? { sideChat: { ...live.thread.session.sideChat, route: this.sideRouteOf(agentId) } }
@@ -9370,7 +9370,11 @@ export class SessionManager {
       return await this.tryAutoSteer(live, item, portId)
     }
     if (portId !== undefined) live.queuedBy.set(item.id, portId)
-    this.update(live, { queue: [...queue, item] })
+    this.stopSuggesting(live.id)
+    this.update(live, {
+      queue: [...queue, item],
+      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
+    })
     this.persist(live)
     this.touch(live.id)
     return { itemId: item.id }
@@ -9432,11 +9436,13 @@ export class SessionManager {
         live.turn.hadOutput = false
       }
       live.userTurn = true
+      this.stopSuggesting(live.id)
       this.update(live, {
         waitingBackground: false,
         turnStartedAt: now,
         turnStartUsed: live.thread.session.usage?.used ?? null,
         updatedAt: now,
+        ...(live.thread.session.suggestion ? { suggestion: null } : {}),
       })
       this.persist(live)
       this.touch(live.id)
@@ -9542,9 +9548,11 @@ export class SessionManager {
       live.userTurn = !item.approval && !item.kettu && !item.from
     }
     const rest = queue.filter((i) => i.id !== itemId)
+    this.stopSuggesting(live.id)
     this.update(live, {
       queue: rest,
       ...(rest.length === 0 ? { queuePaused: false } : {}),
+      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
       ...(fromWaiting
         ? {
             waitingBackground: false,
@@ -9742,7 +9750,8 @@ export class SessionManager {
       turnStartUsed: live.thread.session.usage?.used ?? null,
       error: null,
       updatedAt: now,
-      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
+      // Always clear explicitly so replicas that held a suggestion across release/revive drop it.
+      suggestion: null,
       ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
     })
     this.persist(live)

@@ -72,4 +72,13 @@ describe('ComposerEditor multiline Tab suggestion layout (#2874)', () => {
     expect(source).toContain('suggestionOf.of(suggestion)')
     expect(source).toContain('suggestionPreviewText(suggestion)')
   })
+
+  it('reconfigures empty-box placeholder in useLayoutEffect and clears suggestions on send (#2903)', () => {
+    expect(source).toMatch(
+      /useLayoutEffect\(\(\) => \{\s*view\.current\?\.dispatch\(\{\s*effects:\s*parts\.placeholder\.reconfigure\(emptyBox\(placeholder,\s*suggestion\)\),\s*\}\)\s*\},\s*\[parts,\s*placeholder,\s*suggestion\]\)/,
+    )
+    const composerSource = readFileSync(join(import.meta.dirname, 'composer.tsx'), 'utf8')
+    expect(composerSource).toContain('suppressSuggestion(sessionId)')
+    expect(composerSource).toContain('unshow?.({ restoreSuggestion: true })')
+  })
 })
