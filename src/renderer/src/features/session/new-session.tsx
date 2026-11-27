@@ -743,6 +743,9 @@ function DraftComposer({
             addMenu: tc('attachments.add'),
             approvalMenu: tc('controls.permissionMode'),
             selected: (label) => tc('controls.selected', { label }),
+            voiceInput: tc('controls.voiceInput'),
+            discardRecording: tc('controls.discardRecording'),
+            useRecording: tc('controls.useRecording'),
           }}
           foot={
             <div className="ui-as-composer__tray kettu-tray">

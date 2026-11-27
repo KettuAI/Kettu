@@ -10,6 +10,7 @@ import type { AgentId } from '@shared/thread'
 import { Button } from '@renderer/components/affect/button'
 import { TextField } from '@renderer/components/affect/text-field'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { installServer, type AgentChoice } from './actions'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useChoosableAgents } from './hooks'
@@ -102,6 +103,7 @@ export function InstallForm({
   onDone: (agents: AgentChoice, values: Record<string, string>) => void
 }) {
   const { t } = useTranslation('marketplace')
+  const fieldLabels = useTextFieldLabels()
   const inputs = specInputs(server.spec)
   const [agents, setAgents] = useState<AgentChoice>('all')
   const [values, setValues] = useState<Record<string, string>>({})
@@ -126,6 +128,7 @@ export function InstallForm({
           key={input.name}
           size="sm"
           type={input.secret ? 'password' : 'text'}
+          labels={fieldLabels}
           autoFocus={i === 0}
           autoComplete="off"
           spellCheck={false}

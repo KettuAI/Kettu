@@ -28,6 +28,7 @@ import {
   SettingsField,
 } from '@renderer/features/settings/settings-dialog'
 import { errorMessage } from '@renderer/lib/host'
+import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { useHostScope } from '@renderer/stores/host-scope'
 import {
   installSkill,
@@ -60,6 +61,7 @@ export function KeysDialog({
 
 function KeysForm({ server, onDone }: { server: MarketServer; onDone: () => void }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const fieldLabels = useTextFieldLabels()
   const inputs = specInputs(server.spec)
   const { useMarketplaceStore } = useHostScope()
   const set = useMarketplaceStore((s) => s.keys?.[server.id] ?? null)
@@ -101,6 +103,7 @@ function KeysForm({ server, onDone }: { server: MarketServer; onDone: () => void
           <TextField
             key={input.name}
             type={input.secret ? 'password' : 'text'}
+            labels={fieldLabels}
             autoComplete="off"
             spellCheck={false}
             autoFocus={i === 0}

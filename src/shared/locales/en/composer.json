@@ -69,7 +69,10 @@
     "readingModels": "Reading models…",
     "noModels": "No models available",
     "noModelMatch": "No models match",
-    "chooseModel": "Choose a model"
+    "chooseModel": "Choose a model",
+    "voiceInput": "Voice input",
+    "discardRecording": "Discard recording",
+    "useRecording": "Use recording"
   },
   "switchAgent": {
     "menu": "Switch agent…",

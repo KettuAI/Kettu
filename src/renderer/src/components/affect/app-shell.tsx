@@ -248,7 +248,7 @@ export type AppShellProps = {
   /** With chrome="mac": false leaves the traffic lights' room empty, for a window that draws its own */
   lights?: boolean;
   /** Words the shell shows, for translation */
-  labels?: { search?: string; searchKey?: string; menu?: string; resize?: string; account?: string };
+  labels?: { search?: string; searchKey?: string; menu?: string; resize?: string; account?: string; openSidebar?: string };
   /** Tasks behind "Getting started" */
   setup?: SetupGroup[];
   /** Sidebar width in px – drag its edge between min and max; double-click the edge for the default again */
@@ -524,7 +524,7 @@ export function AppShell({
   const [language, setLanguage] = useState("English");
   const [appearance, setAppearance] = useState("System");
   const userTrigger = ({ open, toggle }: { open: boolean; toggle: () => void }) => (
-    <button type="button" className="ui-as-user" aria-haspopup="menu" aria-expanded={open} title={rail ? userName || "Account" : undefined} onClick={toggle}>
+    <button type="button" className="ui-as-user" aria-haspopup="menu" aria-expanded={open} title={rail ? userName || labels?.account || "Account" : undefined} onClick={toggle}>
       {user.mark ?? (showAvatar ? (
         <img src={user.avatar} alt="" width={21} height={21} onError={() => setAvatarFailed(user.avatar ?? null)} />
       ) : (
@@ -539,7 +539,7 @@ export function AppShell({
         </span>
       ) : (
         <span className="ui-as-user__name" title={userName || undefined}>
-          {userName || "Account"}
+          {userName || labels?.account || "Account"}
         </span>
       )}
       {!userAction && <Icon icon={ArrowDown01Icon} size={13} />}
@@ -640,7 +640,7 @@ export function AppShell({
       <button
         className="ui-as-icon-btn ui-as-side-open"
         type="button"
-        aria-label="Open sidebar"
+        aria-label={labels?.openSidebar ?? "Open sidebar"}
         tabIndex={sideHidden ? 0 : -1}
         inert={!!overlay}
         onClick={() => (narrow ? setDrawer(true) : setCollapsed(false))}

@@ -1329,8 +1329,8 @@
     "archived": "从侧边栏移走但仍保留。恢复项目或会话即可放回原处。",
     "artifacts": "页面要读取项目文件或向你的智能体提问时会先问你。只保存自己数据的页面不会问。",
     "sharing": "把产物发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
-    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
-    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
+    "remote": "在 iPhone、iPad、Android 手机或另一台电脑上的 Kettu 里使用这台电脑的会话。",
+    "remote_web": "在 iPhone、iPad、Android 手机或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
     "browser": "登录状态、智能体给出的链接在哪里打开，以及它们可以使用的网站。",
     "browserWeb": "智能体回复中的链接会在新标签页中打开。",
     "harnesses": "智能体跑在上面的程序：Claude Code、Codex 等。Kettu 先用你电脑上装好的，没有时再替你装一份。",
@@ -1906,7 +1906,7 @@
     }
   },
   "remote": {
-    "keywords": "远程 访问 手机 平板 设备 配对 二维码 扫码 连接 remote device pair qr",
+    "keywords": "远程 访问 手机 平板 安卓 设备 配对 二维码 扫码 连接 remote device pair qr iphone ipad android",
     "switch": "远程访问",
     "status": {
       "on": "已打开",
@@ -1942,7 +1942,7 @@
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
-      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 电脑 › 添加电脑…，粘贴链接。",
+      "emptyHint": "用 iPhone、iPad 或 Android 手机上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 电脑 › 添加电脑…，粘贴链接。",
       "add": "添加设备…",
       "addOff": "打开远程访问后才能添加设备。",
       "online": "在线",
@@ -1997,6 +1997,7 @@
     },
     "kinds": {
       "ios": "iOS 应用",
+      "android": "Android 应用",
       "desktop": "桌面应用",
       "web": "网页版"
     },
@@ -2015,7 +2016,7 @@
     },
     "pair": {
       "title": "添加设备",
-      "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
+      "scan": "用 iPhone、iPad 或 Android 手机上的 Kettu 扫这个码。",
       "otherComputer": "在另一台电脑上，打开 设置 › 电脑 › 添加电脑 并粘贴链接。",
       "target": "打开方式",
       "targets": {
@@ -2215,7 +2216,7 @@
       "note": {
         "switch": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到这台电脑时跟过去，或在设备上粘贴新的配对链接更新。",
         "own": "一次只用一个中继。你的 Kettu 账号照旧把这台电脑的通知发到 iPhone。",
-        "pinned": "电脑和 iPhone 上的 Kettu 应用连得上它。浏览器没法按指纹认证书，要用有域名的中继。",
+        "pinned": "电脑、iPhone、iPad 和 Android 手机上的 Kettu 应用连得上它。浏览器没法按指纹认证书，要用有域名的中继。",
         "local": "本地模式下 Kettu 不向自己的服务发送任何东西。中继是你自己的，所以照用。",
         "switch_web": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到 {{host}} 时跟过去，或在设备上粘贴新的配对链接更新。",
         "own_web": "一次只用一个中继。你的 Kettu 账号照旧把 {{host}} 的通知发到 iPhone。"

@@ -75,6 +75,9 @@ export type ComposerLabels = {
   approvalMenu: string;
   /** Announced when a mode or model is picked */
   selected: (label: string) => string;
+  voiceInput: string;
+  discardRecording: string;
+  useRecording: string;
 };
 
 const defaultLabels: ComposerLabels = {
@@ -83,6 +86,9 @@ const defaultLabels: ComposerLabels = {
   addMenu: "Add to the chat",
   approvalMenu: "How should actions be approved?",
   selected: (label) => `${label} selected.`,
+  voiceInput: "Voice input",
+  discardRecording: "Discard recording",
+  useRecording: "Use recording",
 };
 
 export type ChatComposerProps = {
@@ -610,7 +616,7 @@ export function ChatComposer({
                 </button>
                 )}
                 {voice && (
-                  <button type="button" className="ui-ccc__icon-btn" aria-label="Voice input" onClick={startRecording}>
+                  <button type="button" className="ui-ccc__icon-btn" aria-label={labels.voiceInput} onClick={startRecording}>
                     <MicIcon />
                   </button>
                 )}
@@ -638,10 +644,10 @@ export function ChatComposer({
                     <span key={i} style={{ height: Math.max(2, level * 16) }} />
                   ))}
                 </span>
-                <button type="button" className="ui-ccc__button" aria-label="Discard recording" onClick={() => stopRecording(false)}>
+                <button type="button" className="ui-ccc__button" aria-label={labels.discardRecording} onClick={() => stopRecording(false)}>
                   <CancelIcon />
                 </button>
-                <button type="button" className="ui-ccc__send" aria-label="Use recording" onClick={() => stopRecording(true)}>
+                <button type="button" className="ui-ccc__send" aria-label={labels.useRecording} onClick={() => stopRecording(true)}>
                   <TickIcon />
                 </button>
               </div>

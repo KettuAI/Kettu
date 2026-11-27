@@ -69,7 +69,10 @@
     "readingModels": "正在读取模型…",
     "noModels": "没有可用的模型",
     "noModelMatch": "没有匹配的模型",
-    "chooseModel": "选择模型"
+    "chooseModel": "选择模型",
+    "voiceInput": "语音输入",
+    "discardRecording": "放弃录音",
+    "useRecording": "使用录音"
   },
   "switchAgent": {
     "menu": "换智能体…",
