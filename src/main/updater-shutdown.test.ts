@@ -67,6 +67,8 @@ vi.mock('./events', () => ({
 }))
 
 vi.stubEnv('MAIN_VITE_UPDATE_MODE', 'install')
+// Linux runners require APPIMAGE so offReason() does not turn updates off before load().
+vi.stubEnv('APPIMAGE', '/tmp/Kettu.AppImage')
 
 const { Updater } = await import('./updater')
 const { prepareRelaunch } = await import('./debug-mode')
