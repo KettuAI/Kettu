@@ -8,6 +8,7 @@ import { applyEdits, modify, parse as parseJsonc, type ParseError } from 'jsonc-
 import { parse as parseToml, patch as patchToml } from '@decimalturn/toml-patch'
 import type { HarnessId } from '@shared/agents'
 import { MCP_BRIDGE_NAME } from '@shared/mcp-bridge'
+import type { McpTerminalApp } from '@shared/mcp-terminal'
 import { McpConfigError, object, type ConfigLayout } from './mcp-config'
 
 export type TerminalFormat = 'json' | 'toml'
@@ -19,6 +20,8 @@ export function terminalFormat(layout: ConfigLayout): TerminalFormat | null {
     case 'claude':
     case 'standard':
     case 'opencode':
+    case 'vscode':
+    case 'zed':
       return 'json'
     case 'codex':
       return 'toml'
@@ -59,6 +62,12 @@ export function serversKey(config: Dictionary, layout: ConfigLayout): string[] |
       return config.mcpServers === undefined && object(config.servers)
         ? ['servers']
         : ['mcpServers']
+    case 'vscode':
+      return config.servers === undefined && object(config.mcpServers)
+        ? ['mcpServers']
+        : ['servers']
+    case 'zed':
+      return ['context_servers']
     case 'opencode':
       return object(object(config.mcp)?.servers) ? ['mcp', 'servers'] : ['mcp']
     case 'codex':
@@ -122,16 +131,18 @@ export function bridgeArgs(
 }
 
 /**
- * One server's entry as the agent's own file holds it, running the bridge: never a key, a port or
- * a token. Tools turned off in Kettu go into the entry where the harness has a setting for them.
+ * One server's entry as the agent's or app's own file holds it, running the bridge: never a key, a
+ * port or a token. Tools turned off in Kettu go into the entry where it has a setting for them.
  */
 export function bridgeEntry(
   layout: ConfigLayout,
-  harness: HarnessId,
+  owner: { harness: HarnessId } | { app: McpTerminalApp },
   command: string,
   args: readonly string[],
   toolsOff: readonly string[],
 ): unknown {
+  const harness = 'harness' in owner ? owner.harness : null
+  const app = 'app' in owner ? owner.app : null
   switch (layout) {
     case 'claude':
       return { type: 'stdio', command, args: [...args], env: {} }
@@ -146,11 +157,16 @@ export function bridgeEntry(
         env_vars: ['KETTU_MCP_SESSION'],
         ...(toolsOff.length ? { disabled_tools: [...toolsOff] } : {}),
       }
+    case 'vscode':
+      return { type: 'stdio', command, args: [...args] }
+    case 'zed':
+      return { command, args: [...args], env: {} }
     default:
       return {
         command,
         args: [...args],
         ...(harness === 'gemini' && toolsOff.length ? { excludeTools: [...toolsOff] } : {}),
+        ...(app === 'windsurf' && toolsOff.length ? { disabledTools: [...toolsOff] } : {}),
       }
   }
 }

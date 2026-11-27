@@ -3,6 +3,7 @@
 // Nothing here holds a key, a tool call's arguments or what it returned.
 
 import { harnessOf, type AgentId } from './agents'
+import type { McpTerminalApp } from './mcp-terminal'
 
 /** Which projects a server goes to; absent means every project. */
 export interface McpProjects {
@@ -156,6 +157,8 @@ export interface McpCallRecord {
   error?: string
   /** For a call from a terminal, which has no session: the folder the agent ran in. */
   folder?: string
+  /** For a call from an app's own file rather than an agent's. */
+  app?: McpTerminalApp
 }
 
 export const MCP_CALL_DAYS = 30

@@ -1249,8 +1249,8 @@
   "mcpTerminal": {
     "title": "Terminal and apps",
     "count": "{{using}} of {{count}} use Kettu’s servers",
-    "lede": "Let the agents you run in a terminal use Kettu’s MCP servers. Kettu backs up each file first.",
-    "failed": "Couldn’t read the agents’ files.",
+    "lede": "Let the agents you run in a terminal, and the apps on this computer, use Kettu’s MCP servers. Kettu backs up each file first.",
+    "failed": "Couldn’t read the agents’ and apps’ files.",
     "uses": "Uses Kettu’s servers",
     "noOwn": "No servers of its own",
     "own_one": "Its own {{count}} server",
@@ -1258,6 +1258,7 @@
     "changed_one": "{{count}} entry changed outside Kettu",
     "changed_other": "{{count}} entries changed outside Kettu",
     "backedUp": "Backed up {{when}}",
+    "shared": "{{apps}} reads this file too",
     "invalidJson": "Invalid JSON",
     "unsupported": {
       "format": "Kettu can’t write this agent’s file yet",
@@ -1333,8 +1334,27 @@
     "kettuServers_other": "{{count}} servers through Kettu",
     "restore": "Restore",
     "restoreWarn": "Changes made to the file since then are lost.",
-    "sealed": "Backups that hold keys are encrypted, their key kept in the keychain.",
-    "restored": "{{file}} restored"
+    "sealed": "Every backup is encrypted, its key kept in the keychain.",
+    "restored": "{{file}} restored",
+    "app": {
+      "switch": "Use Kettu’s servers in {{agent}}",
+      "onTitle": "Use Kettu’s MCP servers in {{agent}}",
+      "rule": "{{agent}} gets the servers Kettu gives every agent.",
+      "importsFirst": "First, {{agent}}’s own servers move into Kettu, for every agent",
+      "noServers": "Kettu has no servers for every agent yet.",
+      "turnedOn": "{{agent}} now uses Kettu’s servers",
+      "offTitle": "Stop using Kettu’s servers in {{agent}}?",
+      "goesWithout": "{{agent}} goes without it",
+      "turnedOff": "{{agent}} uses its own servers again",
+      "leaveOutHint": "{{agent}} goes without this server",
+      "restartNote": {
+        "claude-desktop": "Quit and reopen Claude Desktop to pick this up.",
+        "cursor": "Restart Cursor to pick this up.",
+        "vscode": "VS Code picks this up by itself and asks you to trust each new server before it starts it.",
+        "windsurf": "Refresh the MCP servers in Windsurf to pick this up.",
+        "zed": "Zed picks this up by itself."
+      }
+    }
   },
   "mcp": {
     "addTitle": "Add MCP server",
@@ -1514,6 +1534,7 @@
       "terminal": "Outside a session",
       "inTerminal": "{{agent}} in a terminal",
       "inTerminalAt": "{{agent}} in a terminal · {{folder}}",
+      "inApp": "From {{app}}",
       "result": {
         "ok": "OK",
         "tool-error": "Tool error",

@@ -16,9 +16,9 @@ import {
   withClaudeLock,
   writeConnectFile,
   type McpTerminalDeps,
-  type TerminalAgent,
+  type TerminalOwner,
 } from './mcp-terminal'
-import { editServers, isBridgeEntry, mergeList } from './mcp-terminal-files'
+import { bridgeEntry, editServers, isBridgeEntry, mergeList } from './mcp-terminal-files'
 import type { McpConfigFile } from './mcp-config'
 
 const BRIDGE = '/Applications/Kettu.app/Contents/Resources/helpers/kettu-mcp-bridge'
@@ -70,6 +70,19 @@ describe('editing an agent file', () => {
       'mcp__a__y',
     ])
     expect(mergeList(['Bash(rm:*)'], [], [])).toBeNull()
+  })
+
+  it("puts Kettu's turned-off tools in Windsurf's entry, and in no other app's", () => {
+    const args = ['mcp', 'connect', 'a']
+    expect(bridgeEntry('standard', { app: 'windsurf' }, BRIDGE, args, ['wipe'])).toEqual({
+      command: BRIDGE,
+      args,
+      disabledTools: ['wipe'],
+    })
+    expect(bridgeEntry('standard', { app: 'cursor' }, BRIDGE, args, ['wipe'])).toEqual({
+      command: BRIDGE,
+      args,
+    })
   })
 
   it('knows its own bridge entries, whichever copy runs them', () => {
@@ -124,7 +137,7 @@ interface Fixture {
   imports: number
 }
 
-async function fixture(agent: TerminalAgent, file: McpConfigFile): Promise<Fixture> {
+async function fixture(owner: TerminalOwner, file: McpConfigFile): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), 'kettu-mcp-terminal-'))
   const home = join(root, 'home')
   await mkdir(home, { recursive: true })
@@ -136,13 +149,13 @@ async function fixture(agent: TerminalAgent, file: McpConfigFile): Promise<Fixtu
     log: () => {},
     ledger: terminalLedgerFile(data, () => {}),
     library: () => library,
-    agents: () => [agent],
+    owners: async () => [owner],
     files: () => [{ ...file, path: join(home, file.path) }],
     claudeSettings: () => join(home, '.claude', 'settings.json'),
     launch: () => ({ command: BRIDGE, args: ['mcp', 'connect'] }),
     dataArg: () => null,
     key: () => Buffer.alloc(32, 3),
-    importOwn: async (agentId, items) => {
+    importOwn: async (target, items) => {
       state.imports += items.length
       for (const { name } of items) {
         library.push({
@@ -152,7 +165,7 @@ async function fixture(agent: TerminalAgent, file: McpConfigFile): Promise<Fixtu
           source: 'manual',
           version: null,
           spec: { type: 'stdio', command: 'npx', args: ['-y', `${name}-mcp`], env: [] },
-          agents: [agentId],
+          agents: target.startsWith('app:') ? 'all' : [target as AgentId],
           on: true,
         })
       }
@@ -173,7 +186,12 @@ async function fixture(agent: TerminalAgent, file: McpConfigFile): Promise<Fixtu
   return out
 }
 
-const CLAUDE: TerminalAgent = { id: 'claude-code' as AgentId, harness: 'claude-code', folder: null }
+const CLAUDE: TerminalOwner = {
+  id: 'claude-code' as AgentId,
+  harness: 'claude-code',
+  app: null,
+  folder: null,
+}
 
 describe('a takeover of Claude Code', () => {
   let f: Fixture
@@ -342,7 +360,7 @@ describe('a takeover of Claude Code', () => {
 
 describe('a takeover of Codex', () => {
   it('writes TOML tables with the tools turned off, keeping the comments', async () => {
-    const codex: TerminalAgent = { id: 'codex' as AgentId, harness: 'codex', folder: null }
+    const codex: TerminalOwner = { id: 'codex', harness: 'codex', app: null, folder: null }
     const f = await fixture(codex, { path: 'config.toml', layout: 'codex', agentId: codex.id })
     try {
       const file = join(f.home, 'config.toml')
@@ -379,6 +397,89 @@ describe('a takeover of Codex', () => {
       await f.terminal.turnOff(codex.id)
       expect(parseToml(await readFile(file, 'utf8'))).toMatchObject({
         mcp_servers: { notes: { command: 'npx', args: ['-y', 'notes-mcp'] } },
+      })
+    } finally {
+      await rm(f.root, { recursive: true, force: true })
+    }
+  })
+})
+
+const server = (id: string, agents: MarketServer['agents'], command: string): MarketServer => ({
+  id,
+  name: id,
+  title: id,
+  source: 'manual',
+  version: null,
+  spec: { type: 'stdio', command, args: [], env: [] },
+  agents,
+  on: true,
+})
+
+describe('a takeover of an app', () => {
+  const VSCODE: TerminalOwner = { id: 'app:vscode', harness: null, app: 'vscode', folder: null }
+  const ZED: TerminalOwner = { id: 'app:zed', harness: null, app: 'zed', folder: null }
+
+  it("writes VS Code's servers in its JSONC file, keeping its tabs, comments and inputs", async () => {
+    const f = await fixture(VSCODE, { path: 'mcp.json', layout: 'vscode', app: 'VS Code' })
+    try {
+      const file = join(f.home, 'mcp.json')
+      await writeFile(
+        file,
+        '{\n\t// mine\n\t"servers": {\n\t\t"notes": { "command": "npx", "args": ["-y", "notes-mcp"], "env": { "K": "' +
+          SECRET +
+          '" } },\n\t\t"only": { "command": "only-mcp" }\n\t},\n\t"inputs": []\n}\n',
+      )
+      f.library.push(server('shared', 'all', 'shared-mcp'))
+      f.library.push(server('only', ['codex' as AgentId], 'only-mcp'))
+      const plan = await f.terminal.plan(VSCODE.id)
+      // A server kept for some agents is not the app's: its own entry stays as it is.
+      expect(plan.entries).toEqual([
+        { name: 'notes', replaces: true },
+        { name: 'shared', replaces: false },
+      ])
+      await f.terminal.turnOn(VSCODE.id, plan.id)
+      const notes = f.library.find((item) => item.name === 'notes')
+      expect(notes?.agents).toBe('all')
+      const text = await readFile(file, 'utf8')
+      expect(text).toContain('\t// mine')
+      expect(text).not.toContain(SECRET)
+      const config = parseJsonc(text)
+      expect(config.inputs).toEqual([])
+      expect(config.servers.only).toEqual({ command: 'only-mcp' })
+      expect(config.servers.notes).toEqual({
+        type: 'stdio',
+        command: BRIDGE,
+        args: ['mcp', 'connect', 'notes', '--agent', 'app:vscode'],
+      })
+      expect(config.servers.shared.args).toContain('app:vscode')
+      await f.terminal.turnOff(VSCODE.id)
+      const back = parseJsonc(await readFile(file, 'utf8'))
+      expect(back.servers.notes.env.K).toBe(SECRET)
+      expect(Object.keys(back.servers)).toEqual(['notes', 'only'])
+    } finally {
+      await rm(f.root, { recursive: true, force: true })
+    }
+  })
+
+  it("writes Zed's context servers beside its other settings", async () => {
+    const f = await fixture(ZED, { path: 'settings.json', layout: 'zed', app: 'Zed' })
+    try {
+      const file = join(f.home, 'settings.json')
+      await writeFile(file, '// Zed settings\n{\n  "theme": "One Dark",\n  "vim_mode": true,\n}\n')
+      f.library.push(server('shared', 'all', 'shared-mcp'))
+      await f.terminal.turnOn(ZED.id, (await f.terminal.plan(ZED.id)).id)
+      const text = await readFile(file, 'utf8')
+      expect(text).toContain('// Zed settings')
+      expect(parseJsonc(text, [], { allowTrailingComma: true })).toEqual({
+        theme: 'One Dark',
+        vim_mode: true,
+        context_servers: {
+          shared: {
+            command: BRIDGE,
+            args: ['mcp', 'connect', 'shared', '--agent', 'app:zed'],
+            env: {},
+          },
+        },
       })
     } finally {
       await rm(f.root, { recursive: true, force: true })

@@ -6,6 +6,7 @@ import type {
   McpTerminalOffPlan,
   McpTerminalPlan,
   McpTerminalRow,
+  McpTerminalTarget,
 } from './mcp-terminal'
 // The contract between the renderer and the agent host, over the agent host port.
 
@@ -1324,17 +1325,23 @@ export interface HostContract {
   'market.dismissMcpNotice': { params: { id: string }; result: void }
   'market.importMcp': { params: { choices: McpImportChoice[] }; result: string[] }
   'market.mcpTerminal': { params: void; result: McpTerminalRow[] }
-  'market.mcpTerminalPlan': { params: { agentId: AgentId }; result: McpTerminalPlan }
-  'market.mcpTerminalOn': { params: { agentId: AgentId; planId: string }; result: void }
-  'market.mcpTerminalOffPlan': { params: { agentId: AgentId }; result: McpTerminalOffPlan }
-  'market.mcpTerminalOff': { params: { agentId: AgentId }; result: void }
-  'market.mcpTerminalDrift': { params: { agentId: AgentId }; result: McpTerminalDrift[] }
+  'market.mcpTerminalPlan': { params: { target: McpTerminalTarget }; result: McpTerminalPlan }
+  'market.mcpTerminalOn': { params: { target: McpTerminalTarget; planId: string }; result: void }
+  'market.mcpTerminalOffPlan': { params: { target: McpTerminalTarget }; result: McpTerminalOffPlan }
+  'market.mcpTerminalOff': { params: { target: McpTerminalTarget }; result: void }
+  'market.mcpTerminalDrift': { params: { target: McpTerminalTarget }; result: McpTerminalDrift[] }
   'market.mcpTerminalResolve': {
-    params: { agentId: AgentId; choices: Record<string, McpTerminalChoice> }
+    params: { target: McpTerminalTarget; choices: Record<string, McpTerminalChoice> }
     result: void
   }
-  'market.mcpTerminalBackups': { params: { agentId: AgentId }; result: McpTerminalBackup[] }
-  'market.mcpTerminalRestore': { params: { agentId: AgentId; backupId: string }; result: void }
+  'market.mcpTerminalBackups': {
+    params: { target: McpTerminalTarget }
+    result: McpTerminalBackup[]
+  }
+  'market.mcpTerminalRestore': {
+    params: { target: McpTerminalTarget; backupId: string }
+    result: void
+  }
   'market.previewMcp': { params: { text: string }; result: McpDiscoveryRow[] }
   'market.addMcp': { params: { choices: McpImportChoice[] }; result: string[] }
   'market.checkMcp': { params: { serverId: string }; result: void }
