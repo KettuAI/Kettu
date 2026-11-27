@@ -135,26 +135,16 @@ export type Item =
       endId: string | null
       latest: boolean
       toolIds: string[]
-      /** It closes the thread, and what runs on after its turn shows under its end. */
-      still?: boolean
     }
   // The running turn's status, where the reply will start: right after a message you sent.
   | { key: string; type: 'status'; afterSent: boolean }
-  // What runs on after the last turn ended, when no reply closes the thread to show it.
-  | { key: string; type: 'still' }
 
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
  * ends: the same rows with the same keys, and a turn ending only adds its reply footer. With
- * `live`, a turn is running and gets its reply footer only when it ends; with `still` and none
- * running, what runs on after the last turn closes the thread.
+ * `live`, a turn is running and gets its reply footer only when it ends.
  */
-export function buildItems(
-  order: string[],
-  signature: string,
-  live = false,
-  still = false,
-): Item[] {
+export function buildItems(order: string[], signature: string, live = false): Item[] {
   const items: Item[] = []
   const { replacing, after, skipped } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
@@ -198,8 +188,6 @@ export function buildItems(
   }
   const last = items.at(-1)
   if (live) items.push({ key: 'status', type: 'status', afterSent: sentItem(last) })
-  else if (still && last?.type === 'reply') items[items.length - 1] = { ...last, still: true }
-  else if (still && last) items.push({ key: 'still', type: 'still' })
   return items
 }
 
@@ -336,13 +324,11 @@ const agentHeights = new WeakMap<ThreadEntry, number>()
  */
 export function estimateOf(item: Item, byId: Record<string, ThreadEntry> | undefined): number {
   if (item.type === 'run') return 28
-  if (item.type === 'group' || item.type === 'status' || item.type === 'still') return 24
+  if (item.type === 'group' || item.type === 'status') return 24
   if (item.type === 'reply') {
     const files = byId ? changedFiles(item.toolIds, byId) : 0
     const end = item.endId ? byId?.[item.endId] : undefined
-    const ending =
-      (end?.kind === 'turn_end' && end.stopReason !== 'end_turn' ? ENDING_PX : 0) +
-      (item.still ? ENDING_PX : 0)
+    const ending = end?.kind === 'turn_end' && end.stopReason !== 'end_turn' ? ENDING_PX : 0
     if (files === 0) return FOOTER_PX + ending
     const rows = Math.min(files, SHOWN_CHANGES) + (files > SHOWN_CHANGES ? 1 : 0)
     return FOOTER_PX + ending + CHANGES_HEAD_PX + rows * CHANGE_ROW_PX

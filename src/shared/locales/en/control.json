@@ -58,6 +58,38 @@
     "skip": "Skip",
     "stop": "Stop"
   },
+  "dock": {
+    "manage": "Manage",
+    "hide": "Hide",
+    "popoverLabel": "Active tools and background work",
+    "terminals_one": "{{count}} terminal",
+    "terminals_other": "{{count}} terminals",
+    "devices_one": "{{count}} device",
+    "devices_other": "{{count}} devices",
+    "groupTerminals_one": "<b>{{count}} terminal</b>",
+    "groupTerminals_other": "<b>{{count}} terminals</b>",
+    "groupDevices_one": "<b>{{count}} device</b>",
+    "groupDevices_other": "<b>{{count}} devices</b>",
+    "groupPreview": "{{names}}",
+    "groupPreviewMore": "{{names}} +{{more}}",
+    "nameSeparator": ", ",
+    "summary": {
+      "computerWaiting": "Allow {{app}}",
+      "computerStopping": "Stopping computer",
+      "computerAgent": "Computer · {{app}}",
+      "computerActive": "Computer active",
+      "computerYou": "Computer held",
+      "browserAsks": "Browser needs you",
+      "browserYou": "Browser held",
+      "browserAgent": "Browser",
+      "deviceAsks": "{{name}} needs you",
+      "deviceYou": "{{name}} held",
+      "terminalPassword": "Password · {{name}}",
+      "terminalAsks": "{{name}} needs you",
+      "terminalYou": "{{name}} held",
+      "terminalAgent": "Terminal · {{name}}"
+    }
+  },
   "note": {
     "handedBack": {
       "browser": "You used the browser for <b>{{duration}}</b> and handed it back",

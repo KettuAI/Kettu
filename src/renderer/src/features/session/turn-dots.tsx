@@ -6,8 +6,16 @@ import { BY_PHASE, CELLS, turnDotStyles, type RunningPhase } from './turn-dot-pa
  * changes its opacity, on its own delay into the phase's loop; reduced motion holds the frame the
  * loop starts on.
  */
-export function TurnDots({ phase, className }: { phase: RunningPhase; className?: string }) {
-  const styles = turnDotStyles(phase)
+export function TurnDots({
+  phase,
+  className,
+  slower = 1,
+}: {
+  phase: RunningPhase
+  className?: string
+  slower?: number
+}) {
+  const styles = turnDotStyles(phase, slower)
   return (
     <svg
       key={BY_PHASE[phase]}

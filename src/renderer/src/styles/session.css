@@ -309,8 +309,7 @@
   opacity: 0;
 }
 /* A turn cancelled before any reply: Edit stays in view after its end, in the primary blue. */
-.ks-user__edit,
-.ks-still__open {
+.ks-user__edit {
   height: 24px;
   margin-left: -4px;
   padding: 0 8px;
@@ -319,12 +318,10 @@
   color: var(--primary-foreground);
   transition: background-color 140ms ease;
 }
-.ks-user__edit:hover,
-.ks-still__open:hover {
+.ks-user__edit:hover {
   background: var(--primary-from);
 }
-.ks-user__edit:focus-visible,
-.ks-still__open:focus-visible {
+.ks-user__edit:focus-visible {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
@@ -462,11 +459,10 @@
   }
 }
 
-/* A reply's completed duration stays quietly visible on the left, while copy, fork and time fade
-   in beside it on hover or focus. Both keep their room, so nothing shifts. */
+/* A reply's actions, timestamp and turn duration stay quiet at rest and fade in together on hover
+   or focus without shifting layout. */
 .ks-reply-foot {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
   min-height: 28px;
@@ -474,25 +470,10 @@
   font-size: 12px;
   color: var(--thread-faint);
 }
-.ks-reply-foot[data-has-duration] {
-  margin-left: 0;
-  gap: 0 4px;
-}
-.ks-reply-foot__duration {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  max-width: 100%;
-  min-height: 28px;
-  line-height: 16px;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
 .ks-reply-foot__actions {
   display: flex;
   align-items: center;
-  flex: 1 1 120px;
+  flex: 1;
   min-width: 0;
   opacity: 0;
   transition: opacity 140ms ease;
@@ -500,6 +481,18 @@
 .ks-reply-foot[data-shown] .ks-reply-foot__actions,
 .ks-reply-foot:focus-within .ks-reply-foot__actions {
   opacity: 1;
+}
+.ks-reply-foot__meta {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ks-reply-foot__sep {
+  white-space: pre;
 }
 @media (prefers-reduced-motion: reduce) {
   .ks-reply-foot__actions {
@@ -513,6 +506,9 @@
   flex: 1;
 }
 .ks-reply-foot .ui-mac__after {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--thread-faint);
 }
 .ks-reply-foot .ui-mac__tip {

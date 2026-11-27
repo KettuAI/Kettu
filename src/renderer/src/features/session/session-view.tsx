@@ -8,9 +8,6 @@ import type { AgentId } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { Button } from '@renderer/components/ui/button'
-import { BrowserLabel } from '@renderer/features/browser/browser-label'
-import { DeviceLabels } from '@renderer/features/devices/device-label'
-import { TerminalLabels } from '@renderer/features/terminal/terminal-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { HarnessPageButton } from '@renderer/features/agents/fix-button'
 import { harnessAtFault } from '@renderer/features/agents/problem-fix'
@@ -46,9 +43,9 @@ import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { LinkSessionContext } from './open-link'
-import { ComputerLabel } from './computer-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
+import { SessionLiveDock } from './session-live-dock'
 import {
   ArchivedComposer,
   ArchivedProjectComposer,
@@ -78,7 +75,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 }
 
 function SessionBody({ summary }: { summary: SessionSummary }) {
-  const { t } = useTranslation(['session', 'common', 'control'])
+  const { t } = useTranslation(['session', 'common'])
   const sessionId = summary.id
   const replicaStatus = useThreadsStore((s) => s.replicas[sessionId]?.status ?? 'loading')
   const replicaError = useThreadsStore((s) => s.replicas[sessionId]?.error ?? null)
@@ -350,6 +347,15 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                       {actionError ?? queueError}
                     </p>
                   )}
+                  <SessionLiveDock
+                    sessionId={sessionId}
+                    agentId={summary.agentId}
+                    hostId={hostId}
+                    computerView={session && computer ? (session.computer ?? null) : null}
+                    showSurfaces={!archived && !away && summary.origin !== 'subagent'}
+                    showBackground={!!session && !archived && !away && !running}
+                    onError={setQueueError}
+                  />
                   <div className="flex flex-col">
                     {/* Mounted only while something waits; its cards sit behind the composer. */}
                     {session &&
@@ -358,36 +364,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                       session.queue.length > 0 && (
                         <QueueStack session={session} onError={setQueueError} />
                       )}
-                    <div className="ctl-labels" role="group" aria-label={t('control:label.group')}>
-                      {session && (
-                        <ComputerLabel
-                          sessionId={sessionId}
-                          view={computer ? (session.computer ?? null) : null}
-                          agentId={summary.agentId}
-                          hostId={hostId}
-                          onError={setQueueError}
-                        />
-                      )}
-                      {!archived && !away && summary.origin !== 'subagent' && (
-                        <>
-                          <BrowserLabel
-                            sessionId={sessionId}
-                            agentId={summary.agentId}
-                            hostId={hostId}
-                          />
-                          <DeviceLabels
-                            sessionId={sessionId}
-                            agentId={summary.agentId}
-                            hostId={hostId}
-                          />
-                          <TerminalLabels
-                            sessionId={sessionId}
-                            agentId={summary.agentId}
-                            hostId={hostId}
-                          />
-                        </>
-                      )}
-                    </div>
                     {away ? (
                       session && <HostAway host={away} inline />
                     ) : summary.origin === 'subagent' ? (
