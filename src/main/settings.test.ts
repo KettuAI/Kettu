@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
 import { DEFAULT_SETTINGS } from '@shared/settings'
@@ -423,6 +423,35 @@ describe("a plugin's items in a patch", () => {
     expect(() =>
       validateSettingsPatch({ marketplace: { skills: [{ ...skill, source: 'kettu' }] } }),
     ).toThrow()
+  })
+})
+
+describe("a server's tools and projects in a patch", () => {
+  const server = {
+    id: 'manual:0b6e4f2c-6b7a-4f5e-9d2a-3c1b2a4d5e6f',
+    name: 'files',
+    title: 'Files',
+    source: 'manual',
+    version: null,
+    spec: { type: 'stdio', command: 'files-mcp', args: [], env: [] },
+    agents: 'all',
+    on: true,
+  }
+  const put = (extra: Record<string, unknown>) =>
+    validateSettingsPatch({ marketplace: { mcpEdit: { put: [{ ...server, ...extra }] } } })
+
+  it('keeps the tools turned off, each once, and the projects it goes to', () => {
+    const projects = { mode: 'only', paths: [resolve('/work/app')] }
+    expect(put({ toolsOff: ['erase', 'erase', 'move'], projects })).toEqual({
+      marketplace: { mcpEdit: { put: [{ ...server, toolsOff: ['erase', 'move'], projects }] } },
+    })
+  })
+
+  it('refuses a tool name that is no name, a relative project and an unknown mode', () => {
+    expect(() => put({ toolsOff: [''] })).toThrow()
+    expect(() => put({ toolsOff: 'erase' })).toThrow()
+    expect(() => put({ projects: { mode: 'only', paths: ['work/app'] } })).toThrow()
+    expect(() => put({ projects: { mode: 'some', paths: [] } })).toThrow()
   })
 })
 

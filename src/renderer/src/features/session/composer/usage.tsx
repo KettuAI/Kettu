@@ -1,8 +1,9 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
   Database02Icon,
+  MoreHorizontalIcon,
   RefreshIcon,
   Timer02Icon,
 } from '@hugeicons/core-free-icons'
@@ -14,6 +15,7 @@ import {
   type ContextEstimates,
   type ContextReport,
 } from '@shared/context'
+import type { McpRunState, SessionMcpServer } from '@shared/mcp-insight'
 import type { LastRequest } from '@shared/model-requests'
 import {
   cacheHitOf,
@@ -31,6 +33,12 @@ import {
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
@@ -68,7 +76,9 @@ import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
-import { toggleSidePane } from '@renderer/stores/view'
+import { openMarketplace, toggleSidePane } from '@renderer/stores/view'
+import { itemKey } from '@renderer/features/marketplace/model'
+import { ItemTile } from '@renderer/features/marketplace/tiles'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
 import { readsModelRequests } from '@renderer/features/requests/support'
 import { useSessionView } from '@renderer/features/session/use-thread'
@@ -510,7 +520,7 @@ export function ContextButton({
             />
           )}
           <UsageLines sessionId={sessionId} usage={shown} />
-          <McpServersPart sessionId={sessionId} idle={idle} />
+          <McpServersPart sessionId={sessionId} idle={idle} onLeave={() => setOpen(false)} />
           {readsModelRequests(agentId) && (
             <button
               type="button"
@@ -537,16 +547,51 @@ export function ContextButton({
 const NO_NAMES: string[] = []
 
 /**
- * The session's MCP servers. For now only what changed in the library since its agent attached,
- * with Use now, which attaches it again between turns so the servers reach it.
+ * The library servers the session's agent was handed, each with its state, tools and what it
+ * takes per turn, then what changed in the library since its agent attached, with Use now.
  */
-function McpServersPart({ sessionId, idle }: { sessionId: string; idle: boolean }) {
+function McpServersPart({
+  sessionId,
+  idle,
+  onLeave,
+}: {
+  sessionId: string
+  idle: boolean
+  onLeave: () => void
+}) {
   const { t } = useTranslation('composer')
   const changed = useThreadsStore(
     (s) => s.replicas[sessionId]?.state?.session.mcpChanged ?? NO_NAMES,
   )
+  const [servers, setServers] = useState<SessionMcpServer[] | null>(null)
   const [applying, setApplying] = useState(false)
-  if (changed.length === 0) return null
+  const read = useCallback(() => {
+    host('sessions.mcpServers', { sessionId })
+      .then(setServers)
+      .catch(() => setServers([]))
+  }, [sessionId])
+  useEffect(read, [read])
+  const act = (server: SessionMcpServer, action: 'reconnect' | 'off' | 'on') => {
+    host('sessions.mcpServer', { sessionId, serverId: server.serverId, action })
+      .catch((error: unknown) =>
+        toast(
+          t('usage.mcp.actionFailed', { name: server.title, error: errorMessage(error) }),
+          undefined,
+          { tone: 'warning' },
+        ),
+      )
+      .finally(read)
+  }
+  const page = (server: SessionMcpServer | null) => {
+    onLeave()
+    const hostId = sessionHost(sessionId)
+    openMarketplace(
+      server
+        ? { item: itemKey({ kind: 'mcp', id: server.serverId }), hostId }
+        : { tab: 'mcp', hostId },
+    )
+  }
+  if (changed.length === 0 && (servers === null || servers.length === 0)) return null
   const use = () => {
     setApplying(true)
     host('sessions.applyMcp', { sessionId })
@@ -559,21 +604,151 @@ function McpServersPart({ sessionId, idle }: { sessionId: string; idle: boolean 
   }
   return (
     <section className="kettu-ctx__mcp">
-      <span className="kettu-ctx__title">{t('usage.mcp.title')}</span>
-      <div className="kettu-ctx__mcp-notice" role="status">
-        <span>{t('usage.mcp.changed', { names: changed.join(', '), count: changed.length })}</span>
-        <button
-          type="button"
-          className="kettu-ctx__mcp-use"
-          disabled={applying || !idle}
-          title={idle ? undefined : t('usage.mcp.afterTurn')}
-          onClick={use}
-        >
-          {applying && <Spinner className="size-3" />}
-          {t('usage.mcp.useNow')}
+      <div className="kettu-ctx__mcp-head">
+        <span className="kettu-ctx__title">
+          {t('usage.mcp.title')}
+          {servers && servers.length > 0 && (
+            <span className="kettu-ctx__mcp-count">{servers.length}</span>
+          )}
+        </span>
+        <button type="button" className="kettu-ctx__mcp-manage" onClick={() => page(null)}>
+          {t('usage.mcp.manage')}
         </button>
       </div>
+      {servers && servers.length > 0 && (
+        <ul className="kettu-ctx__mcp-list">
+          {servers.map((server) => (
+            <McpServerRow
+              key={server.serverId}
+              server={server}
+              act={(action) => act(server, action)}
+              open={() => page(server)}
+            />
+          ))}
+        </ul>
+      )}
+      {changed.length > 0 && (
+        <div className="kettu-ctx__mcp-notice" role="status">
+          <span>
+            {t('usage.mcp.changed', { names: changed.join(', '), count: changed.length })}
+          </span>
+          <button
+            type="button"
+            className="kettu-ctx__mcp-use"
+            disabled={applying || !idle}
+            title={idle ? undefined : t('usage.mcp.afterTurn')}
+            onClick={use}
+          >
+            {applying && <Spinner className="size-3" />}
+            {t('usage.mcp.useNow')}
+          </button>
+        </div>
+      )}
     </section>
+  )
+}
+
+/** A server's state in a few words, the reason itself for one that failed. */
+function mcpStateText(
+  state: McpRunState,
+  t: ReturnType<typeof useTranslation<'composer'>>['t'],
+): string {
+  switch (state.state) {
+    case 'running':
+      return t('usage.mcp.state.running')
+    case 'idle':
+      return t('usage.mcp.state.idle')
+    case 'starting':
+      return t('usage.mcp.state.starting')
+    case 'needs-sign-in':
+      return t('usage.mcp.state.signIn')
+    case 'by-agent':
+      return t('usage.mcp.state.byAgent')
+    case 'error':
+      return state.reason
+  }
+}
+
+function McpServerRow({
+  server,
+  act,
+  open,
+}: {
+  server: SessionMcpServer
+  act: (action: 'reconnect' | 'off' | 'on') => void
+  open: () => void
+}) {
+  const { t } = useTranslation('composer')
+  const { state } = server
+  const facts = server.off
+    ? t('usage.mcp.offHere')
+    : [
+        mcpStateText(state, t),
+        server.tools !== null ? t('usage.mcp.tools', { count: server.tools }) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+  const tone = server.off
+    ? 'off'
+    : state.state === 'error'
+      ? 'error'
+      : state.state === 'needs-sign-in'
+        ? 'warn'
+        : state.state === 'running'
+          ? 'on'
+          : 'idle'
+  return (
+    <li className="kettu-ctx__mcp-row" data-off={server.off ? '' : undefined}>
+      <ItemTile
+        size="small"
+        subject={{ kind: 'mcp', id: server.serverId, brand: null, site: server.site }}
+      />
+      <span className="kettu-ctx__mcp-name">
+        <span className="kettu-ctx__mcp-title" title={server.title}>
+          {server.name}
+        </span>
+        <span className="kettu-ctx__mcp-facts" data-tone={tone} title={facts}>
+          {facts}
+        </span>
+      </span>
+      {!server.off && server.tokens !== null && (
+        <span className="kettu-ctx__mcp-tokens">
+          {t('usage.mcp.perTurn', { tokens: tokens(server.tokens) })}
+        </span>
+      )}
+      {server.off ? (
+        <button type="button" className="kettu-ctx__mcp-act" onClick={() => act('on')}>
+          {t('usage.mcp.turnOn')}
+        </button>
+      ) : state.state === 'needs-sign-in' ? (
+        <button type="button" className="kettu-ctx__mcp-act" onClick={open}>
+          {t('usage.mcp.signIn')}
+        </button>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="kettu-ctx__mcp-more"
+                aria-label={t('usage.mcp.more', { name: server.name })}
+              />
+            }
+          >
+            <Glyph icon={MoreHorizontalIcon} size={14} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem disabled={!server.routed} onClick={() => act('reconnect')}>
+              {t('usage.mcp.reconnect')}
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!server.routed} onClick={() => act('off')}>
+              {t('usage.mcp.turnOff')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={open}>{t('usage.mcp.openPage')}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </li>
   )
 }
 

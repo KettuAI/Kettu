@@ -859,6 +859,7 @@ export class ArtifactService {
       sessionId,
       folder: (sessionId && this.deps.sessionFolder?.(sessionId)) || grant.project,
       servers: grant.servers,
+      ...('sessions' in grant ? { sessions: grant.sessions } : {}),
     }
   }
 

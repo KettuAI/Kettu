@@ -6105,6 +6105,102 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-ctx__mcp-use:disabled {
   opacity: 0.5;
 }
+/* The session's servers: a head with the count and Manage, then one row each. */
+.kettu-ctx__mcp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kettu-ctx__mcp-count {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-manage,
+.kettu-ctx__mcp-act {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--primary-foreground);
+}
+.kettu-ctx__mcp-manage:hover,
+.kettu-ctx__mcp-act:hover {
+  text-decoration: underline;
+}
+.kettu-ctx__mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kettu-ctx__mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.kettu-ctx__mcp-row[data-off] > :not(.kettu-ctx__mcp-act) {
+  opacity: 0.5;
+}
+.kettu-ctx__mcp-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.kettu-ctx__mcp-title,
+.kettu-ctx__mcp-facts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kettu-ctx__mcp-title {
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--composer-strong);
+}
+.kettu-ctx__mcp-facts {
+  font-size: 11.5px;
+  line-height: 15px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-facts[data-tone='error'] {
+  color: var(--danger);
+}
+.kettu-ctx__mcp-facts[data-tone='warn'] {
+  color: var(--warning);
+}
+.kettu-ctx__mcp-tokens {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-more:hover,
+.kettu-ctx__mcp-more[data-popup-open] {
+  background: var(--bg-hover);
+  color: var(--composer-strong);
+}
+.kettu-ctx__mcp-more:focus-visible,
+.kettu-ctx__mcp-manage:focus-visible,
+.kettu-ctx__mcp-act:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
 .kettu-ctx__note {
   margin: 0;
   padding: 0 14px 8px;

@@ -9,13 +9,20 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketServer } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
 import { ArtifactService, type ArtifactServiceDeps } from '../artifacts/service'
-import { McpProxy } from '../marketplace/proxy'
 import { Answers } from './answers'
-import { BRIDGE_UPGRADE, McpRouter, routingHeaders, serverPath, type ServerCommand } from './router'
+import {
+  BRIDGE_UPGRADE,
+  McpRouter,
+  routingHeaders,
+  serverPath,
+  type RouterCall,
+  type ServerCommand,
+} from './router'
 
 const closers: (() => Promise<void>)[] = []
 afterEach(async () => {
@@ -69,6 +76,42 @@ async function sseServer(valid: Set<string>) {
   return { url: `http://127.0.0.1:${port}/sse`, seen }
 }
 
+/** A remote Streamable HTTP server, stateless, that takes only the bearer `valid`. */
+async function streamableServer(valid: string) {
+  const seen: string[] = []
+  const httpServer = http.createServer((req, res) => {
+    const authorization = req.headers.authorization ?? ''
+    seen.push(authorization)
+    if (authorization !== `Bearer ${valid}`) {
+      res.writeHead(401).end()
+      return
+    }
+    const server = new Server({ name: 'notes', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, () => ({
+      tools: [
+        { name: 'read', inputSchema: { type: 'object' } },
+        { name: 'wipe', inputSchema: { type: 'object' } },
+      ],
+    }))
+    server.setRequestHandler(CallToolRequestSchema, (request) => ({
+      content: [{ type: 'text', text: `did ${request.params.name}` }],
+    }))
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+    res.on('close', () => void transport.close())
+    void server.connect(transport).then(() => transport.handleRequest(req, res))
+  })
+  await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  closers.push(
+    () =>
+      new Promise<void>((resolve) => {
+        httpServer.closeAllConnections()
+        httpServer.close(() => resolve())
+      }),
+  )
+  const port = (httpServer.address() as AddressInfo).port
+  return { url: `http://127.0.0.1:${port}/mcp`, seen }
+}
+
 /** A command server: newline JSON-RPC on its standard input and output, its key in its env. */
 const COMMAND_SERVER = `
 const readline = require('node:readline')
@@ -83,7 +126,13 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       serverInfo: { name: 'echo', version: '1.0.0' },
     } })
   } else if (message.method === 'tools/list') {
-    send({ jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'where', inputSchema: { type: 'object' } }] } })
+    send({ jsonrpc: '2.0', id: message.id, result: { tools: [
+      { name: 'where', inputSchema: { type: 'object' } },
+      { name: 'erase', inputSchema: { type: 'object' }, annotations: { destructiveHint: true } },
+    ] } })
+  } else if (message.method === 'tools/call' && message.params.name === 'erase') {
+    process.stderr.write('erased\\n')
+    send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: 'erased' }] } })
   } else if (message.method === 'tools/call') {
     send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text',
       text: process.cwd() + '|' + (process.env.ECHO_KEY === 'k-secret') }] } })
@@ -103,6 +152,7 @@ async function setup(
   const script = path.join(dir, 'echo.cjs')
   await writeFile(script, COMMAND_SERVER)
   const refused: string[] = []
+  const calls: RouterCall[] = []
   const deps = {
     signsIn: (server: MarketServer) => server.spec.type === 'http' && !!server.spec.oauth,
     headers: () => ({}),
@@ -115,12 +165,12 @@ async function setup(
   const router = new McpRouter({
     ...deps,
     servers: () => servers,
+    called: (call: RouterCall) => void calls.push(call),
     command: (): ServerCommand => ({
       command: process.execPath,
       args: [script],
       env: { PATH: process.env.PATH ?? '', ECHO_KEY: 'k-secret' },
     }),
-    proxy: new McpProxy(deps),
     answers: new Answers(null),
     appVersion: '0.0.0',
     home: dir,
@@ -138,7 +188,7 @@ async function setup(
   closers.push(() => service.stop())
   const access = service.routerAccess('s1', dir, null)!
   access.allow(given.map((server) => server.id))
-  return { dir, access, refused }
+  return { dir, access, refused, router, calls }
 }
 
 async function agentClient(url: string, token: string): Promise<Client> {
@@ -252,6 +302,50 @@ describe('the bridge connection', () => {
   })
 })
 
+describe('what an agent may use of a server', () => {
+  it('leaves a tool turned off out of the list and refuses a call to it', async () => {
+    const servers = [{ ...echo, toolsOff: ['erase'] }]
+    const { access, calls } = await setup(servers)
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['where'])
+    await expect(client.callTool({ name: 'erase', arguments: {} })).rejects.toThrow(
+      /turned off in Kettu/,
+    )
+    expect(calls.map((call) => [call.outcome.tool, call.outcome.result])).toEqual([
+      ['erase', 'refused'],
+    ])
+  })
+
+  it('serves no tools and refuses every call while the server is off for the session', async () => {
+    const { access, router } = await setup([echo])
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    expect((await client.listTools()).tools).toHaveLength(2)
+    router.setSessionOff('s1', echo.id, true)
+    expect((await client.listTools()).tools).toEqual([])
+    await expect(client.callTool({ name: 'where', arguments: {} })).rejects.toThrow(
+      /turned off for this session/,
+    )
+    router.setSessionOff('s1', echo.id, false)
+    expect((await client.listTools()).tools).toHaveLength(2)
+  })
+
+  it("records a call's metadata without what was sent or returned, and keeps its stderr", async () => {
+    const { access, calls, router } = await setup([echo])
+    const client = await agentClient(`${access.origin}${serverPath(echo.id)}`, access.token)
+    await client.callTool({ name: 'erase', arguments: { path: '/private/notes-arg' } })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ serverId: echo.id, sessionId: 's1' })
+    expect(calls[0]!.outcome).toMatchObject({ tool: 'erase', result: 'ok' })
+    const text = JSON.stringify(calls)
+    expect(text).not.toContain('/private/notes-arg')
+    expect(text).not.toContain('erased')
+    for (let wait = 0; wait < 40 && router.logsOf(echo.id)[0]?.text !== 'erased\n'; wait++) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    expect(router.logsOf(echo.id)).toMatchObject([{ serverId: echo.id, text: 'erased\n' }])
+  })
+})
+
 describe('a remote server on SSE', () => {
   const docs = (url: string, oauth: boolean): MarketServer => ({
     id: 'com.example/docs',
@@ -300,6 +394,74 @@ describe('a remote server on SSE', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INIT }),
     })
     expect(answer.status).toBe(401)
+    expect(remote.seen).toHaveLength(0)
+  })
+})
+
+describe('a remote Streamable HTTP server', () => {
+  it("is forwarded with the user's sign-in, never the session's token, its tools filtered", async () => {
+    const remote = await streamableServer('fresh')
+    const notes: MarketServer = {
+      id: 'com.example/notes',
+      name: 'notes',
+      title: 'Notes',
+      source: 'registry',
+      version: '1.0.0',
+      spec: {
+        type: 'http',
+        transport: 'streamable-http',
+        url: remote.url,
+        headers: [],
+        oauth: { flow: 'browser' },
+      },
+      agents: 'all',
+      on: true,
+      toolsOff: ['wipe'],
+    }
+    const { access } = await setup([notes], { token: 'fresh' })
+    const client = await agentClient(`${access.origin}${serverPath(notes.id)}`, access.token)
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['read'])
+    const result = await client.callTool({ name: 'read', arguments: {} })
+    expect(result.content).toEqual([{ type: 'text', text: 'did read' }])
+    await expect(client.callTool({ name: 'wipe', arguments: {} })).rejects.toThrow(/turned off/)
+    expect(remote.seen.length).toBeGreaterThan(0)
+    expect(remote.seen.every((seen) => seen === 'Bearer fresh')).toBe(true)
+  })
+})
+
+describe('a remote server that needs sign-in', () => {
+  it('answers the agent with an error that says to sign in in Kettu, never an HTTP 401', async () => {
+    const remote = await streamableServer('fresh')
+    const notes: MarketServer = {
+      id: 'com.example/notes',
+      name: 'notes',
+      title: 'Notes',
+      source: 'registry',
+      version: '1.0.0',
+      spec: {
+        type: 'http',
+        transport: 'streamable-http',
+        url: remote.url,
+        headers: [],
+        oauth: { flow: 'browser' },
+      },
+      agents: 'all',
+      on: true,
+    }
+    const { access } = await setup([notes])
+    const answer = await fetch(`${access.origin}${serverPath(notes.id)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INIT }),
+    })
+    expect(answer.status).not.toBe(401)
+    expect(await answer.text()).toContain(
+      "notes needs sign-in; sign in to it in Kettu's Marketplace",
+    )
     expect(remote.seen).toHaveLength(0)
   })
 })

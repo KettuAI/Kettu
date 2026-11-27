@@ -25,6 +25,15 @@ import type {
 } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
+import {
+  carryOf,
+  servedInProject,
+  toolInfos,
+  turnTokens,
+  type McpRunState,
+  type McpServerInsight,
+  type SessionMcpServer,
+} from '@shared/mcp-insight'
 import { channelTrigger, PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
 import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
 import type { AgentToPluginHost } from '@shared/plugin-host'
@@ -164,9 +173,9 @@ import { MarketConnectionsService } from './marketplace/connections'
 import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
 import { createHash } from 'node:crypto'
-import { McpProxy } from './marketplace/proxy'
 import { Answers, answersFile } from './mcp-router/answers'
 import { McpRouter } from './mcp-router/router'
+import { McpCalls } from './mcp-router/calls'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -189,7 +198,9 @@ import {
 import {
   ALL_TRANSPORTS,
   keyState,
+  GATED_SERVER_BYTES,
   libraryServers,
+  serverMasker,
   parseMarketKeys,
   serverCommand,
   serverHeaders,
@@ -352,6 +363,15 @@ const MEMORY_ERRORS: Record<MemoryErrorCode, PortErrorCode> = {
   not_found: 'not_found',
   conflict: 'conflict',
   off: 'unavailable',
+}
+
+/** How long a server checked after a failed call goes before another failure checks it again. */
+const FAILURE_CHECK_MS = 60_000
+
+/** How a session's agent reached a library server it was handed. */
+interface McpHanded {
+  name: string
+  how: 'router' | 'agent' | 'gateway'
 }
 
 /** Runs a memory request, its refusals crossing the port with `memory_<code>` as `data.reason`. */
@@ -599,6 +619,8 @@ export class AgentHost {
   private readonly mcpDiscovery: McpDiscoveryService
   private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
   private readonly mcpCheckStates = new Map<string, McpCheck>()
+  /** When each server was last checked after a failed call. */
+  private readonly failureChecks = new Map<string, number>()
   private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
   private nextMcpInstall = 1
   private agentEnvKeys: Record<string, Record<string, string>> = {}
@@ -611,10 +633,12 @@ export class AgentHost {
   private readonly marketCatalog: MarketCatalogService
   /** The sign-ins of the Marketplace's OAuth servers. */
   private readonly marketConnections: MarketConnectionsService
-  /** Where agents reach the OAuth servers, with a fresh token. */
-  private readonly mcpProxy: McpProxy
   private readonly mcpAnswers: Answers
   private readonly mcpRouter: McpRouter
+  /** The record of tool calls through the router. */
+  private readonly mcpCalls: McpCalls
+  /** The library servers each session's agent was handed at its last attach, by server id. */
+  private readonly sessionMcp = new Map<string, Map<string, McpHanded>>()
   /** The bridge program, once it is found where main said; null without one. */
   private mcpBridge: string | null = null
   /** The sign-ins sent to main that no push has carried back yet, by server id. */
@@ -937,14 +961,7 @@ export class AgentHost {
     })
     const signsIn = (server: MarketServer): boolean =>
       this.marketConnections.access(server) === 'proxy'
-    this.mcpProxy = new McpProxy({
-      signsIn,
-      headers: (server) =>
-        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
-      token: (serverId) => this.marketConnections.token(serverId),
-      refused: (serverId, used) => this.marketConnections.refused(serverId, used),
-      fetch: net,
-    })
+    this.mcpCalls = new McpCalls(path.join(options.userDataPath, 'state', 'mcp-calls'), log)
     const home = options.homeDir ?? os.homedir()
     this.mcpAnswers = new Answers(answersFile(options.userDataPath, log))
     this.trees = new AgentTrees({
@@ -963,8 +980,21 @@ export class AgentHost {
       signsIn,
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
-      proxy: this.mcpProxy,
       answers: this.mcpAnswers,
+      called: ({ serverId, sessionId, outcome }) => {
+        if (outcome.result === 'error') this.checkAfterFailure(serverId, sessionId)
+        void this.mcpCalls.add({
+          at: outcome.at,
+          serverId,
+          sessionId,
+          agentId: sessionId ? this.sessions.sessionAgent(sessionId) : null,
+          tool: outcome.tool,
+          ms: outcome.ms,
+          bytes: outcome.bytes,
+          result: outcome.result,
+          ...(outcome.error !== undefined ? { error: this.mcpMask(serverId)(outcome.error) } : {}),
+        })
+      },
       appVersion: options.appVersion,
       home,
       log,
@@ -1495,6 +1525,8 @@ export class AgentHost {
             : this.artifactService.servers(sessionId, record.projectPath, gateway, suggests)
         },
         library: async (sessionId, record, connection, transports, taken) => {
+          const handed = new Map<string, McpHanded>()
+          this.sessionMcp.set(sessionId, handed)
           const library = this.settings.marketplace.mcp
           if (library.length === 0) return []
           const own = await readOwnMcpServers(
@@ -1510,6 +1542,8 @@ export class AgentHost {
           return libraryServers(library, this.marketKeys, record.agentId, transports, {
             platform,
             taken,
+            project: record.projectPath,
+            handed: (server, name, how) => handed.set(server.id, { name, how }),
             own,
             conflict: (server, name) =>
               this.diagnostics.log(
@@ -1544,11 +1578,14 @@ export class AgentHost {
             ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
             ...(record.commandTools?.mcp ?? []),
           ]
-          const handed = this.settings.marketplace.mcp.filter(
-            (server) =>
-              serverFor(server, record.agentId) ||
-              (server.on && (also.includes(server.name) || also.includes(server.id))),
-          )
+          const handed = this.settings.marketplace.mcp.filter((server) => {
+            const named = server.on && (also.includes(server.name) || also.includes(server.id))
+            return (
+              named ||
+              (serverFor(server, record.agentId) &&
+                servedInProject(server.projects, record.projectPath))
+            )
+          })
           return Object.fromEntries(
             handed.map((server) => [
               server.name,
@@ -2761,6 +2798,22 @@ export class AgentHost {
     resolve?.(error)
   }
 
+  /**
+   * A call through the router failed: the server is checked once, as an agent would connect, so
+   * its page says why; not again within a minute, however many calls fail meanwhile.
+   */
+  private checkAfterFailure(serverId: string, sessionId: string | null): void {
+    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    if (!server) return
+    const now = Date.now()
+    if (now - (this.failureChecks.get(serverId) ?? 0) < FAILURE_CHECK_MS) return
+    this.failureChecks.set(serverId, now)
+    const folder = sessionId
+      ? (this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId))
+      : null
+    this.checkMcpServer(server, this.marketKeys.get(serverId) ?? new Map(), folder ?? undefined)
+  }
+
   private checkMcpServer(
     server: MarketServer,
     keys: ReadonlyMap<string, string>,
@@ -2940,6 +2993,96 @@ export class AgentHost {
    * The Marketplace's servers or keys may have changed from `servers` and `keys`: each agent whose
    * servers differ now has its prepared sessions replaced.
    */
+  /** Masks a server's keys and fixed values, the host's own secrets and the home folder. */
+  private mcpMask(serverId: string): (text: string) => string {
+    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    return serverMasker(server, this.marketKeys, redactLogText, {
+      env: this.env.agentEnv(),
+      platform: this.options.platform,
+    })
+  }
+
+  private mcpState(server: MarketServer): McpRunState {
+    const signs = server.spec.type === 'http' && server.spec.oauth !== undefined
+    if (signs && this.marketConnections.access(server) === null) return { state: 'needs-sign-in' }
+    return this.mcpRouter.state(server)
+  }
+
+  /** Each library server's state, its tools as last listed and what each agent pays for them. */
+  private mcpInsight(serverId?: string): McpServerInsight[] {
+    return this.settings.marketplace.mcp
+      .filter((server) => serverId === undefined || server.id === serverId)
+      .map((server) => {
+        const known = this.mcpRouter.knownTools(server)
+        const tools = known ? toolInfos(known, server.toolsOff) : null
+        const big = known === null || JSON.stringify(known).length > GATED_SERVER_BYTES
+        const agents = this.agents.ids().map((agentId) => {
+          const carry = carryOf(agentId, this.agents.toolGateway(agentId) && big)
+          return { agentId, carry, tokens: tools ? turnTokens(tools, carry, server.name) : 0 }
+        })
+        return { serverId: server.id, state: this.mcpState(server), tools, agents }
+      })
+  }
+
+  /** The library servers a session's agent was handed at its last attach. */
+  private sessionMcpServers(sessionId: string): SessionMcpServer[] {
+    const handed = this.sessionMcp.get(sessionId)
+    if (!handed) return []
+    const agentId = this.sessions.sessionAgent(sessionId)
+    const off = this.mcpRouter.offIn(sessionId)
+    const out: SessionMcpServer[] = []
+    for (const [id, { name, how }] of handed) {
+      const server = this.settings.marketplace.mcp.find((item) => item.id === id)
+      if (!server) continue
+      const known = this.mcpRouter.knownTools(server)
+      const tools = known ? toolInfos(known, server.toolsOff) : null
+      const carry = agentId ? carryOf(agentId, how === 'gateway') : 'full'
+      out.push({
+        serverId: id,
+        // The library's name, though the agent may know it by another, such as with -kettu.
+        name: server.name,
+        title: server.title,
+        site: server.spec.type === 'http' ? server.spec.url : null,
+        state: how === 'agent' ? { state: 'by-agent' } : this.mcpState(server),
+        tools: tools ? tools.filter((tool) => !tool.off).length : null,
+        tokens: tools ? turnTokens(tools, carry, name) : null,
+        off: off.has(id),
+        routed: how !== 'agent',
+      })
+    }
+    return out
+  }
+
+  private async sessionMcpServer(
+    sessionId: string,
+    serverId: string,
+    action: 'reconnect' | 'off' | 'on',
+  ): Promise<void> {
+    const handed = this.sessionMcp.get(sessionId)?.get(serverId)
+    if (!handed) throw new HostError('not_found', 'The session was not handed this server')
+    if (handed.how === 'agent') {
+      throw new HostError(
+        'conflict',
+        'The agent runs this server itself, so Kettu cannot change it',
+      )
+    }
+    if (action === 'reconnect') return this.mcpRouter.reconnect(sessionId, serverId)
+    this.mcpRouter.setSessionOff(sessionId, serverId, action === 'off')
+  }
+
+  /** Every MCP server instance's stderr for a problem report, with keys masked. */
+  private mcpLogs(): NonNullable<DiagnosticsBundle['mcpLogs']> {
+    return this.mcpRouter.logsOf().map((log) => {
+      const server = this.settings.marketplace.mcp.find((item) => item.id === log.serverId)
+      return {
+        ...log,
+        server: server?.name ?? log.serverId,
+        folder: redactLogText(log.folder),
+        text: this.mcpMask(log.serverId)(log.text),
+      }
+    })
+  }
+
   private marketChanged(servers: HostSettings['marketplace']['mcp'], keys: MarketKeys): void {
     // Routed servers compare by where they go, without a session's token.
     const oauth = { access: (server: MarketServer) => this.marketConnections.access(server) }
@@ -2969,8 +3112,15 @@ export class AgentHost {
         .map((server) => server.id),
     )
     this.mcpRouter.serversChanged(changed)
+    // Projects do not change what an agent is handed in general, only which sessions get it.
+    const projects = (list: typeof servers, agentId: AgentId): string =>
+      JSON.stringify(
+        list.filter((server) => serverFor(server, agentId)).map((server) => server.projects),
+      )
     this.sessions.libraryChanged(
-      (agentId) => of(servers, keys, agentId) !== of(now, this.marketKeys, agentId),
+      (agentId) =>
+        of(servers, keys, agentId) !== of(now, this.marketKeys, agentId) ||
+        projects(servers, agentId) !== projects(now, agentId),
     )
   }
 
@@ -3842,6 +3992,7 @@ export class AgentHost {
       })),
       sessions: this.sessions.list(),
       log: this.diagnostics.logEntries(),
+      mcpLogs: this.mcpLogs(),
     }
   }
 
@@ -4025,6 +4176,15 @@ export class AgentHost {
       'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
       'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
       'market.connections': () => this.marketConnections.view(),
+      'market.mcpInsight': ({ serverId }) => this.mcpInsight(serverId),
+      'market.mcpInstances': ({ serverId }) => this.mcpRouter.instancesOf(serverId),
+      'market.mcpCalls': async (query) => ({ calls: await this.mcpCalls.list(query) }),
+      'market.mcpLogs': ({ serverId }) => this.mcpLogs().filter((log) => log.serverId === serverId),
+      'market.mcpStop': async ({ serverId, instance }) => {
+        if (!(await this.mcpRouter.stopInstance(serverId, instance))) {
+          throw new HostError('not_found', 'The server has no such instance')
+        }
+      },
       'market.ownPlugins': ({ refresh }) => this.ownPlugins.plugins(refresh === true),
       'market.skills': ({ refresh, cached }) =>
         this.marketSkills.skills(refresh === true, cached === true),
@@ -4216,6 +4376,9 @@ export class AgentHost {
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.refreshModels': ({ sessionId }) => sessions.refreshModels(sessionId),
       'sessions.applyMcp': ({ sessionId }) => sessions.applyLibrary(sessionId),
+      'sessions.mcpServers': ({ sessionId }) => this.sessionMcpServers(sessionId),
+      'sessions.mcpServer': ({ sessionId, serverId, action }) =>
+        this.sessionMcpServer(sessionId, serverId, action),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.pin': ({ sessionId, pinned }) => sessions.pin(sessionId, pinned),

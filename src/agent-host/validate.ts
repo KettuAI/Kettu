@@ -1149,6 +1149,31 @@ function mcpChoices(params: unknown): { choices: McpImportChoice[] } {
   }
 }
 
+/** A library server's id of any source; the host looks it up among those it keeps. */
+function libraryServerId(o: Fields): string {
+  return string(o, 'serverId', ID_CHARS)
+}
+
+/** Which of a server's calls to read: metadata only, so nothing here reaches a server. */
+function mcpCallQuery(params: unknown): import('@shared/mcp-insight').McpCallQuery {
+  const o = fields(params)
+  const query: import('@shared/mcp-insight').McpCallQuery = { serverId: libraryServerId(o) }
+  const failed = optionalFlag(o, 'failed')
+  if (failed !== undefined) query.failed = failed
+  if (o.since !== undefined) query.since = time(o, 'since')
+  if (o.before !== undefined) query.before = time(o, 'before')
+  const text = optionalString(o, 'query', 200)
+  if (text !== undefined) query.query = text
+  if (o.limit !== undefined) {
+    const limit = o.limit
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw invalidParams('limit must be a whole number from 1 to 500')
+    }
+    query.limit = limit
+  }
+  return query
+}
+
 function marketServerId(o: Fields): string {
   const id = string(o, 'serverId', ID_CHARS)
   if (
@@ -1686,6 +1711,20 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.disconnect': (params) => ({ serverId: marketServerId(fields(params)) }),
     'market.connections': none,
+    'market.mcpInsight': (params) => {
+      if (params === undefined || params === null) return {}
+      const o = fields(params)
+      return o.serverId === undefined ? {} : { serverId: libraryServerId(o) }
+    },
+    'market.mcpInstances': (params) => ({ serverId: libraryServerId(fields(params)) }),
+    'market.mcpCalls': mcpCallQuery,
+    'market.mcpLogs': (params) => ({ serverId: libraryServerId(fields(params)) }),
+    'market.mcpStop': (params) => {
+      const o = fields(params)
+      const instance = string(o, 'instance', 32)
+      if (!/^i\d+$/.test(instance)) throw invalidParams('instance is not an instance id')
+      return { serverId: libraryServerId(o), instance }
+    },
     'market.ownPlugins': (params) => {
       const refresh = optionalFlag(
         params === undefined || params === null ? {} : fields(params),
@@ -2220,6 +2259,15 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.refreshModels': session,
     'sessions.applyMcp': session,
+    'sessions.mcpServers': session,
+    'sessions.mcpServer': (params) => {
+      const o = fields(params)
+      const action = o.action
+      if (action !== 'reconnect' && action !== 'off' && action !== 'on') {
+        throw invalidParams('action must be reconnect, off or on')
+      }
+      return { sessionId: sessionId(o), serverId: libraryServerId(o), action }
+    },
     'sessions.rename': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), title: o.title === null ? null : string(o, 'title', 200) }

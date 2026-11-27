@@ -239,7 +239,26 @@
       "changed_other": "{{names}} 在这个会话开始以后加了或改了。",
       "useNow": "现在用上",
       "afterTurn": "这一轮结束后可用",
-      "applyFailed": "没能现在用上：{{error}}"
+      "applyFailed": "没能现在用上：{{error}}",
+      "manage": "管理",
+      "state": {
+        "running": "已连接",
+        "idle": "空闲",
+        "starting": "启动中…",
+        "signIn": "需要登录",
+        "byAgent": "由智能体运行"
+      },
+      "tools_one": "{{count}} 个工具",
+      "tools_other": "{{count}} 个工具",
+      "perTurn": "每轮约 {{tokens}} token",
+      "offHere": "这个会话里关了",
+      "turnOn": "打开",
+      "signIn": "登录",
+      "more": "{{name}} 的更多操作",
+      "reconnect": "重连",
+      "turnOff": "在这个会话里关掉",
+      "openPage": "打开服务器页",
+      "actionFailed": "{{name}}：{{error}}"
     }
   },
   "attachments": {

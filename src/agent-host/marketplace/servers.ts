@@ -14,7 +14,9 @@ import {
   type McpValue,
 } from '@shared/marketplace'
 import { mcpFingerprint, type McpEndpoint } from '@shared/mcp-fingerprint'
+import { servedInProject } from '@shared/mcp-insight'
 import type { NodeRuntime } from '@shared/host-control'
+import { createRedactor } from '@shared/log/redact'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, McpServer } from '../connection'
@@ -159,6 +161,31 @@ export const DECLARED_LIBRARY_BYTES = 12_000
 /** The environment variables the bridge reads where to connect from. */
 export const BRIDGE_ENV = { url: 'KETTU_MCP_URL', token: 'KETTU_MCP_TOKEN' } as const
 
+/**
+ * Masks what a server's process may print of its keys: the values of its inputs and every fixed
+ * header or environment value, which a server added by hand may hold a key in, then `then`.
+ */
+export function serverMasker(
+  server: MarketServer | undefined,
+  keys: MarketKeys,
+  then: (text: string) => string = (text) => text,
+  shell?: { env: Env; platform: Platform },
+): (text: string) => string {
+  const values = [...(server ? (keys.get(server.id)?.values() ?? []) : [])]
+  if (server) {
+    for (const item of server.spec.type === 'stdio' ? server.spec.env : server.spec.headers) {
+      if ('input' in item) continue
+      values.push(item.value)
+      // A reference reaches the process as what it names, which is masked as well.
+      if (shell) values.push(resolveMcpReference(item.value, shell.env, shell.platform).value)
+    }
+  }
+  // The longest first, so a value that holds another is masked whole.
+  values.sort((a, b) => b.length - a.length)
+  const own = createRedactor({ secrets: () => values })
+  return (text) => then(own(text))
+}
+
 /** A server's fixed headers and filled inputs, as its requests carry them. */
 export function serverHeaders(
   server: MarketServer,
@@ -293,6 +320,10 @@ export function libraryServers(
     own?: readonly OwnServer[]
     /** The agent's own server of that name is another server, which Kettu's entry replaces. */
     conflict?(server: MarketServer, own: string): void
+    /** The session's project, which a server set to some projects only goes to when it names. */
+    project?: string
+    /** Each server handed, under the name the agent knows it by and how it reaches it. */
+    handed?(server: MarketServer, name: string, how: 'router' | 'agent' | 'gateway'): void
   },
 ): McpServer[] {
   const used = new Set(options.taken ?? [])
@@ -333,6 +364,12 @@ export function libraryServers(
   for (const server of servers) {
     const named = options.also?.includes(server.name) || options.also?.includes(server.id)
     if (!serverFor(server, agentId) && !(server.on && named)) continue
+    if (
+      options.project !== undefined &&
+      !named &&
+      !servedInProject(server.projects, options.project)
+    )
+      continue
     const { spec } = server
     if (!runnable(server, keys, options.node)) continue
     if (spec.type === 'http' && spec.oauth && options.oauth?.access(server) === null) continue
@@ -347,7 +384,10 @@ export function libraryServers(
         options.node,
         options.env,
       )
-      if (entry) out.push(entry)
+      if (entry) {
+        out.push(entry)
+        options.handed?.(server, entry.name, 'agent')
+      }
       continue
     }
     if (options.gateway && router.gate) {
@@ -355,14 +395,17 @@ export function libraryServers(
       const bytes = known === null ? Infinity : JSON.stringify(known).length
       if (bytes > GATED_SERVER_BYTES || declared + bytes > DECLARED_LIBRARY_BYTES) {
         gated.push(server.id)
+        options.handed?.(server, server.name, 'gateway')
         continue
       }
       declared += bytes
     }
     if (transports.mcpHttp) {
+      const entryName = nameOf(server)
+      options.handed?.(server, entryName.name, 'router')
       out.push({
         type: 'http',
-        ...nameOf(server),
+        ...entryName,
         url: `${router.origin}${serverPath(server.id)}`,
         headers: [{ name: 'Authorization', value: `Bearer ${router.token}` }],
         secret: true,
@@ -381,7 +424,10 @@ export function libraryServers(
           options.node,
           options.env,
         )
-        if (entry) out.push(entry)
+        if (entry) {
+          out.push(entry)
+          options.handed?.(server, entry.name, 'agent')
+        }
         options.fellBack?.(server, 'this build has no bridge, so the agent runs it itself')
       } else {
         options.fellBack?.(
@@ -391,9 +437,11 @@ export function libraryServers(
       }
       continue
     }
+    const entryName = nameOf(server)
+    options.handed?.(server, entryName.name, 'router')
     out.push({
       type: 'stdio',
-      ...nameOf(server),
+      ...entryName,
       command: options.bridge,
       args: ['mcp', 'connect', server.name, '--agent', agentId],
       env: [

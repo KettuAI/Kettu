@@ -12,6 +12,7 @@ import {
   earlierVersion,
   errorResponse,
   INTERNAL_ERROR,
+  INVALID_PARAMS,
   isListMethod,
   isNotification,
   isRecord,
@@ -44,6 +45,46 @@ import {
 /** Where an instance is shared: by one session, a folder, every session, or one link alone. */
 export type Sharing = 'session' | 'folder' | 'all' | 'link'
 
+/** How a tool call through a link ended, as its record keeps it: no arguments, no output. */
+export interface CallOutcome {
+  tool: string
+  at: number
+  ms: number
+  bytes: number
+  result: 'ok' | 'tool-error' | 'error' | 'refused' | 'cancelled'
+  error?: string
+}
+
+/** What a link's agent may use of the server, asked again on every request. */
+export interface LinkPolicy {
+  /** The tool is turned off, for every agent. */
+  toolOff(name: string): boolean
+  /** The server is turned off for this link's session. */
+  serverOff(): boolean
+  /** A tool call through the link ended. */
+  called?(outcome: CallOutcome): void
+}
+
+const OPEN_POLICY: LinkPolicy = { toolOff: () => false, serverOff: () => false }
+
+/** What each list answers with while the server is turned off for a session. */
+const EMPTY_LISTS: Record<string, Record<string, unknown>> = {
+  'tools/list': { tools: [] },
+  'prompts/list': { prompts: [] },
+  'resources/list': { resources: [] },
+  'resources/templates/list': { resourceTemplates: [] },
+}
+
+/** A list result without the tools `off` names; anything else as it is. */
+export function withoutTools(
+  result: Record<string, unknown>,
+  off: (name: string) => boolean,
+): Record<string, unknown> {
+  if (!Array.isArray(result.tools)) return result
+  const tools = result.tools.filter((tool) => !(isRecord(tool) && off(String(tool.name))))
+  return tools.length === result.tools.length ? result : { ...result, tools }
+}
+
 export interface Upstream {
   transport: Transport
   /** The end of what the process wrote to stderr, for the reason it failed. */
@@ -64,6 +105,8 @@ export interface InstanceOptions {
   answers: Answers
   client: { name: string; version: string }
   log(level: 'info' | 'warn' | 'error', message: string): void
+  /** It started (null) or failed to start or ended on its own, with the reason. */
+  status?(error: string | null): void
   /** It stopped and has no links left. */
   ended(instance: Instance): void
 }
@@ -143,6 +186,10 @@ export class Instance {
   private readonly tokens = new Map<string, { link: Link; token: Id }>()
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private lastActive = 0
+  /** When the running process or connection started. */
+  startedAt: number | null = null
+  /** When a link last called one of its tools. */
+  lastCallAt: number | null = null
   /** Why the last start failed, while nothing has started since. */
   error: string | null = null
 
@@ -154,6 +201,16 @@ export class Instance {
 
   get sharing(): Sharing {
     return this.options.sharing
+  }
+
+  get isStarting(): boolean {
+    return this.starting !== null
+  }
+
+  /** When it stops while nothing uses it, or null when it does not stop on its own. */
+  stopsAt(): number | null {
+    const { idleMs } = this.options
+    return idleMs === null || !this.running ? null : this.lastActive + idleMs
   }
 
   /** What the server answered last, kept from an earlier run, while it runs the same command. */
@@ -204,6 +261,7 @@ export class Instance {
       upstream = await this.options.open()
     } catch (error) {
       this.error = text(error)
+      this.options.status?.(this.error)
       throw error
     }
     this.upstream = upstream
@@ -224,10 +282,13 @@ export class Instance {
       await transport.start()
       await Promise.race([this.open(link), timeout])
       this.error = null
+      this.startedAt = Date.now()
+      this.options.status?.(null)
       this.touch()
     } catch (error) {
       const reason = this.reason(error, upstream)
       this.error = reason
+      this.options.status?.(reason)
       this.upstream = null
       void transport.close().catch(() => undefined)
       throw new Error(reason, { cause: error })
@@ -324,6 +385,7 @@ export class Instance {
       return
     }
     const keeps = isListMethod(request.method) && request.params?.cursor === undefined
+    if (request.method === 'tools/call') this.lastCallAt = Date.now()
     this.sendForwarded({
       link,
       id: request.id,
@@ -440,7 +502,13 @@ export class Instance {
         result,
       )
     }
-    link.reply({ ...response, id: forwarded.id, ...this.modernResult(link, result) })
+    const shown = result && forwarded.method === 'tools/list' ? link.filterTools(result) : result
+    link.reply({
+      ...response,
+      ...(shown ? { result: shown } : {}),
+      id: forwarded.id,
+      ...this.modernResult(link, shown),
+    })
   }
 
   /** A result of the old protocol as a new agent reads one: complete, naming the server. */
@@ -561,7 +629,10 @@ export class Instance {
   private closed(upstream: Upstream): void {
     const line = lastLine(upstream.stderr?.() ?? '')
     this.upstream = null
-    this.endAll(line ? `The server exited: ${line}` : 'The server exited')
+    this.startedAt = null
+    const reason = line ? `The server exited: ${line}` : 'The server exited'
+    this.options.status?.(reason)
+    this.endAll(reason)
     this.options.log('info', `${this.options.serverName} exited${line ? `: ${line}` : ''}`)
     if (this.links.size === 0) this.options.ended(this)
   }
@@ -583,6 +654,7 @@ export class Instance {
   async stop(why: 'idle' | 'closed' | 'removed'): Promise<void> {
     const upstream = this.upstream
     this.upstream = null
+    this.startedAt = null
     this.endAll(why === 'idle' ? 'The server stopped after being idle' : 'The server stopped')
     if (upstream) {
       if (why === 'idle') this.options.log('info', `${this.options.serverName} stopped while idle`)
@@ -603,12 +675,15 @@ export class Link {
   private nextAsk = 1
   /** Requests sent to the link, by the id it was sent with. */
   private readonly asked = new Map<Id, { resolve(response: Response): void; serverId: Id | null }>()
+  /** The link's tool calls not yet answered, by its own id, for their records. */
+  private readonly calls = new Map<Id, { tool: string; at: number; refused?: boolean }>()
   private closed = false
 
   constructor(
     readonly instance: Instance,
     private readonly down: Transport,
     private readonly onClose: (link: Link) => void,
+    readonly policy: LinkPolicy = OPEN_POLICY,
   ) {
     instance.attach(this)
     down.onmessage = (message) => this.received(message)
@@ -618,6 +693,7 @@ export class Link {
   close(): void {
     if (this.closed) return
     this.closed = true
+    for (const id of [...this.calls.keys()]) this.ended(id, null, 'The client disconnected')
     for (const [id, asked] of this.asked) {
       asked.resolve(errorResponse(id, INTERNAL_ERROR, 'The client disconnected'))
     }
@@ -663,9 +739,47 @@ export class Link {
     }
   }
 
+  /** A list of tools as this link's agent may see it. */
+  filterTools(result: Record<string, unknown>): Record<string, unknown> {
+    return withoutTools(result, (name) => this.policy.toolOff(name))
+  }
+
   reply(response: Response): void {
-    if (response.id !== null) this.open.delete(response.id)
+    if (response.id !== null) {
+      this.open.delete(response.id)
+      this.ended(response.id, response)
+    }
     this.deliver(response, response.id ?? undefined)
+  }
+
+  /** A tool call of the link's ended, answered with `response` or not at all. */
+  private ended(id: Id, response: Response | null, why?: string): void {
+    const call = this.calls.get(id)
+    if (!call) return
+    this.calls.delete(id)
+    const { called } = this.policy
+    if (!called) return
+    const answer = response?.error ?? response?.result
+    const outcome: CallOutcome = {
+      tool: call.tool,
+      at: call.at,
+      ms: Date.now() - call.at,
+      bytes: answer === undefined ? 0 : Buffer.byteLength(JSON.stringify(answer)),
+      result: !response
+        ? why === 'Cancelled'
+          ? 'cancelled'
+          : 'error'
+        : response.error
+          ? call.refused
+            ? 'refused'
+            : 'error'
+          : response.result?.isError === true
+            ? 'tool-error'
+            : 'ok',
+    }
+    const error = response?.error?.message ?? (response ? undefined : why)
+    if (error !== undefined && outcome.result !== 'ok') outcome.error = error
+    called(outcome)
   }
 
   notify(notification: Notification): void {
@@ -738,11 +852,21 @@ export class Link {
       this.era ??= requestEra(message) ?? 'legacy'
       if (this.era === 'modern') this.modern = { ...this.modern, ...metaOf(message.params) }
       this.open.add(message.id)
+      if (message.method === 'tools/call') {
+        this.calls.set(message.id, { tool: String(message.params?.name ?? ''), at: Date.now() })
+      }
       void this.handle(message)
       return
     }
     if (isNotification(message)) {
       if (message.method === 'notifications/initialized') return
+      if (message.method === 'notifications/cancelled') {
+        const requestId = message.params?.requestId
+        if (typeof requestId === 'string' || typeof requestId === 'number') {
+          this.open.delete(requestId)
+          this.ended(requestId, null, 'Cancelled')
+        }
+      }
       this.instance.notify(this, message)
     }
   }
@@ -773,6 +897,16 @@ export class Link {
         if (shared || !instance.running) return this.reply(resultResponse(request.id, {}))
         break
     }
+    const refusal = this.refusal(request)
+    if (refusal !== null) {
+      const call = this.calls.get(request.id)
+      if (call) call.refused = true
+      return this.reply(errorResponse(request.id, INVALID_PARAMS, refusal))
+    }
+    if (this.policy.serverOff()) {
+      const empty = EMPTY_LISTS[request.method]
+      if (empty) return this.reply(resultResponse(request.id, empty))
+    }
     if (shared && !sharedMethod(request.method)) {
       return this.reply(
         errorResponse(
@@ -784,9 +918,30 @@ export class Link {
     }
     if (isListMethod(request.method) && request.params?.cursor === undefined && !instance.running) {
       const kept = instance.options.lazy ? instance.kept()?.lists[request.method] : undefined
-      if (isRecord(kept)) return this.reply(resultResponse(request.id, kept))
+      if (isRecord(kept)) {
+        const shown = request.method === 'tools/list' ? this.filterTools(kept) : kept
+        return this.reply(resultResponse(request.id, shown))
+      }
     }
     await instance.forward(this, request)
+  }
+
+  /**
+   * Why Kettu refuses a request without passing it on: a tool turned off, or anything but the
+   * lists while the server is off for the session. Null to let it through.
+   */
+  private refusal(request: Request): string | null {
+    const name = this.instance.options.serverName
+    const offered = sharedMethod(request.method) && request.method !== 'ping'
+    if (offered && this.policy.serverOff() && !(request.method in EMPTY_LISTS)) {
+      return `${name} is turned off for this session in Kettu`
+    }
+    if (request.method !== 'tools/call') return null
+    const tool = request.params?.name
+    if (typeof tool === 'string' && this.policy.toolOff(tool)) {
+      return `The tool ${tool} of ${name} is turned off in Kettu`
+    }
+    return null
   }
 
   /** What the server opened with: as it runs, else kept from before, else from starting it. */

@@ -8,11 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { useHostScope } from '@renderer/stores/host-scope'
 import { changeServer, disconnectServer } from './actions'
 import { KeysDialog, UninstallDialog } from './dialogs'
-import { useAgentName, useConnection, useMcpState, useTransportName } from './hooks'
+import { useAgentName, useConnection, useMcpInsight, useMcpState, useTransportName } from './hooks'
 import { McpCheckButton, McpSignIn, McpState } from './mcp-library'
 import { homeShort, type Listing } from './model'
 import { ExternalLink } from './parts'
 import { RunSettings } from './run-settings'
+import { McpCallsTab, McpLogsTab, McpRunning, McpToolsTab, McpWhoGets } from './mcp-server-tabs'
 
 export function McpServerPageBody({
   server,
@@ -27,6 +28,8 @@ export function McpServerPageBody({
   const check = useMcpState(server)
   const transport = useTransportName(server.spec)
   const agentName = useAgentName()
+  const insight = useMcpInsight(server)
+  const toolCount = insight?.tools?.length ?? (check?.state === 'connected' ? check.tools : null)
   const tabs = [
     'overview',
     'tools',
@@ -50,7 +53,7 @@ export function McpServerPageBody({
           {tabs.map((tab) => (
             <TabsTrigger key={tab} value={tab}>
               {t(`mcp.tabs.${tab}`)}
-              {tab === 'tools' && check?.state === 'connected' && <span>{check.tools}</span>}
+              {tab === 'tools' && toolCount !== null && <span>{toolCount}</span>}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -79,6 +82,8 @@ export function McpServerPageBody({
               </dl>
             )}
           </section>
+          {server.spec.type === 'stdio' && <McpRunning server={server} />}
+          <McpWhoGets server={server} insight={insight} />
           <section className="k-mcp-server-card">
             <h2>{t('mcp.about')}</h2>
             <dl>
@@ -142,9 +147,17 @@ export function McpServerPageBody({
             </dl>
           </section>
         </TabsContent>
-        <TabsContent value="tools" />
-        <TabsContent value="calls" />
-        {server.spec.type === 'stdio' && <TabsContent value="logs" />}
+        <TabsContent value="tools" className="k-mcp-server-panel">
+          <McpToolsTab server={server} insight={insight} />
+        </TabsContent>
+        <TabsContent value="calls" className="k-mcp-server-panel">
+          <McpCallsTab server={server} />
+        </TabsContent>
+        {server.spec.type === 'stdio' && (
+          <TabsContent value="logs" className="k-mcp-server-panel">
+            <McpLogsTab server={server} />
+          </TabsContent>
+        )}
         <TabsContent value="settings" className="k-mcp-server-panel">
           <McpServerSettings key={JSON.stringify(server.spec)} server={server} back={back} />
         </TabsContent>
