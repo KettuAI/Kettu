@@ -4,7 +4,7 @@
 // answer. Only names, commands and addresses are shown on the card; values never are.
 
 import { createHash } from 'node:crypto'
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { parse as parseToml } from '@decimalturn/toml-patch'
 import { parse as parseJsonc } from 'jsonc-parser'
@@ -153,6 +153,38 @@ export async function projectRoots(
     if (parent === dir) return [p.resolve(cwd)]
     dir = parent
   }
+}
+
+/**
+ * Whether the user's own Codex config marks `cwd`, or a folder above it up to its repository's
+ * root, untrusted. A thread's own trust level wins over the user's, so such a folder is never
+ * given "trusted".
+ */
+export async function codexUntrusted(
+  configFile: string,
+  cwd: string,
+  platform: Platform = process.platform as Platform,
+): Promise<boolean> {
+  const text = await readText(configFile)
+  if (text === null) return false
+  let projects: unknown
+  try {
+    projects = (parseToml(text) as Record<string, unknown>).projects
+  } catch {
+    return false
+  }
+  if (!isRecord(projects)) return false
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const marked = new Set<string>()
+  for (const [folder, entry] of Object.entries(projects)) {
+    if (isRecord(entry) && entry.trust_level === 'untrusted') marked.add(p.resolve(folder))
+  }
+  if (marked.size === 0) return false
+  for (const folder of await projectRoots(cwd, platform)) {
+    const real = await realpath(folder).catch(() => folder)
+    if (marked.has(folder) || marked.has(real)) return true
+  }
+  return false
 }
 
 async function exists(file: string): Promise<boolean> {

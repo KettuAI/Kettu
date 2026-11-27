@@ -244,7 +244,12 @@ import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
-import { folderServers, folderSettings, type FolderServer } from './project-settings'
+import {
+  codexUntrusted,
+  folderServers,
+  folderSettings,
+  type FolderServer,
+} from './project-settings'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
@@ -1640,6 +1645,17 @@ export class AgentHost {
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
       folderDeclared: async (cwd, agentId) => {
+        const codexUserUntrusted = (agent: AgentId, folder: string): Promise<boolean> => {
+          const config = mcpConfigPaths(
+            platform,
+            home,
+            this.agents.mcpDiscoveryAgents().filter(({ id }) => id === agent),
+            [],
+            (name, of) => this.env.get(name, of),
+            true,
+          ).find((file) => file.layout === 'codex')
+          return config ? codexUntrusted(config.path, folder, platform) : Promise.resolve(false)
+        }
         const harness = harnessOf(agentId)
         // The other harnesses start what their own files declare, so Kettu running them too
         // would start them twice.
@@ -1653,11 +1669,14 @@ export class AgentHost {
           }
         }
         const ownFiles = harnessProjectMcpPaths(harness, cwd, platform)
-        const [servers, settings, own] = await Promise.all([
+        const [servers, found, own, untrusted] = await Promise.all([
           folderServers(cwd, platform),
           folderSettings(harness, cwd, platform),
           readOwnMcpServers(ownFiles),
+          harness === 'codex' ? codexUserUntrusted(agentId, cwd) : false,
         ])
+        // What the user's own Codex keeps untrusted never loads, so there is nothing to ask.
+        const settings = untrusted ? null : found
         const relative = new Set(
           ownFiles.map((file) => path.relative(cwd, file.path) || path.basename(file.path)),
         )

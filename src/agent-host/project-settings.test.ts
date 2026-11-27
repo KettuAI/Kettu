@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { folderHandOff, folderServers, folderSettings } from './project-settings'
+import { codexUntrusted, folderHandOff, folderServers, folderSettings } from './project-settings'
 
 let dir: string
 let repo: string
@@ -180,5 +180,25 @@ describe('what an attach hands on of a folder', () => {
     const plan = folderHandOff(declared(false), (item) => item !== db, true)
     expect(plan.trusted).toBe(false)
     expect(plan.servers).toEqual([web])
+  })
+})
+
+describe("the folders the user's own Codex keeps untrusted", () => {
+  it('finds the folder or any folder up to its repository root, and nothing else', async () => {
+    const inner = path.join(repo, 'packages', 'app')
+    await mkdir(inner, { recursive: true })
+    const config = path.join(dir, 'config.toml')
+    const write = (folder: string, level: string) =>
+      writeFile(config, `[projects."${folder}"]\ntrust_level = "${level}"\n`)
+    await write(repo, 'untrusted')
+    expect(await codexUntrusted(config, inner)).toBe(true)
+    await write(inner, 'untrusted')
+    expect(await codexUntrusted(config, inner)).toBe(true)
+    expect(await codexUntrusted(config, repo)).toBe(false)
+    await write(repo, 'trusted')
+    expect(await codexUntrusted(config, inner)).toBe(false)
+    await write(dir, 'untrusted')
+    expect(await codexUntrusted(config, inner)).toBe(false)
+    expect(await codexUntrusted(path.join(dir, 'missing.toml'), inner)).toBe(false)
   })
 })
