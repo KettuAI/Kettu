@@ -2780,4 +2780,99 @@ describe('speed tiers (Fast and Ultrafast)', () => {
     const afterOff = await connection.setConfigOption(opened.sessionId, 'fast-mode', 'off')
     expect(afterOff.find((o) => o.id === 'service-tier')?.value).toBe('default')
   })
+
+  it('enriches per-thread warnings with matching process-level configWarning metadata and codexHome layer', async () => {
+    const { server, connection } = await connect()
+    const summary = '`[features].multi_agent` is deprecated. It still controls the V1 fallback.'
+    server.notify('configWarning', {
+      summary,
+      details: 'Migrate to [agents] settings.',
+      path: '/home/.codex/config.toml',
+      range: { start: { line: 5, column: 1 }, end: { line: 5, column: 18 } },
+    })
+    await until(() => true)
+
+    const opened = await connection.newSession('/project')
+    const target = threadTarget()
+    connection.register(opened.sessionId, target.target)
+    // Codex repeats the same warning on the thread as a `warning` notification; it should dedupe
+    // and retain the structured path/range metadata from `configWarning`.
+    server.notify('warning', { threadId: opened.sessionId, message: summary })
+    await until(() => target.entries().some((entry) => entry.kind === 'notice'))
+
+    const notices = target.entries().filter((entry) => entry.kind === 'notice')
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description: `${summary}\nMigrate to [agents] settings.`,
+      configWarning: {
+        agent: 'codex',
+        impact: 'deprecated',
+        sources: [{ layer: 'user', path: '/home/.codex/config.toml', line: 5, column: 1 }],
+        details: 'Migrate to [agents] settings.',
+        docsUrl: 'https://developers.openai.com/codex/config-reference',
+      },
+    })
+  })
+
+  it('surfaces startup parse configWarning notifications with path and range on new user sessions', async () => {
+    const { server, connection } = await connect()
+    server.notify('configWarning', {
+      summary: 'Invalid configuration; using defaults.',
+      details: '/home/.codex/config.toml:1:22: unclosed array, expected `]`',
+      path: '/home/.codex/config.toml',
+      range: { start: { line: 1, column: 22 }, end: { line: 1, column: 22 } },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const opened = await connection.newSession('/project')
+    const target = threadTarget()
+    connection.register(opened.sessionId, target.target)
+
+    const notices = target.entries().filter((entry) => entry.kind === 'notice')
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      configWarning: {
+        agent: 'codex',
+        impact: 'invalid',
+        sources: [{ layer: 'user', path: '/home/.codex/config.toml', line: 1, column: 22 }],
+      },
+    })
+  })
+
+  it('routes thread-scoped configWarning notifications directly without duplicating ignored settings', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    const target = threadTarget()
+    connection.register(opened.sessionId, target.target)
+
+    const summary =
+      'Codex is ignoring 1 unrecognized configuration setting. Check for typos or deprecated settings.\n' +
+      '  user (/home/.codex/config.toml): `disable_response_storage` is ignored.'
+    server.notify('configWarning', {
+      threadId: opened.sessionId,
+      summary,
+      details: null,
+    })
+    await until(() => target.entries().some((entry) => entry.kind === 'notice'))
+
+    const notices = target.entries().filter((entry) => entry.kind === 'notice')
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description: summary,
+      configWarning: {
+        agent: 'codex',
+        impact: 'ignored',
+        sources: [{ layer: 'user', path: '/home/.codex/config.toml' }],
+      },
+    })
+  })
 })

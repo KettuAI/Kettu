@@ -1001,6 +1001,38 @@
       "details": "详情",
       "copy": "复制原始信息"
     },
+    "configWarning": {
+      "title": "Codex 配置警告",
+      "impact": {
+        "deprecated": {
+          "badge": "已弃用 · 仍生效",
+          "note": "该配置项已弃用，但当前会话仍会按它生效，建议按文档迁移或清理。"
+        },
+        "ignored": {
+          "badge": "已移除 · 已忽略",
+          "note": "该配置项未被识别或已移除，已被 Codex 忽略，不会影响当前会话。"
+        },
+        "invalid": {
+          "badge": "配置无效 · 使用默认",
+          "note": "Codex 无法解析该配置，已回退为默认设置。"
+        }
+      },
+      "layer": {
+        "user": "用户配置",
+        "project": "项目配置",
+        "system": "系统配置",
+        "profile": "配置文件",
+        "managed": "托管配置",
+        "mdm": "托管配置"
+      },
+      "sourceLabel": "配置文件",
+      "openConfig": "打开配置文件",
+      "viewInFiles": "在文件栏查看",
+      "openShort": "打开",
+      "viewShort": "查看",
+      "copyPath": "复制路径",
+      "docs": "Codex 配置文档"
+    },
     "width": {
       "label": "调整内容宽度"
     },
