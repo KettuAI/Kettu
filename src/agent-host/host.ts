@@ -183,7 +183,13 @@ import { createHash } from 'node:crypto'
 import { Answers, answersFile } from './mcp-router/answers'
 import { McpRouter } from './mcp-router/router'
 import { McpCalls } from './mcp-router/calls'
-import { ToolChanges, toolGuard, toolsFile, trustedSource } from './mcp-router/tool-changes'
+import {
+  PROJECT_SERVER,
+  ToolChanges,
+  toolGuard,
+  toolsFile,
+  trustedSource,
+} from './mcp-router/tool-changes'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -3476,7 +3482,7 @@ export class AgentHost {
    * like those of a server added by hand.
    */
   private projectServer(server: FolderServer, folder: string): MarketServer {
-    const id = `project:${createHash('sha256')
+    const id = `${PROJECT_SERVER}${createHash('sha256')
       .update(JSON.stringify([server.files, server.digest, server.secrets]))
       .digest('hex')
       .slice(0, 24)}`
