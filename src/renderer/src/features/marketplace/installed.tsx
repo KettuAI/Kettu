@@ -5,7 +5,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { McpStatus } from '@shared/agent-host'
 import {
   displayTitle,
   specRuns,
@@ -25,7 +24,7 @@ import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
-import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
@@ -35,14 +34,11 @@ import {
   useConnection,
   useConnectionText,
   useKettuSwitches,
+  useKeptServers,
 } from './hooks'
 import {
-  catalogEntry,
-  fromCatalog,
-  fromKept,
   homeShort,
   keptItemKey,
-  matchesQuery,
   matchesText,
   oauthFlow,
   parentPath,
@@ -57,7 +53,6 @@ import { workflowMatches } from './workflow-model'
 import { useWorkflows } from './workflow-actions'
 import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
-import { PlainTile } from './tiles'
 import { isPluginItem, pluginDescription, pluginTitle } from './plugin-model'
 import { useInstalledPlugins, usePluginItemOff, usePluginPublisher } from './plugin-hooks'
 import { FromPlugin, PluginInstalledRow } from './plugin-ui'
@@ -89,7 +84,7 @@ export function InstalledView({ query }: { query: string }) {
     !matchesText(['Kettu'], query) &&
     plugins.list.length + servers.length + builtIn.length + skills.length + workflows.length ===
       0 &&
-    own.folders.length + own.plugins.length + own.places.length === 0
+    own.folders.length + own.plugins.length === 0
   if (nothing) {
     return (
       <section className="ui-as-int-section">
@@ -359,23 +354,6 @@ function Facts({ facts }: { facts: (string | null | undefined)[] }) {
 }
 
 /** The servers Kettu keeps, from the registry or added by hand, matching the search. */
-function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
-  const scope = useHostScope()
-  const { useSettingsStore, useMarketplaceStore } = scope
-  const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
-  // The catalog gives a kept server its mark, badge and line once it has answered.
-  useMarketplaceStore((s) => s.catalog)
-  const needle = query.trim().toLocaleLowerCase()
-  return kept
-    .map((server) => ({ server, listing: listingOf(scope, server) }))
-    .filter(({ listing, server }) => matchesQuery(listing, query) || server.name.includes(needle))
-}
-
-function listingOf(scope: HostScope, server: MarketServer): Listing {
-  const entry = server.source === 'registry' ? catalogEntry(scope, server.id) : null
-  return entry ? { ...fromCatalog(entry), title: server.title } : fromKept(server)
-}
-
 function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
@@ -611,17 +589,15 @@ function skillFolders(own: AgentOwnSkill[]): SkillFolder[] {
 interface Own {
   folders: SkillFolder[]
   plugins: AgentOwnPlugin[]
-  places: McpStatus['places']
   loading: boolean
   failure: string | null
 }
 
 function useOwn(query: string): Own {
-  const { useMarketplaceStore, useMcpStore } = useHostScope()
+  const { useMarketplaceStore } = useHostScope()
   const agentName = useAgentName()
   const skills = useMarketplaceStore((s) => s.skills)
   const failure = useMarketplaceStore((s) => s.skillsError)
-  const status = useMcpStore((s) => s.status)
   const folders = skillFolders(skills?.own ?? [])
     .map((group) => ({
       ...group,
@@ -636,14 +612,10 @@ function useOwn(query: string): Own {
   const plugins = (useMarketplaceStore((s) => s.ownPlugins)?.plugins ?? []).filter((plugin) =>
     matchesText([displayTitle(pluginName(plugin.id)), plugin.id, agentName(plugin.agentId)], query),
   )
-  const places = (status?.places ?? []).filter((place) =>
-    matchesText([agentName(place.agentId), place.path], query),
-  )
   return {
     folders,
     plugins,
-    places,
-    loading: !skills || !status,
+    loading: !skills,
     failure: skills ? null : failure,
   }
 }
@@ -655,8 +627,8 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
   const agentName = useAgentName()
   const pluginErrors = useMarketplaceStore((s) => s.ownPlugins?.errors ?? null)
   const count = own.folders.reduce((n, group) => n + group.skills.length, 0) + own.plugins.length
-  if (searching && count + own.places.length === 0) return null
-  if (!own.loading && count + own.places.length === 0 && !own.failure && !pluginErrors?.length) {
+  if (searching && count === 0) return null
+  if (!own.loading && count === 0 && !own.failure && !pluginErrors?.length) {
     return null
   }
   return (
@@ -701,16 +673,6 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
                 key={`${plugin.agentId}|${plugin.id}|${plugin.scope}|${plugin.projectPath ?? ''}`}
                 plugin={plugin}
               />
-            ))}
-          </div>
-        </div>
-      )}
-      {own.places.length > 0 && (
-        <div className="k-mkt-group">
-          <h3 className="k-mkt-group__head">{t('installed.mcpConfig')}</h3>
-          <div className="ui-as-int-grid">
-            {own.places.map((place) => (
-              <PlaceRow key={place.agentId} place={place} />
             ))}
           </div>
         </div>
@@ -796,44 +758,6 @@ function OwnPluginRow({ plugin }: { plugin: AgentOwnPlugin }) {
       meta={<Facts facts={facts} />}
       line={plugin.id}
       oneLine
-    />
-  )
-}
-
-/** Where one agent keeps its own MCP servers: the file, or that it is not created yet. */
-function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
-  const { t } = useTranslation(['marketplace', 'settings'])
-  const { useAgentsStore } = useHostScope()
-  const agent = useAgentsStore((s) => s.byId[place.agentId])
-  const name = agent?.name ?? place.agentId
-  const note = place.chosen
-    ? t('settings:agents.chosenInKettu')
-    : place.env && t('settings:agents.setByLine', { env: place.env })
-  const values = {
-    path: note ? t('own.pathNote', { path: place.path, note }) : place.path,
-    command: place.listCommand,
-    file: place.project,
-  }
-  // The full account goes to the tooltip; the row names only the file.
-  const about = place.listCommand
-    ? t(
-        !place.exists ? 'own.withCommandMissing' : note ? 'own.withCommandFrom' : 'own.withCommand',
-        values,
-      )
-    : t(place.exists ? 'own.from' : 'own.fromMissing', values)
-  const path = homeShort(place.path)
-  return (
-    <ItemRow
-      title={name}
-      icon={
-        <PlainTile>
-          <AgentMark agent={place.agentId} size={18} dot={null} />
-        </PlainTile>
-      }
-      line={place.exists ? path : t('installed.notCreated', { path })}
-      lineTitle={about}
-      oneLine
-      end={place.exists ? <PlaceAction path={place.path} icon /> : undefined}
     />
   )
 }

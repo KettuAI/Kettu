@@ -467,3 +467,73 @@ describe('the secrets of plugins in the key store', () => {
     expect((await load()).contentsForHost().pluginSecrets).toEqual({})
   })
 })
+
+describe('importing a discovered MCP server', () => {
+  it('stores only the selected source in the key store and keeps values out of the library', async () => {
+    const { McpDiscoveryService } = await import('../agent-host/marketplace/mcp-discovery')
+    const { SettingsStore } = await import('./settings')
+    const { installDiscoveredMcp } = await import('./mcp-install')
+    const files = ['work', 'personal'].map((app) => ({
+      app,
+      path: join(dir, app),
+      layout: 'standard' as const,
+    }))
+    const settings = await SettingsStore.load(dir)
+    servers = settings.get().marketplace.mcp
+    settings.onChange((current) => {
+      servers = current.marketplace.mcp
+    })
+    const service = new McpDiscoveryService({
+      files: () => files,
+      library: () => servers,
+      changed: () => {},
+    })
+    try {
+      for (const { path, app } of files) {
+        await writeFile(
+          path,
+          JSON.stringify({
+            mcpServers: {
+              notes: {
+                command: 'node',
+                args: ['-v'],
+                env: { API_KEY: 'fixture-' + app, HOME_DIR: '${HOME}' },
+              },
+            },
+          }),
+        )
+      }
+      const summary = await service.scan()
+      expect(JSON.stringify(summary)).not.toContain('fixture-')
+      const row = summary.servers[0]!
+      const entries = service.prepare([
+        { id: row.id, sourceId: row.sources[0]!.id, name: 'notes', agents: ['codex'] },
+      ])
+      const keys = await load()
+      expect(await installDiscoveredMcp(settings, keys, entries)).toBeNull()
+      await settings.flush()
+      const id = entries[0]!.server.id
+      expect((await load()).values()).toEqual({ [id]: { API_KEY: 'fixture-work' } })
+      expect(await fileText()).not.toContain('fixture-work')
+      expect(await readFile(join(dir, 'settings.json'), 'utf8')).not.toContain('fixture-')
+      expect(settings.get().marketplace.mcp).toMatchObject([
+        {
+          id,
+          on: true,
+          name: 'notes',
+          agents: ['codex'],
+          importedFrom: [{ app: 'work' }, { app: 'personal' }],
+          importedWith: { app: 'work' },
+          spec: {
+            env: [
+              { name: 'API_KEY', input: true },
+              { name: 'HOME_DIR', value: '${HOME}' },
+            ],
+          },
+        },
+      ])
+    } finally {
+      service.stop()
+    }
+  })
+})

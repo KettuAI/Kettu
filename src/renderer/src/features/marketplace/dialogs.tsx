@@ -2,18 +2,9 @@
 // added by hand.
 
 import { useId, useState, type FormEvent } from 'react'
-import { Delete02Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import {
-  displayTitle,
-  specInputs,
-  type MarketServer,
-  type MarketSkill,
-  type McpSpec,
-  type McpValue,
-} from '@shared/marketplace'
+import { displayTitle, specInputs, type MarketServer, type MarketSkill } from '@shared/marketplace'
 import type { InstalledKettuPlugin } from '@shared/plugins'
-import { Icon } from '@renderer/components/affect/app-shell'
 import { TextField } from '@renderer/components/affect/text-field'
 import {
   AlertDialog,
@@ -25,12 +16,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { toast } from '@renderer/components/ui/toast'
-import { IconAction, Segmented, SetButton } from '@renderer/features/settings/controls'
+import { SetButton } from '@renderer/features/settings/controls'
 import {
-  DIALOG_FIELD,
   DIALOG_MONO_FIELD,
   SettingsDialogBody,
   SettingsDialogContent,
@@ -41,7 +30,6 @@ import {
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import {
-  addServer,
   installSkill,
   setServerAgents,
   setSkillAgents,
@@ -50,7 +38,6 @@ import {
 } from './actions'
 import { AgentPicker, InputLabel } from './install'
 import { setPluginToolAgents } from './plugin-actions'
-import { nameProblem, splitCommand } from './model'
 
 /** New values for a server's inputs: one typed replaces its value, Clear removes it. */
 export function KeysDialog({
@@ -505,314 +492,6 @@ function isGithubUrl(text: string): boolean {
   try {
     const url = new URL(text)
     return url.protocol === 'https:' && url.hostname === 'github.com' && url.pathname.length > 1
-  } catch {
-    return false
-  }
-}
-
-/** A header or variable as the add dialog edits it. */
-interface ValueDraft {
-  key: number
-  name: string
-  value: string
-  secret: boolean
-}
-
-const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-/** A server added by hand: a URL with headers, or a command with its environment. */
-export function AddServerDialog({
-  open,
-  onOpenChange,
-  onAdded,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onAdded: () => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SettingsDialogContent>
-        {open && (
-          <AddServerForm
-            onDone={() => {
-              onOpenChange(false)
-              onAdded()
-            }}
-          />
-        )}
-      </SettingsDialogContent>
-    </Dialog>
-  )
-}
-
-function AddServerForm({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation(['marketplace', 'common'])
-  const scope = useHostScope()
-  const { useSettingsStore } = scope
-  const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
-  const id = useId()
-  const [name, setName] = useState('')
-  const [kind, setKind] = useState<'http' | 'stdio'>('http')
-  const [url, setUrl] = useState('')
-  const [transport, setTransport] = useState<'streamable-http' | 'sse'>('streamable-http')
-  const [command, setCommand] = useState('')
-  const [headers, setHeaders] = useState<ValueDraft[]>([])
-  const [env, setEnv] = useState<ValueDraft[]>([])
-  const [next, setNext] = useState(0)
-  const [tried, setTried] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const values = kind === 'http' ? headers : env
-  const setValues = kind === 'http' ? setHeaders : setEnv
-  const nameOk = kind === 'http' ? HEADER_NAME : ENV_NAME
-
-  const problem = nameProblem(name.trim(), kept)
-  const words = splitCommand(command.trim())
-  const urlOk = isUrl(url.trim())
-  const commandOk = words !== null && words.length > 0
-  const names = values.map((v) => v.name.trim())
-  const valueProblem = (draft: ValueDraft, i: number): string | null => {
-    const key = draft.name.trim()
-    if (!nameOk.test(key)) return t('dialogs.add.valueNameInvalid')
-    if (names.indexOf(key) !== i) return t('dialogs.add.valueNameTaken')
-    if (draft.secret && !draft.value.trim()) return t('dialogs.add.secretEmpty')
-    return null
-  }
-  const valuesOk = values.every((draft, i) => valueProblem(draft, i) === null)
-  const ready = problem === null && (kind === 'http' ? urlOk : commandOk) && valuesOk
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    setTried(true)
-    if (!ready) return
-    const spec: McpSpec =
-      kind === 'http'
-        ? { type: 'http', transport, url: url.trim(), headers: values.map(toValue) }
-        : { type: 'stdio', command: words![0]!, args: words!.slice(1), env: values.map(toValue) }
-    const secrets = Object.fromEntries(
-      values.filter((v) => v.secret).map((v) => [v.name.trim(), v.value.trim()]),
-    )
-    setBusy(true)
-    setError(null)
-    try {
-      await addServer(scope, name.trim(), spec, secrets)
-      onDone()
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const nameMessage =
-    tried && problem
-      ? {
-          empty: t('dialogs.add.nameEmpty'),
-          format: t('dialogs.add.nameFormat'),
-          reserved: t('dialogs.add.nameReserved'),
-          taken: t('dialogs.add.nameTaken'),
-        }[problem]
-      : null
-  const targetMessage =
-    tried && kind === 'http' && !urlOk
-      ? t('dialogs.add.urlInvalid')
-      : tried && kind === 'stdio' && !commandOk
-        ? words === null
-          ? t('dialogs.add.commandQuote')
-          : t('dialogs.add.commandEmpty')
-        : null
-
-  return (
-    <form onSubmit={(event) => void submit(event)}>
-      <SettingsDialogHeader title={t('dialogs.add.title')}>
-        {t('dialogs.add.description')}
-      </SettingsDialogHeader>
-      <SettingsDialogBody>
-        <SettingsField
-          label={t('dialogs.add.name')}
-          htmlFor={`${id}-name`}
-          hint={nameMessage ?? t('dialogs.add.nameHint')}
-        >
-          <input
-            id={`${id}-name`}
-            className={DIALOG_MONO_FIELD}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            autoCapitalize="off"
-            aria-invalid={nameMessage ? true : undefined}
-            placeholder={t('dialogs.add.namePlaceholder')}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </SettingsField>
-        <SettingsField label={t('dialogs.add.kind')}>
-          <Segmented
-            label={t('dialogs.add.kind')}
-            value={kind}
-            options={[
-              { value: 'http', label: t('dialogs.add.kindUrl') },
-              { value: 'stdio', label: t('dialogs.add.kindCommand') },
-            ]}
-            onChange={setKind}
-          />
-        </SettingsField>
-        {kind === 'http' ? (
-          <>
-            <SettingsField
-              label={t('dialogs.add.url')}
-              htmlFor={`${id}-url`}
-              hint={targetMessage ?? undefined}
-            >
-              <input
-                id={`${id}-url`}
-                className={DIALOG_MONO_FIELD}
-                autoComplete="off"
-                spellCheck={false}
-                autoCapitalize="off"
-                inputMode="url"
-                aria-invalid={targetMessage ? true : undefined}
-                placeholder={t('dialogs.add.urlPlaceholder')}
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-            </SettingsField>
-            <SettingsField label={t('dialogs.add.transport')}>
-              <Segmented
-                label={t('dialogs.add.transport')}
-                value={transport}
-                options={[
-                  { value: 'streamable-http', label: t('listing.transport.streamable-http') },
-                  { value: 'sse', label: t('listing.transport.sse') },
-                ]}
-                onChange={setTransport}
-              />
-            </SettingsField>
-          </>
-        ) : (
-          <SettingsField
-            label={t('dialogs.add.command')}
-            htmlFor={`${id}-command`}
-            hint={targetMessage ?? t('dialogs.add.commandHint')}
-          >
-            <input
-              id={`${id}-command`}
-              className={DIALOG_MONO_FIELD}
-              autoComplete="off"
-              spellCheck={false}
-              autoCapitalize="off"
-              aria-invalid={targetMessage ? true : undefined}
-              placeholder={t('dialogs.add.commandPlaceholder')}
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-            />
-          </SettingsField>
-        )}
-        <div className="kettu-sd__field">
-          <span className="k-mkt-values__label">
-            {kind === 'http' ? t('dialogs.add.headers') : t('dialogs.add.env')}
-          </span>
-          {values.map((draft, i) => {
-            const message = tried ? valueProblem(draft, i) : null
-            const update = (patch: Partial<ValueDraft>) =>
-              setValues((list) => list.map((v) => (v.key === draft.key ? { ...v, ...patch } : v)))
-            return (
-              <div key={draft.key} className="k-mkt-value">
-                <div className="k-mkt-value__fields">
-                  <input
-                    className={DIALOG_MONO_FIELD}
-                    aria-label={t('dialogs.add.valueName')}
-                    aria-invalid={message ? true : undefined}
-                    autoComplete="off"
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    placeholder={
-                      kind === 'http'
-                        ? t('dialogs.add.headerPlaceholder')
-                        : t('dialogs.add.envPlaceholder')
-                    }
-                    value={draft.name}
-                    onChange={(event) => update({ name: event.target.value })}
-                  />
-                  <input
-                    className={DIALOG_FIELD}
-                    type={draft.secret ? 'password' : 'text'}
-                    aria-label={t('dialogs.add.value')}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder={t('dialogs.add.value')}
-                    value={draft.value}
-                    onChange={(event) => update({ value: event.target.value })}
-                  />
-                  <label className="k-mkt-value__secret">
-                    <Checkbox
-                      checked={draft.secret}
-                      onCheckedChange={(checked) => update({ secret: checked === true })}
-                    />
-                    {t('dialogs.add.secret')}
-                  </label>
-                  <IconAction
-                    label={t('dialogs.add.remove', {
-                      name: draft.name.trim() || t('dialogs.add.value'),
-                    })}
-                    icon={Delete02Icon}
-                    onClick={() => setValues((list) => list.filter((v) => v.key !== draft.key))}
-                  />
-                </div>
-                {message && (
-                  <span role="alert" className="kettu-sd__error">
-                    {message}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-          <span>
-            <SetButton
-              icon={<Icon icon={PlusSignIcon} size={14} />}
-              onClick={() => {
-                setValues((list) => [...list, { key: next, name: '', value: '', secret: true }])
-                setNext((n) => n + 1)
-              }}
-            >
-              {kind === 'http' ? t('dialogs.add.addHeader') : t('dialogs.add.addVariable')}
-            </SetButton>
-          </span>
-          <span className="kettu-sd__hint">{t('dialogs.add.secretHint')}</span>
-        </div>
-        {error && (
-          <p role="alert" className="kettu-sd__error" data-selectable="">
-            {t('dialogs.add.failed', { error })}
-          </p>
-        )}
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        <DialogClose render={<SetButton size="md" variant="ghost" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <SetButton size="md" variant="primary" type="submit" loading={busy}>
-          {t('dialogs.add.submit')}
-        </SetButton>
-      </SettingsDialogFooter>
-    </form>
-  )
-}
-
-/** A secret becomes an input the key store fills; anything else is kept in the spec as it is. */
-function toValue(draft: ValueDraft): McpValue {
-  const name = draft.name.trim()
-  return draft.secret
-    ? { name, input: true, secret: true, required: true }
-    : { name, value: draft.value }
-}
-
-function isUrl(text: string): boolean {
-  try {
-    const url = new URL(text)
-    return url.protocol === 'https:' || url.protocol === 'http:'
   } catch {
     return false
   }

@@ -1,3 +1,4 @@
+import type { McpCheck, McpDiscovery } from '@shared/mcp-discovery'
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
 import type { HostEvent } from '@shared/agent-host'
@@ -80,6 +81,12 @@ export interface ConnectFlow {
 export type ConnectionEvent = Extract<HostEvent, { type: 'market.connectionChanged' }>
 
 export interface MarketplaceStore {
+  discovery: McpDiscovery | null
+  discoveryError: boolean
+  discoveryLoading: boolean
+  mcpChecks: Record<string, McpCheck>
+  loadDiscovery(): Promise<void>
+  loadMcpChecks(): Promise<void>
   /** The MCP catalog the host last answered with; null until it has. */
   catalog: MarketCatalog | null
   /** Why the host could not be asked for the catalog; the last one it gave stays. */
@@ -180,6 +187,8 @@ export function createMarketplaceStore(
   let catalogRead = 0
   let searchRead = 0
   let keysRead = 0
+  let discoveryRead = 0
+  let checkRevision = 0
   let connectionsRead = 0
   let ownPluginsRead = 0
   let pluginsRead = 0
@@ -196,6 +205,30 @@ export function createMarketplaceStore(
     refresh ? { refresh } : cached ? { cached } : {}
   const old = (kind: keyof typeof readAt) => Date.now() - readAt[kind] >= MARKET_KEPT_MS[kind]
   return create<MarketplaceStore>()((set, get) => ({
+    discovery: null,
+    discoveryError: false,
+    discoveryLoading: false,
+    mcpChecks: {},
+    async loadDiscovery() {
+      const read = ++discoveryRead
+      set({ discoveryLoading: true, discoveryError: false })
+      try {
+        const discovery = await request('market.discoverMcp', undefined)
+        if (read === discoveryRead) set({ discovery, discoveryLoading: false })
+      } catch {
+        if (read === discoveryRead) set({ discoveryError: true, discoveryLoading: false })
+      }
+    },
+    async loadMcpChecks() {
+      const revision = ++checkRevision
+      try {
+        const checks = await request('market.mcpChecks', undefined)
+        if (revision === checkRevision)
+          set((state) => ({ mcpChecks: { ...checks, ...state.mcpChecks } }))
+      } catch {
+        // Hosts without connection checks still show their installed entries.
+      }
+    },
     catalog: null,
     catalogError: null,
     catalogLoading: false,

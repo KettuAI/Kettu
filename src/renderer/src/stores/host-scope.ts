@@ -191,6 +191,15 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
     case 'usage.status':
       other.usage.setState({ status: event.status })
       break
+    case 'market.discoveryChanged':
+      if (other.scope.useMarketplaceStore.getState().discovery)
+        void other.scope.useMarketplaceStore.getState().loadDiscovery()
+      break
+    case 'market.mcpCheckChanged':
+      other.scope.useMarketplaceStore.setState((state) => ({
+        mcpChecks: { ...state.mcpChecks, [event.serverId]: event.check },
+      }))
+      break
     case 'market.keysChanged':
       marketKeysChanged(other.scope.useMarketplaceStore)
       break

@@ -1,3 +1,4 @@
+import type { McpConfigSource } from '@shared/mcp-discovery'
 // Pure validation and merging of settings.json and of the renderer's patches.
 
 import { isStartMode, START_MODE_CHARS, takesStartMode } from '@shared/agents'
@@ -626,10 +627,42 @@ function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | st
   return `"${path}.type" must be one of "http", "stdio"`
 }
 
+function parseMcpOrigin(value: unknown, path: string, strict: boolean): McpConfigSource | string {
+  if (!isRecord(value) || !isText(value.path, 4096)) return `"${path}" must name a source file`
+  const extra = extraKey(value, ['path', 'agentId', 'app', 'project', 'entryName'], path, strict)
+  if (extra) return extra
+  if (value.agentId !== undefined && !isAgentId(value.agentId))
+    return `"${path}.agentId" is invalid`
+  if (value.app !== undefined && !isText(value.app, 100)) return `"${path}.app" is invalid`
+  if (value.project !== undefined && !isText(value.project, 4096))
+    return `"${path}.project" is invalid`
+  if (value.entryName !== undefined && !isText(value.entryName, 256))
+    return `"${path}.entryName" is invalid`
+  return {
+    path: value.path as string,
+    ...(value.agentId === undefined ? {} : { agentId: value.agentId as AgentId }),
+    ...(value.app === undefined ? {} : { app: value.app as string }),
+    ...(value.project === undefined ? {} : { project: value.project as string }),
+    ...(value.entryName === undefined ? {} : { entryName: value.entryName as string }),
+  }
+}
+
 /** A server of the Marketplace as a patch or the file gives it, or why it is not one. */
 function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketServer | string {
   if (!isRecord(raw)) return `"${path}" must be an object`
-  const allowed = ['id', 'name', 'title', 'source', 'version', 'spec', 'agents', 'on', 'run']
+  const allowed = [
+    'id',
+    'name',
+    'title',
+    'source',
+    'version',
+    'spec',
+    'agents',
+    'on',
+    'importedFrom',
+    'importedWith',
+    'run',
+  ]
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, title, source, version, agents, on } = raw
@@ -670,11 +703,30 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
   if (onProblem) return onProblem
   const run = raw.run === undefined ? undefined : parseMcpRun(raw.run, `${path}.run`, strict)
   if (typeof run === 'string') return run
+  let importedFrom: McpConfigSource[] | undefined
+  if (raw.importedFrom !== undefined) {
+    if (!Array.isArray(raw.importedFrom) || raw.importedFrom.length > 1000) {
+      return `"${path}.importedFrom" must be a list of configuration files`
+    }
+    importedFrom = []
+    for (const [index, item] of raw.importedFrom.entries()) {
+      const origin = parseMcpOrigin(item, `${path}.importedFrom[${index}]`, strict)
+      if (typeof origin === 'string') return origin
+      importedFrom.push(origin)
+    }
+  }
+  const importedWith =
+    raw.importedWith === undefined
+      ? undefined
+      : parseMcpOrigin(raw.importedWith, `${path}.importedWith`, strict)
+  if (typeof importedWith === 'string') return importedWith
   return {
     id,
     name,
     title,
     source: source as MarketServer['source'],
+    ...(importedFrom === undefined ? {} : { importedFrom }),
+    ...(importedWith === undefined ? {} : { importedWith }),
     version: version as string | null,
     spec,
     agents: served.agents,

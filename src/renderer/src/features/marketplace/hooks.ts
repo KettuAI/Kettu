@@ -1,15 +1,23 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { MarketConnection } from '@shared/marketplace'
+import type { MarketConnection, MarketServer, McpSpec } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
-import { useHostScope } from '@renderer/stores/host-scope'
+import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
 import { count } from '@renderer/lib/format'
 import { listingIdOf } from '@shared/market-community'
 import { errorMessage } from '@renderer/lib/host'
-import { updateFor } from './model'
+import {
+  catalogEntry,
+  fromCatalog,
+  fromKept,
+  matchesQuery,
+  oauthFlow,
+  updateFor,
+  type Listing,
+} from './model'
 
 /** An agent's name on the host the page shows. */
 export function useAgentName(): (agentId: AgentId) => string {
@@ -111,4 +119,38 @@ export function useKettuSwitches() {
       .catch((e: unknown) => setError(errorMessage(e)))
   }
   return { agents, off, error, set }
+}
+
+export function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
+  const scope = useHostScope()
+  const { useSettingsStore, useMarketplaceStore } = scope
+  const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
+  // The catalog gives a kept server its mark, badge and line once it has answered.
+  useMarketplaceStore((s) => s.catalog)
+  const needle = query.trim().toLocaleLowerCase()
+  return kept
+    .map((server) => ({ server, listing: listingOf(scope, server) }))
+    .filter(({ listing, server }) => matchesQuery(listing, query) || server.name.includes(needle))
+}
+
+function listingOf(scope: HostScope, server: MarketServer): Listing {
+  const entry = server.source === 'registry' ? catalogEntry(scope, server.id) : null
+  return entry ? { ...fromCatalog(entry), title: server.title } : fromKept(server)
+}
+
+export function useMcpState(server: MarketServer) {
+  const { useMarketplaceStore } = useHostScope()
+  const check = useMarketplaceStore((s) => s.mcpChecks[server.id])
+  const connection = useConnection(server.id)
+  if (check?.state === 'checking') return check
+  if (check?.state === 'needs-sign-in' && connection?.state === 'connected') return undefined
+  if (oauthFlow(server.spec) && connection && connection.state !== 'connected') {
+    return check?.state === 'error' ? check : ({ state: 'needs-sign-in' } as const)
+  }
+  return check
+}
+
+export function useTransportName(spec: McpSpec): string {
+  const { t } = useTranslation('marketplace')
+  return spec.type === 'stdio' ? t('mcp.command') : t(`listing.transport.${spec.transport}`)
 }

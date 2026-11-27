@@ -1,3 +1,4 @@
+import type { McpImportChoice } from '@shared/mcp-discovery'
 // Hand-written guards for every request on the agent host port. A validator returns a fresh
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
@@ -1120,6 +1121,34 @@ function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
 const REPORT_CHARS = 2_000
 
 /** A server Kettu keeps: a registry name, `manual:` and a UUID, or `kettu:` and a listing id. */
+function mcpChoices(params: unknown): { choices: McpImportChoice[] } {
+  const { choices } = fields(params)
+  if (!Array.isArray(choices) || choices.length === 0 || choices.length > 100) {
+    throw invalidParams('Choose between 1 and 100 MCP servers.')
+  }
+  return {
+    choices: choices.map((value: unknown) => {
+      const row = fields(value)
+      const id = string(row, 'id', ID_CHARS)
+      const name = string(row, 'name', 48)
+      const sourceId = row.sourceId === undefined ? undefined : string(row, 'sourceId', 64)
+      const another = optionalFlag(row, 'another')
+      const { agents } = row
+      if (agents !== 'all' && (!Array.isArray(agents) || agents.length > 250)) {
+        throw invalidParams('Pick all agents or a list of agents.')
+      }
+      return {
+        id,
+        name,
+        sourceId,
+        another,
+        agents:
+          agents === 'all' ? agents : agents.map((agent: unknown) => agentId({ agentId: agent })),
+      }
+    }),
+  }
+}
+
 function marketServerId(o: Fields): string {
   const id = string(o, 'serverId', ID_CHARS)
   if (
@@ -1638,6 +1667,13 @@ export function createValidators(platform: Platform): Validators {
       return { query: trimmed }
     },
     'market.keys': none,
+    'market.discoverMcp': none,
+    'market.dismissMcpNotice': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'market.importMcp': mcpChoices,
+    'market.previewMcp': (params) => ({ text: string(fields(params), 'text', 131072) }),
+    'market.addMcp': mcpChoices,
+    'market.checkMcp': (params) => ({ serverId: marketServerId(fields(params)) }),
+    'market.mcpChecks': none,
     'market.connect': (params) => ({ serverId: marketServerId(fields(params)) }),
     'market.detectSignIn': (params) => {
       const o = fields(params)

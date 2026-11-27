@@ -1,3 +1,4 @@
+import type { McpCheck, McpDiscovery, McpDiscoveryRow, McpImportChoice } from './mcp-discovery'
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
@@ -1266,6 +1267,13 @@ export interface HostContract {
   'market.search': { params: { query: string }; result: MarketSearch }
   // Which inputs of the servers Kettu keeps have a value; never the values.
   'market.keys': { params: void; result: MarketKeyState }
+  'market.discoverMcp': { params: void; result: McpDiscovery }
+  'market.dismissMcpNotice': { params: { id: string }; result: void }
+  'market.importMcp': { params: { choices: McpImportChoice[] }; result: string[] }
+  'market.previewMcp': { params: { text: string }; result: McpDiscoveryRow[] }
+  'market.addMcp': { params: { choices: McpImportChoice[] }; result: string[] }
+  'market.checkMcp': { params: { serverId: string }; result: void }
+  'market.mcpChecks': { params: void; result: Record<string, McpCheck> }
   // Signs in to a server Kettu keeps that uses OAuth; it must already be in the settings. The window
   // opens the browser page or shows the code; `market.connectionChanged` tells how it ended.
   'market.connect': { params: { serverId: string }; result: ConnectStart }
@@ -2364,6 +2372,13 @@ export const HOST_METHODS = [
   'market.catalog',
   'market.search',
   'market.keys',
+  'market.discoverMcp',
+  'market.dismissMcpNotice',
+  'market.importMcp',
+  'market.previewMcp',
+  'market.addMcp',
+  'market.checkMcp',
+  'market.mcpChecks',
   'market.connect',
   'market.detectSignIn',
   'market.cancelConnect',
@@ -2683,6 +2698,8 @@ export type HostEvent =
   | { type: 'files.changed'; projectPath: string }
   | { type: 'star.changed'; state: GitHubStarState }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
+  | { type: 'market.discoveryChanged' }
+  | { type: 'market.mcpCheckChanged'; serverId: string; check: McpCheck }
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
   // The account, what it published or the drafts changed; Marketplace › Published reads again.
   | { type: 'market.publishedChanged' }

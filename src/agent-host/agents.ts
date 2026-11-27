@@ -4887,6 +4887,16 @@ export class AgentManager {
     })
   }
 
+  mcpDiscoveryAgents(): { id: AgentId; harness: HarnessId; folder: string | null }[] {
+    return [...this.slots.values()]
+      .filter((slot) => this.has(slot.id))
+      .map((slot) => ({
+        id: slot.id,
+        harness: slot.def.id,
+        folder: this.chosenFolder(slot),
+      }))
+  }
+
   /** The places, one per agent with an `mcpConfig`, where each keeps MCP servers of its own. */
   async mcpPlaces(): Promise<McpStatus['places']> {
     const { platform } = this.deps

@@ -489,7 +489,7 @@ export interface SessionMcp {
     connection: AgentConnection,
     transports: McpTransports,
     taken: readonly string[],
-  ): McpServer[]
+  ): McpServer[] | Promise<McpServer[]>
   /**
    * What the library hands the record's agent now, each server by name with a digest of how it
    * runs, to tell what changed since a session attached.
@@ -4145,7 +4145,7 @@ export class SessionManager {
         )
       : null
     return {
-      mcpServers: [...own, ...this.libraryServers(sessionId, record, runtime, own)],
+      mcpServers: [...own, ...(await this.libraryServers(sessionId, record, runtime, own))],
       ...skills,
       ...(projectMcp ? { projectMcp } : {}),
       ...(projectHooks ? { projectHooks } : {}),
@@ -4408,12 +4408,12 @@ export class SessionManager {
     )
   }
 
-  private libraryServers(
+  private async libraryServers(
     sessionId: string,
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
     own: McpServer[],
-  ): McpServer[] {
+  ): Promise<McpServer[]> {
     if (!this.deps.mcp || !runtime) return []
     const live = this.live.get(sessionId)
     if (live) {

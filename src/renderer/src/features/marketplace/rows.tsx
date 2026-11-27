@@ -19,11 +19,9 @@ import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { useHostScope } from '@renderer/stores/host-scope'
-import { installServer } from './actions'
 import { ConnectButton } from './connect'
 import { useConnectFlow, useInstalling, useKept } from './hooks'
-import { InstallForm } from './install'
+import { CatalogInstallConfirmation } from './install'
 import { asksFirst, oauthFlow } from './model'
 import type { TileSubject } from './tile-art'
 import { ItemTile } from './tiles'
@@ -266,33 +264,25 @@ export function AddControl({
 export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: () => void }) {
   const { t } = useTranslation('marketplace')
   const kept = useKept(server.id)
-  const scope = useHostScope()
   const busy = useInstalling(server.id)
   const flow = useConnectFlow(server.id)
-  // A Connect that installs it keeps its button, and the popover with it, until it ends.
+  const [open, setOpen] = useState(false)
   if (kept && !flow?.fresh) return <InstalledCheck name={server.title} onOpen={onOpen} />
   if (oauthFlow(server.spec)) return <ConnectButton server={server} />
+  const label = asksFirst(server.spec) ? t('row.setUp') : t('row.install')
   return (
-    <AddControl
-      name={server.title}
-      label={asksFirst(server.spec) ? t('row.setUp') : t('row.install')}
-      state={busy ? 'busy' : 'off'}
-      onOpen={onOpen}
-      onAdd={() => void installServer(scope, server, 'all', {})}
-      form={
-        asksFirst(server.spec)
-          ? (close) => (
-              <InstallForm
-                server={server}
-                onDone={(agents, values) => {
-                  close()
-                  void installServer(scope, server, agents, values)
-                }}
-              />
-            )
-          : undefined
-      }
-    />
+    <>
+      <Button
+        size="md"
+        variant="secondary"
+        loading={busy}
+        aria-label={t('row.action', { action: label, name: server.title })}
+        onClick={() => setOpen(true)}
+      >
+        {label}
+      </Button>
+      <CatalogInstallConfirmation server={server} open={open} setOpen={setOpen} />
+    </>
   )
 }
 

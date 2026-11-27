@@ -62,6 +62,7 @@ import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
 import {
   marketConnectionChanged,
   marketKeysChanged,
+  useMarketplaceStore,
   marketPluginsChanged,
 } from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
@@ -243,6 +244,15 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
       break
     case 'usage.status':
       receiveUsageStatus(event.status)
+      break
+    case 'market.discoveryChanged':
+      if (useMarketplaceStore.getState().discovery)
+        void useMarketplaceStore.getState().loadDiscovery()
+      break
+    case 'market.mcpCheckChanged':
+      useMarketplaceStore.setState((state) => ({
+        mcpChecks: { ...state.mcpChecks, [event.serverId]: event.check },
+      }))
       break
     case 'market.keysChanged':
       marketKeysChanged()

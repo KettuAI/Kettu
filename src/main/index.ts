@@ -105,6 +105,7 @@ import { accessKeyEnd, relayChoiceInit } from '@shared/remote/own-relay'
 import { relayReport } from '@shared/remote/status'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
+import { installDiscoveredMcp } from './mcp-install'
 import { MarketUnauthorized, runMarketCall } from './market-api'
 import { computerModelForRun } from './system-model'
 import { ComputerOverlay } from './computer-overlay'
@@ -545,6 +546,7 @@ async function start(): Promise<void> {
     marketKeys: () => marketKeys.contentsForHost(),
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    installMcp: (entries) => installDiscoveredMcp(settings, marketKeys, entries),
     pluginSecret: (pluginId, key, value) =>
       marketKeys.setPluginSecret(pluginId, key, value).then(
         () => null,

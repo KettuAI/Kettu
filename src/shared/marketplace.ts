@@ -3,6 +3,7 @@
 // is set.
 
 import type { AgentId } from './agents'
+import type { McpConfigSource } from './mcp-discovery'
 
 /** A header or environment variable: a fixed value, or one the user fills in when installing. */
 export type McpValue =
@@ -82,6 +83,8 @@ export interface MarketServer {
   version: string | null // the registry's or the listing's version; null when added by hand
   spec: McpSpec
   agents: 'all' | AgentId[] // the agents that get it; 'all' takes in agents added later
+  importedFrom?: McpConfigSource[]
+  importedWith?: McpConfigSource
   on: boolean
   // How Kettu runs it; absent means each default of McpRun.
   run?: McpRun
@@ -108,11 +111,15 @@ export const MCP_RUN_LIMITS = {
 } as const
 
 /** A server's run settings with each default filled in. */
-export function runOf(server: Pick<MarketServer, 'run'>): Required<McpRun> {
+export function runOf(
+  server: Pick<MarketServer, 'run'> & Partial<Pick<MarketServer, 'spec'>>,
+): Required<McpRun> {
   return {
     mode: server.run?.mode ?? MCP_RUN_DEFAULTS.mode,
     idleMinutes: server.run?.idleMinutes ?? MCP_RUN_DEFAULTS.idleMinutes,
-    startSeconds: server.run?.startSeconds ?? MCP_RUN_DEFAULTS.startSeconds,
+    startSeconds:
+      server.run?.startSeconds ??
+      (server.spec?.type === 'http' ? 60 : MCP_RUN_DEFAULTS.startSeconds),
   }
 }
 

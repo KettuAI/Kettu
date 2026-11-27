@@ -1,3 +1,4 @@
+import { McpServerPageBody } from './mcp-server-page'
 // The Kettu Marketplace in the directory: what people published, at the Community trust level,
 // and the account's own Only me items. Their rows, install forms and listing, which install and
 // keep each item like the other sources' and offer the listing's newer version as an update; a
@@ -32,21 +33,19 @@ import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { backTo } from '@renderer/app/history'
 import { count, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { currentLocale, i18n } from '@renderer/lib/i18n'
+import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { AGENT_NAMES } from '@renderer/stores/agents'
-import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
 import { RunSettings } from './run-settings'
 import {
-  installServer,
   installSkill,
   updateCommunityServer,
   updateCommunitySkill,
@@ -57,7 +56,7 @@ import { useBusy, useChoosableAgents, useInstallsLabel, useKept, useKeptSkill } 
 import { BundleInstallButton, BundleNote, BundleUpdateButton } from './bundle-install'
 import { AgentPicker } from './install'
 import { InstallButton, KeptControls, Runs } from './listing'
-import { asksFirst, itemKey, oauthFlow, updateFor } from './model'
+import { fromKept, itemKey, oauthFlow, updateFor } from './model'
 import { ListingFrame, ListingSkeleton } from './parts'
 import { usePublishedStore } from './published-hooks'
 import { publishedItem } from './published-keys'
@@ -91,7 +90,6 @@ import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
 import { FlowChart, FlowSkeleton, StepsOutline } from './workflow-flow'
 
 // Bound to the namespace only: each call reads the language shown at the time.
-const tm = i18n.getFixedT(null, 'marketplace')
 
 const KIND = {
   skill: 'skill',
@@ -238,46 +236,20 @@ function WorkflowAction({
   )
 }
 
-/**
- * A server's action: Install at once for one that asks for nothing; one that signs in or asks for
- * keys opens its listing, where Connect and the keys' form are.
- */
 function ServerAction({ item, onOpen }: { item: CommunityItem; onOpen: () => void }) {
   const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
   const id = kettuId(item.id)
   const kept = useKept(id)
   const busy = useBusy(busyKey('mcp', id))
-  const [reading, setReading] = useState(false)
-  const install = async () => {
-    setReading(true)
-    const server = await serverOf(scope, item.id)
-    setReading(false)
-    if (!server) return onOpen()
-    if (oauthFlow(server.spec) || asksFirst(server.spec)) return onOpen()
-    void installServer(scope, server, 'all', {})
-  }
   return (
     <AddControl
       name={item.name}
       label={t('row.install')}
-      state={busy || reading ? 'busy' : kept ? 'on' : 'off'}
+      state={busy ? 'busy' : kept ? 'on' : 'off'}
       onOpen={onOpen}
-      onAdd={() => void install()}
+      onAdd={onOpen}
     />
   )
-}
-
-/** A server listing's spec as Kettu would install it, read from its page; null when it has none. */
-async function serverOf(scope: HostScope, id: string): Promise<CatalogServer | null> {
-  const store = scope.useMarketplaceStore
-  await store.getState().loadCommunityListing(id)
-  const state = store.getState().communityListings[id]
-  if (state?.listing?.state === 'listed') return state.listing.server
-  if (state?.error) {
-    toast(tm('toast.listingFailed', { error: state.error }), undefined, { tone: 'warning' })
-  }
-  return null
 }
 
 /** A listing's page as the host gave it; `fresh` reads it again even when one was read before. */
@@ -585,6 +557,13 @@ function Listed({
 }) {
   const { t } = useTranslation('marketplace')
   const [reporting, setReporting] = useState(false)
+  const scope = useHostScope()
+  const id = kettuId(listing.id)
+  const keptMcp = scope.useSettingsStore((state) =>
+    state.settings.marketplace.mcp.find((server) => server.id === id),
+  )
+  const connecting = scope.useMarketplaceStore((state) => state.connecting[id])
+  const keptPage = !preview && !connecting?.fresh ? keptMcp : undefined
   const installedHere = useInstalledHere(listing)
   const installed = preview ? false : installedHere
   return (
@@ -616,76 +595,86 @@ function Listed({
         </span>
       </header>
 
-      {listing.kind === 'agent-plugin' ? (
-        <PluginFacts
-          version={listing.version}
-          updated={Date.parse(listing.updatedAt)}
-          script={addsTags(listing.adds).some((tag) => tag.kind === 'script')}
-        />
+      {keptPage ? (
+        <McpServerPageBody server={keptPage} listing={fromKept(keptPage)} back={back} />
       ) : (
-        <Facts listing={listing} />
-      )}
-
-      <div className="k-mkt-body">
-        <div className="k-mkt-body__main">
-          {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
-          {listing.kind === 'workflow' ? (
-            <WorkflowFlow listing={listing} />
-          ) : listing.kind === 'agent-plugin' ? (
-            <PluginListingBody listing={listing} preview={preview} />
+        <>
+          {listing.kind === 'agent-plugin' ? (
+            <PluginFacts
+              version={listing.version}
+              updated={Date.parse(listing.updatedAt)}
+              script={addsTags(listing.adds).some((tag) => tag.kind === 'script')}
+            />
           ) : (
-            <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
+            <Facts listing={listing} />
           )}
-          {listing.kind === 'mcp-server' &&
-            (server ? (
-              <ServerRuns listing={listing} server={server} />
-            ) : bundle ? (
-              <BundleRuns listing={listing} bundle={bundle} />
-            ) : (
-              <p className="k-mkt-section-note">{t('community.cannotRun')}</p>
-            ))}
-        </div>
-        <aside className="k-mkt-side">
-          <dl>
-            <dt>{t('listing.side.publisher')}</dt>
-            <dd>
-              {listing.handle}
-              {listing.official && <KettuMark />}
-            </dd>
-            <dt>{t('community.side.trust')}</dt>
-            <dd>{listing.official ? t('listing.official') : t('community.trust')}</dd>
-            <dt>{t('plugin.facts.installs')}</dt>
-            <dd>
-              {listing.visibility === 'private' ? t('community.onlyMe') : count(listing.installs)}
-            </dd>
-            <dt>{t('community.side.kind')}</dt>
-            <dd>{t(`community.kinds.${KIND[listing.kind]}`)}</dd>
-            <dt>{t('community.side.name')}</dt>
-            <dd className="k-mkt-mono" data-selectable="">
-              @{listing.handle}/{listing.slug}
-            </dd>
-            <dt>{t('listing.side.listedIn')}</dt>
-            <dd>{t('community.source')}</dd>
-            {listing.kind === 'agent-plugin' && !preview && (
-              <PluginSideExtra listingId={listing.id} />
-            )}
-          </dl>
-          {/* No one reports their own listing; the preview draws it where others see it, off. */}
-          {(preview || !listing.mine) && (
-            <button
-              type="button"
-              className="k-mkt-report"
-              disabled={preview}
-              onClick={() => setReporting(true)}
-            >
-              <Icon icon={Flag02Icon} size={13} />
-              {t('community.report')}
-            </button>
+
+          <div className="k-mkt-body">
+            <div className="k-mkt-body__main">
+              {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
+              {listing.kind === 'workflow' ? (
+                <WorkflowFlow listing={listing} />
+              ) : listing.kind === 'agent-plugin' ? (
+                <PluginListingBody listing={listing} preview={preview} />
+              ) : (
+                <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
+              )}
+              {listing.kind === 'mcp-server' &&
+                (server ? (
+                  <ServerRuns listing={listing} server={server} />
+                ) : bundle ? (
+                  <BundleRuns listing={listing} bundle={bundle} />
+                ) : (
+                  <p className="k-mkt-section-note">{t('community.cannotRun')}</p>
+                ))}
+            </div>
+            <aside className="k-mkt-side">
+              <dl>
+                <dt>{t('listing.side.publisher')}</dt>
+                <dd>
+                  {listing.handle}
+                  {listing.official && <KettuMark />}
+                </dd>
+                <dt>{t('community.side.trust')}</dt>
+                <dd>{listing.official ? t('listing.official') : t('community.trust')}</dd>
+                <dt>{t('plugin.facts.installs')}</dt>
+                <dd>
+                  {listing.visibility === 'private'
+                    ? t('community.onlyMe')
+                    : count(listing.installs)}
+                </dd>
+                <dt>{t('community.side.kind')}</dt>
+                <dd>{t(`community.kinds.${KIND[listing.kind]}`)}</dd>
+                <dt>{t('community.side.name')}</dt>
+                <dd className="k-mkt-mono" data-selectable="">
+                  @{listing.handle}/{listing.slug}
+                </dd>
+                <dt>{t('listing.side.listedIn')}</dt>
+                <dd>{t('community.source')}</dd>
+                {listing.kind === 'agent-plugin' && !preview && (
+                  <PluginSideExtra listingId={listing.id} />
+                )}
+              </dl>
+              {/* No one reports their own listing; the preview draws it where others see it, off. */}
+              {(preview || !listing.mine) && (
+                <button
+                  type="button"
+                  className="k-mkt-report"
+                  disabled={preview}
+                  onClick={() => setReporting(true)}
+                >
+                  <Icon icon={Flag02Icon} size={13} />
+                  {t('community.report')}
+                </button>
+              )}
+            </aside>
+          </div>
+          {!preview && (
+            <ReportDialog listing={listing} open={reporting} onOpenChange={setReporting} />
           )}
-        </aside>
-      </div>
-      {!preview && <ReportDialog listing={listing} open={reporting} onOpenChange={setReporting} />}
-      <Related listing={listing} tab={tab} />
+          <Related listing={listing} tab={tab} />
+        </>
+      )}
     </>
   )
 }
