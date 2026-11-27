@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ANTIGRAVITY } from './agents/antigravity'
 import {
   globalInstallOf,
   installMethodOf,
@@ -47,6 +48,32 @@ describe.each(['bash', 'sh'] as const)('the %s script route', (shell) => {
     })
     const update = await updatePlan(installs, 'script', { ...ctx, program: '/bin/vendor' })
     expect(update).toEqual({ command: plan?.command, run: plan?.run })
+  })
+})
+
+describe('Antigravity script install detection and self-update', () => {
+  it('detects the official installer path on macOS, Linux, and Windows and runs agy update', async () => {
+    const installs = ANTIGRAVITY.installs!
+    expect(
+      installMethodOf(installs, '/Users/ann/.local/bin/agy', {
+        platform: 'darwin',
+        home: '/Users/ann',
+      }),
+    ).toBe('script')
+    expect(
+      installMethodOf(installs, 'C:\\Users\\Ann\\AppData\\Local\\agy\\bin\\agy.exe', {
+        platform: 'win32',
+        home: 'C:\\Users\\Ann',
+      }),
+    ).toBe('script')
+    const plan = await updatePlan(installs, 'script', {
+      ...context,
+      program: '/Users/ann/.local/bin/agy',
+    })
+    expect(plan).toEqual({
+      command: 'agy update',
+      run: { program: '/Users/ann/.local/bin/agy', args: ['update'] },
+    })
   })
 })
 

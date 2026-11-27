@@ -144,7 +144,7 @@ export function useRefresh({ busy = false }: { busy?: boolean } = {}): {
   phase: RefreshPhase
 } {
   const [turn] = useState(createRefreshTurn)
-  const phase = useSyncExternalStore(turn.subscribe, turn.getPhase)
+  const phase = useSyncExternalStore(turn.subscribe, turn.getPhase, turn.getPhase)
   useEffect(() => {
     turn.setBusy(busy)
   }, [turn, busy])

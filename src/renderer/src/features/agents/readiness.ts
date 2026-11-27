@@ -64,8 +64,8 @@ export function programUnchecked(status: AgentStatus): boolean {
 }
 
 /**
- * Up to date only once the harness is on the machine. A check from when it could run does not make
- * a missing program, such as Pi's `pi`, current.
+ * Up to date only once the harness is on the machine, a remote update check has completed, its
+ * installed version is known (for a user CLI), and no newer version or problem was found.
  */
 export function showsCurrent(status: AgentStatus): boolean {
   if (status.uninstalled || !hasProgram(status) || awaitsPackage(status)) return false
@@ -73,5 +73,8 @@ export function showsCurrent(status: AgentStatus): boolean {
   if (readiness(status).kind === 'missing') return false
   if (cliOutdated(status) !== null || status.versionWarning || programUnchecked(status))
     return false
-  return status.updateCheckedAt !== null || status.cli !== null
+  if (status.update || status.cli?.update || status.cli?.newerVersion) return false
+  if (status.cli?.installed && (status.cli.checkable === false || !status.cli.installed.version))
+    return false
+  return status.updateCheckedAt !== null
 }

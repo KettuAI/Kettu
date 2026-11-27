@@ -44,12 +44,12 @@ export const secondsTime = seconds.time
 
 /** The current time, refreshed every 30 s. */
 export function useNow(): number {
-  return useSyncExternalStore(subscribeClock, clockTime)
+  return useSyncExternalStore(subscribeClock, clockTime, clockTime)
 }
 
 /** The current time, refreshed every second: re-renders the component that uses it each second. */
 export function useSeconds(): number {
-  return useSyncExternalStore(subscribeSeconds, secondsTime)
+  return useSyncExternalStore(subscribeSeconds, secondsTime, secondsTime)
 }
 
 /**
@@ -57,5 +57,6 @@ export function useSeconds(): number {
  * changes, so `select` returns a primitive.
  */
 export function useClock<T>(select: (now: number) => T): T {
-  return useSyncExternalStore(subscribeClock, () => select(clockTime()))
+  const read = () => select(clockTime())
+  return useSyncExternalStore(subscribeClock, read, read)
 }

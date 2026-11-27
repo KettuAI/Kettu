@@ -1,3 +1,4 @@
+import { parsePlainVersion } from '../agent-updates'
 import type { AgentDefinition } from '../catalog'
 import { CONFIG_VARIABLES } from '@shared/settings'
 import { CLAUDE_CLI } from '../installed-cli'
@@ -26,6 +27,11 @@ export const CLAUDE_CODE: AgentDefinition = {
     scriptBin: ['.local', 'bin'],
     scriptHome: ['.local', 'share', 'claude'],
     selfUpdate: ['update'],
+    // The same release endpoint the official install.sh reads, usable even without npm.
+    versionCheck: {
+      urls: () => ['https://downloads.claude.ai/claude-code-releases/latest'],
+      parse: parsePlainVersion,
+    },
     brewCask: 'claude-code',
     winget: 'Anthropic.ClaudeCode',
     npm: '@anthropic-ai/claude-code',
