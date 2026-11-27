@@ -138,6 +138,8 @@ export interface HostsOptions {
   settingsCall?(call: unknown): SettingsCallAnswer
   /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
   installMcp?(entries: McpInstallEntry[]): Promise<string | null>
+  /** Makes the key store's backup key if it has none: null once it is there, else why not. */
+  mcpBackupKey?(): Promise<string | null>
   pluginSecret?(pluginId: unknown, key: unknown, value: unknown): Promise<string | null>
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
@@ -259,6 +261,7 @@ export class Hosts {
           'helpers',
           mcpBridgeFile(process.platform),
         ),
+        mcpCommandPath: path.join(options.bundleDir, '..', 'bin', 'kettu'),
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
         userAgent: daemonUserAgent(options.version, process.platform, process.arch),
@@ -1221,6 +1224,15 @@ export class Hosts {
         const run = this.options.installMcp
         void (run ? run(entries) : Promise.resolve('The daemon cannot import MCP servers.')).then(
           (error) => this.agent.post({ type: 'mcp-install-result', callId, error }),
+        )
+        break
+      }
+      case 'host:mcp-backup-key': {
+        const { callId } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.options.mcpBackupKey
+        void (run ? run() : Promise.resolve('The daemon keeps no backup key.')).then((error) =>
+          this.agent.post({ type: 'mcp-backup-key-result', callId, error }),
         )
         break
       }

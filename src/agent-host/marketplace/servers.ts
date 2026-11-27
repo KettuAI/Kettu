@@ -23,6 +23,7 @@ import type { AgentInit, McpServer } from '../connection'
 import { serverPath, type ServerCommand } from '../mcp-router/router'
 import type { Access } from './connections'
 import { getEnv, type Env } from '../find-command'
+import { isBridgeSpec } from './mcp-terminal-files'
 
 /** The values of each server's inputs, by server id and input name. */
 export type MarketKeys = ReadonlyMap<string, ReadonlyMap<string, string>>
@@ -273,6 +274,12 @@ export interface OwnServer {
   endpoint: McpEndpoint
 }
 
+/** The library server a bridge entry connects to, or null for any other entry. */
+function bridgeTarget(endpoint: McpEndpoint): string | null {
+  if (endpoint.type !== 'stdio' || !isBridgeSpec(endpoint)) return null
+  return endpoint.args[2] ?? null
+}
+
 /** Where a library server connects or what it starts, as its fingerprint compares it. */
 export function endpointOf(spec: McpSpec): McpEndpoint {
   return spec.type === 'stdio'
@@ -340,11 +347,14 @@ export function libraryServers(
   const projectNames = new Set(projectOwn.map((item) => item.name))
   const nameOf = (server: MarketServer): Handed => {
     const print = mcpFingerprint(endpointOf(server.spec))
+    // An entry Kettu wrote for the agent's terminal runs the bridge to this very server.
+    const isIt = (item: OwnServer): boolean =>
+      mcpFingerprint(item.endpoint) === print || bridgeTarget(item.endpoint) === server.name
     if (transports.mcpMergesSameName) {
       const replaces = [
         ...new Set(
           [...own, ...projectOwn]
-            .filter((item) => item.name === server.name || mcpFingerprint(item.endpoint) === print)
+            .filter((item) => item.name === server.name || isIt(item))
             .map((item) => item.name),
         ),
       ]
@@ -353,35 +363,26 @@ export function libraryServers(
       if (taken(name)) name = `${server.name}-kettu`
       for (let n = 2; taken(name); n++) name = `${server.name}-kettu-${n}`
       used.add(name)
-      const clash = own.find(
-        (item) => item.name === server.name && mcpFingerprint(item.endpoint) !== print,
-      )
+      const clash = own.find((item) => item.name === server.name && !isIt(item))
       if (clash) options.conflict?.(server, clash.name)
       return replaces.length > 0 ? { name, replaces } : { name }
     }
     // The same server under another name in the agent's own file is handed under that name, so
     // the agent runs it once, as Kettu's. Prefer the library server's own name when both exist.
     const same =
-      own.find(
-        (item) =>
-          item.name === server.name &&
-          mcpFingerprint(item.endpoint) === print &&
-          !used.has(item.name),
-      ) ?? own.find((item) => mcpFingerprint(item.endpoint) === print && !used.has(item.name))
+      own.find((item) => item.name === server.name && isIt(item) && !used.has(item.name)) ??
+      own.find((item) => isIt(item) && !used.has(item.name))
     let name = same?.name ?? server.name
     for (let n = 2; used.has(name); n++) name = `${server.name}-${n}`
     used.add(name)
-    const clash = own.find((item) => item.name === name && mcpFingerprint(item.endpoint) !== print)
+    const clash = own.find((item) => item.name === name && !isIt(item))
     if (clash) options.conflict?.(server, clash.name)
     // Additional copies of the same server under other names (such as a second alias in the
     // agent's config or a project `.mcp.json` entry) cannot be shadowed by `name` alone.
     const replaces = [
       ...new Set(
         [...own, ...projectOwn]
-          .filter(
-            (item) =>
-              item.name !== name && !used.has(item.name) && mcpFingerprint(item.endpoint) === print,
-          )
+          .filter((item) => item.name !== name && !used.has(item.name) && isIt(item))
           .map((item) => item.name),
       ),
     ]

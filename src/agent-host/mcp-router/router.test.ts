@@ -548,3 +548,71 @@ describe('routingHeaders', () => {
     expect(legacy.get('mcp-method')).toBeNull()
   })
 })
+
+describe("a terminal's bridge", () => {
+  const KEY = 'terminal-key-0123456789'
+
+  async function terminal(on: boolean) {
+    const { router, dir, calls } = await setup([echo])
+    const service = new ArtifactService({
+      log: () => {},
+      plan: {},
+      sessions: {},
+      router,
+      terminal: {
+        key: () => KEY,
+        caller: (agent: string | null, cwd: string) =>
+          on && agent === 'claude-code'
+            ? {
+                key: 'terminal:1',
+                sessionId: null,
+                folder: cwd,
+                servers: new Set([echo.id]),
+                terminal: { agentId: 'claude-code' },
+              }
+            : null,
+      },
+    } as unknown as ArtifactServiceDeps)
+    await service.start()
+    closers.push(() => service.stop())
+    const origin = new URL(service.url!).origin
+    return { origin, dir, calls }
+  }
+
+  it('reaches the server in its own folder, and records the call as the terminal agent', async () => {
+    const { origin, dir, calls } = await terminal(true)
+    const line = bridge(origin, 'echo', {
+      Authorization: `Bearer ${KEY}`,
+      'Kettu-Agent': 'claude-code',
+      'Kettu-Cwd': encodeURIComponent(dir),
+    })
+    expect(await line.head).toMatch(/^HTTP\/1\.1 101 /)
+    line.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INIT })
+    await line.answer(1)
+    line.send({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    line.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'where', arguments: {} },
+    })
+    await line.answer(2)
+    expect(calls.at(-1)).toMatchObject({
+      sessionId: null,
+      terminal: { agentId: 'claude-code', folder: dir },
+    })
+  })
+
+  it('answers as a server with no tools once its takeover is off', async () => {
+    const { origin } = await terminal(false)
+    const line = bridge(origin, 'echo', {
+      Authorization: `Bearer ${KEY}`,
+      'Kettu-Agent': 'claude-code',
+    })
+    expect(await line.head).toMatch(/^HTTP\/1\.1 101 /)
+    line.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INIT })
+    expect((await line.answer(1)).result).toMatchObject({ capabilities: { tools: {} } })
+    line.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })
+    expect((await line.answer(2)).result).toEqual({ tools: [] })
+  })
+})

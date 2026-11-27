@@ -115,6 +115,8 @@ export type MainToHost =
       clineHostPath: string
       // The MCP bridge among the helpers, where the build has one; absent from older mains.
       mcpBridgePath?: string | null
+      // The daemon's own `kettu`, which its entries in agents' files run; absent in the desktop app.
+      mcpCommandPath?: string | null
       settings: HostSettings
       // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
       socketPath?: string
@@ -139,8 +141,11 @@ export type MainToHost =
       agentEnv?: Record<string, Record<string, string>>
       // The secrets the plugins declare, by plugin id then key; read by the plugin's own script only.
       pluginSecrets?: Record<string, Record<string, string>>
+      // The key that seals the backups of agents' MCP files, once host:mcp-backup-key made one.
+      backupKey?: string
     }
   | { type: 'mcp-install-result'; callId: number; error: string | null }
+  | { type: 'mcp-backup-key-result'; callId: number; error: string | null }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
   // reads the logs, its agents and sessions, and writes the zip under its data folder.
@@ -326,6 +331,8 @@ export type HostToMain =
   // disconnected it; main stores the text as it stores keys and pushes host:market-keys again.
   | { type: 'host:market-oauth'; serverId: string; state: string | null }
   | { type: 'host:mcp-install'; callId: number; entries: McpInstallEntry[] }
+  // Makes the key store's backup key if it has none; main pushes host:market-keys with it, then answers.
+  | { type: 'host:mcp-backup-key'; callId: number }
   | { type: 'host:ready' }
   // The harnesses whose user program the host's first start found, in the order to add them: the
   // settings' owner adds their default agents and records the first start as done.

@@ -546,3 +546,93 @@ describe("a plugin's tools", () => {
     expect(texts(wrong)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
   })
 })
+
+describe("a terminal's bridge", () => {
+  const KEY = 'terminal-key-0123456789'
+
+  async function terminalService(caller: (agent: string | null, cwd: string) => unknown) {
+    const upgrades: string[] = []
+    const deps = {
+      log: () => {},
+      plan: {},
+      sessions: {},
+      router: {
+        handle: () => {},
+        upgrade: (
+          socket: import('node:stream').Duplex,
+          _head: Buffer,
+          _caller: unknown,
+          name: string,
+        ) => {
+          upgrades.push(name)
+          socket.end('HTTP/1.1 101 Switching Protocols\r\n\r\n')
+        },
+        upgradeEmpty: (socket: import('node:stream').Duplex, _head: Buffer, name: string) => {
+          upgrades.push(`empty:${name}`)
+          socket.end('HTTP/1.1 101 Switching Protocols\r\n\r\n')
+        },
+        forget: () => {},
+        tools: async () => [],
+        call: async () => ({ content: [] }),
+      },
+      terminal: { key: () => KEY, caller },
+    } as unknown as ArtifactServiceDeps
+    const service = new ArtifactService(deps)
+    services.push(service)
+    await service.start()
+    return { service, upgrades }
+  }
+
+  async function connect(
+    service: ArtifactService,
+    headers: Record<string, string>,
+  ): Promise<string> {
+    const net = await import('node:net')
+    const port = service.listeningPort!
+    return new Promise((resolve, reject) => {
+      const socket = net.connect(port, '127.0.0.1')
+      let answer = ''
+      socket.on('data', (chunk) => (answer += chunk.toString()))
+      socket.on('end', () => resolve(answer.split('\r\n')[0] ?? ''))
+      socket.on('error', reject)
+      const lines = Object.entries({
+        Host: `127.0.0.1:${port}`,
+        Connection: 'Upgrade',
+        Upgrade: 'kettu-mcp',
+        ...headers,
+      }).map(([name, value]) => `${name}: ${value}`)
+      socket.write(`GET /bridge/github HTTP/1.1\r\n${lines.join('\r\n')}\r\n\r\n`)
+    })
+  }
+
+  it('is refused without the key of the connect file', async () => {
+    const { service, upgrades } = await terminalService(() => null)
+    expect(await connect(service, { 'Kettu-Agent': 'claude-code' })).toContain('401')
+    expect(await connect(service, { Authorization: 'Bearer wrong-key-000000' })).toContain('401')
+    expect(upgrades).toEqual([])
+  })
+
+  it("never reaches Kettu's own tools with that key", async () => {
+    const { service } = await terminalService(() => null)
+    const answer = await fetch(service.url!, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    })
+    expect(answer.status).toBe(401)
+  })
+
+  it("answers with no tools inside Kettu's sessions and while the takeover is off", async () => {
+    const caller = { key: 'k', sessionId: null, folder: '/', servers: new Set(['github']) }
+    const { service, upgrades } = await terminalService((agent) =>
+      agent === 'claude-code' ? caller : null,
+    )
+    const auth = { Authorization: `Bearer ${KEY}`, 'Kettu-Cwd': '%2Frepo' }
+    expect(await connect(service, { ...auth, 'Kettu-Agent': 'claude-code' })).toContain('101')
+    expect(
+      await connect(service, { ...auth, 'Kettu-Agent': 'claude-code', 'Kettu-Session': '1' }),
+    ).toContain('101')
+    expect(await connect(service, { ...auth, 'Kettu-Agent': 'codex' })).toContain('101')
+    expect(upgrades).toEqual(['github', 'empty:github', 'empty:github'])
+  })
+})

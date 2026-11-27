@@ -1,5 +1,10 @@
 import { randomUUID as mcpId } from 'node:crypto'
-import type { McpCheck, McpDiscoveryRow, McpImportChoice } from '@shared/mcp-discovery'
+import type {
+  McpCheck,
+  McpConfigSource,
+  McpDiscoveryRow,
+  McpImportChoice,
+} from '@shared/mcp-discovery'
 // The agent host, assembled: state, agents, sessions, git and the ports. start.ts runs it in
 // the utility process or under Node.js; tests run it in-process with fakes for the launcher,
 // shell and git.
@@ -42,7 +47,7 @@ import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
 import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
-import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
+import { harnessOf, isAgentId, takesStartMode, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
@@ -311,6 +316,16 @@ import { LimitNotices, limitNoticeText, type LimitNotice } from './limit-notices
 import { LOG_READERS } from './usage/readers'
 import { UsageStore, type UsageWorkerFactory } from './usage/store'
 import { createValidators } from './validate'
+import {
+  backupKey,
+  bridgeDataArg,
+  McpTerminal,
+  McpTerminalStale,
+  newTerminalKey,
+  terminalLedgerFile,
+  writeConnectFile,
+} from './marketplace/mcp-terminal'
+import type { RouterCaller } from './mcp-router/router'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
@@ -408,6 +423,11 @@ export interface HostOptions {
    * commands.
    */
   mcpBridgePath?: string | null
+  /**
+   * What the daemon's own entries in agents' files run, its `kettu` command; the desktop app's
+   * run the bridge itself.
+   */
+  mcpCommandPath?: string | null
   settings: HostSettings
   baseEnv: Env
   send(message: HostToMain): void
@@ -638,6 +658,13 @@ export class AgentHost {
   private readonly failureChecks = new Map<string, number>()
   private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
   private nextMcpInstall = 1
+  private readonly mcpTerminal: McpTerminal
+  /** The connect file's key, which a terminal's bridge brings; new at each start of the service. */
+  private terminalKey: string | null = null
+  private backupKey: Buffer | null = null
+  private readonly mcpBackupKeyCalls = new Map<number, (error: string | null) => void>()
+  /** Who waits for the library to hold a change, checked as each settings change arrives. */
+  private libraryWaiters = new Set<() => boolean>()
   private agentEnvKeys: Record<string, Record<string, string>> = {}
   /** The secrets the plugins declare, by plugin then key, as main's key store holds them. */
   private pluginSecrets: Record<string, Record<string, string>> = {}
@@ -657,6 +684,8 @@ export class AgentHost {
   private readonly sessionMcp = new Map<string, Map<string, McpHanded>>()
   /** The bridge program, once it is found where main said; null without one. */
   private mcpBridge: string | null = null
+  /** The daemon's `kettu`, which its entries in agents' files run in place of the bridge. */
+  private mcpCommand: string | null = null
   /** The sign-ins sent to main that no push has carried back yet, by server id. */
   private readonly unkept = new Map<string, { state: string | null; pushes: number }>()
   /** The plugins Claude Code and Codex agents have of their own, which Kettu only lists. */
@@ -1048,13 +1077,14 @@ export class AgentHost {
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
       answers: this.mcpAnswers,
       tools: this.mcpToolChanges,
-      called: ({ serverId, sessionId, outcome }) => {
+      called: ({ serverId, sessionId, outcome, terminal }) => {
         if (outcome.result === 'error') this.checkAfterFailure(serverId, sessionId)
         void this.mcpCalls.add({
           at: outcome.at,
           serverId,
           sessionId,
-          agentId: sessionId ? this.sessions.sessionAgent(sessionId) : null,
+          agentId: sessionId ? this.sessions.sessionAgent(sessionId) : (terminal?.agentId ?? null),
+          ...(terminal ? { folder: terminal.folder } : {}),
           tool: outcome.tool,
           ms: outcome.ms,
           bytes: outcome.bytes,
@@ -1079,6 +1109,39 @@ export class AgentHost {
           (name, agent) => this.env.get(name, agent),
         ),
       library: () => this.settings.marketplace.mcp,
+      changed: () => {
+        this.hub.broadcast({ type: 'market.discoveryChanged' })
+        void this.mcpTerminal.rows().catch(() => {})
+      },
+    })
+    this.mcpTerminal = new McpTerminal({
+      dataPath: options.userDataPath,
+      log,
+      ledger: terminalLedgerFile(options.userDataPath, log),
+      library: () => this.settings.marketplace.mcp,
+      agents: () =>
+        this.agents
+          .mcpDiscoveryAgents()
+          .map(({ id, harness, folder }) => ({ id, harness, folder })),
+      files: (agentId) =>
+        mcpConfigPaths(
+          platform,
+          home,
+          this.agents.mcpDiscoveryAgents().filter(({ id }) => id === agentId),
+          [],
+          (name, agent) => this.env.get(name, agent),
+          true,
+        ),
+      claudeSettings: (agentId) =>
+        path.join(this.agents.configFolder(agentId) ?? path.join(home, '.claude'), 'settings.json'),
+      launch: () => {
+        const command = this.mcpCommand ?? this.mcpBridge
+        return command ? { command, args: ['mcp', 'connect'] } : null
+      },
+      dataArg: () => bridgeDataArg(platform, home, process.env, options.userDataPath),
+      key: () => this.backupKey,
+      importOwn: (agentId, items) => this.importOwnMcp(agentId, items),
+      giveTo: (agentId, serverIds) => this.giveMcpTo(agentId, serverIds),
       changed: () => this.hub.broadcast({ type: 'market.discoveryChanged' }),
     })
     this.ownPlugins = new OwnPluginsService({
@@ -1399,6 +1462,10 @@ export class AgentHost {
         },
       },
       router: this.mcpRouter,
+      terminal: {
+        key: () => this.terminalKey,
+        caller: (agent, cwd) => this.terminalCaller(agent, cwd),
+      },
       libraryServer: (serverId) =>
         this.settings.marketplace.mcp.find((server) => server.id === serverId) ?? null,
       sessions: {
@@ -2191,7 +2258,10 @@ export class AgentHost {
     host.artifacts.start()
     host.idleRelease.start()
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
+    await host.writeConnect()
     options.send({ type: 'host:ready' })
+    // Rewrites the bridge's path in agents' files when the app moved, and catches up on changes.
+    void host.mcpTerminal.sync()
     void host.trees.stopLeftovers()
     host.agents.startLimitReads()
     host.agents.startSignInEndReads()
@@ -2518,6 +2588,9 @@ export class AgentHost {
     this.marketChanged(previous.marketplace.mcp, this.marketKeys)
     if (JSON.stringify(previous.marketplace.mcp) !== JSON.stringify(next.marketplace.mcp)) {
       void this.marketBundles.sweep()
+      for (const waiter of [...this.libraryWaiters])
+        if (waiter()) this.libraryWaiters.delete(waiter)
+      void this.mcpTerminal.sync()
     }
     if (JSON.stringify(previous.marketplace.skills) !== JSON.stringify(next.marketplace.skills)) {
       void this.skillsChanged(previous.marketplace.skills)
@@ -2925,6 +2998,138 @@ export class AgentHost {
     return entries.map(({ server }) => server.id)
   }
 
+  /** A takeover call, its failures told apart: a file that changed, or one Kettu cannot write. */
+  private async mcpTerminalCall<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run()
+    } catch (error) {
+      if (error instanceof HostError) throw error
+      if (error instanceof McpTerminalStale) throw new HostError('conflict', error.message)
+      throw new HostError('unavailable', (error as Error).message)
+    }
+  }
+
+  mcpBackupKeyResult(callId: number, error: string | null): void {
+    const resolve = this.mcpBackupKeyCalls.get(callId)
+    this.mcpBackupKeyCalls.delete(callId)
+    resolve?.(error)
+  }
+
+  /** Has main make the key store's backup key, which arrives with host:market-keys. */
+  private async ensureBackupKey(): Promise<void> {
+    if (this.backupKey) return
+    const callId = this.nextMcpInstall++
+    const error = await new Promise<string | null>((resolve) => {
+      this.mcpBackupKeyCalls.set(callId, resolve)
+      this.options.send({ type: 'host:mcp-backup-key', callId })
+    })
+    if (error) throw new HostError('unavailable', error)
+    if (!this.backupKey) throw new HostError('unavailable', 'The key store sent no backup key')
+  }
+
+  /** Settles once the library holds what `done` looks for, or fails after a while. */
+  private waitForLibrary(done: () => boolean): Promise<void> {
+    if (done()) return Promise.resolve()
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.libraryWaiters.delete(check)
+        reject(new HostError('unavailable', 'The MCP library did not change in time'))
+      }, 15_000)
+      const check = (): boolean => {
+        if (!done()) return false
+        clearTimeout(timer)
+        resolve()
+        return true
+      }
+      this.libraryWaiters.add(check)
+    })
+  }
+
+  /** An agent's own entries into the library for it alone, as the import window would. */
+  private async importOwnMcp(
+    agentId: AgentId,
+    items: readonly { source: McpConfigSource; name: string }[],
+  ): Promise<void> {
+    const discovery = await this.mcpDiscovery.scan()
+    const choices: McpImportChoice[] = items.map(({ source, name }) => {
+      for (const row of discovery.servers) {
+        const found = row.sources.find(
+          (item) =>
+            item.path === source.path &&
+            item.agentId === source.agentId &&
+            item.name === source.entryName &&
+            !item.project,
+        )
+        if (found) return { id: row.id, sourceId: found.id, name, agents: [agentId] }
+      }
+      throw new McpTerminalStale(`${source.entryName ?? name} changed. Review it again.`)
+    })
+    const ids = await this.installMcp(this.mcpDiscovery.prepare(choices))
+    await this.waitForLibrary(() =>
+      ids.every((id) => this.settings.marketplace.mcp.some((server) => server.id === id)),
+    )
+  }
+
+  /** Library servers given to `agentId` too, for the agent's own entries they are. */
+  private async giveMcpTo(agentId: AgentId, serverIds: readonly string[]): Promise<void> {
+    const put = this.settings.marketplace.mcp
+      .filter((server) => serverIds.includes(server.id) && server.agents !== 'all')
+      .map((server) => ({
+        ...server,
+        agents: [...new Set([...(server.agents as AgentId[]), agentId])],
+      }))
+    if (put.length === 0) return
+    await this.settingsCall({ kind: 'change', patch: { marketplace: { mcpEdit: { put } } } })
+    await this.waitForLibrary(() =>
+      serverIds.every((id) => {
+        const server = this.settings.marketplace.mcp.find((item) => item.id === id)
+        return !server || serverFor(server, agentId)
+      }),
+    )
+  }
+
+  /** The connect file a terminal's bridge reads: this start's port and a fresh key. */
+  private async writeConnect(): Promise<void> {
+    const url = this.artifactService.url
+    if (!url) return
+    this.terminalKey ??= newTerminalKey()
+    try {
+      await writeConnectFile(this.options.userDataPath, new URL(url).origin, this.terminalKey)
+    } catch (error) {
+      this.diagnostics.log(
+        'warn',
+        `Could not write the MCP bridge's file: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  /**
+   * Who a terminal's bridge stands for: the agent it names, while its takeover is on, in the
+   * folder it runs in, with the servers that agent gets there. Null answers it with no tools.
+   */
+  private terminalCaller(agent: string | null, cwd: string): RouterCaller | null {
+    if (!agent || !isAgentId(agent) || !this.mcpTerminal.isOn(agent)) return null
+    const folder = path.isAbsolute(cwd) ? path.resolve(cwd) : (this.options.homeDir ?? os.homedir())
+    const project = this.projects
+      .list()
+      .map((item) => item.path)
+      .filter(
+        (item) =>
+          folder === item || folder.startsWith(item.endsWith(path.sep) ? item : item + path.sep),
+      )
+      .sort((a, b) => b.length - a.length)[0]
+    const servers = this.settings.marketplace.mcp.filter(
+      (server) => serverFor(server, agent) && servedInProject(server.projects, project ?? ''),
+    )
+    return {
+      key: `terminal:${mcpId()}`,
+      sessionId: null,
+      folder,
+      servers: new Set(servers.map((server) => server.id)),
+      terminal: { agentId: agent },
+    }
+  }
+
   mcpInstallResult(callId: number, error: string | null): void {
     const resolve = this.mcpInstallCalls.get(callId)
     this.mcpInstallCalls.delete(callId)
@@ -3005,7 +3210,9 @@ export class AgentHost {
     oauth?: unknown,
     agentEnv?: unknown,
     pluginSecrets?: unknown,
+    sealKey?: unknown,
   ): void {
+    if (sealKey !== undefined) this.backupKey = backupKey(sealKey)
     const keys = parseMarketKeys(values)
     const signIns = oauth === undefined ? undefined : parseSignIns(oauth)
     if (!keys || signIns === null) {
@@ -3123,6 +3330,10 @@ export class AgentHost {
    * before.
    */
   private async findBridge(file: string | null): Promise<void> {
+    const command = this.options.mcpCommandPath
+    if (command && (await isExecutableFile(command, this.options.platform))) {
+      this.mcpCommand = command
+    }
     if (file && (await isExecutableFile(file, this.options.platform))) {
       this.mcpBridge = file
       return
@@ -4384,6 +4595,26 @@ export class AgentHost {
       'market.discoverMcp': () => this.mcpDiscovery.scan(),
       'market.dismissMcpNotice': ({ id }) => this.mcpDiscovery.dismiss(id),
       'market.importMcp': ({ choices }) => this.installMcp(this.mcpDiscovery.prepare(choices)),
+      'market.mcpTerminal': () => this.mcpTerminal.rows(),
+      'market.mcpTerminalPlan': async ({ agentId }) => {
+        await this.ensureBackupKey()
+        return this.mcpTerminalCall(() => this.mcpTerminal.plan(agentId))
+      },
+      'market.mcpTerminalOn': async ({ agentId, planId }) => {
+        await this.ensureBackupKey()
+        await this.mcpTerminalCall(() => this.mcpTerminal.turnOn(agentId, planId))
+      },
+      'market.mcpTerminalOffPlan': ({ agentId }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.offPlan(agentId)),
+      'market.mcpTerminalOff': ({ agentId }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.turnOff(agentId)),
+      'market.mcpTerminalDrift': ({ agentId }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.drifts(agentId)),
+      'market.mcpTerminalResolve': ({ agentId, choices }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.resolve(agentId, choices)),
+      'market.mcpTerminalBackups': ({ agentId }) => this.mcpTerminal.backups(agentId),
+      'market.mcpTerminalRestore': ({ agentId, backupId }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.restore(agentId, backupId)),
       'market.previewMcp': ({ text }, { portId }) => this.previewMcp(text, portId),
       'market.addMcp': ({ choices }, { portId }) => this.addMcp(choices, portId),
       'market.checkMcp': ({ serverId }) => {
@@ -4490,6 +4721,7 @@ export class AgentHost {
       'mcp.retry': async () => {
         await this.artifactService.start()
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })
+        await this.writeConnect()
         return this.mcpStatus()
       },
       'agents.listSessions': ({ agentId, projectPath, cursor, allFolders }) =>

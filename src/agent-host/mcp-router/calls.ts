@@ -19,7 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/
 const RESULTS: readonly McpCallResult[] = ['ok', 'tool-error', 'error', 'refused', 'cancelled']
 /** A line longer than this is not one Kettu wrote. */
-const MAX_LINE = 4096
+const MAX_LINE = 8192
+const MAX_FOLDER = 1024
 
 function dayOf(at: number): string {
   return new Date(at).toISOString().slice(0, 10)
@@ -43,6 +44,9 @@ export function callLine(record: McpCallRecord): string {
     ...(record.error !== undefined && record.result !== 'ok'
       ? { error: record.error.replace(/\s+/g, ' ').slice(0, MCP_CALL_ERROR_CHARS) }
       : {}),
+    ...(record.sessionId === null && record.folder !== undefined
+      ? { folder: record.folder.slice(0, MAX_FOLDER) }
+      : {}),
   }
   return `${JSON.stringify(kept)}\n`
 }
@@ -56,7 +60,7 @@ function readLine(line: string): McpCallRecord | null {
     return null
   }
   if (!isRecord(raw)) return null
-  const { at, serverId, sessionId, agentId, tool, ms, bytes, result, error } = raw
+  const { at, serverId, sessionId, agentId, tool, ms, bytes, result, error, folder } = raw
   if (typeof at !== 'number' || typeof serverId !== 'string' || typeof tool !== 'string') {
     return null
   }
@@ -74,6 +78,7 @@ function readLine(line: string): McpCallRecord | null {
     bytes,
     result: result as McpCallResult,
     ...(typeof error === 'string' ? { error } : {}),
+    ...(typeof folder === 'string' && sessionId === null ? { folder } : {}),
   }
 }
 

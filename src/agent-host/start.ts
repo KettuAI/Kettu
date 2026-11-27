@@ -60,6 +60,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       sessionRouterPath: message.sessionRouterPath,
       clineHostPath: message.clineHostPath,
       mcpBridgePath: message.mcpBridgePath ?? null,
+      mcpCommandPath: message.mcpCommandPath ?? null,
       settings: message.settings,
       baseEnv: process.env,
       // A development run keeps its installs apart from the installed app's.
@@ -105,7 +106,13 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:market-keys':
         withHost((h) =>
-          h.setMarketKeys(message.values, message.oauth, message.agentEnv, message.pluginSecrets),
+          h.setMarketKeys(
+            message.values,
+            message.oauth,
+            message.agentEnv,
+            message.pluginSecrets,
+            message.backupKey,
+          ),
         )
         break
       case 'host:market-account':
@@ -127,6 +134,14 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           message.answer !== null
         ) {
           withHost((h) => h.settingsResult(message.callId, message.answer))
+        }
+        break
+      case 'mcp-backup-key-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          (message.error === null || typeof message.error === 'string')
+        ) {
+          withHost((h) => h.mcpBackupKeyResult(message.callId, message.error))
         }
         break
       case 'mcp-install-result':

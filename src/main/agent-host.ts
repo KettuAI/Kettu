@@ -109,6 +109,8 @@ export interface AgentHostDeps {
   settingsCall?: (call: unknown) => SettingsCallAnswer
   /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
   installMcp?(entries: McpInstallEntry[]): Promise<string | null>
+  /** Makes the key store's backup key if it has none: null once it is there, else why not. */
+  mcpBackupKey?(): Promise<string | null>
   pluginSecret?: (pluginId: unknown, key: unknown, value: unknown) => Promise<string | null>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
@@ -833,6 +835,15 @@ export class AgentHost {
         const run = this.deps.installMcp
         void (run ? run(entries) : Promise.resolve('This build cannot import MCP servers.')).then(
           (error) => this.host.post({ type: 'mcp-install-result', callId, error }),
+        )
+        break
+      }
+      case 'host:mcp-backup-key': {
+        const { callId } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.mcpBackupKey
+        void (run ? run() : Promise.resolve('This build keeps no backup key.')).then((error) =>
+          this.host.post({ type: 'mcp-backup-key-result', callId, error }),
         )
         break
       }

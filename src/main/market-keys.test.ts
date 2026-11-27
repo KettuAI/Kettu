@@ -123,6 +123,19 @@ function load(
 const fileText = (): Promise<string> => readFile(marketKeysFile(dir), 'utf8')
 
 describe('the Marketplace key store', () => {
+  it('keeps the backup key sealed, for good, once one is asked for', async () => {
+    const keys = await load()
+    expect(keys.contentsForHost().backupKey).toBeUndefined()
+    await keys.ensureBackupKey()
+    const made = keys.contentsForHost().backupKey!
+    expect(Buffer.from(made, 'base64')).toHaveLength(32)
+    expect(pushed.at(-1)?.backupKey).toBe(made)
+    expect(await fileText()).not.toContain(made)
+    await keys.ensureBackupKey()
+    const again = await load()
+    expect(again.contentsForHost().backupKey).toBe(made)
+  })
+
   it('keeps values encrypted and reads them back', async () => {
     const keys = await load()
     await keys.set({ serverId: github.id, values: { Authorization: `Bearer ${TOKEN}` } })

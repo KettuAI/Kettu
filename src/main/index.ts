@@ -547,6 +547,11 @@ async function start(): Promise<void> {
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     installMcp: (entries) => installDiscoveredMcp(settings, marketKeys, entries),
+    mcpBackupKey: () =>
+      marketKeys.ensureBackupKey().then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      ),
     pluginSecret: (pluginId, key, value) =>
       marketKeys.setPluginSecret(pluginId, key, value).then(
         () => null,
