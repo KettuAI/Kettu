@@ -230,7 +230,7 @@ describe('a paired device', () => {
       type: 'welcome',
       protocol: 1,
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
-      features: ['bytes', 'load'],
+      features: ['bytes', 'load', 'tool-output-append'],
       role: 'owner',
       device: { id: t.phone.id, name: 'Phone' },
       terminal: false,
@@ -437,7 +437,7 @@ describe("a device's notifications", () => {
     const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
     expect(await device.first).toMatchObject({
       protocol: 4,
-      features: ['bytes', 'load', 'push', 'web-push', 'standby'],
+      features: ['bytes', 'load', 'tool-output-append', 'push', 'web-push', 'standby'],
     })
     const state = await ask(device, 'notifications.set', {
       target,
@@ -464,13 +464,18 @@ describe("a device's notifications", () => {
   it('are not offered to an older device, or by a host without its signing key', async () => {
     const t = await setup({ push: true })
     const older = await t.connect(undefined, { protocol: { min: 1, max: 3 } })
-    expect(await older.first).toMatchObject({ protocol: 3, features: ['bytes', 'load', 'standby'] })
+    expect(await older.first).toMatchObject({
+      protocol: 3,
+      features: ['bytes', 'load', 'tool-output-append', 'standby'],
+    })
     await expect(ask(older, 'notifications.get', undefined)).rejects.toMatchObject({
       code: 'unavailable',
     })
     const plain = await setup()
     const device = await plain.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
-    expect(await device.first).toMatchObject({ features: ['bytes', 'load', 'standby'] })
+    expect(await device.first).toMatchObject({
+      features: ['bytes', 'load', 'tool-output-append', 'standby'],
+    })
     await expect(ask(device, 'notifications.set', { target })).rejects.toMatchObject({
       code: 'unavailable',
     })

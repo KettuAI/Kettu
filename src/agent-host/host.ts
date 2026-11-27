@@ -2065,7 +2065,23 @@ export class AgentHost {
         turnStarted: (sessionId) => void this.workflowSuggestions.turnStarted(sessionId),
       },
       events: {
-        patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
+        patches: (batch, portIds, legacy) => {
+          if (!legacy) {
+            this.hub.send(portIds, { type: 'session.patches', batch })
+            return
+          }
+          const modern: string[] = []
+          const older: string[] = []
+          for (const portId of portIds) {
+            const device = this.hub.deviceOf(portId)
+            // 本地桌面窗口（device === null）与已协商 `tool-output-append` 的设备接收增量补丁；
+            // 未声明该能力的旧设备透明降级为完整 `entry.update`。
+            if (!device || device.toolOutputAppend) modern.push(portId)
+            else older.push(portId)
+          }
+          if (modern.length > 0) this.hub.send(modern, { type: 'session.patches', batch })
+          if (older.length > 0) this.hub.send(older, { type: 'session.patches', batch: legacy() })
+        },
         summary: (summary, portIds) => {
           if (portIds) {
             this.hub.send(portIds, { type: 'session.summary', summary })

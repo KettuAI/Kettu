@@ -2,14 +2,17 @@
 // produces for the same work, so a Codex thread reads as it did through codex-acp.
 
 import path from 'node:path'
-import type {
-  ContentRef,
-  EntryChanges,
-  PlanItem,
-  TokenTotals,
-  ToolContent,
-  ToolEntry,
-  UserContent,
+import {
+  cutToolOutput,
+  fenceToolOutput,
+  trimToolOutputDelta,
+  type ContentRef,
+  type EntryChanges,
+  type PlanItem,
+  type TokenTotals,
+  type ToolContent,
+  type ToolEntry,
+  type UserContent,
 } from '@shared/thread'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { replayedBlock } from '../acp/mapper'
@@ -64,9 +67,6 @@ function output(): MapperOutput {
   return { patches: [], effects: [] }
 }
 
-/** Output a command printed, as one fenced block, its start cut once it grows past this. */
-const OUTPUT_LIMIT = 64 * 1024
-
 /** `/bin/zsh -lc 'ls -la'` as `ls -la`, the command Codex runs inside its shell. */
 export function stripShellPrefix(command: string): string {
   const inner = command.replace(/^(?:\/bin\/)?(?:bash|zsh|sh)\s+(?:-[lc]+\s+)?/, '')
@@ -76,16 +76,9 @@ export function stripShellPrefix(command: string): string {
 }
 
 /** `text` as one fenced block, with a fence longer than any it holds. */
-export function fenced(text: string): string {
-  let longest = 2
-  for (const match of text.matchAll(/^\s*(`{3,})/gm)) longest = Math.max(longest, match[1]!.length)
-  const fence = '`'.repeat(longest + 1)
-  return `${fence}\n${text.replace(/\n$/, '')}\n${fence}`
-}
+export const fenced = fenceToolOutput
 
-function cut(text: string): string {
-  return text.length > OUTPUT_LIMIT ? `…\n${text.slice(text.length - OUTPUT_LIMIT)}` : text
-}
+const cut = cutToolOutput
 
 function toolStatus(status: string | null | undefined): ToolEntry['status'] {
   switch (status) {
@@ -801,15 +794,13 @@ export class ThreadMapper {
 
   private appendOutput(ctx: MapperContext, out: MapperOutput, itemId: string, delta: string): void {
     if (!delta) return
-    const printed = cut((this.outputs.get(itemId) ?? '') + toLf(delta))
+    const normalized = toLf(delta)
+    const printed = cut((this.outputs.get(itemId) ?? '') + normalized)
     this.outputs.set(itemId, printed)
     const entry = ctx.thread.byId[`t:${itemId}`]
     if (entry?.kind !== 'tool' || entry.toolKind === 'read') return
-    out.patches.push({
-      op: 'entry.update',
-      id: entry.id,
-      changes: { content: [{ type: 'markdown', markdown: fenced(printed) }] },
-    })
+    // 仅下发本次增量片段，由新客户端本地维护 64 KiB 围栏尾窗，避免每块重发整段输出。
+    out.patches.push({ op: 'entry.appendOutput', id: entry.id, text: trimToolOutputDelta(normalized) })
   }
 
   /** Adds or updates the tool entry of item `itemId`; returns its entry id. */

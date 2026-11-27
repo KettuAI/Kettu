@@ -3,7 +3,13 @@
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { applyPatches, threadEntries, threadFromSnapshot, type ThreadState } from '@shared/thread'
+import {
+  applyPatches,
+  threadEntries,
+  threadFromSnapshot,
+  type Patch,
+  type ThreadState,
+} from '@shared/thread'
 import { newTurnScope, type MapperContext, type MapperEffect } from '../session-updates'
 import { commandFacts, diffHunks, fenced, stripShellPrefix, ThreadMapper } from './mapper'
 
@@ -43,6 +49,7 @@ function run(
   })
   const scope = newTurnScope()
   const effects: MapperEffect[] = []
+  const patches: Patch[] = []
   let n = 0
   let now = 1_000
   const unknown: string[] = []
@@ -60,12 +67,13 @@ function run(
     const out = mapper.notification(method, params, ctx)
     if (!out) unknown.push(method)
     else {
+      patches.push(...out.patches)
       thread = applyPatches(thread, out.patches)
       effects.push(...out.effects)
     }
     now += 100
   }
-  return { thread, entries: threadEntries(thread), effects, unknown }
+  return { thread, entries: threadEntries(thread), effects, unknown, patches }
 }
 
 const at = { threadId: 'thread-1', turnId: 'turn-1' }
@@ -235,6 +243,32 @@ describe('commands', () => {
       tool?.kind === 'tool' && tool.content[0]?.type === 'markdown' ? tool.content[0].markdown : ''
     expect(markdown.startsWith('```\n…\n')).toBe(true)
     expect(markdown.length).toBeLessThan(70 * 1024)
+  })
+
+  it('emits incremental entry.appendOutput patches for streaming command output deltas', () => {
+    const item = {
+      type: 'commandExecution',
+      id: 'cmd1',
+      command: 'npm test',
+      cwd: '/p',
+      status: 'inProgress',
+      commandActions: [{ type: 'unknown', command: 'npm test' }],
+      aggregatedOutput: null,
+      exitCode: null,
+    }
+    const { entries, patches } = run([
+      started(item),
+      ['item/commandExecution/outputDelta', { ...at, itemId: 'cmd1', delta: 'first\r\n' }],
+      ['item/commandExecution/outputDelta', { ...at, itemId: 'cmd1', delta: 'second\n' }],
+    ])
+    expect(patches.filter((p) => p.op === 'entry.appendOutput')).toEqual([
+      { op: 'entry.appendOutput', id: 't:cmd1', text: 'first\n' },
+      { op: 'entry.appendOutput', id: 't:cmd1', text: 'second\n' },
+    ])
+    expect(entries[0]).toMatchObject({
+      kind: 'tool',
+      content: [{ type: 'markdown', markdown: '```\nfirst\nsecond\n```' }],
+    })
   })
 })
 

@@ -90,6 +90,7 @@ import {
   RESUME_MS,
   RESUME_VERSION,
   STANDBY_FEATURE,
+  TOOL_OUTPUT_APPEND_FEATURE,
   parseAddresses,
   parseClosing,
   parseHostRenamed,
@@ -2452,6 +2453,7 @@ export class HostClient {
       features: [
         BROWSER_FEATURE,
         IMAGE_REFS_FEATURE,
+        TOOL_OUTPUT_APPEND_FEATURE,
         ...(this.options.relay?.regions ? [REGIONS_CHANNEL_FEATURE] : []),
       ],
     }

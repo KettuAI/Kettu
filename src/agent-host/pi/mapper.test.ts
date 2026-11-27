@@ -6,6 +6,7 @@ import {
   applyPatches,
   threadEntries,
   threadFromSnapshot,
+  type Patch,
   type ThreadEntry,
   type ThreadState,
 } from '@shared/thread'
@@ -66,6 +67,7 @@ interface Run {
   entries: ThreadEntry[]
   effects: MapperEffect[]
   unknown: string[]
+  patches: Patch[]
 }
 
 /** Maps events, or stored entries when `replaying`, each against the thread the ones before left. */
@@ -79,6 +81,7 @@ function run(
   const scope = newTurnScope()
   const effects: MapperEffect[] = []
   const unknown: string[] = []
+  const patches: Patch[] = []
   let n = 0
   records.forEach((record, seq) => {
     const ctx: MapperContext = {
@@ -96,11 +99,12 @@ function run(
       : mapper.event(event, ctx, event.toolCallId ? options.before?.[event.toolCallId] : undefined)
     if (!out) unknown.push((record as { type: string }).type)
     else {
+      patches.push(...out.patches)
       thread = applyPatches(thread, out.patches)
       effects.push(...out.effects)
     }
   })
-  return { thread, entries: threadEntries(thread), effects, unknown }
+  return { thread, entries: threadEntries(thread), effects, unknown, patches }
 }
 
 const rows = (entries: readonly ThreadEntry[]) =>
@@ -346,6 +350,17 @@ describe('a running command', () => {
     const more = run([start, ...Array.from({ length: 16 }, (_, i) => update(`line ${i}`))])
     expect(more.entries[0]).toMatchObject({
       content: [{ type: 'markdown', markdown: '```\nline 15\n```' }],
+    })
+
+    // 输出按前缀递增时仅发 entry.appendOutput 增量；发生覆盖回写时自动回退 entry.update
+    const filler = Array.from({ length: 14 }, () => update('a\n'))
+    const growing = run([start, update('a\n'), ...filler, update('a\nb\n')])
+    expect(growing.patches.filter((p) => p.op === 'entry.appendOutput')).toEqual([
+      { op: 'entry.appendOutput', id: 't:c1', text: 'a\n' },
+      { op: 'entry.appendOutput', id: 't:c1', text: 'b\n' },
+    ])
+    expect(growing.entries[0]).toMatchObject({
+      content: [{ type: 'markdown', markdown: '```\na\nb\n```' }],
     })
   })
 })

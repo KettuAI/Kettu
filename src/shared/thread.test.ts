@@ -8,8 +8,10 @@ import {
   outOfCreditTurn,
   prependEntries,
   retryableTurn,
+  stripToolOutputMeta,
   threadEntries,
   threadFromSnapshot,
+  TOOL_OUTPUT_LIMIT,
   UnknownEntryError,
   type Patch,
   type SessionView,
@@ -151,6 +153,78 @@ describe('applyPatches', () => {
     ])
     expect(after.byId['c:1']).toMatchObject({ summary: 'AB' })
   })
+
+  it('appends streaming tool output with newline preservation, nested fences, and 64 KiB window', () => {
+    const tool: ToolEntry = {
+      kind: 'tool',
+      id: 't:1',
+      title: 'Run',
+      toolKind: 'execute',
+      status: 'in_progress',
+      content: [],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+    }
+    // 尾换行保真与嵌套反引号围栏升级
+    const streamed = applyPatches(state([tool]), [
+      { op: 'entry.appendOutput', id: 't:1', text: 'line1\n' },
+      { op: 'entry.appendOutput', id: 't:1', text: '```\nline2\n' },
+      { op: 'entry.appendOutput', id: 't:1', text: 'line3' },
+    ])
+    const entry = streamed.byId['t:1']
+    expect(entry?.kind === 'tool' && entry.content).toEqual([
+      { type: 'markdown', markdown: '````\nline1\n```\nline2\nline3\n````' },
+    ])
+
+    // 末尾带换行时标记 trailingNewline，再追加不会丢换行；stripToolOutputMeta 可干净剥离
+    const withNewline = applyPatches(state([tool]), [
+      { op: 'entry.appendOutput', id: 't:1', text: 'a\n' },
+    ])
+    const withNewlineTool = withNewline.byId['t:1'] as ToolEntry
+    expect(withNewlineTool.content).toEqual([
+      { type: 'markdown', markdown: '```\na\n```', trailingNewline: true },
+    ])
+    expect(stripToolOutputMeta(withNewlineTool.content)).toEqual([
+      { type: 'markdown', markdown: '```\na\n```' },
+    ])
+    const nextLine = applyPatches(withNewline, [
+      { op: 'entry.appendOutput', id: 't:1', text: 'b\n' },
+    ])
+    expect((nextLine.byId['t:1'] as ToolEntry).content).toEqual([
+      { type: 'markdown', markdown: '```\na\nb\n```', trailingNewline: true },
+    ])
+
+    // 超过 64 KiB 滑窗时分批追加与一次性追加完全等价
+    const chunkA = 'a'.repeat(50_000) + '\n'
+    const chunkB = 'b'.repeat(30_000) + '\n'
+    const chunkC = 'tail-line'
+    const stepped = applyPatches(state([tool]), [
+      { op: 'entry.appendOutput', id: 't:1', text: chunkA },
+      { op: 'entry.appendOutput', id: 't:1', text: chunkB },
+      { op: 'entry.appendOutput', id: 't:1', text: chunkC },
+    ])
+    const combined = applyPatches(state([tool]), [
+      { op: 'entry.appendOutput', id: 't:1', text: chunkA + chunkB + chunkC },
+    ])
+    expect(stepped.byId['t:1']).toEqual(combined.byId['t:1'])
+    const md = ((stepped.byId['t:1'] as ToolEntry).content[0] as { markdown: string }).markdown
+    expect(md.startsWith('```\n…\n')).toBe(true)
+    expect(md.endsWith('tail-line\n```')).toBe(true)
+
+    // partial 模式下跳过未知条目；非 partial 抛 UnknownEntryError；非 tool 条目抛 Error
+    expect(
+      applyPatches(state([agent]), [{ op: 'entry.appendOutput', id: 't:missing', text: 'x' }], {
+        partial: true,
+      }).byId,
+    ).toEqual(state([agent]).byId)
+    expect(() =>
+      applyPatches(state([agent]), [{ op: 'entry.appendOutput', id: 't:missing', text: 'x' }]),
+    ).toThrow(UnknownEntryError)
+    expect(() =>
+      applyPatches(state([agent]), [{ op: 'entry.appendOutput', id: 'm:1', text: 'x' }]),
+    ).toThrow('entry.appendOutput')
+  })
 })
 
 describe('pages', () => {
@@ -241,6 +315,43 @@ describe('coalescePatches', () => {
       { op: 'entry.appendText', id: 'm:2', text: 'c' },
       { op: 'entry.appendText', id: 'm:1', text: 'd' },
     ])
+  })
+
+  it('merges consecutive tool output appends and caps oversized merged deltas equivalently', () => {
+    expect(
+      coalescePatches([
+        { op: 'entry.appendOutput', id: 't:1', text: 'a\n' },
+        { op: 'entry.appendOutput', id: 't:1', text: 'b\n' },
+        { op: 'entry.appendOutput', id: 't:2', text: 'c' },
+      ]),
+    ).toEqual([
+      { op: 'entry.appendOutput', id: 't:1', text: 'a\nb\n' },
+      { op: 'entry.appendOutput', id: 't:2', text: 'c' },
+    ])
+
+    // 超大连续输出合并后长度被封顶，且应用结果与逐条应用完全一致
+    const tool: ToolEntry = {
+      kind: 'tool',
+      id: 't:1',
+      title: 'Run',
+      toolKind: 'execute',
+      status: 'in_progress',
+      content: [],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+    }
+    const bigPatches: Patch[] = [
+      { op: 'entry.appendOutput', id: 't:1', text: 'x'.repeat(TOOL_OUTPUT_LIMIT) },
+      { op: 'entry.appendOutput', id: 't:1', text: 'y'.repeat(TOOL_OUTPUT_LIMIT) },
+      { op: 'entry.appendOutput', id: 't:1', text: 'z'.repeat(100) },
+    ]
+    const merged = coalescePatches(bigPatches)
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.op === 'entry.appendOutput' && merged[0].text.length).toBe(
+      TOOL_OUTPUT_LIMIT + 1,
+    )
+    expect(applyPatches(state([tool]), merged)).toEqual(applyPatches(state([tool]), bigPatches))
   })
 })
 

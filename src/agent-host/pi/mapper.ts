@@ -3,13 +3,15 @@
 
 import path from 'node:path'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
-import type {
-  ThreadEntry,
-  TokenTotals,
-  ToolContent,
-  ToolEntry,
-  ToolKind,
-  UserContent,
+import {
+  cutToolOutput,
+  trimToolOutputDelta,
+  type ThreadEntry,
+  type TokenTotals,
+  type ToolContent,
+  type ToolEntry,
+  type ToolKind,
+  type UserContent,
 } from '@shared/thread'
 import { diffHunks, fenced } from '../codex/mapper'
 import { t } from '../i18n'
@@ -43,8 +45,6 @@ import type {
   PiUsage,
 } from './protocol'
 
-/** Output a tool printed, its start cut once it grows past this. */
-const OUTPUT_LIMIT = 64 * 1024
 /** A running command's output reaches the thread at most this often. */
 const OUTPUT_EVERY_MS = 150
 const SHELL_TOOLS: ReadonlySet<string> = new Set(['bash', 'powershell'])
@@ -54,9 +54,7 @@ function output(): MapperOutput {
   return { patches: [], effects: [] }
 }
 
-function cut(text: string): string {
-  return text.length > OUTPUT_LIMIT ? `…\n${text.slice(text.length - OUTPUT_LIMIT)}` : text
-}
+const cut = cutToolOutput
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -301,6 +299,8 @@ interface Call {
   args: unknown
   /** When its running output last reached the thread. */
   shownAt: number
+  /** 已下发给线程的规范化累计输出文本，用于计算增量补丁。 */
+  shownText: string
 }
 
 interface Reply {
@@ -695,7 +695,12 @@ export class SessionMapper {
     replaying = false,
   ): void {
     const known = this.calls.get(callId)
-    this.calls.set(callId, { name, args: args ?? known?.args, shownAt: known?.shownAt ?? 0 })
+    this.calls.set(callId, {
+      name,
+      args: args ?? known?.args,
+      shownAt: known?.shownAt ?? 0,
+      shownText: known?.shownText ?? '',
+    })
     if (this.hidden(name)) return
     const id = `t:${callId}`
     const existing = ctx.thread.byId[id]
@@ -728,7 +733,7 @@ export class SessionMapper {
   ): void {
     const known = this.calls.get(callId)
     const input = args ?? known?.args ?? {}
-    this.calls.set(callId, { name, args: input, shownAt: 0 })
+    this.calls.set(callId, { name, args: input, shownAt: 0, shownText: '' })
     if (this.hidden(name)) return
     const id = `t:${callId}`
     const facts = toolFacts(name, input, this.cwd)
@@ -770,8 +775,16 @@ export class SessionMapper {
     if (!call || existing?.kind !== 'tool' || !SHELL_TOOLS.has(call.name)) return
     if (ctx.now - call.shownAt < OUTPUT_EVERY_MS) return
     const text = toLf(blockText(partial?.content))
-    if (text === '') return
+    if (text === '' || text === call.shownText) return
     call.shownAt = ctx.now
+    // 若本次快照在已下发文本末尾继续追加，则仅发增量补丁；若发生覆盖/回写则回退整段更新。
+    if (text.startsWith(call.shownText)) {
+      const delta = text.slice(call.shownText.length)
+      call.shownText = text
+      out.patches.push({ op: 'entry.appendOutput', id, text: trimToolOutputDelta(delta) })
+      return
+    }
+    call.shownText = text
     out.patches.push({
       op: 'entry.update',
       id,
@@ -788,7 +801,7 @@ export class SessionMapper {
     failed: boolean,
     before?: string | null,
   ): void {
-    const call = this.calls.get(callId) ?? { name, args: {}, shownAt: 0 }
+    const call = this.calls.get(callId) ?? { name, args: {}, shownAt: 0, shownText: '' }
     this.calls.delete(callId)
     const id = `t:${callId}`
     const existing = ctx.thread.byId[id]
