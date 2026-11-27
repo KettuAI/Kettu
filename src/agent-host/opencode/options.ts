@@ -63,7 +63,7 @@ export function configOptions(offer: Offer, chosen: Chosen): ConfigOption[] {
       value: current ? modelValue(current) : modelValue(models[0]!),
       choices: models.map((model) => ({
         value: modelValue(model),
-        name: `${model.providerID}/${model.name}`,
+        name: `${model.providerID}/${model.name || model.id}`,
       })),
     })
   }

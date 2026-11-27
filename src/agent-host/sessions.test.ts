@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StopReason } from '@shared/thread'
+import type { ConfigOption, StopReason } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import type { AgentManager } from './agents'
 import { CLAUDE_CODE } from './catalog'
@@ -2539,5 +2539,131 @@ describe('session manager shutdown and flush cleanup', () => {
       await readFile(path.join(dir, 'state', 'agent-options.json'), 'utf8'),
     ) as { agents: Record<string, unknown> }
     expect(savedOptions.agents['claude-code']).toBeDefined()
+  })
+})
+
+describe('openNew start option guards', () => {
+  it('holds the first prompt when a new session omits a cached model option, without blocking on dropped thought_level', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo, { recursive: true })
+
+    const cachedModel = {
+      id: 'model',
+      name: 'Model',
+      category: 'model' as const,
+      type: 'select' as const,
+      value: 'custom-provider/my-model',
+      choices: [
+        { value: 'opencode/default', name: 'opencode/Default' },
+        { value: 'custom-provider/my-model', name: 'custom-provider/My Model' },
+      ],
+    }
+    const cachedEffort = {
+      id: 'effort',
+      name: 'Reasoning',
+      category: 'thought_level' as const,
+      type: 'select' as const,
+      value: 'high',
+      choices: [
+        { value: 'low', name: 'Low' },
+        { value: 'high', name: 'High' },
+        { value: 'default', name: 'Default' },
+      ],
+    }
+    const modeOnly = [
+      {
+        id: 'mode',
+        name: 'Mode',
+        category: 'mode' as const,
+        type: 'select' as const,
+        value: 'build',
+        choices: [{ value: 'build', name: 'Build' }],
+      },
+    ]
+
+    const options = new AgentOptionsStore({
+      file: agentOptionsFile(dir, log),
+      changed: () => {},
+    })
+    await options.load()
+    options.started('opencode', [cachedModel, cachedEffort, ...modeOnly], repo)
+
+    let sessionConfig: ConfigOption[] = modeOnly
+    const prompt = vi.fn(async () => ({
+      stopReason: 'end_turn' as StopReason,
+      tokens: null,
+      models: [],
+    }))
+    let seq = 0
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      register: () => {},
+      unregister: () => {},
+      reopen: () => {},
+      newSession: async () => ({ sessionId: `ses_${++seq}`, config: sessionConfig }),
+      setConfigOption: async (_sessionId: string, optionId: string, value: string | boolean) =>
+        sessionConfig.map((item) => (item.id === optionId ? { ...item, value } : item)),
+      prompt,
+      cancel: async () => {},
+    }
+    const runtime = {
+      agentId: 'opencode' as const,
+      init: {
+        capabilities: {
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'OpenCode',
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+
+    const { sessions } = manager({}, { agents, options })
+    await sessions.load()
+
+    // Case 1: agent omits the entire `model` option; first prompt must be held in a paused queue.
+    const held = await sessions.create({
+      agentId: 'opencode',
+      projectPath: repo,
+      options: { model: 'custom-provider/my-model' },
+      prompt: [{ type: 'text', text: 'Do not fall back silently' }],
+    })
+    await vi.waitFor(async () => {
+      const snap = await sessions.snapshot(held.id)
+      expect(snap?.session.status).toBe('ready')
+      expect(snap?.session.queuePaused).toBe(true)
+    })
+    const heldSnap = await sessions.snapshot(held.id)
+    expect(prompt).not.toHaveBeenCalled()
+    expect(heldSnap?.session.queue).toHaveLength(1)
+    expect(heldSnap?.entries.some((entry) => entry.kind === 'notice')).toBe(true)
+
+    // Case 2: cached options include `thought_level`, but the chosen model has no effort variants;
+    // the prompt still sends on the custom model without a false hold.
+    options.started('opencode', [cachedModel, cachedEffort, ...modeOnly], repo)
+    sessionConfig = [{ ...cachedModel, value: 'opencode/default' }, ...modeOnly]
+    const sent = await sessions.create({
+      agentId: 'opencode',
+      projectPath: repo,
+      options: { model: 'custom-provider/my-model', effort: 'high' },
+      prompt: [{ type: 'text', text: 'Run on custom model' }],
+    })
+    await vi.waitFor(() => {
+      expect(prompt).toHaveBeenCalledTimes(1)
+    })
+    const sentSnap = await sessions.snapshot(sent.id)
+    expect(sentSnap?.session.queuePaused).toBe(false)
+    expect(sentSnap?.session.config.find((item) => item.id === 'model')?.value).toBe(
+      'custom-provider/my-model',
+    )
   })
 })

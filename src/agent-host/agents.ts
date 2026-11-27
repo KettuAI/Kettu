@@ -1712,6 +1712,7 @@ export class AgentManager {
         ...context,
         spec,
         env,
+        platform: this.deps.platform,
         spawn: run.spawn,
         currentCli: this.currentCli(slot, spec),
         cliVersion: slot.h.detection?.cli?.version ?? slot.h.binaryVersion,
@@ -5189,11 +5190,22 @@ export class AgentManager {
       : this.openCodeClient(slot)
   }
 
+  private openCodeProgram(slot: Slot): { command: string; env?: Env } {
+    const detection = slot.h.detection
+    if (detection?.state === 'available') {
+      const running = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
+      const spec = running ?? detection.spec
+      if (spec) return { command: spec.command, env: spec.env }
+      if (detection.cli?.path) return { command: detection.cli.path }
+    }
+    return { command: this.display(slot).command }
+  }
+
   private openCodeClient(slot: Slot): OpenCodeClient {
-    const display = this.display(slot)
+    const { command, env } = this.openCodeProgram(slot)
     return new OpenCodeClient({
-      program: display.command,
-      env: this.deps.env.agentEnv(slot.id),
+      program: command,
+      env: { ...this.deps.env.agentEnv(slot.id), ...env },
       platform: this.deps.platform,
       ...(this.deps.runProgram ? { runProgram: this.deps.runProgram } : {}),
     })

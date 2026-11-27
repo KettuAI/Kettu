@@ -81,11 +81,10 @@ function failed(run: ProgramRun): boolean {
 function integrationOf(value: unknown): Integration | null {
   const row = record(value)
   const id = text(row?.id)
-  const name = text(row?.name)
-  if (!id || !name) return null
+  if (!id) return null
   return {
     id,
-    name,
+    name: text(row?.name) ?? id,
     methods: list(row?.methods) ?? [],
     connections: list(row?.connections) ?? [],
   }
@@ -497,7 +496,7 @@ export class OpenCodeClient {
       return /HTTP 404\b/.test(run.output.toString()) ? { kind: 'missing' } : { kind: 'error' }
     }
     try {
-      return { kind: 'ok', value: JSON.parse(run.stdout) as unknown }
+      return { kind: 'ok', value: JSON.parse(run.stdout.replace(/^\uFEFF/, '')) as unknown }
     } catch {
       return { kind: 'error' }
     }

@@ -5,6 +5,7 @@
 
 import type { ChildProcess } from 'node:child_process'
 import type { NodeRuntime } from '@shared/host-control'
+import type { Platform } from '@shared/platform'
 import type { ConfigOption } from '@shared/thread'
 import type { AgentDefinition, LaunchSpec } from './catalog'
 import type { AgentConnection, ConnectionHooks } from './connection'
@@ -83,6 +84,8 @@ export interface HostedContext extends DriverContext {
   spec: LaunchSpec
   env: Env
   spawn: HostedSpawn
+  /** Host OS platform for path canonicalization; defaults to `process.platform`. */
+  platform?: Platform
   /**
    * The user's CLI to start a process with: `started` while it is still there, else the one
    * detection finds again. Rejects with why none can run. A test may leave it out.
