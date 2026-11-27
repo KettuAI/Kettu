@@ -401,8 +401,10 @@ export function ComposerEditor({
         if (!editor) return false
         const { selection, doc } = editor.state
         if (selection.ranges.length !== 1 || !selection.main.empty) return false
+        const target = forward ? doc.length : 0
+        if (selection.main.head === target) return true
         const edge = editor.moveToLineBoundary(selection.main, forward, true).head
-        return edge === (forward ? doc.length : 0)
+        return edge === target
       },
       insert: (text) => {
         const editor = view.current
