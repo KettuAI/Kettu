@@ -2104,21 +2104,29 @@ export class AgentHost {
           if (modern.length > 0) this.hub.send(modern, { type: 'session.patches', batch })
           if (older.length > 0) this.hub.send(older, { type: 'session.patches', batch: legacy() })
         },
-        summary: (summary, portIds) => {
+        summary: (summary, portIds, rev) => {
+          const event: HostEvent =
+            rev !== undefined
+              ? { type: 'session.summary', summary, rev }
+              : { type: 'session.summary', summary }
           if (portIds) {
-            this.hub.send(portIds, { type: 'session.summary', summary })
+            this.hub.send(portIds, event)
             return
           }
-          this.hub.broadcast({ type: 'session.summary', summary })
+          this.hub.broadcast(event)
           if (summary.scratch || summary.worktree) this.sendFolders()
           this.scheduleActivity()
         },
-        removed: (sessionId, portIds) => {
+        removed: (sessionId, portIds, rev) => {
+          const event: HostEvent =
+            rev !== undefined
+              ? { type: 'session.removed', sessionId, rev }
+              : { type: 'session.removed', sessionId }
           if (portIds) {
-            this.hub.send(portIds, { type: 'session.removed', sessionId })
+            this.hub.send(portIds, event)
             return
           }
-          this.hub.broadcast({ type: 'session.removed', sessionId })
+          this.hub.broadcast(event)
           this.sendFolders()
           this.scheduleActivity()
         },
@@ -5303,7 +5311,8 @@ export class AgentHost {
       'paths.complete': ({ path }) =>
         completePath(path, this.options.platform, this.options.homeDir ?? os.homedir()),
       'paths.drives': () => listDrives(this.options.platform),
-      'sessions.list': ({ projectPath }) => sessions.list(projectPath),
+      'sessions.list': ({ projectPath, since }) =>
+        since !== undefined ? sessions.listDelta(since, projectPath) : sessions.list(projectPath),
       'sessions.create': async (params, { portId, device }) => {
         // A worktree is made with git, which is found as the agents find it.
         if (params.worktree) await this.env.ready()

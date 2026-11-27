@@ -1595,7 +1595,12 @@ export interface HostContract {
   // A Windows host's drives that answer now, by their roots (`C:\`), to go up past a drive's root;
   // other systems list none. Older hosts lack it, as their info's `drives` says.
   'paths.drives': { params: void; result: string[] }
-  'sessions.list': { params: { projectPath?: string }; result: SessionSummary[] }
+  // 省略 `since` 时保持兼容返回全量数组；传入 `since` 时返回增量同步结构（含当前修订号与删除墓碑）。
+  'sessions.list': {
+    params: { projectPath?: string; since?: number }
+    result: SessionSummary[]
+    deviceResult: SessionSummary[] | SessionListDelta
+  }
   'sessions.create': {
     // projectPath null: No project, in a new scratch folder.
     // options: config values to start with, by option id.
@@ -2977,13 +2982,25 @@ export const HOST_METHODS = [
   'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]
 
+/** `sessions.list({ since })` 返回的修订号增量同步结果。 */
+export interface SessionListDelta {
+  /** 主机当前列表修订号，单调递增；客户端保存后作为下次请求的 `since`。 */
+  revision: number
+  /** 为 `true` 时表示已回退全量列表，客户端应以 `changed` 全量替换本地缓存。 */
+  full: boolean
+  /** `full` 为 `true` 时为全部符合条件的会话摘要；否则仅为修订号大于 `since` 的变更会话。 */
+  changed: SessionSummary[]
+  /** 修订号大于 `since` 且已删除的会话 ID；`full` 为 `true` 时为空数组。 */
+  removed: string[]
+}
+
 /** One that has a session in front: the host's own windows as one, or a paired device. */
 export type SessionViewer = { kind: 'host' } | { kind: 'device'; id: string; name: string }
 
 export type HostEvent =
   | { type: 'session.patches'; batch: PatchBatch }
-  | { type: 'session.summary'; summary: SessionSummary }
-  | { type: 'session.removed'; sessionId: string }
+  | { type: 'session.summary'; summary: SessionSummary; rev?: number }
+  | { type: 'session.removed'; sessionId: string; rev?: number }
   | { type: 'session.returned'; sessionId: string | null }
   // To a port that watches the session: the others that have it in front, never the port's own
   // computer or device.

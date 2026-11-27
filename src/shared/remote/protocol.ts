@@ -75,6 +75,12 @@ export const TOOL_OUTPUT_APPEND_FEATURE = 'tool-output-append'
  */
 export const LOAD_FEATURE = 'load'
 
+/**
+ * 会话列表增量同步能力：主机在 welcome 中声明后，客户端可传 `since` 调用 `sessions.list`
+ * 拉取指定修订号之后的增量变更与删除列表，并配合实时事件中的 `rev` 持续推进修订号。
+ */
+export const SESSION_LIST_DELTA_FEATURE = 'session-list-delta'
+
 /** The most features a hello names that the host reads. */
 const MAX_FEATURES = 16
 

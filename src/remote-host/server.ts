@@ -69,6 +69,7 @@ import {
   parsePromote,
   RESUME_MS,
   RESUME_VERSION,
+  SESSION_LIST_DELTA_FEATURE,
   STANDBY_FEATURE,
   TOOL_DIGESTS_FEATURE,
   TOOL_OUTPUT_APPEND_FEATURE,
@@ -1527,6 +1528,7 @@ class DeviceSession {
         BYTES_FEATURE,
         LOAD_FEATURE,
         TOOL_OUTPUT_APPEND_FEATURE,
+        SESSION_LIST_DELTA_FEATURE,
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
           ? [PUSH_FEATURE, WEB_PUSH_FEATURE]
           : []),

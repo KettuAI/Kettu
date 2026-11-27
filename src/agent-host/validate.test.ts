@@ -102,6 +102,19 @@ describe('createValidators', () => {
     rejects(() => archive({ sessionId: 's', subSessions: 'false' }))
   })
 
+  it('validates optional projectPath and non-negative integer since for sessions.list', () => {
+    const list = posix['sessions.list']
+    expect(list(undefined)).toEqual({})
+    expect(list(null)).toEqual({})
+    expect(list({})).toEqual({})
+    expect(list({ projectPath: '/p', since: 0 })).toEqual({ projectPath: '/p', since: 0 })
+    expect(list({ since: 42, extra: 'ignored' })).toEqual({ since: 42 })
+    rejects(() => list({ since: -1 }))
+    rejects(() => list({ since: 1.5 }))
+    rejects(() => list({ since: Number.NaN }))
+    rejects(() => list({ since: '1' }))
+  })
+
   it('takes a session and a bounded task id for a background task', () => {
     for (const method of ['sessions.stopTask', 'sessions.taskOutput'] as const) {
       expect(posix[method]({ sessionId: 's', taskId: 'b1', other: 1 })).toEqual({
