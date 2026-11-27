@@ -34,6 +34,7 @@ import {
   type MemoryScope,
 } from '@shared/memory'
 import { catalogSkillId, skillRepositoryId, type SkillSource } from '@shared/marketplace'
+import { MAX_TOOLS_OFF } from '@shared/mcp-insight'
 import {
   DIRECTORY_CURSOR,
   HANDLE,
@@ -1728,6 +1729,21 @@ export function createValidators(platform: Platform): Validators {
     'market.mcpInstances': (params) => ({ serverId: libraryServerId(fields(params)) }),
     'market.mcpCalls': mcpCallQuery,
     'market.mcpLogs': (params) => ({ serverId: libraryServerId(fields(params)) }),
+    'market.mcpToolChanges': none,
+    'market.mcpToolDiff': (params) => ({ serverId: libraryServerId(fields(params)) }),
+    'market.acceptMcpTools': (params) => {
+      const o = fields(params)
+      const names = o.names
+      if (!Array.isArray(names) || names.length > MAX_TOOLS_OFF) {
+        throw invalidParams(`names must be a list of at most ${MAX_TOOLS_OFF} tool names`)
+      }
+      for (const name of names) {
+        if (typeof name !== 'string' || name.length === 0 || name.length > 128) {
+          throw invalidParams('names must hold tool names of 1 to 128 characters')
+        }
+      }
+      return { serverId: libraryServerId(o), names: [...new Set(names as string[])] }
+    },
     'market.mcpStop': (params) => {
       const o = fields(params)
       const instance = string(o, 'instance', 32)

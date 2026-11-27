@@ -32,6 +32,7 @@ import {
   turnTokens,
   type McpRunState,
   type McpServerInsight,
+  type McpToolInfo,
   type SessionMcpServer,
 } from '@shared/mcp-insight'
 import { channelTrigger, PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
@@ -176,6 +177,7 @@ import { createHash } from 'node:crypto'
 import { Answers, answersFile } from './mcp-router/answers'
 import { McpRouter } from './mcp-router/router'
 import { McpCalls } from './mcp-router/calls'
+import { ToolChanges, toolGuard, toolsFile, trustedSource } from './mcp-router/tool-changes'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -637,6 +639,7 @@ export class AgentHost {
   /** The sign-ins of the Marketplace's OAuth servers. */
   private readonly marketConnections: MarketConnectionsService
   private readonly mcpAnswers: Answers
+  private readonly mcpToolChanges: ToolChanges
   private readonly mcpRouter: McpRouter
   /** The record of tool calls through the router. */
   private readonly mcpCalls: McpCalls
@@ -1008,6 +1011,9 @@ export class AgentHost {
     this.mcpCalls = new McpCalls(path.join(options.userDataPath, 'state', 'mcp-calls'), log)
     const home = options.homeDir ?? os.homedir()
     this.mcpAnswers = new Answers(answersFile(options.userDataPath, log))
+    this.mcpToolChanges = new ToolChanges(toolsFile(options.userDataPath, log), {
+      changed: (serverId) => this.mcpToolsChanged(serverId),
+    })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
       control: options.processControl ?? processControl(platform),
@@ -1025,6 +1031,7 @@ export class AgentHost {
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
       answers: this.mcpAnswers,
+      tools: this.mcpToolChanges,
       called: ({ serverId, sessionId, outcome }) => {
         if (outcome.result === 'error') this.checkAfterFailure(serverId, sessionId)
         void this.mcpCalls.add({
@@ -2091,6 +2098,7 @@ export class AgentHost {
       host.agentOptions.load(),
       host.preparedRecords.load(),
       host.mcpAnswers.load(),
+      host.mcpToolChanges.load(),
       host.findBridge(options.mcpBridgePath ?? null),
       host.attachments.load(),
       host.artifactService.start(),
@@ -2907,6 +2915,7 @@ export class AgentHost {
           project: project ?? server.importedWith?.project ?? server.importedFrom?.[0]?.project,
           node: this.options.nodeRuntime,
           bearer: bearer ?? undefined,
+          listed: (tools) => this.mcpToolChanges.seen(server.id, tools, 'list'),
         }),
       )
       .then(changed, () => changed({ state: 'error', reason: 'cannot-connect' }))
@@ -3085,14 +3094,49 @@ export class AgentHost {
       .filter((server) => serverId === undefined || server.id === serverId)
       .map((server) => {
         const known = this.mcpRouter.knownTools(server)
-        const tools = known ? toolInfos(known, server.toolsOff) : null
+        const changes = this.mcpToolChanges.changes(server.id, toolGuard(server))
+        const tools = this.mcpToolInfos(server, known, changes)
         const big = known === null || JSON.stringify(known).length > GATED_SERVER_BYTES
         const agents = this.agents.ids().map((agentId) => {
           const carry = carryOf(agentId, this.agents.toolGateway(agentId) && big)
           return { agentId, carry, tokens: tools ? turnTokens(tools, carry, server.name) : 0 }
         })
-        return { serverId: server.id, state: this.mcpState(server), tools, agents }
+        return { serverId: server.id, state: this.mcpState(server), tools, agents, changes }
       })
+  }
+
+  /**
+   * A server's tools as its page lists them: as the router last heard them, with the new ones a
+   * check saw since; as the check saw them alone for a server the router never listed.
+   */
+  private mcpToolInfos(
+    server: MarketServer,
+    known: readonly unknown[] | null,
+    changes: ReturnType<ToolChanges['changes']>,
+  ): McpToolInfo[] | null {
+    const latest = this.mcpToolChanges.latest(server.id)
+    const listed: readonly unknown[] | null = known ?? latest
+    if (!listed) return null
+    const names = new Set(
+      listed.flatMap((tool) =>
+        typeof tool === 'object' && tool !== null && 'name' in tool ? [String(tool.name)] : [],
+      ),
+    )
+    const added = (latest ?? []).filter(
+      (tool) => changes?.added.includes(tool.name) === true && !names.has(tool.name),
+    )
+    return toolInfos([...listed, ...added], server.toolsOff, {
+      trusted: trustedSource(server),
+      changes,
+    })
+  }
+
+  /** A server's tools differ from what was accepted in another way: clients and agents hear. */
+  private mcpToolsChanged(serverId: string): void {
+    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    const changes = server ? this.mcpToolChanges.changes(serverId, toolGuard(server)) : null
+    this.hub.broadcast({ type: 'market.mcpToolsChanged', serverId, changes })
+    if (server && toolGuard(server) === 'hold') this.mcpRouter.heldChanged(serverId)
   }
 
   /** The library servers a session's agent was handed at its last attach. */
@@ -3106,7 +3150,8 @@ export class AgentHost {
       const server = this.settings.marketplace.mcp.find((item) => item.id === id)
       if (!server) continue
       const known = this.mcpRouter.knownTools(server)
-      const tools = known ? toolInfos(known, server.toolsOff) : null
+      const changes = this.mcpToolChanges.changes(server.id, toolGuard(server))
+      const tools = this.mcpToolInfos(server, known, changes)
       const carry = agentId ? carryOf(agentId, how === 'gateway') : 'full'
       out.push({
         serverId: id,
@@ -3115,7 +3160,7 @@ export class AgentHost {
         title: server.title,
         site: server.spec.type === 'http' ? server.spec.url : null,
         state: how === 'agent' ? { state: 'by-agent' } : this.mcpState(server),
-        tools: tools ? tools.filter((tool) => !tool.off).length : null,
+        tools: tools ? tools.filter((tool) => !tool.off && !tool.held).length : null,
         tokens: tools ? turnTokens(tools, carry, name) : null,
         off: off.has(id),
         routed: how !== 'agent',
@@ -4255,6 +4300,17 @@ export class AgentHost {
       'market.answerMcpChange': ({ sessionId, entryId, decision }, { device }) =>
         this.sessions.answerMcp(sessionId, entryId, decision, fromDevice(device)),
       'market.undoMcpChange': ({ sessionId, entryId }) => this.undoMcp(sessionId, entryId),
+      'market.mcpToolChanges': () =>
+        this.settings.marketplace.mcp.flatMap(
+          (server) => this.mcpToolChanges.changes(server.id, toolGuard(server)) ?? [],
+        ),
+      'market.mcpToolDiff': ({ serverId }) => this.mcpToolChanges.diff(serverId),
+      'market.acceptMcpTools': ({ serverId, names }) => {
+        if (!this.settings.marketplace.mcp.some((server) => server.id === serverId)) {
+          throw new HostError('not_found', 'This MCP server is no longer installed.')
+        }
+        this.mcpToolChanges.accept(serverId, names)
+      },
       'market.mcpStop': async ({ serverId, instance }) => {
         if (!(await this.mcpRouter.stopInstance(serverId, instance))) {
           throw new HostError('not_found', 'The server has no such instance')

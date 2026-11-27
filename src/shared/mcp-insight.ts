@@ -40,6 +40,49 @@ export interface McpToolInfo {
   bytes: number
   tags: McpToolTag[]
   off: boolean
+  /** How it differs from the definition the user accepted, when it does. */
+  change?: 'added' | 'changed'
+  /** Kept from agents until the user accepts the change. */
+  held?: boolean
+}
+
+/**
+ * What Kettu does when a server's tools change: holds them back until the user accepts them, only
+ * notes it for a trusted source, or only notes it for a server each agent runs itself, which
+ * Kettu cannot hold back.
+ */
+export type McpToolGuard = 'hold' | 'note' | 'by-agent'
+
+/** How a server's tools differ from those the user accepted; absent when they do not. */
+export interface McpToolChanges {
+  serverId: string
+  guard: McpToolGuard
+  added: string[]
+  changed: string[]
+  /** Gone from the server: shown with the rest, never waiting to be accepted. */
+  removed: string[]
+  /** When the server first listed something not accepted. */
+  since: number
+}
+
+/** A tool's description and parameters, as accepted or as the server lists it now. */
+export interface McpToolDefinition {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
+/** One tool's change for the review window: null before for a new tool, after for a gone one. */
+export interface McpToolDiff {
+  name: string
+  kind: 'added' | 'changed' | 'removed'
+  before: McpToolDefinition | null
+  after: McpToolDefinition | null
+}
+
+/** How many tools wait to be accepted: the new ones and the changed ones. */
+export function changedCount(changes: McpToolChanges | null | undefined): number {
+  return changes ? changes.added.length + changes.changed.length : 0
 }
 
 /** How an agent carries a server's tools in each turn. */
@@ -58,6 +101,7 @@ export interface McpServerInsight {
   /** Null until the server has listed its tools once. */
   tools: McpToolInfo[] | null
   agents: McpAgentCost[]
+  changes: McpToolChanges | null
 }
 
 /** One process or connection the router keeps for a server. */
@@ -166,17 +210,31 @@ function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).length
 }
 
-/** The tools a server listed, as the page shows them, those in `off` marked. */
-export function toolInfos(tools: readonly unknown[], off: readonly string[] = []): McpToolInfo[] {
+/**
+ * The tools a server listed, as the page shows them, those in `off` marked. Annotations are only
+ * claims, so a tool is tagged from them only when its server comes from a trusted source.
+ */
+export function toolInfos(
+  tools: readonly unknown[],
+  off: readonly string[] = [],
+  options: { trusted?: boolean; changes?: McpToolChanges | null } = {},
+): McpToolInfo[] {
+  const { trusted = false, changes = null } = options
   const out: McpToolInfo[] = []
   for (const tool of tools) {
     if (!isRecord(tool) || typeof tool.name !== 'string') continue
+    const change = changes?.added.includes(tool.name)
+      ? 'added'
+      : changes?.changed.includes(tool.name)
+        ? 'changed'
+        : undefined
     out.push({
       name: tool.name,
       summary: firstSentence(tool.description),
       bytes: utf8Bytes(JSON.stringify(tool)),
-      tags: toolTags(tool),
+      tags: trusted ? toolTags(tool) : [],
       off: off.includes(tool.name),
+      ...(change ? { change, held: changes?.guard === 'hold' } : {}),
     })
   }
   return out
@@ -196,7 +254,7 @@ export function carryOf(agentId: AgentId, gated: boolean): McpCarry {
 /** The tokens a server's tools that are on take in each turn of an agent carrying them so. */
 export function turnTokens(tools: readonly McpToolInfo[], carry: McpCarry, name: string): number {
   if (carry === 'gateway') return 0
-  const on = tools.filter((tool) => !tool.off)
+  const on = tools.filter((tool) => !tool.off && !tool.held)
   if (carry === 'names') {
     return tokensOf(on.reduce((sum, tool) => sum + utf8Bytes(`mcp__${name}__${tool.name}`), 0))
   }

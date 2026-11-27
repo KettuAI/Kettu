@@ -54,6 +54,7 @@ export default function MarketplacePage({
     void store.loadConnections()
     void store.loadDiscovery()
     void store.loadMcpChecks()
+    void store.loadMcpToolChanges()
   }, [useMarketplaceStore, away])
   // What shows may be the host's old copy while a newer one is read behind it.
   const reading = useMarketplaceStore((s) => s.catalogLoading || s.skillsLoading)

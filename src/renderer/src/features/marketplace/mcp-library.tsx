@@ -24,10 +24,12 @@ import {
   useChoosableAgents,
   useKeptServers,
   useMcpState,
+  useMcpToolChanges,
   useTransportName,
 } from './hooks'
 import { keptItemKey, type Listing } from './model'
 import { McpFileErrors, McpImportDialog } from './mcp-review'
+import { McpToolChangesDialog, McpToolChangesTag } from './mcp-tool-changes'
 import { ItemRow, QuietNote, SkeletonRows } from './rows'
 import { serverSubject } from './tile-art'
 
@@ -153,51 +155,67 @@ function LibraryRow({ server, listing }: { server: MarketServer; listing: Listin
   const agentName = useAgentName()
   const agents = server.agents === 'all' ? allAgents.map(({ id }) => id) : server.agents
   const open = () => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'mcp' })
+  const changes = useMcpToolChanges(server.id)
+  const [reviewing, setReviewing] = useState(false)
   return (
-    <ItemRow
-      title={server.title}
-      subject={serverSubject({ ...listing, spec: server.spec })}
-      meta={
-        <>
-          <McpState server={server} check={check} />
-          <span>{transport}</span>
-          {check?.state === 'connected' && (
-            <span>{t('mcp.toolCount', { count: check.tools })}</span>
-          )}
-        </>
-      }
-      line={null}
-      onOpen={open}
-      end={
-        <>
-          <span className="k-mcp-agent-marks">
-            {agents.slice(0, 5).map((id) => (
-              <span key={id} title={agentName(id)}>
-                <AgentMark agent={id} size={16} dot={null} />
-              </span>
-            ))}
-            {agents.length > 5 && (
-              <span title={agents.slice(5).map(agentName).join(', ')}>+{agents.length - 5}</span>
+    <>
+      <ItemRow
+        title={server.title}
+        subject={serverSubject({ ...listing, spec: server.spec })}
+        tag={changes ? <McpToolChangesTag changes={changes} /> : undefined}
+        meta={
+          <>
+            <McpState server={server} check={check} />
+            <span>{transport}</span>
+            {check?.state === 'connected' && (
+              <span>{t('mcp.toolCount', { count: check.tools })}</span>
             )}
-          </span>
-          {check?.state === 'needs-sign-in' && <McpSignIn server={server} />}
-          {check?.state === 'error' && <McpCheckButton server={server} />}
-          <SettingSwitch
-            label={t('listing.switch', { name: server.title })}
-            checked={server.on}
-            onChange={(on) => void setServerOn(scope, server.id, on)}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={t('mcp.openNamed', { name: server.title })}
-            onClick={open}
-          >
-            <Icon icon={ArrowRight01Icon} size={16} />
-          </Button>
-        </>
-      }
-    />
+          </>
+        }
+        line={null}
+        onOpen={open}
+        end={
+          <>
+            <span className="k-mcp-agent-marks">
+              {agents.slice(0, 5).map((id) => (
+                <span key={id} title={agentName(id)}>
+                  <AgentMark agent={id} size={16} dot={null} />
+                </span>
+              ))}
+              {agents.length > 5 && (
+                <span title={agents.slice(5).map(agentName).join(', ')}>+{agents.length - 5}</span>
+              )}
+            </span>
+            {check?.state === 'needs-sign-in' && <McpSignIn server={server} />}
+            {check?.state === 'error' && <McpCheckButton server={server} />}
+            {changes && (
+              <Button size="sm" variant="secondary" onClick={() => setReviewing(true)}>
+                {t('mcp.review')}
+              </Button>
+            )}
+            <SettingSwitch
+              label={t('listing.switch', { name: server.title })}
+              checked={server.on}
+              onChange={(on) => void setServerOn(scope, server.id, on)}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t('mcp.openNamed', { name: server.title })}
+              onClick={open}
+            >
+              <Icon icon={ArrowRight01Icon} size={16} />
+            </Button>
+          </>
+        }
+      />
+      <McpToolChangesDialog
+        server={server}
+        changes={changes}
+        open={reviewing}
+        onOpenChange={setReviewing}
+      />
+    </>
   )
 }
 

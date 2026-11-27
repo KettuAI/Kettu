@@ -406,6 +406,10 @@ const ERROR_WORDS: Record<Extract<McpCheck, { state: 'error' }>['reason'], strin
   'missing-variable': 'an environment variable it references is not set',
 }
 
+/** How a held tool reads to an agent: what it waits for and where. */
+const HELD_WORDS =
+  "held back until the user accepts the change on the server's page in Kettu's Marketplace"
+
 function checkText(check: McpCheck | null, mask: (text: string) => string): string {
   if (check === null) return 'not checked yet'
   switch (check.state) {
@@ -547,6 +551,7 @@ export class McpTools {
     const mask = this.deps.mask(server.id)
     const tools = insight?.tools ?? null
     const off = tools?.filter((tool) => tool.off).length ?? 0
+    const held = tools?.filter((tool) => tool.held).length ?? 0
     const set = new Set(this.deps.keysSet(server.id))
     const unset = specInputs(server.spec)
       .filter((input) => !set.has(input.name))
@@ -566,7 +571,7 @@ export class McpTools {
     const line =
       `- ${server.name} "${server.title}" (id ${server.id}): ${server.on ? 'on' : 'off'}; ${how}\n` +
       `  for ${this.agentsText(server.agents)}; ${projects}\n` +
-      `  ${tools ? `${tools.length} tools${off ? `, ${off} off` : ''}` : 'tools not listed yet'}; ` +
+      `  ${tools ? `${tools.length} tools${off ? `, ${off} off` : ''}${held ? `, ${held} ${HELD_WORDS}` : ''}` : 'tools not listed yet'}; ` +
       `state ${state}; last check: ${checkText(check, mask)}` +
       (unset.length ? `\n  keys the user has not filled in: ${unset.join(', ')}` : '')
     return {
@@ -581,6 +586,7 @@ export class McpTools {
         projects: server.projects ?? null,
         tools: tools?.length ?? null,
         toolsOff: off,
+        toolsHeld: held,
         state,
         check: check ? checkSummary(check) : null,
         keysNotSet: unset,
@@ -635,7 +641,7 @@ export class McpTools {
         ? `Tools:\n${tools
             .map(
               (tool) =>
-                `- ${tool.name}${tool.off ? ' (off)' : ''}${tool.tags.length ? ` [${tool.tags.join(', ')}]` : ''}: ${tool.summary}`,
+                `- ${tool.name}${tool.off ? ' (off)' : ''}${tool.held ? ` (${tool.change === 'added' ? 'new' : 'changed'}, ${HELD_WORDS})` : ''}${tool.tags.length ? ` [${tool.tags.join(', ')}]` : ''}: ${tool.summary}`,
             )
             .join('\n')}`
         : 'Kettu has not listed its tools yet; check_mcp_server lists them.',
@@ -661,7 +667,13 @@ export class McpTools {
       ...data,
       target: mask(targetOf(server.spec)),
       values,
-      toolList: tools?.map((tool) => ({ name: tool.name, off: tool.off, tags: tool.tags })) ?? null,
+      toolList:
+        tools?.map((tool) => ({
+          name: tool.name,
+          off: tool.off,
+          held: tool.held === true,
+          tags: tool.tags,
+        })) ?? null,
       failedCalls: calls.map((call) => ({
         at: call.at,
         tool: call.tool,
@@ -692,10 +704,11 @@ export class McpTools {
           { checking: true },
         )
       }
-      return reply(`${server.name}: ${checkText(check, mask)}.`, {
-        server: server.id,
-        check: checkSummary(check),
-      })
+      const held = this.deps.insight(server.id)?.tools?.filter((tool) => tool.held).length ?? 0
+      return reply(
+        `${server.name}: ${checkText(check, mask)}${held ? `; ${held} of them ${HELD_WORDS}` : ''}.`,
+        { server: server.id, check: checkSummary(check), toolsHeld: held },
+      )
     } finally {
       clearTimeout(timer)
     }
@@ -912,9 +925,16 @@ export class McpTools {
             `Kettu has not listed the tools of ${base.name} yet. Call ${CHECK_MCP_SERVER} first.`,
           )
         }
-        if (!tools.some((t) => t.name === tool)) {
+        const found = tools.find((t) => t.name === tool)
+        if (!found) {
           throw new Refusal(
             `${base.name} has no tool ${tool}. Its tools: ${tools.map((t) => t.name).join(', ')}.`,
+          )
+        }
+        if (found.held && c.on) {
+          throw new Refusal(
+            `Nothing was done: ${tool} of ${base.name} is ${HELD_WORDS}, which turning it on ` +
+              'does not change.',
           )
         }
         target = { kind: 'tool', tool }

@@ -85,6 +85,8 @@ import type {
   McpInstanceInfo,
   McpServerInsight,
   McpServerLog,
+  McpToolChanges,
+  McpToolDiff,
   SessionMcpServer,
 } from './mcp-insight'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
@@ -1319,6 +1321,12 @@ export interface HostContract {
   }
   // Undo on the line of an agent's switches: puts back what they did, unless one changed since.
   'market.undoMcpChange': { params: { sessionId: string; entryId: string }; result: void }
+  // How each library server's tools differ from those the user accepted, for those that do.
+  'market.mcpToolChanges': { params: void; result: McpToolChanges[] }
+  // One server's changed tools as accepted and as listed now.
+  'market.mcpToolDiff': { params: { serverId: string }; result: McpToolDiff[] }
+  // Accepts these tools as the server lists them now; agents then list its tools again.
+  'market.acceptMcpTools': { params: { serverId: string; names: string[] }; result: void }
   // The plugins each Claude Code and Codex agent has of its own, which Kettu only lists.
   'market.ownPlugins': { params: { refresh?: boolean }; result: AgentOwnPlugins }
   // The skills catalog and each agent's own skills.
@@ -2430,6 +2438,9 @@ export const HOST_METHODS = [
   'market.mcpStop',
   'market.answerMcpChange',
   'market.undoMcpChange',
+  'market.mcpToolChanges',
+  'market.mcpToolDiff',
+  'market.acceptMcpTools',
   'market.ownPlugins',
   'market.skills',
   'market.skillRepository',
@@ -2748,6 +2759,7 @@ export type HostEvent =
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.discoveryChanged' }
   | { type: 'market.mcpCheckChanged'; serverId: string; check: McpCheck }
+  | { type: 'market.mcpToolsChanged'; serverId: string; changes: McpToolChanges | null }
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
   // The account, what it published or the drafts changed; Marketplace › Published reads again.
   | { type: 'market.publishedChanged' }

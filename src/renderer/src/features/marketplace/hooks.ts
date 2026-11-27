@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { MarketConnection, MarketServer, McpSpec } from '@shared/marketplace'
-import type { McpServerInsight } from '@shared/mcp-insight'
+import type { McpServerInsight, McpToolChanges } from '@shared/mcp-insight'
 import type { AgentId } from '@shared/thread'
 import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
@@ -160,9 +160,16 @@ const INSIGHT_MS = 5_000
 
 /** The server's insight from its host, read again while the page shows it and when it changes. */
 export function useMcpInsight(server: MarketServer): McpServerInsight | null {
-  const { request } = useHostScope()
+  const { request, useMarketplaceStore } = useHostScope()
   const [insight, setInsight] = useState<McpServerInsight | null>(null)
-  const changed = JSON.stringify([server.toolsOff, server.agents, server.spec, server.run])
+  const toolChanges = useMarketplaceStore((s) => s.mcpToolChanges[server.id])
+  const changed = JSON.stringify([
+    server.toolsOff,
+    server.agents,
+    server.spec,
+    server.run,
+    toolChanges ?? null,
+  ])
   useEffect(() => {
     let live = true
     const read = () =>
@@ -177,4 +184,10 @@ export function useMcpInsight(server: MarketServer): McpServerInsight | null {
     }
   }, [request, server.id, changed])
   return insight
+}
+
+/** How a server's tools differ from those the user accepted, or null when they do not. */
+export function useMcpToolChanges(serverId: string): McpToolChanges | null {
+  const { useMarketplaceStore } = useHostScope()
+  return useMarketplaceStore((s) => s.mcpToolChanges[serverId] ?? null)
 }

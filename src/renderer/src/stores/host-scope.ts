@@ -200,6 +200,9 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
         mcpChecks: { ...state.mcpChecks, [event.serverId]: event.check },
       }))
       break
+    case 'market.mcpToolsChanged':
+      other.scope.useMarketplaceStore.getState().mcpToolsChanged(event.serverId, event.changes)
+      break
     case 'market.keysChanged':
       marketKeysChanged(other.scope.useMarketplaceStore)
       break

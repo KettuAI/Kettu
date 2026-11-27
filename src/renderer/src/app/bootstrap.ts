@@ -254,6 +254,9 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
         mcpChecks: { ...state.mcpChecks, [event.serverId]: event.check },
       }))
       break
+    case 'market.mcpToolsChanged':
+      useMarketplaceStore.getState().mcpToolsChanged(event.serverId, event.changes)
+      break
     case 'market.keysChanged':
       marketKeysChanged()
       break

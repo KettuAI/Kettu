@@ -55,12 +55,19 @@ export interface CallOutcome {
   error?: string
 }
 
+/** Why a tool waits for the user: it is new, or its description or parameters changed. */
+export type ToolHold = 'added' | 'changed'
+
 /** What a link's agent may use of the server, asked again on every request. */
 export interface LinkPolicy {
   /** The tool is turned off, for every agent. */
   toolOff(name: string): boolean
   /** The server is turned off for this link's session. */
   serverOff(): boolean
+  /** How a listed tool differs from what the user accepted, while it waits for them; else null. */
+  heldTool?(tool: unknown): ToolHold | null
+  /** The same for a tool the agent calls by name. */
+  heldCall?(name: string): ToolHold | null
   /** A tool call through the link ended. */
   called?(outcome: CallOutcome): void
 }
@@ -75,13 +82,13 @@ const EMPTY_LISTS: Record<string, Record<string, unknown>> = {
   'resources/templates/list': { resourceTemplates: [] },
 }
 
-/** A list result without the tools `off` names; anything else as it is. */
+/** A list result without the tools `off` picks; anything else as it is. */
 export function withoutTools(
   result: Record<string, unknown>,
-  off: (name: string) => boolean,
+  off: (tool: Record<string, unknown>) => boolean,
 ): Record<string, unknown> {
   if (!Array.isArray(result.tools)) return result
-  const tools = result.tools.filter((tool) => !(isRecord(tool) && off(String(tool.name))))
+  const tools = result.tools.filter((tool) => !(isRecord(tool) && off(tool)))
   return tools.length === result.tools.length ? result : { ...result, tools }
 }
 
@@ -105,6 +112,8 @@ export interface InstanceOptions {
   answers: Answers
   client: { name: string; version: string }
   log(level: 'info' | 'warn' | 'error', message: string): void
+  /** The server listed tools: a list's first page, or a later one. */
+  listed?(tools: readonly unknown[], first: boolean): void
   /** It started (null) or failed to start or ended on its own, with the reason. */
   status?(error: string | null): void
   /** It stopped and has no links left. */
@@ -494,6 +503,9 @@ export class Instance {
       void this.inputRequired(forwarded, result)
       return
     }
+    if (result && forwarded.method === 'tools/list' && Array.isArray(result.tools)) {
+      this.options.listed?.(result.tools, forwarded.params?.cursor === undefined)
+    }
     if (result && forwarded.keeps && isListMethod(forwarded.method)) {
       this.options.answers.listed(
         this.options.serverId,
@@ -739,9 +751,13 @@ export class Link {
     }
   }
 
-  /** A list of tools as this link's agent may see it. */
+  /** A list of tools as this link's agent may see it: without those off or held back. */
   filterTools(result: Record<string, unknown>): Record<string, unknown> {
-    return withoutTools(result, (name) => this.policy.toolOff(name))
+    return withoutTools(
+      result,
+      (tool) =>
+        this.policy.toolOff(String(tool.name)) || (this.policy.heldTool?.(tool) ?? null) !== null,
+    )
   }
 
   reply(response: Response): void {
@@ -927,8 +943,8 @@ export class Link {
   }
 
   /**
-   * Why Kettu refuses a request without passing it on: a tool turned off, or anything but the
-   * lists while the server is off for the session. Null to let it through.
+   * Why Kettu refuses a request without passing it on: a tool turned off or held back, or
+   * anything but the lists while the server is off for the session. Null to let it through.
    */
   private refusal(request: Request): string | null {
     const name = this.instance.options.serverName
@@ -938,8 +954,14 @@ export class Link {
     }
     if (request.method !== 'tools/call') return null
     const tool = request.params?.name
-    if (typeof tool === 'string' && this.policy.toolOff(tool)) {
-      return `The tool ${tool} of ${name} is turned off in Kettu`
+    if (typeof tool !== 'string') return null
+    if (this.policy.toolOff(tool)) return `The tool ${tool} of ${name} is turned off in Kettu`
+    const held = this.policy.heldCall?.(tool) ?? null
+    if (held === 'added') {
+      return `The tool ${tool} of ${name} is new; the user must accept it in Kettu's Marketplace before agents can use it`
+    }
+    if (held === 'changed') {
+      return `The tool ${tool} of ${name} changed since the user accepted it; the user must accept the change in Kettu's Marketplace before agents can use it`
     }
     return null
   }

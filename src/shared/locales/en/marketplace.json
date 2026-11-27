@@ -1448,7 +1448,48 @@
       "copy": "Copy",
       "copied": "Copied the log",
       "emptyLog": "This process has written nothing yet.",
-      "logsMasked": "Keys are masked when the log goes into a problem report."
+      "logsMasked": "Keys are masked when the log goes into a problem report.",
+      "held": "Held back",
+      "heldLock": "Changed since you accepted it; agents get it once you accept the change",
+      "change": {
+        "added": "New",
+        "changed": "Changed"
+      },
+      "heldDot": "Tool changes held back",
+      "heldBanner_one": "{{count}} tool changed on {{date}}; agents don't get it until you accept it.",
+      "heldBanner_other": "{{count}} tools changed on {{date}}; agents don't get them until you accept them.",
+      "noteBanner_one": "{{count}} tool changed on {{date}}. Its source is trusted, so agents already have it.",
+      "noteBanner_other": "{{count}} tools changed on {{date}}. Their source is trusted, so agents already have them.",
+      "byAgentBanner_one": "{{count}} tool changed on {{date}}. Each agent runs this server itself, so Kettu cannot hold it back.",
+      "byAgentBanner_other": "{{count}} tools changed on {{date}}. Each agent runs this server itself, so Kettu cannot hold them back.",
+      "reviewChanges": "Review changes"
+    },
+    "heldTag_one": "{{count}} tool changed, held back",
+    "heldTag_other": "{{count}} tools changed, held back",
+    "changedTag_one": "{{count}} tool changed",
+    "changedTag_other": "{{count}} tools changed",
+    "review": "Review",
+    "changes": {
+      "title": "Tool changes in {{name}}",
+      "descriptionHold": "Agents get the tools you check once you accept them; the rest stay held back.",
+      "descriptionNote": "Accepting a change stops the notice; agents have these tools either way.",
+      "loading": "Reading the changes…",
+      "none": "Nothing waits to be accepted any more.",
+      "kind": {
+        "added": "New",
+        "changed": "Changed",
+        "removed": "Removed"
+      },
+      "removedNote": "Gone from the server; nothing to accept.",
+      "description": "Description",
+      "parameters": "Parameters",
+      "noDescription": "No description",
+      "select": "Accept {{name}}",
+      "keepAll": "Keep all held",
+      "accept_one": "Accept {{count}}",
+      "accept_other": "Accept {{count}}",
+      "failed": "Could not accept the changes: {{error}}",
+      "readFailed": "Could not read the changes: {{error}}"
     }
   }
 }

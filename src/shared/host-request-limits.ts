@@ -79,6 +79,9 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   // Do it applies the change before it answers.
   'market.answerMcpChange': AGENT_MS,
   'market.undoMcpChange': AGENT_MS,
+  'market.mcpToolChanges': HOST_MS,
+  'market.mcpToolDiff': HOST_MS,
+  'market.acceptMcpTools': HOST_MS,
   'market.ownPlugins': AGENT_MS,
   'market.skills': AGENT_MS,
   'market.skillRepository': AGENT_MS,

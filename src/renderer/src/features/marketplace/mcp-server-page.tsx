@@ -8,7 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { useHostScope } from '@renderer/stores/host-scope'
 import { changeServer, disconnectServer } from './actions'
 import { KeysDialog, UninstallDialog } from './dialogs'
-import { useAgentName, useConnection, useMcpInsight, useMcpState, useTransportName } from './hooks'
+import {
+  useAgentName,
+  useConnection,
+  useMcpInsight,
+  useMcpState,
+  useMcpToolChanges,
+  useTransportName,
+} from './hooks'
 import { McpCheckButton, McpSignIn, McpState } from './mcp-library'
 import { homeShort, type Listing } from './model'
 import { ExternalLink } from './parts'
@@ -29,6 +36,7 @@ export function McpServerPageBody({
   const transport = useTransportName(server.spec)
   const agentName = useAgentName()
   const insight = useMcpInsight(server)
+  const held = useMcpToolChanges(server.id)?.guard === 'hold'
   const toolCount = insight?.tools?.length ?? (check?.state === 'connected' ? check.tools : null)
   const tabs = [
     'overview',
@@ -54,6 +62,14 @@ export function McpServerPageBody({
             <TabsTrigger key={tab} value={tab}>
               {t(`mcp.tabs.${tab}`)}
               {tab === 'tools' && toolCount !== null && <span>{toolCount}</span>}
+              {tab === 'tools' && held && (
+                <span
+                  className="k-mcp-held-dot"
+                  role="img"
+                  aria-label={t('mcp.page.heldDot')}
+                  title={t('mcp.page.heldDot')}
+                />
+              )}
             </TabsTrigger>
           ))}
         </TabsList>

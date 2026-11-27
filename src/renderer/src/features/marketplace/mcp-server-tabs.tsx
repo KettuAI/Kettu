@@ -3,7 +3,12 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowDown01Icon, ArrowRight01Icon, Search01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  Search01Icon,
+  SquareLock02Icon,
+} from '@hugeicons/core-free-icons'
 import { harnessOf, type AgentId } from '@shared/agents'
 import type { MarketServer } from '@shared/marketplace'
 import type {
@@ -38,7 +43,8 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 import { changeServer, goesTo, setServerAgents } from './actions'
-import { useAgentName } from './hooks'
+import { McpToolChangesBanner, McpToolChangesDialog } from './mcp-tool-changes'
+import { useAgentName, useMcpToolChanges } from './hooks'
 import { McpSignIn } from './mcp-library'
 import { homeShort } from './model'
 
@@ -241,7 +247,7 @@ function McpProjectsChoice({ server }: { server: MarketServer }) {
   )
 }
 
-type ToolFilter = 'all' | 'on' | 'off'
+type ToolFilter = 'all' | 'on' | 'off' | 'held'
 
 /** The tools a server listed last, each with its switch for every agent. */
 export function McpToolsTab({
@@ -255,19 +261,25 @@ export function McpToolsTab({
   const scope = useHostScope()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ToolFilter>('all')
+  const [reviewing, setReviewing] = useState(false)
+  const changes = useMcpToolChanges(server.id)
   const tools = insight?.tools
   if (!tools) {
     return <p className="k-mcp-muted k-mcp-empty">{t('mcp.page.toolsUnknown')}</p>
   }
   const needle = query.trim().toLowerCase()
+  const heldCount = tools.filter((tool) => tool.held).length
+  const picked = (tool: McpToolInfo): boolean =>
+    filter === 'all' ||
+    (filter === 'held' ? tool.held === true : (filter === 'off') === tool.off && !tool.held)
   const shown = tools.filter(
     (tool) =>
-      (filter === 'all' || (filter === 'off') === tool.off) &&
+      picked(tool) &&
       (needle === '' ||
         tool.name.toLowerCase().includes(needle) ||
         tool.summary.toLowerCase().includes(needle)),
   )
-  const offCount = tools.filter((tool) => tool.off).length
+  const offCount = tools.filter((tool) => tool.off && !tool.held).length
   const set = (tool: McpToolInfo, on: boolean) =>
     void changeServer(scope, server.id, (current) => {
       const off = new Set(current.toolsOff ?? [])
@@ -279,6 +291,7 @@ export function McpToolsTab({
     })
   return (
     <section className="k-mcp-server-card">
+      {changes && <McpToolChangesBanner changes={changes} review={() => setReviewing(true)} />}
       <div className="k-mcp-toolbar">
         <SearchField value={query} onChange={setQuery} label={t('mcp.page.searchTools')} />
         <SegmentedControl<ToolFilter>
@@ -289,8 +302,11 @@ export function McpToolsTab({
           onChange={setFilter}
           options={[
             { value: 'all', label: t('mcp.page.all'), count: tools.length },
-            { value: 'on', label: t('mcp.page.on'), count: tools.length - offCount },
+            { value: 'on', label: t('mcp.page.on'), count: tools.length - offCount - heldCount },
             { value: 'off', label: t('mcp.page.off'), count: offCount },
+            ...(heldCount > 0
+              ? [{ value: 'held' as const, label: t('mcp.page.held'), count: heldCount }]
+              : []),
           ]}
         />
       </div>
@@ -303,16 +319,33 @@ export function McpToolsTab({
               key={tool.name}
               className="k-mcp-row k-mcp-tool"
               data-off={tool.off ? '' : undefined}
+              data-held={tool.held ? '' : undefined}
             >
-              <SettingSwitch
-                label={t('mcp.page.toolSwitch', { name: tool.name })}
-                checked={!tool.off}
-                onChange={(on) => set(tool, on)}
-              />
+              {tool.held ? (
+                <span
+                  className="k-mcp-tool-lock"
+                  role="img"
+                  aria-label={t('mcp.page.heldLock')}
+                  title={t('mcp.page.heldLock')}
+                >
+                  <Icon icon={SquareLock02Icon} size={16} />
+                </span>
+              ) : (
+                <SettingSwitch
+                  label={t('mcp.page.toolSwitch', { name: tool.name })}
+                  checked={!tool.off}
+                  onChange={(on) => set(tool, on)}
+                />
+              )}
               <span className="k-mcp-row__main">
                 <code className="k-mkt-mono k-mcp-row__title">{tool.name}</code>
                 {tool.summary && <span className="k-mcp-row__facts">{tool.summary}</span>}
               </span>
+              {tool.change && (
+                <span className="k-mcp-tag" data-tag={tool.change}>
+                  {t(`mcp.page.change.${tool.change}`)}
+                </span>
+              )}
               {tool.tags.map((tag) => (
                 <span key={tag} className="k-mcp-tag" data-tag={tag}>
                   {t(`mcp.page.tag.${tag}`)}
@@ -323,6 +356,12 @@ export function McpToolsTab({
           ))}
         </ul>
       )}
+      <McpToolChangesDialog
+        server={server}
+        changes={changes}
+        open={reviewing}
+        onOpenChange={setReviewing}
+      />
     </section>
   )
 }
