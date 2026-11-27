@@ -341,6 +341,7 @@ export interface IpcInvokeContract {
   'report:dismiss-crash-notice': { args: []; result: void }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
+  'shell:open-file': { args: [path: string]; result: void }
   'editors:list': { args: []; result: EditorList }
   // `editorId`: one `editors:list` gave; `path`: an existing file or folder, absolute.
   'editors:open': { args: [editorId: string, path: string]; result: void }
@@ -1030,6 +1031,8 @@ export interface KettuApi {
     showDataFolder(): Promise<void>
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
+    /** Opens an existing local regular file in the system's default app; the path must be absolute. */
+    openFile(path: string): Promise<void>
   }
   /** Open in editor: the code editors on this computer, which main finds and starts by id. */
   editors: {

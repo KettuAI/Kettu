@@ -256,6 +256,12 @@
     "notFileOrFolder": "“{{path}}”不是文件或文件夹",
     "openFailed": "没能用 {{editor}} 打开：{{reason}}"
   },
+  "shell": {
+    "notFound": "无法打开“{{name}}”：文件已不存在",
+    "notFile": "无法打开“{{name}}”：只能用默认应用打开普通文件",
+    "executable": "无法打开“{{name}}”：不能直接打开可执行文件或脚本",
+    "openFailed": "无法打开“{{name}}”：{{reason}}"
+  },
   "updates": {
     "notYaml": "{{name}} 不是有效的 YAML：{{reason}}",
     "noVersion": "{{name}} 里没有写明发布的版本",

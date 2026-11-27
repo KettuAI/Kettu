@@ -140,6 +140,7 @@ describe('mayUse', () => {
     }
     for (const channel of [
       'settings:update',
+      'shell:open-file',
       'terminal-host:connect',
       'host-sessions:connect',
       'hosts:status',

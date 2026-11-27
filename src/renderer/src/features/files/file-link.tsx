@@ -1,5 +1,11 @@
-import { useContext, useEffect } from 'react'
-import { BrowserIcon, File01Icon, FolderOpenIcon, Link01Icon } from '@hugeicons/core-free-icons'
+import { useContext, useEffect, type MouseEvent } from 'react'
+import {
+  BrowserIcon,
+  File01Icon,
+  FolderOpenIcon,
+  Link01Icon,
+  LinkSquare02Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -12,13 +18,19 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { BrowserIcon as DefaultBrowserIcon } from '@renderer/features/session/markdown/web-link'
-import { fileManagerName } from '@renderer/lib/platform'
+import { fileManagerName, isMod, isWeb } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
+import { fileLinkActions, fileLinkClickTarget } from './file-link-actions'
 import { FileTypeIcon } from './file-type-icon'
 import type { AgentFileRef, FileRef } from './file-refs'
 import { isHtmlFile, openHtmlInBrowser, previewHtml, useHtmlPreview } from './html-preview'
-import { copyFilePathText, hostFilePath, isLocalProject, showFileInManager } from './operations'
+import {
+  copyFilePathText,
+  hostFilePath,
+  openFileInDefaultApp,
+  showFileInManager,
+} from './operations'
 import { nameOf } from './paths'
 
 /** An HTML file's page, in a tab of the session's browser or in the default one. */
@@ -29,10 +41,12 @@ interface PagePreview {
 
 /**
  * The chip both kinds of file reference draw, like the thread's links: the file's icon and name
- * over one line, with the path in its tooltip. A right click offers to show the file in the file
- * manager, which only this computer's files can be, and to copy its path. An HTML file's page
- * can be previewed too: from a small button over the text after the chip while it is hovered or
- * focused, so the line never moves, and from the menu.
+ * over one line, with the path in its tooltip. A plain click opens it in Kettu's Files pane, and a
+ * Mod-click (Cmd on macOS, Ctrl elsewhere) opens a local file with the system's default app. A
+ * right click offers to open with the default app and show the file in the file manager, which only
+ * this computer's files can do, and to copy its path. An HTML file's page can be previewed too:
+ * from a small button over the text after the chip while it is hovered or focused, so the line
+ * never moves, and from the menu.
  */
 function FileChip({
   path,
@@ -45,14 +59,22 @@ function FileChip({
   path: string
   line: number | null
   projectPath: string
-  /** The file's path as its host writes it. */
+  /** The file's path as its host writes it, without any line suffix. */
   hostFile: string
   onOpen: () => void
   page?: PagePreview | null
 }) {
   const { t } = useTranslation('files')
   const target = line ? `${path}:${line}` : path
-  const local = isLocalProject(projectPath)
+  const { localFile } = fileLinkActions({ projectPath, hostFile, web: isWeb })
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (fileLinkClickTarget({ localFile, mod: isMod(event) }) === 'default-app') {
+      event.preventDefault()
+      openFileInDefaultApp(localFile!)
+      return
+    }
+    onOpen()
+  }
   const chip = (
     <ContextMenu>
       <ContextMenuTrigger
@@ -63,7 +85,7 @@ function FileChip({
             data-file-ref=""
             title={target}
             aria-label={t('link.open', { target })}
-            onClick={onOpen}
+            onClick={handleClick}
           />
         }
       >
@@ -80,11 +102,17 @@ function FileChip({
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-56">
         {page && <PageItems page={page} onOpen={onOpen} />}
-        {local && (
-          <ContextMenuItem onClick={() => showFileInManager(hostFile)}>
-            <HugeiconsIcon icon={FolderOpenIcon} strokeWidth={1.9} aria-hidden />
-            {t('preview.showIn', { name: fileManagerName() })}
-          </ContextMenuItem>
+        {localFile && (
+          <>
+            <ContextMenuItem onClick={() => openFileInDefaultApp(localFile)}>
+              <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={1.9} aria-hidden />
+              {t('preview.openWithDefault')}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => showFileInManager(localFile)}>
+              <HugeiconsIcon icon={FolderOpenIcon} strokeWidth={1.9} aria-hidden />
+              {t('preview.showIn', { name: fileManagerName() })}
+            </ContextMenuItem>
+          </>
         )}
         <ContextMenuItem onClick={() => copyFilePathText(hostFile)}>
           <HugeiconsIcon icon={Link01Icon} strokeWidth={1.9} aria-hidden />

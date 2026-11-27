@@ -78,6 +78,7 @@ import { grantedPath, type MediaGrants } from './media'
 import { copyImage, onHostText, revealMedia, saveMediaAs } from './media-actions'
 import type { IslandBridge } from './island/bridge'
 import { notifyTest } from './notifications'
+import { openLocalFile } from './open-file'
 import type { QuitFlow } from './quit'
 import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
@@ -690,6 +691,8 @@ export function registerIpcHandlers({
   handle('shell:show-item', 1, (_, target) => {
     shell.showItemInFolder(absolutePath(target))
   })
+  // Opens an existing local regular file in its default app after validating it is not a folder or executable.
+  handle('shell:open-file', 1, (_, target) => openLocalFile(target))
 
   const editors = new Editors({ file: join(app.getPath('userData'), 'editors.json') })
   handle('editors:list', 0, () => editors.list())
