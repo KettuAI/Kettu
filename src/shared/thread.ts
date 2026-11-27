@@ -43,6 +43,12 @@ import {
   type TimeLimitMinutes,
 } from './routines'
 import type { CatalogSection, SettingScalar } from './settings-catalog'
+import {
+  isMcpRestore,
+  isMcpSwitchTarget,
+  type McpRestore,
+  type McpSwitchTarget,
+} from './mcp-switch'
 import type { TaskDeliverable, Workflow } from './workflow'
 
 export {
@@ -507,6 +513,7 @@ export type ThreadEntry =
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
   | RoutineChangeEntry // Kettu's own record of an agent's change to a Routine, and its answer
+  | McpChangeEntry // Kettu's own record of an agent adding or switching an MCP server, and its answer
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
 
@@ -1037,6 +1044,81 @@ export interface RoutineChangeEntry {
   /** When an unanswered card counts as declined, in the host's milliseconds. */
   expiresAt: number
   outcome: RoutineChangeOutcome | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An environment variable or header of a server an agent adds, by its name: a reference to the
+ * environment such as `${GITHUB_TOKEN}`, one the user fills in on the server's page, or a fixed
+ * value the catalog set, which is never shown.
+ */
+export type McpAddValue =
+  | { name: string; state: 'reference'; reference: string }
+  | { name: string; state: 'unset' | 'fixed' }
+
+/** A server an agent adds, as its card shows it; it holds no key's value. */
+export interface McpAddServer {
+  /** The id it gets in the library. */
+  serverId: string
+  name: string
+  title: string
+  type: 'stdio' | 'http'
+  /** A remote server's transport; null for a command. */
+  transport: 'streamable-http' | 'sse' | null
+  /** The program and its arguments, or the remote server's address, with what reads as a key masked. */
+  target: string
+  /** A remote server Kettu signs in to with OAuth; null when the address could not be asked. */
+  oauth: boolean | null
+  values: McpAddValue[]
+  agents: 'all' | AgentId[]
+}
+
+/** One switch an agent asks to turn, with the server's title as the card shows it. */
+export interface McpSwitchItem {
+  serverId: string
+  title: string
+  target: McpSwitchTarget
+  from: boolean
+  to: boolean
+}
+
+/** What the check after an added server found, as the line under it says. */
+export type McpCheckSummary =
+  | { state: 'connected'; tools: number }
+  | { state: 'needs-sign-in' | 'project-only' }
+  | { state: 'error'; reason: string }
+
+/**
+ * What became of an MCP card: done (a switch later undone, or changed again since, which takes its
+ * Undo away; an added server with what its check found once it ends), not done because the user
+ * declined, nobody answered in time or the turn ended first, or refused when it was applied.
+ */
+export type McpChangeOutcome =
+  | { kind: 'done'; check?: McpCheckSummary; undone?: true; stale?: true }
+  | { kind: 'declined' | 'expired' | 'ended' }
+  | { kind: 'failed'; message: string }
+
+/**
+ * An agent's addition of a server to Kettu's MCP library, or its switches of library servers: a
+ * card while it waits for the user (`outcome` null), then the line it leaves. Every one asks, in
+ * Full access too.
+ */
+export interface McpChangeEntry {
+  kind: 'mcp_change'
+  id: string
+  action: 'add' | 'switch'
+  /** For an addition, the server; else null. */
+  server: McpAddServer | null
+  /** For switches, each switch, made all together or not at all; else empty. */
+  items: McpSwitchItem[]
+  /** What the switches did, set once they are made, for Undo; else null. */
+  restore: McpRestore[] | null
+  /** When an unanswered card counts as declined, in the host's milliseconds. */
+  expiresAt: number
+  outcome: McpChangeOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -1995,6 +2077,16 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.outcome === null || isRoutineChangeOutcome(value.outcome)) &&
         (value.after === null || typeof value.after === 'string')
       )
+    case 'mcp_change':
+      return (
+        (value.action === 'add' || value.action === 'switch') &&
+        (value.server === null || isMcpAddServer(value.server)) &&
+        isListOf(value.items, isMcpSwitchItem) &&
+        (value.restore === null || isListOf(value.restore, isMcpRestore)) &&
+        typeof value.expiresAt === 'number' &&
+        (value.outcome === null || isMcpChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
     case 'plugin_denial':
       return (
         typeof value.pluginId === 'string' &&
@@ -2081,6 +2173,76 @@ function isSettingsChangeOutcome(value: unknown): value is SettingsChangeOutcome
   switch (value.kind) {
     case 'changed':
       return (
+        (value.undone === undefined || value.undone === true) &&
+        (value.stale === undefined || value.stale === true)
+      )
+    case 'declined':
+    case 'expired':
+    case 'ended':
+      return true
+    case 'failed':
+      return typeof value.message === 'string'
+    default:
+      return false
+  }
+}
+
+function isMcpAddValue(value: unknown): value is McpAddValue {
+  if (!isRecord(value) || typeof value.name !== 'string') return false
+  return value.state === 'reference'
+    ? typeof value.reference === 'string'
+    : value.state === 'unset' || value.state === 'fixed'
+}
+
+function isMcpAddServer(value: unknown): value is McpAddServer {
+  return (
+    isRecord(value) &&
+    typeof value.serverId === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.title === 'string' &&
+    (value.type === 'stdio' || value.type === 'http') &&
+    (value.transport === null ||
+      value.transport === 'streamable-http' ||
+      value.transport === 'sse') &&
+    typeof value.target === 'string' &&
+    (typeof value.oauth === 'boolean' || value.oauth === null) &&
+    isListOf(value.values, isMcpAddValue) &&
+    (value.agents === 'all' || (Array.isArray(value.agents) && value.agents.every(isAgentId)))
+  )
+}
+
+function isMcpSwitchItem(value: unknown): value is McpSwitchItem {
+  return (
+    isRecord(value) &&
+    typeof value.serverId === 'string' &&
+    typeof value.title === 'string' &&
+    isMcpSwitchTarget(value.target) &&
+    typeof value.from === 'boolean' &&
+    typeof value.to === 'boolean'
+  )
+}
+
+function isMcpCheckSummary(value: unknown): value is McpCheckSummary {
+  if (!isRecord(value)) return false
+  switch (value.state) {
+    case 'connected':
+      return typeof value.tools === 'number'
+    case 'needs-sign-in':
+    case 'project-only':
+      return true
+    case 'error':
+      return typeof value.reason === 'string'
+    default:
+      return false
+  }
+}
+
+function isMcpChangeOutcome(value: unknown): value is McpChangeOutcome {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'done':
+      return (
+        (value.check === undefined || isMcpCheckSummary(value.check)) &&
         (value.undone === undefined || value.undone === true) &&
         (value.stale === undefined || value.stale === true)
       )

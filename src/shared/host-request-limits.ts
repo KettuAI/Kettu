@@ -76,6 +76,9 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.mcpCalls': AGENT_MS,
   'market.mcpLogs': HOST_MS,
   'market.mcpStop': AGENT_MS,
+  // Do it applies the change before it answers.
+  'market.answerMcpChange': AGENT_MS,
+  'market.undoMcpChange': AGENT_MS,
   'market.ownPlugins': AGENT_MS,
   'market.skills': AGENT_MS,
   'market.skillRepository': AGENT_MS,

@@ -133,6 +133,8 @@ import {
   type RoutineAction,
   type RoutineChangeEntry,
   type RoutineChangeOutcome,
+  type McpChangeEntry,
+  type McpChangeOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -165,6 +167,7 @@ import { riskyRequest } from './command-safety'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
 import type { RoutineAnswer, RoutineAsk } from './routines/tools'
+import type { McpAnswer, McpAsk } from './marketplace/mcp-tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
@@ -1385,6 +1388,8 @@ export class SessionManager {
   private readonly settingsWaits = new Map<string, (answer: SettingsAnswer) => void>()
   /** Routine cards that wait for the user, by entry id. */
   private readonly routineWaits = new Map<string, (answer: RoutineAnswer) => void>()
+  /** MCP library cards that wait for the user, by entry id. */
+  private readonly mcpWaits = new Map<string, (answer: McpAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
@@ -2740,6 +2745,152 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (live?.thread.byId[entryId]?.kind !== 'settings_change') return
     this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  /**
+   * An agent wants to add an MCP server to the library or turn library servers on or off: a card
+   * in the thread that waits for the user as a permission request does, in every mode, and settles
+   * with their answer, `expired` after `waitMs`, or `ended` with the turn.
+   */
+  mcpAsked(
+    sessionId: string,
+    ask: McpAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<McpAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: McpChangeEntry = {
+      kind: 'mcp_change',
+      id: this.nextId(live),
+      ...ask,
+      restore: null,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`mcp:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    const titles = [...new Set(ask.items.map((item) => item.title))]
+    const body = ask.server
+      ? t('attention.mcpAdd', { name: ask.server.title })
+      : t(ask.items.every((item) => item.to) ? 'attention.mcpOn' : 'attention.mcpOff', {
+          name: listOf(titles),
+        })
+    if (live.record.origin === 'routine' && !live.routineTurnEnded) {
+      this.deps.routine?.current?.waiting(live.id, true, body)
+    } else {
+      this.deps.events.attention(live.id, 'permission', this.titleOf(live), body, { id: entry.id })
+    }
+    const answer = new Promise<McpAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleMcp(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.mcpWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /** A window's or a device's answer to an MCP library card; the first one counts. */
+  answerMcp(
+    sessionId: string,
+    entryId: string,
+    decision: 'confirm' | 'decline',
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcpChange.gone'))
+    if (entry.outcome !== null || !this.mcpWaits.has(entryId)) {
+      throw new HostError('not_found', t('session.waiting.mcpChange.answered'), {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleMcp(sessionId, entryId, { decision }, device)
+  }
+
+  /** What became of an MCP library card the user approved, with what its switches did. */
+  mcpSettled(
+    sessionId: string,
+    entryId: string,
+    outcome: McpChangeOutcome,
+    restore?: McpChangeEntry['restore'],
+  ): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'mcp_change') return
+    this.emit(live, [
+      {
+        op: 'entry.update',
+        id: entryId,
+        changes: { outcome, ...(restore !== undefined ? { restore } : {}) },
+      },
+    ])
+  }
+
+  /** A switch line's change, for its undo: what it did, once it was made and not undone. */
+  mcpChange(sessionId: string, entryId: string): NonNullable<McpChangeEntry['restore']> {
+    this.recordOf(sessionId)
+    const entry = this.live.get(sessionId)?.thread.byId[entryId]
+    if (entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcpChange.noChange'))
+    if (
+      entry.action !== 'switch' ||
+      entry.restore === null ||
+      entry.outcome?.kind !== 'done' ||
+      entry.outcome.undone ||
+      entry.outcome.stale
+    ) {
+      throw new HostError('conflict', t('session.waiting.mcpChange.noUndo'))
+    }
+    return entry.restore
+  }
+
+  private settleMcp(
+    sessionId: string,
+    entryId: string,
+    answer: McpAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.mcpWaits.get(entryId)
+    this.mcpWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`mcp:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'mcp_change' && entry.outcome === null) {
+        // Confirm is settled by what doing it gives; the card holds until then.
+        if (answer.decision !== 'confirm') {
+          const outcome: McpChangeOutcome = {
+            kind: answer.decision === 'decline' ? 'declined' : answer.decision,
+          }
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: entryId,
+              changes: { outcome, ...(device ? { device } : {}) },
+            },
+          ])
+        } else if (device) {
+          this.emit(live, [{ op: 'entry.update', id: entryId, changes: { device } }])
+        }
+      }
+      this.stopWaiting(live)
+      if (live.record.origin === 'routine' && waitingCount(live) === 0) {
+        this.deps.routine?.current?.waiting(live.id, false)
+      }
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
   }
 
   /** A settings line's change, for its undo: the rows it set, once it was made and not undone. */
@@ -12149,6 +12300,11 @@ export class SessionManager {
       // So does a Routine card.
       if (requestId.startsWith('routine:')) {
         this.settleRoutine(live.id, entryId, { decision: 'ended' })
+        continue
+      }
+      // And an MCP library card.
+      if (requestId.startsWith('mcp:')) {
+        this.settleMcp(live.id, entryId, { decision: 'ended' })
         continue
       }
       live.origins.delete(requestId)

@@ -678,6 +678,51 @@ describe('isThreadEntry', () => {
       after: 'm:1',
     },
     {
+      kind: 'mcp_change',
+      id: 'e:21',
+      action: 'add',
+      server: {
+        serverId: 'manual:1',
+        name: 'notes',
+        title: 'notes',
+        type: 'stdio',
+        transport: null,
+        target: 'npx -y notes-mcp',
+        oauth: false,
+        values: [
+          { name: 'NOTES_TOKEN', state: 'unset' },
+          { name: 'NOTES_URL', state: 'reference', reference: '${NOTES_URL}' },
+        ],
+        agents: ['codex'],
+      },
+      items: [],
+      restore: null,
+      expiresAt: 1_700_000_000_000,
+      outcome: { kind: 'done', check: { state: 'connected', tools: 4 } },
+      after: null,
+    },
+    {
+      kind: 'mcp_change',
+      id: 'e:22',
+      action: 'switch',
+      server: null,
+      items: [
+        {
+          serverId: 'github',
+          title: 'GitHub',
+          target: { kind: 'agent', agentId: 'codex' },
+          from: true,
+          to: false,
+        },
+      ],
+      restore: [
+        { serverId: 'github', before: { agents: 'all' }, after: { agents: ['claude-code'] } },
+      ],
+      expiresAt: 1_700_000_000_000,
+      outcome: { kind: 'done', undone: true },
+      after: 'm:1',
+    },
+    {
       kind: 'settings_change',
       id: 'e:21',
       items: [
@@ -804,6 +849,16 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...delivery, written: { agentId: 1 } })).toBe(false)
     const artifact = valid.find((entry) => entry.kind === 'artifact')!
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
+    const mcpSwitch = valid.find(
+      (entry) => entry.kind === 'mcp_change' && entry.action === 'switch',
+    )!
+    expect(isThreadEntry({ ...mcpSwitch, action: 'remove' })).toBe(false)
+    expect(
+      isThreadEntry({
+        ...mcpSwitch,
+        restore: [{ serverId: 'github', before: { spec: {} }, after: {} }],
+      }),
+    ).toBe(false)
     const routine = valid.find((entry) => entry.kind === 'routine_change')!
     expect(isThreadEntry({ ...routine, action: 'pause' })).toBe(false)
     expect(isThreadEntry({ ...routine, outcome: { kind: 'done' } })).toBe(false)

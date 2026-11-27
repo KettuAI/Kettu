@@ -137,6 +137,7 @@ export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false)
       : ["use Kettu's browser, a phone device or a terminal", ['browser', 'devices', 'terminals']],
     ['find or change a Kettu setting', ['settings']],
     ['set up or change something that runs on a schedule', ['routines']],
+    ['add, check or turn on or off an MCP server', ['mcp']],
   ]
   const clauses = uses.map(([what, topics]) => `${what} (${topics.map(name).join(', ')})`)
   const list = `${clauses.slice(0, -1).join(', ')}, or ${clauses.at(-1)}`
@@ -223,6 +224,9 @@ export function serviceInstructions(flags: GuideFlags): string {
     "Routines: list_routines lists Kettu's Routines, prompts that run on a schedule; " +
       'create_routine, update_routine, delete_routine and run_routine act on them only when the ' +
       "user asks, each waiting for the user's card in every mode. Topic routines.",
+    "MCP servers: list_mcp_servers, read_mcp_server and check_mcp_server read Kettu's MCP " +
+      'library; add_mcp_server and switch_mcp_servers change it only when the user asks, each ' +
+      "waiting for the user's card in every mode. Topic mcp.",
     `Problems: ${REPORT_TOOL} drafts a report for the Kettu team, only for problems with Kettu ` +
       "itself, never for bugs in the user's project, your model provider's limits or your own " +
       'mistakes; the user sends it.',
@@ -237,11 +241,11 @@ export function guideTool(flags: GuideFlags): Tool {
     title: 'Read the Kettu guide',
     description:
       "Explains when and how to use Kettu's tools, by topic: artifacts (pages, documents and " +
-      'slide decks for the user), with files, canvas and runtime for their details; sessions ' +
+      'slide decks for the user), with files, canvas and runtime in detail; sessions ' +
       '(handing work to another session or agent); workflows; browser; devices; terminals' +
       (flags.computer ? '; computer (the user’s desktop apps)' : '') +
       (flags.market ? '; marketplace (publishing)' : '') +
-      "; settings (Kettu's own settings); routines (prompts that run on a schedule).",
+      "; settings (Kettu's settings); routines (scheduled prompts); mcp (MCP servers).",
     inputSchema: {
       type: 'object',
       properties: {

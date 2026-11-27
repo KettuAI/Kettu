@@ -33,6 +33,7 @@ import { AgentsDialog, UninstallDialog } from './dialogs'
 import { useConnectFlow, useConnection } from './hooks'
 import { AgentPicker } from './install'
 import { oauthFlow } from './model'
+import { onSignInRequest, signInRequested, takeSignInRequest } from './sign-in-request'
 
 /** Copies `text`; the button says so for a moment. */
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -251,9 +252,20 @@ export function ConnectButton({
   label?: string
 }) {
   const { t } = useTranslation('marketplace')
-  const [open, setOpen] = useState(false)
+  const scope = useHostScope()
+  // A sign-in asked for elsewhere starts here, in the popover that shows its steps.
+  const [open, setOpen] = useState(() => kept !== null && signInRequested(scope.hostId, server.id))
   const flow = useConnectFlow(server.id)
   const busy = flow !== null && flow.phase !== 'failed'
+  useEffect(() => {
+    if (!kept) return
+    if (takeSignInRequest(scope.hostId, server.id)) void connectServer(scope, server, kept.agents)
+    return onSignInRequest(scope.hostId, server.id, () => {
+      if (!takeSignInRequest(scope.hostId, server.id)) return
+      setOpen(true)
+      void connectServer(scope, server, kept.agents)
+    })
+  }, [kept, scope, server])
   if (!kept) {
     return (
       <>

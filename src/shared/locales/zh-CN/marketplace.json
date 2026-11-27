@@ -1152,6 +1152,7 @@
       "workflows": "工作流",
       "settings": "设置",
       "routines": "定时任务",
+      "mcp": "MCP 服务器",
       "plugins": "插件"
     },
     "new": "新",

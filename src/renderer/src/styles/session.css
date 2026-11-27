@@ -1475,6 +1475,13 @@
   max-width: none;
   text-align: right;
 }
+/* A command line, an address or a reference on an MCP server's card, which may run long. */
+.ks-routine-rows .ks-mcp-rows__mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .ks-routine-rows__block {
   display: flex;
   flex-direction: column;

@@ -263,6 +263,7 @@ export function settled(entry: ThreadEntry): ThreadEntry {
       // A card still waiting ended with the turn that asked, and changed nothing.
       return entry.outcome === null ? { ...entry, outcome: { kind: 'ended' } } : entry
     case 'routine_change':
+    case 'mcp_change':
       // A card still waiting ended with the turn that asked, and did nothing.
       return entry.outcome === null ? { ...entry, outcome: { kind: 'ended' } } : entry
     case 'tool': {

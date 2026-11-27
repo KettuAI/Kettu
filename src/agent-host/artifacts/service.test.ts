@@ -97,6 +97,12 @@ describe('the servers a session attaches with', () => {
       'update_routine',
       'delete_routine',
       'run_routine',
+      // Adding and switching an MCP server ask the user in Kettu's own card, in every mode.
+      'list_mcp_servers',
+      'read_mcp_server',
+      'check_mcp_server',
+      'add_mcp_server',
+      'switch_mcp_servers',
       'read_kettu_guide',
       // It only searches the descriptions of the tools behind the gateway.
       'find_tools',
