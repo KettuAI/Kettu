@@ -6,14 +6,18 @@ import {
   GITHUB_ISSUE_URL,
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
+  GITHUB_STACK_URL,
+  githubReferenceOf,
   type ChangedFile,
   type GitOperation,
   type GitStatus,
   type GitTools,
   type IssueLookup,
   type PullRequest,
+  type PullRequestStackLookup,
   type PullRequestState,
   type PushTarget,
+  type ReferenceLookup,
 } from '@shared/git'
 import type {
   BranchPullRequest,
@@ -39,6 +43,7 @@ import {
   viewCurrentPullRequest,
   viewIssueByUrl,
   viewPullRequestByUrl,
+  viewPullRequestStackByUrl,
 } from './gh'
 import { nextPollDelayMs } from './github'
 import {
@@ -185,6 +190,8 @@ export function createGitService(
   const pullRequestLoads = new Map<string, Promise<PullRequest>>()
   const issueCache = new Map<string, { at: number; value: IssueLookup }>()
   const issueLoads = new Map<string, Promise<IssueLookup>>()
+  const stackCache = new Map<string, { at: number; value: PullRequestStackLookup }>()
+  const stackLoads = new Map<string, Promise<PullRequestStackLookup>>()
   // Session rows' pull requests gh could not read, so a row does not ask again on every render.
   const unreadablePullRequests = new Map<string, number>()
   // Kept for the run: an avatar URL changes only when its user uploads a new picture.
@@ -197,6 +204,14 @@ export function createGitService(
         const entry = pullRequestCache.get(url)
         return entry && { at: entry.at, live: isLivePullRequest(entry.value) }
       }
+      if (GITHUB_STACK_URL.test(url)) {
+        const entry = stackCache.get(url)
+        if (!entry) return undefined
+        return {
+          at: entry.at,
+          live: entry.value.kind === 'stack' && entry.value.stack.state === 'open',
+        }
+      }
       const entry = issueCache.get(url)
       if (!entry) return undefined
       const found = entry.value
@@ -208,7 +223,12 @@ export function createGitService(
             : found.issue.state === 'open',
       }
     },
-    read: (url) => (GITHUB_PULL_REQUEST_URL.test(url) ? api.pullRequest(url) : api.issue(url)),
+    read: (url) =>
+      GITHUB_PULL_REQUEST_URL.test(url)
+        ? api.pullRequest(url)
+        : GITHUB_STACK_URL.test(url)
+          ? api.stack(url)
+          : api.issue(url),
   })
   let disposed = false
   let backgroundFetch: ReturnType<typeof setInterval> | null = null
@@ -219,7 +239,7 @@ export function createGitService(
   const changed = createEmitter<[GitStatus]>(reportListenerError)
   const pullRequestChanged = createEmitter<[string, PullRequest | null]>(reportListenerError)
   const branchPullRequestsChanged = createEmitter<[string]>(reportListenerError)
-  const referenceChanged = createEmitter<[string, IssueLookup]>(reportListenerError)
+  const referenceChanged = createEmitter<[string, ReferenceLookup]>(reportListenerError)
   const sessionEvents = createEmitter<[string, GitEventDraft[]]>(reportListenerError)
   const toolsChanged = createEmitter<[GitTools]>(reportListenerError)
 
@@ -590,6 +610,23 @@ export function createGitService(
     return value
   }
 
+  async function loadStack(url: string): Promise<PullRequestStackLookup> {
+    const tools = await getTools()
+    let value: PullRequestStackLookup
+    if (tools.gh.state === 'not-installed') {
+      value = { kind: 'unavailable', reason: 'gh-missing' }
+    } else if (tools.gh.state === 'signed-out') {
+      value = { kind: 'unavailable', reason: 'gh-signed-out' }
+    } else {
+      value = await viewPullRequestStackByUrl(exec, url, homedir())
+    }
+    const previous = stackCache.get(url)?.value
+    stackCache.set(url, { at: now(), value })
+    trimCache(stackCache)
+    if (!previous || !sameJson(previous, value)) referenceChanged.emit(url, value)
+    return value
+  }
+
   function trimCache(cache: Map<string, unknown>): void {
     while (cache.size > PULL_REQUEST_CACHE_SIZE) {
       const oldest = cache.keys().next().value
@@ -929,7 +966,12 @@ export function createGitService(
       if (disposed) return
       references.watch(
         subscriberId,
-        urls.filter((url) => GITHUB_PULL_REQUEST_URL.test(url) || GITHUB_ISSUE_URL.test(url)),
+        urls.filter(
+          (url) =>
+            GITHUB_PULL_REQUEST_URL.test(url) ||
+            GITHUB_ISSUE_URL.test(url) ||
+            GITHUB_STACK_URL.test(url),
+        ),
       )
     },
 
@@ -1138,6 +1180,29 @@ export function createGitService(
       return load
     },
 
+    async stack(url, fresh = false) {
+      if (disposed) throw new Error('The git service is disposed')
+      if (githubReferenceOf(url)?.kind !== 'stack') {
+        throw new Error('Not a GitHub pull request stack URL')
+      }
+      const cached = stackCache.get(url)
+      if (cached && !fresh) {
+        // Repositories without Stacks or without access are cached longer so hover never spams gh.
+        const ttl =
+          cached.value.kind === 'unavailable' &&
+          (cached.value.reason === 'not-found' || cached.value.reason === 'forbidden')
+            ? UNREADABLE_RETRY_MS
+            : PULL_REQUEST_CACHE_MS
+        if (now() - cached.at < ttl) return cached.value
+      }
+      let load = stackLoads.get(url)
+      if (!load) {
+        load = track(loadStack(url)).finally(() => stackLoads.delete(url))
+        stackLoads.set(url, load)
+      }
+      return load
+    },
+
     knownPullRequest,
 
     async avatarUrl(login) {
@@ -1184,6 +1249,14 @@ export function createGitService(
       const tools = await track(probeTools(exec, homedir()))
       if (!disposed) {
         setTools(tools)
+        for (const [url, entry] of stackCache) {
+          if (
+            entry.value.kind === 'unavailable' &&
+            (entry.value.reason === 'gh-missing' || entry.value.reason === 'gh-signed-out')
+          ) {
+            stackCache.delete(url)
+          }
+        }
         for (const state of projects.values()) {
           if (isLive(state)) background(requestPoll(state, true))
         }

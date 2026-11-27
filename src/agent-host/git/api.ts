@@ -11,7 +11,9 @@ import type {
   IssueLookup,
   LogCommit,
   PullRequest,
+  PullRequestStackLookup,
   PullRequestState,
+  ReferenceLookup,
   RepositoryVisibility,
 } from '@shared/git'
 import type { GitEntry, ToolEntry, ToolKind } from '@shared/thread'
@@ -111,6 +113,8 @@ export interface GitServiceApi {
   pullRequest(url: string): Promise<PullRequest>
   /** Details for an issue reference; `url` matches GITHUB_ISSUE_URL. */
   issue(url: string): Promise<IssueLookup>
+  /** Details for a pull request stack reference; `url` matches GITHUB_STACK_URL. */
+  stack(url: string, fresh?: boolean): Promise<PullRequestStackLookup>
   /** What is known of a session row's pull request without asking gh; asks in the background. */
   knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null
   /**
@@ -148,8 +152,8 @@ export interface GitServiceApi {
   onChanged(listener: (status: GitStatus) => void): () => void
   onPullRequest(listener: (projectPath: string, pr: PullRequest | null) => void): () => void
   onBranchPullRequests(listener: (projectPath: string) => void): () => void
-  /** A pull request or issue read changed what is known of it, or was read for the first time. */
-  onReferenceChanged(listener: (url: string, found: IssueLookup) => void): () => void
+  /** A pull request, issue, or stack read changed what is known of it, or was read for the first time. */
+  onReferenceChanged(listener: (url: string, found: ReferenceLookup) => void): () => void
   onSessionEvents(listener: (sessionId: string, events: GitEventDraft[]) => void): () => void
   onTools(listener: (tools: GitTools) => void): () => void
   dispose(): Promise<void>

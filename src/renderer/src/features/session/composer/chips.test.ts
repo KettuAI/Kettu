@@ -49,4 +49,30 @@ describe('findChips with exclusive commands and stackable skills', () => {
     const chips = findChips(text, ctx())
     expect(chips.map((c) => c.kind)).toEqual(['link', 'skill'])
   })
+
+  it('turns full and schemeless GitHub stack URLs into link chips', () => {
+    const text =
+      'Review https://github.com/KettuAI/Kettu/stacks/42 and github.com/KettuAI/Kettu/stacks/7.'
+    const chips = findChips(text, ctx())
+    expect(chips).toEqual([
+      {
+        kind: 'link',
+        from: 7,
+        to: 49,
+        url: 'https://github.com/KettuAI/Kettu/stacks/42',
+        host: 'github.com',
+        path: '/KettuAI/Kettu/stacks/42',
+        local: false,
+      },
+      {
+        kind: 'link',
+        from: 54,
+        to: 87,
+        url: 'https://github.com/KettuAI/Kettu/stacks/7',
+        host: 'github.com',
+        path: '/KettuAI/Kettu/stacks/7',
+        local: false,
+      },
+    ])
+  })
 })

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { githubReferenceFromLink, schemelessGitHubLinks, schemelessGitHubUrl } from './git'
+import {
+  githubReferenceFromLink,
+  githubReferenceOf,
+  schemelessGitHubLinks,
+  schemelessGitHubUrl,
+} from './git'
 
 const urls = (text: string) => schemelessGitHubLinks(text).map((link) => link.url)
 
@@ -80,5 +85,78 @@ describe('schemelessGitHubUrl', () => {
     expect(url && githubReferenceFromLink(url)).toEqual(
       githubReferenceFromLink('https://github.com/KettuAI/Kettu/pull/45'),
     )
+  })
+})
+
+describe('GitHub stacked pull request links (#2844)', () => {
+  it('parses canonical and extended /stacks/<number> links', () => {
+    expect(githubReferenceOf('https://github.com/KettuAI/Kettu/stacks/42')).toEqual({
+      kind: 'stack',
+      owner: 'KettuAI',
+      repo: 'Kettu',
+      number: 42,
+      url: 'https://github.com/KettuAI/Kettu/stacks/42',
+    })
+    expect(
+      githubReferenceFromLink('https://www.github.com/KettuAI/Kettu/stacks/042?tab=prs#top'),
+    ).toEqual({
+      kind: 'stack',
+      owner: 'KettuAI',
+      repo: 'Kettu',
+      number: 42,
+      url: 'https://github.com/KettuAI/Kettu/stacks/42',
+    })
+    expect(githubReferenceFromLink('https://github.com/KettuAI/Kettu/stacks/7/')).toEqual({
+      kind: 'stack',
+      owner: 'KettuAI',
+      repo: 'Kettu',
+      number: 7,
+      url: 'https://github.com/KettuAI/Kettu/stacks/7',
+    })
+  })
+
+  it('finds schemeless /stacks/<number> links and rejects malformed stack paths', () => {
+    expect(
+      urls(
+        'Check github.com/KettuAI/Kettu/stacks/12 and www.github.com/o/r/stacks/9?foo=1, then merge.',
+      ),
+    ).toEqual([
+      'https://github.com/KettuAI/Kettu/stacks/12',
+      'https://www.github.com/o/r/stacks/9?foo=1',
+    ])
+    expect(urls('看一下github.com/o/r/stacks/8，里面有三个 PR')).toEqual([
+      'https://github.com/o/r/stacks/8',
+    ])
+    expect(schemelessGitHubUrl('github.com/o/r/stacks/15')).toBe('https://github.com/o/r/stacks/15')
+
+    for (const invalid of [
+      'https://github.com/o/r/stacks/0',
+      'https://github.com/o/r/stacks/new',
+      'https://github.com/o/r/stacks/12abc',
+      'https://github.com/o/r/stacks/',
+      'https://github.com/o/r/stack/12',
+      'http://github.com/o/r/stacks/12',
+      'https://github.com:8443/o/r/stacks/12',
+      'https://user@github.com/o/r/stacks/12',
+      'https://github.example.com/o/r/stacks/12',
+      'https://github.com/-bad/r/stacks/12',
+      'https://github.com/o/../stacks/12',
+    ]) {
+      expect(githubReferenceFromLink(invalid), invalid).toBeNull()
+      expect(githubReferenceOf(invalid), invalid).toBeNull()
+    }
+
+    for (const text of [
+      'src/github.com/o/r/stacks/12',
+      'gist.github.com/o/r/stacks/12',
+      'github.com.evil.com/o/r/stacks/12',
+      'me@github.com/o/r/stacks/12',
+      'github.com/o/r/stacks/0',
+      'github.com/o/r/stacks/new',
+      'github.com/o/r/stacks/12abc',
+      'github.com/o/r/stack/12',
+    ]) {
+      expect(schemelessGitHubLinks(text), text).toEqual([])
+    }
   })
 })

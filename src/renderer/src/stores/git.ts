@@ -6,9 +6,11 @@ import {
   type GitHubReference,
   type GitTools,
   type Issue,
-  type IssueLookup,
   type PullRequest,
+  type PullRequestStack,
+  type ReferenceLookup,
   type RepositoryVisibility,
+  type StackUnavailableReason,
 } from '@shared/git'
 import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -118,6 +120,9 @@ export const EMPTY_PULL_REQUEST_FORM: PullRequestForm = {
 export interface HostGitState {
   pullRequests: Record<string, PullRequest> // by URL, for references
   issues: Record<string, Issue> // by URL, for references
+  stacks: Record<string, PullRequestStack> // by URL, for references
+  /** By stack URL, why stack details fell back cleanly instead of showing an error. */
+  stackUnavailable: Record<string, StackUnavailableReason>
   /** By issue URL, the pull request URL GitHub said it really is. */
   pullRequestAliases: Record<string, string>
   /** By URL, why a reference's details did not load, until they do. */
@@ -132,6 +137,8 @@ export interface HostGitState {
 const EMPTY_HOST_GIT: HostGitState = {
   pullRequests: {},
   issues: {},
+  stacks: {},
+  stackUnavailable: {},
   pullRequestAliases: {},
   referenceErrors: {},
   avatars: {},
@@ -221,6 +228,24 @@ export function issueOf(
   url: string,
 ): Issue | undefined {
   return hostGitOf(s, hostId).issues[url]
+}
+
+/** A cached pull request stack on `hostId` by URL. */
+export function stackOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): PullRequestStack | undefined {
+  return hostGitOf(s, hostId).stacks[url]
+}
+
+/** Why loading a pull request stack on `hostId` degraded cleanly, or null. */
+export function stackUnavailableOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): StackUnavailableReason | null {
+  return hostGitOf(s, hostId).stackUnavailable[url] ?? null
 }
 
 /** Why loading a reference on `hostId` last failed, or null. */
@@ -431,14 +456,60 @@ function loadIssue(url: string, fresh = false, hostId: string | null = null): Pr
   })
 }
 
+/** A pull request stack's details; degrades cleanly rather than surfacing raw host errors. */
+function loadStack(
+  url: string,
+  fresh = false,
+  forceRefresh = false,
+  hostId: string | null = null,
+): Promise<void> {
+  const h = hostGitOf(useGitStore.getState(), hostId)
+  if (!fresh && (h.stacks[url] || h.stackUnavailable[url])) return Promise.resolve()
+  return loadOnce(hostId, url, async () => {
+    try {
+      const found = await hostAt(hostId, 'git.stack', forceRefresh ? { url, fresh: true } : { url })
+      receiveReference(url, found, hostId)
+    } catch {
+      receiveReference(url, { kind: 'unavailable', reason: 'unavailable' }, hostId)
+    }
+  })
+}
+
 /** What the host says a reference now is, read for a request or pushed because it changed. */
 export function receiveReference(
   url: string,
-  found: IssueLookup,
+  found: ReferenceLookup,
   hostId: string | null = null,
 ): void {
   if (found.kind === 'pull') {
     receivePullRequest(found.pullRequest, url, hostId)
+    return
+  }
+  if (found.kind === 'stack') {
+    setLoadedAt(hostId, url, Date.now())
+    updateHostGit(hostId, (h) => ({
+      stacks: setCapped(h.stacks, url, found.stack, MAX_CACHED_REFS),
+      stackUnavailable: without(h.stackUnavailable, url),
+      referenceErrors: without(h.referenceErrors, url),
+    }))
+    return
+  }
+  if (found.kind === 'unavailable') {
+    setLoadedAt(hostId, url, Date.now())
+    updateHostGit(hostId, (h) => {
+      // Keep an already-loaded stack visible on transient refresh issues instead of flashing away.
+      if (h.stacks[url] && (found.reason === 'timeout' || found.reason === 'unavailable')) {
+        return { referenceErrors: without(h.referenceErrors, url) }
+      }
+      return {
+        stacks:
+          found.reason === 'not-found' || found.reason === 'forbidden'
+            ? without(h.stacks, url)
+            : h.stacks,
+        stackUnavailable: setCapped(h.stackUnavailable, url, found.reason, MAX_CACHED_REFS),
+        referenceErrors: without(h.referenceErrors, url),
+      }
+    })
     return
   }
   setLoadedAt(hostId, url, Date.now())
@@ -456,26 +527,42 @@ export function loadReference(
 ): void {
   const again = fresh && isStale(hostId, ref.url)
   if (again) forget(hostId, ref.url)
-  void (ref.kind === 'pull'
-    ? loadPullRequest(ref.url, again, hostId)
-    : loadIssue(ref.url, again, hostId))
+  if (ref.kind === 'pull') {
+    void loadPullRequest(ref.url, again, hostId)
+    return
+  }
+  if (ref.kind === 'stack') {
+    void loadStack(ref.url, again, false, hostId)
+    return
+  }
+  void loadIssue(ref.url, again, hostId)
 }
 
 export function retryReference(ref: GitHubReference, hostId: string | null = null): Promise<void> {
   forget(hostId, ref.url)
   if (!gitToolsOf(useGitStore.getState(), hostId)) void loadGitTools(hostId)
-  return ref.kind === 'pull'
-    ? loadPullRequest(ref.url, true, hostId).then(() => {})
-    : loadIssue(ref.url, true, hostId)
+  if (ref.kind === 'pull') return loadPullRequest(ref.url, true, hostId).then(() => {})
+  if (ref.kind === 'stack') return loadStack(ref.url, true, true, hostId)
+  return loadIssue(ref.url, true, hostId)
 }
 
-// Merged and closed pull requests and closed issues do not change enough to read again.
+// Merged and closed pull requests, closed issues, and closed/unreadable stacks do not change enough to read again.
 function isStale(hostId: string | null, url: string): boolean {
+  const h = hostGitOf(useGitStore.getState(), hostId)
+  const unavailable = h.stackUnavailable[url]
+  if (
+    (unavailable === 'gh-missing' || unavailable === 'gh-signed-out') &&
+    h.tools?.gh.state === 'ready'
+  ) {
+    return true
+  }
   const at = loadedAtByHost.get(gitHostKey(hostId))?.get(url)
   if (at === undefined || Date.now() - at < STALE_MS) return false
-  const h = hostGitOf(useGitStore.getState(), hostId)
   const pr = h.pullRequests[h.pullRequestAliases[url] ?? url]
   if (pr) return pr.state === 'open' || pr.state === 'draft'
+  const stack = h.stacks[url]
+  if (stack) return stack.state === 'open'
+  if (unavailable) return unavailable === 'timeout' || unavailable === 'unavailable'
   return h.issues[url]?.state === 'open'
 }
 
@@ -494,6 +581,12 @@ export function isReferenceSettled(
   const h = hostGitOf(s, hostId)
   const pr = h.pullRequests[h.pullRequestAliases[ref.url] ?? ref.url]
   if (pr) return pr.state === 'merged' || pr.state === 'closed'
+  if (ref.kind === 'stack') {
+    const stack = h.stacks[ref.url]
+    if (stack) return stack.state === 'closed'
+    const unavailable = h.stackUnavailable[ref.url]
+    return unavailable !== undefined
+  }
   const issue = ref.kind === 'issue' ? h.issues[ref.url] : undefined
   return issue !== undefined && issue.state !== 'open'
 }
@@ -621,10 +714,33 @@ export function loadAvatar(login: string, hostId: string | null = null): void {
 const toolsInFlight = new Map<string | null, Promise<void>>()
 const toolsSeq = new Map<string | null, number>()
 
+function clearAuthStackFallbacks(
+  hostId: string | null,
+  current: HostGitState,
+  tools: GitTools,
+): Record<string, StackUnavailableReason> {
+  if (tools.gh.state !== 'ready') return current.stackUnavailable
+  let changed = false
+  const next: Record<string, StackUnavailableReason> = {}
+  for (const [url, reason] of Object.entries(current.stackUnavailable)) {
+    if (reason === 'gh-missing' || reason === 'gh-signed-out') {
+      forget(hostId, url)
+      changed = true
+    } else {
+      next[url] = reason
+    }
+  }
+  return changed ? next : current.stackUnavailable
+}
+
 /** Applies a `git.tools` push event from `hostId` (null for this computer). */
 export function receiveGitTools(hostId: string | null, tools: GitTools): void {
   toolsSeq.set(hostId, (toolsSeq.get(hostId) ?? 0) + 1)
-  updateHostGit(hostId, () => ({ tools, toolsError: null }))
+  updateHostGit(hostId, (h) => ({
+    tools,
+    toolsError: null,
+    stackUnavailable: clearAuthStackFallbacks(hostId, h, tools),
+  }))
 }
 
 export function loadGitTools(hostId: string | null = null): Promise<void> {
@@ -637,7 +753,11 @@ export function loadGitTools(hostId: string | null = null): Promise<void> {
     .then(
       (tools) => {
         if (toolsSeq.get(hostId) === seq) {
-          updateHostGit(hostId, () => ({ tools, toolsError: null }))
+          updateHostGit(hostId, (h) => ({
+            tools,
+            toolsError: null,
+            stackUnavailable: clearAuthStackFallbacks(hostId, h, tools),
+          }))
         }
       },
       (error: unknown) => {

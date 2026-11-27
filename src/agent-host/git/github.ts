@@ -4,12 +4,16 @@ import {
   GITHUB_ISSUE_URL,
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
+  GITHUB_STACK_URL,
   isRepositoryName,
   type CheckRun,
   type Issue,
   type IssueLabel,
   type PullRequest,
   type PullRequestAuthor,
+  type PullRequestStack,
+  type PullRequestStackItem,
+  type PullRequestStackState,
   type PullRequestState,
 } from '@shared/git'
 import { LocalizedError } from '../localized-error'
@@ -335,6 +339,146 @@ export function mapIssue(raw: unknown, url: string): Issue | { pullRequestUrl: s
 export function mapAvatarUrl(raw: unknown): string | null {
   const url = isObject(raw) ? text(raw.avatar_url) : ''
   return url.startsWith('https://avatars.githubusercontent.com/') ? url : null
+}
+
+// GitHub's Stacked Pull Requests REST preview requires this API version header.
+export const GITHUB_STACKS_API_VERSION = '2026-03-10'
+
+/** Arguments of `gh api` for the pull request stack at `url`, which matches GITHUB_STACK_URL. */
+export function stackArgs(url: string): string[] {
+  const parts = GITHUB_STACK_URL.exec(url)
+  const number = parts ? Number(parts[3]) : NaN
+  if (
+    !parts ||
+    !isRepositoryName(parts[2]!) ||
+    !GITHUB_LOGIN.test(parts[1]!) ||
+    !Number.isSafeInteger(number) ||
+    number < 1
+  ) {
+    throw new LocalizedError({ key: 'git.notStackUrl' })
+  }
+  return [
+    'api',
+    '--hostname',
+    'github.com',
+    '-H',
+    'Accept: application/vnd.github+json',
+    '-H',
+    `X-GitHub-Api-Version: ${GITHUB_STACKS_API_VERSION}`,
+    `repos/${parts[1]}/${parts[2]}/stacks/${number}`,
+  ]
+}
+
+function restPullRequestState(item: Json): PullRequestState {
+  if (item.merged === true || timeOf(item.merged_at ?? item.mergedAt) !== null) return 'merged'
+  switch (text(item.state).toUpperCase()) {
+    case 'MERGED':
+      return 'merged'
+    case 'CLOSED':
+      return 'closed'
+    default:
+      return item.draft === true || item.isDraft === true ? 'draft' : 'open'
+  }
+}
+
+function stackPullRequestItem(
+  raw: unknown,
+  owner: string,
+  repo: string,
+): PullRequestStackItem | null {
+  if (!isObject(raw)) return null
+  const number = typeof raw.number === 'number' ? raw.number : NaN
+  if (!Number.isSafeInteger(number) || number < 1) return null
+  const candidateUrl = text(raw.html_url) || text(raw.url)
+  const url = GITHUB_PULL_REQUEST_URL.test(candidateUrl)
+    ? candidateUrl
+    : `https://github.com/${owner}/${repo}/pull/${number}`
+  const head = isObject(raw.head)
+    ? text(raw.head.ref).trim() || null
+    : text(raw.headRefName).trim() || null
+  const title = text(raw.title).trim() || null
+  return { number, url, state: restPullRequestState(raw), head, title }
+}
+
+function stackStateOf(
+  raw: Json,
+  pullRequests: readonly PullRequestStackItem[],
+): PullRequestStackState {
+  const state = text(raw.state).toLowerCase()
+  if (state === 'closed') return 'closed'
+  if (state === 'open') return 'open'
+  if (typeof raw.open === 'boolean') return raw.open ? 'open' : 'closed'
+  if (
+    pullRequests.length > 0 &&
+    pullRequests.every((item) => item.state === 'merged' || item.state === 'closed')
+  ) {
+    return 'closed'
+  }
+  return 'open'
+}
+
+/**
+ * Maps the JSON of `GET /repos/{owner}/{repo}/stacks/{stack_number}`. Optional preview fields
+ * degrade to `null` rather than throwing, while non-stack payloads throw so the caller falls back.
+ */
+export function mapPullRequestStack(raw: unknown, url: string): PullRequestStack {
+  const parts = GITHUB_STACK_URL.exec(url)
+  const number = parts ? Number(parts[3]) : NaN
+  if (
+    !parts ||
+    !isRepositoryName(parts[2]!) ||
+    !GITHUB_LOGIN.test(parts[1]!) ||
+    !Number.isSafeInteger(number) ||
+    number < 1
+  ) {
+    throw new LocalizedError({ key: 'git.notStackUrl' })
+  }
+  if (!isObject(raw)) throw new LocalizedError({ key: 'git.unexpected.stack' })
+  if (
+    'pull_requests' in raw &&
+    raw.pull_requests !== undefined &&
+    raw.pull_requests !== null &&
+    !Array.isArray(raw.pull_requests)
+  ) {
+    throw new LocalizedError({ key: 'git.unexpected.stack' })
+  }
+  const hasStackShape =
+    Array.isArray(raw.pull_requests) ||
+    typeof raw.open === 'boolean' ||
+    typeof raw.state === 'string' ||
+    isObject(raw.base)
+  if (!hasStackShape) throw new LocalizedError({ key: 'git.unexpected.stack' })
+
+  const owner = parts[1]!
+  const repo = parts[2]!
+  const pullRequests: PullRequestStackItem[] = []
+  const seen = new Set<number>()
+  if (Array.isArray(raw.pull_requests)) {
+    for (const entry of raw.pull_requests) {
+      const item = stackPullRequestItem(entry, owner, repo)
+      if (!item || seen.has(item.number)) continue
+      seen.add(item.number)
+      pullRequests.push(item)
+    }
+  }
+  const base = isObject(raw.base)
+    ? text(raw.base.ref).trim() || null
+    : typeof raw.base === 'string'
+      ? raw.base.trim() || null
+      : null
+  const title = text(raw.title).trim() || text(raw.name).trim() || null
+  return {
+    url,
+    owner,
+    repo,
+    number,
+    title,
+    state: stackStateOf(raw, pullRequests),
+    base,
+    pullRequests,
+    createdAt: timeOf(raw.created_at ?? raw.createdAt),
+    updatedAt: timeOf(raw.updated_at ?? raw.updatedAt),
+  }
 }
 
 /**

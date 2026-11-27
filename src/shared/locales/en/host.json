@@ -560,10 +560,12 @@
     "notPullRequestUrl": "Not a GitHub pull request URL: {{url}}",
     "notIssueUrl": "Not a GitHub issue URL",
     "noIssue": "GitHub has no issue at this address, or it cannot be read",
+    "notStackUrl": "Not a GitHub pull request stack URL",
     "unexpected": {
       "pullRequestObject": "Unexpected gh output: not a pull request object",
       "pullRequestUrl": "Unexpected pull request URL: {{url}}",
       "issue": "Unexpected gh output: not an issue",
+      "stack": "Unexpected gh output: not a pull request stack",
       "pullRequestList": "Unexpected gh output: not a pull request list",
       "revList": "Unexpected rev-list count output: {{output}}",
       "show": "Unexpected git show output for {{oid}}"

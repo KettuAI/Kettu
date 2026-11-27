@@ -11,7 +11,7 @@ import { KindSketch } from '@renderer/features/artifacts/sketch'
 import { useThumbnail } from '@renderer/features/artifacts/thumbnails'
 import '@renderer/features/artifacts/artifact-card.css'
 import { ReferenceIcon } from '@renderer/features/git/gh-reference'
-import { useReferenceData } from '@renderer/features/git/gh-reference-data'
+import { referenceTitleOf, useReferenceData } from '@renderer/features/git/gh-reference-data'
 import { sessionLinkProps } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { mediumAgo } from '@renderer/lib/format'
@@ -34,7 +34,8 @@ function referencesOf(summary: SessionSummary, outputs: SessionOutputs): GitHubR
   const seen = new Set<string>()
   for (const url of [...(summary.prs ?? []).map((pr) => pr.url), ...outputs.references]) {
     const ref = githubReferenceOf(url)
-    const key = ref && `${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase()
+    const scope = ref?.kind === 'stack' ? 'stack:' : ''
+    const key = ref && `${scope}${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase()
     if (!ref || !key || seen.has(key)) continue
     seen.add(key)
     refs.push(ref)
@@ -249,9 +250,14 @@ function ReferenceRow({
   hostId: string | null
   onOpen?: () => void
 }) {
+  const { t } = useTranslation('git')
   const { data } = useReferenceData(reference, hostId)
   useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
-  const title = data ? (data.kind === 'pull' ? data.pr.title : data.issue.title) : null
+  const title = referenceTitleOf(data, t)
+  const label =
+    reference.kind === 'stack'
+      ? `${reference.repo} Stack #${reference.number}`
+      : `${reference.repo}#${reference.number}`
   return (
     <a
       {...sessionLinkProps(reference.url, sessionId, { onOpen })}
@@ -259,9 +265,7 @@ function ReferenceRow({
       className="-mx-1.5 flex h-6 min-w-0 items-center gap-2 rounded-md px-1.5 text-small no-underline outline-none hover:bg-hover"
     >
       <ReferenceIcon kind={reference.kind} data={data} size={14} />
-      <span className="shrink-0 font-medium text-primary tabular-nums">
-        {reference.repo}#{reference.number}
-      </span>
+      <span className="shrink-0 font-medium text-primary tabular-nums">{label}</span>
       {title && <span className="min-w-0 truncate text-tertiary">{title}</span>}
     </a>
   )
