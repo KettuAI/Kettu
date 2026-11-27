@@ -299,6 +299,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
         sessionId={sessionId}
         entryId={entryId}
         title={entry.title}
+        description={entry.description}
         className={animation}
       />
     )

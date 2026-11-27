@@ -187,6 +187,7 @@ import {
   toArrayBuffer,
   type Attachments,
 } from './attachments'
+import type { ExitInfo } from './agent-process'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import {
   DEFAULT_EFFORT as CLAUDE_DEFAULT_EFFORT,
@@ -223,6 +224,8 @@ import {
   type SideQuestion,
 } from './connection'
 import type { Diagnostics } from './diagnostics'
+import { isDiskFullError } from './disk-full'
+import { formatExitReason, type AgentExitDetail } from './exit-reason'
 import { answeredFields, checkedValues } from './elicitation'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import type { McpTransports } from './marketplace/servers'
@@ -419,6 +422,8 @@ export interface SessionTimings {
   /** The free direct context reader's polling interval and activity coalescing window. */
   contextRefreshMs: number
   contextDebounceMs: number
+  /** Minimum gap between repeated host-level disk-full attention notifications. */
+  diskFullCooldownMs: number
 }
 
 /** The longest a thread's write waits after writes that failed. */
@@ -436,6 +441,7 @@ export const SESSION_TIMINGS: SessionTimings = {
   listedTitleRetryMs: 10_000,
   contextRefreshMs: CONTEXT_REFRESH_MS,
   contextDebounceMs: 500,
+  diskFullCooldownMs: 60_000,
 }
 
 export interface SessionEvents {
@@ -871,6 +877,8 @@ interface Live {
   retryAt: number
   /** The thread says the disk is full, until a write succeeds again. */
   fullNoticed: boolean
+  /** Entry id of the latest agent_stopped notice emitted by failTurn, for exit-detail enrichment. */
+  cutNoticeId: string | null
   /** A replay failed partway, so the thread is not stored until one completes. */
   partial: boolean
   /** A replay resolved with zero entries, so an empty snapshot is not cached until entries arrive. */
@@ -1525,13 +1533,19 @@ export class SessionManager {
   private emptyRemoval: Promise<void> | null = null
   /** Each session's pull requests as plugins were last told of them, by url: state and checks. */
   private readonly pullRequestsTold = new Map<string, Map<string, string>>()
+  /** Storage write sources currently failing due to ENOSPC / disk full. */
+  private readonly fullSources = new Set<string>()
+  /** Timestamp of the last host-level disk-full attention notification, for cooldown throttling. */
+  private diskFullAttentionAt = 0
+  /** Unsubscribe callbacks for direct JsonFile write observers owned by SessionManager. */
+  private readonly fileWatchers: (() => void)[] = []
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
     this.now = deps.now ?? Date.now
     deps.agents.hooks = {
       liveSessions: (agentId) => this.connectedCount(agentId),
-      agentExited: (agentId) => this.agentExited(agentId),
+      agentExited: (agentId, info) => this.agentExited(agentId, info),
       signedIn: (agentId) => this.agentSignedIn(agentId),
       accountChanged: (agentId) => this.accountChanged(agentId),
       optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
@@ -1540,6 +1554,17 @@ export class SessionManager {
       },
       configChanged: (agentId) => this.configChanged(agentId),
     }
+    const watchFile = (file: { onWrite?: JsonFile<unknown>['onWrite'] } | undefined): void => {
+      if (!file?.onWrite) return
+      this.fileWatchers.push(
+        file.onWrite((outcome) => {
+          if (outcome.ok) this.noteDiskWriteSucceeded(outcome.file)
+          else if (isDiskFullError(outcome.error)) this.reportDiskFull(outcome.file)
+        }),
+      )
+    }
+    watchFile(deps.file)
+    watchFile(deps.returned)
   }
 
   async load(): Promise<void> {
@@ -3637,7 +3662,7 @@ export class SessionManager {
       () => {
         live.writeFailures = 0
         live.retryAt = 0
-        live.fullNoticed = false
+        this.noteDiskWriteSucceeded(`threads:${live.id}`, live.id)
       },
       (error: unknown) => this.writeFailed(live, change, write, error),
     )
@@ -3675,9 +3700,31 @@ export class SessionManager {
       `Could not store the thread of session ${live.id}; trying again in ${Math.round(wait / 1000)} s: ${(error as Error).message}`,
     )
     if (this.live.get(live.id) !== live) return
-    if (code === 'full' && !live.fullNoticed) {
+    if (code === 'full' || isDiskFullError(error)) {
+      this.reportDiskFull(`threads:${live.id}`, live.id)
+    }
+    this.scheduleCheckpoint(live)
+  }
+
+  /** Whether any host state file or thread write is currently failing with ENOSPC / disk full. */
+  get isDiskFull(): boolean {
+    return this.fullSources.size > 0
+  }
+
+  /**
+   * Surfaces the disk-full notice when any state file (sessions.json, agent-processes.json,
+   * threads.db, etc.) fails with ENOSPC, deduplicated per session and throttled for attention alerts.
+   */
+  reportDiskFull(source: string, sessionId?: string): void {
+    this.fullSources.add(source)
+    if (this.stopped) return
+    const title = t('notice.diskFull.title')
+    const description = t('notice.diskFull.description')
+    const targets = this.diskFullTargets(sessionId)
+    const notified: Live[] = []
+    for (const live of targets) {
+      if (live.fullNoticed) continue
       live.fullNoticed = true
-      const title = t('notice.diskFull.title')
       this.emit(live, [
         {
           op: 'entry.add',
@@ -3686,14 +3733,85 @@ export class SessionManager {
             id: this.nextId(live),
             severity: 'error',
             title,
-            description: t('notice.diskFull.description'),
+            description,
             after: agentEntryBefore(live.thread),
           },
         },
       ])
-      this.deps.events.attention(live.id, 'error', this.titleOf(live), title)
+      notified.push(live)
     }
-    this.scheduleCheckpoint(live)
+    const now = this.now()
+    const canAttend =
+      this.diskFullAttentionAt === 0 ||
+      now - this.diskFullAttentionAt >= this.timings.diskFullCooldownMs
+    if (!canAttend) return
+    if (notified.length > 0) {
+      this.diskFullAttentionAt = now
+      const primary = notified[0]!
+      this.deps.events.attention(primary.id, 'error', this.titleOf(primary), title)
+      return
+    }
+    // Even if every session is currently closed (e.g. just dropped after an agent crash), still
+    // raise a throttled attention alert on a shown or recent session so ENOSPC is never silent.
+    if (targets.length === 0) {
+      const fallback = this.diskFullFallbackRecord(sessionId)
+      if (fallback) {
+        this.diskFullAttentionAt = now
+        const label =
+          fallback.customTitle ?? fallback.title ?? this.deps.agents.name(fallback.agentId)
+        this.deps.events.attention(fallback.id, 'error', label, title)
+      }
+    }
+  }
+
+  private diskFullFallbackRecord(sessionId?: string): SessionRecord | null {
+    if (sessionId) {
+      const record = this.records.get(sessionId)
+      return record && record.origin !== 'subagent' ? record : null
+    }
+    for (const shown of this.shown.values()) {
+      for (const id of shown) {
+        const record = this.records.get(id)
+        if (record && record.origin !== 'subagent') return record
+      }
+    }
+    let latest: SessionRecord | null = null
+    for (const record of this.records.values()) {
+      if (record.origin === 'subagent') continue
+      if (!latest || record.updatedAt > latest.updatedAt) latest = record
+    }
+    return latest
+  }
+
+  /** Clears a source from the active disk-full set; resets notice gates once all failing sources recover. */
+  noteDiskWriteSucceeded(source: string, sessionId?: string): void {
+    const hadFull = this.fullSources.delete(source)
+    if (this.fullSources.size > 0) return
+    if (!hadFull && sessionId) {
+      const live = this.live.get(sessionId)
+      if (live) live.fullNoticed = false
+      return
+    }
+    if (!hadFull) return
+    this.diskFullAttentionAt = 0
+    for (const live of this.live.values()) live.fullNoticed = false
+  }
+
+  private diskFullTargets(sessionId?: string): Live[] {
+    if (sessionId) {
+      const live = this.live.get(sessionId)
+      return live && !live.prepared && !live.closing ? [live] : []
+    }
+    const candidates = [...this.live.values()].filter(
+      (live) => !live.prepared && !live.closing && live.record.origin !== 'subagent',
+    )
+    if (candidates.length === 0) return []
+    const active = candidates.filter(
+      (live) => this.inFront(live.id) || (live.turn !== null && !live.turn.ended),
+    )
+    if (active.length > 0) return active
+    candidates.sort((a, b) => b.record.updatedAt - a.record.updatedAt)
+    return [candidates[0]!]
   }
 
   // Snapshots and pages: a session's view with the latest page of its thread, from memory while
@@ -4316,6 +4434,7 @@ export class SessionManager {
       writeFailures: 0,
       retryAt: 0,
       fullNoticed: false,
+      cutNoticeId: null,
       partial: false,
       emptyReplay: false,
       blobs: new Map(),
@@ -7023,13 +7142,29 @@ export class SessionManager {
     return typeof mode === 'string' && isFullAccessMode(mode)
   }
 
+  private exitDetailOf(
+    agentId: AgentId,
+    info?: ExitInfo | null,
+    errorMessage?: string,
+  ): AgentExitDetail {
+    const ctx = this.deps.agents.exitContext?.(agentId)
+    const stderr = ctx ? ctx.stderr : this.deps.diagnostics.stderrText(agentId).toString()
+    return {
+      info: info ?? ctx?.info ?? null,
+      stderr,
+      ...(errorMessage !== undefined ? { errorMessage } : {}),
+      diskFull: this.isDiskFull,
+    }
+  }
+
   /**
    * The agent exited unexpectedly: a running turn ends with a notice, and every session it held
    * goes back to closed with its thread stored, to attach again when it is used. Nothing restarts
    * the agent, so a crash never brings back sessions no one is using.
    */
-  private agentExited(agentId: AgentId): void {
+  private agentExited(agentId: AgentId, info?: ExitInfo): void {
     const name = this.deps.agents.name(agentId)
+    const notice = stoppedNotice(name, this.exitDetailOf(agentId, info))
     const held: SessionRecord[] = []
     for (const live of [...this.live.values()]) {
       if (live.record.agentId !== agentId) continue
@@ -7060,6 +7195,7 @@ export class SessionManager {
         const givenBack = agentAddedNothing(live.thread, turn.entryId)
         if (givenBack) turn.attachments = []
         this.finishTurn(live, turn, null)
+        live.cutNoticeId = null
         this.emit(live, [
           {
             op: 'entry.add',
@@ -7067,12 +7203,39 @@ export class SessionManager {
               kind: 'notice',
               id: this.nextId(live),
               severity: 'error',
-              ...stoppedNotice(name),
+              ...notice,
               after: agentEntryBefore(live.thread),
             },
           },
         ])
         if (givenBack) this.giveBack(live, turn)
+      } else if (live.cutNoticeId !== null) {
+        // failTurn won the race against the exit event; enrich its notice now that exit info arrived.
+        const cutNoticeId = live.cutNoticeId
+        live.cutNoticeId = null
+        const existing = live.thread.byId[cutNoticeId]
+        if (
+          notice.description &&
+          existing?.kind === 'notice' &&
+          existing.cause === 'agent_stopped' &&
+          existing.description !== notice.description
+        ) {
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: cutNoticeId,
+              changes: { description: notice.description },
+            },
+          ])
+          if (live.record.lastTurn?.reason === 'failed') {
+            live.record.lastTurn = this.failedTurn(
+              live,
+              `${notice.title}: ${notice.description}`,
+              this.now(),
+            )
+            this.persist(live)
+          }
+        }
       }
       this.clearPermissions(live, 'withdrawn')
       live.childRunning = false
@@ -7080,9 +7243,16 @@ export class SessionManager {
         const now = this.now()
         this.update(live, { updatedAt: now })
         if (this.inFront(live.id)) live.record.lastViewedAt = now
-        const stopped: { message: string } = { message: t('notice.stopped.title', { agent: name }) }
+        const stopped: { message: string; detail?: string } = {
+          message: notice.title,
+          ...(notice.description ? { detail: notice.description } : {}),
+        }
         if (turn) {
-          live.record.lastTurn = this.failedTurn(live, stopped.message, now)
+          live.record.lastTurn = this.failedTurn(
+            live,
+            notice.description ? `${notice.title}: ${notice.description}` : notice.title,
+            now,
+          )
           this.planContinue(live.record)
         }
         this.persist(live)
@@ -7091,7 +7261,12 @@ export class SessionManager {
             ? this.reportRun(live, { stopReason: null, error: stopped, usage: null, turn })
             : false) || this.reportStep(live)
         if (!routineTurn) {
-          this.deps.events.attention(live.id, 'error', this.titleOf(live), stopped.message)
+          this.deps.events.attention(
+            live.id,
+            'error',
+            this.titleOf(live),
+            notice.description ?? notice.title,
+          )
         }
       }
       held.push(live.record)
@@ -9511,6 +9686,7 @@ export class SessionManager {
       suggestion: null,
     }
     live.turn = turn
+    live.cutNoticeId = null
     this.stopSuggesting(live.id)
     live.sender =
       portId === null ? null : { portId, device: this.deps.portDevice?.(portId) ?? null }
@@ -11019,10 +11195,21 @@ export class SessionManager {
     if (givenBack) turn.attachments = []
     this.finishTurn(live, turn, null)
     const now = this.now()
-    live.record.lastTurn = this.failedTurn(live, mapped.message, now)
+    const agentName = this.deps.agents.name(live.record.agentId)
+    const rawError = error instanceof Error ? error.message : undefined
+    const cutNotice = closed
+      ? stoppedNotice(agentName, this.exitDetailOf(live.record.agentId, null, rawError))
+      : null
+    const failureText = cutNotice
+      ? cutNotice.description
+        ? `${cutNotice.title}: ${cutNotice.description}`
+        : cutNotice.title
+      : mapped.message
+    live.record.lastTurn = this.failedTurn(live, failureText, now)
     this.planContinue(live.record)
     const noticeId = this.nextId(live)
     if (authRequired) live.signInNotices.push(noticeId)
+    live.cutNoticeId = closed ? noticeId : null
     this.emit(live, [
       {
         op: 'entry.add',
@@ -11033,18 +11220,14 @@ export class SessionManager {
           ...(authRequired
             ? {
                 title: t('notice.signInNeeded', {
-                  agent: this.deps.agents.name(live.record.agentId),
+                  agent: agentName,
                 }),
                 description: mapped.message,
               }
-            : closed
-              ? stoppedNotice(this.deps.agents.name(live.record.agentId))
+            : cutNotice
+              ? cutNotice
               : isOutOfCredit(mapped)
-                ? outOfCreditNotice(
-                    this.deps.agents.name(live.record.agentId),
-                    live.thread.session.config,
-                    mapped.message,
-                  )
+                ? outOfCreditNotice(agentName, live.thread.session.config, mapped.message)
                 : {
                     title: t('notice.turnFailed'),
                     description: mapped.message,
@@ -11089,15 +11272,26 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     if (givenBack) this.giveBack(live, turn)
+    const runError = cutNotice
+      ? {
+          message: cutNotice.title,
+          ...(cutNotice.description ? { detail: cutNotice.description } : {}),
+        }
+      : mapped
     const routineTurn =
       this.reportRun(live, {
         stopReason: null,
-        error: mapped,
+        error: runError,
         usage: null,
         turn,
       }) || this.reportStep(live)
     if (!routineTurn) {
-      this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
+      this.deps.events.attention(
+        live.id,
+        'error',
+        this.titleOf(live),
+        cutNotice?.description ?? cutNotice?.title ?? mapped.message,
+      )
     }
     this.followAgentTurn(live)
     this.checkpoint(live)
@@ -14870,6 +15064,7 @@ export class SessionManager {
     this.suggestRuns.clear()
     if (this.followTimer) clearInterval(this.followTimer)
     this.followTimer = null
+    for (const unsubscribe of this.fileWatchers.splice(0)) unsubscribe()
   }
 }
 
@@ -15128,8 +15323,16 @@ function outOfCreditNotice(
 
 // The exit event and the failed prompt race, so both say the same thing. The notice ends the cut
 // turn, where the renderer offers to resume it.
-function stoppedNotice(name: string): { title: string; cause: 'agent_stopped' } {
-  return { title: t('notice.stopped.title', { agent: name }), cause: 'agent_stopped' }
+function stoppedNotice(
+  name: string,
+  detail?: AgentExitDetail,
+): { title: string; description?: string; cause: 'agent_stopped' } {
+  const description = detail ? formatExitReason(detail) : undefined
+  return {
+    title: t('notice.stopped.title', { agent: name }),
+    ...(description ? { description } : {}),
+    cause: 'agent_stopped',
+  }
 }
 
 /**

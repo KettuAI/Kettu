@@ -60,6 +60,8 @@ class Child {
   exited = false
   /** Whether the router took its exit into account, so a later event is ignored. */
   gone = false
+  /** Resolves once the child's stderr pipe has finished draining to `process.stderr`. */
+  stderrDone: Promise<void> = Promise.resolve()
   readonly outgoing = new Map<JsonRpcId, Deferred>()
   readonly proc: ChildProcess
 
@@ -679,12 +681,16 @@ export class SessionRouter {
     if (proc.stderr) {
       const errors = createInterface({ input: proc.stderr })
       errors.on('line', (line) => process.stderr.write(`${line}\n`))
+      child.stderrDone = new Promise<void>((resolve) => {
+        errors.once('close', resolve)
+        proc.stderr?.once('error', resolve)
+      })
     }
     proc.stdin?.on('error', () => {})
-    proc.on('exit', () => this.childGone(child))
+    proc.on('exit', (code, signal) => this.childGone(child, code, signal))
     proc.on('error', (error) => {
       process.stderr.write(`session-router: ${error.message}\n`)
-      this.childGone(child)
+      this.childGone(child, null, null)
     })
     return child
   }
@@ -799,9 +805,14 @@ export class SessionRouter {
 
   /**
    * A child exited. An ending one is the router's own doing; any other means the adapter crashed,
-   * so the router ends the rest and exits with code 1, which the host takes as a crash.
+   * so the router ends the rest and exits with the child's non-zero code (or 1), which the host
+   * takes as a crash.
    */
-  private childGone(child: Child): void {
+  private childGone(
+    child: Child,
+    code: number | null = null,
+    signal: NodeJS.Signals | null = null,
+  ): void {
     if (child.gone) return
     child.gone = true
     child.exited = true
@@ -820,7 +831,15 @@ export class SessionRouter {
       other.ending = true
       this.killChild(other)
     }
-    this.finish(1)
+    const exitCode = code !== null && code > 0 && code <= 255 ? code : 1
+    // Briefly wait for the crashed child's stderr pipe to flush so the host sees its last lines.
+    void Promise.race([
+      child.stderrDone,
+      new Promise<void>((resolve) => setTimeout(resolve, 50).unref?.()),
+    ]).finally(() => {
+      if (signal) process.stderr.write(`session-router: process stopped by ${signal}\n`)
+      this.finish(exitCode)
+    })
   }
 
   /** Its own input ended: every child goes, and the router exits once they have or after the limit. */

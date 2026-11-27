@@ -3,8 +3,9 @@
 import type { Worker } from 'node:worker_threads'
 import type { AgentId } from '@shared/thread'
 import type { ClockRequest, ScanProgress, TokenParts } from '@shared/usage'
+import { isDiskFullText } from '../disk-full'
 import { t } from '../i18n'
-import type { LogFn } from '../storage'
+import { notifyStorageWrite, type LogFn } from '../storage'
 import type { DbSummary, SourceMap, SourceStats, UsageDbStatus } from './db'
 import type { UsageRow } from './model'
 import type { ScanRequest, UsageReply, UsageRequest } from './protocol'
@@ -88,19 +89,26 @@ export class UsageStore {
           break
         case 'log':
           options.log(reply.level, `Usage: ${reply.message}`)
+          if (reply.level === 'error' && isDiskFullText(reply.message)) {
+            notifyStorageWrite(options.file, false, new Error(reply.message))
+          }
           break
         case 'progress':
           options.onProgress(reply.progress)
           break
         case 'changed':
+          notifyStorageWrite(options.file, true)
           options.onChanged()
           break
         case 'result':
           this.settle(reply.id)?.resolve(reply.value)
           break
-        case 'error':
-          this.settle(reply.id)?.reject(new Error(reply.message))
+        case 'error': {
+          const error = new Error(reply.message)
+          if (isDiskFullText(reply.message)) notifyStorageWrite(options.file, false, error)
+          this.settle(reply.id)?.reject(error)
           break
+        }
       }
     })
     worker.onExit((error) => {

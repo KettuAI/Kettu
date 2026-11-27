@@ -401,4 +401,61 @@ describe('the session router', () => {
     })
     expect((rejected._meta as unknown as { error?: unknown }).error).toBeDefined()
   })
+
+  it('flushes crashed child stderr and preserves its non-zero exit code', async () => {
+    const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-router-crash-')))
+    dirs.push(dir)
+    const crashingChild = path.join(dir, 'crash.mjs')
+    await writeFile(
+      crashingChild,
+      `
+import { createInterface } from 'node:readline'
+createInterface({ input: process.stdin }).on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.method === 'initialize') {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: 1, agentCapabilities: {} } }) + '\\n')
+    return
+  }
+  if (message.method === 'session/new') {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { sessionId: 's-crash' } }) + '\\n')
+    return
+  }
+  if (message.method === 'session/prompt') {
+    process.stderr.write('Error: ENOSPC: no space left on device, write\\n')
+    process.exit(42)
+  }
+})
+`,
+    )
+    const router = spawn(process.execPath, [ROUTER, process.execPath, crashingChild], {
+      cwd: dir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    routers.push(router)
+    let stderr = ''
+    router.stderr?.setEncoding('utf8').on('data', (chunk: string) => {
+      stderr += chunk
+    })
+    const exited = new Promise<number | null>((resolve) =>
+      router.once('exit', (code) => resolve(code)),
+    )
+    const waiting = new Map<number, () => void>()
+    createInterface({ input: router.stdout! }).on('line', (line) => {
+      const msg = JSON.parse(line) as { id?: number }
+      if (msg.id !== undefined) waiting.get(msg.id)?.()
+    })
+    const send = (id: number, method: string, params: unknown) =>
+      new Promise<void>((resolve) => {
+        waiting.set(id, resolve)
+        router.stdin!.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
+      })
+    await send(1, 'initialize', { protocolVersion: 1 })
+    await send(2, 'session/new', { cwd: dir, mcpServers: [] })
+    router.stdin!.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'session/prompt', params: { sessionId: 's-crash', prompt: [] } })}\n`,
+    )
+    const code = await exited
+    expect(code).toBe(42)
+    expect(stderr).toContain('ENOSPC: no space left on device')
+  })
 })

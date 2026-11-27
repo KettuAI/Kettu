@@ -8,6 +8,7 @@ import {
   corruptName,
   JsonFile,
   migrate,
+  observeStorageWrites,
   parseAgentsFile,
   parseAgentUpdatesFile,
   parseProjectsFile,
@@ -239,6 +240,65 @@ describe('JsonFile', () => {
     await store.flush()
     expect(await readFile(file, 'utf8')).toBe(newer)
     expect(logs.some((line) => line.includes('newer than this app'))).toBe(true)
+  })
+
+  it('reports ENOSPC write failures and recoveries to both onWrite and root observers', async () => {
+    const file = path.join(dir, 'state', 'doc.json')
+    const enospc = Object.assign(new Error('ENOSPC: no space left on device, write'), {
+      code: 'ENOSPC',
+    })
+    let fail = true
+    const store = new JsonFile<Doc>({
+      file,
+      version: 1,
+      migrations: {},
+      parse: (data) => ({ version: 1, value: Number(data.value) }),
+      empty: () => ({ version: 1, value: 0 }),
+      log,
+      debounceMs: 0,
+      retryMs: 60_000,
+      writeFile: async (target, contents) => {
+        if (fail) throw enospc
+        await writeFileAtomic(target, contents)
+      },
+    })
+    const direct: { file: string; ok: boolean; code?: string }[] = []
+    const rootSeen: { file: string; ok: boolean; code?: string }[] = []
+    const otherRootSeen: string[] = []
+    const unsubDirect = store.onWrite((outcome) =>
+      direct.push({
+        file: outcome.file,
+        ok: outcome.ok,
+        code: (outcome.error as NodeJS.ErrnoException | undefined)?.code,
+      }),
+    )
+    const unsubRoot = observeStorageWrites(dir, (outcome) =>
+      rootSeen.push({
+        file: outcome.file,
+        ok: outcome.ok,
+        code: (outcome.error as NodeJS.ErrnoException | undefined)?.code,
+      }),
+    )
+    const unsubOther = observeStorageWrites(path.join(dir, 'other-host'), (outcome) =>
+      otherRootSeen.push(outcome.file),
+    )
+    try {
+      store.save({ version: 1, value: 1 })
+      expect(await store.flushWritten()).toBe(false)
+      expect(direct).toEqual([{ file, ok: false, code: 'ENOSPC' }])
+      expect(rootSeen).toEqual([{ file, ok: false, code: 'ENOSPC' }])
+      expect(otherRootSeen).toEqual([])
+
+      fail = false
+      store.save({ version: 1, value: 2 })
+      expect(await store.flushWritten()).toBe(true)
+      expect(direct.at(-1)).toEqual({ file, ok: true, code: undefined })
+      expect(rootSeen.at(-1)).toEqual({ file, ok: true, code: undefined })
+    } finally {
+      unsubDirect()
+      unsubRoot()
+      unsubOther()
+    }
   })
 })
 

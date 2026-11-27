@@ -17,11 +17,13 @@ export function CutTurnEnd({
   sessionId,
   entryId,
   title,
+  description,
   className,
 }: {
   sessionId: string
   entryId: string
   title: string
+  description?: string
   className?: string
 }) {
   const { t } = useTranslation('session')
@@ -45,13 +47,22 @@ export function CutTurnEnd({
       setSending(false)
     })
   }
+  const hasDetail = Boolean(description || error)
   return (
     <Alert variant="error" className={cn('ks-notice py-2', className)}>
       <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{title}</AlertTitle>
-      {error && <AlertDescription className="text-small">{error}</AlertDescription>}
+      {description && (
+        <AlertDescription
+          className="col-start-2 text-small break-words whitespace-pre-wrap"
+          data-selectable=""
+        >
+          {description}
+        </AlertDescription>
+      )}
+      {error && <AlertDescription className="col-start-2 text-small">{error}</AlertDescription>}
       {resumable && (
-        <AlertAction className="top-1/2 -translate-y-1/2">
+        <AlertAction className={hasDetail ? 'top-2' : 'top-1/2 -translate-y-1/2'}>
           <Button size="xs" variant="outline" disabled={sending} onClick={resume}>
             {t('thread.resume')}
           </Button>

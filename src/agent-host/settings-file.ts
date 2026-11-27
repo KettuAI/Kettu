@@ -4,6 +4,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { t } from './i18n'
+import { notifyStorageWrite } from './storage'
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -41,13 +42,15 @@ export async function writeSettings(
 
 /** Writes beside the file and renames it over, so a crash never leaves half a settings file. */
 export async function writeTextAtomic(file: string, text: string): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true })
   const temp = `${file}.kettu-${process.pid}.tmp`
   try {
+    await mkdir(path.dirname(file), { recursive: true })
     await writeFile(temp, text, { mode: 0o600 })
     await rename(temp, file)
+    notifyStorageWrite(file, true)
   } catch (error) {
-    await rm(temp, { force: true })
+    await rm(temp, { force: true }).catch(() => {})
+    notifyStorageWrite(file, false, error)
     throw error
   }
 }

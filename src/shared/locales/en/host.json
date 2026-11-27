@@ -185,7 +185,15 @@
       "description": "Free up space on this computer. Until then the conversation stays in memory, and Kettu saves it once there is room."
     },
     "stopped": {
-      "title": "{{agent}} exited before finishing this turn"
+      "title": "{{agent}} exited before finishing this turn",
+      "diskFull": "The disk is full. Free up space on this computer, then resume.",
+      "diskFullWithDetail": "The disk is full. Free up space on this computer, then resume.\n{{detail}}",
+      "code": "Exited with code {{code}}.",
+      "codeWithDetail": "Exited with code {{code}}: {{detail}}",
+      "signal": "Stopped by signal {{signal}}.",
+      "signalWithDetail": "Stopped by signal {{signal}}: {{detail}}",
+      "closed": "The connection closed unexpectedly.",
+      "closedWithDetail": "The connection closed unexpectedly: {{detail}}"
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} did not confirm the cancellation",
