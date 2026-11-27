@@ -25,6 +25,11 @@ import { Button } from '@renderer/components/ui/button'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import {
+  LinkSessionContext,
+  sessionLinkProps,
+  useLinkSessionId,
+} from '@renderer/features/session/open-link'
 import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -263,12 +268,19 @@ function Head({
   )
 }
 
-export function Title({ url, title }: { url: string; title: string }) {
+export function Title({
+  url,
+  title,
+  sessionId,
+}: {
+  url: string
+  title: string
+  sessionId?: string | null
+}) {
+  const resolvedSessionId = useLinkSessionId(sessionId)
   return (
     <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
+      {...sessionLinkProps(url, resolvedSessionId)}
       title={title}
       className="line-clamp-3 rounded-sm font-heading text-subheading leading-snug font-medium text-primary no-underline underline-offset-2 focus-ring hover:underline"
     >
@@ -381,6 +393,7 @@ function IssueDetails({
   hostId: string | null
 }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const now = useNow()
   const repo = useProjectRepository()
   const at = issue.state === 'open' ? issue.createdAt : issue.closedAt
@@ -411,9 +424,7 @@ function IssueDetails({
         <div className="flex items-center gap-1 text-xs text-secondary">
           {t('ref.closedBy')}
           <a
-            href={closedBy.url}
-            target="_blank"
-            rel="noreferrer"
+            {...sessionLinkProps(closedBy.url, sessionId)}
             className="inline-flex items-center gap-1 rounded-sm font-medium text-primary no-underline focus-ring hover:underline"
           >
             <PrIcon state={issue.closedBy.state} size={12} />
@@ -552,9 +563,11 @@ function Missing({
 export function ReferenceCard({
   reference,
   hostId: explicitHostId,
+  sessionId,
 }: {
   reference: GitHubReference
   hostId?: string | null
+  sessionId?: string | null
 }) {
   const hostId = useGitHostId(explicitHostId)
   const { data, error } = useReferenceData(reference, hostId)
@@ -565,16 +578,21 @@ export function ReferenceCard({
     const state = hostGitOf(useGitStore.getState(), hostId)
     if (!state.tools && !state.toolsError) void loadGitTools(hostId)
   }, [reference, hostId])
-  if (data?.kind === 'pull') {
-    return <PullRequestDetails reference={reference} pr={data.pr} hostId={hostId} />
-  }
-  if (data?.kind === 'issue') {
-    return <IssueDetails reference={reference} issue={data.issue} hostId={hostId} />
-  }
-  if (error !== null || gh === 'not-installed' || gh === 'signed-out') {
-    return <Missing reference={reference} error={error} hostId={hostId} />
-  }
-  return <Loading />
+  const content =
+    data?.kind === 'pull' ? (
+      <PullRequestDetails reference={reference} pr={data.pr} hostId={hostId} />
+    ) : data?.kind === 'issue' ? (
+      <IssueDetails reference={reference} issue={data.issue} hostId={hostId} />
+    ) : error !== null || gh === 'not-installed' || gh === 'signed-out' ? (
+      <Missing reference={reference} error={error} hostId={hostId} />
+    ) : (
+      <Loading />
+    )
+  return sessionId !== undefined ? (
+    <LinkSessionContext value={sessionId}>{content}</LinkSessionContext>
+  ) : (
+    content
+  )
 }
 
 export const REFERENCE_CARD_CLASS = 'flex w-[340px] flex-col gap-2.5 px-3.5 pt-3.5 pb-3.25'
@@ -583,6 +601,7 @@ export const REFERENCE_CARD_CLASS = 'flex w-[340px] flex-col gap-2.5 px-3.5 pt-3
 export function ReferenceHoverCard({
   reference,
   hostId,
+  sessionId,
   trigger,
   side = 'bottom',
   align = 'start',
@@ -592,6 +611,7 @@ export function ReferenceHoverCard({
 }: {
   reference: GitHubReference
   hostId?: string | null
+  sessionId?: string | null
   trigger: React.ReactElement
   side?: 'bottom' | 'right' | 'top'
   align?: 'start' | 'center'
@@ -610,7 +630,7 @@ export function ReferenceHoverCard({
         anchor={anchor}
         className={REFERENCE_CARD_CLASS}
       >
-        <ReferenceCard reference={reference} hostId={hostId} />
+        <ReferenceCard reference={reference} hostId={hostId} sessionId={sessionId} />
       </HoverCardContent>
     </HoverCard>
   )

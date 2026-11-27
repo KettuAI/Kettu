@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { sessionLinkProps } from '@renderer/features/session/open-link'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { TaskRing } from '@renderer/features/tasks/task-ring'
 import { runningFor, shortAgo } from '@renderer/lib/format'
@@ -154,7 +155,7 @@ export function Outputs({ outputs, max = 2 }: { outputs: RowOutput[]; max?: numb
 export function OutputChip({ output, children }: { output: RowOutput; children?: ReactNode }) {
   if (output.kind === 'pr') {
     return (
-      <a className="k-ov-out" data-kind="pr" href={output.url} target="_blank" rel="noreferrer">
+      <a className="k-ov-out" data-kind="pr" {...sessionLinkProps(output.url, output.sessionId)}>
         <Icon icon={GitPullRequestIcon} size={12} />
         <b>#{output.number}</b>
         {children}

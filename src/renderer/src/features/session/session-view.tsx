@@ -40,6 +40,7 @@ import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
+import { LinkSessionContext } from './open-link'
 import { ComputerLabel } from './computer-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
@@ -224,184 +225,194 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   }
 
   return (
-    <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
-      <SessionHeader summary={summary} session={session} />
-      <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ProjectPathContext value={folder}>
-            {/* The drop zone covers the thread and leaves the composer in view. */}
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              {summary.task && <StepSentBack summary={summary} />}
-              {body}
-              <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
-            </div>
-          </ProjectPathContext>
-          {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
-          <div style={{ paddingRight: gutter }}>
-            <div className="px-8 pb-6">
-              <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
-                {session &&
-                status === 'failed' &&
-                movedTo &&
-                agentStatus?.movedAccounts?.refused ? (
-                  <AccountMovedAlert
-                    agent={name}
-                    to={movedToName ?? movedTo}
-                    message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
-                    onRetry={retry}
-                    onOpen={() => {
-                      openHostSettings(hostId)
-                      openHarnessSettings(movedTo)
-                    }}
-                  />
-                ) : session && status === 'failed' ? (
-                  <FailedState
-                    title={t('view.stopped', { agent: name })}
-                    message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
-                    detail={session.error?.detail}
-                    onRetry={retry}
-                    action={
-                      missingCopy ? (
-                        <InstallCopyButton missing={missingCopy} />
-                      ) : (
-                        harnessAtFault(agentStatus) && (
-                          <HarnessPageButton status={agentStatus} hostId={hostId} />
-                        )
-                      )
-                    }
-                    report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
-                  />
-                ) : null}
-                {session && status === 'auth_required' && !empty && (
-                  <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
-                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                    <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
-                    <AlertDescription>{t('view.historyStays')}</AlertDescription>
-                    <AlertAction className="flex gap-1.5">
-                      <Button size="xs" variant="outline" onClick={retry}>
-                        {t('common:actions.retry')}
-                      </Button>
-                      <Button size="xs" onClick={() => openAgents(summary.agentId)}>
-                        {t('view.signIn')}
-                      </Button>
-                    </AlertAction>
-                  </Alert>
-                )}
-                {agentRemoved && (
-                  <Alert variant="warning">
-                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                    <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
-                    <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
-                    <AlertAction>
-                      <Button size="xs" variant="outline" onClick={() => openAgents(null)}>
-                        {t('view.openAgents')}
-                      </Button>
-                    </AlertAction>
-                  </Alert>
-                )}
-                {agentOff && !agentRemoved && (
-                  <Alert variant="warning">
-                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                    <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
-                    <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
-                    <AlertAction>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => openAgents(summary.agentId)}
-                      >
-                        {t('view.openAgent')}
-                      </Button>
-                    </AlertAction>
-                  </Alert>
-                )}
-                {summary.worktree && !archived && summary.origin !== 'subagent' && (
-                  <WorktreeState sessionId={sessionId} worktree={summary.worktree} />
-                )}
-                {(actionError || queueError) && (
-                  <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
-                    {actionError ?? queueError}
-                  </p>
-                )}
-                <div className="flex flex-col">
-                  {/* Mounted only while something waits; its cards sit behind the composer. */}
+    <LinkSessionContext value={sessionId}>
+      <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
+        <SessionHeader summary={summary} session={session} />
+        <div className="relative flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <ProjectPathContext value={folder}>
+              {/* The drop zone covers the thread and leaves the composer in view. */}
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                {summary.task && <StepSentBack summary={summary} />}
+                {body}
+                <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
+              </div>
+            </ProjectPathContext>
+            {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
+            <div style={{ paddingRight: gutter }}>
+              <div className="px-8 pb-6">
+                <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
                   {session &&
-                    !archived &&
-                    summary.origin !== 'subagent' &&
-                    session.queue.length > 0 && (
-                      <QueueStack session={session} onError={setQueueError} />
-                    )}
-                  <div className="ctl-labels" role="group" aria-label={t('control:label.group')}>
-                    {session && (
-                      <ComputerLabel
-                        sessionId={sessionId}
-                        view={computer ? (session.computer ?? null) : null}
-                        agentId={summary.agentId}
-                        hostId={hostId}
-                        onError={setQueueError}
-                      />
-                    )}
-                    {!archived && !away && summary.origin !== 'subagent' && (
-                      <>
-                        <BrowserLabel
+                  status === 'failed' &&
+                  movedTo &&
+                  agentStatus?.movedAccounts?.refused ? (
+                    <AccountMovedAlert
+                      agent={name}
+                      to={movedToName ?? movedTo}
+                      message={
+                        session.error?.message ?? t('view.couldNotContinue', { agent: name })
+                      }
+                      onRetry={retry}
+                      onOpen={() => {
+                        openHostSettings(hostId)
+                        openHarnessSettings(movedTo)
+                      }}
+                    />
+                  ) : session && status === 'failed' ? (
+                    <FailedState
+                      title={t('view.stopped', { agent: name })}
+                      message={
+                        session.error?.message ?? t('view.couldNotContinue', { agent: name })
+                      }
+                      detail={session.error?.detail}
+                      onRetry={retry}
+                      action={
+                        missingCopy ? (
+                          <InstallCopyButton missing={missingCopy} />
+                        ) : (
+                          harnessAtFault(agentStatus) && (
+                            <HarnessPageButton status={agentStatus} hostId={hostId} />
+                          )
+                        )
+                      }
+                      report={{
+                        hostId: otherHost?.id ?? null,
+                        sessionId,
+                        agentId: summary.agentId,
+                      }}
+                    />
+                  ) : null}
+                  {session && status === 'auth_required' && !empty && (
+                    <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
+                      <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                      <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
+                      <AlertDescription>{t('view.historyStays')}</AlertDescription>
+                      <AlertAction className="flex gap-1.5">
+                        <Button size="xs" variant="outline" onClick={retry}>
+                          {t('common:actions.retry')}
+                        </Button>
+                        <Button size="xs" onClick={() => openAgents(summary.agentId)}>
+                          {t('view.signIn')}
+                        </Button>
+                      </AlertAction>
+                    </Alert>
+                  )}
+                  {agentRemoved && (
+                    <Alert variant="warning">
+                      <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                      <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
+                      <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
+                      <AlertAction>
+                        <Button size="xs" variant="outline" onClick={() => openAgents(null)}>
+                          {t('view.openAgents')}
+                        </Button>
+                      </AlertAction>
+                    </Alert>
+                  )}
+                  {agentOff && !agentRemoved && (
+                    <Alert variant="warning">
+                      <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                      <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
+                      <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
+                      <AlertAction>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => openAgents(summary.agentId)}
+                        >
+                          {t('view.openAgent')}
+                        </Button>
+                      </AlertAction>
+                    </Alert>
+                  )}
+                  {summary.worktree && !archived && summary.origin !== 'subagent' && (
+                    <WorktreeState sessionId={sessionId} worktree={summary.worktree} />
+                  )}
+                  {(actionError || queueError) && (
+                    <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
+                      {actionError ?? queueError}
+                    </p>
+                  )}
+                  <div className="flex flex-col">
+                    {/* Mounted only while something waits; its cards sit behind the composer. */}
+                    {session &&
+                      !archived &&
+                      summary.origin !== 'subagent' &&
+                      session.queue.length > 0 && (
+                        <QueueStack session={session} onError={setQueueError} />
+                      )}
+                    <div className="ctl-labels" role="group" aria-label={t('control:label.group')}>
+                      {session && (
+                        <ComputerLabel
                           sessionId={sessionId}
+                          view={computer ? (session.computer ?? null) : null}
                           agentId={summary.agentId}
                           hostId={hostId}
+                          onError={setQueueError}
                         />
-                        <DeviceLabels
-                          sessionId={sessionId}
-                          agentId={summary.agentId}
-                          hostId={hostId}
+                      )}
+                      {!archived && !away && summary.origin !== 'subagent' && (
+                        <>
+                          <BrowserLabel
+                            sessionId={sessionId}
+                            agentId={summary.agentId}
+                            hostId={hostId}
+                          />
+                          <DeviceLabels
+                            sessionId={sessionId}
+                            agentId={summary.agentId}
+                            hostId={hostId}
+                          />
+                          <TerminalLabels
+                            sessionId={sessionId}
+                            agentId={summary.agentId}
+                            hostId={hostId}
+                          />
+                        </>
+                      )}
+                    </div>
+                    {away ? (
+                      session && <HostAway host={away} inline />
+                    ) : summary.origin === 'subagent' ? (
+                      <SubagentBar summary={summary} session={session} />
+                    ) : archived ? (
+                      <ArchivedComposer sessionId={sessionId} />
+                    ) : summary.worktree?.state === 'gone' ? (
+                      // Its history stays readable; nothing more can run without the branch.
+                      <WorktreeGoneComposer />
+                    ) : session ? (
+                      // Its menus open inside it, so while one is open it rises over the computer label.
+                      <div className="relative z-10 has-aria-expanded:z-20">
+                        {/* An agent removed or turned off: the session goes on with another one. */}
+                        <Composer
+                          key={sessionId}
+                          session={session}
+                          agentName={name}
+                          mustSwitch={agentRemoved || agentOff}
                         />
-                        <TerminalLabels
-                          sessionId={sessionId}
-                          agentId={summary.agentId}
-                          hostId={hostId}
-                        />
-                      </>
+                      </div>
+                    ) : (
+                      <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
                     )}
                   </div>
-                  {away ? (
-                    session && <HostAway host={away} inline />
-                  ) : summary.origin === 'subagent' ? (
-                    <SubagentBar summary={summary} session={session} />
-                  ) : archived ? (
-                    <ArchivedComposer sessionId={sessionId} />
-                  ) : summary.worktree?.state === 'gone' ? (
-                    // Its history stays readable; nothing more can run without the branch.
-                    <WorktreeGoneComposer />
-                  ) : session ? (
-                    // Its menus open inside it, so while one is open it rises over the computer label.
-                    <div className="relative z-10 has-aria-expanded:z-20">
-                      {/* An agent removed or turned off: the session goes on with another one. */}
-                      <Composer
-                        key={sessionId}
-                        session={session}
-                        agentName={name}
-                        mustSwitch={agentRemoved || agentOff}
-                      />
-                    </div>
-                  ) : (
-                    <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
-                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
+        <AnimatePresence>
+          {lit && (
+            <SurfaceLight
+              key="computer"
+              placement="inside"
+              act={session?.computer?.act?.seq ?? 0}
+              radius={SHEET_INSIDE_RADIUS}
+            />
+          )}
+        </AnimatePresence>
+        <Announcer summary={summary} name={name} />
       </div>
-      <AnimatePresence>
-        {lit && (
-          <SurfaceLight
-            key="computer"
-            placement="inside"
-            act={session?.computer?.act?.seq ?? 0}
-            radius={SHEET_INSIDE_RADIUS}
-          />
-        )}
-      </AnimatePresence>
-      <Announcer summary={summary} name={name} />
-    </div>
+    </LinkSessionContext>
   )
 }
 

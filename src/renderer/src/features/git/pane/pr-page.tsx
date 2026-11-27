@@ -16,6 +16,7 @@ import type { CheckRun, GitStatus, GitTools, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { sessionLinkProps, useLinkSessionId } from '@renderer/features/session/open-link'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { longAgo, shortDuration } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
@@ -152,6 +153,7 @@ function PullRequestView({
   onHandOff: (text: string) => void
 }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const now = useNow()
   const done = pr.state === 'merged' || pr.state === 'closed'
   const when = done
@@ -196,9 +198,7 @@ function PullRequestView({
       <MergeCard pr={pr} />
       <div className="flex gap-1.5">
         <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
+          {...sessionLinkProps(pr.url, sessionId)}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           <Glyph icon={LinkSquare02Icon} size={14} />
@@ -222,6 +222,7 @@ function CopyLink({ url }: { url: string }) {
 
 function ChecksCard({ pr, onFix }: { pr: PullRequest; onFix: () => void }) {
   const { t } = useTranslation('git')
+  const sessionId = useLinkSessionId()
   const { checks } = pr
   const total = checks.passed + checks.failed + checks.pending
   if (total === 0) return null
@@ -265,9 +266,7 @@ function ChecksCard({ pr, onFix }: { pr: PullRequest; onFix: () => void }) {
           </span>
           {failing.url && (
             <a
-              href={failing.url}
-              target="_blank"
-              rel="noreferrer"
+              {...sessionLinkProps(failing.url, sessionId)}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
               <Glyph icon={LinkSquare02Icon} size={14} />
@@ -287,6 +286,7 @@ function ChecksCard({ pr, onFix }: { pr: PullRequest; onFix: () => void }) {
 }
 
 function RunRow({ run }: { run: CheckRun }) {
+  const sessionId = useLinkSessionId()
   const lasted =
     run.startedAt !== null && run.completedAt !== null
       ? shortDuration(run.completedAt - run.startedAt)
@@ -310,9 +310,7 @@ function RunRow({ run }: { run: CheckRun }) {
       )}
       {run.url ? (
         <a
-          href={run.url}
-          target="_blank"
-          rel="noreferrer"
+          {...sessionLinkProps(run.url, sessionId)}
           className="flex min-w-0 flex-1 items-center rounded-sm outline-none hover:underline focus-visible:focus-ring"
         >
           {name}

@@ -133,7 +133,7 @@ export const TaskRow = memo(function TaskRow({
     taskRowStatus(task, sessions, !expanded, view),
     origin && !flat && !expanded ? rowStatus(origin, true) : null,
   )
-  const prs = useMemo(() => pullRequestsOf(sessions), [sessions])
+  const { prs, sessionByUrl } = useMemo(() => pullRequestsOf(sessions), [sessions])
   const folded = hasSteps && !expanded
   const progress =
     folded && task.status === 'running' && task.at !== null
@@ -204,7 +204,12 @@ export const TaskRow = memo(function TaskRow({
           {task.title}
         </span>
         {prs.length > 0 && (
-          <PullRequestsBadge prs={prs} hostId={hostId} onOpen={() => setCardOpen(false)} />
+          <PullRequestsBadge
+            prs={prs}
+            sessionIdOf={(pr) => sessionByUrl.get(pr.url) ?? null}
+            hostId={hostId}
+            onOpen={() => setCardOpen(false)}
+          />
         )}
         {progress && (
           <span
@@ -447,13 +452,22 @@ function OriginRowItem({
 }
 
 /** A task's pull requests: those its steps' sessions opened or found on its branch, once each. */
-function pullRequestsOf(sessions: readonly (SessionSummary | undefined)[]): SessionPullRequest[] {
+function pullRequestsOf(sessions: readonly (SessionSummary | undefined)[]): {
+  prs: SessionPullRequest[]
+  sessionByUrl: Map<string, string>
+} {
   const byUrl = new Map<string, SessionPullRequest>()
+  const sessionByUrl = new Map<string, string>()
   for (const summary of sessions) {
     if (!summary) continue
-    for (const pr of sessionPullRequests(summary)) if (!byUrl.has(pr.url)) byUrl.set(pr.url, pr)
+    for (const pr of sessionPullRequests(summary)) {
+      if (!byUrl.has(pr.url)) {
+        byUrl.set(pr.url, pr)
+        sessionByUrl.set(pr.url, summary.id)
+      }
+    }
   }
-  return [...byUrl.values()]
+  return { prs: [...byUrl.values()], sessionByUrl }
 }
 
 /**

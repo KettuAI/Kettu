@@ -4,6 +4,7 @@ import type { SessionOutputs, SessionSummary } from '@shared/agent-host'
 import type { KnownExpiry } from '@shared/prompt-cache'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useCacheLeft } from '@renderer/features/prompt-cache/cache-phase'
+import { LinkSessionContext } from '@renderer/features/session/open-link'
 import { BackgroundDots, TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { countdown, duration, longAgo } from '@renderer/lib/format'
@@ -39,31 +40,33 @@ export function SessionCard({
   const outputs = useOutputs(summary)
   const hostId = hostOfSession(summary)
   return (
-    <div className="flex flex-col">
-      <div className="flex flex-col gap-1 px-3.5 pt-3 pb-3">
-        <p className="text-label font-semibold text-pretty wrap-anywhere text-primary">
-          {sessionTitle(summary)}
-        </p>
-        <div className="flex min-w-0 items-center gap-1.5 text-hint text-tertiary">
-          <AgentMark agent={summary.agentId} size={14} hostId={hostId} />
-          <span className="min-w-0 truncate">
-            {agentName(summary.agentId, hostId)}
-            {model && <> · {model}</>}
-          </span>
-          {summary.branch && (
-            <span className="flex min-w-0 items-center gap-1">
-              <Glyph icon={GitBranchIcon} size={12} className="shrink-0 text-icon" />
-              <span className="truncate font-mono text-code">{summary.branch}</span>
+    <LinkSessionContext value={summary.id}>
+      <div className="flex flex-col">
+        <div className="flex flex-col gap-1 px-3.5 pt-3 pb-3">
+          <p className="text-label font-semibold text-pretty wrap-anywhere text-primary">
+            {sessionTitle(summary)}
+          </p>
+          <div className="flex min-w-0 items-center gap-1.5 text-hint text-tertiary">
+            <AgentMark agent={summary.agentId} size={14} hostId={hostId} />
+            <span className="min-w-0 truncate">
+              {agentName(summary.agentId, hostId)}
+              {model && <> · {model}</>}
             </span>
-          )}
+            {summary.branch && (
+              <span className="flex min-w-0 items-center gap-1">
+                <Glyph icon={GitBranchIcon} size={12} className="shrink-0 text-icon" />
+                <span className="truncate font-mono text-code">{summary.branch}</span>
+              </span>
+            )}
+          </div>
+        </div>
+        <CardOutputs summary={summary} outputs={outputs} onOpen={onOpen} />
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-subtle px-3.5 py-2 text-hint text-tertiary">
+          <State summary={summary} status={status} outputs={outputs} />
+          {cache && <Cache cache={cache} />}
         </div>
       </div>
-      <CardOutputs summary={summary} outputs={outputs} onOpen={onOpen} />
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-subtle px-3.5 py-2 text-hint text-tertiary">
-        <State summary={summary} status={status} outputs={outputs} />
-        {cache && <Cache cache={cache} />}
-      </div>
-    </div>
+    </LinkSessionContext>
   )
 }
 

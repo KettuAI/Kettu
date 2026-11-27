@@ -2,6 +2,7 @@
 "use client";
 
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { handleSessionLinkAuxClick, handleSessionLinkClick, useLinkSessionId } from "@renderer/features/session/open-link";
 
 /*
  * AI Answer (Clean) – an assistant's answer with its sources, in a single self-contained file.
@@ -189,6 +190,7 @@ export function AIAnswer({
   labels,
   glideHeight = true,
 }: AIAnswerProps) {
+  const sessionId = useLinkSessionId();
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
   const custom = children !== undefined;
@@ -426,7 +428,14 @@ export function AIAnswer({
                   return (
                     <div key={i} role="listitem" className="ui-ansc__source-wrap">
                       {s.href ? (
-                        <a {...props} href={s.href} target="_blank" rel="noreferrer">
+                        <a
+                          {...props}
+                          href={s.href}
+                          target={sessionId ? undefined : "_blank"}
+                          rel="noreferrer"
+                          onClick={sessionId ? (event) => handleSessionLinkClick(event, s.href!, sessionId) : undefined}
+                          onAuxClick={sessionId ? (event) => handleSessionLinkAuxClick(event, s.href!, sessionId) : undefined}
+                        >
                           {inner}
                         </a>
                       ) : (
@@ -589,7 +598,16 @@ export function AIAnswer({
           {pop.ids.map((id) => {
             const s = sources[id];
             return (
-              <a key={id} className="ui-ansc__pop-item" href={s.href} target="_blank" rel="noreferrer" tabIndex={-1}>
+              <a
+                key={id}
+                className="ui-ansc__pop-item"
+                href={s.href}
+                target={sessionId && s.href ? undefined : "_blank"}
+                rel="noreferrer"
+                tabIndex={-1}
+                onClick={sessionId && s.href ? (event) => handleSessionLinkClick(event, s.href!, sessionId) : undefined}
+                onAuxClick={sessionId && s.href ? (event) => handleSessionLinkAuxClick(event, s.href!, sessionId) : undefined}
+              >
                 <span className="ui-ansc__site">
                   {s.icon && <span className="ui-ansc__favicon" onErrorCapture={hideBroken}>
                     {s.icon}

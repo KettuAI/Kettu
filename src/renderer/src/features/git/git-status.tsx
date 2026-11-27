@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { LinkSessionContext } from '@renderer/features/session/open-link'
 import { emitAppEvent } from '@renderer/app/events'
 import { refreshGitProject, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
@@ -139,14 +140,16 @@ export function BranchTrayLink({
           onPointerMove={followPointer}
           className="kettu-pop kettu-branch-pop max-h-[min(47rem,var(--available-height))] w-99 overflow-hidden"
         >
-          <BranchPopover
-            status={status}
-            pr={pr}
-            onClose={() => setOpen(null)}
-            onSwitch={() => setOpen('switch')}
-            onHandOff={handOff}
-            onOpenPane={openPane}
-          />
+          <LinkSessionContext value={sessionId}>
+            <BranchPopover
+              status={status}
+              pr={pr}
+              onClose={() => setOpen(null)}
+              onSwitch={() => setOpen('switch')}
+              onHandOff={handOff}
+              onOpenPane={openPane}
+            />
+          </LinkSessionContext>
         </PopoverContent>
       </Popover>
       <BranchSwitcher

@@ -14,6 +14,7 @@ import {
 } from '@renderer/components/ui/resizable'
 import { useToastArea } from '@renderer/components/ui/toast'
 import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
+import { LinkSessionContext } from '@renderer/features/session/open-link'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -25,7 +26,13 @@ import {
 } from '@renderer/stores/terminals'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import { shownDoc, toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
+import {
+  panelSession,
+  shownDoc,
+  toggleTerminal,
+  useViewStore,
+  type SidePane,
+} from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
 import { SHEET, SHEET_PANEL } from './sheet'
 import { SurfacesPane, SurfaceTabs } from './surface-tabs'
@@ -260,54 +267,56 @@ export function SidePanelArea({
             style={SHEET_PANEL}
           >
             {panel && (
-              <div
-                data-side-panel={panel}
-                data-pane={held}
-                data-maximized={maximized || undefined}
-                className={cn('kp-pane', SHEET)}
-              >
-                <SurfaceTabs panel={panel} projectPath={projectPath} maximized={maximized} />
-                {held === 'terminal' ? (
-                  <TerminalPanel projectPath={projectPath} panel={panel} />
-                ) : (
-                  <Suspense fallback={<div className="min-h-0 flex-1" />}>
-                    {held === 'files' ? (
-                      <FilesPanel projectPath={projectPath} panel={panel} />
-                    ) : held === 'file' || held === 'diff' ? (
-                      <DocPane projectPath={projectPath} panel={panel} />
-                    ) : held === 'git' ? (
-                      <GitPane panel={panel} projectPath={projectPath} />
-                    ) : held === 'browser' ? (
-                      <BrowserPane panel={panel} maximized={maximized} />
-                    ) : held === 'devices' ? (
-                      <DevicesPane panel={panel} />
-                    ) : held === 'surfaces' ? (
-                      <SurfacesPane panel={panel} projectPath={projectPath} />
-                    ) : held === 'computer' ? (
-                      <ComputerPane panel={panel} />
-                    ) : held === 'requests' ? (
-                      <RequestsPane key={panel} panel={panel} />
-                    ) : held === 'board' ? (
-                      <BoardPane sessionId={panel} />
-                    ) : held === 'sideChat' ? (
-                      <SideChatPane key={panel} sessionId={panel} />
-                    ) : held === 'plugin' ? (
-                      <PluginPane panel={panel} projectPath={projectPath} />
-                    ) : (
-                      artifactId && (
-                        <ArtifactViewer
-                          key={artifactId}
-                          where="panel"
-                          projectPath={projectPath}
-                          panel={panel}
-                          id={artifactId}
-                          maximized={maximized}
-                        />
-                      )
-                    )}
-                  </Suspense>
-                )}
-              </div>
+              <LinkSessionContext value={panelSession(panel)}>
+                <div
+                  data-side-panel={panel}
+                  data-pane={held}
+                  data-maximized={maximized || undefined}
+                  className={cn('kp-pane', SHEET)}
+                >
+                  <SurfaceTabs panel={panel} projectPath={projectPath} maximized={maximized} />
+                  {held === 'terminal' ? (
+                    <TerminalPanel projectPath={projectPath} panel={panel} />
+                  ) : (
+                    <Suspense fallback={<div className="min-h-0 flex-1" />}>
+                      {held === 'files' ? (
+                        <FilesPanel projectPath={projectPath} panel={panel} />
+                      ) : held === 'file' || held === 'diff' ? (
+                        <DocPane projectPath={projectPath} panel={panel} />
+                      ) : held === 'git' ? (
+                        <GitPane panel={panel} projectPath={projectPath} />
+                      ) : held === 'browser' ? (
+                        <BrowserPane panel={panel} maximized={maximized} />
+                      ) : held === 'devices' ? (
+                        <DevicesPane panel={panel} />
+                      ) : held === 'surfaces' ? (
+                        <SurfacesPane panel={panel} projectPath={projectPath} />
+                      ) : held === 'computer' ? (
+                        <ComputerPane panel={panel} />
+                      ) : held === 'requests' ? (
+                        <RequestsPane key={panel} panel={panel} />
+                      ) : held === 'board' ? (
+                        <BoardPane sessionId={panel} />
+                      ) : held === 'sideChat' ? (
+                        <SideChatPane key={panel} sessionId={panel} />
+                      ) : held === 'plugin' ? (
+                        <PluginPane panel={panel} projectPath={projectPath} />
+                      ) : (
+                        artifactId && (
+                          <ArtifactViewer
+                            key={artifactId}
+                            where="panel"
+                            projectPath={projectPath}
+                            panel={panel}
+                            id={artifactId}
+                            maximized={maximized}
+                          />
+                        )
+                      )}
+                    </Suspense>
+                  )}
+                </div>
+              </LinkSessionContext>
             )}
           </ResizablePanel>
         </>
