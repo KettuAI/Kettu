@@ -72,9 +72,14 @@ describe('editing an agent file', () => {
     expect(mergeList(['Bash(rm:*)'], [], [])).toBeNull()
   })
 
-  it("puts Kettu's turned-off tools in Windsurf's entry, and in no other app's", () => {
+  it("puts Kettu's turned-off tools in Windsurf's and Devin Desktop's entries alone", () => {
     const args = ['mcp', 'connect', 'a']
     expect(bridgeEntry('standard', { app: 'windsurf' }, BRIDGE, args, ['wipe'])).toEqual({
+      command: BRIDGE,
+      args,
+      disabledTools: ['wipe'],
+    })
+    expect(bridgeEntry('standard', { app: 'devin' }, BRIDGE, args, ['wipe'])).toEqual({
       command: BRIDGE,
       args,
       disabledTools: ['wipe'],
@@ -461,6 +466,32 @@ describe('a takeover of an app', () => {
     }
   })
 
+  it('puts its own entry back, key and all, once the server stops going to every agent', async () => {
+    const f = await fixture(VSCODE, { path: 'mcp.json', layout: 'vscode', app: 'VS Code' })
+    try {
+      const file = join(f.home, 'mcp.json')
+      await writeFile(
+        file,
+        '{\n\t"servers": {\n\t\t"notes": { "command": "npx", "args": ["-y", "notes-mcp"], "env": { "K": "' +
+          SECRET +
+          '" } }\n\t}\n}\n',
+      )
+      f.library.push(server('shared', 'all', 'shared-mcp'))
+      await f.terminal.turnOn(VSCODE.id, (await f.terminal.plan(VSCODE.id)).id)
+      expect(parseJsonc(await readFile(file, 'utf8')).servers.notes.args).toContain('app:vscode')
+      for (const item of f.library) item.agents = ['codex' as AgentId]
+      await f.terminal.sync()
+      const config = parseJsonc(await readFile(file, 'utf8'))
+      expect(config.servers).toEqual({
+        notes: { command: 'npx', args: ['-y', 'notes-mcp'], env: { K: SECRET } },
+      })
+      expect(f.terminal.written(VSCODE.id)).toEqual([])
+      expect(f.terminal.isOn(VSCODE.id)).toBe(true)
+    } finally {
+      await rm(f.root, { recursive: true, force: true })
+    }
+  })
+
   it("writes Zed's context servers beside its other settings", async () => {
     const f = await fixture(ZED, { path: 'settings.json', layout: 'zed', app: 'Zed' })
     try {
@@ -480,6 +511,43 @@ describe('a takeover of an app', () => {
             env: {},
           },
         },
+      })
+    } finally {
+      await rm(f.root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a server that stops going to a takeover', () => {
+  it("puts the agent's own entry back as it was, and keeps the takeover on", async () => {
+    const codex: TerminalOwner = { id: 'codex', harness: 'codex', app: null, folder: null }
+    const f = await fixture(codex, { path: 'config.toml', layout: 'codex', agentId: codex.id })
+    try {
+      const file = join(f.home, 'config.toml')
+      const own =
+        '[mcp_servers.notes]\ncommand = "npx"\nargs = ["-y", "notes-mcp"]\nenv = { K = "' +
+        SECRET +
+        '" }\n'
+      await writeFile(file, '# mine\n' + own)
+      await f.terminal.turnOn(codex.id, (await f.terminal.plan(codex.id)).id)
+      const notes = f.library.find((item) => item.name === 'notes')!
+      notes.agents = ['claude-code' as AgentId]
+      await f.terminal.sync()
+      const text = await readFile(file, 'utf8')
+      expect(text).toContain('# mine')
+      expect(parseToml(text)).toEqual({
+        mcp_servers: { notes: { command: 'npx', args: ['-y', 'notes-mcp'], env: { K: SECRET } } },
+      })
+      expect(f.terminal.written(codex.id)).toEqual([])
+      // Given to it again, it goes through Kettu again, the entry it had replaced once more.
+      notes.agents = 'all'
+      await f.terminal.sync()
+      expect(parseToml(await readFile(file, 'utf8'))).toMatchObject({
+        mcp_servers: { notes: { command: BRIDGE } },
+      })
+      await f.terminal.turnOff(codex.id)
+      expect(parseToml(await readFile(file, 'utf8'))).toEqual({
+        mcp_servers: { notes: { command: 'npx', args: ['-y', 'notes-mcp'], env: { K: SECRET } } },
       })
     } finally {
       await rm(f.root, { recursive: true, force: true })

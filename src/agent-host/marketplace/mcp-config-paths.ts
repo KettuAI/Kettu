@@ -136,6 +136,7 @@ export function mcpConfigPaths(
     p.join(userConfig('COPILOT_HOME') ?? p.join(home, '.copilot'), 'mcp-config.json'),
   )
   app('Windsurf', p.join(home, '.codeium', 'windsurf', 'mcp_config.json'))
+  app('Devin Desktop', p.join(platform === 'win32' ? appData : config, 'devin', 'mcp_config.json'))
   app('Zed', p.join(platform === 'win32' ? appData : config, 'zed', 'settings.json'), 'zed')
 
   for (const project of projects) files.push(...projectMcpConfigPaths(project, platform))

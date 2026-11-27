@@ -11,6 +11,7 @@ const MAC_BUNDLES: Record<McpTerminalApp, string[]> = {
   cursor: ['Cursor.app'],
   vscode: ['Visual Studio Code.app'],
   windsurf: ['Windsurf.app'],
+  devin: ['Devin.app'],
   zed: ['Zed.app', 'Zed Preview.app'],
 }
 
@@ -20,6 +21,7 @@ const WINDOWS_FOLDERS: Record<McpTerminalApp, string[]> = {
   cursor: ['Programs\\cursor'],
   vscode: ['Programs\\Microsoft VS Code'],
   windsurf: ['Programs\\Windsurf'],
+  devin: ['Programs\\Devin'],
   zed: ['Programs\\Zed'],
 }
 
@@ -28,6 +30,8 @@ const LINUX_COMMANDS: Record<McpTerminalApp, string[]> = {
   cursor: ['cursor'],
   vscode: ['code'],
   windsurf: ['windsurf'],
+  // Not `devin`, which is Devin CLI's.
+  devin: ['devin-desktop'],
   zed: ['zed', 'zeditor'],
 }
 

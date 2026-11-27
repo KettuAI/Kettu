@@ -1322,6 +1322,7 @@
         "cursor": "重启 Cursor 后生效。",
         "vscode": "VS Code 会自己读到改动，每个新服务器第一次启动前会请你确认信任。",
         "windsurf": "在 Windsurf 里刷新 MCP 服务器后生效。",
+        "devin": "在 Devin Desktop 里刷新 MCP 服务器后生效。",
         "zed": "Zed 会自己读到改动。"
       }
     }
