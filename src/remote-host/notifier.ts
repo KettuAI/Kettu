@@ -12,6 +12,7 @@ import type { HostActivitySnapshot } from '@shared/host-control'
 import type {
   DevicePush,
   LiveActivityPlan,
+  LiveQuickOptions,
   NotificationChoices,
   PushActions,
   PushEvent,
@@ -29,7 +30,8 @@ export type LiveActivityPayload =
       requestId?: string
       actions?: PushActions
       since?: number
-      actionKind?: 'execute' | 'edit' | 'review'
+      actionKind?: 'execute' | 'edit' | 'review' | 'question'
+      quickOptions?: LiveQuickOptions
     }
   | {
       kind: 'error'
@@ -81,6 +83,9 @@ export interface Attention {
   requestId?: string
   /** The one-time answers a notification may offer, when the request fits in one. */
   actions?: PushActions
+  /** 移动端实时活动的请求语义分类与 2–3 项快捷选项。 */
+  actionKind?: 'execute' | 'edit' | 'review' | 'question'
+  quickOptions?: LiveQuickOptions
   /** The session was in front of a window or a device when this happened. */
   inFront: boolean
   /** The devices that had it in front then. */
@@ -457,14 +462,15 @@ export class Notifier {
         const att = latest ? this.open.get(latest) : undefined
         const meta = latest ? snap?.waitingMeta[latest] : undefined
         const body = att?.body
-        const actionKind: 'execute' | 'edit' | 'review' | undefined =
-          body === undefined
+        const actionKind: 'execute' | 'edit' | 'review' | 'question' | undefined =
+          att?.actionKind ??
+          (body === undefined
             ? undefined
             : /^(?:Wants to run|Run)\b/i.test(body)
               ? 'execute'
               : /^(?:Wants to (?:edit|delete|move)|Edit)\b/i.test(body)
                 ? 'edit'
-                : 'review'
+                : 'review')
         return {
           kind: 'waiting',
           count,
@@ -476,6 +482,7 @@ export class Notifier {
           ...(att?.actions ? { actions: att.actions } : {}),
           ...(meta?.since ? { since: meta.since } : {}),
           ...(actionKind ? { actionKind } : {}),
+          ...(att?.quickOptions ? { quickOptions: att.quickOptions } : {}),
         }
       }
     }

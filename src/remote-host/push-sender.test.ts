@@ -266,4 +266,84 @@ describe('sending a push', () => {
       spy.mockRestore()
     }
   })
+
+  it('封装等待选择态快捷选项并在关闭详情时自动隐藏', async () => {
+    const startToken = '33'.repeat(32)
+    const quickOptions = {
+      target: 'question' as const,
+      total: 3,
+      questionCount: 1,
+      multiSelect: false,
+      items: [
+        { id: '0', label: '270° 填充弧', style: 'recommended' as const },
+        { id: '1', label: '360° 闭环', style: 'normal' as const },
+        { id: '2', label: '同心双环', style: 'normal' as const },
+      ],
+    }
+    const t = await setup([200], {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { start: startToken },
+      },
+    })
+    t.sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 1,
+      sessionId: 's2',
+      title: '选择锁屏样式',
+      payload: {
+        kind: 'waiting',
+        count: 1,
+        sessionId: 's2',
+        title: '选择锁屏样式',
+        body: '锁屏圆形额度小组件采用哪套方案？',
+        requestId: 'req-q1',
+        actionKind: 'question',
+        quickOptions,
+      },
+    })
+    await t.finished
+    const content = await opened(t, t.requests[0]!.body)
+    expect(content).toMatchObject({
+      kind: 'waiting',
+      count: 1,
+      actionKind: 'question',
+      requestId: 'req-q1',
+      quickOptions,
+    })
+
+    const tPrivate = await setup([200], {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { start: startToken },
+      },
+      choices: { ...DEFAULT_CHOICES, details: false },
+    })
+    tPrivate.sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 1,
+      sessionId: 's2',
+      title: 'Secret',
+      payload: {
+        kind: 'waiting',
+        count: 1,
+        sessionId: 's2',
+        title: 'Secret',
+        body: 'Secret question',
+        requestId: 'req-q1',
+        actionKind: 'question',
+        quickOptions,
+      },
+    })
+    await tPrivate.finished
+    const hidden = await opened(tPrivate, tPrivate.requests[0]!.body)
+    expect(hidden).not.toHaveProperty('quickOptions')
+    expect(hidden).not.toHaveProperty('actionKind')
+  })
 })

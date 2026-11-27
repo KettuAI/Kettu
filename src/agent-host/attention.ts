@@ -2,9 +2,11 @@
 // turn's reply says and changed.
 
 import path from 'node:path'
+import type { LiveQuickOptions } from '@shared/remote/push'
 import {
   previewsCommand,
   type PendingPermission,
+  type PendingQuestion,
   type ThreadEntry,
   type ThreadState,
   type ToolEntry,
@@ -59,6 +61,95 @@ export function allowOnceOption(
       return null
   }
   return options.find((option) => option.kind === 'allow_once')?.id ?? null
+}
+
+function stripRecommendedMarker(raw: string): { label: string; recommended: boolean } {
+  const trimmed = raw.trim()
+  for (const marker of ['(Recommended)', '（推荐）', '(推荐)']) {
+    if (trimmed.startsWith(marker)) {
+      return { label: trimmed.slice(marker.length).trim(), recommended: true }
+    }
+    if (trimmed.endsWith(marker)) {
+      return { label: trimmed.slice(0, -marker.length).trim(), recommended: true }
+    }
+  }
+  return { label: trimmed, recommended: false }
+}
+
+/**
+ * 按 iOS 灵动岛 v2 克制可读策略 X 生成快捷选项载荷：
+ * - 单选提问 2–3 项：全部直选；4+ 项单选：仅携带 1 条推荐首选 + total 引导进 App；
+ * - 多题 / 多选 / 密码输入：items 置空，直接引导进 App 完整作答；
+ * - 非高危权限且存在 allow_always 时，附带三选一快捷按钮（允许一次 / 拒绝 / 始终允许）。
+ */
+export function liveQuickOptions(
+  tool: ToolEntry | undefined,
+  options: PendingPermission['options'],
+  questions: readonly PendingQuestion[] | undefined,
+  risky: boolean,
+): { actionKind?: 'execute' | 'edit' | 'review' | 'question'; quickOptions?: LiveQuickOptions } {
+  if (questions && questions.length > 0) {
+    const first = questions[0]!
+    const total = first.options.length
+    if (questions.length > 1 || first.multiSelect || first.secret || total === 0) {
+      return {
+        actionKind: 'question',
+        quickOptions: {
+          target: 'question',
+          total,
+          questionCount: questions.length,
+          multiSelect: first.multiSelect,
+          items: [],
+        },
+      }
+    }
+    const parsed = first.options.map((opt, idx) => ({
+      index: idx,
+      ...stripRecommendedMarker(opt.label),
+    }))
+    const chosen =
+      parsed.length <= 3 ? parsed : [parsed.find((item) => item.recommended) ?? parsed[0]!]
+    return {
+      actionKind: 'question',
+      quickOptions: {
+        target: 'question',
+        total,
+        questionCount: 1,
+        multiSelect: false,
+        items: chosen.map((item) => ({
+          id: String(item.index),
+          label: item.label.slice(0, 64),
+          style: item.recommended ? 'recommended' : 'normal',
+        })),
+      },
+    }
+  }
+
+  // 安全权限审批：在 allowOnceOption 放行且非高危、具备 allow_always 时提供三选一
+  const allowOnceId = allowOnceOption(tool, options)
+  if (!risky && allowOnceId) {
+    const allowOnce = options.find((o) => o.id === allowOnceId)
+    const allowAlways = options.find((o) => o.kind === 'allow_always')
+    const deny =
+      options.find((o) => o.kind === 'reject_once') ??
+      options.find((o) => o.kind === 'reject_always')
+    if (allowOnce && allowAlways && deny) {
+      return {
+        quickOptions: {
+          target: 'permission',
+          total: 3,
+          questionCount: 1,
+          multiSelect: false,
+          items: [
+            { id: allowOnce.id, label: allowOnce.name.slice(0, 48), style: 'allow' },
+            { id: deny.id, label: deny.name.slice(0, 48), style: 'deny' },
+            { id: allowAlways.id, label: allowAlways.name.slice(0, 64), style: 'recommended' },
+          ],
+        },
+      }
+    }
+  }
+  return {}
 }
 
 /**
