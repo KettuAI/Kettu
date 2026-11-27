@@ -549,6 +549,42 @@
   background: var(--thread-fox);
   box-shadow: 0 0 0 3px var(--thread-fox-halo);
 }
+.ks-status__label {
+  position: relative;
+}
+/* Matches AIAnswer's writing shimmer so active turn status shares the same motion language. */
+.ks-status__label--shimmer::after {
+  content: attr(data-text);
+  content: attr(data-text) / '';
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: transparent;
+  background: linear-gradient(90deg, transparent 38%, var(--thread-shimmer) 50%, transparent 62%)
+    100% 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: ks-status-sweep 1.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes ks-status-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-status__label--shimmer::after {
+    display: none;
+  }
+}
+:root[data-reduce-motion='always'] .ks-status__label--shimmer::after {
+  display: none;
+}
 @keyframes ks-fade-in {
   from {
     opacity: 0;

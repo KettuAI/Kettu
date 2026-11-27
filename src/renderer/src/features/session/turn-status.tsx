@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { duration, tokens } from '@renderer/lib/format'
+import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { deviceInUse, useDevicesStore } from '@renderer/stores/devices'
 import { terminalInUse, useTerminalsStore } from '@renderer/stores/terminals'
@@ -91,8 +92,6 @@ export const TurnStatus = memo(function TurnStatus({
     const used = terminalInUse(s, sessionId)
     return used?.control.kind === 'you' ? used.name : null
   })
-  if (writing) return null
-  const separator = <i aria-hidden>·</i>
   const app = computer?.app ?? null
   const appHeld = computer?.control === 'you'
   const appUsed = !!app && !appHeld && !QUIET_PHASES.has(phase)
@@ -105,6 +104,10 @@ export const TurnStatus = memo(function TurnStatus({
     page === 'you' ||
     appHeld ||
     holding !== null
+  // While an agent message carries the turn's writing indicator (or whenever the phase is writing
+  // without a user-hold prompt taking precedence), step aside so only AIAnswer renders Writing.
+  if (!waiting && (writing || phase === 'writing')) return null
+  const separator = <i aria-hidden>·</i>
   const text = asked
     ? t(`control:status.asks.${asked}`)
     : page === 'you'
@@ -147,7 +150,11 @@ export const TurnStatus = memo(function TurnStatus({
           (appHeld ? 'app-held' : holding !== null ? 'held' : appUsed ? 'app' : device.state) ??
           phase
         }
-        className="min-w-0 animate-in truncate animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
+        className={cn(
+          'ks-status__label min-w-0 animate-in truncate animation-duration-(--duration-base) fade-in slide-in-from-bottom-1',
+          !waiting && 'ks-status__label--shimmer',
+        )}
+        data-text={!waiting ? text : undefined}
       >
         {text}
       </span>

@@ -38,6 +38,7 @@
   --thread-quiet: rgb(0 0 0 / 58%);
   --thread-muted: rgb(0 0 0 / 52%);
   --thread-faint: rgb(0 0 0 / 42%);
+  --thread-shimmer: rgb(255 255 255 / 82%);
   --thread-chip: var(--bg-hover);
   --thread-hover: rgb(0 0 0 / 3%);
   --thread-line: var(--border-subtle);
@@ -758,6 +759,7 @@
     --thread-quiet: rgb(255 255 255 / 60%);
     --thread-muted: rgb(255 255 255 / 54%);
     --thread-faint: rgb(255 255 255 / 42%);
+    --thread-shimmer: #ffffff;
     --thread-chip: var(--bg-hover);
     --thread-hover: rgb(255 255 255 / 5%);
     --thread-line: var(--border-subtle);
@@ -1188,6 +1190,7 @@
   --thread-quiet: rgb(255 255 255 / 60%);
   --thread-muted: rgb(255 255 255 / 54%);
   --thread-faint: rgb(255 255 255 / 42%);
+  --thread-shimmer: #ffffff;
   --thread-chip: var(--bg-hover);
   --thread-hover: rgb(255 255 255 / 5%);
   --thread-line: var(--border-subtle);

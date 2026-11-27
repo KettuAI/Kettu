@@ -178,6 +178,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
   const [wrote, setWrote] = useState(writing)
   if (writing && !wrote) setWrote(true)
   if (!entry) return null
+  const writingLabel = t('thread.phase.writing', { count: 1 })
   return (
     <div
       className={cn('ks-answer min-w-0', animation)}
@@ -191,7 +192,9 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
         streaming={writing}
         glideHeight={false}
         mark={wrote && <TurnDots phase="writing" />}
-        labels={{ writing: t('thread.phase.writing', { count: 1 }) }}
+        // Keep the localized writing text while the label fades out so AIAnswer never flashes its
+        // English "Answer" fallback, and leave settled replies loaded from history unlabeled.
+        labels={{ writing: writingLabel, answer: wrote ? writingLabel : '' }}
       >
         <SessionIdContext value={sessionId}>
           <EntryIdContext value={entryId}>
