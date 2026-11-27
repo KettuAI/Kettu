@@ -1567,6 +1567,8 @@ export class AgentHost {
         mode: (sessionId) => this.sessions.toolMode(sessionId),
         starterRank: (sessionId) => this.sessions.starterRank(sessionId),
         startMode: (agentId) => startModeIn(this.settings, agentId),
+        defaultMode: (agentId, callerId) =>
+          this.agents.defaultMode(agentId, this.sessions.workFolder(callerId)),
       },
       log,
       appVersion: options.appVersion,

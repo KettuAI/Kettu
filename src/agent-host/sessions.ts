@@ -285,6 +285,7 @@ import {
   type ToolSession,
 } from './session-tools'
 import {
+  defaultMode,
   isRanked,
   modeLabel,
   modeRank,
@@ -6531,6 +6532,11 @@ export class SessionManager {
     // A run starts in the strictest mode that still asks, before anything is sent.
     if (live.record.origin === 'routine') await this.applyRoutineMode(live, runtime.connection)
     if (live.startedMode) await this.applyStartedMode(live, runtime.connection)
+    if (gone()) {
+      if (live.removing || !this.has(live.id)) throw removedWhileStarting()
+      return
+    }
+    const finalConfig = live.thread.session.config
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(agentId)
     this.touch(live.id)
@@ -6544,12 +6550,15 @@ export class SessionManager {
     // The first message never goes out with a value the user did not choose.
     const wanted = Object.entries(live.startValues).flatMap(([id, value]): ConfigOption[] => {
       const option =
-        config.find((o) => o.id === id) ??
+        finalConfig.find((o) => o.id === id) ??
         own.find((o) => o.id === id) ??
         cached.find((o) => o.id === id && o.category !== 'thought_level')
       return option ? [{ ...option, value }] : []
     })
-    const notice = lostValuesNotice(lostValues(wanted, config), { subject: 'start', held: true })
+    const notice = lostValuesNotice(lostValues(wanted, finalConfig), {
+      subject: 'start',
+      held: true,
+    })
     if (!notice) {
       this.startTurn(live, first.content, this.now(), first.entryId, first.portId)
       return
@@ -6764,6 +6773,7 @@ export class SessionManager {
     if (option.value === wanted) return
     try {
       await this.setModeBeforeStart(live, connection, option, wanted)
+      if (option.id in live.startValues) live.startValues[option.id] = wanted
     } catch {
       throw new HostError(
         'restricted',
@@ -6807,14 +6817,16 @@ export class SessionManager {
     if (!hold || optionId === null || !isRanked(harness)) return
     const own = config.find((option) => option.id === optionId)?.value
     const agentMode =
-      startModeIn(this.deps.settings(), agentId) ?? (typeof own === 'string' ? own : '')
+      startModeIn(this.deps.settings(), agentId) ??
+      (typeof own === 'string' ? own : defaultMode(harness))
     hold.ceiling = startedCeiling(hold.starter, harness, agentMode)
     live.startValues[optionId] = startedMode(harness, hold.wanted ?? agentMode, hold.ceiling)
   }
 
   /**
-   * A started session keeps a mode under its ceiling, the widest the agent takes when the one held
-   * is refused; one it leaves wider fails the start before anything is sent.
+   * A started session keeps a mode under its ceiling and no wider than the mode held for it,
+   * falling back to the widest allowed mode the agent takes when the one held is refused; one it
+   * leaves wider fails the start before anything is sent.
    */
   private async applyStartedMode(live: Live, connection: AgentConnection): Promise<void> {
     const ceiling = live.startedMode?.ceiling ?? null
@@ -6825,16 +6837,59 @@ export class SessionManager {
     const option = live.thread.session.config.find(
       (candidate) => candidate.id === optionId && candidate.type === 'select',
     )
-    const allowed = startableModes(harness, ceiling)
-    if (option && typeof option.value === 'string' && allowed.includes(option.value)) return
     const held = live.startValues[optionId]
-    const limit = Math.min(ceiling, typeof held === 'string' ? (modeRank(harness, held) ?? 1) : 1)
+    const limit = Math.min(
+      ceiling,
+      typeof held === 'string' ? (modeRank(harness, held) ?? 1) : ceiling,
+    ) as ModeRank
+    const allowed = startableModes(harness, limit)
+    const currentValue = (): string | null => {
+      const latest = live.thread.session.config.find(
+        (candidate) => candidate.id === optionId && candidate.type === 'select',
+      )?.value
+      return typeof latest === 'string' ? latest : null
+    }
     const offered = option?.choices?.map((choice) => choice.value) ?? []
-    for (const mode of startableModes(harness, limit as ModeRank).reverse()) {
+    if (option && typeof option.value === 'string' && allowed.includes(option.value)) {
+      if (option.value === held) return
+      // `held` was refused or not offered during `applyStartOptions` while the session stayed at a
+      // narrower allowed mode; try any wider allowed mode up to `limit`, then keep `startValues`
+      // synced with the mode that actually took effect so `lostValues` does not hold the prompt.
+      const currentRank = modeRank(harness, option.value) ?? 1
+      for (const mode of [...allowed].reverse()) {
+        if (mode === held || mode === option.value) continue
+        if ((modeRank(harness, mode) ?? 1) <= currentRank) break
+        if (!offered.includes(mode)) continue
+        try {
+          await this.setModeBeforeStart(live, connection, option, mode)
+          const actual = currentValue()
+          if (
+            actual !== null &&
+            allowed.includes(actual) &&
+            (modeRank(harness, actual) ?? 1) > currentRank
+          ) {
+            live.startValues[optionId] = actual
+            return
+          }
+        } catch {
+          // The next narrower mode may still be taken.
+        }
+      }
+      const settled = currentValue()
+      if (settled !== null && allowed.includes(settled)) {
+        live.startValues[optionId] = settled
+        return
+      }
+    }
+    for (const mode of [...allowed].reverse()) {
       if (!option || !offered.includes(mode)) continue
       try {
         await this.setModeBeforeStart(live, connection, option, mode)
-        return
+        const actual = currentValue()
+        if (actual !== null && allowed.includes(actual)) {
+          live.startValues[optionId] = actual
+          return
+        }
       } catch {
         // The next narrower mode may still be taken.
       }

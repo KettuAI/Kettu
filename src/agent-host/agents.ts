@@ -147,7 +147,13 @@ import {
   type Provider as DshRoute,
 } from './dsh/credentials'
 import { readAccountBalance, type AccountBalance } from './dsh/balance'
-import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
+import {
+  readClaudeDefaultMode,
+  readClaudeSettings,
+  writeClaudeSetting,
+  type ListedModel,
+} from './claude/user-settings'
+import { defaultMode as harnessDefaultMode, isRanked } from './started-mode'
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
 import { withCodexOriginator } from './codex/originator'
@@ -5765,6 +5771,32 @@ export class AgentManager {
   }
 
   // Claude Code's common settings.
+
+  /**
+   * The permission mode a new session of `agentId` opens with in `cwd` when Settings > Agents sets
+   * none, or null for an unranked harness. For Claude Code this prefers the live connection's SDK
+   * resolution (matching `ClaudeConnection.open`) and falls back to reading its settings files.
+   */
+  async defaultMode(agentId: AgentId, cwd: string | null): Promise<string | null> {
+    const harness = harnessOf(agentId)
+    if (!isRanked(harness)) return null
+    if (harness !== 'claude-code') return harnessDefaultMode(harness)
+    const slot = this.slots.get(agentId)
+    if (!slot) return harnessDefaultMode(harness)
+    const live = slot.runtime?.connection
+    if (live?.defaultMode && cwd !== null) {
+      try {
+        return await live.defaultMode(cwd)
+      } catch {
+        // Fall through to reading settings from disk.
+      }
+    }
+    try {
+      return await readClaudeDefaultMode(this.settingsFile(slot), cwd)
+    } catch {
+      return harnessDefaultMode(harness)
+    }
+  }
 
   /** A Claude Code agent's auto-compact windows and prompt cache duration, from its settings file. */
   async claudeSettings(agentId: AgentId, listed: readonly ListedModel[]): Promise<ClaudeSettings> {

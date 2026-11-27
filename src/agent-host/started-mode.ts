@@ -100,14 +100,16 @@ export function starterRank(
 
 /**
  * The widest rank a started session may have: the starter's, that of the mode its agent would start
- * in, and never full access. A mode Kettu does not know counts as asking.
+ * in, and never full access. A missing agent mode falls back to the harness's built-in default; a
+ * mode Kettu does not know counts as asking.
  */
 export function startedCeiling(
   starter: ModeRank | null,
   harness: RankedHarness,
   agentMode: string | null,
 ): ModeRank {
-  const agent = agentMode === null ? STARTED_MAX : (modeRank(harness, agentMode) ?? 1)
+  const effective = agentMode ?? defaultMode(harness)
+  const agent = modeRank(harness, effective) ?? 1
   return Math.min(starter ?? STARTED_MAX, agent, STARTED_MAX) as ModeRank
 }
 
@@ -132,10 +134,10 @@ export function startedMode(harness: RankedHarness, wanted: string, ceiling: Mod
 }
 
 /**
- * The mode a harness's new session starts in when the user set none, where Kettu knows it before
- * the session opens; null for Claude Code, which reads it from its settings files.
+ * The mode a harness's new session starts in when the user set none and its own settings files set
+ * none. Callers that can resolve Claude Code's settings files should pass that resolved mode.
  */
-export function defaultMode(harness: RankedHarness): string | null {
+export function defaultMode(harness: RankedHarness): string {
   switch (harness) {
     case 'codex':
       return CODEX_DEFAULT
@@ -144,7 +146,7 @@ export function defaultMode(harness: RankedHarness): string | null {
     case 'antigravity':
       return 'default'
     case 'claude-code':
-      return null
+      return 'default'
   }
 }
 

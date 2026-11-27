@@ -15,6 +15,7 @@ import { preparedFile, PreparedRecords, type PreparedFile } from './prepared'
 import { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
+import { SessionTools } from './session-tools'
 import {
   SessionManager,
   type SessionEvents,
@@ -3379,5 +3380,401 @@ describe('SessionManager.setConfigOption serialization', () => {
     )
     await sessions.flush()
     await optionsStore.flush()
+  })
+})
+
+describe('started-session permission ceiling and applyStartedMode ordering', () => {
+  const modeOption = (value: string, choices: readonly string[]): ConfigOption => ({
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    value,
+    choices: choices.map((choice) => ({ value: choice, name: choice })),
+  })
+
+  function modeAgent(opts: {
+    agentId: 'claude-code' | 'codex' | 'deepseek' | 'antigravity'
+    name: string
+    choices: readonly string[]
+    initialMode: string | ((callIndex: number) => string)
+    onSetMode?: (mode: string, current: ConfigOption[]) => ConfigOption[] | Promise<ConfigOption[]>
+  }) {
+    let nextId = 0
+    const configs = new Map<string, ConfigOption[]>()
+    const prompted: string[] = []
+    const setCalls: { sessionId: string; optionId: string; value: string | boolean }[] = []
+
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      close: () => {},
+      register: () => {},
+      unregister: () => {},
+      reopen: () => {},
+      newSession: vi.fn(async () => {
+        const index = ++nextId
+        const sessionId = `acp-${index}`
+        const initial =
+          typeof opts.initialMode === 'function' ? opts.initialMode(index) : opts.initialMode
+        const config = [modeOption(initial, opts.choices)]
+        configs.set(sessionId, config)
+        return { sessionId, config }
+      }),
+      setConfigOption: vi.fn(
+        async (sessionId: string, optionId: string, value: string | boolean) => {
+          setCalls.push({ sessionId, optionId, value })
+          const current = configs.get(sessionId) ?? []
+          if (optionId === 'mode' && typeof value === 'string' && opts.onSetMode) {
+            const next = await opts.onSetMode(value, current)
+            configs.set(sessionId, next)
+            return next
+          }
+          const next = current.map((option) =>
+            option.id === optionId ? { ...option, value } : option,
+          )
+          configs.set(sessionId, next)
+          return next
+        },
+      ),
+      loadSession: async () => ({ config: [] }),
+      resumeSession: async () => ({ config: [] }),
+      listSessions: async () => ({ sessions: [], nextCursor: null }),
+      cancel: async () => {},
+      prompt: vi.fn(async (sessionId: string) => {
+        prompted.push(sessionId)
+        return { stopReason: 'end_turn' as StopReason, tokens: null, models: [] }
+      }),
+    }
+    const runtime = {
+      agentId: opts.agentId,
+      kettu: false,
+      init: {
+        name: opts.name,
+        version: '1.0.0',
+        capabilities: {
+          loadSession: true,
+          listSessions: true,
+          resumeSession: true,
+          closeSession: false,
+          deleteSession: false,
+          forkSession: false,
+          forkAtMessage: false,
+          ownTitles: null,
+          logout: false,
+          steering: false,
+          mcpHttp: true,
+          mcpSse: false,
+          mcpStdio: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+        authMethods: [],
+        raw: null,
+      },
+      connection,
+    }
+    const agents = {
+      name: () => opts.name,
+      isDisabled: () => false,
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    return { agents, connection, prompted, setCalls, configs }
+  }
+
+  it('refreshes config and startValues after applyStartedMode fallback so the first prompt is not falsely held', async () => {
+    // Claude Code starts at bypassPermissions (rank 4); ceiling is 3 (auto), agent refuses auto,
+    // so applyStartedMode falls back to acceptEdits (rank 2). Previously startNew checked
+    // lostValues against the stale pre-applyStartedMode config and un-synced startValues, holding
+    // the first prompt in a paused queue.
+    const fake = modeAgent({
+      agentId: 'claude-code',
+      name: 'Claude Code',
+      choices: ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'],
+      initialMode: (call) => (call === 1 ? 'bypassPermissions' : 'bypassPermissions'),
+      onSetMode: (mode, current) => {
+        if (mode === 'auto') throw new Error('auto mode unavailable')
+        return current.map((option) => (option.id === 'mode' ? { ...option, value: mode } : option))
+      },
+    })
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const startedId = await sessions.startFromTool(caller.id, {
+      prompt: 'Run tests',
+      mode: 'auto',
+      options: {},
+      report: false,
+    })
+
+    await vi.waitFor(() => expect(fake.prompted).toContain('acp-2'))
+    expect(sessions.firstHeld(startedId)).toBe(false)
+    expect((await sessions.toolMode(startedId))?.id).toBe('acceptEdits')
+    const snap = await sessions.open(startedId)
+    expect(snap.session.queuePaused).toBe(false)
+    expect(snap.entries.some((entry) => entry.kind === 'notice')).toBe(false)
+  })
+
+  it('falls back to a narrower allowed mode without holding when starting from default and requested auto is refused', async () => {
+    const fake = modeAgent({
+      agentId: 'claude-code',
+      name: 'Claude Code',
+      choices: ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'],
+      initialMode: (call) => (call === 1 ? 'auto' : 'default'),
+      onSetMode: (mode, current) => {
+        if (mode === 'auto') throw new Error('auto disabled')
+        return current.map((option) => (option.id === 'mode' ? { ...option, value: mode } : option))
+      },
+    })
+    const { sessions } = manager(
+      {},
+      { agents: fake.agents, settings: { startModes: { 'claude-code': 'auto' } } },
+    )
+    await sessions.load()
+
+    const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const startedId = await sessions.startFromTool(caller.id, {
+      prompt: 'Edit file',
+      mode: 'auto',
+      options: {},
+      report: false,
+    })
+
+    await vi.waitFor(() => expect(fake.prompted).toContain('acp-2'))
+    expect(sessions.firstHeld(startedId)).toBe(false)
+    expect((await sessions.toolMode(startedId))?.id).toBe('acceptEdits')
+    const snap = await sessions.open(startedId)
+    expect(snap.session.queuePaused).toBe(false)
+  })
+
+  it('enforces the requested narrower mode limit in applyStartedMode instead of allowing the wider ceiling', async () => {
+    // Codex opens at `agent` (rank 3). Caller (rank 3) explicitly asks for `workspace-write`
+    // (rank 2). If `workspace-write` is refused during applyStartOptions, applyStartedMode must
+    // NOT leave the session at `agent` (rank 3) even though ceiling is 3; it must fall back to
+    // `read-only` (rank 1) and send the first prompt without holding.
+    const fake = modeAgent({
+      agentId: 'codex',
+      name: 'Codex',
+      choices: ['read-only', 'workspace-write', 'agent', 'agent-full-access'],
+      initialMode: 'agent',
+      onSetMode: (mode, current) => {
+        if (mode === 'workspace-write') throw new Error('workspace-write unavailable')
+        return current.map((option) => (option.id === 'mode' ? { ...option, value: mode } : option))
+      },
+    })
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const caller = await sessions.create({ agentId: 'codex', projectPath: '/repo' })
+    const startedId = await sessions.startFromTool(caller.id, {
+      prompt: 'Audit diff',
+      mode: 'workspace-write',
+      options: {},
+      report: false,
+    })
+
+    await vi.waitFor(() => expect(fake.prompted).toContain('acp-2'))
+    expect(sessions.firstHeld(startedId)).toBe(false)
+    expect((await sessions.toolMode(startedId))?.id).toBe('read-only')
+  })
+
+  it('fails the start with restricted when the agent silently ignores mode narrowing', async () => {
+    const fake = modeAgent({
+      agentId: 'deepseek',
+      name: 'DeepSeek Harness',
+      choices: ['plan', 'read-only', 'workspace-write', 'danger-full-access'],
+      initialMode: 'danger-full-access',
+      // Agent does not throw on setConfigOption, but keeps returning danger-full-access.
+      onSetMode: (_mode, current) => current,
+    })
+    const { sessions } = manager({}, { agents: fake.agents })
+    await sessions.load()
+
+    const caller = await sessions.create({ agentId: 'deepseek', projectPath: '/repo' })
+    await expect(
+      sessions.startFromTool(caller.id, {
+        prompt: 'Inspect repo',
+        options: {},
+        report: false,
+      }),
+    ).rejects.toMatchObject({ code: 'restricted' })
+    expect(fake.prompted).toEqual([])
+  })
+
+  it('keeps list_agents and start_session 100% consistent on a real Claude Code connection across settings', async () => {
+    const sdkDir = await mkdtemp(path.join(dir, 'claude-sdk-modes-'))
+    const entry = path.join(sdkDir, 'sdk.mjs')
+    await writeFile(path.join(sdkDir, 'package.json'), JSON.stringify({ version: '0.3.314' }))
+    const sdk = new FakeClaudeSdk()
+    sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    const connection = claudeSdkDriver(async () => sdk).connect({
+      def: CLAUDE_CODE,
+      hooks: {
+        traffic: () => {},
+        account: () => {},
+        ignored: () => {},
+        log: () => {},
+      },
+      spec: {
+        command: entry,
+        args: [],
+        env: { CLAUDE_CODE_EXECUTABLE: '/opt/claude/bin/claude' },
+        shell: false,
+        display: { command: entry, args: [], env: {} },
+      },
+      env: { PATH: '/usr/bin', HOME: dir },
+      claudeSettingsDir: path.join(sdkDir, 'settings'),
+      spawn: () => new FakeChild() as never,
+    })
+    const init = await connection.initialize('1.0.0')
+    const runtime = { agentId: 'claude-code' as const, kettu: false, init, connection }
+    const agents = {
+      name: () => 'Claude Code',
+      isDisabled: () => false,
+      signedIn: () => {},
+      status: () => ({ capabilities: init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    let startModes: Record<string, string> = {}
+    const { sessions } = manager(
+      {},
+      {
+        agents,
+        settings: {
+          get startModes() {
+            return startModes
+          },
+        },
+      },
+    )
+    await sessions.load()
+
+    const tools = new SessionTools({
+      info: (id) => sessions.sessionInfo(id),
+      list: (projectPath) => sessions.toolSessions(projectPath),
+      lastReply: (id) => sessions.lastReply(id),
+      history: (id) => sessions.historyTurns(id),
+      rename: (id, title) => sessions.renameByAgent(id, title),
+      work: (id) => sessions.runningWork([id]),
+      archiveAfterTurn: (id, agentName) => sessions.archiveWhenIdle(id, agentName),
+      archiveNow: (id, agentName) => sessions.archiveStarted(id, agentName),
+      start: (callerId, params) => sessions.startFromTool(callerId, params),
+      carried: (callerId, agentId) => sessions.carriedOptions(callerId, agentId),
+      agentOptions: () => null,
+      readOptions: async () => {},
+      choices: (id) => sessions.toolChoices(id),
+      held: (id) => sessions.firstHeld(id),
+      send: (id, text, from, now) => sessions.sendFromTool(id, text, from, now),
+      started: (callerId) => sessions.startedBy(callerId),
+      limits: () => ({ working: 20, daily: 100, reports: 10 }),
+      name: (id) => sessions.toolName(id),
+      agentName: (id) => sessions.agentName(id),
+      agentLabel: () => 'Claude Code',
+      agents: () => [
+        {
+          id: 'claude-code',
+          name: 'Claude Code',
+          harnessName: 'Claude Code',
+          state: 'ready',
+          signIn: 'signed-in',
+        } as never,
+      ],
+      roles: async () => [],
+      role: async () => null,
+      mode: (id) => sessions.toolMode(id),
+      starterRank: (id) => sessions.starterRank(id),
+      startMode: (agentId) => startModes[agentId],
+      defaultMode: async (_agentId, callerId) =>
+        (await connection.defaultMode?.(sessions.workFolder(callerId) ?? '/repo')) ?? null,
+    })
+
+    try {
+      // Parent session runs in Auto mode (rank 3).
+      const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+      await sessions.setConfigOption(caller.id, 'mode', 'auto')
+      const callContext = { sessionId: caller.id, project: '/repo' }
+
+      // Case 1: No Settings startMode and no ~/.claude/settings.json defaultMode -> only `default`.
+      sdk.settings = {}
+      const listDefault = await tools.call(callContext, 'list_agents', {})
+      const defaultModes = (
+        listDefault.structuredContent as { agents: { modes: { id: string }[] }[] }
+      ).agents[0]!.modes.map((m) => m.id)
+      expect(defaultModes).toEqual(['default'])
+      const startDefault = await tools.call(callContext, 'start_session', {
+        prompt: 'Check default',
+        mode: 'default',
+        report: false,
+      })
+      expect(startDefault.structuredContent).toMatchObject({ mode: { id: 'default' } })
+      expect(
+        (startDefault.structuredContent as { mode_lowered?: boolean }).mode_lowered,
+      ).toBeUndefined()
+      const startTooWide = await tools.call(callContext, 'start_session', {
+        prompt: 'Ask for auto while unset',
+        mode: 'auto',
+        report: false,
+      })
+      expect(startTooWide.structuredContent).toMatchObject({
+        mode: { id: 'default' },
+        mode_lowered: true,
+      })
+      expect((startTooWide.content[0] as { text: string }).text).toContain(
+        'Claude Code starts its sessions in Ask before edits',
+      )
+
+      // Case 2: Claude settings sets permissions.defaultMode = 'acceptEdits' -> list_agents offers
+      // `default` and `acceptEdits`, and start_session honors `acceptEdits` without lowering.
+      sdk.settings = { permissions: { defaultMode: 'acceptEdits' } }
+      const listAccept = await tools.call(callContext, 'list_agents', {})
+      const acceptModes = (
+        listAccept.structuredContent as { agents: { modes: { id: string }[] }[] }
+      ).agents[0]!.modes.map((m) => m.id)
+      expect(acceptModes).toEqual(['default', 'acceptEdits'])
+      for (const offered of acceptModes) {
+        const res = await tools.call(callContext, 'start_session', {
+          prompt: `Run in ${offered}`,
+          mode: offered,
+          report: false,
+        })
+        expect(res.structuredContent).toMatchObject({ mode: { id: offered } })
+        expect((res.structuredContent as { mode_lowered?: boolean }).mode_lowered).toBeUndefined()
+        expect((res.structuredContent as { held?: boolean }).held).toBeUndefined()
+      }
+
+      // Case 3: Settings > Agents explicitly sets startMode = 'auto' -> list_agents offers up to
+      // `auto` and start_session honors `auto` without lowering even when Claude settings are empty.
+      sdk.settings = {}
+      startModes = { 'claude-code': 'auto' }
+      const listAuto = await tools.call(callContext, 'list_agents', {})
+      const autoModes = (
+        listAuto.structuredContent as { agents: { modes: { id: string }[] }[] }
+      ).agents[0]!.modes.map((m) => m.id)
+      expect(autoModes).toEqual(['default', 'acceptEdits', 'auto'])
+      const startAuto = await tools.call(callContext, 'start_session', {
+        prompt: 'Run in auto',
+        mode: 'auto',
+        report: false,
+      })
+      expect(startAuto.structuredContent).toMatchObject({ mode: { id: 'auto' } })
+      expect(
+        (startAuto.structuredContent as { mode_lowered?: boolean }).mode_lowered,
+      ).toBeUndefined()
+      expect((startAuto.structuredContent as { held?: boolean }).held).toBeUndefined()
+    } finally {
+      connection.close()
+    }
   })
 })

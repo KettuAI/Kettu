@@ -112,4 +112,44 @@ describe('the mode of a started session', () => {
     expect(startableModes('codex', 2)).toEqual(['read-only', 'workspace-write'])
     expect(startableModes('deepseek', 3)).toEqual(['read-only', 'workspace-write'])
   })
+
+  it('uses each ranked harness built-in default when agentMode is null instead of widening to 3', () => {
+    expect(defaultMode('claude-code')).toBe('default')
+    expect(defaultMode('codex')).toBe('agent')
+    expect(defaultMode('deepseek')).toBe('workspace-write')
+    expect(defaultMode('antigravity')).toBe('default')
+
+    // With no explicit Settings > Agents start mode or resolved override, null falls back to each
+    // harness's own built-in default so list_agents never promises wider modes than start_session.
+    expect(startedCeiling(4, 'claude-code', null)).toBe(1)
+    expect(startedCeiling(3, 'claude-code', null)).toBe(1)
+    expect(startedCeiling(4, 'antigravity', null)).toBe(1)
+    expect(startedCeiling(4, 'deepseek', null)).toBe(2)
+    expect(startedCeiling(4, 'codex', null)).toBe(3)
+    expect(startedCeiling(2, 'codex', null)).toBe(2)
+
+    // Explicit resolved defaults (such as Claude Code permissions.defaultMode) raise the ceiling
+    // up to STARTED_MAX (never full access), while staying bounded by the starter's rank.
+    expect(startedCeiling(3, 'claude-code', 'acceptEdits')).toBe(2)
+    expect(startedCeiling(3, 'claude-code', 'auto')).toBe(3)
+    expect(startedCeiling(4, 'claude-code', 'bypassPermissions')).toBe(3)
+    expect(startedCeiling(2, 'claude-code', 'auto')).toBe(2)
+    expect(startedCeiling(3, 'claude-code', 'plan')).toBe(1)
+    expect(startedCeiling(3, 'claude-code', 'dontAsk')).toBe(1)
+  })
+
+  it('keeps unranked harnesses uncapped as starters while ranking all four ranked harnesses consistently', () => {
+    for (const harness of ['opencode', 'pi', 'gemini', 'cursor'] as const) {
+      expect(starterRank(harness, 'default', false)).toBeNull()
+    }
+    expect(startedMode('claude-code', 'auto', startedCeiling(3, 'claude-code', null))).toBe(
+      'default',
+    )
+    expect(
+      startedMode('claude-code', 'acceptEdits', startedCeiling(3, 'claude-code', 'acceptEdits')),
+    ).toBe('acceptEdits')
+    expect(startedMode('deepseek', 'danger-full-access', startedCeiling(4, 'deepseek', null))).toBe(
+      'workspace-write',
+    )
+  })
 })
