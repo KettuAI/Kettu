@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
-import type { AgentId } from '@shared/thread'
-import type { RenderedTurn } from '../carried-context'
+import type { AgentId, ThreadEntry } from '@shared/thread'
+import { threadTurns, type RenderedTurn } from '../carried-context'
 import type { ToolSession } from '../session-tools'
 import { sessionCalls, type PluginSessionsDeps } from './sessions-api'
 
@@ -135,6 +135,44 @@ describe('sessions.read', () => {
     const { run, deps } = api()
     await expect(run('sessions.read', { id: 'ghost' })).rejects.toThrow('No session ghost')
     expect(deps.turns).not.toHaveBeenCalled()
+  })
+
+  it('keeps the final agent reply when tool output in a turn exceeds 24 KB', async () => {
+    const entries: ThreadEntry[] = [
+      { kind: 'user', id: 'u1', content: [{ type: 'text', text: 'Run diagnostics' }] },
+    ]
+    for (let i = 1; i <= 120; i++) {
+      entries.push({
+        kind: 'tool',
+        id: `t${i}`,
+        title: `Inspect ${i}`,
+        toolKind: 'read',
+        status: 'completed',
+        content: [{ type: 'markdown', markdown: `LOG-${i}: ${'v'.repeat(280)}` }],
+        locations: [],
+        permission: null,
+        permissionResult: null,
+      })
+    }
+    const conclusion = 'DIAGNOSTIC CONCLUSION: All health checks passed.'
+    entries.push({
+      kind: 'agent',
+      id: 'a1',
+      markdown: conclusion,
+      attachments: [],
+      streaming: false,
+    })
+
+    const { run } = api({
+      turns: vi.fn(async () => threadTurns(entries, 'claude-code', () => 'Claude Code')),
+    })
+    const out = (await run('sessions.read', { id: 'a', limit: 1 })) as {
+      turns: { assistant: string }[]
+    }
+    expect(out.turns).toHaveLength(1)
+    expect(Buffer.byteLength(out.turns[0]!.assistant, 'utf8')).toBeLessThanOrEqual(24 * 1024)
+    expect(out.turns[0]!.assistant).toContain(conclusion)
+    expect(out.turns[0]!.assistant).toContain('[... earlier steps omitted ...]')
   })
 })
 

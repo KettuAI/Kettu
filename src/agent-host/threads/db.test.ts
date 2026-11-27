@@ -430,6 +430,7 @@ describe('the thread database', () => {
         'a3',
         'And github.com/KettuAI/Kettu/issues/31, not gist.github.com/KettuAI/Kettu/issues/1',
       ),
+      reply('a4', '   \n\t '),
       { kind: 'turn_end', id: 'end1', stopReason: 'end_turn', durationMs: 9000 },
       user('u2'),
     ]

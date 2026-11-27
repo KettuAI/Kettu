@@ -8,7 +8,7 @@ import { START_MODE_CHARS, harnessOf, isAgentId } from '@shared/agents'
 import { pluginStarter } from '@shared/plugins'
 import { DEFAULT_STARTED_LIMITS } from '@shared/started-sessions'
 import type { AgentId } from '@shared/thread'
-import { cutStart, historyPage, type RenderedTurn } from '../carried-context'
+import { cutStart, historyPage, trimTurnAssistant, type RenderedTurn } from '../carried-context'
 import {
   LIST_DEFAULT,
   LIST_LIMIT,
@@ -24,7 +24,7 @@ import type { PluginApiCall } from './call'
 
 const READ_DEFAULT = 5
 const READ_LIMIT = 20
-/** One turn's side of a conversation, cut at its start beyond this. */
+/** One turn's side of a conversation, trimmed to fit within this limit. */
 const TURN_BYTES = 24 * 1024
 
 export interface PluginSessionsDeps {
@@ -212,7 +212,7 @@ export function sessionCalls(deps: PluginSessionsDeps): Record<string, PluginApi
             number: turn.number,
             agent: turn.agentId,
             user: cutStart(turn.user, TURN_BYTES),
-            assistant: cutStart(turn.assistant, TURN_BYTES),
+            assistant: trimTurnAssistant(turn, TURN_BYTES),
           })),
           moreBefore: first !== null && first > 1 ? first : null,
         }

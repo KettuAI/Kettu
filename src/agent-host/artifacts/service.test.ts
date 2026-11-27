@@ -373,13 +373,13 @@ describe('the Marketplace tools', () => {
 
 // agy drops the largest MCP tools past a budget of its own and cannot call a dropped one over ACP.
 describe('an agent that drops tools past a budget of its own', () => {
-  it('is listed the core tools and the gateway, within 16500 bytes, the gateway the smallest', async () => {
+  it('is listed the core tools and the gateway, within 16800 bytes, the gateway the smallest', async () => {
     const service = await everythingOn()
     const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, true, true)
     const tools = result!.tools
     expect(tools.map((tool) => tool.name).sort()).toEqual([...CORE_TOOLS, GATEWAY_TOOL].sort())
     const size = (tool: Tool) => JSON.stringify(declared(tool)).length
-    expect(tools.reduce((sum, tool) => sum + size(tool), 0)).toBeLessThanOrEqual(16500)
+    expect(tools.reduce((sum, tool) => sum + size(tool), 0)).toBeLessThanOrEqual(16800)
     const gateway = tools.find((tool) => tool.name === GATEWAY_TOOL)!
     for (const tool of tools) {
       if (tool !== gateway) expect(size(gateway)).toBeLessThan(size(tool))

@@ -29,6 +29,7 @@ import {
   type SessionsFile,
 } from './storage'
 import { FakeChild, FakeClaudeSdk } from './testing/fake-claude-sdk'
+import { ThreadDb } from './threads/db'
 import { EMPTY_SESSION, type StoredThread } from './threads/model'
 import type { ThreadStore } from './threads/store'
 import type { WorktreeInspection } from './worktrees/api'
@@ -2970,5 +2971,192 @@ describe('next-message suggestion clearing on send (#2903)', () => {
     await vi.waitFor(async () =>
       expect((await sessions.snapshot(created.id))?.session.suggestion).toBe('Open a pull request'),
     )
+  })
+
+  it('scopes lastReply to the latest turn across both live memory and SQLite thread storage', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo, { recursive: true })
+    const db = ThreadDb.open(path.join(dir, 'threads.db'), log)
+    try {
+      let target: SessionTarget | null = null
+      let turn = 0
+      const connection = {
+        isClosed: false,
+        closed: new Promise<void>(() => {}),
+        register: (_acpId: string, next: SessionTarget) => {
+          target = next
+        },
+        unregister: () => {
+          target = null
+        },
+        reopen: () => {},
+        newSession: async () => ({ sessionId: 'acp-last-reply', config: [] }),
+        loadSession: async () => ({ config: [] }),
+        closeSession: async () => {},
+        prompt: async () => {
+          turn += 1
+          if (turn === 1) {
+            target!.apply({
+              patches: [
+                {
+                  op: 'entry.add',
+                  entry: {
+                    kind: 'agent',
+                    id: 'a-turn-1',
+                    markdown: 'Turn 1 final reply',
+                    attachments: [],
+                    streaming: false,
+                  },
+                },
+              ],
+              effects: [],
+            })
+          } else if (turn === 2) {
+            target!.apply({
+              patches: [
+                {
+                  op: 'entry.add',
+                  entry: {
+                    kind: 'tool',
+                    id: 'tool-turn-2',
+                    title: 'Run tests',
+                    toolKind: 'execute',
+                    status: 'completed',
+                    content: [{ type: 'markdown', markdown: 'ok' }],
+                    locations: [],
+                    permission: null,
+                    permissionResult: null,
+                  },
+                },
+              ],
+              effects: [],
+            })
+          } else if (turn === 3) {
+            target!.apply({
+              patches: [
+                {
+                  op: 'entry.add',
+                  entry: {
+                    kind: 'tool',
+                    id: 'tool-turn-3',
+                    title: 'Inspect file',
+                    toolKind: 'read',
+                    status: 'completed',
+                    content: [{ type: 'markdown', markdown: 'contents' }],
+                    locations: [],
+                    permission: null,
+                    permissionResult: null,
+                  },
+                },
+                {
+                  op: 'entry.add',
+                  entry: {
+                    kind: 'agent',
+                    id: 'a-turn-3',
+                    markdown: 'Turn 3 final reply',
+                    attachments: [],
+                    streaming: false,
+                  },
+                },
+              ],
+              effects: [],
+            })
+          }
+          return { stopReason: 'end_turn' as StopReason, tokens: null, models: [] }
+        },
+        cancel: async () => {},
+      }
+      const runtime = {
+        agentId: 'claude-code' as const,
+        init: {
+          capabilities: {
+            loadSession: true,
+            closeSession: true,
+            prompt: { image: false, audio: false, embeddedContext: false },
+          },
+        },
+        connection,
+      }
+      const agents = {
+        name: () => 'Claude Code',
+        signedIn: () => {},
+        authRequired: () => {},
+        status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+        hasContext: () => false,
+        refreshLimits: async () => {},
+        runtime: () => runtime,
+        ensureReady: async () => runtime,
+      }
+      const threads: Partial<ThreadStore> = {
+        load: async (id) => db.load(id),
+        write: async (id, change) => {
+          db.write(id, change)
+        },
+        remove: async (ids) => {
+          db.remove(ids)
+        },
+      }
+
+      const { sessions } = manager({}, { agents, threads, timings: { flushMs: 0 } })
+      await sessions.load()
+      const release = async (id: string) => {
+        const internal = sessions as unknown as {
+          closeAll(records: SessionRecord[], keep: boolean): Promise<void>
+          recordOf(sessionId: string): SessionRecord
+        }
+        await internal.closeAll([internal.recordOf(id)], true)
+      }
+
+      const created = await sessions.create({
+        agentId: 'claude-code',
+        projectPath: repo,
+        prompt: [{ type: 'text', text: 'First question' }],
+      })
+      await vi.waitFor(async () =>
+        expect((await sessions.snapshot(created.id))?.session.status).toBe('ready'),
+      )
+      expect(await sessions.lastReply(created.id)).toBe('Turn 1 final reply')
+
+      // Turn 2 executes only a tool call: live and stored DB reads must not leak Turn 1's reply.
+      await sessions.queue(created.id, [{ type: 'text', text: 'Second question' }])
+      await vi.waitFor(() => expect(turn).toBe(2))
+      await vi.waitFor(async () =>
+        expect((await sessions.snapshot(created.id))?.session.status).toBe('ready'),
+      )
+      expect(await sessions.lastReply(created.id)).toBeNull()
+      await release(created.id)
+      expect(await sessions.lastReply(created.id)).toBeNull()
+
+      // Turn 3 runs a tool and emits a final reply: both live and stored DB paths return it.
+      await sessions.queue(created.id, [{ type: 'text', text: 'Third question' }])
+      await vi.waitFor(() => expect(turn).toBe(3))
+      await vi.waitFor(async () =>
+        expect((await sessions.snapshot(created.id))?.session.status).toBe('ready'),
+      )
+      expect(await sessions.lastReply(created.id)).toBe('Turn 3 final reply')
+      await release(created.id)
+      expect(await sessions.lastReply(created.id)).toBe('Turn 3 final reply')
+
+      // Stored thread with no user entry falls back to its latest non-blank agent reply.
+      db.write(created.id, {
+        head: { agentId: 'claude-code', acpSessionId: 'acp-last-reply' },
+        replace: true,
+        entries: [
+          {
+            pos: 0,
+            entry: {
+              kind: 'agent',
+              id: 'orphan-reply',
+              markdown: 'Reply without user boundary',
+              attachments: [],
+              streaming: false,
+            },
+          },
+        ],
+      })
+      expect(await sessions.lastReply(created.id)).toBe('Reply without user boundary')
+    } finally {
+      db.close()
+    }
   })
 })

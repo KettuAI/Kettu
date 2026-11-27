@@ -313,6 +313,7 @@ import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
   compactedTurns,
+  latestTurnReply,
   sideContext,
   threadTurns,
   type CarriedContext,
@@ -13351,26 +13352,17 @@ export class SessionManager {
     return { id: option.value, name: name ?? option.value }
   }
 
-  /** The latest agent message of a session's thread, from memory or the stored one. */
+  /** The latest agent reply of a session's latest turn, from memory or the stored thread. */
   async lastReply(sessionId: string): Promise<string | null> {
     const live = this.live.get(sessionId)
     if (live) {
       this.flushPatches(live)
-      const { order, byId } = live.thread
-      for (let i = order.length - 1; i >= 0; i--) {
-        const entry = byId[order[i]!]
-        if (entry?.kind === 'agent' && entry.markdown.trim() !== '') return entry.markdown
-      }
-      return null
+      return latestTurnReply(threadEntries(live.thread))
     }
     const record = this.recordOf(sessionId)
     const stored = await this.readThread(record)
     if (!stored) return null
-    for (let i = stored.entries.length - 1; i >= 0; i--) {
-      const entry = stored.entries[i]!.entry
-      if (entry.kind === 'agent' && entry.markdown.trim() !== '') return entry.markdown
-    }
-    return null
+    return latestTurnReply(stored.entries.map((item) => item.entry))
   }
 
   /** A session's agent's display name, for the notice an archive leaves. */
