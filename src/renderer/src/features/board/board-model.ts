@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next'
 import type { SessionSummary } from '@shared/agent-host'
+import { subagentRunning } from '@shared/session-groups'
 import type { BackgroundTaskView, ThreadState } from '@shared/thread'
 import { labelText, toolLabel } from '@renderer/features/session/entries/helpers'
 import { ansiRuns } from '@renderer/features/session/entries/shell'
@@ -7,10 +8,71 @@ import type { SubagentDigest, SubagentStep } from '@renderer/features/session/su
 import { listedSubagents } from '@renderer/features/sidebar/subagents'
 
 export interface BoardActivity {
-  /** Background tasks and sub-agents at work. */
+  /** Background tasks, sub-agents and child sessions at work. */
   running: number
-  /** Sub-agents waiting for the user's answer. */
+  /** Sub-agents and child sessions waiting for the user's answer. */
   needs: number
+}
+
+/**
+ * Whether a session belongs to `parentId`'s board: its unarchived sub-agents and child sessions
+ * (such as those started through `start_session`), excluding prepared drafts.
+ */
+export function isBoardChild(
+  child: Pick<SessionSummary, 'parentId' | 'origin' | 'archivedAt' | 'prepared'>,
+  parentId: string,
+): boolean {
+  return (
+    child.parentId === parentId &&
+    (child.origin === 'subagent' || child.origin === 'user') &&
+    child.archivedAt === null &&
+    !child.prepared
+  )
+}
+
+/** Unarchived sub-agents and child sessions under `parentId`, deduplicated by id. */
+export function boardChildren(
+  byId: Readonly<Record<string, SessionSummary>>,
+  parentId: string,
+): SessionSummary[] {
+  const seen = new Set<string>()
+  const out: SessionSummary[] = []
+  for (const child of Object.values(byId)) {
+    if (!isBoardChild(child, parentId) || seen.has(child.id)) continue
+    seen.add(child.id)
+    out.push(child)
+  }
+  return out
+}
+
+/** Running and waiting counts across `parentId`'s board children. */
+export function boardChildActivity(
+  byId: Readonly<Record<string, SessionSummary>>,
+  parentId: string,
+): BoardActivity {
+  let running = 0
+  let needs = 0
+  for (const child of boardChildren(byId, parentId)) {
+    if (subagentWaiting(child)) needs++
+    else if (subagentRunning(child)) running++
+  }
+  return { running, needs }
+}
+
+/**
+ * Live keys for `parentId`'s board children, for the board button's unread dot. A child that starts
+ * waiting for the user is news again, so its state is part of its key.
+ */
+export function boardChildKeys(
+  byId: Readonly<Record<string, SessionSummary>>,
+  parentId: string,
+): string[] {
+  const keys: string[] = []
+  for (const child of boardChildren(byId, parentId)) {
+    if (subagentWaiting(child)) keys.push(`agent:${child.id}:needs`)
+    else if (subagentRunning(child)) keys.push(`agent:${child.id}:running`)
+  }
+  return keys
 }
 
 /** Running tasks first, the latest started first, then the ended ones, the latest ended first. */
@@ -31,9 +93,15 @@ export function subagentFailed(child: Pick<SessionSummary, 'status' | 'attention
   return child.status === 'failed' || child.attention === 'error'
 }
 
-/** The sub-agents the way the board lists them: those waiting for the user, then the rest. */
+/** The sub-agents and child sessions the way the board lists them: those waiting for the user, then the rest. */
 export function boardSubagents(children: readonly SessionSummary[]): SessionSummary[] {
-  const listed = listedSubagents(children, true)
+  const seen = new Set<string>()
+  const unique = children.filter((child) => {
+    if (seen.has(child.id)) return false
+    seen.add(child.id)
+    return true
+  })
+  const listed = listedSubagents(unique, true)
   return [...listed.filter(subagentWaiting), ...listed.filter((child) => !subagentWaiting(child))]
 }
 

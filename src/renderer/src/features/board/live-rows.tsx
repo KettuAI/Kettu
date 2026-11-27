@@ -42,6 +42,8 @@ export function AgentLive({
   const title = sessionTitle(child)
   const open = () => openSession(child.id, child.projectPath)
   const one = compact && !waiting
+  // A sub-agent that ran before keeps no start for this run unless turnStartedAt is reported.
+  const startedAt = child.turnStartedAt ?? (digest?.durationMs == null ? child.createdAt : null)
   return (
     <div className="kb-item" data-wait={waiting || undefined}>
       <div className="kb-live" data-one={one || undefined}>
@@ -61,10 +63,9 @@ export function AgentLive({
             {t('actions.review')}
           </Button>
         ) : (
-          // A sub-agent that ran before keeps no start for this run, so it shows no time.
-          digest?.durationMs == null && (
+          startedAt !== null && (
             <span className="kb-live__end">
-              <Clock since={child.createdAt} />
+              <Clock since={startedAt} />
             </span>
           )
         )}
