@@ -34,6 +34,10 @@ export interface DiffProps {
   path: string
   oldText: string | null
   newText: string
+  /** How long lines behave; defaults to wrapping, as in a session reply. */
+  overflow?: 'wrap' | 'scroll'
+  /** Keeps the diff in a single unified column even inside a wide container. */
+  layout?: 'auto' | 'unified'
   className?: string
 }
 
