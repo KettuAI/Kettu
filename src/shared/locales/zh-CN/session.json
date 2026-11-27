@@ -330,6 +330,19 @@
   },
   "projectMcp": {
     "where": "来自项目的 .mcp.json；使用后它们在这台电脑上以你的权限运行。",
+    "whereFiles": "来自项目的 {{files}}；使用后它们在这台电脑上以你的权限运行，在那之前这个会话照常工作，不用它们。",
+    "selfRun_one": "使用后 {{names}} 由 {{agent}} 自己运行，Kettu 看不到它的调用和工具变化。",
+    "selfRun_other": "使用后 {{names}} 由 {{agent}} 自己运行，Kettu 看不到它们的调用和工具变化。",
+    "everything": "这个项目会运行或改动的",
+    "kind": {
+      "server": "MCP 服务器",
+      "hook": "Hook",
+      "plugin": "插件",
+      "command": "命令",
+      "env": "环境变量",
+      "provider": "地址",
+      "setting": "设置"
+    },
     "servers": "服务器",
     "decision": {
       "use": "使用",
@@ -1267,6 +1280,7 @@
       "terminalRename": "给你的终端改名",
       "app": "使用应用",
       "projectMcp": "启动 MCP 服务器",
+      "projectSettings": "用这个项目自己的设置",
       "projectHooks": "运行这个项目设为自动执行的命令",
       "projectEnv": "使用这个项目设置的环境变量",
       "projectHooksEnv": "运行这个项目设为自动执行的命令，并使用它设置的环境变量"

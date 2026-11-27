@@ -650,29 +650,41 @@ export interface AgentProcessesFile {
 
 /**
  * The user's answers about the MCP servers each folder declares itself, by the folder's path key:
- * the servers they let start (`all`: every one, later ones too) and those they refused.
+ * by each server's content digest, whether it may start (`all`: every one, later ones too).
+ * `named` holds answers an older version kept by server name, which the server of that name takes
+ * over the next time it is seen.
  */
 export interface ProjectMcpFile {
-  version: 1
-  folders: Record<string, { all?: true; use: string[]; skip: string[] }>
+  version: 2
+  folders: Record<string, ProjectMcpFolder>
+}
+
+export interface ProjectMcpFolder {
+  all?: true
+  servers: Record<string, boolean>
+  named?: { use: string[]; skip: string[] }
 }
 
 /**
- * The user's answers about the hooks each folder's own Claude Code settings declare, by the
- * folder's path key: those hooks, by their digest (`use`), every one, later ones too (`all`), or
- * none (`skip`).
+ * The user's answers about what each folder's own settings make an agent run or change (hooks,
+ * plugins, commands, environment), by the folder's path key and then the harness: those settings,
+ * by their digest (`use`, or `skip` to refuse them), every one, later ones too (`all`), or, as an
+ * older version kept it, every one refused (`skip` without a digest).
  */
 export interface ProjectHooksFile {
-  version: 1
-  folders: Record<string, { decision: 'use'; digest: string } | { decision: 'all' | 'skip' }>
+  version: 2
+  folders: Record<string, Record<string, ProjectHooksAnswer>>
 }
+
+export type ProjectHooksAnswer =
+  { decision: 'use' | 'skip'; digest: string } | { decision: 'all' | 'skip' }
 
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
 export const RETURNED_VERSION = 1
-export const PROJECT_MCP_VERSION = 1
-export const PROJECT_HOOKS_VERSION = 1
+export const PROJECT_MCP_VERSION = 2
+export const PROJECT_HOOKS_VERSION = 2
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
 export const REGISTRY_LISTING_VERSION = 1
@@ -684,8 +696,34 @@ export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const RETURNED_MIGRATIONS: Readonly<Record<number, Migration>> = {}
-export const PROJECT_MCP_MIGRATIONS: Readonly<Record<number, Migration>> = {}
-export const PROJECT_HOOKS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+// Answers were kept by server name, which a repository could keep while changing the command.
+export const PROJECT_MCP_MIGRATIONS: Readonly<Record<number, Migration>> = {
+  1: (data) => {
+    const folders: Record<string, unknown> = {}
+    for (const [folder, value] of Object.entries(isRecord(data.folders) ? data.folders : {})) {
+      if (!isRecord(value)) continue
+      const names = (list: unknown) => (Array.isArray(list) ? list.filter(isString) : [])
+      const use = names(value.use)
+      const skip = names(value.skip)
+      folders[folder] = {
+        ...(value.all === true ? { all: true } : {}),
+        servers: {},
+        ...(use.length > 0 || skip.length > 0 ? { named: { use, skip } } : {}),
+      }
+    }
+    return { folders }
+  },
+}
+// Answers were Claude Code's alone; every harness now keeps its own under the folder.
+export const PROJECT_HOOKS_MIGRATIONS: Readonly<Record<number, Migration>> = {
+  1: (data) => {
+    const folders: Record<string, unknown> = {}
+    for (const [folder, value] of Object.entries(isRecord(data.folders) ? data.folders : {})) {
+      folders[folder] = { 'claude-code': value }
+    }
+    return { folders }
+  },
+}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const REGISTRY_LISTING_MIGRATIONS: Readonly<Record<number, Migration>> = {}
@@ -1151,34 +1189,47 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
   }
 }
 
-// A message whose content does not parse is dropped rather than failing the whole file.
+// A folder or an answer that does not parse is dropped, which only asks again.
 export function parseProjectMcpFile(data: Record<string, unknown>): ProjectMcpFile | string {
   if (!isRecord(data.folders)) return 'folders is not an object'
   const folders: ProjectMcpFile['folders'] = {}
+  const names = (list: unknown) => (Array.isArray(list) ? list.filter(isString) : [])
   for (const [folder, value] of Object.entries(data.folders)) {
     if (!isRecord(value)) continue
+    const servers: Record<string, boolean> = {}
+    for (const [digest, allowed] of Object.entries(isRecord(value.servers) ? value.servers : {})) {
+      if (typeof allowed === 'boolean') servers[digest] = allowed
+    }
+    const named = isRecord(value.named)
+      ? { use: names(value.named.use), skip: names(value.named.skip) }
+      : null
     folders[folder] = {
       ...(value.all === true ? { all: true as const } : {}),
-      use: Array.isArray(value.use) ? value.use.filter(isString) : [],
-      skip: Array.isArray(value.skip) ? value.skip.filter(isString) : [],
+      servers,
+      ...(named && (named.use.length > 0 || named.skip.length > 0) ? { named } : {}),
     }
   }
-  return { version: 1, folders }
+  return { version: 2, folders }
 }
 
 // An answer that does not parse is dropped, which only asks again.
 export function parseProjectHooksFile(data: Record<string, unknown>): ProjectHooksFile | string {
   if (!isRecord(data.folders)) return 'folders is not an object'
   const folders: ProjectHooksFile['folders'] = {}
-  for (const [folder, value] of Object.entries(data.folders)) {
-    if (!isRecord(value)) continue
-    if (value.decision === 'use' && isString(value.digest)) {
-      folders[folder] = { decision: 'use', digest: value.digest }
-    } else if (value.decision === 'all' || value.decision === 'skip') {
-      folders[folder] = { decision: value.decision }
+  for (const [folder, harnesses] of Object.entries(data.folders)) {
+    if (!isRecord(harnesses)) continue
+    const answers: Record<string, ProjectHooksAnswer> = {}
+    for (const [harness, value] of Object.entries(harnesses)) {
+      if (!isRecord(value)) continue
+      if ((value.decision === 'use' || value.decision === 'skip') && isString(value.digest)) {
+        answers[harness] = { decision: value.decision, digest: value.digest }
+      } else if (value.decision === 'all' || value.decision === 'skip') {
+        answers[harness] = { decision: value.decision }
+      }
     }
+    folders[folder] = answers
   }
-  return { version: 1, folders }
+  return { version: 2, folders }
 }
 
 export function parseReturnedFile(data: Record<string, unknown>): ReturnedFile | string {
@@ -1490,7 +1541,7 @@ export function projectMcpFile(userDataPath: string, log: LogFn): JsonFile<Proje
     version: PROJECT_MCP_VERSION,
     migrations: PROJECT_MCP_MIGRATIONS,
     parse: parseProjectMcpFile,
-    empty: () => ({ version: 1, folders: {} }),
+    empty: () => ({ version: 2, folders: {} }),
     log,
     // Written at once: a refusal lost to a quit would start the server next time.
     debounceMs: 0,
@@ -1503,7 +1554,7 @@ export function projectHooksFile(userDataPath: string, log: LogFn): JsonFile<Pro
     version: PROJECT_HOOKS_VERSION,
     migrations: PROJECT_HOOKS_MIGRATIONS,
     parse: parseProjectHooksFile,
-    empty: () => ({ version: 1, folders: {} }),
+    empty: () => ({ version: 2, folders: {} }),
     log,
     // Written at once: a refusal lost to a quit would run the hooks next time.
     debounceMs: 0,

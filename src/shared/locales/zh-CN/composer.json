@@ -258,6 +258,8 @@
       "reconnect": "重连",
       "turnOff": "在这个会话里关掉",
       "openPage": "打开服务器页",
+      "project": "这个项目的",
+      "review": "查看",
       "actionFailed": "{{name}}：{{error}}"
     }
   },

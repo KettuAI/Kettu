@@ -15,7 +15,11 @@ import {
   type ContextEstimates,
   type ContextReport,
 } from '@shared/context'
-import type { McpRunState, SessionMcpServer } from '@shared/mcp-insight'
+import { changedCount, type McpRunState, type SessionMcpServer } from '@shared/mcp-insight'
+import {
+  McpToolChangesDialog,
+  McpToolChangesTag,
+} from '@renderer/features/marketplace/mcp-tool-changes'
 import type { LastRequest } from '@shared/model-requests'
 import {
   cacheHitOf,
@@ -623,6 +627,7 @@ function McpServersPart({
               server={server}
               act={(action) => act(server, action)}
               open={() => page(server)}
+              reviewed={read}
             />
           ))}
         </ul>
@@ -673,13 +678,21 @@ function McpServerRow({
   server,
   act,
   open,
+  reviewed,
 }: {
   server: SessionMcpServer
   act: (action: 'reconnect' | 'off' | 'on') => void
   open: () => void
+  reviewed: () => void
 }) {
   const { t } = useTranslation('composer')
+  const [reviewing, setReviewing] = useState(false)
   const { state } = server
+  // A server of the folder has no server page, so its held changes are reviewed from here.
+  const held =
+    server.project && server.changes?.guard === 'hold' && changedCount(server.changes) > 0
+      ? server.changes
+      : null
   const facts = server.off
     ? t('usage.mcp.offHere')
     : [
@@ -706,6 +719,10 @@ function McpServerRow({
       <span className="kettu-ctx__mcp-name">
         <span className="kettu-ctx__mcp-title" title={server.title}>
           {server.name}
+          {server.project && (
+            <span className="kettu-ctx__mcp-project">{t('usage.mcp.project')}</span>
+          )}
+          {held && <McpToolChangesTag changes={held} />}
         </span>
         <span className="kettu-ctx__mcp-facts" data-tone={tone} title={facts}>
           {facts}
@@ -720,7 +737,11 @@ function McpServerRow({
         <button type="button" className="kettu-ctx__mcp-act" onClick={() => act('on')}>
           {t('usage.mcp.turnOn')}
         </button>
-      ) : state.state === 'needs-sign-in' ? (
+      ) : held ? (
+        <button type="button" className="kettu-ctx__mcp-act" onClick={() => setReviewing(true)}>
+          {t('usage.mcp.review')}
+        </button>
+      ) : state.state === 'needs-sign-in' && !server.project ? (
         <button type="button" className="kettu-ctx__mcp-act" onClick={open}>
           {t('usage.mcp.signIn')}
         </button>
@@ -744,9 +765,22 @@ function McpServerRow({
             <DropdownMenuItem disabled={!server.routed} onClick={() => act('off')}>
               {t('usage.mcp.turnOff')}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={open}>{t('usage.mcp.openPage')}</DropdownMenuItem>
+            {!server.project && (
+              <DropdownMenuItem onClick={open}>{t('usage.mcp.openPage')}</DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+      {server.project && (
+        <McpToolChangesDialog
+          server={{ id: server.serverId, title: server.title }}
+          changes={server.changes ?? null}
+          open={reviewing}
+          onOpenChange={(next) => {
+            setReviewing(next)
+            if (!next) reviewed()
+          }}
+        />
       )}
     </li>
   )

@@ -337,6 +337,7 @@ export function libraryServers(
   const own = options.own ?? []
   const projectOwn = options.projectOwn ?? []
   const ownNames = new Set(own.map((item) => item.name))
+  const projectNames = new Set(projectOwn.map((item) => item.name))
   const nameOf = (server: MarketServer): Handed => {
     const print = mcpFingerprint(endpointOf(server.spec))
     if (transports.mcpMergesSameName) {
@@ -347,7 +348,7 @@ export function libraryServers(
             .map((item) => item.name),
         ),
       ]
-      const taken = (name: string) => used.has(name) || ownNames.has(name)
+      const taken = (name: string) => used.has(name) || ownNames.has(name) || projectNames.has(name)
       let name = server.name
       if (taken(name)) name = `${server.name}-kettu`
       for (let n = 2; taken(name); n++) name = `${server.name}-kettu-${n}`

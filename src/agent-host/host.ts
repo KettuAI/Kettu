@@ -215,7 +215,7 @@ import {
   seenMcpFile,
   type PreparedMcpImport,
 } from './marketplace/mcp-discovery'
-import { claudeProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
+import { harnessProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
 import { parseMcpPaste } from './marketplace/mcp-paste'
 import { importedServer, type ConfiguredMcp } from './marketplace/mcp-config'
 import { findCommand, isExecutableFile, type Env } from './find-command'
@@ -238,6 +238,7 @@ import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
+import { folderServers, folderSettings, type FolderServer } from './project-settings'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
@@ -388,6 +389,9 @@ async function memoryCall<T>(run: () => Promise<T>): Promise<T> {
     })
   }
 }
+
+/** The harnesses whose sessions hold a folder's own servers and settings for the user. */
+const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex', 'opencode'])
 
 export interface HostOptions {
   userDataPath: string
@@ -619,6 +623,12 @@ export class AgentHost {
   private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
+  /**
+   * Servers of a folder's own files the user let start, which Kettu runs as it does the library's,
+   * by id, with the values their files give; kept in memory only, and read again at each attach.
+   */
+  private readonly projectServers = new Map<string, MarketServer>()
+  private readonly projectKeys = new Map<string, ReadonlyMap<string, string>>()
   private readonly mcpDiscovery: McpDiscoveryService
   private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
   private readonly mcpCheckStates = new Map<string, McpCheck>()
@@ -1022,11 +1032,17 @@ export class AgentHost {
       log,
     })
     this.mcpRouter = new McpRouter({
-      servers: () => this.settings.marketplace.mcp,
+      servers: () => this.routedServers(),
       command: (server) =>
-        serverCommand(server, this.marketKeys, this.env.agentEnv(), options.nodeRuntime, platform),
+        serverCommand(
+          server,
+          this.routedKeys(),
+          this.env.agentEnv(),
+          options.nodeRuntime,
+          platform,
+        ),
       headers: (server) =>
-        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
+        serverHeaders(server, this.routedKeys(), { env: this.env.agentEnv(), platform }),
       signsIn,
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
@@ -1545,6 +1561,39 @@ export class AgentHost {
       returned: returnedFile(options.userDataPath, log),
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
+      folderDeclared: async (cwd, agentId) => {
+        const harness = harnessOf(agentId)
+        // The other harnesses start what their own files declare, so Kettu running them too
+        // would start them twice.
+        if (!FOLDER_HELD_HARNESSES.has(harness)) {
+          return {
+            servers: [],
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+          }
+        }
+        const ownFiles = harnessProjectMcpPaths(harness, cwd, platform)
+        const [servers, settings, own] = await Promise.all([
+          folderServers(cwd, platform),
+          folderSettings(harness, cwd, platform),
+          readOwnMcpServers(ownFiles),
+        ])
+        const relative = new Set(
+          ownFiles.map((file) => path.relative(cwd, file.path) || path.basename(file.path)),
+        )
+        return {
+          servers,
+          settings,
+          harnessServers: own.map((server) => server.name),
+          harnessDigests: servers
+            .filter((server) => server.files.some((file) => relative.has(file)))
+            .map((server) => server.digest),
+          // OpenCode has no way to turn one of a folder's servers off that Kettu checked.
+          turnsOff: harness !== 'opencode',
+        }
+      },
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
@@ -1576,15 +1625,18 @@ export class AgentHost {
               )
             : this.artifactService.servers(sessionId, record.projectPath, gateway, suggests)
         },
-        library: async (sessionId, record, connection, transports, taken) => {
+        library: async (sessionId, record, connection, transports, taken, project = []) => {
           const handed = new Map<string, McpHanded>()
           this.sessionMcp.set(sessionId, handed)
-          const library = this.settings.marketplace.mcp
-          if (library.length === 0) return []
           const folder =
             record.worktree && record.worktree.removed !== 'branch'
               ? record.worktree.path
               : record.projectPath
+          const library = [
+            ...this.settings.marketplace.mcp,
+            ...project.map((server) => this.projectServer(server, folder)),
+          ]
+          if (library.length === 0) return []
           const realFolder = folder ? await realpath(folder).catch(() => null) : null
           const projects = [...new Set([folder, realFolder].filter((p): p is string => Boolean(p)))]
           const own = await readOwnMcpServers(
@@ -1597,11 +1649,12 @@ export class AgentHost {
               true,
             ),
           )
-          const projectOwn =
-            folder && harnessOf(record.agentId) === 'claude-code'
-              ? await readOwnMcpServers(claudeProjectMcpPaths(folder, platform))
-              : []
-          return libraryServers(library, this.marketKeys, record.agentId, transports, {
+          const projectOwn = folder
+            ? await readOwnMcpServers(
+                harnessProjectMcpPaths(harnessOf(record.agentId), folder, platform),
+              )
+            : []
+          return libraryServers(library, this.routedKeys(), record.agentId, transports, {
             platform,
             taken,
             project: record.projectPath,
@@ -3084,10 +3137,51 @@ export class AgentHost {
    * The Marketplace's servers or keys may have changed from `servers` and `keys`: each agent whose
    * servers differ now has its prepared sessions replaced.
    */
+  /** The servers the router runs: the library's, then the folders' own the user let start. */
+  private routedServers(): MarketServer[] {
+    const library = this.settings.marketplace.mcp
+    return this.projectServers.size > 0 ? [...library, ...this.projectServers.values()] : library
+  }
+
+  private routedKeys(): MarketKeys {
+    return this.projectKeys.size > 0
+      ? new Map([...this.marketKeys, ...this.projectKeys])
+      : this.marketKeys
+  }
+
+  /**
+   * A folder's own server as the router runs it: by an id from its folder and content, so the
+   * same server of two folders, whose values may differ, runs as two. Its tool changes are held
+   * like those of a server added by hand.
+   */
+  private projectServer(server: FolderServer, folder: string): MarketServer {
+    const id = `project:${createHash('sha256')
+      .update(JSON.stringify([server.files, server.digest, server.secrets]))
+      .digest('hex')
+      .slice(0, 24)}`
+    const entry: MarketServer = {
+      id,
+      name: server.name,
+      title: server.name,
+      source: 'manual',
+      version: null,
+      spec: server.spec,
+      agents: 'all',
+      on: true,
+    }
+    this.projectServers.set(id, entry)
+    const keys = new Map(Object.entries(server.secrets))
+    this.projectKeys.set(id, keys)
+    // The list a first check sees once the user allowed it is what is accepted; later changes
+    // are held for the user in the session's context popover.
+    if (this.mcpToolChanges.latest(id) === null) void this.checkMcpServer(entry, keys, folder)
+    return entry
+  }
+
   /** Masks a server's keys and fixed values, the host's own secrets and the home folder. */
   private mcpMask(serverId: string): (text: string) => string {
-    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
-    return serverMasker(server, this.marketKeys, redactLogText, {
+    const server = this.routedServers().find((item) => item.id === serverId)
+    return serverMasker(server, this.routedKeys(), redactLogText, {
       env: this.env.agentEnv(),
       platform: this.options.platform,
     })
@@ -3144,7 +3238,7 @@ export class AgentHost {
 
   /** A server's tools differ from what was accepted in another way: clients and agents hear. */
   private mcpToolsChanged(serverId: string): void {
-    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    const server = this.routedServers().find((item) => item.id === serverId)
     const changes = server ? this.mcpToolChanges.changes(serverId, toolGuard(server)) : null
     this.hub.broadcast({ type: 'market.mcpToolsChanged', serverId, changes })
     if (server && toolGuard(server) === 'hold') this.mcpRouter.heldChanged(serverId)
@@ -3157,15 +3251,18 @@ export class AgentHost {
     const agentId = this.sessions.sessionAgent(sessionId)
     const off = this.mcpRouter.offIn(sessionId)
     const out: SessionMcpServer[] = []
+    const servers = this.routedServers()
     for (const [id, { name, how }] of handed) {
-      const server = this.settings.marketplace.mcp.find((item) => item.id === id)
+      const server = servers.find((item) => item.id === id)
       if (!server) continue
       const known = this.mcpRouter.knownTools(server)
       const changes = this.mcpToolChanges.changes(server.id, toolGuard(server))
       const tools = this.mcpToolInfos(server, known, changes)
       const carry = agentId ? carryOf(agentId, how === 'gateway') : 'full'
+      const project = this.projectServers.has(id)
       out.push({
         serverId: id,
+        ...(project ? { project: true as const, changes } : {}),
         // The library's name, though the agent may know it by another, such as with -kettu.
         name: server.name,
         title: server.title,
@@ -3199,8 +3296,9 @@ export class AgentHost {
 
   /** Every MCP server instance's stderr for a problem report, with keys masked. */
   private mcpLogs(): NonNullable<DiagnosticsBundle['mcpLogs']> {
+    const servers = this.routedServers()
     return this.mcpRouter.logsOf().map((log) => {
-      const server = this.settings.marketplace.mcp.find((item) => item.id === log.serverId)
+      const server = servers.find((item) => item.id === log.serverId)
       return {
         ...log,
         server: server?.name ?? log.serverId,
@@ -4317,7 +4415,7 @@ export class AgentHost {
         ),
       'market.mcpToolDiff': ({ serverId }) => this.mcpToolChanges.diff(serverId),
       'market.acceptMcpTools': ({ serverId, names }) => {
-        if (!this.settings.marketplace.mcp.some((server) => server.id === serverId)) {
+        if (!this.routedServers().some((server) => server.id === serverId)) {
           throw new HostError('not_found', 'This MCP server is no longer installed.')
         }
         this.mcpToolChanges.accept(serverId, names)
@@ -4995,8 +5093,8 @@ export class AgentHost {
       'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerProjectMcp(sessionId, entryId, decision, fromDevice(device))
       },
-      'sessions.answerProjectHooks': ({ sessionId, entryId, decision }, { device }) => {
-        sessions.answerProjectHooks(sessionId, entryId, decision, fromDevice(device))
+      'sessions.answerProjectHooks': ({ sessionId, entryId }) => {
+        sessions.answerProjectHooks(sessionId, entryId)
       },
       'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) =>
         sessions.answerReport(sessionId, entryId, outcome, fromDevice(device)),

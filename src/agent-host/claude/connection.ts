@@ -268,8 +268,6 @@ interface Session {
   skills: Set<string>
   /** Reopen before the next prompt: the last one failed to sign in, or the query ended. */
   stale: boolean
-  /** The servers the folder declares itself that the query was started without. */
-  held: string[]
   /** The hooks the folder declares itself, which the query runs only when `hooksHeld` is false. */
   hooks: FolderHooks | null
   /** The query was started with every hook off, the folder's not being allowed. */
@@ -1031,7 +1029,6 @@ export class ClaudeConnection implements AgentConnection {
       terminal: new Set(),
       skills: new Set(),
       stale: false,
-      held: [],
       hooks: settings.hooks,
       hooksHeld: false,
       titleText: options.titled ? null : '',
@@ -1090,13 +1087,12 @@ export class ClaudeConnection implements AgentConnection {
         servers.flatMap((server) => server.replaces ?? []).filter((name) => !provided.has(name)),
       ),
     ]
-    const covered = new Set([...provided, ...replaced])
-    // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
-    const projectMcp = bare
-      ? { held: [], disabled: [] }
-      : await this.heldServers(cwd, options, covered)
-    session.held = projectMcp.held
-    if (projectMcp.disabled.length > 0) flags.disabledMcpjsonServers = projectMcp.disabled
+    // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking, so
+    // it starts none: Kettu runs those the user let start and hands them in `servers`.
+    const declared = bare
+      ? []
+      : await declaredServers(cwd, (message) => this.context.hooks.log('warn', message))
+    if (declared.length > 0) flags.disabledMcpjsonServers = declared.map((server) => server.name)
     if (replaced.length > 0) {
       flags.deniedMcpServers = replaced.map((serverName) => ({ serverName }))
     }
@@ -1729,37 +1725,6 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   /**
-   * The servers `cwd`'s .mcp.json files declare that may not start: all uncovered ones without a
-   * gate, and a hidden session asks nobody about the rest. Servers already covered by Kettu's
-   * session MCP config are disabled in `.mcp.json` without prompting the user.
-   */
-  private async heldServers(
-    cwd: string,
-    options: SessionOptions,
-    covered: ReadonlySet<string>,
-  ): Promise<{ held: string[]; disabled: string[] }> {
-    const declared = await declaredServers(cwd, (message) =>
-      this.context.hooks.log('warn', message),
-    )
-    if (declared.length === 0) return { held: [], disabled: [] }
-    const coveredNames = declared
-      .filter((server) => covered.has(server.name))
-      .map((server) => server.name)
-    const uncovered = declared.filter((server) => !covered.has(server.name))
-    if (uncovered.length === 0) return { held: [], disabled: coveredNames }
-    const names = uncovered.map((server) => server.name)
-    const gate = options.projectMcp
-    if (!gate) return { held: names, disabled: [...names, ...coveredNames] }
-    try {
-      const held = await (options.hidden ? gate.held(cwd, names) : gate.hold(cwd, uncovered))
-      return { held, disabled: [...held, ...coveredNames] }
-    } catch (error) {
-      this.context.hooks.log('warn', `Could not read the answers for ${cwd}: ${errorText(error)}`)
-      return { held: names, disabled: [...names, ...coveredNames] }
-    }
-  }
-
-  /**
    * Whether the hooks and helpers of `cwd`'s own settings may not run: all of them without a gate,
    * and those of settings that could not be read, which may declare some. Only `ask` asks the user.
    */
@@ -1790,9 +1755,7 @@ export class ClaudeConnection implements AgentConnection {
     if (session.hooksHeld && session.hooks && hooks) {
       if (!(await hooks.held(session.cwd, session.hooks))) return true
     }
-    const gate = session.options.projectMcp
-    if (!gate || session.held.length === 0) return false
-    return (await gate.held(session.cwd, session.held)).length < session.held.length
+    return false
   }
 
   private async restoreChoices(session: Session, choices: SessionChoices): Promise<void> {

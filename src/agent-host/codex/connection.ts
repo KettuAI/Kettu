@@ -44,6 +44,7 @@ import { t } from '../i18n'
 import { planMarkdown } from '../plan-revision'
 import { mergeConfig, type MapperEffect, type MapperOutput } from '../session-updates'
 import { SIDE_INSTRUCTIONS, sideTurnText } from '../side-chat'
+import { projectRoots } from '../project-settings'
 import { mapAccount, mapRateLimits } from './account'
 import { isAsyncQuestion, type AsyncQuestionItem } from './async-questions'
 import {
@@ -272,14 +273,23 @@ function sandboxMode(policy: SandboxPolicy): SandboxMode {
 }
 
 /**
- * Per-session config Codex takes at start: the folder trusted, as codex-acp did, Kettu's MCP, the
- * question tool in Default mode, where Codex otherwise asks in plain text, and with Kettu's memory
- * Codex's own off, so it neither reads its memories nor makes them from it.
+ * Per-session config Codex takes at start: the folder trusted only once the user let its own
+ * `.codex` settings apply, and otherwise untrusted, which loads none of them and keeps app-server
+ * from writing the folder as trusted into the user's own `config.toml`; Kettu's MCP, with the
+ * folder's own servers off, since Kettu runs those the user let start; the question tool in
+ * Default mode, where Codex otherwise asks in plain text; and with Kettu's memory Codex's own off,
+ * so it neither reads its memories nor makes them from it.
  */
-function sessionConfig(cwd: string, options: SessionOptions): Record<string, JsonValue> {
+function sessionConfig(
+  cwd: string,
+  options: SessionOptions,
+  folders: readonly string[] = [cwd],
+): Record<string, JsonValue> {
+  const trust_level = options.projectTrusted ? 'trusted' : 'untrusted'
   const features: Record<string, JsonValue> = { default_mode_request_user_input: true }
   const config: Record<string, JsonValue> = {
-    projects: { [cwd]: { trust_level: 'trusted' } },
+    // Codex keeps a folder's trust by its repository's root, which the user may have trusted.
+    projects: Object.fromEntries([cwd, ...folders].map((folder) => [folder, { trust_level }])),
     features,
     // Codex warns in the thread that an under-development feature is on.
     suppress_unstable_features_warning: true,
@@ -292,8 +302,12 @@ function sessionConfig(cwd: string, options: SessionOptions): Record<string, Jso
     return entry ? [[server.name.replace(/\s+/g, '_'), entry] as [string, JsonValue]] : []
   })
   // Codex merges an entry into its own one of the same name, so its own copy is only turned off.
-  const off = (options.mcpServers ?? []).flatMap((server) => server.replaces ?? [])
-  for (const name of off) entries.push([name, { enabled: false }])
+  const given = new Set(entries.map(([name]) => name))
+  const off = [
+    ...(options.mcpServers ?? []).flatMap((server) => server.replaces ?? []),
+    ...(options.projectServers ?? []),
+  ].filter((name) => !given.has(name))
+  for (const name of new Set(off)) entries.push([name, { enabled: false }])
   if (entries.length > 0) config.mcp_servers = Object.fromEntries(entries)
   if (options.memory) {
     features.memories = false
@@ -772,7 +786,7 @@ export class CodexConnection implements AgentConnection {
       approvalPolicy: mode.approvalPolicy,
       approvalsReviewer: mode.approvalsReviewer,
       sandbox: sandboxMode(mode.sandbox),
-      config: sessionConfig(cwd, options),
+      config: sessionConfig(cwd, options, await projectRoots(cwd)),
       ...developerInstructions(options),
       ephemeral: hidden,
       experimentalRawEvents: false,
@@ -802,7 +816,7 @@ export class CodexConnection implements AgentConnection {
             sandbox: sandboxMode(mode.sandbox),
           }
         : {}),
-      config: sessionConfig(cwd, options),
+      config: sessionConfig(cwd, options, await projectRoots(cwd)),
       ...developerInstructions(options),
       excludeTurns: true,
     })
@@ -941,7 +955,7 @@ export class CodexConnection implements AgentConnection {
       sandbox: sandboxMode(mode.sandbox),
       // A fork takes the model and effort of the configuration, not of its source.
       ...(source ? { model: source.model } : {}),
-      config: sessionConfig(cwd, options),
+      config: sessionConfig(cwd, options, await projectRoots(cwd)),
       ...developerInstructions(options),
       ephemeral: hidden,
       excludeTurns: true,
@@ -1059,7 +1073,7 @@ export class CodexConnection implements AgentConnection {
       approvalPolicy: 'never',
       sandbox: 'read-only',
       ...(source ? { model: source.model } : {}),
-      config: sessionConfig(cwd, { ...options, mcpServers: servers }),
+      config: sessionConfig(cwd, { ...options, mcpServers: servers }, await projectRoots(cwd)),
       developerInstructions: own ? `${own}\n\n${SIDE_INSTRUCTIONS}` : SIDE_INSTRUCTIONS,
       ephemeral: true,
       excludeTurns: true,

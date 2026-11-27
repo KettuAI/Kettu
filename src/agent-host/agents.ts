@@ -231,7 +231,7 @@ import {
   type CliVersion,
 } from './installed-cli'
 import { OpenCodeClient } from './opencode/client'
-import { OpenCodeConnection } from './opencode/connection'
+import { OpenCodeFolders } from './opencode/folders'
 import type { OpenCodeSessions } from './model-requests/opencode'
 import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
@@ -5184,7 +5184,7 @@ export class AgentManager {
     const slot = this.slots.get(agentId)
     if (!slot || harnessOf(agentId) !== 'opencode') return null
     const connection = slot.stopping ? null : slot.runtime?.connection
-    return connection instanceof OpenCodeConnection && !connection.isClosed
+    return connection instanceof OpenCodeFolders && !connection.isClosed
       ? connection.stored
       : this.openCodeClient(slot)
   }

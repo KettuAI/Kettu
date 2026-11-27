@@ -759,14 +759,30 @@ export interface DeclaredMcpServer {
 }
 
 /**
- * The folder's own MCP config declares servers the user has not answered for, which the agent does
- * not start until they do. `decision` is null while it waits, then the answer, `timeout` when none
- * came.
+ * Something other than an MCP server that a folder's own settings make an agent's harness run or
+ * change: a hook, plugin or command by what it runs, an environment variable by its name alone,
+ * never its value, a provider by its address, or another setting by its key.
+ */
+export interface DeclaredItem {
+  kind: 'hook' | 'plugin' | 'command' | 'env' | 'provider' | 'setting'
+  target: string
+}
+
+/**
+ * The folder's own config declares servers, or settings of the session's harness, the user has not
+ * answered for, which do not start or apply until they do. `items` and `files` (the folder's files
+ * they come from, relative to it) are set on a card that asks for a folder's settings as a whole;
+ * one without them asks for MCP servers alone. `decision` is null while it waits, then the answer,
+ * `timeout` when none came.
  */
 export interface ProjectMcpEntry {
   kind: 'project_mcp'
   id: string
   servers: DeclaredMcpServer[]
+  items?: DeclaredItem[]
+  files?: string[]
+  /** The servers the session's harness runs itself once allowed, which Kettu does not run. */
+  selfRun?: string[]
   decision: ProjectMcpAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
@@ -2122,6 +2138,11 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           (item): item is DeclaredMcpServer =>
             isRecord(item) && typeof item.name === 'string' && typeof item.target === 'string',
         ) &&
+        (value.items === undefined || isListOf(value.items, isDeclaredItem)) &&
+        (value.files === undefined ||
+          isListOf(value.files, (item): item is string => typeof item === 'string')) &&
+        (value.selfRun === undefined ||
+          isListOf(value.selfRun, (item): item is string => typeof item === 'string')) &&
         (value.decision === null || isProjectAnswer(value.decision)) &&
         (value.after === null || typeof value.after === 'string')
       )
@@ -2139,6 +2160,18 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return false
   }
 }
+
+const DECLARED_KINDS: ReadonlySet<unknown> = new Set([
+  'hook',
+  'plugin',
+  'command',
+  'env',
+  'provider',
+  'setting',
+])
+
+const isDeclaredItem = (value: unknown): value is DeclaredItem =>
+  isRecord(value) && DECLARED_KINDS.has(value.kind) && typeof value.target === 'string'
 
 const isProjectAnswer = (value: unknown): value is ProjectMcpAnswer | ProjectHooksAnswer =>
   value === 'use' || value === 'all' || value === 'skip' || value === 'timeout'

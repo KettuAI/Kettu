@@ -311,7 +311,45 @@ describe('context estimates', () => {
 })
 
 describe('sessions', () => {
-  it('starts a thread with the default mode, trusting the folder and passing Kettu’s MCP server', async () => {
+  it('trusts the folder only once its own settings may load, and turns its servers off', async () => {
+    const { server, connection } = await connect()
+    const kettuDb = {
+      type: 'http' as const,
+      name: 'db-kettu',
+      url: 'http://127.0.0.1:9/servers/db',
+      headers: [],
+      replaces: ['db'],
+    }
+    await connection.newSession('/project', { projectServers: ['db', 'shell'] })
+    await connection.newSession('/project', {
+      projectTrusted: true,
+      projectServers: ['db', 'shell'],
+      mcpServers: [kettuDb],
+    })
+    await connection.resumeSession('thread-7', '/project', { projectTrusted: true })
+    const [held, trusted] = server.sent('thread/start')
+    expect(held).toMatchObject({
+      config: {
+        projects: { '/project': { trust_level: 'untrusted' } },
+        mcp_servers: { db: { enabled: false }, shell: { enabled: false } },
+      },
+    })
+    expect(trusted).toMatchObject({
+      config: {
+        projects: { '/project': { trust_level: 'trusted' } },
+        mcp_servers: {
+          'db-kettu': { url: 'http://127.0.0.1:9/servers/db' },
+          db: { enabled: false },
+          shell: { enabled: false },
+        },
+      },
+    })
+    expect(server.sent('thread/resume')[0]).toMatchObject({
+      config: { projects: { '/project': { trust_level: 'trusted' } } },
+    })
+  })
+
+  it('starts a thread with the default mode, the folder untrusted and Kettu’s MCP server', async () => {
     const { server, connection } = await connect()
     const opened = await connection.newSession('/project', {
       mcpServers: [
@@ -332,7 +370,7 @@ describe('sessions', () => {
       approvalsReviewer: 'auto_review',
       sandbox: 'workspace-write',
       config: {
-        projects: { '/project': { trust_level: 'trusted' } },
+        projects: { '/project': { trust_level: 'untrusted' } },
         features: { default_mode_request_user_input: true },
         suppress_unstable_features_warning: true,
         thread_unload_delay_secs: 0,
@@ -436,7 +474,7 @@ describe('sessions', () => {
     await connection.forkSession(opened.sessionId, '/project', { mcpServers: [kettu], memory })
     for (const method of ['thread/start', 'thread/resume', 'thread/fork']) {
       expect(server.sent(method)[0]).toMatchObject({
-        config: { projects: { '/project': { trust_level: 'trusted' } }, ...memoryOff },
+        config: { projects: { '/project': { trust_level: 'untrusted' } }, ...memoryOff },
         developerInstructions: 'Plan first.\n\nMemory index.',
       })
     }

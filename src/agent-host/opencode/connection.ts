@@ -498,6 +498,11 @@ export class OpenCodeConnection implements AgentConnection {
     return this.done
   }
 
+  /** Whether this server runs the session, a subagent's included. */
+  has(sessionId: string): boolean {
+    return this.sessions.has(sessionId)
+  }
+
   get hiddenSessions(): boolean {
     return true
   }

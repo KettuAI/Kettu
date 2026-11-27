@@ -131,6 +131,12 @@ export interface SessionMcpServer {
   off: boolean
   /** Whether it can be turned off and reconnected here: the router runs it for this session. */
   routed: boolean
+  /**
+   * Set for a server of the session's folder the user allowed on its card, which has no server
+   * page: its tools that changed since accepted, reviewed here instead.
+   */
+  project?: true
+  changes?: McpToolChanges | null
 }
 
 export type McpCallResult = 'ok' | 'tool-error' | 'error' | 'refused' | 'cancelled'

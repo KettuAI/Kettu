@@ -1,10 +1,11 @@
 // OpenCode's driver for its own server: it runs in the agent host, which starts one
-// `opencode serve` for all of the agent's sessions.
+// `opencode serve` for the agent's sessions, and a second for those in folders whose own settings
+// the user let apply.
 
 import type { HostedDriver } from '../driver'
-import { OpenCodeConnection } from './connection'
+import { OpenCodeFolders } from './folders'
 
 export const OPENCODE_SERVER_DRIVER: HostedDriver = {
   kind: 'hosted',
-  connect: (context) => new OpenCodeConnection(context),
+  connect: (context) => new OpenCodeFolders(context),
 }
