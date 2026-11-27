@@ -169,11 +169,15 @@ export function serverMasker(
   server: MarketServer | undefined,
   keys: MarketKeys,
   then: (text: string) => string = (text) => text,
+  shell?: { env: Env; platform: Platform },
 ): (text: string) => string {
   const values = [...(server ? (keys.get(server.id)?.values() ?? []) : [])]
   if (server) {
     for (const item of server.spec.type === 'stdio' ? server.spec.env : server.spec.headers) {
-      if (!('input' in item)) values.push(item.value)
+      if ('input' in item) continue
+      values.push(item.value)
+      // A reference reaches the process as what it names, which is masked as well.
+      if (shell) values.push(resolveMcpReference(item.value, shell.env, shell.platform).value)
     }
   }
   // The longest first, so a value that holds another is masked whole.
@@ -397,11 +401,11 @@ export function libraryServers(
       declared += bytes
     }
     if (transports.mcpHttp) {
-      const named = nameOf(server)
-      options.handed?.(server, named.name, 'router')
+      const entryName = nameOf(server)
+      options.handed?.(server, entryName.name, 'router')
       out.push({
         type: 'http',
-        ...named,
+        ...entryName,
         url: `${router.origin}${serverPath(server.id)}`,
         headers: [{ name: 'Authorization', value: `Bearer ${router.token}` }],
         secret: true,
@@ -433,11 +437,11 @@ export function libraryServers(
       }
       continue
     }
-    const named = nameOf(server)
-    options.handed?.(server, named.name, 'router')
+    const entryName = nameOf(server)
+    options.handed?.(server, entryName.name, 'router')
     out.push({
       type: 'stdio',
-      ...named,
+      ...entryName,
       command: options.bridge,
       args: ['mcp', 'connect', server.name, '--agent', agentId],
       env: [

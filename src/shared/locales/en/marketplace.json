@@ -1363,6 +1363,86 @@
       "http": "Check the server address and its credentials in Settings.",
       "cannot-connect": "Check the address and that this computer can reach it.",
       "missing-variable": "Set the value in the login shell or in Settings."
+    },
+    "page": {
+      "running": "Running",
+      "noneRunning": "Not running. It starts when a session first calls one of its tools.",
+      "sharedAll": "Shared by every session",
+      "sharedFolder": "Shared in {{folder}}",
+      "aSession": "A session",
+      "started": "started {{time}}",
+      "lastCall": "last call {{ago}}",
+      "noCall": "no call yet",
+      "stopsAt": "stops at {{time}} if idle",
+      "stop": "Stop",
+      "stopFailed": "Could not stop it: {{error}}",
+      "whoGets": "Who gets it",
+      "projects": "Projects",
+      "projectsAll": "All projects",
+      "projectsOnly": "Only these",
+      "projectsExcept": "All but these",
+      "noProjects": "No projects on this computer yet.",
+      "namesOnly": "Looks tools up when it needs them, so it carries their names only.",
+      "gateway": "Goes through Kettu's gateway, so large servers cost it no context.",
+      "perTurn": "~{{tokens}} tokens / turn",
+      "agentSwitch": "Give it to {{name}}",
+      "toolsUnknown": "Its tools show here once a session or a check has listed them.",
+      "searchTools": "Search tools",
+      "toolFilter": "Which tools",
+      "all": "All",
+      "on": "On",
+      "off": "Off",
+      "noTools": "No tools match.",
+      "toolSwitch": "Turn {{name}} on for every agent",
+      "tag": {
+        "read-only": "Read-only",
+        "changes": "Changes things",
+        "deletes": "Deletes"
+      },
+      "callFilter": "Which calls",
+      "failed": "Failed",
+      "rangeLabel": "Time range",
+      "range": {
+        "hour": "Last hour",
+        "day": "Last 24 hours",
+        "week": "Last 7 days",
+        "month": "Last 30 days"
+      },
+      "searchCalls": "Search by tool",
+      "noCalls": "No calls in this time.",
+      "noFailed": "No failed calls in this time.",
+      "col": {
+        "time": "Time",
+        "tool": "Tool",
+        "session": "Session",
+        "duration": "Duration",
+        "size": "Size",
+        "result": "Result"
+      },
+      "terminal": "Outside a session",
+      "result": {
+        "ok": "OK",
+        "tool-error": "Tool error",
+        "error": "Failed",
+        "refused": "Refused",
+        "cancelled": "Cancelled"
+      },
+      "why": {
+        "tool-error": "The tool reported an error. What it said is in the session.",
+        "error": "The call failed.",
+        "refused": "Kettu refused the call.",
+        "cancelled": "The agent cancelled the call."
+      },
+      "openInSession": "Open in session",
+      "callsKept": "Calls are kept for 30 days. What was sent and returned stays in the session.",
+      "noLogs": "No logs yet. Each process keeps its last 1 MB here once it starts.",
+      "instance": "Process",
+      "live": "running",
+      "ended": "ended",
+      "copy": "Copy",
+      "copied": "Copied the log",
+      "emptyLog": "This process has written nothing yet.",
+      "logsMasked": "Keys are masked when the log goes into a problem report."
     }
   }
 }

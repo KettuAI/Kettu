@@ -365,6 +365,9 @@ const MEMORY_ERRORS: Record<MemoryErrorCode, PortErrorCode> = {
   off: 'unavailable',
 }
 
+/** How long a server checked after a failed call goes before another failure checks it again. */
+const FAILURE_CHECK_MS = 60_000
+
 /** How a session's agent reached a library server it was handed. */
 interface McpHanded {
   name: string
@@ -616,6 +619,8 @@ export class AgentHost {
   private readonly mcpDiscovery: McpDiscoveryService
   private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
   private readonly mcpCheckStates = new Map<string, McpCheck>()
+  /** When each server was last checked after a failed call. */
+  private readonly failureChecks = new Map<string, number>()
   private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
   private nextMcpInstall = 1
   private agentEnvKeys: Record<string, Record<string, string>> = {}
@@ -976,7 +981,8 @@ export class AgentHost {
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
       answers: this.mcpAnswers,
-      called: ({ serverId, sessionId, outcome }) =>
+      called: ({ serverId, sessionId, outcome }) => {
+        if (outcome.result === 'error') this.checkAfterFailure(serverId, sessionId)
         void this.mcpCalls.add({
           at: outcome.at,
           serverId,
@@ -987,7 +993,8 @@ export class AgentHost {
           bytes: outcome.bytes,
           result: outcome.result,
           ...(outcome.error !== undefined ? { error: this.mcpMask(serverId)(outcome.error) } : {}),
-        }),
+        })
+      },
       appVersion: options.appVersion,
       home,
       log,
@@ -2791,6 +2798,22 @@ export class AgentHost {
     resolve?.(error)
   }
 
+  /**
+   * A call through the router failed: the server is checked once, as an agent would connect, so
+   * its page says why; not again within a minute, however many calls fail meanwhile.
+   */
+  private checkAfterFailure(serverId: string, sessionId: string | null): void {
+    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    if (!server) return
+    const now = Date.now()
+    if (now - (this.failureChecks.get(serverId) ?? 0) < FAILURE_CHECK_MS) return
+    this.failureChecks.set(serverId, now)
+    const folder = sessionId
+      ? (this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId))
+      : null
+    this.checkMcpServer(server, this.marketKeys.get(serverId) ?? new Map(), folder ?? undefined)
+  }
+
   private checkMcpServer(
     server: MarketServer,
     keys: ReadonlyMap<string, string>,
@@ -2973,7 +2996,10 @@ export class AgentHost {
   /** Masks a server's keys and fixed values, the host's own secrets and the home folder. */
   private mcpMask(serverId: string): (text: string) => string {
     const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
-    return serverMasker(server, this.marketKeys, redactLogText)
+    return serverMasker(server, this.marketKeys, redactLogText, {
+      env: this.env.agentEnv(),
+      platform: this.options.platform,
+    })
   }
 
   private mcpState(server: MarketServer): McpRunState {
@@ -3013,7 +3039,8 @@ export class AgentHost {
       const carry = agentId ? carryOf(agentId, how === 'gateway') : 'full'
       out.push({
         serverId: id,
-        name,
+        // The library's name, though the agent may know it by another, such as with -kettu.
+        name: server.name,
         title: server.title,
         site: server.spec.type === 'http' ? server.spec.url : null,
         state: how === 'agent' ? { state: 'by-agent' } : this.mcpState(server),

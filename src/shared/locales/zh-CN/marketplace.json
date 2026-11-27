@@ -1336,6 +1336,86 @@
       "http": "检查设置里的服务器地址和凭据。",
       "cannot-connect": "确认地址正确，以及这台电脑能连到它。",
       "missing-variable": "在登录 Shell 或设置里填写这个值。"
+    },
+    "page": {
+      "running": "正在运行",
+      "noneRunning": "没有在运行。会话第一次调用它的工具时才启动。",
+      "sharedAll": "所有会话共用",
+      "sharedFolder": "在 {{folder}} 里共用",
+      "aSession": "一个会话",
+      "started": "{{time}} 启动",
+      "lastCall": "最后一次调用 {{ago}}",
+      "noCall": "还没有调用",
+      "stopsAt": "空闲到 {{time}} 停",
+      "stop": "停止",
+      "stopFailed": "没能停止：{{error}}",
+      "whoGets": "给谁",
+      "projects": "项目",
+      "projectsAll": "全部项目",
+      "projectsOnly": "只这几个",
+      "projectsExcept": "除了这几个",
+      "noProjects": "这台电脑上还没有项目。",
+      "namesOnly": "用到时才找工具，所以只带工具名。",
+      "gateway": "经 Kettu 的网关，大的服务器不占它的上下文。",
+      "perTurn": "每轮约 {{tokens}} token",
+      "agentSwitch": "给 {{name}}",
+      "toolsUnknown": "会话或检查列出过它的工具以后，这里才有。",
+      "searchTools": "搜索工具",
+      "toolFilter": "哪些工具",
+      "all": "全部",
+      "on": "开着",
+      "off": "关了",
+      "noTools": "没有匹配的工具。",
+      "toolSwitch": "对所有 Agent 打开 {{name}}",
+      "tag": {
+        "read-only": "只读",
+        "changes": "会改东西",
+        "deletes": "会删除"
+      },
+      "callFilter": "哪些调用",
+      "failed": "失败的",
+      "rangeLabel": "时间范围",
+      "range": {
+        "hour": "最近一小时",
+        "day": "最近 24 小时",
+        "week": "最近 7 天",
+        "month": "最近 30 天"
+      },
+      "searchCalls": "按工具搜索",
+      "noCalls": "这段时间没有调用。",
+      "noFailed": "这段时间没有失败的调用。",
+      "col": {
+        "time": "时间",
+        "tool": "工具",
+        "session": "会话",
+        "duration": "用时",
+        "size": "大小",
+        "result": "结果"
+      },
+      "terminal": "不在会话里",
+      "result": {
+        "ok": "成功",
+        "tool-error": "工具出错",
+        "error": "失败",
+        "refused": "被拒",
+        "cancelled": "已取消"
+      },
+      "why": {
+        "tool-error": "工具报告了错误，它说了什么在会话里。",
+        "error": "调用失败了。",
+        "refused": "Kettu 拒绝了这次调用。",
+        "cancelled": "Agent 取消了这次调用。"
+      },
+      "openInSession": "在会话里打开",
+      "callsKept": "调用记录留 30 天。发了什么、回了什么留在会话里。",
+      "noLogs": "还没有日志。每个进程启动后，这里留它最后 1 MB。",
+      "instance": "进程",
+      "live": "运行中",
+      "ended": "已结束",
+      "copy": "复制",
+      "copied": "已复制日志",
+      "emptyLog": "这个进程还没有输出。",
+      "logsMasked": "日志进问题报告时会遮住密钥。"
     }
   }
 }

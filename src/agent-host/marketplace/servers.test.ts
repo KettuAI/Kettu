@@ -342,4 +342,21 @@ describe('serverMasker', () => {
     expect(out).not.toContain('hunter2hunter2')
     expect(out).toContain('auth with')
   })
+
+  it('masks what a reference to the environment stands for, too', () => {
+    const server: MarketServer = {
+      ...context7,
+      spec: {
+        type: 'stdio',
+        command: 'npx',
+        args: [],
+        env: [{ name: 'API_TOKEN', value: '${NOTES_TOKEN}' }],
+      },
+    }
+    const mask = serverMasker(server, keys({}), undefined, {
+      env: { NOTES_TOKEN: 'notes-token-from-shell' },
+      platform: 'darwin',
+    })
+    expect(mask('sent notes-token-from-shell')).not.toContain('notes-token-from-shell')
+  })
 })
