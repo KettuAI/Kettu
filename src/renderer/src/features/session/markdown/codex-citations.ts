@@ -41,7 +41,7 @@ function citation(source: string): MdNode | null {
   const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path
   const lines = start === null ? '' : `:${start}${end !== null && end > start ? `-${end}` : ''}`
   // Only what a link's address cannot hold is escaped, and a Windows drive path keeps its slashes.
-  const url = path.replace(/[%\s?#]/g, encodeURIComponent) + (start === null ? '' : `:${start}`)
+  const url = path.replace(/[%\s?#]/g, encodeURIComponent) + lines
   return { type: 'link', url, children: [{ type: 'text', value: name + lines }] }
 }
 
