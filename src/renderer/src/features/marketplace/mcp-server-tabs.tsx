@@ -503,6 +503,7 @@ function CallRow({
 }) {
   const { t } = useTranslation('marketplace')
   const { hostId } = useHostScope()
+  const agentName = useAgentName()
   const session = useSessionsStore((s) => (call.sessionId ? s.byId[call.sessionId] : undefined))
   const failed = call.result !== 'ok'
   const signIn = /needs sign-in/.test(call.error ?? '')
@@ -528,6 +529,21 @@ function CallRow({
               )}
               <span>{session?.title ?? t('mcp.page.aSession')}</span>
             </button>
+          ) : call.agentId ? (
+            <span
+              className="k-mcp-session k-mcp-muted"
+              title={call.folder ? homeShort(call.folder) : undefined}
+            >
+              <AgentMark agent={call.agentId} size={14} hostId={hostId} dot={null} />
+              <span>
+                {call.folder
+                  ? t('mcp.page.inTerminalAt', {
+                      agent: agentName(call.agentId),
+                      folder: homeShort(call.folder),
+                    })
+                  : t('mcp.page.inTerminal', { agent: agentName(call.agentId) })}
+              </span>
+            </span>
           ) : (
             <span className="k-mcp-muted">{t('mcp.page.terminal')}</span>
           )}

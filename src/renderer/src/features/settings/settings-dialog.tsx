@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
+import { RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { cn } from '@renderer/lib/utils'
 
 /**
@@ -125,3 +126,32 @@ export const DIALOG_MONO_FIELD = 'ui-sg-input kettu-sd__input kettu-sd__input--m
 
 /** A 32 px field in the dialog's text. */
 export const DIALOG_FIELD = 'ui-sg-input kettu-sd__input'
+
+/** One choice of a few as a tile, with what it does under it and anything it needs inside. */
+export function Choice({
+  value,
+  checked,
+  title,
+  description,
+  extra,
+}: {
+  value: string
+  checked: boolean
+  title: string
+  description: string
+  extra?: ReactNode
+}) {
+  const id = useId()
+  return (
+    <div className="kettu-sd__choice" data-checked={checked || undefined}>
+      <label htmlFor={id}>
+        <RadioGroupItem id={id} value={value} className="mt-0.5" />
+        <span className="ui-sg-label">
+          <b>{title}</b>
+          <small>{description}</small>
+        </span>
+      </label>
+      {extra && <div className="kettu-sd__choice-extra">{extra}</div>}
+    </div>
+  )
+}

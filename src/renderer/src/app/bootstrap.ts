@@ -248,6 +248,8 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
     case 'market.discoveryChanged':
       if (useMarketplaceStore.getState().discovery)
         void useMarketplaceStore.getState().loadDiscovery()
+      if (useMarketplaceStore.getState().terminal)
+        void useMarketplaceStore.getState().loadTerminal()
       break
     case 'market.mcpCheckChanged':
       useMarketplaceStore.setState((state) => ({

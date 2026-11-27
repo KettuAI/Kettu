@@ -28,6 +28,8 @@ export class LineTransport implements Transport {
     this.socket.on('data', (chunk: Buffer) => this.read(this.decoder.write(chunk)))
     this.socket.on('error', (error) => this.onerror?.(error))
     this.socket.on('close', () => this.finish())
+    // The socket is half-open, so a client that closed its input would otherwise wait for good.
+    this.socket.on('end', () => void this.close())
   }
 
   /** Bytes that came with the upgrade request, ahead of the stream. */

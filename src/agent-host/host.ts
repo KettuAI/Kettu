@@ -1132,8 +1132,13 @@ export class AgentHost {
           (name, agent) => this.env.get(name, agent),
           true,
         ),
-      claudeSettings: (agentId) =>
-        path.join(this.agents.configFolder(agentId) ?? path.join(home, '.claude'), 'settings.json'),
+      claudeSettings: (agentId) => {
+        const configured = this.env.get('CLAUDE_CONFIG_DIR', agentId)?.trim()
+        const folder =
+          this.agents.configFolder(agentId) ??
+          (configured ? path.resolve(home, configured) : path.join(home, '.claude'))
+        return path.join(folder, 'settings.json')
+      },
       launch: () => {
         const command = this.mcpCommand ?? this.mcpBridge
         return command ? { command, args: ['mcp', 'connect'] } : null

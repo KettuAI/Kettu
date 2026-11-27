@@ -140,7 +140,7 @@ function isBackup(value: unknown): value is BackupRecord {
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.at === 'number' &&
-    ['takeover', 'update', 'apply', 'restore'].includes(value.reason as string) &&
+    ['takeover', 'update', 'apply', 'restore', 'off'].includes(value.reason as string) &&
     typeof value.first === 'boolean' &&
     typeof value.on === 'boolean' &&
     Array.isArray(value.files) &&
@@ -258,7 +258,9 @@ export async function withClaudeLock<T>(file: string, run: () => Promise<T>): Pr
         await rmdir(lock).catch(() => {})
         continue
       }
-      if (Date.now() > until) throw new Error('Claude Code is writing its file; try again')
+      if (Date.now() > until) {
+        throw new Error('Claude Code is writing its file; try again', { cause: error })
+      }
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
   }
@@ -779,12 +781,13 @@ export class McpTerminal {
           file: file.path,
           on: target?.on === true,
           own: 0,
-          backedUpAt: target?.backups.at(-1)?.at ?? null,
+          backedUpAt: target?.backups.length
+            ? Math.max(...target.backups.map((backup) => backup.at))
+            : null,
           changed: 0,
         }
         if (!terminalFormat(file.layout)) row.unsupported = 'format'
         else if (!this.deps.launch()) row.unsupported = 'no-bridge'
-        else if (!this.deps.key()) row.unsupported = 'no-key'
         try {
           if (terminalFormat(file.layout)) {
             const reading = await this.read(agent.id, target)
@@ -806,8 +809,14 @@ export class McpTerminal {
   plan(agentId: AgentId): Promise<McpTerminalPlan> {
     // The agent's own entries stay here: they may hold keys written in the file.
     return this.run(async () => {
-      const { own: _own, ...plan } = await this.planNow(agentId)
-      return plan
+      const next = await this.planNow(agentId)
+      return {
+        agentId: next.agentId,
+        id: next.id,
+        files: next.files,
+        imports: next.imports,
+        entries: next.entries,
+      }
     })
   }
 
@@ -1088,7 +1097,7 @@ export class McpTerminal {
       }
     }
     try {
-      await this.write(agentId, target, 'update', writes, {
+      await this.write(agentId, target, 'off', writes, {
         ...offTarget,
         entries: {},
         tools: [],
@@ -1141,15 +1150,17 @@ export class McpTerminal {
   backups(agentId: AgentId): Promise<McpTerminalBackup[]> {
     return this.run(async () => {
       const target = (await this.load()).agents[agentId]
+      // Newest first; the first backup is kept at the front of the record whatever its time.
       return (target?.backups ?? [])
-        .map((backup) => ({
+        .map((backup, index) => ({ backup, index }))
+        .sort((a, b) => b.backup.at - a.backup.at || b.index - a.index)
+        .map(({ backup }) => ({
           id: backup.id,
           at: backup.at,
           reason: backup.reason,
           servers: Object.keys(backup.entries).length,
           first: backup.first,
         }))
-        .reverse()
     })
   }
 

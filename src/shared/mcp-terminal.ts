@@ -5,7 +5,7 @@ import type { AgentId } from './agents'
 import type { McpDiscoveryFileError } from './mcp-discovery'
 
 /** Why Kettu cannot take over an agent's file. */
-export type McpTerminalUnsupported = 'format' | 'no-bridge' | 'no-key'
+export type McpTerminalUnsupported = 'format' | 'no-bridge'
 
 /** One agent's row in Marketplace › MCP › Terminal and apps, and on its page in Settings. */
 export interface McpTerminalRow {
@@ -66,7 +66,7 @@ export interface McpTerminalBackup {
   id: string
   at: number
   /** What the write after it did. */
-  reason: 'takeover' | 'update' | 'apply' | 'restore'
+  reason: 'takeover' | 'update' | 'apply' | 'restore' | 'off'
   /** The servers Kettu had written in the file then; 0 for the one before the takeover. */
   servers: number
   /** Restoring it turns the takeover off. */

@@ -2567,3 +2567,239 @@
   margin-block-start: 0.25rem;
   color: var(--text-tertiary);
 }
+
+.k-mcp-terminal-on {
+  color: var(--success);
+}
+
+.k-mcp-terminal-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.k-mcp-terminal-meta > * + * {
+  position: relative;
+  margin-left: 6px;
+  padding-left: 9px;
+}
+
+.k-mcp-terminal-meta > * + *::before {
+  content: '\00b7';
+  position: absolute;
+  left: 0;
+  color: var(--faint);
+}
+
+.k-mcp-terminal-login {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border: var(--hairline) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: var(--text-ui);
+}
+
+.k-mcp-terminal-login > span {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+.k-mcp-terminal-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.k-mcp-terminal-sub {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.k-mcp-terminal-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.k-mcp-terminal-file {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: var(--hairline) solid var(--border-subtle);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+}
+
+.k-mcp-terminal-file > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-file code {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+}
+
+.k-mcp-terminal-group h3,
+.k-mcp-terminal-drift h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0 0 0.375rem;
+  font-size: var(--text-ui);
+  font-weight: 600;
+}
+
+.k-mcp-terminal-box {
+  display: grid;
+  border: var(--hairline) solid var(--border-subtle);
+  border-radius: var(--radius-tile);
+  overflow: hidden;
+}
+
+.k-mcp-terminal-box > .k-mkt-section-note {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.k-mcp-terminal-entry,
+.k-mcp-terminal-backup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.k-mcp-terminal-entry + .k-mcp-terminal-entry,
+.k-mcp-terminal-backup + .k-mcp-terminal-backup {
+  border-block-start: var(--hairline) solid var(--border-subtle);
+}
+
+.k-mcp-terminal-entry > code {
+  flex: none;
+  color: var(--text-primary);
+}
+
+.k-mcp-terminal-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-hint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.k-mcp-terminal-tag {
+  flex: none;
+  padding: 0.0625rem 0.4375rem;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-tag[data-tone='added'] {
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+.k-mcp-terminal-tag[data-tone='removed'] {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+.k-mcp-terminal-tag[data-tone='warn'] {
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+
+.k-mcp-terminal-backup > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.k-mcp-terminal-backup b {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.k-mcp-terminal-backup small {
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-note > svg {
+  flex: none;
+  margin-block-start: 0.125rem;
+}
+
+.k-mcp-terminal-note[data-warn] {
+  color: var(--warning);
+}
+
+.k-mcp-terminal-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.k-mcp-terminal-check > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.k-mcp-terminal-check b {
+  font-weight: 500;
+}
+
+.k-mcp-terminal-check small {
+  color: var(--text-tertiary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-expander {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.25rem;
+  color: var(--text-secondary);
+  font-size: var(--text-hint);
+}
+
+.k-mcp-terminal-expander[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
+}
+
+.k-mcp-terminal-expander:hover {
+  color: var(--text-primary);
+}
+
+.k-mcp-terminal-diffs {
+  display: grid;
+  gap: 0.5rem;
+}
