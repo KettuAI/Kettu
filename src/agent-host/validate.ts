@@ -1703,6 +1703,39 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.keys': none,
     'market.discoverMcp': none,
+    'market.mcpTerminal': none,
+    'market.mcpTerminalPlan': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalOn': (params) => {
+      const o = fields(params)
+      const planId = string(o, 'planId', 64)
+      if (!/^[0-9a-f]{64}$/.test(planId)) throw invalidParams('planId is not a plan')
+      return { agentId: agentId(o), planId }
+    },
+    'market.mcpTerminalOffPlan': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalOff': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalDrift': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalResolve': (params) => {
+      const o = fields(params)
+      const choices = fields(o.choices)
+      const out: Record<string, 'file' | 'kettu'> = {}
+      const names = Object.keys(choices)
+      if (names.length > 1000) throw invalidParams('choices names too many entries')
+      for (const name of names) {
+        const choice = choices[name]
+        if (name.length > 256 || (choice !== 'file' && choice !== 'kettu')) {
+          throw invalidParams('choices must map entry names to "file" or "kettu"')
+        }
+        out[name] = choice
+      }
+      return { agentId: agentId(o), choices: out }
+    },
+    'market.mcpTerminalBackups': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalRestore': (params) => {
+      const o = fields(params)
+      const backupId = string(o, 'backupId', 64)
+      if (!/^[0-9a-f-]{36}$/.test(backupId)) throw invalidParams('backupId is not a backup')
+      return { agentId: agentId(o), backupId }
+    },
     'market.dismissMcpNotice': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'market.importMcp': mcpChoices,
     'market.previewMcp': (params) => ({ text: string(fields(params), 'text', 131072) }),

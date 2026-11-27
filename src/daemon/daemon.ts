@@ -482,6 +482,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     marketKeys: () => marketKeys.contentsForHost(),
     marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     installMcp: (entries) => installDiscoveredMcp(settings, marketKeys, entries),
+    mcpBackupKey: () =>
+      marketKeys.ensureBackupKey().then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      ),
     pluginSecret: (pluginId, key, value) =>
       marketKeys.setPluginSecret(pluginId, key, value).then(
         () => null,

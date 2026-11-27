@@ -2,15 +2,7 @@
 // folder and a name, with its account, sign-in, API key, usage and configuration. Installs and
 // updates are Settings > Harnesses'.
 
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import {
   Add01Icon,
   ComputerTerminal01Icon,
@@ -120,8 +112,10 @@ import { AutoCompactRows } from './auto-compact-rows'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { CodebuddySettingsRows } from './codebuddy-settings-rows'
 import { FavoriteModelsGroup } from './favorite-models'
+import { AgentTerminalRow } from '@renderer/features/marketplace/mcp-terminal'
 import { PlaceRow } from './places'
 import {
+  Choice,
   DIALOG_FIELD,
   DIALOG_MONO_FIELD,
   SettingsDialogBody,
@@ -599,35 +593,6 @@ function AddAgentDialog({
         </form>
       </SettingsDialogContent>
     </Dialog>
-  )
-}
-
-/** One choice of a few as a tile, with what it does under it and anything it needs inside. */
-export function Choice({
-  value,
-  checked,
-  title,
-  description,
-  extra,
-}: {
-  value: string
-  checked: boolean
-  title: string
-  description: string
-  extra?: ReactNode
-}) {
-  const id = useId()
-  return (
-    <div className="kettu-sd__choice" data-checked={checked || undefined}>
-      <label htmlFor={id}>
-        <RadioGroupItem id={id} value={value} className="mt-0.5" />
-        <span className="ui-sg-label">
-          <b>{title}</b>
-          <small>{description}</small>
-        </span>
-      </label>
-      {extra && <div className="kettu-sd__choice-extra">{extra}</div>}
-    </div>
   )
 }
 
@@ -1388,6 +1353,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
             </SetButton>
           </RowFrame>
         )}
+        {hostId === null && <AgentTerminalRow agentId={status.id} />}
         {details?.config.map((item) => (
           <PlaceRow
             key={item.id}

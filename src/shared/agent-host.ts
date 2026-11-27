@@ -1,4 +1,12 @@
 import type { McpCheck, McpDiscovery, McpDiscoveryRow, McpImportChoice } from './mcp-discovery'
+import type {
+  McpTerminalBackup,
+  McpTerminalChoice,
+  McpTerminalDrift,
+  McpTerminalOffPlan,
+  McpTerminalPlan,
+  McpTerminalRow,
+} from './mcp-terminal'
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
@@ -1309,6 +1317,18 @@ export interface HostContract {
   'market.discoverMcp': { params: void; result: McpDiscovery }
   'market.dismissMcpNotice': { params: { id: string }; result: void }
   'market.importMcp': { params: { choices: McpImportChoice[] }; result: string[] }
+  'market.mcpTerminal': { params: void; result: McpTerminalRow[] }
+  'market.mcpTerminalPlan': { params: { agentId: AgentId }; result: McpTerminalPlan }
+  'market.mcpTerminalOn': { params: { agentId: AgentId; planId: string }; result: void }
+  'market.mcpTerminalOffPlan': { params: { agentId: AgentId }; result: McpTerminalOffPlan }
+  'market.mcpTerminalOff': { params: { agentId: AgentId }; result: void }
+  'market.mcpTerminalDrift': { params: { agentId: AgentId }; result: McpTerminalDrift[] }
+  'market.mcpTerminalResolve': {
+    params: { agentId: AgentId; choices: Record<string, McpTerminalChoice> }
+    result: void
+  }
+  'market.mcpTerminalBackups': { params: { agentId: AgentId }; result: McpTerminalBackup[] }
+  'market.mcpTerminalRestore': { params: { agentId: AgentId; backupId: string }; result: void }
   'market.previewMcp': { params: { text: string }; result: McpDiscoveryRow[] }
   'market.addMcp': { params: { choices: McpImportChoice[] }; result: string[] }
   'market.checkMcp': { params: { serverId: string }; result: void }
@@ -2445,6 +2465,15 @@ export const HOST_METHODS = [
   'market.discoverMcp',
   'market.dismissMcpNotice',
   'market.importMcp',
+  'market.mcpTerminal',
+  'market.mcpTerminalPlan',
+  'market.mcpTerminalOn',
+  'market.mcpTerminalOffPlan',
+  'market.mcpTerminalOff',
+  'market.mcpTerminalDrift',
+  'market.mcpTerminalResolve',
+  'market.mcpTerminalBackups',
+  'market.mcpTerminalRestore',
   'market.previewMcp',
   'market.addMcp',
   'market.checkMcp',

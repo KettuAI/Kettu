@@ -154,6 +154,8 @@ export interface McpCallRecord {
   result: McpCallResult
   /** Why it failed, for `error` and `refused`: Kettu's or the protocol's message, never output. */
   error?: string
+  /** For a call from a terminal, which has no session: the folder the agent ran in. */
+  folder?: string
 }
 
 export const MCP_CALL_DAYS = 30

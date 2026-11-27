@@ -1,4 +1,5 @@
 import type { McpCheck, McpDiscovery } from '@shared/mcp-discovery'
+import type { McpTerminalRow } from '@shared/mcp-terminal'
 import type { McpToolChanges } from '@shared/mcp-insight'
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
@@ -89,6 +90,10 @@ export interface MarketplaceStore {
   /** How each server's tools differ from those the user accepted, for those that do. */
   mcpToolChanges: Record<string, McpToolChanges>
   loadDiscovery(): Promise<void>
+  /** Each agent's terminal and whether it uses Kettu's servers; null until the host answered. */
+  terminal: McpTerminalRow[] | null
+  terminalError: boolean
+  loadTerminal(): Promise<void>
   loadMcpChecks(): Promise<void>
   loadMcpToolChanges(): Promise<void>
   mcpToolsChanged(serverId: string, changes: McpToolChanges | null): void
@@ -193,6 +198,7 @@ export function createMarketplaceStore(
   let searchRead = 0
   let keysRead = 0
   let discoveryRead = 0
+  let terminalRead = 0
   let checkRevision = 0
   let connectionsRead = 0
   let ownPluginsRead = 0
@@ -223,6 +229,17 @@ export function createMarketplaceStore(
         if (read === discoveryRead) set({ discovery, discoveryLoading: false })
       } catch {
         if (read === discoveryRead) set({ discoveryError: true, discoveryLoading: false })
+      }
+    },
+    terminal: null,
+    terminalError: false,
+    async loadTerminal() {
+      const read = ++terminalRead
+      try {
+        const terminal = await request('market.mcpTerminal', undefined)
+        if (read === terminalRead) set({ terminal, terminalError: false })
+      } catch {
+        if (read === terminalRead) set({ terminalError: true })
       }
     },
     async loadMcpChecks() {

@@ -2,27 +2,41 @@
 // service, then the client's lines both ways, unchanged. Standard library only.
 
 use std::env;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
 const URL_ENV: &str = "KETTU_MCP_URL";
 const TOKEN_ENV: &str = "KETTU_MCP_TOKEN";
+/// Set in the processes of Kettu's own sessions, so an entry Kettu wrote into an agent's file is
+/// not run a second time beside the copy the session was handed.
+const SESSION_ENV: &str = "KETTU_MCP_SESSION";
+/// What Kettu writes into its data folder each time it starts, for the entries in agents' files.
+const CONNECT_FILE: &str = "mcp-bridge.txt";
+const CONNECT_HEADER: &str = "kettu-mcp-bridge 1";
+const CONNECT_LIMIT: u64 = 4 * 1024;
+const NOT_RUNNING: &str = "Kettu is not running. Open Kettu, then reconnect this server.";
 const UPGRADE: &str = "kettu-mcp";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HEAD_LIMIT: usize = 16 * 1024;
 const BODY_LIMIT: usize = 4 * 1024;
 
-const USAGE: &str = "Usage: kettu-mcp-bridge mcp connect <server> [--agent <agent>]
+const USAGE: &str =
+    "Usage: kettu-mcp-bridge mcp connect <server> [--agent <agent>] [--data <folder>]
 
 Connects an MCP client that speaks stdio to a server Kettu runs. Kettu writes this command into
-the client's configuration, with KETTU_MCP_URL and KETTU_MCP_TOKEN in its environment.";
+the client's configuration. Its own sessions start it with KETTU_MCP_URL and KETTU_MCP_TOKEN; a
+terminal finds where to connect in Kettu's data folder, which --data names when it is not the
+desktop app's own.";
 
 struct Args {
     server: String,
     agent: Option<String>,
+    data: Option<PathBuf>,
 }
 
 fn parse(args: &[String]) -> Result<Option<Args>, String> {
@@ -36,10 +50,12 @@ fn parse(args: &[String]) -> Result<Option<Args>, String> {
     }
     let mut server = None;
     let mut agent = None;
+    let mut data = None;
     let mut rest = args[2..].iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--agent" => agent = Some(rest.next().ok_or("--agent needs a value")?.clone()),
+            "--data" => data = Some(PathBuf::from(rest.next().ok_or("--data needs a value")?)),
             "-h" | "--help" => return Ok(None),
             other if other.starts_with('-') => return Err(format!("unknown option {other}")),
             other if server.is_none() => server = Some(other.to_string()),
@@ -47,18 +63,108 @@ fn parse(args: &[String]) -> Result<Option<Args>, String> {
         }
     }
     let server = server.ok_or("no server named")?;
-    Ok(Some(Args { server, agent }))
+    Ok(Some(Args {
+        server,
+        agent,
+        data,
+    }))
+}
+
+/// Where the desktop app keeps its data by default, as Electron names its folder.
+fn default_data() -> Option<PathBuf> {
+    let home = env::var_os("HOME").map(PathBuf::from);
+    if cfg!(target_os = "macos") {
+        return home.map(|home| {
+            home.join("Library")
+                .join("Application Support")
+                .join("Kettu")
+        });
+    }
+    if cfg!(windows) {
+        return env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("Kettu"));
+    }
+    let config = env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .or_else(|| home.map(|home| home.join(".config")))?;
+    Some(config.join("Kettu"))
+}
+
+/// Where a terminal connects: the URL and key Kettu wrote at its start.
+struct Target {
+    url: String,
+    key: String,
+}
+
+/// The connect file's text: a header line, then `url=` and `key=` lines.
+fn parse_connect(text: &str) -> Option<Target> {
+    let mut lines = text.lines();
+    if lines.next()? != CONNECT_HEADER {
+        return None;
+    }
+    let mut url = None;
+    let mut key = None;
+    for line in lines {
+        if let Some(value) = line.strip_prefix("url=") {
+            url = Some(value.to_string());
+        } else if let Some(value) = line.strip_prefix("key=") {
+            key = Some(value.to_string());
+        }
+    }
+    Some(Target {
+        url: url?,
+        key: key?,
+    })
+}
+
+/// A file only its owner may read and write; a key others can read is no key.
+#[cfg(unix)]
+fn private_file(meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o077 == 0
+}
+
+#[cfg(not(unix))]
+fn private_file(_meta: &fs::Metadata) -> bool {
+    true
+}
+
+/// The connect file, which is not there when Kettu has not started since it was installed.
+fn read_connect(folder: &Path) -> Result<Target, String> {
+    let file = folder.join(CONNECT_FILE);
+    let meta = match fs::symlink_metadata(&file) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(NOT_RUNNING.into()),
+        Err(error) => return Err(format!("cannot read {}: {error}", file.display())),
+    };
+    if !meta.is_file() || meta.len() > CONNECT_LIMIT {
+        return Err(format!("{} is not Kettu's file", file.display()));
+    }
+    if !private_file(&meta) {
+        return Err(format!(
+            "{} can be read by others, so it is not used",
+            file.display()
+        ));
+    }
+    let text = fs::read_to_string(&file)
+        .map_err(|error| format!("cannot read {}: {error}", file.display()))?;
+    parse_connect(&text).ok_or_else(|| format!("{} is not Kettu's file", file.display()))
 }
 
 /// The port of a loopback `http://` URL; the token never goes anywhere else.
 fn loopback_port(url: &str) -> Result<u16, String> {
-    let rest = url.strip_prefix("http://").ok_or("KETTU_MCP_URL must be an http:// URL")?;
+    let rest = url
+        .strip_prefix("http://")
+        .ok_or("Kettu's URL must be an http:// URL")?;
     let authority = rest.split('/').next().unwrap_or("");
-    let (host, port) = authority.rsplit_once(':').ok_or("KETTU_MCP_URL has no port")?;
+    let (host, port) = authority
+        .rsplit_once(':')
+        .ok_or("Kettu's URL has no port")?;
     if !matches!(host, "127.0.0.1" | "localhost" | "[::1]") {
-        return Err("KETTU_MCP_URL must be on this computer".into());
+        return Err("Kettu's URL must be on this computer".into());
     }
-    port.parse::<u16>().map_err(|_| "KETTU_MCP_URL has no valid port".to_string())
+    port.parse::<u16>()
+        .map_err(|_| "Kettu's URL has no valid port".to_string())
 }
 
 /// Percent-encoding of everything but the unreserved characters, for a path or a header.
@@ -76,7 +182,9 @@ fn encode(text: &str) -> String {
 
 /// A header value without anything that could end the header.
 fn header_safe(text: &str) -> bool {
-    !text.bytes().any(|byte| byte == b'\r' || byte == b'\n' || byte == 0)
+    !text
+        .bytes()
+        .any(|byte| byte == b'\r' || byte == b'\n' || byte == 0)
 }
 
 /// Reads the answer's head a byte at a time, so nothing after it is taken from the stream.
@@ -85,10 +193,16 @@ fn read_head(stream: &mut TcpStream) -> io::Result<String> {
     let mut byte = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
         if head.len() >= HEAD_LIMIT {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "the answer's head is too long"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the answer's head is too long",
+            ));
         }
         if stream.read(&mut byte)? == 0 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Kettu closed the connection"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Kettu closed the connection",
+            ));
         }
         head.push(byte[0]);
     }
@@ -101,7 +215,9 @@ fn read_reason(stream: &mut TcpStream, head: &str) -> String {
         .lines()
         .find_map(|line| {
             let (name, value) = line.split_once(':')?;
-            name.trim().eq_ignore_ascii_case("content-length").then(|| value.trim().parse().ok())?
+            name.trim()
+                .eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse().ok())?
         })
         .unwrap_or(0usize)
         .min(BODY_LIMIT);
@@ -114,28 +230,44 @@ fn status_of(head: &str) -> Option<u16> {
     head.split_whitespace().nth(1)?.parse().ok()
 }
 
+/// Where to connect and with which token: a session's environment, else the connect file.
+fn target(args: &Args) -> Result<(Target, bool), String> {
+    match (env::var(URL_ENV), env::var(TOKEN_ENV)) {
+        (Ok(url), Ok(key)) => Ok((Target { url, key }, false)),
+        (Ok(_), Err(_)) => Err(format!(
+            "{TOKEN_ENV} is not set; Kettu starts this command with it"
+        )),
+        (Err(_), Ok(_)) => Err(format!(
+            "{URL_ENV} is not set; Kettu starts this command with it"
+        )),
+        (Err(_), Err(_)) => {
+            let folder = args
+                .data
+                .clone()
+                .or_else(default_data)
+                .ok_or("cannot tell where Kettu keeps its data; pass --data")?;
+            Ok((read_connect(&folder)?, true))
+        }
+    }
+}
+
 fn connect(args: &Args) -> Result<TcpStream, String> {
-    let url = env::var(URL_ENV).map_err(|_| {
-        format!("{URL_ENV} is not set; Kettu starts this command with it")
-    })?;
-    let token = env::var(TOKEN_ENV).map_err(|_| {
-        format!("{TOKEN_ENV} is not set; Kettu starts this command with it")
-    })?;
+    let (Target { url, key: token }, terminal) = target(args)?;
     let port = loopback_port(&url)?;
     if !header_safe(&token) || token.is_empty() {
-        return Err(format!("{TOKEN_ENV} is not a token"));
+        return Err("Kettu's key is not a token".into());
     }
     let address = SocketAddr::from(([127, 0, 0, 1], port));
     let mut stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).map_err(|error| {
         match error.kind() {
-            io::ErrorKind::ConnectionRefused | io::ErrorKind::TimedOut => {
-                "Kettu is not running; open Kettu, then reconnect this MCP server".to_string()
-            }
+            io::ErrorKind::ConnectionRefused | io::ErrorKind::TimedOut => NOT_RUNNING.to_string(),
             _ => format!("cannot reach Kettu: {error}"),
         }
     })?;
     let _ = stream.set_nodelay(true);
-    let cwd = env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
+    let cwd = env::current_dir()
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let mut request = format!(
         "GET /bridge/{} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: Upgrade\r\n\
          Upgrade: {UPGRADE}\r\nAuthorization: Bearer {token}\r\nKettu-Cwd: {}\r\n",
@@ -144,6 +276,9 @@ fn connect(args: &Args) -> Result<TcpStream, String> {
     );
     if let Some(agent) = &args.agent {
         request.push_str(&format!("Kettu-Agent: {}\r\n", encode(agent)));
+    }
+    if terminal && env::var_os(SESSION_ENV).is_some() {
+        request.push_str("Kettu-Session: 1\r\n");
     }
     request.push_str("\r\n");
     stream
@@ -155,11 +290,17 @@ fn connect(args: &Args) -> Result<TcpStream, String> {
         status => {
             let reason = read_reason(&mut stream, &head);
             let reason = if reason.is_empty() {
-                format!("status {}", status.map(|s| s.to_string()).unwrap_or_default())
+                format!(
+                    "status {}",
+                    status.map(|s| s.to_string()).unwrap_or_default()
+                )
             } else {
                 reason
             };
-            Err(format!("Kettu refused the connection to {}: {reason}", args.server))
+            Err(format!(
+                "Kettu refused the connection to {}: {reason}",
+                args.server
+            ))
         }
     }
 }
@@ -236,6 +377,12 @@ mod tests {
         let args = args.unwrap();
         assert_eq!(args.server, "github");
         assert_eq!(args.agent.as_deref(), Some("codex"));
+        assert!(args.data.is_none());
+        let args = parse(&strings(&["mcp", "connect", "a", "--data", "/tmp/k"]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(args.data.as_deref(), Some(Path::new("/tmp/k")));
+        assert!(parse(&strings(&["mcp", "connect", "a", "--data"])).is_err());
         assert!(parse(&strings(&["mcp", "list"])).is_err());
         assert!(parse(&strings(&["mcp", "connect"])).is_err());
         assert!(parse(&strings(&["mcp", "connect", "a", "b"])).is_err());
@@ -248,6 +395,52 @@ mod tests {
         assert!(loopback_port("http://example.com:4100").is_err());
         assert!(loopback_port("https://127.0.0.1:4100").is_err());
         assert!(loopback_port("http://127.0.0.1.example.com:80").is_err());
+    }
+
+    #[test]
+    fn reads_the_connect_file() {
+        let target = parse_connect("kettu-mcp-bridge 1\nurl=http://127.0.0.1:4100\nkey=abc\n");
+        let target = target.unwrap();
+        assert_eq!(target.url, "http://127.0.0.1:4100");
+        assert_eq!(target.key, "abc");
+        assert!(parse_connect("url=http://127.0.0.1:4100\nkey=abc\n").is_none());
+        assert!(parse_connect("kettu-mcp-bridge 1\nurl=http://127.0.0.1:4100\n").is_none());
+    }
+
+    fn folder(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!("kettu-bridge-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn says_kettu_is_not_running_without_the_file() {
+        let dir = folder("missing");
+        assert_eq!(read_connect(&dir).err().as_deref(), Some(NOT_RUNNING));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uses_the_file_only_when_others_cannot_read_it() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        let dir = folder("modes");
+        let file = dir.join(CONNECT_FILE);
+        fs::write(
+            &file,
+            "kettu-mcp-bridge 1\nurl=http://127.0.0.1:4100\nkey=abc\n",
+        )
+        .unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(read_connect(&dir).is_err());
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(read_connect(&dir).unwrap().key, "abc");
+        let other = folder("link");
+        symlink(&file, other.join(CONNECT_FILE)).unwrap();
+        assert!(read_connect(&other).is_err());
+        fs::remove_dir_all(dir).unwrap();
+        fs::remove_dir_all(other).unwrap();
     }
 
     #[test]

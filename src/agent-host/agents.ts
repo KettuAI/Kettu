@@ -1511,7 +1511,9 @@ export class AgentManager {
 
   /** The environment the agent's process starts in. */
   private startEnv(slot: Slot): Env {
-    const base = this.deps.env.agentEnv(slot.id)
+    // Tells the bridge of an entry Kettu wrote into the agent's own file that this is one of
+    // Kettu's sessions, which hands the server itself.
+    const base = { ...this.deps.env.agentEnv(slot.id), KETTU_MCP_SESSION: '1' }
     const launchEnv = this.deps.launchEnv?.(slot.id, base) ?? base
     return slot.added && slot.def.addedEnv ? { ...launchEnv, ...slot.def.addedEnv } : launchEnv
   }

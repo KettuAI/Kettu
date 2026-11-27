@@ -6,6 +6,7 @@ import { MARKET_NAME, type MarketServer } from '@shared/marketplace'
 import { mcpFingerprint } from '@shared/mcp-fingerprint'
 import { endpointOf, type OwnServer } from './servers'
 import { JsonFile, type LogFn } from '../storage'
+import { isBridgeSpec } from './mcp-terminal-files'
 import type {
   McpDiscovery,
   McpDiscoveryRow,
@@ -278,7 +279,10 @@ export class McpDiscoveryService {
     let learned = false
     const files = this.deps.files()
     await this.watchFiles(files)
-    const { configured, errors } = await readMcpConfigs(files)
+    const read = await readMcpConfigs(files)
+    // Kettu's own entries, written for an agent's terminal, are the library's already.
+    const configured = read.configured.filter(({ spec }) => !isBridgeSpec(spec))
+    const errors = read.errors
 
     const library = this.deps.library()
     const fingerprints = new Map<string, string[]>()

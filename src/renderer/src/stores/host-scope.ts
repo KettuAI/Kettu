@@ -194,6 +194,8 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
     case 'market.discoveryChanged':
       if (other.scope.useMarketplaceStore.getState().discovery)
         void other.scope.useMarketplaceStore.getState().loadDiscovery()
+      if (other.scope.useMarketplaceStore.getState().terminal)
+        void other.scope.useMarketplaceStore.getState().loadTerminal()
       break
     case 'market.mcpCheckChanged':
       other.scope.useMarketplaceStore.setState((state) => ({

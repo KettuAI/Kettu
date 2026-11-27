@@ -36,7 +36,15 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
-import { BRIDGE_PREFIX, BRIDGE_UPGRADE, McpRouter, type RouterCaller } from '../mcp-router/router'
+import {
+  BRIDGE_AGENT_HEADER,
+  BRIDGE_CWD_HEADER,
+  BRIDGE_PREFIX,
+  BRIDGE_SESSION_HEADER,
+  BRIDGE_UPGRADE,
+  McpRouter,
+  type RouterCaller,
+} from '../mcp-router/router'
 import type { Duplex } from 'node:stream'
 import type { McpToolGroup, McpToolSummary } from '@shared/agent-host'
 import type { MarketServer } from '@shared/marketplace'
@@ -310,7 +318,16 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   /** The skills behind the skill tools, which only an agent that loads no skill folders gets. */
   skills?: SkillToolsDeps
   /** The Marketplace's servers, each under a path of its own; without it none. */
-  router?: Pick<McpRouter, 'handle' | 'upgrade' | 'forget' | 'tools' | 'call'>
+  router?: Pick<McpRouter, 'handle' | 'upgrade' | 'upgradeEmpty' | 'forget' | 'tools' | 'call'>
+  /**
+   * The bridges started from agents' own files in a terminal: the key of the connect file, which
+   * reaches the library's servers over the bridge alone, never Kettu's own tools; and who such a
+   * bridge stands for, or null to answer it as a server with no tools.
+   */
+  terminal?: {
+    key(): string | null
+    caller(agent: string | null, cwd: string): RouterCaller | null
+  }
   /** The library's servers by id, for the gateway's calls to the ones behind it. */
   libraryServer?(serverId: string): MarketServer | null
 }
@@ -849,6 +866,15 @@ export class ArtifactService {
     return folder && folder !== caller.project ? { ...caller, folder } : caller
   }
 
+  /** Whether a bridge brings the connect file's key, compared without leaking it by timing. */
+  private isTerminalKey(header: string | undefined): boolean {
+    const key = this.deps.terminal?.key()
+    const match = /^Bearer ([A-Za-z0-9_-]{1,256})$/.exec(header ?? '')
+    if (!key || !match) return false
+    const given = createHash('sha256').update(match[1]!).digest()
+    return timingSafeEqual(given, createHash('sha256').update(key).digest())
+  }
+
   private grantOf(header: string | undefined): Grant | null {
     const match = /^Bearer ([A-Za-z0-9_-]{1,256})$/.exec(header ?? '')
     if (!match) return null
@@ -895,14 +921,35 @@ export class ArtifactService {
     const router = this.deps.router
     if (!router || !path.startsWith(BRIDGE_PREFIX)) return deny(404, 'Not found')
     if (req.headers.upgrade?.toLowerCase() !== BRIDGE_UPGRADE) return deny(404, 'Not found')
-    const caller = this.routerCaller(req.headers.authorization)
-    if (!caller) return deny(401, 'Kettu does not know this token; reconnect the server')
     let name: string
     try {
       name = decodeURIComponent(path.slice(BRIDGE_PREFIX.length))
     } catch {
       return deny(404, 'Not found')
     }
+    if (this.isTerminalKey(req.headers.authorization)) {
+      // A copy of an entry Kettu wrote, started inside one of Kettu's own sessions, which already
+      // has the server through its own token.
+      if (req.headers[BRIDGE_SESSION_HEADER] !== undefined) {
+        return router.upgradeEmpty(socket, head, name)
+      }
+      const header = (value: string | string[] | undefined): string | null => {
+        if (typeof value !== 'string') return null
+        try {
+          return decodeURIComponent(value)
+        } catch {
+          return null
+        }
+      }
+      const caller = this.deps.terminal!.caller(
+        header(req.headers[BRIDGE_AGENT_HEADER]),
+        header(req.headers[BRIDGE_CWD_HEADER]) ?? '',
+      )
+      if (!caller) return router.upgradeEmpty(socket, head, name)
+      return router.upgrade(socket, head, caller, name)
+    }
+    const caller = this.routerCaller(req.headers.authorization)
+    if (!caller) return deny(401, 'Kettu does not know this token; reconnect the server')
     router.upgrade(socket, head, caller, name)
   }
 

@@ -24,9 +24,9 @@ import {
 import { DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup } from '@renderer/components/ui/radio-group'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { Choice } from './agents-section'
 import { FindField, IconAction, SetButton, Skel } from './controls'
 import {
+  Choice,
   DIALOG_MONO_FIELD,
   SettingsDialogBody,
   SettingsDialogFooter,

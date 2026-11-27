@@ -13,6 +13,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import type { AgentId } from '@shared/agents'
 import { runOf, type MarketServer } from '@shared/marketplace'
 import {
   MCP_STDERR_BYTES,
@@ -51,6 +52,8 @@ export const BRIDGE_PREFIX = '/bridge/'
 export const BRIDGE_UPGRADE = 'kettu-mcp'
 export const BRIDGE_CWD_HEADER = 'kettu-cwd'
 export const BRIDGE_AGENT_HEADER = 'kettu-agent'
+/** Sent by a bridge started inside one of Kettu's own sessions from an entry in the agent's file. */
+export const BRIDGE_SESSION_HEADER = 'kettu-session'
 
 const BODY_BYTES = 16 * 1024 * 1024
 /** HTTP sessions one caller may hold open to one server; an older one closes for a new one. */
@@ -79,6 +82,8 @@ export interface RouterCaller {
   servers: ReadonlySet<string>
   /** For a token a folder's sessions share: those sessions, else absent. */
   sessions?: ReadonlySet<string>
+  /** A bridge started from an agent's own file in a terminal, with no session behind it. */
+  terminal?: { agentId: AgentId | null }
 }
 
 /** A call through the router, for its record, with who made it. */
@@ -87,6 +92,8 @@ export interface RouterCall {
   /** The session it came from, when the caller's token tells one. */
   sessionId: string | null
   outcome: CallOutcome
+  /** For a call from a terminal: the agent the bridge named and the folder it ran in. */
+  terminal?: { agentId: AgentId | null; folder: string }
 }
 
 /** What a command server runs, its keys filled in. */
@@ -204,6 +211,8 @@ export class McpRouter {
   private sdk: Promise<Sdk> | null = null
   private readonly instances = new Map<string, Instance>()
   private readonly links = new Set<Linked>()
+  /** The connections answered as servers with no tools, closed with the router. */
+  private readonly empties = new Set<Duplex>()
   private readonly sessions = new Map<string, HttpSession>()
   private readonly stateless = new Map<string, { transport: StatelessTransport; link: Link }>()
   private readonly clients = new Map<string, Promise<Client>>()
@@ -363,18 +372,70 @@ export class McpRouter {
     return made
   }
 
-  /** The bridge's upgrade, its token already checked: lines of JSON-RPC from here on. */
+  /**
+   * The bridge's upgrade, its token already checked: lines of JSON-RPC from here on. A terminal's
+   * bridge for a server its agent or folder does not get answers as a server with no tools, as an
+   * entry left in a file after its takeover was turned off does.
+   */
   upgrade(socket: Duplex, head: Buffer, caller: RouterCaller, name: string): void {
     const server = this.deps.servers().find((item) => item.name === name && item.on)
+    if (!server && caller.terminal) return this.upgradeEmpty(socket, head, name)
     if (!server) return refuseUpgrade(socket, 404, `Kettu has no MCP server named ${name}`)
     if (!caller.servers.has(server.id)) {
+      if (caller.terminal) return this.upgradeEmpty(socket, head, name)
       return refuseUpgrade(socket, 403, `${name} was not given to this session`)
     }
+    if (caller.terminal) socket.once('close', () => this.forget(caller.key))
     socket.write(
       `HTTP/1.1 101 Switching Protocols\r\nUpgrade: ${BRIDGE_UPGRADE}\r\nConnection: Upgrade\r\n\r\n`,
     )
     const transport = new LineTransport(socket)
     this.link(server, caller, transport)
+    void transport.start()
+    transport.push(head)
+  }
+
+  /** A server with no tools, resources or prompts, which never fails the client's start. */
+  upgradeEmpty(socket: Duplex, head: Buffer, name: string): void {
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nUpgrade: ${BRIDGE_UPGRADE}\r\nConnection: Upgrade\r\n\r\n`,
+    )
+    this.empties.add(socket)
+    socket.once('close', () => this.empties.delete(socket))
+    const transport = new LineTransport(socket)
+    transport.onmessage = (received) => {
+      const message = received as Message
+      if (!isRequest(message)) return
+      const answer = (result: Record<string, unknown>) =>
+        void transport.send({ jsonrpc: '2.0', id: message.id, result } as never)
+      switch (message.method) {
+        case 'initialize': {
+          const asked = (message.params as { protocolVersion?: unknown } | undefined)
+            ?.protocolVersion
+          return answer({
+            protocolVersion: typeof asked === 'string' ? asked : MODERN_VERSION,
+            capabilities: { tools: {}, resources: {}, prompts: {} },
+            serverInfo: { name, version: this.deps.appVersion },
+          })
+        }
+        case 'tools/list':
+          return answer({ tools: [] })
+        case 'resources/list':
+          return answer({ resources: [] })
+        case 'resources/templates/list':
+          return answer({ resourceTemplates: [] })
+        case 'prompts/list':
+          return answer({ prompts: [] })
+        case 'ping':
+          return answer({})
+        default:
+          void transport.send({
+            jsonrpc: '2.0',
+            id: message.id,
+            error: { code: -32601, message: `${message.method} is not offered here` },
+          } as never)
+      }
+    }
     void transport.start()
     transport.push(head)
   }
@@ -413,7 +474,15 @@ export class McpRouter {
         this.holds(serverId) ? (this.deps.tools?.change(serverId, tool) ?? null) : null,
       heldCall: (name) =>
         this.holds(serverId) ? (this.deps.tools?.changeByName(serverId, name) ?? null) : null,
-      called: (outcome) => this.deps.called?.({ serverId, sessionId: sessionOf(caller), outcome }),
+      called: (outcome) =>
+        this.deps.called?.({
+          serverId,
+          sessionId: sessionOf(caller),
+          outcome,
+          ...(caller.terminal
+            ? { terminal: { agentId: caller.terminal.agentId, folder: caller.folder } }
+            : {}),
+        }),
     }
   }
 
@@ -773,6 +842,8 @@ export class McpRouter {
   async close(): Promise<void> {
     this.closing = true
     for (const linked of [...this.links]) linked.link.close()
+    for (const socket of this.empties) socket.destroy()
+    this.empties.clear()
     await Promise.all([...this.instances.values()].map((instance) => instance.stop('removed')))
     this.instances.clear()
     await this.deps.answers.flush()

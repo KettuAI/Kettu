@@ -29,6 +29,7 @@ import {
 } from './hooks'
 import { keptItemKey, type Listing } from './model'
 import { McpFileErrors, McpImportDialog } from './mcp-review'
+import { TerminalGroup } from './mcp-terminal'
 import { McpToolChangesDialog, McpToolChangesTag } from './mcp-tool-changes'
 import { ItemRow, QuietNote, SkeletonRows } from './rows'
 import { serverSubject } from './tile-art'
@@ -392,6 +393,7 @@ export function McpLibrary({ query, showSections }: { query: string; showSection
             )}
             {discovery && <McpFileErrors errors={discovery.errors} />}
           </section>
+          <TerminalGroup />
         </>
       )}
       {target && discovery && (
