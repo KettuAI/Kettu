@@ -411,6 +411,8 @@ export function ContextButton({
   const { t } = useTranslation('composer')
   const limitView = useLimitView()
   const [open, setOpen] = useState(false)
+  // The review dialog lives outside the popover, which would otherwise stack over it.
+  const [reviewing, setReviewing] = useState<SessionMcpServer | null>(null)
   // The tray names a limit only from 70% on; below that it stays in the popover.
   const nearest = warningLimit(holding)
   const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
@@ -452,99 +454,121 @@ export function ContextButton({
     }
   }
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label={
-              usage
-                ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', { percent })
-                : t('usage.title')
-            }
-            title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
-            className="ui-as-tray-link kettu-tray-link--meter"
-          />
-        }
-      >
-        {warning && (
-          <span
-            key={`${warning.window}-${warning.usedPercent}`}
-            className="kettu-tray-limit"
-            data-level={LIMIT_METER[limitLevel(warning)]}
-          >
-            {limitShort(warning)}{' '}
-            {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
-          </span>
-        )}
-        {usage && (
-          <>
-            <MeterRing share={share} level={METER[tone]} />
-            <span className="tabular kettu-tray-meter__percent">
-              {read?.error && '≈'}
-              <Trans
-                t={t}
-                i18nKey="usage.contextShort"
-                values={{ percent }}
-                components={{ word: <span className="kettu-tray-meter__word" /> }}
-              />
-            </span>
-          </>
-        )}
-      </PopoverTrigger>
-      {/* A long list scrolls above the tray rather than flipping the card beside it. */}
-      <PopoverContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        collisionAvoidance={{ fallbackAxisSide: 'none' }}
-        className="kettu-pop max-h-(--available-height) w-80 overflow-y-auto"
-      >
-        <div className="kettu-ctx">
-          {shown && (
-            <ContextPart
-              sessionId={sessionId}
-              agentId={agentId}
-              usage={shown}
-              idle={idle}
-              reports={reports}
-              live={live}
-              report={read}
-              managed={pushed !== undefined && direct}
-              model={model}
-              subagent={subagent}
-            />
-          )}
-          {showEstimates && (
-            <ContextEstimatePart
-              key={`${sessionId}/${agentId}`}
-              sessionId={sessionId}
-              closed={closed}
-              agentName={agentName}
-            />
-          )}
-          <UsageLines sessionId={sessionId} usage={shown} />
-          <McpServersPart sessionId={sessionId} idle={idle} onLeave={() => setOpen(false)} />
-          {readsModelRequests(agentId) && (
+    <>
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger
+          render={
             <button
               type="button"
-              className="kettu-ctx__link"
-              onClick={() => {
-                setOpen(false)
-                toggleSidePane(sessionId, 'requests', true)
-              }}
+              aria-label={
+                usage
+                  ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', {
+                      percent,
+                    })
+                  : t('usage.title')
+              }
+              title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
+              className="ui-as-tray-link kettu-tray-link--meter"
+            />
+          }
+        >
+          {warning && (
+            <span
+              key={`${warning.window}-${warning.usedPercent}`}
+              className="kettu-tray-limit"
+              data-level={LIMIT_METER[limitLevel(warning)]}
             >
-              <span className="kettu-ctx__link-name">
-                <Glyph icon={REQUESTS_ICON} size={14} />
-                {t('usage.everyRequest')}
-              </span>
-              <Glyph icon={ArrowRight01Icon} size={13} />
-            </button>
+              {limitShort(warning)}{' '}
+              {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
+            </span>
           )}
-          {subscribed && <PlanLimits limits={limits} holding={holding} account={account} />}
-        </div>
-      </PopoverContent>
-    </Popover>
+          {usage && (
+            <>
+              <MeterRing share={share} level={METER[tone]} />
+              <span className="tabular kettu-tray-meter__percent">
+                {read?.error && '≈'}
+                <Trans
+                  t={t}
+                  i18nKey="usage.contextShort"
+                  values={{ percent }}
+                  components={{ word: <span className="kettu-tray-meter__word" /> }}
+                />
+              </span>
+            </>
+          )}
+        </PopoverTrigger>
+        {/* A long list scrolls above the tray rather than flipping the card beside it. */}
+        <PopoverContent
+          side="top"
+          align="end"
+          sideOffset={8}
+          collisionAvoidance={{ fallbackAxisSide: 'none' }}
+          className="kettu-pop max-h-(--available-height) w-80 overflow-y-auto"
+        >
+          <div className="kettu-ctx">
+            {shown && (
+              <ContextPart
+                sessionId={sessionId}
+                agentId={agentId}
+                usage={shown}
+                idle={idle}
+                reports={reports}
+                live={live}
+                report={read}
+                managed={pushed !== undefined && direct}
+                model={model}
+                subagent={subagent}
+              />
+            )}
+            {showEstimates && (
+              <ContextEstimatePart
+                key={`${sessionId}/${agentId}`}
+                sessionId={sessionId}
+                closed={closed}
+                agentName={agentName}
+              />
+            )}
+            <UsageLines sessionId={sessionId} usage={shown} />
+            <McpServersPart
+              sessionId={sessionId}
+              idle={idle}
+              onLeave={() => setOpen(false)}
+              review={(server) => {
+                setOpen(false)
+                setReviewing(server)
+              }}
+            />
+            {readsModelRequests(agentId) && (
+              <button
+                type="button"
+                className="kettu-ctx__link"
+                onClick={() => {
+                  setOpen(false)
+                  toggleSidePane(sessionId, 'requests', true)
+                }}
+              >
+                <span className="kettu-ctx__link-name">
+                  <Glyph icon={REQUESTS_ICON} size={14} />
+                  {t('usage.everyRequest')}
+                </span>
+                <Glyph icon={ArrowRight01Icon} size={13} />
+              </button>
+            )}
+            {subscribed && <PlanLimits limits={limits} holding={holding} account={account} />}
+          </div>
+        </PopoverContent>
+      </Popover>
+      {reviewing && (
+        <McpToolChangesDialog
+          server={{ id: reviewing.serverId, title: reviewing.title }}
+          changes={reviewing.changes ?? null}
+          open
+          onOpenChange={(next) => {
+            if (!next) setReviewing(null)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -558,10 +582,12 @@ function McpServersPart({
   sessionId,
   idle,
   onLeave,
+  review,
 }: {
   sessionId: string
   idle: boolean
   onLeave: () => void
+  review: (server: SessionMcpServer) => void
 }) {
   const { t } = useTranslation('composer')
   const changed = useThreadsStore(
@@ -627,7 +653,7 @@ function McpServersPart({
               server={server}
               act={(action) => act(server, action)}
               open={() => page(server)}
-              reviewed={read}
+              review={() => review(server)}
             />
           ))}
         </ul>
@@ -678,15 +704,14 @@ function McpServerRow({
   server,
   act,
   open,
-  reviewed,
+  review,
 }: {
   server: SessionMcpServer
   act: (action: 'reconnect' | 'off' | 'on') => void
   open: () => void
-  reviewed: () => void
+  review: () => void
 }) {
   const { t } = useTranslation('composer')
-  const [reviewing, setReviewing] = useState(false)
   const { state } = server
   // A server of the folder has no server page, so its held changes are reviewed from here.
   const held =
@@ -722,11 +747,16 @@ function McpServerRow({
           {server.project && (
             <span className="kettu-ctx__mcp-project">{t('usage.mcp.project')}</span>
           )}
-          {held && <McpToolChangesTag changes={held} />}
         </span>
-        <span className="kettu-ctx__mcp-facts" data-tone={tone} title={facts}>
-          {facts}
-        </span>
+        {held ? (
+          <span className="kettu-ctx__mcp-held" title={facts}>
+            <McpToolChangesTag changes={held} />
+          </span>
+        ) : (
+          <span className="kettu-ctx__mcp-facts" data-tone={tone} title={facts}>
+            {facts}
+          </span>
+        )}
       </span>
       {!server.off && server.tokens !== null && (
         <span className="kettu-ctx__mcp-tokens">
@@ -738,7 +768,7 @@ function McpServerRow({
           {t('usage.mcp.turnOn')}
         </button>
       ) : held ? (
-        <button type="button" className="kettu-ctx__mcp-act" onClick={() => setReviewing(true)}>
+        <button type="button" className="kettu-ctx__mcp-act" onClick={review}>
           {t('usage.mcp.review')}
         </button>
       ) : state.state === 'needs-sign-in' && !server.project ? (
@@ -770,17 +800,6 @@ function McpServerRow({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-      )}
-      {server.project && (
-        <McpToolChangesDialog
-          server={{ id: server.serverId, title: server.title }}
-          changes={server.changes ?? null}
-          open={reviewing}
-          onOpenChange={(next) => {
-            setReviewing(next)
-            if (!next) reviewed()
-          }}
-        />
       )}
     </li>
   )
