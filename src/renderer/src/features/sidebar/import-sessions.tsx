@@ -44,10 +44,10 @@ import { useCacheLeft } from '@renderer/features/prompt-cache/cache-phase'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { basename } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
-import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useProjectsStore } from '@renderer/stores/projects'
+import { agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { activeProjects, useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import {
@@ -89,30 +89,31 @@ export function ImportSessionsDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
+  const hostId = hostOfPath(project.path)
   const agents = useAgentsStore(
-    useShallow((s) =>
-      usableAgents(s.order, s.byId).filter(
+    useShallow((s) => {
+      const { order, byId } = agentsOn(s, hostId)
+      return usableAgents(order, byId).filter(
         (a) => !a.disabled && a.capabilities.listSessions && readiness(a).kind !== 'missing',
-      ),
-    ),
+      )
+    }),
   )
   const storedProjects = useProjectsStore(
-    useShallow((s) => s.projects.filter((p) => hostOfPath(p.path) === null && !p.missing)),
+    useShallow((s) =>
+      activeProjects(s.projects).filter((p) => hostOfPath(p.path) === hostId && !p.missing),
+    ),
   )
-  const localProjects = useMemo(
+  const hostProjects = useMemo(
     () =>
       storedProjects.some((p) => p.path === project.path)
         ? storedProjects
         : [project, ...storedProjects],
     [storedProjects, project],
   )
-  const projectHints = useMemo(
-    () => projectNameHints(localProjects.map((p) => p.path)),
-    [localProjects],
-  )
+  const projectHints = useMemo(() => projectNameHints(hostProjects), [hostProjects])
   const projectNames = useMemo(
-    () => new Map(localProjects.map((p) => [p.path, p.name])),
-    [localProjects],
+    () => new Map(hostProjects.map((p) => [p.path, p.name])),
+    [hostProjects],
   )
 
   const agentIds = agents.map((a) => a.id)
@@ -134,7 +135,7 @@ export function ImportSessionsDialog({
   // initializing while the dialog is open load right away instead of staying on skeletons.
   const requestedProject = useRef<Set<AgentId>>(new Set())
 
-  const targetProject = localProjects.find((p) => p.path === targetPath) ?? project
+  const targetProject = hostProjects.find((p) => p.path === targetPath) ?? project
 
   // Requests only: the loading marker is set by whoever starts a load, never inside an effect.
   const request = (
@@ -217,10 +218,11 @@ export function ImportSessionsDialog({
     request(agentId, scope, targetProject.path, cursor)
   }
 
-  // Each opening starts over, with the agents that can list sessions at that moment.
-  const [shownOpen, setShownOpen] = useState(false)
-  if (open !== shownOpen) {
-    setShownOpen(open)
+  // Each opening (or switching to another project) starts over with that host's ready agents.
+  const openKey = open ? project.path : null
+  const [shownKey, setShownKey] = useState<string | null>(null)
+  if (openKey !== shownKey) {
+    setShownKey(openKey)
     if (open) {
       setTargetPath(project.path)
       setScopedLists(emptyScopedLists())
@@ -245,9 +247,9 @@ export function ImportSessionsDialog({
       requestedProject.current.add(agent.id)
       request(agent.id, 'project', project.path)
     }
-    // Reset only when the dialog opens or closes; late-ready agents are picked up below.
+    // Reset only when the dialog opens, closes, or switches projects; late-ready agents are picked up below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [openKey])
 
   useEffect(() => {
     if (!open) return
@@ -370,7 +372,7 @@ export function ImportSessionsDialog({
   }
 
   const projectLabel = (folderPath: string): string =>
-    projectNames.get(folderPath) ?? basename(folderPath)
+    projectNames.get(folderPath) ?? basename(hostPath(folderPath))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -383,7 +385,7 @@ export function ImportSessionsDialog({
             <DialogTitle>{t('import.title', { project: targetProject.name })}</DialogTitle>
             <DialogDescription>{t('import.description')}</DialogDescription>
           </div>
-          {localProjects.length > 1 && (
+          {hostProjects.length > 1 && (
             <div className="flex shrink-0 items-center gap-2 phone:w-full">
               <span className="text-meta text-tertiary">{t('import.targetLabel')}</span>
               <Select value={targetProject.path} onValueChange={changeTarget} disabled={running}>
@@ -402,10 +404,10 @@ export function ImportSessionsDialog({
                 </SelectTrigger>
                 <SelectContent align="end" className="max-w-[280px]">
                   <SelectGroup>
-                    {localProjects.map((p) => {
+                    {hostProjects.map((p) => {
                       const hint = projectHints.get(p.path)
                       return (
-                        <SelectItem key={p.path} value={p.path} title={p.path}>
+                        <SelectItem key={p.path} value={p.path} title={hostPath(p.path)}>
                           <HugeiconsIcon
                             icon={Folder01Icon}
                             strokeWidth={1.9}
@@ -771,7 +773,8 @@ function SessionList({
             {sessions.map((s) => {
               const key = importKey(agentId, s.acpSessionId)
               const showCwd =
-                Boolean(s.cwd) && (scope === 'all' || !sameFolder(s.cwd, targetProjectPath))
+                Boolean(s.cwd) &&
+                (scope === 'all' || !sameFolder(s.cwd, hostPath(targetProjectPath)))
               return (
                 <li key={s.acpSessionId}>
                   <SessionRow

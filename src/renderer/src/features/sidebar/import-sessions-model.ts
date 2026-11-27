@@ -1,6 +1,7 @@
 import type { ImportableSession } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { monthDay } from '@renderer/lib/format'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 
 /** Whether the dialog shows sessions matching the target project folder or every folder. */
@@ -56,10 +57,10 @@ function folderKey(value: string): string {
   return trimmed
 }
 
-/** Whether two folder paths refer to the same directory. */
+/** Whether two folder paths refer to the same directory on the same host. */
 export function sameFolder(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false
-  return folderKey(a) === folderKey(b)
+  return hostOfPath(a) === hostOfPath(b) && folderKey(hostPath(a)) === folderKey(hostPath(b))
 }
 
 /** Shortens POSIX home prefixes for compact display while keeping the path recognizable. */

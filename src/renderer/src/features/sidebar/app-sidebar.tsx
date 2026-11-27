@@ -522,11 +522,7 @@ function ProjectGroup({
   const folderLabel = folderSummary ? folderStatusText(t, folderSummary.counts) : undefined
   if (!project && tree.length === 0) return null
   const limited = limitRows(rows, allShown, (row) => rowInSight(row, shownId))
-  // Importing reads the agents' own lists, which only this computer's do.
   const local = hostId === null
-  // A host that cannot pin a group leaves its pin out; a project can always be removed.
-  const canPin = project ? project.pinnedAt !== undefined : noProject !== undefined
-  const hasMenu = local || !!project || canPin
 
   const toggle = () => toggleGroup(key)
   const groupStop = stop?.kind === 'group' && stop.key === key
@@ -551,7 +547,7 @@ function ProjectGroup({
         // A row being dragged from the keyboard moves with the arrows instead.
         if (event.defaultPrevented) return
         // The context menu key opens the More menu, the row's menu for the keyboard.
-        if (hasMenu && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
           event.preventDefault()
           setMoreOpen(true)
         } else if (event.key === 'ArrowRight' && !open) toggle()
@@ -629,7 +625,7 @@ function ProjectGroup({
       toast(errorMessage(error), undefined, { tone: 'warning' })
     }
   }
-  const menuItems = !hasMenu ? null : project ? (
+  const menuItems = project ? (
     <ProjectMenuItems
       project={project}
       away={away}
@@ -641,9 +637,9 @@ function ProjectGroup({
     />
   ) : (
     <NoProjectMenuItems
-      local={local}
+      hostId={hostId}
       pinned={noProject ? noProject.pinnedAt !== null : undefined}
-      pinDisabled={away}
+      away={away}
       onPin={pin}
     />
   )
@@ -651,40 +647,31 @@ function ProjectGroup({
   return (
     <>
       <div className="ui-as-chat-folder-row" data-menu={moreOpen || menuOpen || undefined}>
-        {hasMenu ? (
-          <ContextMenu onOpenChange={setMenuOpen}>
-            {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
-            <Tooltip>
-              <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
-              {tooltip}
-            </Tooltip>
-            <ContextMenuContent>{menuItems}</ContextMenuContent>
-          </ContextMenu>
-        ) : (
+        <ContextMenu onOpenChange={setMenuOpen}>
+          {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
           <Tooltip>
-            <TooltipTrigger render={row} delay={700} />
+            <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
             {tooltip}
           </Tooltip>
-        )}
+          <ContextMenuContent>{menuItems}</ContextMenuContent>
+        </ContextMenu>
         <span className="ui-as-chat-row__tools">
-          {hasMenu && (
-            <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    aria-label={t('row.moreFor', { title: name })}
-                    title={t('row.more')}
-                    className="ui-as-chat-row__tool"
-                  />
-                }
-              >
-                <Glyph icon={MoreHorizontalIcon} size={15} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={t('row.moreFor', { title: name })}
+                  title={t('row.more')}
+                  className="ui-as-chat-row__tool"
+                />
+              }
+            >
+              <Glyph icon={MoreHorizontalIcon} size={15} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
+          </DropdownMenu>
           {canStart && (
             <button
               type="button"

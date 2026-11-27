@@ -72,6 +72,7 @@ function SettingsForm({
   const id = useId()
   const [loaded, setLoaded] = useState<ProjectWorktreeSettings | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [unsupported, setUnsupported] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [template, setTemplate] = useState('')
   const [copy, setCopy] = useState('')
@@ -88,13 +89,23 @@ function SettingsForm({
     host('projects.worktreeSettings', { path: projectPath }).then(
       (settings) => {
         if (!live) return
+        setUnsupported(false)
         setLoaded(settings)
         setTemplate(settings.branchTemplate)
         setCopy(settings.copy.join('\n'))
         setSetup(settings.setup ?? '')
         setWait(settings.waitForSetup)
       },
-      (failure: unknown) => live && setLoadError(errorMessage(failure)),
+      (failure: unknown) => {
+        if (!live) return
+        if (errorCode(failure) === 'unknown_method') {
+          setUnsupported(true)
+          setLoadError(null)
+          return
+        }
+        setUnsupported(false)
+        setLoadError(errorMessage(failure))
+      },
     )
     return () => {
       live = false
@@ -162,22 +173,31 @@ function SettingsForm({
         </DialogDescription>
       </DialogHeader>
       <div className="flex min-h-0 flex-col px-5.5 pt-1.5">
-        {loadError !== null ? (
+        {unsupported || loadError !== null ? (
           <div className="mt-3 flex items-start gap-3">
-            <p role="alert" className="flex-1 text-small leading-normal text-danger">
-              {loadError}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="compact"
-              onClick={() => {
-                setLoadError(null)
-                setAttempt((n) => n + 1)
-              }}
+            <p
+              role="alert"
+              className={
+                unsupported
+                  ? 'flex-1 text-small leading-normal text-secondary'
+                  : 'flex-1 text-small leading-normal text-danger'
+              }
             >
-              {t('common:actions.retry')}
-            </Button>
+              {unsupported ? t('worktreeSettings.unsupported') : loadError}
+            </p>
+            {!unsupported && (
+              <Button
+                type="button"
+                variant="outline"
+                size="compact"
+                onClick={() => {
+                  setLoadError(null)
+                  setAttempt((n) => n + 1)
+                }}
+              >
+                {t('common:actions.retry')}
+              </Button>
+            )}
           </div>
         ) : loaded === null ? (
           <div aria-busy className="flex flex-col gap-2.5 py-3">
