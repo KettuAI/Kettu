@@ -27,6 +27,7 @@ import { IconAction, SetButton, SettingSwitch } from '@renderer/features/setting
 import { bytes } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { installServer, updateCommunityServer, type AgentChoice } from './actions'
 import { useInstalling } from './hooks'
@@ -183,6 +184,7 @@ function BundleForm({
   onDone: (agents: AgentChoice, values: Record<string, string>) => void
 }) {
   const { t } = useTranslation('marketplace')
+  const fieldLabels = useTextFieldLabels()
   const { hostId, api } = useHostScope()
   const [agents, setAgents] = useState<AgentChoice>('all')
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -285,6 +287,7 @@ function BundleForm({
             <TextField
               size="sm"
               type={input.secret ? 'password' : input.type === 'number' ? 'number' : 'text'}
+              labels={fieldLabels}
               autoFocus={i === 0}
               autoComplete="off"
               spellCheck={false}

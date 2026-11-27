@@ -1,13 +1,16 @@
 {
   "actions": {
     "cancel": "Cancel",
+    "clear": "Clear",
     "close": "Close",
     "copy": "Copy",
     "copyCommand": "Copy command",
     "copied": "Copied",
     "dismiss": "Dismiss",
     "done": "Done",
-    "retry": "Retry"
+    "hidePassword": "Hide password",
+    "retry": "Retry",
+    "showPassword": "Show password"
   },
   "untitledSession": "Untitled session",
   "loading": "Loading",

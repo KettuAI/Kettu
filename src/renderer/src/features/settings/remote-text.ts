@@ -14,9 +14,11 @@ const DAY = 24 * 60 * 60 * 1000
 
 type Device = Pick<PairedDevice, 'kind' | 'model' | 'platform'>
 
-/** "iOS app", "Desktop app": what a device runs Kettu in. */
+/** "iOS app", "Android app", "Desktop app": what a device runs Kettu in. */
 export function kindLabel(t: TFunction<'settings'>, kind: string): string {
-  if (kind === 'ios' || kind === 'desktop' || kind === 'web') return t(`remote.kinds.${kind}`)
+  if (kind === 'ios' || kind === 'android' || kind === 'desktop' || kind === 'web') {
+    return t(`remote.kinds.${kind}`)
+  }
   return kind
 }
 

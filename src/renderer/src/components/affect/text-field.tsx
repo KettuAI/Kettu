@@ -10,6 +10,24 @@ import { useEffect, useId, useRef, useState, type ComponentPropsWithRef, type Re
  * firms up the edge – no ring. The styles are injected below, so no extra files are needed.
  */
 
+export type TextFieldLabels = {
+  clear: string;
+  showPassword: string;
+  hidePassword: string;
+  copy: string;
+  copied: string;
+  optional: string;
+};
+
+const defaultTextFieldLabels: TextFieldLabels = {
+  clear: "Clear",
+  showPassword: "Show password",
+  hidePassword: "Hide password",
+  copy: "Copy",
+  copied: "Copied",
+  optional: "Optional",
+};
+
 export type TextFieldProps = Omit<ComponentPropsWithRef<"input">, "size" | "prefix"> & {
   /** Shown above the field and tied to it */
   label?: ReactNode;
@@ -35,6 +53,8 @@ export type TextFieldProps = Omit<ComponentPropsWithRef<"input">, "size" | "pref
   onClear?: () => void;
   /** Extra class on the input itself; className goes on the wrapper */
   inputClassName?: string;
+  /** Words the field's buttons say to screen readers, for translation */
+  labels?: Partial<TextFieldLabels>;
 };
 
 export function TextField({
@@ -52,6 +72,7 @@ export function TextField({
   onKeyDown,
   className,
   inputClassName,
+  labels: ownLabels,
   id,
   type = "text",
   value,
@@ -64,6 +85,7 @@ export function TextField({
   "aria-describedby": describedBy,
   ...rest
 }: TextFieldProps) {
+  const labels = { ...defaultTextFieldLabels, ...ownLabels };
   const autoId = useId();
   const inputId = id ?? `${autoId}-input`;
   const messageId = `${autoId}-message`;
@@ -139,7 +161,7 @@ export function TextField({
           <label className="ui-tfc__label" htmlFor={inputId}>
             {label}
           </label>
-          {optional && <span className="ui-tfc__optional">Optional</span>}
+          {optional && <span className="ui-tfc__optional">{labels.optional}</span>}
         </div>
       )}
       {/* A click anywhere on the box – the prefix, the padding – puts the caret in the input */}
@@ -192,7 +214,7 @@ export function TextField({
         />
         {suffix != null && <span className="ui-tfc__affix" data-side="end">{suffix}</span>}
         {showClear && (
-          <button type="button" className="ui-tfc__action" aria-label="Clear" tabIndex={-1} onClick={clear}>
+          <button type="button" className="ui-tfc__action" aria-label={labels.clear} tabIndex={-1} onClick={clear}>
             <ClearIcon />
           </button>
         )}
@@ -200,7 +222,7 @@ export function TextField({
           <button
             type="button"
             className="ui-tfc__action"
-            aria-label={revealed ? "Hide password" : "Show password"}
+            aria-label={revealed ? labels.hidePassword : labels.showPassword}
             aria-pressed={revealed}
             onClick={() => setRevealed((r) => !r)}
           >
@@ -214,7 +236,7 @@ export function TextField({
             type="button"
             className="ui-tfc__action"
             data-copied={copied || undefined}
-            aria-label={copied ? "Copied" : "Copy"}
+            aria-label={copied ? labels.copied : labels.copy}
             onClick={copy}
             disabled={disabled || !text}
           >
@@ -225,7 +247,7 @@ export function TextField({
         )}
         {copyable && (
           <span className="ui-tfc__sr" role="status">
-            {copied ? "Copied" : ""}
+            {copied ? labels.copied : ""}
           </span>
         )}
       </div>

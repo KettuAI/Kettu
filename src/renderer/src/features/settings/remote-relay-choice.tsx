@@ -22,6 +22,7 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { TextField } from '@renderer/components/affect/text-field'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
+import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { CONFIRM, ControlError, Segmented, SetButton } from './controls'
 import { RelayRegions, RetryRelay } from './remote-relay'
@@ -375,6 +376,7 @@ function OwnRelayForm({
   onDone: () => void
 }) {
   const { t } = useTranslation('settings')
+  const fieldLabels = useTextFieldLabels()
   const { api, useSettingsStore } = useHostScope()
   const saved = useSettingsStore((s) => s.settings.remote.ownRelay)
   const keptEnd = useKeptKeyEnd()
@@ -473,6 +475,7 @@ function OwnRelayForm({
         label={t('remote.relay.own.key')}
         inputClassName="k-mono"
         type="password"
+        labels={fieldLabels}
         value={key}
         placeholder={keepsKey ? `krk_••••${keptEnd}` : 'krk_…'}
         spellCheck={false}

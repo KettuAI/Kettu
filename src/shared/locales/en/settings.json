@@ -1341,8 +1341,8 @@
     "archived": "Off the sidebar but kept. Restore a project or session to put it back where it was.",
     "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
     "sharing": "Publish artifacts to links, on Kettu or through your own Cloudflare account; choose who can open a page on Kettu.",
-    "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
-    "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
+    "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad, an Android phone or another computer.",
+    "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad, an Android phone or another computer.",
     "browser": "Sign-ins, how links from agents open, and the sites they may use.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu uses what is already on your computer, and installs a copy only when there is none.",
@@ -1929,7 +1929,7 @@
     }
   },
   "remote": {
-    "keywords": "remote access phone iphone ipad tablet device devices pair pairing qr code scan connect",
+    "keywords": "remote access phone iphone ipad android tablet device devices pair pairing qr code scan connect",
     "switch": "Remote access",
     "status": {
       "on": "On",
@@ -1966,7 +1966,7 @@
     "devices": {
       "group": "Devices",
       "emptyTitle": "No devices yet",
-      "emptyHint": "Scan the code with Kettu on an iPhone or iPad, or paste the link in Settings › Hosts › Add host… in Kettu on another computer.",
+      "emptyHint": "Scan the code with Kettu on an iPhone, an iPad or an Android phone, or paste the link in Settings › Hosts › Add host… in Kettu on another computer.",
       "add": "Add device…",
       "addOff": "Turn on remote access to add a device.",
       "online": "Online",
@@ -2025,6 +2025,7 @@
     },
     "kinds": {
       "ios": "iOS app",
+      "android": "Android app",
       "desktop": "Desktop app",
       "web": "Web"
     },
@@ -2045,7 +2046,7 @@
     },
     "pair": {
       "title": "Add device",
-      "scan": "Scan this code with Kettu on an iPhone or iPad.",
+      "scan": "Scan this code with Kettu on an iPhone, an iPad or an Android phone.",
       "otherComputer": "On another computer, open Settings › Hosts › Add host and paste the link.",
       "target": "Open with",
       "targets": {
@@ -2245,7 +2246,7 @@
       "note": {
         "switch": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect on the same network, or when you paste a new pairing link on the device.",
         "own": "Only one relay at a time. Your Kettu account still sends this computer’s notifications to your iPhone.",
-        "pinned": "The Kettu apps on computers and iPhones reach it. Browsers can’t check a pinned certificate, so they need a relay with a domain.",
+        "pinned": "The Kettu apps on computers, iPhones, iPads and Android phones reach it. Browsers can’t check a pinned certificate, so they need a relay with a domain.",
         "local": "In Local mode Kettu sends nothing to its own services. Your relay is yours, so it stays.",
         "switch_web": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect to {{host}} on the same network, or when you paste a new pairing link on the device.",
         "own_web": "Only one relay at a time. Your Kettu account still sends {{host}}’s notifications to your iPhone."

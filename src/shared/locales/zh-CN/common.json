@@ -1,13 +1,16 @@
 {
   "actions": {
     "cancel": "取消",
+    "clear": "清除",
     "close": "关闭",
     "copy": "复制",
     "copyCommand": "复制命令",
     "copied": "已复制",
     "dismiss": "关闭提示",
     "done": "完成",
-    "retry": "重试"
+    "hidePassword": "隐藏密码",
+    "retry": "重试",
+    "showPassword": "显示密码"
   },
   "untitledSession": "未命名会话",
   "loading": "正在加载",
