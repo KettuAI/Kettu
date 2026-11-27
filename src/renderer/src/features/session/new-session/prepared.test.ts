@@ -25,6 +25,7 @@ import {
 } from '@renderer/stores/agent-options'
 import { chooseWhere, useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import {
+  discardPrepared,
   prepareFor,
   preparedRemoved,
   receivePrepared,
@@ -366,5 +367,285 @@ describe('prepared session options across worktree switches and lifecycle', () =
     await vi.waitFor(() => expect(discardCalls).toEqual(['prep-late']))
     expect(useAgentOptionsStore.getState().prepared).toBeNull()
     expect(picksOf(useAgentOptionsStore.getState(), null, 'claude-code')).toBeUndefined()
+  })
+
+  it('flushes picks made while preparing strictly one by one in model -> thought_level -> mode order', async () => {
+    const agyConfig = (model = 'gemini', thought = 'medium', mode = 'default'): ConfigOption[] => [
+      select('model', 'model', model, ['gemini', 'claude']),
+      select('thought_level', 'thought_level', thought, ['low', 'medium', 'high']),
+      select('mode', 'mode', mode, ['default', 'auto', 'dangerously-skip-permissions']),
+    ]
+    seedOptions({
+      antigravity: {
+        agentId: 'antigravity',
+        config: agyConfig('gemini', 'medium', 'default'),
+        levels: {
+          gemini: select('thought_level', 'thought_level', 'medium', ['low', 'medium', 'high']),
+          claude: select('thought_level', 'thought_level', 'medium', ['low', 'medium', 'high']),
+        },
+        remembered: { thought_level: 'medium' },
+        observedAt: 0,
+      },
+    })
+
+    let resolvePrepare!: (summary: SessionSummary) => void
+    const setOrder: string[] = []
+    const resolvers: Array<() => void> = []
+    let activeSets = 0
+    let maxConcurrentSets = 0
+
+    hostMock.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === 'sessions.prepare') {
+        return new Promise<SessionSummary>((resolve) => {
+          resolvePrepare = resolve
+        })
+      }
+      if (method === 'sessions.setConfigOption') {
+        setOrder.push(`${String(params.optionId)}=${String(params.value)}`)
+        activeSets += 1
+        maxConcurrentSets = Math.max(maxConcurrentSets, activeSets)
+        return new Promise<void>((resolve) => {
+          resolvers.push(() => {
+            activeSets -= 1
+            resolve()
+          })
+        })
+      }
+      return Promise.resolve(undefined)
+    })
+
+    prepareFor({ hostId: null, agentId: 'antigravity', projectPath: repo, parentId: null })
+    // Pick in reverse dependency order while sessions.prepare is still in flight.
+    setOption(null, 'antigravity', 'mode', 'dangerously-skip-permissions')
+    setOption(null, 'antigravity', 'thought_level', 'high')
+    setOption(null, 'antigravity', 'model', 'claude')
+
+    resolvePrepare(
+      preparedSummary('prep-agy', 'antigravity', repo, agyConfig('gemini', 'medium', 'default')),
+    )
+
+    // First only model=claude may be dispatched; thought_level and mode must wait in the queue.
+    await vi.waitFor(() => expect(setOrder).toEqual(['model=claude']))
+    let settled = false
+    const waiting = settleOptions(null, 'antigravity').then(() => {
+      settled = true
+    })
+
+    resolvers.shift()!()
+    await vi.waitFor(() => expect(setOrder).toEqual(['model=claude', 'thought_level=high']))
+    expect(settled).toBe(false)
+
+    resolvers.shift()!()
+    await vi.waitFor(() =>
+      expect(setOrder).toEqual([
+        'model=claude',
+        'thought_level=high',
+        'mode=dangerously-skip-permissions',
+      ]),
+    )
+    expect(settled).toBe(false)
+
+    resolvers.shift()!()
+    await waiting
+    expect(settled).toBe(true)
+    expect(maxConcurrentSets).toBe(1)
+    expect(picksOf(useAgentOptionsStore.getState(), null, 'antigravity')).toEqual({})
+  })
+
+  it('flushes buffered picks in dependency order when receivePrepared recovers after a failed prepare', async () => {
+    const agyConfig: ConfigOption[] = [
+      select('model', 'model', 'gemini', ['gemini', 'claude']),
+      select('thought_level', 'thought_level', 'medium', ['low', 'medium', 'high']),
+      select('mode', 'mode', 'default', ['default', 'auto', 'dangerously-skip-permissions']),
+    ]
+    seedOptions({
+      antigravity: {
+        agentId: 'antigravity',
+        config: agyConfig,
+        levels: {},
+        remembered: { thought_level: 'medium' },
+        observedAt: 0,
+      },
+    })
+
+    const setOrder: string[] = []
+    let releaseFirst: (() => void) | null = null
+    let inFlight = 0
+    let maxInFlight = 0
+    hostMock.mockImplementation(async (method: string, params: Record<string, unknown>) => {
+      if (method === 'sessions.prepare') throw new Error('sign in required')
+      if (method === 'sessions.setConfigOption') {
+        setOrder.push(`${String(params.optionId)}=${String(params.value)}`)
+        inFlight += 1
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        if (params.optionId === 'thought_level') {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve
+          })
+        }
+        inFlight -= 1
+      }
+      return undefined
+    })
+
+    prepareFor({ hostId: null, agentId: 'antigravity', projectPath: repo, parentId: null })
+    await vi.waitFor(() =>
+      expect(useAgentOptionsStore.getState().prepared?.error).toBe('sign in required'),
+    )
+
+    // User picks mode before thought_level while waiting for sign-in recovery.
+    setOption(null, 'antigravity', 'mode', 'dangerously-skip-permissions')
+    setOption(null, 'antigravity', 'thought_level', 'high')
+
+    receivePrepared(preparedSummary('prep-recovered', 'antigravity', repo, agyConfig), null)
+    await vi.waitFor(() => expect(releaseFirst).not.toBeNull())
+    expect(setOrder).toEqual(['thought_level=high'])
+
+    releaseFirst!()
+    await settleOptions(null, 'antigravity')
+    expect(setOrder).toEqual(['thought_level=high', 'mode=dangerously-skip-permissions'])
+    expect(maxInFlight).toBe(1)
+  })
+
+  it('serializes carryEffortPicks and supersedes queued options while recovering from failures', async () => {
+    const agyConfig: ConfigOption[] = [
+      select('model', 'model', 'gemini', ['gemini', 'claude']),
+      select('thought_level', 'thought_level', 'high', ['low', 'medium', 'high']),
+      select('mode', 'mode', 'default', ['default', 'auto', 'dangerously-skip-permissions']),
+    ]
+    seedOptions({
+      antigravity: {
+        agentId: 'antigravity',
+        config: agyConfig,
+        levels: {
+          gemini: select('thought_level', 'thought_level', 'high', ['low', 'medium', 'high']),
+          claude: select('thought_level', 'thought_level', 'medium', ['low', 'medium']),
+        },
+        remembered: {},
+        observedAt: 0,
+      },
+    })
+
+    const calls: string[] = []
+    let releaseFirst: (() => void) | null = null
+    hostMock.mockImplementation(async (method: string, params: Record<string, unknown>) => {
+      if (method === 'sessions.prepare') {
+        return preparedSummary('prep-1', 'antigravity', repo, agyConfig)
+      }
+      if (method === 'sessions.setConfigOption') {
+        const label = `${String(params.optionId)}=${String(params.value)}`
+        calls.push(label)
+        if (label === 'model=claude') {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve
+          })
+          throw new Error('model temporarily unavailable')
+        }
+      }
+      return undefined
+    })
+
+    prepareFor({ hostId: null, agentId: 'antigravity', projectPath: repo, parentId: null })
+    await vi.waitFor(() =>
+      expect(useAgentOptionsStore.getState().prepared?.summary?.id).toBe('prep-1'),
+    )
+
+    // Pre-populate a thought_level pick of high before switching to a model whose max is medium.
+    useAgentOptionsStore.setState((s) => ({
+      picks: { ...s.picks, '\0antigravity': { thought_level: 'high' } },
+    }))
+    setOption(null, 'antigravity', 'model', 'claude')
+    // While model=claude is in flight, queue mode=full then supersede it with mode=auto.
+    setOption(null, 'antigravity', 'mode', 'dangerously-skip-permissions')
+    setOption(null, 'antigravity', 'mode', 'auto')
+
+    await vi.waitFor(() => expect(releaseFirst).not.toBeNull())
+    expect(calls).toEqual(['model=claude'])
+
+    releaseFirst!()
+    // The failed model pick is reported, while carried effort and final mode still run in order
+    // (skipping the superseded mode=dangerously-skip-permissions).
+    await expect(settleOptions(null, 'antigravity')).rejects.toThrow(
+      /model temporarily unavailable/,
+    )
+    expect(calls).toEqual(['model=claude', 'thought_level=medium', 'mode=auto'])
+  })
+
+  it('drops queued stale option updates and ignores late rejections after discarding or switching agents', async () => {
+    const agyConfig: ConfigOption[] = [
+      select('model', 'model', 'gemini', ['gemini']),
+      select('thought_level', 'thought_level', 'medium', ['low', 'medium', 'high']),
+      select('mode', 'mode', 'default', ['default', 'auto', 'dangerously-skip-permissions']),
+    ]
+    seedOptions({
+      antigravity: {
+        agentId: 'antigravity',
+        config: agyConfig,
+        levels: {},
+        remembered: {},
+        observedAt: 0,
+      },
+      codex: {
+        agentId: 'codex',
+        config: codexConfig('workspace-write'),
+        levels: {},
+        remembered: {},
+        observedAt: 0,
+      },
+    })
+
+    const sent: Array<{ sessionId: string; optionId: string; value: unknown }> = []
+    let rejectInFlight: ((err: Error) => void) | null = null
+    hostMock.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === 'sessions.prepare') {
+        return Promise.resolve(
+          params.agentId === 'codex'
+            ? preparedSummary('prep-codex', 'codex', repo, codexConfig('workspace-write'), 2)
+            : preparedSummary('prep-agy-1', 'antigravity', repo, agyConfig, 1),
+        )
+      }
+      if (method === 'sessions.setConfigOption') {
+        sent.push({
+          sessionId: String(params.sessionId),
+          optionId: String(params.optionId),
+          value: params.value,
+        })
+        if (params.sessionId === 'prep-agy-1' && params.optionId === 'thought_level') {
+          return new Promise<void>((_, reject) => {
+            rejectInFlight = reject
+          })
+        }
+        return Promise.resolve(undefined)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    prepareFor({ hostId: null, agentId: 'antigravity', projectPath: repo, parentId: null })
+    await vi.waitFor(() =>
+      expect(useAgentOptionsStore.getState().prepared?.summary?.id).toBe('prep-agy-1'),
+    )
+
+    // Queue two options on prep-agy-1; the first stays in flight while the second waits.
+    setOption(null, 'antigravity', 'thought_level', 'high')
+    setOption(null, 'antigravity', 'mode', 'dangerously-skip-permissions')
+    await vi.waitFor(() => expect(rejectInFlight).not.toBeNull())
+    expect(sent).toEqual([{ sessionId: 'prep-agy-1', optionId: 'thought_level', value: 'high' }])
+
+    // Discard and switch to codex before prep-agy-1's first RPC settles.
+    discardPrepared()
+    prepareFor({ hostId: null, agentId: 'codex', projectPath: repo, parentId: null })
+    await vi.waitFor(() =>
+      expect(useAgentOptionsStore.getState().prepared?.summary?.id).toBe('prep-codex'),
+    )
+
+    // Late rejection from the old prepared session must neither send the queued mode update nor
+    // poison picks or refused errors for antigravity's next prepared session.
+    rejectInFlight!(new Error('session discarded'))
+    await settleOptions(null, 'antigravity')
+    expect(sent).toEqual([{ sessionId: 'prep-agy-1', optionId: 'thought_level', value: 'high' }])
+    expect(picksOf(useAgentOptionsStore.getState(), null, 'antigravity')).toMatchObject({
+      thought_level: 'high',
+      mode: 'dangerously-skip-permissions',
+    })
   })
 })

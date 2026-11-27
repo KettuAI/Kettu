@@ -497,6 +497,8 @@ export class AcpConnection implements AgentConnection {
   private appendsSystemPrompt = false
   /** agy 会话的托管模式与完全访问状态（按 sessionId 索引）。 */
   private readonly agyAccess = new Map<string, AgyAccess>()
+  /** Per-session serialization tail for config mutations and agy access restarts. */
+  private readonly configQueues = new Map<string, Promise<void>>()
   /** agy 根会话（及其子智能体共享）的「本会话总是允许」授权记忆。 */
   private readonly agySessionGrants = new Map<string, AgySessionGrants>()
   /** agy 用户 settings.json 中 permissions.ask 规则缓存（按文件 mtime 自动刷新）。 */
@@ -996,6 +998,7 @@ export class AcpConnection implements AgentConnection {
   }
 
   close(): void {
+    this.configQueues.clear()
     this.agyMetrics?.stop()
     this.agyWait?.stop()
     this.connection.close()
@@ -1433,6 +1436,7 @@ export class AcpConnection implements AgentConnection {
   private forgetSession(sessionId: string): void {
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
+    this.configQueues.delete(sessionId)
     this.agyAppDataDirs.delete(sessionId)
     this.agySessionGrants.delete(sessionId)
     this.agyCommands.delete(sessionId)
@@ -1473,6 +1477,7 @@ export class AcpConnection implements AgentConnection {
     if (this.unprompted.has(sessionId)) {
       throw new Error(`${this.hooks.name ?? 'The agent'}'s hidden sessions are never prompted`)
     }
+    await this.configQueues.get(sessionId)
     await this.agyAccess.get(sessionId)?.restarting
     const planning = this.agy && plansAgy(this.version) && this.targets.has(sessionId)
     if (planning) {
@@ -1783,55 +1788,72 @@ export class AcpConnection implements AgentConnection {
     )
   }
 
-  async setConfigOption(
+  /** Runs config mutations for a session strictly one at a time so restarts snapshot settled config. */
+  private serializeConfig<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+    const previous = this.configQueues.get(sessionId)
+    const result = previous ? previous.then(run) : run()
+    const tail = result.then(
+      () => {},
+      () => {},
+    )
+    this.configQueues.set(sessionId, tail)
+    void tail.finally(() => {
+      if (this.configQueues.get(sessionId) === tail) this.configQueues.delete(sessionId)
+    })
+    return result
+  }
+
+  setConfigOption(
     sessionId: string,
     optionId: string,
     value: string | boolean,
   ): Promise<ConfigOption[]> {
-    const access = this.agyAccess.get(sessionId)
-    if (access) {
-      await access.restarting
-    }
-    if (this.agy && optionId === MODE_OPTION && value === PLAN_MODE) {
-      const mode =
-        this.agyMode(sessionId) ??
-        currentMode(this.targets.get(sessionId)?.context().thread.session.config ?? [])
-      if (mode !== null && mode !== PLAN_MODE) this.agyBuildModes.set(sessionId, mode)
-    }
-    if (access && optionId === MODE_OPTION && typeof value === 'string') {
-      // 进入或退出完全访问（或取消挂起中的完全访问切换）需要走 switchAccess 逻辑。
-      if ((this.fullAccess && value === FULL_ACCESS) || access.full || access.pending !== null) {
-        const switched = await this.switchAccess(sessionId, access, value)
-        if (switched) return switched
+    return this.serializeConfig(sessionId, async () => {
+      const access = this.agyAccess.get(sessionId)
+      if (access) {
+        await access.restarting
       }
-      // 切入 Kettu 托管 Auto 模式：底层 agy 保持 default，由 Kettu 统一做风险评估与审批拦截。
-      if (value === AUTO_MODE) {
-        let base = access.config
-        if (access.rawMode !== HELD_MODE) {
-          base = await this.requestConfig(sessionId, MODE_OPTION, HELD_MODE)
-          access.rawMode = currentMode(base) ?? HELD_MODE
+      if (this.agy && optionId === MODE_OPTION && value === PLAN_MODE) {
+        const mode =
+          this.agyMode(sessionId) ??
+          currentMode(this.targets.get(sessionId)?.context().thread.session.config ?? [])
+        if (mode !== null && mode !== PLAN_MODE) this.agyBuildModes.set(sessionId, mode)
+      }
+      if (access && optionId === MODE_OPTION && typeof value === 'string') {
+        // Entering/leaving full access or cancelling a pending full-access switch goes via switchAccess.
+        if ((this.fullAccess && value === FULL_ACCESS) || access.full || access.pending !== null) {
+          const switched = await this.switchAccess(sessionId, access, value)
+          if (switched) return switched
         }
-        access.managedAuto = true
-        access.config = this.formatAgyConfig(base, access, this.pendingState(sessionId, access))
-        return access.config
-      }
-      // 从托管 Auto 切回 default：底层已在 default 时无需冗余 RPC，直接还原展示值。
-      if (value === HELD_MODE && access.managedAuto && access.rawMode === HELD_MODE) {
+        // Managed Auto mode keeps the underlying agy process in default so Kettu evaluates every ask.
+        if (value === AUTO_MODE) {
+          let base = access.config
+          if (access.rawMode !== HELD_MODE) {
+            base = await this.requestConfig(sessionId, MODE_OPTION, HELD_MODE)
+            access.rawMode = currentMode(base) ?? HELD_MODE
+          }
+          access.managedAuto = true
+          access.config = this.formatAgyConfig(base, access, this.pendingState(sessionId, access))
+          return access.config
+        }
+        // Returning from managed Auto to default needs no RPC when the underlying process is already in default.
+        if (value === HELD_MODE && access.managedAuto && access.rawMode === HELD_MODE) {
+          access.managedAuto = false
+          access.config = this.formatAgyConfig(
+            withModeValue(access.config, HELD_MODE),
+            access,
+            this.pendingState(sessionId, access),
+          )
+          return access.config
+        }
         access.managedAuto = false
-        access.config = this.formatAgyConfig(
-          withModeValue(access.config, HELD_MODE),
-          access,
-          this.pendingState(sessionId, access),
-        )
-        return access.config
       }
-      access.managedAuto = false
-    }
-    const config = await this.requestConfig(sessionId, optionId, value)
-    if (!access) return config
-    access.rawMode = currentMode(config) ?? access.rawMode
-    access.config = this.formatAgyConfig(config, access, this.pendingState(sessionId, access))
-    return access.config
+      const config = await this.requestConfig(sessionId, optionId, value)
+      if (!access) return config
+      access.rawMode = currentMode(config) ?? access.rawMode
+      access.config = this.formatAgyConfig(config, access, this.pendingState(sessionId, access))
+      return access.config
+    })
   }
 
   private async requestConfig(
@@ -1968,55 +1990,59 @@ export class AcpConnection implements AgentConnection {
   }
 
   /**
-   * 在回合或后台任务结束后执行挂起的模式切换；若仍被后台任务阻塞则刷新等待原因，失败时回滚并通知。
+   * Executes a pending full-access switch once turns and background work finish, serialized behind
+   * any in-flight config mutation so restarts snapshot settled config.
    */
   private async switchPending(sessionId: string): Promise<void> {
-    const access = this.agyAccess.get(sessionId)
-    const mode = access?.pending
-    if (!access || !mode) return
-    if (this.prompting.has(sessionId) || this.runsCommands(sessionId)) {
-      const next = this.pendingState(sessionId, access)
-      const prev = access.config.find((option) => option.id === MODE_OPTION)?.pending
-      if (next && (prev?.wait !== next.wait || prev?.value !== next.value)) {
-        access.config = this.formatAgyConfig(access.config, access, next)
+    if (!this.agyAccess.get(sessionId)?.pending) return
+    await this.serializeConfig(sessionId, async () => {
+      const access = this.agyAccess.get(sessionId)
+      const mode = access?.pending
+      if (!access || !mode) return
+      if (this.prompting.has(sessionId) || this.runsCommands(sessionId)) {
+        const next = this.pendingState(sessionId, access)
+        const prev = access.config.find((option) => option.id === MODE_OPTION)?.pending
+        if (next && (prev?.wait !== next.wait || prev?.value !== next.value)) {
+          access.config = this.formatAgyConfig(access.config, access, next)
+          this.targets.get(sessionId)?.apply({
+            patches: [{ op: 'session.update', changes: { config: access.config } }],
+            effects: [],
+          })
+        }
+        return
+      }
+      access.pending = null
+      const full = mode === FULL_ACCESS
+      if (full === access.full || this.isClosed) return
+      try {
+        const config = await this.restartAgy(sessionId, access, full, mode)
         this.targets.get(sessionId)?.apply({
-          patches: [{ op: 'session.update', changes: { config: access.config } }],
+          patches: [{ op: 'session.update', changes: { config } }],
           effects: [],
         })
+      } catch (error) {
+        const message = (error as Error).message
+        this.hooks.log('warn', `Could not switch agy session ${sessionId} to ${mode}: ${message}`)
+        const target = this.targets.get(sessionId)
+        if (!target) return
+        const ctx = target.context()
+        const out: MapperOutput = {
+          patches: [{ op: 'session.update', changes: { config: access.config } }],
+          effects: [],
+        }
+        addEntry(ctx, out, {
+          kind: 'notice',
+          id: ctx.nextId(),
+          severity: 'error',
+          title: t(
+            full ? 'antigravity.fullAccess.enterFailed' : 'antigravity.fullAccess.leaveFailed',
+          ),
+          description: message,
+          after: agentEntryBefore(ctx.thread),
+        })
+        target.apply(out)
       }
-      return
-    }
-    access.pending = null
-    const full = mode === FULL_ACCESS
-    if (full === access.full || this.isClosed) return
-    try {
-      const config = await this.restartAgy(sessionId, access, full, mode)
-      this.targets.get(sessionId)?.apply({
-        patches: [{ op: 'session.update', changes: { config } }],
-        effects: [],
-      })
-    } catch (error) {
-      const message = (error as Error).message
-      this.hooks.log('warn', `Could not switch agy session ${sessionId} to ${mode}: ${message}`)
-      const target = this.targets.get(sessionId)
-      if (!target) return
-      const ctx = target.context()
-      const out: MapperOutput = {
-        patches: [{ op: 'session.update', changes: { config: access.config } }],
-        effects: [],
-      }
-      addEntry(ctx, out, {
-        kind: 'notice',
-        id: ctx.nextId(),
-        severity: 'error',
-        title: t(
-          full ? 'antigravity.fullAccess.enterFailed' : 'antigravity.fullAccess.leaveFailed',
-        ),
-        description: message,
-        after: agentEntryBefore(ctx.thread),
-      })
-      target.apply(out)
-    }
+    })
   }
 
   /**

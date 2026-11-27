@@ -2972,3 +2972,224 @@ describe('next-message suggestion clearing on send (#2903)', () => {
     )
   })
 })
+
+describe('SessionManager.setConfigOption serialization', () => {
+  const agyConfig = (
+    model: string,
+    thoughtLevel: string,
+    mode: string,
+    levels: string[] = ['low', 'medium', 'high'],
+  ): ConfigOption[] => [
+    {
+      id: 'model',
+      name: 'Model',
+      category: 'model',
+      type: 'select',
+      value: model,
+      choices: [
+        { value: 'gemini', name: 'Gemini' },
+        { value: 'gemini-pro', name: 'Gemini Pro' },
+      ],
+    },
+    {
+      id: 'thought_level',
+      name: 'Thinking',
+      category: 'thought_level',
+      type: 'select',
+      value: thoughtLevel,
+      choices: levels.map((v) => ({ value: v, name: v })),
+    },
+    {
+      id: 'mode',
+      name: 'Mode',
+      category: 'mode',
+      type: 'select',
+      value: mode,
+      choices: [
+        { value: 'default', name: 'Default' },
+        { value: 'auto', name: 'Auto' },
+        { value: 'dangerously-skip-permissions', name: 'Full access' },
+      ],
+    },
+  ]
+
+  it('serializes concurrent setConfigOption calls per session so state and remembered options stay consistent', async () => {
+    const repo = path.join(dir, 'repo-serial')
+    await mkdir(repo, { recursive: true })
+    const optionsStore = new AgentOptionsStore({
+      file: agentOptionsFile(dir, log),
+      changed: () => {},
+    })
+    await optionsStore.load()
+
+    let state = agyConfig('gemini', 'medium', 'default')
+    const events: string[] = []
+    let releaseFirst: (() => void) | null = null
+    let firstInFlight = false
+    const setConfigOption = vi.fn(
+      async (_acpSessionId: string, optionId: string, value: string | boolean) => {
+        events.push(`start:${optionId}=${String(value)}`)
+        if (optionId === 'thought_level' && value === 'high') {
+          firstInFlight = true
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve
+          })
+          firstInFlight = false
+        }
+        if (optionId === 'model' && value === 'gemini-pro') {
+          state = agyConfig(
+            'gemini-pro',
+            String(state.find((o) => o.id === 'thought_level')?.value ?? 'medium'),
+            String(state.find((o) => o.id === 'mode')?.value ?? 'default'),
+            ['low', 'medium', 'high', 'xhigh'],
+          )
+        } else {
+          state = state.map((option) => (option.id === optionId ? { ...option, value } : option))
+        }
+        events.push(`end:${optionId}=${String(value)}`)
+        return state
+      },
+    )
+    const connection = {
+      newSession: vi.fn(async () => ({ sessionId: 'acp-1', config: state })),
+      setConfigOption,
+      prompt: vi.fn(async () => ({ stopReason: 'end_turn', tokens: null, models: null })),
+      cancel: async () => {},
+      deleteSession: vi.fn(async () => {}),
+      register: () => {},
+      unregister: () => {},
+      isClosed: false,
+    }
+    const runtime = {
+      agentId: 'antigravity',
+      init: { capabilities: { deleteSession: true } },
+      connection,
+    }
+    const agents = {
+      name: () => 'Google Antigravity',
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({
+        capabilities: { prompt: { image: false, audio: false, embeddedContext: false } },
+        limits: [],
+      }),
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+
+    const { sessions } = manager({}, { agents, options: optionsStore })
+    await sessions.load()
+
+    const prep = await sessions.prepare({ agentId: 'antigravity', projectPath: repo }, 'win-1')
+
+    // Concurrently update thought_level=high and mode=dangerously-skip-permissions on the same session.
+    const first = sessions.setConfigOption(prep.id, 'thought_level', 'high')
+    const second = sessions.setConfigOption(prep.id, 'mode', 'dangerously-skip-permissions')
+
+    await vi.waitFor(() => expect(firstInFlight).toBe(true))
+    // The second mutation must stay queued until the first completes.
+    expect(events).toEqual(['start:thought_level=high'])
+
+    releaseFirst!()
+    await Promise.all([first, second])
+
+    expect(events).toEqual([
+      'start:thought_level=high',
+      'end:thought_level=high',
+      'start:mode=dangerously-skip-permissions',
+      'end:mode=dangerously-skip-permissions',
+    ])
+    const summary = sessions.summary(prep.id)
+    expect(summary.prepared?.config.find((o) => o.id === 'thought_level')?.value).toBe('high')
+    expect(summary.prepared?.config.find((o) => o.id === 'mode')?.value).toBe(
+      'dangerously-skip-permissions',
+    )
+    expect(optionsStore.rememberedOf('antigravity')).toMatchObject({ thought_level: 'high' })
+
+    // Changing model concurrently with a newly unlocked thought_level validates against the updated config.
+    await Promise.all([
+      sessions.setConfigOption(prep.id, 'model', 'gemini-pro'),
+      sessions.setConfigOption(prep.id, 'thought_level', 'xhigh'),
+    ])
+    const afterModel = sessions.summary(prep.id)
+    expect(afterModel.prepared?.config.find((o) => o.id === 'model')?.value).toBe('gemini-pro')
+    expect(afterModel.prepared?.config.find((o) => o.id === 'thought_level')?.value).toBe('xhigh')
+    expect(optionsStore.rememberedOf('antigravity')).toMatchObject({
+      model: 'gemini-pro',
+      thought_level: 'xhigh',
+    })
+    await sessions.flush()
+    await optionsStore.flush()
+  })
+
+  it('recovers cleanly when a queued setConfigOption fails so later mutations still run', async () => {
+    const repo = path.join(dir, 'repo-recover')
+    await mkdir(repo, { recursive: true })
+    const optionsStore = new AgentOptionsStore({
+      file: agentOptionsFile(dir, log),
+      changed: () => {},
+    })
+    await optionsStore.load()
+
+    let state = agyConfig('gemini', 'medium', 'default')
+    let releaseFailure: (() => void) | null = null
+    const setConfigOption = vi.fn(
+      async (_acpSessionId: string, optionId: string, value: string | boolean) => {
+        if (optionId === 'thought_level' && value === 'high') {
+          await new Promise<void>((resolve) => {
+            releaseFailure = resolve
+          })
+          throw new Error('temporary failure')
+        }
+        state = state.map((option) => (option.id === optionId ? { ...option, value } : option))
+        return state
+      },
+    )
+    const connection = {
+      newSession: vi.fn(async () => ({ sessionId: 'acp-2', config: state })),
+      setConfigOption,
+      prompt: vi.fn(async () => ({ stopReason: 'end_turn', tokens: null, models: null })),
+      cancel: async () => {},
+      deleteSession: vi.fn(async () => {}),
+      register: () => {},
+      unregister: () => {},
+      isClosed: false,
+    }
+    const runtime = {
+      agentId: 'antigravity',
+      init: { capabilities: { deleteSession: true } },
+      connection,
+    }
+    const agents = {
+      name: () => 'Google Antigravity',
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({
+        capabilities: { prompt: { image: false, audio: false, embeddedContext: false } },
+        limits: [],
+      }),
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+
+    const { sessions } = manager({}, { agents, options: optionsStore })
+    await sessions.load()
+
+    const prep = await sessions.prepare({ agentId: 'antigravity', projectPath: repo }, 'win-1')
+    const failed = sessions.setConfigOption(prep.id, 'thought_level', 'high')
+    const next = sessions.setConfigOption(prep.id, 'mode', 'dangerously-skip-permissions')
+
+    await vi.waitFor(() => expect(releaseFailure).not.toBeNull())
+    releaseFailure!()
+
+    await expect(failed).rejects.toThrow(/temporary failure/)
+    await expect(next).resolves.toBeUndefined()
+    const summary = sessions.summary(prep.id)
+    expect(summary.prepared?.config.find((o) => o.id === 'thought_level')?.value).toBe('medium')
+    expect(summary.prepared?.config.find((o) => o.id === 'mode')?.value).toBe(
+      'dangerously-skip-permissions',
+    )
+    await sessions.flush()
+    await optionsStore.flush()
+  })
+})

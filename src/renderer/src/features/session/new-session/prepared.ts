@@ -3,7 +3,7 @@
 // the session model.
 
 import type { SessionSummary } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import {
   agentKey,
@@ -34,6 +34,17 @@ const IDLE_MS = 30 * 60_000
 // Opening the agent menu replaces one older than this, since a provider's list can change.
 export const STALE_MS = 5 * 60_000
 
+// Order in which buffered picks are flushed to a prepared session: model first (its choices govern
+// effort/reasoning options), then model_config, thought_level, other options, and mode last
+// (switching permission mode can restart the agent process and restore the rest).
+const FLUSH_ORDER: readonly ConfigOption['category'][] = [
+  'model',
+  'model_config',
+  'thought_level',
+  'other',
+  'mode',
+]
+
 let target: PrepareTarget | null = null
 let shown = false
 let idle = false
@@ -41,12 +52,23 @@ let leftTimer: ReturnType<typeof setTimeout> | null = null
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 // Removed on purpose, so their removal is not taken for the agent's exit.
 const discarded = new Set<string>()
-const sets = new Set<Promise<unknown>>()
+const sets = new Map<Promise<unknown>, { hostId: string | null; agentId: AgentId; gen: number }>()
+// Per-prepared-session serialization tail so config option RPCs never race one another.
+const optionQueues = new Map<string, Promise<void>>()
+// The latest queued value per option, avoiding duplicate flushes when a ready summary races prepare.
+const queuedValues = new Map<
+  string,
+  { sessionId: string; gen: number; seq: number; value: string | boolean }
+>()
 // The latest set of each option, so an earlier answer that lands late does not stand for it.
 const latestSet = new Map<string, number>()
 // The options the agent refused, by agent and option, until a later set answers or a send reports it.
 const refused = new Map<string, string>()
 let nextSet = 0
+// Incremented whenever the active prepared session identity changes or clears.
+let preparedGen = 0
+// Incremented whenever an in-flight prepare is started, replaced, or invalidated.
+let prepareToken = 0
 
 const setKey = (hostId: string | null, agentId: AgentId, optionId: string): string =>
   `${agentKey(hostId, agentId)}\0${optionId}`
@@ -54,8 +76,93 @@ const setKey = (hostId: string | null, agentId: AgentId, optionId: string): stri
 const keyOf = (t: PrepareTarget): string =>
   JSON.stringify([t.hostId, t.agentId, t.projectPath, t.parentId])
 
-const setPrepared = (next: PreparedState | null): void =>
+function clearRefused(hostId: string | null, agentId: AgentId): void {
+  const prefix = `${agentKey(hostId, agentId)}\0`
+  for (const key of refused.keys()) {
+    if (key.startsWith(prefix)) refused.delete(key)
+  }
+}
+
+function setPrepared(next: PreparedState | null): void {
+  const prev = useAgentOptionsStore.getState().prepared
+  const prevId = prev?.summary?.id ?? null
+  const nextId = next?.summary?.id ?? null
+  if (prevId !== nextId) {
+    preparedGen += 1
+    if (prev && prevId !== null) {
+      optionQueues.delete(prevId)
+      clearRefused(prev.hostId, prev.agentId)
+    }
+  }
   useAgentOptionsStore.setState({ prepared: next })
+}
+
+function optionRank(config: readonly ConfigOption[] | undefined, optionId: string): number {
+  const category = config?.find((option) => option.id === optionId)?.category
+  if (category) {
+    const index = FLUSH_ORDER.indexOf(category)
+    return index >= 0 ? index : FLUSH_ORDER.indexOf('other')
+  }
+  return optionId === 'mode' ? FLUSH_ORDER.indexOf('mode') : FLUSH_ORDER.indexOf('other')
+}
+
+function orderOptionIds(
+  config: readonly ConfigOption[] | undefined,
+  ids: readonly string[],
+): string[] {
+  return [...ids].sort((a, b) => optionRank(config, a) - optionRank(config, b))
+}
+
+function cancelQueuedOption(hostId: string | null, agentId: AgentId, optionId: string): void {
+  const key = setKey(hostId, agentId, optionId)
+  latestSet.set(key, ++nextSet)
+  queuedValues.delete(key)
+  refused.delete(key)
+}
+
+/** Flushes buffered picks to the active prepared session in dependency order, one at a time. */
+function flushPicks(
+  hostId: string | null,
+  agentId: AgentId,
+  config: readonly ConfigOption[] | undefined,
+): void {
+  const state = useAgentOptionsStore.getState()
+  const prepared = preparedFor(state, hostId, agentId)
+  const sessionId = prepared?.summary?.id
+  if (!sessionId) return
+  const pending = picksOf(state, hostId, agentId)
+  if (!pending) return
+  const entries = Object.entries(pending)
+  if (entries.length === 0) return
+  const entry = optionsOn(state, hostId)[agentId]
+  const sourceConfig = config ?? prepared.summary?.prepared?.config ?? entry?.config
+  const modelId = sourceConfig?.find((option) => option.category === 'model')?.id
+  const pickedModel = modelId ? pending[modelId] : undefined
+  let reconciled = pending
+  if (sourceConfig && typeof pickedModel === 'string') {
+    reconciled = carryEffortPicks(sourceConfig, entry?.levels ?? {}, pending, pickedModel)
+    for (const [id, effort] of entries) {
+      const carried = reconciled[id]
+      if (carried === effort) continue
+      if (carried === undefined) {
+        cancelQueuedOption(hostId, agentId, id)
+        settlePick(hostId, agentId, id, effort)
+      } else {
+        pickOption(hostId, agentId, id, carried)
+      }
+    }
+  }
+  const gen = preparedGen
+  for (const optionId of orderOptionIds(sourceConfig, Object.keys(reconciled))) {
+    const value = reconciled[optionId]
+    if (value === undefined) continue
+    const queued = queuedValues.get(setKey(hostId, agentId, optionId))
+    if (queued && queued.sessionId === sessionId && queued.gen === gen && queued.value === value) {
+      continue
+    }
+    sendOption(hostId, agentId, optionId, value)
+  }
+}
 
 /** The prepared session for what New session shows; one for anything else is discarded. */
 export function prepareFor(next: PrepareTarget | null): void {
@@ -74,6 +181,7 @@ export async function prepare(t: PrepareTarget, replace = false): Promise<void> 
   const key = keyOf(t)
   const current = useAgentOptionsStore.getState().prepared
   if (!replace && current?.key === key && (current.opening || current.summary)) return
+  const token = ++prepareToken
   setPrepared({
     key,
     hostId: t.hostId,
@@ -91,21 +199,19 @@ export async function prepare(t: PrepareTarget, replace = false): Promise<void> 
       ...(picks && Object.keys(picks).length > 0 ? { options: picks } : {}),
       ...(replace ? { replace: true } : {}),
     })
-    if (useAgentOptionsStore.getState().prepared?.key !== key) {
-      // Left for another agent or folder meanwhile.
+    if (token !== prepareToken || useAgentOptionsStore.getState().prepared?.key !== key) {
+      // Left for another agent or folder meanwhile, or superseded by a newer prepare/discard.
       discard(summary.id)
       return
     }
     setPrepared({ key, hostId: t.hostId, agentId: t.agentId, summary, opening: false, error: null })
     for (const [optionId, value] of Object.entries(picks ?? {}))
       settlePick(t.hostId, t.agentId, optionId, value)
-    // Picks made while it opened go to it now.
-    const later = picksOf(useAgentOptionsStore.getState(), t.hostId, t.agentId) ?? {}
-    for (const [optionId, value] of Object.entries(later))
-      setOption(t.hostId, t.agentId, optionId, value)
+    // Picks made while it opened go to it now, serialized in dependency order.
+    flushPicks(t.hostId, t.agentId, summary.prepared?.config)
   } catch (error) {
     const now = useAgentOptionsStore.getState().prepared
-    if (now?.key !== key) return
+    if (token !== prepareToken || now?.key !== key) return
     setPrepared({ ...now, opening: false, error: errorMessage(error) })
   }
 }
@@ -119,6 +225,7 @@ function discard(sessionId: string): void {
 
 /** Removes the window's prepared session; the next use of New session prepares another. */
 export function discardPrepared(): void {
+  prepareToken += 1
   const current = useAgentOptionsStore.getState().prepared
   keepDraftOptions(current)
   setPrepared(null)
@@ -148,6 +255,7 @@ function keepDraftOptions(current: PreparedState | null): void {
 export function sessionStarted(hostId: string | null, agentId: AgentId, sessionId: string): void {
   const current = preparedFor(useAgentOptionsStore.getState(), hostId, agentId)
   if (!current) return
+  prepareToken += 1
   setPrepared(null)
   if (current.summary && current.summary.id !== sessionId) {
     discard(current.summary.id)
@@ -175,9 +283,7 @@ export function receivePrepared(summary: SessionSummary, hostId: string | null):
   setPrepared({ ...current, summary, opening, error: null })
   // The host opened it again after this window's prepare failed, so the picks go to it now.
   if (!held && current.error !== null) {
-    const picks = picksOf(useAgentOptionsStore.getState(), hostId, summary.agentId) ?? {}
-    for (const [optionId, value] of Object.entries(picks))
-      setOption(hostId, summary.agentId, optionId, value)
+    flushPicks(hostId, summary.agentId, summary.prepared?.config)
   }
 }
 
@@ -186,6 +292,7 @@ export function preparedRemoved(sessionId: string): boolean {
   if (discarded.delete(sessionId)) return true
   const current = useAgentOptionsStore.getState().prepared
   if (current?.summary?.id !== sessionId) return false
+  prepareToken += 1
   keepDraftOptions(current)
   setPrepared(null)
   if (shown && target && !idle) void prepare(target)
@@ -216,6 +323,7 @@ export function setOption(
     const carried = after[id]
     if (carried === effort) continue
     if (carried === undefined) {
+      cancelQueuedOption(hostId, agentId, id)
       settlePick(hostId, agentId, id, effort)
     } else {
       pickOption(hostId, agentId, id, carried)
@@ -233,36 +341,55 @@ function sendOption(
   const { prepared } = useAgentOptionsStore.getState()
   const summary = prepared?.summary
   if (!summary || prepared.hostId !== hostId || summary.agentId !== agentId) return
+  const sessionId = summary.id
+  const gen = preparedGen
   const key = setKey(hostId, agentId, optionId)
   const seq = ++nextSet
   latestSet.set(key, seq)
-  const setting = host('sessions.setConfigOption', { sessionId: summary.id, optionId, value })
-    .then(
-      () => {
-        if (latestSet.get(key) === seq) refused.delete(key)
-      },
-      (error: unknown) => {
-        const message = errorMessage(error)
-        console.warn(`Could not set ${optionId} on the prepared session: ${message}`)
-        // A later answer owns the option now; only this one's refusal still matters.
-        if (latestSet.get(key) !== seq) return
-        const picks = picksOf(useAgentOptionsStore.getState(), hostId, agentId)
-        if (picks?.[optionId] !== value) return
-        // Take the unapplied value back out, so the row shows the value the agent kept.
-        settlePick(hostId, agentId, optionId, value)
-        refused.set(key, message)
-      },
-    )
-    .finally(() => {
-      sets.delete(setting)
-      if (
-        latestSet.get(key) === seq &&
-        useAgentOptionsStore.getState().prepared?.summary?.id === summary.id
-      ) {
-        settlePick(hostId, agentId, optionId, value)
-      }
-    })
-  sets.add(setting)
+  queuedValues.set(key, { sessionId, gen, seq, value })
+  const previous = optionQueues.get(sessionId)
+  const run = async (): Promise<void> => {
+    // Drop stale or superseded updates before issuing another host RPC.
+    const current = useAgentOptionsStore.getState().prepared
+    if (
+      gen !== preparedGen ||
+      current?.summary?.id !== sessionId ||
+      current.hostId !== hostId ||
+      current.summary.agentId !== agentId
+    ) {
+      return
+    }
+    if (latestSet.get(key) !== seq) return
+    try {
+      await host('sessions.setConfigOption', { sessionId, optionId, value })
+      if (gen === preparedGen && latestSet.get(key) === seq) refused.delete(key)
+    } catch (error: unknown) {
+      const message = errorMessage(error)
+      console.warn(`Could not set ${optionId} on the prepared session: ${message}`)
+      // A later answer or a newer prepared session owns the option now.
+      if (gen !== preparedGen || latestSet.get(key) !== seq) return
+      if (useAgentOptionsStore.getState().prepared?.summary?.id !== sessionId) return
+      const picks = picksOf(useAgentOptionsStore.getState(), hostId, agentId)
+      if (picks?.[optionId] !== value) return
+      // Take the unapplied value back out, so the row shows the value the agent kept.
+      settlePick(hostId, agentId, optionId, value)
+      refused.set(key, message)
+    }
+  }
+  const setting = (previous ? previous.then(run) : run()).finally(() => {
+    sets.delete(setting)
+    if (optionQueues.get(sessionId) === setting) optionQueues.delete(sessionId)
+    if (queuedValues.get(key)?.seq === seq) queuedValues.delete(key)
+    if (
+      gen === preparedGen &&
+      latestSet.get(key) === seq &&
+      useAgentOptionsStore.getState().prepared?.summary?.id === sessionId
+    ) {
+      settlePick(hostId, agentId, optionId, value)
+    }
+  })
+  optionQueues.set(sessionId, setting)
+  sets.set(setting, { hostId, agentId, gen })
 }
 
 /**
@@ -270,7 +397,16 @@ function sendOption(
  * reasons when it refused a value, so the send does not go on without one the user chose.
  */
 export async function settleOptions(hostId: string | null, agentId: AgentId): Promise<void> {
-  await Promise.allSettled([...sets])
+  for (;;) {
+    const active = [...sets.entries()]
+      .filter(
+        ([, meta]) =>
+          meta.gen === preparedGen && meta.hostId === hostId && meta.agentId === agentId,
+      )
+      .map(([promise]) => promise)
+    if (active.length === 0) break
+    await Promise.allSettled(active)
+  }
   const prefix = `${agentKey(hostId, agentId)}\0`
   const reasons = [...refused]
     .filter(([key]) => key.startsWith(prefix))
@@ -339,6 +475,7 @@ export function refreshOnMenu(hostId: string | null, runningAgents: readonly Age
 export function hostRestarted(hostId: string | null = null): void {
   // Only the host New session's folder is on lost the prepared session.
   if ((target?.hostId ?? null) !== hostId) return
+  prepareToken += 1
   keepDraftOptions(useAgentOptionsStore.getState().prepared)
   setPrepared(null)
   discarded.clear()

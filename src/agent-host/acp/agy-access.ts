@@ -92,14 +92,24 @@ export function withFullAccess(
   return withAgyModes(config, { full, includeFull: true, pending })
 }
 
+const RESTORE_ORDER: readonly ConfigOption['category'][] = [
+  'model',
+  'model_config',
+  'thought_level',
+  'other',
+]
+
 /**
- * The session's values to set again on a new process, in order: the model first, since the levels
- * it offers follow it, then the rest; never the mode, which the switch sets itself.
+ * The session's values to set again on a new process, in order: the model first, then model
+ * config and thought level (whose choices follow the model), then the rest; never the mode,
+ * which the switch sets itself.
  */
 export function restoreOrder(before: readonly ConfigOption[]): ConfigOption[] {
-  return before
-    .filter((option) => option.id !== MODE_OPTION)
-    .toSorted((a, b) => Number(b.category === 'model') - Number(a.category === 'model'))
+  const rank = (option: ConfigOption): number => {
+    const index = RESTORE_ORDER.indexOf(option.category)
+    return index >= 0 ? index : RESTORE_ORDER.length
+  }
+  return before.filter((option) => option.id !== MODE_OPTION).toSorted((a, b) => rank(a) - rank(b))
 }
 
 /** Whether `config` lacks `option`'s value and offers it. */

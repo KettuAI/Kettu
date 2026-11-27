@@ -1499,6 +1499,8 @@ export class SessionManager {
   private readonly reviving = new Map<string, Promise<Live>>()
   /** Idle sessions being let go, by id. */
   private readonly releasing = new Map<string, Promise<void>>()
+  /** Per-session serialization tail for config mutations so state and remembered values stay ordered. */
+  private readonly configQueues = new Map<string, Promise<void>>()
   /** A look at the idle limit is due once the current work is done. */
   private limitCheck = false
   /** Sessions let go for idleness since this host started, whose resume the cache guard checks. */
@@ -6021,10 +6023,14 @@ export class SessionManager {
     if (!params.replace && held?.prepared?.key === key) {
       await held.prepared.opening
       if (params.options && held.prepared && held.connection) {
-        await this.applyStartOptions(held, held.connection, params.options)
-        const set = Object.keys(params.options)
-        held.prepared.notices = held.prepared.notices.filter((n) => !set.includes(n.optionId))
-        this.touch(held.id)
+        const options = params.options
+        await this.serializeConfig(held.id, async () => {
+          if (!held.prepared || !held.connection || held.closing) return
+          await this.applyStartOptions(held, held.connection, options)
+          const set = Object.keys(options)
+          held.prepared.notices = held.prepared.notices.filter((n) => !set.includes(n.optionId))
+          this.touch(held.id)
+        })
       }
       return this.summary(held.id)
     }
@@ -6349,6 +6355,7 @@ export class SessionManager {
     } catch {
       return null
     }
+    await this.configQueues.get(live.id)
     if (!live.prepared || this.live.get(live.id) !== live || !live.connection) return null
     if (live.thread.session.status !== 'ready') return null
     if (live.record.parentId !== null) {
@@ -13018,6 +13025,21 @@ export class SessionManager {
 
   // Config options.
 
+  /** Runs config mutations for a session strictly one at a time without blocking on prior failures. */
+  private serializeConfig<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+    const previous = this.configQueues.get(sessionId)
+    const result = previous ? previous.then(run) : run()
+    const tail = result.then(
+      () => {},
+      () => {},
+    )
+    this.configQueues.set(sessionId, tail)
+    void tail.finally(() => {
+      if (this.configQueues.get(sessionId) === tail) this.configQueues.delete(sessionId)
+    })
+    return result
+  }
+
   async setConfigOption(
     sessionId: string,
     optionId: string,
@@ -13027,50 +13049,60 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noConfig'))
     }
-    let live = await this.revive(sessionId)
-    const status = live.thread.session.status
-    if (!live.connection && status !== 'closed') throw busyError(status)
-    const option = live.thread.session.config.find((o) => o.id === optionId)
-    if (!option) throw invalidParams(t('session.noConfigOption', { option: optionId }))
-    if (!isValueOf(option, value)) {
-      throw invalidParams(t('session.notAChoice', { value: String(value), option: option.name }))
-    }
-    if (option.idleOnly && (live.turn || (status !== 'ready' && status !== 'closed'))) {
-      throw new HostError('busy', t('session.configBetweenTurns', { option: option.name }))
-    }
-    try {
-      const targetMode = option.category === 'mode' && typeof value === 'string' ? value : undefined
-      const connection = await this.attachClosed(live, targetMode)
-      live.used = true
-      if (optionId === SYNTHETIC_MODE_ID) {
-        await connection.setMode(live.record.acpSessionId, value as string)
-        this.update(live, {
-          config: live.thread.session.config.map((o): ConfigOption =>
-            o.id === SYNTHETIC_MODE_ID ? { ...o, value } : o,
-          ),
-        })
-      } else {
-        let config: ConfigOption[]
-        try {
-          config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
-        } catch (error) {
-          // A model its agent process did not list when it attached is new to that process.
-          if (!this.listedAfterAttach(live, option, value)) throw error
-          live = await this.attachAgain(live)
-          config = await live.connection!.setConfigOption(live.record.acpSessionId, optionId, value)
+    return this.serializeConfig(sessionId, async () => {
+      this.assertRegistered(sessionId)
+      let live = await this.revive(sessionId)
+      const status = live.thread.session.status
+      if (!live.connection && status !== 'closed') throw busyError(status)
+      const option = live.thread.session.config.find((o) => o.id === optionId)
+      if (!option) throw invalidParams(t('session.noConfigOption', { option: optionId }))
+      if (!isValueOf(option, value)) {
+        throw invalidParams(t('session.notAChoice', { value: String(value), option: option.name }))
+      }
+      if (option.idleOnly && (live.turn || (status !== 'ready' && status !== 'closed'))) {
+        throw new HostError('busy', t('session.configBetweenTurns', { option: option.name }))
+      }
+      try {
+        const targetMode =
+          option.category === 'mode' && typeof value === 'string' ? value : undefined
+        const connection = await this.attachClosed(live, targetMode)
+        live.used = true
+        if (optionId === SYNTHETIC_MODE_ID) {
+          await connection.setMode(live.record.acpSessionId, value as string)
+          if (live.closing || this.live.get(sessionId) !== live) return
+          this.update(live, {
+            config: live.thread.session.config.map((o): ConfigOption =>
+              o.id === SYNTHETIC_MODE_ID ? { ...o, value } : o,
+            ),
+          })
+        } else {
+          let config: ConfigOption[]
+          try {
+            config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
+          } catch (error) {
+            // A model its agent process did not list when it attached is new to that process.
+            if (!this.listedAfterAttach(live, option, value)) throw error
+            live = await this.attachAgain(live)
+            config = await live.connection!.setConfigOption(
+              live.record.acpSessionId,
+              optionId,
+              value,
+            )
+          }
+          if (live.closing || this.live.get(sessionId) !== live) return
+          const next = mergeConfig(live.thread.session.config, config)
+          this.update(live, { config: next })
+          this.deps.options?.chose(live.record.agentId, option, value, next)
         }
-        const next = mergeConfig(live.thread.session.config, config)
-        this.update(live, { config: next })
-        this.deps.options?.chose(live.record.agentId, option, value, next)
+        if (live.prepared) {
+          // Chosen again, so whatever the notice said of it no longer holds.
+          live.prepared.notices = live.prepared.notices.filter((n) => n.optionId !== optionId)
+          this.touch(live.id)
+        }
+      } catch (error) {
+        throw agentError(error)
       }
-      if (live.prepared) {
-        // Chosen again, so whatever the notice said of it no longer holds.
-        live.prepared.notices = live.prepared.notices.filter((n) => n.optionId !== optionId)
-        this.touch(live.id)
-      }
-    } catch (error) {
-      throw agentError(error)
-    }
+    })
   }
 
   /**
@@ -14459,6 +14491,7 @@ export class SessionManager {
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
     this.idleReleased.delete(sessionId)
+    this.configQueues.delete(sessionId)
     this.pullRequestsTold.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
