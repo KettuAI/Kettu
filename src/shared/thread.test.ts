@@ -849,10 +849,15 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...delivery, written: { agentId: 1 } })).toBe(false)
     const artifact = valid.find((entry) => entry.kind === 'artifact')!
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
-    const mcp = valid.find((entry) => entry.kind === 'mcp_change' && entry.action === 'switch')!
-    expect(isThreadEntry({ ...mcp, action: 'remove' })).toBe(false)
+    const mcpSwitch = valid.find(
+      (entry) => entry.kind === 'mcp_change' && entry.action === 'switch',
+    )!
+    expect(isThreadEntry({ ...mcpSwitch, action: 'remove' })).toBe(false)
     expect(
-      isThreadEntry({ ...mcp, restore: [{ serverId: 'github', before: { spec: {} }, after: {} }] }),
+      isThreadEntry({
+        ...mcpSwitch,
+        restore: [{ serverId: 'github', before: { spec: {} }, after: {} }],
+      }),
     ).toBe(false)
     const routine = valid.find((entry) => entry.kind === 'routine_change')!
     expect(isThreadEntry({ ...routine, action: 'pause' })).toBe(false)

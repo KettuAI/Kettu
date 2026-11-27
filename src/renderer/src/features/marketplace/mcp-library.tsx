@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowRight01Icon,
   Cancel01Icon,
@@ -18,6 +18,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { changeServer, setServerOn } from './actions'
 import { ConnectButton } from './connect'
+import { onSignInRequest, signInRequested, takeSignInRequest } from './sign-in-request'
 import {
   useAgentName,
   useChoosableAgents,
@@ -98,27 +99,44 @@ export function McpSignIn({ server }: { server: MarketServer }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [busy, setBusy] = useState(false)
-  if (server.spec.type !== 'http') return null
-  if (server.spec.oauth)
-    return <ConnectButton server={server} kept={server} label={t('mcp.signIn')} />
-  const { url } = server.spec
-  const detect = async () => {
-    setBusy(true)
+  const remote = server.spec.type === 'http'
+  const oauth = server.spec.type === 'http' && server.spec.oauth !== undefined
+  const url = server.spec.type === 'http' ? server.spec.url : ''
+  /** Finds how the server signs in and keeps it; false when Kettu cannot sign in to it. */
+  const findOAuth = async (): Promise<boolean> => {
     try {
       const { oauth } = await scope.request('market.detectSignIn', { url, headers: [] })
       if (!oauth) {
         toast(t('mcp.agentSignIn'), undefined, { tone: 'warning' })
-        return
+        return false
       }
       await changeServer(scope, server.id, (current) =>
         current.spec.type === 'http' ? { ...current, spec: { ...current.spec, oauth } } : current,
       )
+      return true
     } catch {
       toast(t('mcp.signInFailed'), undefined, { tone: 'warning' })
-    } finally {
-      setBusy(false)
+      return false
     }
   }
+  const detect = async () => {
+    setBusy(true)
+    await findOAuth()
+    setBusy(false)
+  }
+  // A sign-in asked for elsewhere: once the server signs in with OAuth, Connect takes it on.
+  useEffect(() => {
+    if (!remote || oauth) return
+    const run = () =>
+      void findOAuth().then((found) => {
+        if (!found) takeSignInRequest(scope.hostId, server.id)
+      })
+    if (signInRequested(scope.hostId, server.id)) run()
+    return onSignInRequest(scope.hostId, server.id, run)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, oauth, scope.hostId, server.id])
+  if (!remote) return null
+  if (oauth) return <ConnectButton server={server} kept={server} label={t('mcp.signIn')} />
   return (
     <Button size="sm" variant="secondary" loading={busy} onClick={() => void detect()}>
       {t('mcp.signIn')}

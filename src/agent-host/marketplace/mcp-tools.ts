@@ -312,7 +312,7 @@ interface Plan {
   what: string
   apply(): Promise<{ text: string; data: Record<string, unknown>; restore?: McpRestore[] }>
   /** After it is applied: the check of an added server, whose outcome the line shows. */
-  then?(settleCheck: (check: McpCheckSummary) => void): void
+  afterApply?(settleCheck: (check: McpCheckSummary) => void): void
 }
 
 /**
@@ -845,7 +845,7 @@ export class McpTools {
           data: { server: added.id, name: added.name },
         }
       },
-      then: (settleCheck) => {
+      afterApply: (settleCheck) => {
         void this.deps.check(added).then(
           (check) => {
             const summary = checkSummary(check)
@@ -1000,7 +1000,7 @@ export class McpTools {
     try {
       const done = await plan.apply()
       this.deps.settle(sessionId, entryId, { kind: 'done' }, done.restore)
-      plan.then?.((check) => this.deps.settle(sessionId, entryId, { kind: 'done', check }))
+      plan.afterApply?.((check) => this.deps.settle(sessionId, entryId, { kind: 'done', check }))
       return reply(done.text, { done: true, ...done.data })
     } catch (error) {
       const message = (error as Error).message

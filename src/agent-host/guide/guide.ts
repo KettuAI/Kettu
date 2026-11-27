@@ -241,12 +241,11 @@ export function guideTool(flags: GuideFlags): Tool {
     title: 'Read the Kettu guide',
     description:
       "Explains when and how to use Kettu's tools, by topic: artifacts (pages, documents and " +
-      'slide decks for the user), with files, canvas and runtime for their details; sessions ' +
+      'slide decks for the user), with files, canvas and runtime in detail; sessions ' +
       '(handing work to another session or agent); workflows; browser; devices; terminals' +
       (flags.computer ? '; computer (the user’s desktop apps)' : '') +
       (flags.market ? '; marketplace (publishing)' : '') +
-      "; settings (Kettu's own settings); routines (prompts that run on a schedule); mcp " +
-      "(Kettu's MCP servers).",
+      "; settings (Kettu's settings); routines (scheduled prompts); mcp (MCP servers).",
     inputSchema: {
       type: 'object',
       properties: {

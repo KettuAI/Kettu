@@ -111,7 +111,7 @@
         "gone": "This Routine card is no longer waiting for an answer",
         "answered": "This Routine card was already answered"
       },
-      "mcp": {
+      "mcpChange": {
         "gone": "This MCP server card is no longer waiting for an answer",
         "answered": "This MCP server card was already answered",
         "noChange": "This MCP server change is no longer on record",

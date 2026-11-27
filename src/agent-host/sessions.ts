@@ -2756,9 +2756,9 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcp.gone'))
+    if (!live || entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcpChange.gone'))
     if (entry.outcome !== null || !this.mcpWaits.has(entryId)) {
-      throw new HostError('not_found', t('session.waiting.mcp.answered'), {
+      throw new HostError('not_found', t('session.waiting.mcpChange.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -2788,7 +2788,7 @@ export class SessionManager {
   mcpChange(sessionId: string, entryId: string): NonNullable<McpChangeEntry['restore']> {
     this.recordOf(sessionId)
     const entry = this.live.get(sessionId)?.thread.byId[entryId]
-    if (entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcp.noChange'))
+    if (entry?.kind !== 'mcp_change') throw notFound(t('session.waiting.mcpChange.noChange'))
     if (
       entry.action !== 'switch' ||
       entry.restore === null ||
@@ -2796,7 +2796,7 @@ export class SessionManager {
       entry.outcome.undone ||
       entry.outcome.stale
     ) {
-      throw new HostError('conflict', t('session.waiting.mcp.noUndo'))
+      throw new HostError('conflict', t('session.waiting.mcpChange.noUndo'))
     }
     return entry.restore
   }

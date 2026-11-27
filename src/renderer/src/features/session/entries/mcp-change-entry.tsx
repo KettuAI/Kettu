@@ -13,13 +13,19 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { restoreStands } from '@shared/mcp-switch'
 import type { McpSwitchTarget } from '@shared/mcp-switch'
-import type { McpAddServer, McpChangeEntry as Entry, McpSwitchItem } from '@shared/thread'
+import type {
+  McpAddServer,
+  McpChangeEntry as Entry,
+  McpCheckSummary,
+  McpSwitchItem,
+} from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { PermissionRequest } from '@renderer/components/affect/permission-request'
 import { Button } from '@renderer/components/ui/button'
 import { toast } from '@renderer/components/ui/toast'
 import { emitAppEvent } from '@renderer/app/events'
 import { itemKey } from '@renderer/features/marketplace/model'
+import { requestSignIn } from '@renderer/features/marketplace/sign-in-request'
 import { basename } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { onHost } from '@renderer/lib/host-paths'
@@ -306,6 +312,26 @@ function useNotes(entry: Entry, computer: string | null): string[] {
   ].filter((note): note is string => !!note)
 }
 
+/** What the check after an addition found, in the window's language; checking until it ends. */
+function useCheckWords(): (check: McpCheckSummary | undefined) => string {
+  const { t } = useTranslation('session')
+  return (check) => {
+    if (check === undefined) return t('mcpChange.checking')
+    switch (check.state) {
+      case 'connected':
+        return t('mcpChange.connected', { count: check.tools })
+      case 'needs-sign-in':
+        return t('mcpChange.needsSignIn')
+      case 'project-only':
+        return t('mcpChange.projectOnly')
+      case 'error':
+        return t('mcpChange.checkFailed', {
+          reason: t(`mcpChange.reason.${check.reason}`, { defaultValue: check.reason }),
+        })
+    }
+  }
+}
+
 /** What came of an addition: added with what its check found, or not, and Open while it is added. */
 function AddLine({
   sessionId,
@@ -322,20 +348,9 @@ function AddLine({
   const outcome = entry.outcome!
   const done = outcome.kind === 'done'
   const notes = useNotes(entry, name)
+  const checkWords = useCheckWords()
   const check = done ? outcome.check : undefined
-  const checkNote = !done
-    ? null
-    : check === undefined
-      ? t('mcpChange.checking')
-      : check.state === 'connected'
-        ? t('mcpChange.connected', { count: check.tools })
-        : check.state === 'needs-sign-in'
-          ? t('mcpChange.needsSignIn')
-          : check.state === 'project-only'
-            ? t('mcpChange.projectOnly')
-            : t('mcpChange.checkFailed', {
-                reason: t(`mcpChange.reason.${check.reason}`, { defaultValue: check.reason }),
-              })
+  const checkNote = done ? checkWords(check) : null
 
   return (
     <div data-entry-id={entry.id} className={cn('min-w-0', className)}>
@@ -365,7 +380,10 @@ function AddLine({
             variant="quiet"
             size="xs"
             className="ks-settings-line__undo"
-            onClick={() => openServer(hostId, server.serverId)}
+            onClick={() => {
+              requestSignIn(hostId, server.serverId)
+              openServer(hostId, server.serverId)
+            }}
           >
             {t('mcpChange.signInButton')}
           </Button>
