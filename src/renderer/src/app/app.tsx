@@ -31,6 +31,7 @@ import { useAccountShell } from '@renderer/features/account/account-row'
 import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
 import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
+import { CloseAllTerminalsDialog } from '@renderer/features/terminal/close-all-terminals'
 import { RemoveWorktreeDialog } from '@renderer/features/worktrees/remove-worktree-dialog'
 import { WorktreeSettingsDialog } from '@renderer/features/worktrees/worktree-settings-dialog'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
@@ -138,6 +139,7 @@ export function App() {
         <ShortcutsDialog />
         <SearchDialog />
         <ArchiveConfirmDialog />
+        <CloseAllTerminalsDialog />
         <RemoveWorktreeDialog />
         <WorktreeSettingsDialog />
         <ReportDialog />

@@ -16,6 +16,7 @@
     "newOutput": "New output",
     "running": "Running",
     "close": "Close {{name}}",
+    "closeAll": "Close all terminals",
     "owner": "· {{agent}}",
     "password": "Waiting for a password"
   },
@@ -23,6 +24,15 @@
     "title": "End this terminal?",
     "body": "<title/> is still running. Closing the tab ends it.",
     "confirm": "End process"
+  },
+  "closeAll": {
+    "title_one": "End running terminal?",
+    "title_other": "End {{count}} running terminals?",
+    "body_one": "Closing all terminals ends this running process:",
+    "body_other": "Closing all terminals ends these running processes:",
+    "confirm": "Close all",
+    "closed_one": "Closed 1 terminal",
+    "closed_other": "Closed {{count}} terminals"
   },
   "view": {
     "askAgent": "Ask {{agent}}",

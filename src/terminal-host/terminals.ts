@@ -31,6 +31,7 @@ import {
   shellEnvironment,
   type ShellSpec,
 } from './shell'
+import { hasRunningChildProcess, type WindowsProcess } from './windows-busy'
 
 /** The part of node-pty's `IPty` the manager uses, so tests can drive it with a fake. */
 export interface PtyProcess {
@@ -97,8 +98,8 @@ export interface TerminalManagerOptions {
   loadPty: () => Promise<PtySpawn>
   findOnPath?: FindOnPath
   warn?: (message: string) => void
-  /** Lists the processes attached to a Windows console, the shell's included. */
-  consoleProcesses?: (pty: PtyProcess) => Promise<number[] | null>
+  /** Reads the Windows process table once per busy check, or null when it cannot be read. */
+  windowsProcesses?: () => Promise<readonly WindowsProcess[] | null>
   /** Whether a port serves a paired device, which never pauses the pty; none do when absent. */
   isDevicePort?: (port: string) => boolean
   /** The user handed back a terminal an agent's turn uses, after holding it for `durationMs`. */
@@ -756,16 +757,20 @@ export class TerminalManager {
   /** Terminals with a command running, for the quit confirmation. */
   async busy(): Promise<BusyTerminal[]> {
     const live = [...this.terminals.values()].filter((terminal) => terminal.pty)
-    const busy = await Promise.all(
-      live.map(async (terminal) => {
-        if (this.options.platform !== 'win32') return terminal.info.busy
-        const attached = await this.options.consoleProcesses?.(terminal.pty!)
-        // Without a process list there is no telling; asking is safer than losing work.
-        return attached ? attached.length > 1 : true
-      }),
-    )
+    if (live.length === 0) return []
+    if (this.options.platform !== 'win32') {
+      return live
+        .filter((terminal) => terminal.info.busy)
+        .map(({ info }) => ({ id: info.id, projectPath: info.projectPath, title: info.title }))
+    }
+    const processes = await Promise.resolve(this.options.windowsProcesses?.()).catch(() => null)
     return live
-      .filter((_, index) => busy[index])
+      .filter((terminal) => {
+        if (!terminal.pty || !this.terminals.has(terminal.info.id)) return false
+        // If enumeration fails, fall back to known busy state rather than falsely treating an
+        // idle shell at its prompt as busy (matching macOS and Linux semantics).
+        return processes ? hasRunningChildProcess(terminal.pty.pid, processes) : terminal.info.busy
+      })
       .map(({ info }) => ({ id: info.id, projectPath: info.projectPath, title: info.title }))
   }
 

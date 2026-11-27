@@ -588,16 +588,16 @@ export async function assignTerminals(projectPath: string, sessionId: string): P
   }
 }
 
+/** Whether closing `t` would stop a command that is still running. */
+export function isRunningTerminal(t: Pick<TerminalState, 'busy' | 'exitCode' | 'stale'>): boolean {
+  return !t.stale && t.busy && t.exitCode === null
+}
+
 /** The terminals of these sessions with a command running, as their store last heard. */
 export function busyTerminalsOf(sessionIds: readonly string[]): TerminalState[] {
   const sessions = new Set(sessionIds)
   return Object.values(useTerminalsStore.getState().byId).filter(
-    (t) =>
-      t.sessionId !== null &&
-      sessions.has(t.sessionId) &&
-      t.busy &&
-      t.exitCode === null &&
-      !t.stale,
+    (t) => t.sessionId !== null && sessions.has(t.sessionId) && isRunningTerminal(t),
   )
 }
 
@@ -709,6 +709,56 @@ export async function killTerminal(id: string): Promise<void> {
   } catch (error) {
     setError(panelsOf([id]), error)
   }
+}
+
+/**
+ * Closes every terminal belonging to `panel` (or the given snapshot of `ids`): drops stale tabs
+ * locally and kills live ones on their host via `terminals.kill`, so both local and remote hosts
+ * (including older ones) work without a new RPC method.
+ */
+export async function closeAllTerminals(
+  panel: string,
+  ids?: readonly string[],
+): Promise<{ closed: number; errors: unknown[] }> {
+  const { byId } = useTerminalsStore.getState()
+  const targets =
+    ids !== undefined
+      ? ids.flatMap((id) => {
+          const terminal = byId[id]
+          return terminal && terminalPanel(terminal) === panel ? [terminal] : []
+        })
+      : terminalsOf(byId, panel)
+  if (targets.length === 0) return { closed: 0, errors: [] }
+
+  let closed = 0
+  const live: TerminalState[] = []
+  for (const terminal of targets) {
+    if (terminal.stale) {
+      forgetTerminal(terminal.id)
+      closed += 1
+    } else {
+      live.push(terminal)
+    }
+  }
+
+  const results = await Promise.allSettled(
+    live.map((terminal) => terminals('terminals.kill', { id: terminal.id })),
+  )
+  const errors: unknown[] = []
+  results.forEach((result, index) => {
+    const terminal = live[index]!
+    if (result.status === 'fulfilled') {
+      closed += 1
+    } else if (errorCode(result.reason) === 'not_found') {
+      // Already gone on the host; drop any lingering local tab silently.
+      forgetTerminal(terminal.id)
+      closed += 1
+    } else {
+      errors.push(result.reason)
+    }
+  })
+  if (errors.length > 0) setError([panel], errors[0])
+  return { closed, errors }
 }
 
 export async function restartTerminal(id: string): Promise<void> {

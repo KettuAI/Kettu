@@ -224,6 +224,7 @@
     "noEditors": "未找到编辑器",
     "chooseApp": "选择应用…",
     "openTerminal": "在此打开终端",
+    "closeTerminals": "关闭所有终端",
     "copyResume": "复制继续会话的命令",
     "copiedResume": "已复制继续会话的命令",
     "copySessionId": "复制会话 ID",

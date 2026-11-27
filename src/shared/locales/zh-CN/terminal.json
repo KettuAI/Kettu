@@ -16,6 +16,7 @@
     "newOutput": "有新输出",
     "running": "正在运行",
     "close": "关闭 {{name}}",
+    "closeAll": "关闭所有终端",
     "owner": "· {{agent}}",
     "password": "在等密码"
   },
@@ -23,6 +24,12 @@
     "title": "结束此终端？",
     "body": "<title/> 仍在运行，关闭标签页会将其结束。",
     "confirm": "结束进程"
+  },
+  "closeAll": {
+    "title_other": "结束正在运行的终端？",
+    "body_other": "关闭所有终端会结束以下正在运行的进程：",
+    "confirm": "全部关闭",
+    "closed_other": "已关闭 {{count}} 个终端"
   },
   "view": {
     "askAgent": "询问 {{agent}}",

@@ -3,6 +3,7 @@ import {
   Archive01Icon,
   ArrowMoveDownRightIcon,
   Cancel01Icon,
+  CancelCircleIcon,
   FolderRemoveIcon,
   ComputerTerminal01Icon,
   Copy01Icon,
@@ -126,11 +127,16 @@ import { SubagentsMenu } from './subagents-menu'
 import { listedSubagents } from './subagents'
 import { sessionFolder } from '@renderer/lib/session-folder'
 import {
+  refreshSessionTerminals,
+  requestCloseAllTerminals,
+} from '@renderer/features/terminal/close-all-terminals-model'
+import {
   askRemoveWorktree,
   canRemoveWorktree,
   hasLiveWorktree,
   offerWorktreeRemoval,
 } from '@renderer/features/worktrees/remove-worktree-model'
+import { terminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
 function shortcutLabel(shortcut: string): string {
@@ -258,9 +264,14 @@ export function SessionMenuItems({
   const local = isLocalProject(summary.projectPath)
   const resume = resumeCommand(summary, hostPath(sessionFolder(summary)))
   const { id } = summary
+  const terminalCount = useTerminalsStore((s) => (terminal ? terminalsOf(s.byId, id).length : 0))
   const subSessions = useListedSubSessions([id])
   const showFinished = useViewStore((s) => s.showFinishedSubagents)
   const listed = subagents ? listedSubagents(subagents, showFinished) : []
+
+  useEffect(() => {
+    if (terminal) void refreshSessionTerminals(summary.projectPath)
+  }, [terminal, summary.projectPath])
 
   const item = (name: SessionMenuItem) => {
     const accelerator = ACCELERATORS[name]
@@ -482,6 +493,20 @@ export function SessionMenuItems({
             {shortcut}
           </DropdownMenuItem>
         )
+      case 'closeTerminals':
+        return (
+          <DropdownMenuItem
+            key={name}
+            {...props}
+            onClick={() => void requestCloseAllTerminals(id, { notify: true })}
+          >
+            <MenuGlyph icon={CancelCircleIcon} />
+            <span className="min-w-0 flex-1 truncate">{t('row.closeTerminals')}</span>
+            <span className="shrink-0 pl-4 text-hint text-tertiary tabular-nums">
+              {terminalCount}
+            </span>
+          </DropdownMenuItem>
+        )
       case 'copyResume':
         return (
           resume && (
@@ -604,6 +629,7 @@ export function SessionMenuItems({
     place,
     local,
     terminal,
+    hasTerminals: terminalCount > 0,
     resume: resume !== null,
     rename: onRename !== undefined,
     worktree: hasLiveWorktree(summary),
