@@ -1,16 +1,20 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { css as appShellCss } from '@renderer/components/affect/app-shell'
+import { css as dateRangePickerCss } from '@renderer/components/affect/date-range-picker'
 import { clampSubmenuTop, css as profileMenuCss } from '@renderer/components/affect/profile-menu'
 import {
   POPOVER_GAP,
   POPOVER_MARGIN,
+  applyDateRangePanelLayout,
   applyPopoverLayout,
   intersectClipAxes,
   resolveHorizontalPlacement,
   resolvePopoverAnchor,
+  resolvePopoverClipAncestors,
   resolvePopoverClipBox,
   resolvePopoverLayout,
+  resolvePopoverMaxWidth,
   type PopoverRect,
 } from './affect-popover'
 
@@ -404,6 +408,8 @@ class FakeElement {
   readonly computed: FakeStyle
 
   style = {
+    left: '',
+    right: '',
     translate: '',
     setProperty: (name: string, value: string) => {
       this.props.set(name, value)
@@ -730,5 +736,275 @@ describe('ProfileMenu flyout submenu clamping (clampSubmenuTop)', () => {
     })
     // minTop = 8 - 20 = -12 so rendered top = 20 + (-12) = 8px.
     expect(top).toBe(-12)
+  })
+})
+
+describe('DateRangePicker panel placement and clamping', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('resolvePopoverMaxWidth computes usable CSS width inside clip margins', () => {
+    expect(resolvePopoverMaxWidth({ top: 0, right: 1042, bottom: 760, left: 272 })).toBe(754)
+    expect(resolvePopoverMaxWidth({ top: 0, right: 872, bottom: 700, left: 272 })).toBe(584)
+    expect(resolvePopoverMaxWidth({ top: 0, right: 800, bottom: 600, left: 0 }, 2)).toBe(384)
+    expect(resolvePopoverMaxWidth({ top: 0, right: 100, bottom: 600, left: 100 })).toBeNull()
+  })
+
+  it('resolvePopoverClipAncestors collects clipping boxes while skipping display: contents', () => {
+    const { docBody } = stubDomEnv({ width: 1050, height: 760 })
+    const shell = docBody.append(
+      new FakeElement({
+        rect: { top: 0, right: 1050, bottom: 760, left: 0 },
+        classes: ['ui-as'],
+        computed: { display: 'grid', overflow: 'hidden' },
+      }),
+    )
+    const sheet = shell.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 752, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const contents = sheet.append(
+      new FakeElement({
+        rect: { top: 0, right: 0, bottom: 0, left: 0 },
+        computed: { display: 'contents', overflow: 'hidden' },
+      }),
+    )
+    const usageScroll = contents.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 752, left: 272 },
+        computed: { display: 'block', overflowX: 'auto', overflowY: 'auto' },
+      }),
+    )
+    const panel = usageScroll.append(new FakeElement())
+
+    expect(resolvePopoverClipAncestors(panel as unknown as HTMLElement)).toEqual([
+      usageScroll,
+      sheet,
+      shell,
+    ])
+  })
+
+  it('shifts an end-aligned Usage date picker rightward so its left presets rail is never clipped (issue #2875)', () => {
+    // Desktop window with sidebar open (272px): Usage sheet spans x=[272..1042] (width 770px <= 1000px).
+    // Wrapped left-aligned controls place the calendar button at x=[718..746], leaving only 474px to the
+    // sheet's left edge while the dual-month panel is 652px wide.
+    const { docBody } = stubDomEnv({ width: 1050, height: 760 })
+    const sheet = docBody.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 752, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const usage = sheet.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 752, left: 272 },
+        computed: { display: 'block', overflowX: 'auto', overflowY: 'auto' },
+      }),
+    )
+    const anchor = usage.append(
+      new FakeElement({
+        rect: { top: 104, right: 746, bottom: 132, left: 718 },
+        computed: { display: 'inline-block' },
+      }),
+    )
+    const panel = anchor.append(
+      new FakeElement({
+        rect: { top: 138, right: 746, bottom: 478, left: 94 },
+        offsetWidth: 652,
+        offsetHeight: 340,
+      }),
+    )
+
+    const layout = applyDateRangePanelLayout(panel as unknown as HTMLElement, 'end')
+
+    expect(layout).not.toBeNull()
+    expect(panel.style.getPropertyValue('--ui-drpc-panel-max-w')).toBe('754px')
+    expect(layout?.side).toBe('bottom')
+    expect(layout?.align).toBe('end')
+    // endLeft = 746 - 652 = 94, usableLeft = 272 + 8 = 280 => dx = +186px.
+    expect(layout?.dx).toBe(186)
+    expect(panel.style.translate).toBe('186px 0px')
+
+    const bounds = renderedBounds(
+      layout!,
+      { top: 104, right: 746, bottom: 132, left: 718 },
+      652,
+      340,
+    )
+    expect(bounds.left).toBe(272 + POPOVER_MARGIN)
+    expect(bounds.right).toBeLessThanOrEqual(1042 - POPOVER_MARGIN)
+    expect(bounds.bottom).toBeLessThanOrEqual(752 - POPOVER_MARGIN)
+  })
+
+  it('flips an end-aligned Usage date picker to align="start" when the trigger wraps near the left edge', () => {
+    const { docBody } = stubDomEnv({ width: 1050, height: 760 })
+    const sheet = docBody.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 752, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const anchor = sheet.append(
+      new FakeElement({
+        rect: { top: 140, right: 320, bottom: 168, left: 292 },
+        computed: { display: 'inline-block' },
+      }),
+    )
+    const panel = anchor.append(
+      new FakeElement({
+        rect: { top: 174, right: 944, bottom: 514, left: 292 },
+        offsetWidth: 652,
+        offsetHeight: 340,
+      }),
+    )
+
+    const layout = applyDateRangePanelLayout(panel as unknown as HTMLElement, 'end')
+
+    expect(layout?.align).toBe('start')
+    expect(layout?.dx).toBe(0)
+    expect(panel.dataset.align).toBe('start')
+    expect(panel.style.translate).toBe('')
+  })
+
+  it('caps panel width to narrow pane clip width so single-month layout fits without clipping either edge', () => {
+    const { docBody } = stubDomEnv({ width: 880, height: 720 })
+    const sheet = docBody.append(
+      new FakeElement({
+        rect: { top: 8, right: 872, bottom: 712, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const anchor = sheet.append(
+      new FakeElement({
+        rect: { top: 140, right: 560, bottom: 168, left: 532 },
+        computed: { display: 'inline-block' },
+      }),
+    )
+    // Simulate container query narrowing the panel to the 584px max width applied via --ui-drpc-panel-max-w.
+    const panel = anchor.append(
+      new FakeElement({
+        rect: { top: 174, right: 560, bottom: 554, left: -24 },
+        offsetWidth: 652,
+        offsetHeight: 380,
+      }),
+    )
+    const origSetProp = panel.style.setProperty
+    panel.style.setProperty = (name: string, value: string) => {
+      origSetProp(name, value)
+      if (name === '--ui-drpc-panel-max-w') {
+        const px = Number.parseFloat(value)
+        if (Number.isFinite(px)) panel.offsetWidth = Math.min(652, px)
+      }
+    }
+
+    const layout = applyDateRangePanelLayout(panel as unknown as HTMLElement, 'end')
+
+    expect(panel.style.getPropertyValue('--ui-drpc-panel-max-w')).toBe('584px')
+    expect(panel.offsetWidth).toBe(584)
+    const bounds = renderedBounds(
+      layout!,
+      { top: 140, right: 560, bottom: 168, left: 532 },
+      584,
+      380,
+    )
+    expect(bounds.left).toBe(272 + POPOVER_MARGIN)
+    expect(bounds.right).toBe(872 - POPOVER_MARGIN)
+  })
+
+  it('keeps wide desktop end-aligned date picker flush right with zero translation', () => {
+    const { docBody } = stubDomEnv({ width: 1440, height: 900 })
+    const sheet = docBody.append(
+      new FakeElement({
+        rect: { top: 8, right: 1432, bottom: 892, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const anchor = sheet.append(
+      new FakeElement({
+        rect: { top: 12, right: 1368, bottom: 40, left: 1340 },
+        computed: { display: 'inline-block' },
+      }),
+    )
+    const panel = anchor.append(
+      new FakeElement({
+        rect: { top: 46, right: 1368, bottom: 386, left: 716 },
+        offsetWidth: 652,
+        offsetHeight: 340,
+      }),
+    )
+
+    const layout = applyDateRangePanelLayout(panel as unknown as HTMLElement, 'end')
+
+    expect(layout?.side).toBe('bottom')
+    expect(layout?.align).toBe('end')
+    expect(layout?.dx).toBe(0)
+    expect(layout?.dy).toBe(0)
+    expect(layout?.overflow).toBe(false)
+    expect(panel.style.translate).toBe('')
+  })
+
+  it('constrains height, scrolls .ui-drpc__clip, and preserves scrollTop in short windows', () => {
+    const { docBody } = stubDomEnv({ width: 1050, height: 360 })
+    const sheet = docBody.append(
+      new FakeElement({
+        rect: { top: 8, right: 1042, bottom: 352, left: 272 },
+        computed: { display: 'block', overflow: 'clip' },
+      }),
+    )
+    const anchor = sheet.append(
+      new FakeElement({
+        rect: { top: 96, right: 746, bottom: 124, left: 718 },
+        computed: { display: 'inline-block' },
+      }),
+    )
+    const panel = anchor.append(
+      new FakeElement({
+        rect: { top: 130, right: 746, bottom: 470, left: 94 },
+        offsetWidth: 652,
+        offsetHeight: 340,
+      }),
+    )
+    const clipEl = new FakeElement()
+    clipEl.scrollTop = 48
+    panel.registerQuery(':scope > .ui-drpc__clip', clipEl)
+
+    const layout = applyDateRangePanelLayout(panel as unknown as HTMLElement, 'end')
+
+    expect(layout?.side).toBe('bottom')
+    expect(layout?.overflow).toBe(true)
+    // Below space: 352 - 8 (margin) - 124 - 6 (gap) = 214px.
+    expect(layout?.maxHeight).toBe(214)
+    expect(panel.style.getPropertyValue('--ui-drpc-panel-max-h')).toBe('214px')
+    expect(panel.hasAttribute('data-overflow')).toBe(true)
+    expect(clipEl.scrollTop).toBe(48)
+  })
+
+  it('keeps DateRangePicker CSS and positioning integration contract intact', () => {
+    expect(dateRangePickerCss).toMatch(
+      /\.ui-drpc__panel\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*width:\s*min\(var\(--ui-drpc-panel-width,\s*min\(652px,\s*calc\(100vw - 32px\)\)\),\s*var\(--ui-drpc-panel-max-w,\s*100vw\)\);[^}]*max-height:\s*var\(--ui-drpc-panel-max-h,\s*none\);/,
+    )
+    expect(dateRangePickerCss).toMatch(
+      /\.ui-drpc\[data-align="end"\]\s+\.ui-drpc__panel:not\(\[data-align="start"\]\),\s*\.ui-drpc__panel\[data-align="end"\]\s*\{\s*left:\s*auto;\s*right:\s*0;\s*transform-origin:\s*top right;\s*\}/,
+    )
+    expect(dateRangePickerCss).toMatch(
+      /\.ui-drpc__panel\[data-side="top"\]\s*\{\s*top:\s*auto;\s*bottom:\s*calc\(100% \+ 6px\);/,
+    )
+    expect(dateRangePickerCss).toMatch(
+      /\.ui-drpc__panel\[data-overflow\]\s+\.ui-drpc__clip\s*\{\s*overflow-y:\s*auto;\s*overscroll-behavior:\s*contain;\s*\}/,
+    )
+    expect(dateRangePickerCss).toMatch(/\.ui-drpc__foot\s*\{[^}]*flex:\s*none;/)
+    expect(dateRangePickerCss).toContain('@container (max-width: 639px)')
+
+    const source = readFileSync(
+      new URL('../components/affect/date-range-picker.tsx', import.meta.url),
+      'utf8',
+    )
+    expect(source).toContain('applyDateRangePanelLayout(el, align)')
+    expect(source).toContain('resolvePopoverClipAncestors(el)')
+    expect(source).toContain('data-side={place.side}')
+    expect(source).toContain('data-align={place.align}')
   })
 })

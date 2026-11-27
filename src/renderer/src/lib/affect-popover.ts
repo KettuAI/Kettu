@@ -37,6 +37,24 @@ export function resolvePopoverAnchor(el: HTMLElement): HTMLElement | null {
 }
 
 /**
+ * Collects every box-generating ancestor that clips or bounds `el` along either axis.
+ * Ancestors with `display: contents` generate no box and are skipped.
+ */
+export function resolvePopoverClipAncestors(el: HTMLElement): HTMLElement[] {
+  const ancestors: HTMLElement[] = []
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node === document.body || node === document.documentElement) continue
+    const style = getComputedStyle(node)
+    if (style.display === 'contents') continue
+    const isShell = node.classList.contains('ui-as')
+    const clipX = isShell || CLIP_OVERFLOW.test(style.overflowX || style.overflow)
+    const clipY = isShell || CLIP_OVERFLOW.test(style.overflowY || style.overflow)
+    if (clipX || clipY) ancestors.push(node)
+  }
+  return ancestors
+}
+
+/**
  * Computes the intersection of the viewport and every box-generating ancestor that clips or bounds
  * `el`. Ancestors with `display: contents` generate no box and are skipped so an `overflow` style
  * on them never collapses the clip box to 0×0.
@@ -55,6 +73,22 @@ export function resolvePopoverClipBox(el: HTMLElement): PopoverRect {
     }
   }
   return box
+}
+
+/**
+ * Computes the maximum popover width in CSS pixels that fits inside `clip` with `margin` padding
+ * on both sides, or `null` if `clip` has zero width.
+ */
+export function resolvePopoverMaxWidth(
+  clip: PopoverRect,
+  scaleX = 1,
+  margin = POPOVER_MARGIN,
+): number | null {
+  const clipW = clip.right - clip.left
+  if (clipW <= 0) return null
+  const sx = scaleX > 0 && Number.isFinite(scaleX) ? scaleX : 1
+  const marginPx = Math.min(margin * sx, clipW / 2)
+  return Math.max(0, Math.floor((clipW - marginPx * 2) / sx))
 }
 
 export interface PopoverLayoutInput {
@@ -352,6 +386,74 @@ export function applyPopoverLayout(
   if (list && savedListScroll > 0) list.scrollTop = savedListScroll
   if (card && savedCardScroll > 0) card.scrollTop = savedCardScroll
   if (savedElScroll > 0) el.scrollTop = savedElScroll
+
+  return layout
+}
+
+/**
+ * Measures a `DateRangePicker` dialog panel (`.ui-drpc__panel`) against its anchor and clipping
+ * container, constrains its width via `--ui-drpc-panel-max-w` so narrow panes drop cleanly to the
+ * single-month layout before overflowing, and applies horizontal/vertical flip, edge clamping, and
+ * max-height constraints.
+ */
+export function applyDateRangePanelLayout(
+  el: HTMLElement,
+  preferredAlign: AffectPopoverAlign,
+): PopoverLayout | null {
+  const anchor = resolvePopoverAnchor(el)
+  if (!anchor) return null
+
+  const clipEl = el.querySelector<HTMLElement>(':scope > .ui-drpc__clip')
+  const savedScroll = clipEl?.scrollTop ?? 0
+
+  el.dataset.side = 'bottom'
+  el.dataset.align = preferredAlign
+  el.style.left = ''
+  el.style.right = ''
+  el.style.translate = ''
+  el.style.removeProperty('--ui-drpc-panel-max-w')
+  el.style.removeProperty('--ui-drpc-panel-max-h')
+  el.removeAttribute('data-overflow')
+
+  const box = resolvePopoverClipBox(el)
+  const anchorRect = anchor.getBoundingClientRect()
+  const scaleX = anchor.offsetWidth > 0 ? anchorRect.width / anchor.offsetWidth : 1
+  const scaleY = anchor.offsetHeight > 0 ? anchorRect.height / anchor.offsetHeight : 1
+
+  // Cap panel width to the clipping container before reading natural dimensions so the panel's
+  // narrow single-month container query resolves before horizontal and vertical placement.
+  const maxWidth = resolvePopoverMaxWidth(box, scaleX)
+  if (maxWidth !== null && maxWidth > 0) {
+    el.style.setProperty('--ui-drpc-panel-max-w', `${maxWidth}px`)
+  }
+
+  const elRect = el.getBoundingClientRect()
+  const contentWidth = el.offsetWidth || (scaleX > 0 ? elRect.width / scaleX : elRect.width)
+  const contentHeight = el.offsetHeight || (scaleY > 0 ? elRect.height / scaleY : elRect.height)
+
+  const layout = resolvePopoverLayout({
+    preferredSide: 'bottom',
+    preferredAlign,
+    anchor: anchorRect,
+    clip: box,
+    contentWidth,
+    contentHeight,
+    scaleX,
+    scaleY,
+  })
+
+  el.dataset.side = layout.side
+  el.dataset.align = layout.align
+  if (layout.maxHeight !== null) {
+    el.style.setProperty('--ui-drpc-panel-max-h', `${layout.maxHeight}px`)
+  }
+  el.toggleAttribute('data-overflow', layout.overflow)
+
+  if (layout.dx || layout.dy) {
+    el.style.translate = `${layout.dx}px ${layout.dy}px`
+  }
+
+  if (clipEl && savedScroll > 0) clipEl.scrollTop = savedScroll
 
   return layout
 }

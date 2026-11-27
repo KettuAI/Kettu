@@ -173,13 +173,12 @@
   }
 }
 
-/* Usage: the title on the head's first line, the range's controls on a second one that scrolls
-   sideways (features/usage/usage-page.tsx). */
+/* Usage: the title on the head's first line, the controls wrapped below it so dropdowns and the
+   date picker popover are not clipped by a horizontal scroll box (features/usage/usage-page.tsx). */
 @media (max-width: 719px) {
   :root .k-u__head {
     flex-wrap: wrap;
     height: auto;
-    padding-right: 0;
     padding-bottom: 6px;
   }
   :root .k-u__lead {
@@ -188,14 +187,9 @@
   }
   :root .k-u__actions {
     flex: 1 0 100%;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-start;
-    overflow-x: auto;
-    padding: 2px 12px 2px 4px;
-    scrollbar-width: none;
-  }
-  :root .k-u__actions > * {
-    flex: none;
+    padding: 0 0 6px;
   }
 }
 

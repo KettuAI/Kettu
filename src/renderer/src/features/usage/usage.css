@@ -66,8 +66,11 @@
 }
 .k-u__group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   transition: opacity 140ms ease;
 }
 /* A group without a control takes no room, and a rule parts a group only from one before it */
@@ -91,6 +94,8 @@
 }
 .k-u-pick {
   gap: 6px;
+  max-width: 100%;
+  min-width: 0;
   padding: 0 8px 0 9px;
   font-size: 12.5px;
   font-weight: 500;
@@ -111,6 +116,11 @@
 }
 .k-u-pick__opt[data-on] {
   visibility: visible;
+}
+/* Cap the calendar popover to the usage container width so it switches to its single-month layout
+   before overflowing a narrow pane beside the sidebar. */
+.k-u__cal {
+  --ui-drpc-panel-width: min(652px, calc(100cqi - 16px));
 }
 /* The calendar is a square button until it holds a range of its own, which it then names */
 .k-u__cal .ui-drpc__trigger {

@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { applyDateRangePanelLayout, resolvePopoverClipAncestors } from "../../lib/affect-popover";
 
 /*
  * Date Range Picker (Clean) – pick a period from presets or two calendars, in a single self-contained file.
@@ -222,6 +223,10 @@ export function DateRangePicker({
   const appliedCompare = compare && appliedMode !== "off" ? compareRange(applied, appliedMode) : null;
 
   const [open, setOpen] = useState(defaultOpen);
+  const [place, setPlace] = useState<{ side: "bottom" | "top"; align: "start" | "end" }>({
+    side: "bottom",
+    align,
+  });
   useEffect(() => {
     onOpenChange?.(open);
   }, [open, onOpenChange]);
@@ -364,15 +369,55 @@ export function DateRangePicker({
     scrolled.current = true;
   }, [open, presetAt]);
 
-  // The panel stays on screen: near the right edge it opens leftwards
+  // Kettu: keep the panel inside its clipping container (width cap, horizontal/vertical flip and
+  // edge clamping), updating as the window, sidebar, scroll area, or panel geometry changes.
   useLayoutEffect(() => {
     const el = root.current?.querySelector<HTMLElement>('[role="dialog"]');
     if (!open || !el) return;
-    el.style.left = "";
-    const r = el.getBoundingClientRect();
-    const over = r.right - (document.documentElement.clientWidth - 8);
-    if (over > 0) el.style.left = `${-Math.max(0, Math.min(over, r.left - 8))}px`;
-  }, [open]);
+
+    const update = () => {
+      const layout = applyDateRangePanelLayout(el, align);
+      if (!layout) return;
+      const nextSide = layout.side === "top" ? "top" : "bottom";
+      setPlace((prev) =>
+        prev.side === nextSide && prev.align === layout.align ? prev : { side: nextSide, align: layout.align },
+      );
+    };
+
+    update();
+
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        update();
+      });
+    };
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && el.contains(target)) return;
+      if (target === window || target === document || (target instanceof Node && target.contains(el))) {
+        schedule();
+      }
+    };
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", onScroll, true);
+
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    if (ro) {
+      if (root.current) ro.observe(root.current);
+      if (panelInner.current) ro.observe(panelInner.current);
+      for (const ancestor of resolvePopoverClipAncestors(el)) ro.observe(ancestor);
+    }
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", onScroll, true);
+      ro?.disconnect();
+    };
+  }, [open, align]);
 
   // The calendars glide to their new height (5 or 6 weeks) instead of jumping – only this part clips,
   // the last row with Cancel / Apply is never cut off while it moves
@@ -429,6 +474,8 @@ export function DateRangePicker({
         <div
           id={`${uid}-panel`}
           data-overlay-layer=""
+          data-side={place.side}
+          data-align={place.align}
           role="dialog"
           aria-label={labels.choose}
           className="ui-drpc__panel"
@@ -604,7 +651,7 @@ export function DateRangePicker({
 
 /* ---------- Styles ---------- */
 
-const css = /* css */ `
+export const css = /* css */ `
 /* Colors and motion as variables – override them on .ui-drpc */
 .ui-drpc {
   --ui-drpc-card: #ffffff;
@@ -682,9 +729,12 @@ const css = /* css */ `
   z-index: 30;
   top: calc(100% + 6px);
   left: 0;
+  display: flex;
+  flex-direction: column;
   container-type: inline-size;
   /* A fixed width (not max-content), so the container queries below can measure it; override --ui-drpc-panel-width to fit your layout */
-  width: var(--ui-drpc-panel-width, min(652px, calc(100vw - 32px)));
+  width: min(var(--ui-drpc-panel-width, min(652px, calc(100vw - 32px))), var(--ui-drpc-panel-max-w, 100vw));
+  max-height: var(--ui-drpc-panel-max-h, none);
   overflow: hidden;
   border-radius: 10px;
   background: var(--ui-drpc-card);
@@ -692,9 +742,14 @@ const css = /* css */ `
   transform-origin: top left;
   animation: ui-drpc-open 240ms var(--ui-drpc-ease) both;
 }
-.ui-drpc[data-align="end"] .ui-drpc__panel { left: auto; right: 0; transform-origin: top right; }
-.ui-drpc__clip { overflow: hidden; transition: height 320ms var(--ui-drpc-ease); }
-.ui-drpc__body { display: grid; grid-template-columns: 140px 1fr; }
+.ui-drpc[data-align="end"] .ui-drpc__panel:not([data-align="start"]),
+.ui-drpc__panel[data-align="end"] { left: auto; right: 0; transform-origin: top right; }
+.ui-drpc__panel[data-side="top"] { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; animation-name: ui-drpc-open-up; }
+.ui-drpc__panel[data-side="top"][data-align="end"],
+.ui-drpc[data-align="end"] .ui-drpc__panel[data-side="top"]:not([data-align="start"]) { transform-origin: bottom right; }
+.ui-drpc__clip { flex: 0 1 auto; min-height: 0; overflow: hidden; transition: height 320ms var(--ui-drpc-ease); }
+.ui-drpc__panel[data-overflow] .ui-drpc__clip { overflow-y: auto; overscroll-behavior: contain; }
+.ui-drpc__body { display: grid; grid-template-columns: 140px minmax(0, 1fr); }
 
 /* Presets: tab-style rows – gray text, the active one gets the gray fill (no gliding highlight) */
 .ui-drpc__presets { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-right: 0.5px solid var(--ui-drpc-line); }
@@ -766,7 +821,7 @@ button.ui-drpc__preset:hover:not([aria-selected="true"]) { background: var(--ui-
 .ui-drpc__day-empty::before { display: none; }
 
 /* The last row, under a hairline: summary and compare on the left, Cancel / Apply on the right */
-.ui-drpc__foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; border-top: 0.5px solid var(--ui-drpc-line); }
+.ui-drpc__foot { display: flex; flex: none; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; border-top: 0.5px solid var(--ui-drpc-line); }
 .ui-drpc__summary { display: grid; gap: 8px; min-width: 0; }
 .ui-drpc__summary-range { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; color: var(--ui-drpc-strong); font-weight: 500; }
 .ui-drpc__summary-range > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; animation: ui-drpc-in 240ms var(--ui-drpc-ease) both; }
@@ -803,14 +858,16 @@ button.ui-drpc__preset:hover:not([aria-selected="true"]) { background: var(--ui-
 .ui-drpc__btn-primary:disabled { opacity: 0.35; cursor: default; }
 
 @keyframes ui-drpc-open { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ui-drpc-open-up { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes ui-drpc-slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 @keyframes ui-drpc-slide-back { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @keyframes ui-drpc-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes ui-drpc-pick { 0% { transform: scale(0.82); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
 
-/* Narrow panel (phones): presets as a scrolling row of tab chips, one month, stacked last row */
-@container (max-width: 600px) {
-  .ui-drpc__body { grid-template-columns: 1fr; }
+/* Narrow panel (phones and narrow panes): presets as a scrolling row of tab chips, one month, stacked last row.
+   Two months beside the 140px presets rail need 637px (140 + 24 + 24 + 2*224 + 0.5), so switch below 640px. */
+@container (max-width: 639px) {
+  .ui-drpc__body { grid-template-columns: minmax(0, 1fr); }
   .ui-drpc__presets {
     flex-direction: row;
     gap: 4px;
