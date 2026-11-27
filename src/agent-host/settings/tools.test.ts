@@ -151,6 +151,32 @@ describe('find_settings', () => {
     expect(file().appearance.appIcon).toBe('paper-sheets')
   })
 
+  it('finds and updates optional Chinese fonts independently of primary fonts in English and Chinese', async () => {
+    const { tools, file } = harness({ fullAccess: true })
+    const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'chinese font' })
+    expect(text(en)).toContain('appearance.font-ui-cjk')
+    expect(text(en)).toContain('appearance.font-prose-cjk')
+    expect(text(en)).toContain('appearance.font-code-cjk')
+
+    setLocale('zh-CN')
+    const zh = await tools.call(CALLER, FIND_SETTINGS, { query: '中文字体' })
+    expect(text(zh)).toContain('appearance.font-ui-cjk')
+    expect(text(zh)).toContain('界面中文字体 (Interface Chinese font)')
+    expect(text(zh)).toContain('appearance.font-prose-cjk')
+    expect(text(zh)).toContain('appearance.font-code-cjk')
+
+    const setBoth = await change(tools, [
+      { id: 'appearance.font-code', value: 'Fira Code' },
+      { id: 'appearance.font-code-cjk', value: 'LXGW WenKai' },
+    ])
+    expect(setBoth.isError).toBeUndefined()
+    expect(file().appearance.fonts).toEqual({ code: 'Fira Code', codeCjk: 'LXGW WenKai' })
+
+    const clearCjk = await change(tools, [{ id: 'appearance.font-code-cjk', value: '' }])
+    expect(clearCjk.isError).toBeUndefined()
+    expect(file().appearance.fonts).toEqual({ code: 'Fira Code' })
+  })
+
   it('fills the placeholders of a row’s words', async () => {
     const { tools } = harness()
     const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'zoom' }))

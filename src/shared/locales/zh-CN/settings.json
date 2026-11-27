@@ -339,19 +339,42 @@
       "reset": "重置"
     },
     "fonts": {
-      "keywords": "字体 font 界面 回复 代码 等宽",
+      "keywords": "字体 font 界面 回复 代码 等宽 英文 拉丁",
+      "cjkKeywords": "字体 中文字体 中文 汉字 cjk font 界面 回复 代码 苹方 微软雅黑 思源 宋体 楷体",
       "default": "主题的字体",
+      "cjkDefault": "系统中文字体",
+      "primaryLabel": "主字体",
+      "cjkLabel": "中文字体（可选）",
+      "cjkSample": "汉字",
+      "reset": "重置",
+      "resetPrimary": "重置{{role}}",
+      "resetCjk": "重置{{role}}",
+      "previewLabel": "预览",
+      "preview": {
+        "uiLabel": "界面",
+        "ui": "Settings 2026 · 界面按钮与标签 128px",
+        "proseLabel": "回复",
+        "prose": "The quick fox 2026 — 回复正文与 English 123 混排效果。",
+        "codeLabel": "代码",
+        "code": "const font = \"Kettu\"; // 代码注释 0123 !== => {}"
+      },
       "ui": {
         "name": "界面字体",
-        "description": "菜单、按钮、侧边栏和设置用的字体。所选字体缺少的字形由主题的字体补上。"
+        "description": "菜单、按钮、侧边栏和设置用的字体。中文字体留空时按系统中文字体回退。",
+        "cjkName": "界面中文字体",
+        "cjkDescription": "菜单、按钮、侧边栏和设置用的可选中文字体，排在主字体之后；留空时按系统中文字体回退。"
       },
       "prose": {
         "name": "回复字体",
-        "description": "对话里的回复和你发送的消息用的字体。所选字体缺少的字形由主题的字体补上。"
+        "description": "对话里的回复和你发送的消息用的字体。中文字体留空时按系统中文字体回退。",
+        "cjkName": "回复中文字体",
+        "cjkDescription": "对话里的回复和你发送的消息用的可选中文字体，排在主字体之后；留空时按系统中文字体回退。"
       },
       "code": {
         "name": "代码字体",
-        "description": "代码块、行内代码、差异和编辑器用的字体，终端没选自己的字体时也用它。这里只列等宽字体。"
+        "description": "代码块、行内代码、差异和编辑器用的字体，终端没选自己的字体时也用它。主字体只列等宽字体。",
+        "cjkName": "代码中文字体",
+        "cjkDescription": "代码块、行内代码、差异和编辑器用的可选中文字体，排在主代码字体之后；留空时按系统中文字体回退。"
       }
     }
   },

@@ -89,7 +89,7 @@ import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
 import { DebugModeRow } from './debug-mode'
-import { FontFamily, UserFont } from './font-family'
+import { FontFamily, FontsCard } from './font-family'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
 import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
@@ -370,7 +370,9 @@ export function useGeneralSection(): SectionDef {
 export function useAppearanceSection(): SectionDef {
   const { t } = useTranslation('settings')
   const scale = group('scale', t('appearance.groups.scale'))
-  const fonts = group('fonts', t('appearance.groups.fonts'))
+  const fonts = group('fonts', t('appearance.groups.fonts'), {
+    card: () => <FontsCard />,
+  })
   const sidebar = group('sidebar', t('appearance.groups.sidebar'), {
     card: (rows) => <SidebarCard rows={rows} />,
   })
@@ -433,12 +435,20 @@ export function useAppearanceSection(): SectionDef {
         layout: 'bare',
         render: (text) => <TextSize label={text} />,
       },
-      ...USER_FONT_ROLES.map((role) => ({
-        id: `font-${role}`,
-        setting: `appearance.font-${role}` as const,
-        group: fonts,
-        render: () => <UserFont role={role} label={t(`appearance.fonts.${role}.name`)} />,
-      })),
+      ...USER_FONT_ROLES.flatMap<RowDef>((role) => [
+        {
+          id: `font-${role}`,
+          setting: `appearance.font-${role}` as const,
+          group: fonts,
+          render: () => null,
+        },
+        {
+          id: `font-${role}-cjk`,
+          setting: `appearance.font-${role}-cjk` as const,
+          group: fonts,
+          render: () => null,
+        },
+      ]),
       {
         id: 'sidebar-hover',
         setting: 'appearance.sidebar-hover',

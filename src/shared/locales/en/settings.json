@@ -340,19 +340,42 @@
       "reset": "Reset"
     },
     "fonts": {
-      "keywords": "font family typeface installed",
+      "keywords": "font family typeface installed latin english",
+      "cjkKeywords": "font family typeface chinese cjk han pingfang yahei noto",
       "default": "Theme’s font",
+      "cjkDefault": "System Chinese",
+      "primaryLabel": "Primary",
+      "cjkLabel": "Chinese (optional)",
+      "cjkSample": "汉字",
+      "reset": "Reset",
+      "resetPrimary": "Reset {{role}}",
+      "resetCjk": "Reset {{role}}",
+      "previewLabel": "Preview",
+      "preview": {
+        "uiLabel": "Interface",
+        "ui": "Settings 2026 · 界面按钮与标签 128px",
+        "proseLabel": "Reply",
+        "prose": "The quick fox 2026 — 回复正文与 English 123 混排效果。",
+        "codeLabel": "Code",
+        "code": "const font = \"Kettu\"; // 代码注释 0123 !== => {}"
+      },
       "ui": {
         "name": "Interface font",
-        "description": "Menus, buttons, the sidebar and Settings. The theme’s font fills in what it lacks."
+        "description": "Menus, buttons, the sidebar and Settings. Leave Chinese blank to fall back to the system Chinese font.",
+        "cjkName": "Interface Chinese font",
+        "cjkDescription": "Optional Chinese font for menus, buttons, the sidebar and Settings. Follows the primary font; leave blank for the system Chinese font."
       },
       "prose": {
         "name": "Reply font",
-        "description": "Replies and your messages in the thread. The theme’s font fills in what it lacks."
+        "description": "Replies and your messages in the thread. Leave Chinese blank to fall back to the system Chinese font.",
+        "cjkName": "Reply Chinese font",
+        "cjkDescription": "Optional Chinese font for replies and your messages in the thread. Follows the primary font; leave blank for the system Chinese font."
       },
       "code": {
         "name": "Code font",
-        "description": "Code blocks, inline code, diffs and the editor, and the terminal unless it has a font of its own. Only monospace fonts are listed."
+        "description": "Code blocks, inline code, diffs, the editor, and the terminal unless it has a font of its own. Primary lists monospace fonts only.",
+        "cjkName": "Code Chinese font",
+        "cjkDescription": "Optional Chinese font for code blocks, inline code, diffs and the editor. Follows the primary code font; leave blank for the system Chinese font."
       }
     }
   },

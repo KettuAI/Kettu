@@ -1,12 +1,19 @@
 // A face installed on this computer, picked from a searchable menu: the terminal's, and the
-// interface's, replies' and code's in Appearance. Where the window cannot list fonts, a name typed
-// into the search is used as it is.
+// interface's, replies' and code's in Appearance (each with an optional Chinese font). Where the
+// window cannot list fonts, a name typed into the search is used as it is.
 
 import { useRef, useState } from 'react'
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
 import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { isFontFamilyName, type UserFontRole } from '@shared/settings'
+import { fontStack, userFontStack } from '@shared/font-stack'
+import {
+  cjkFontKey,
+  isFontFamilyName,
+  USER_FONT_ROLES,
+  type UserFontKey,
+  type UserFontRole,
+} from '@shared/settings'
 import { Icon } from '@renderer/components/affect/app-shell'
 import {
   Combobox,
@@ -16,10 +23,11 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@renderer/components/ui/combobox'
-import { terminalFontStack } from '@renderer/features/terminal/font-stack'
 import { listInstalledFonts, type FontList } from '@renderer/features/terminal/local-fonts'
+import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { ControlError } from './controls'
+import { FlashMark, RowGroup, RowShell, RowText } from './rows'
 import { useApply } from './use-apply'
 
 // Rows are drawn a page at a time, more as the list scrolls: hundreds of rows at once block the
@@ -58,27 +66,137 @@ const ROLE_FALLBACK: Record<UserFontRole, string> = {
   code: 'var(--font-mono)',
 }
 
-/** The face of the interface, replies or code, over the theme's. */
-export function UserFont({ role, label }: { role: UserFontRole; label: string }) {
+const ROLE_THEME_FALLBACK: Record<UserFontRole, string> = {
+  ui: 'var(--theme-ui-face)',
+  prose: 'var(--theme-prose-face)',
+  code: 'var(--theme-code-face)',
+}
+
+/**
+ * Settings › Appearance › Fonts: primary and optional Chinese pickers for interface, replies and
+ * code, followed by a live mixed Latin/digits/code/Chinese preview.
+ */
+export function FontsCard() {
+  const { t } = useTranslation('settings')
+  const { useSettingsStore } = useHostScope()
+  const fonts = useSettingsStore((s) => s.settings.appearance.fonts)
+
+  return (
+    <RowGroup>
+      {USER_FONT_ROLES.map((role) => (
+        <UserFontRoleRow key={role} role={role} />
+      ))}
+      <RowShell>
+        <div className="k-font-preview-row">
+          <span aria-hidden className="k-preview-label">
+            {t('appearance.fonts.previewLabel')}
+          </span>
+          <div aria-hidden className="k-inset k-font-preview" data-testid="font-preview">
+            {USER_FONT_ROLES.map((role) => (
+              <div
+                key={role}
+                className={`k-font-preview__line k-font-preview__line--${role}`}
+                data-font-preview-role={role}
+              >
+                <span className="k-font-preview__tag">
+                  {t(`appearance.fonts.preview.${role}Label`)}
+                </span>
+                <span
+                  className="k-font-preview__sample"
+                  style={{ fontFamily: userFontStack(role, fonts) ?? ROLE_THEME_FALLBACK[role] }}
+                >
+                  {t(`appearance.fonts.preview.${role}`)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </RowShell>
+    </RowGroup>
+  )
+}
+
+function UserFontRoleRow({ role }: { role: UserFontRole }) {
   const { t } = useTranslation('settings')
   const { useSettingsStore } = useHostScope()
   const fonts = useSettingsStore((s) => s.settings.appearance.fonts)
   const [apply, error] = useApply()
+  const cjkKey = cjkFontKey(role)
+  const primary = fonts[role] ?? null
+  const cjk = fonts[cjkKey] ?? null
+  const primaryName = t(`appearance.fonts.${role}.name`)
+  const cjkName = t(`appearance.fonts.${role}.cjkName`)
+
+  const updateFont = (key: UserFontKey, id: string | null) => {
+    const next = { ...fonts }
+    if (id === null) delete next[key]
+    else next[key] = id
+    apply({ appearance: { fonts: next } })
+  }
+
   return (
-    <FontPicker
-      label={label}
-      family={fonts[role] ?? null}
-      defaultLabel={t('appearance.fonts.default')}
-      monospace={role === 'code'}
-      fallback={ROLE_FALLBACK[role]}
-      error={error}
-      onPick={(id) => {
-        const next = { ...fonts }
-        if (id === null) delete next[role]
-        else next[role] = id
-        apply({ appearance: { fonts: next } })
-      }}
-    />
+    <RowShell id={`font-${role}`}>
+      <div className="k-block k-font-role">
+        <div className="k-font-role__head">
+          <RowText name={primaryName} description={t(`appearance.fonts.${role}.description`)} />
+          <ControlError error={error} />
+        </div>
+        <div className="k-font-pair">
+          <div className="k-field k-font-field">
+            <span className="k-font-field__head">
+              <span>{t('appearance.fonts.primaryLabel')}</span>
+              {primary && (
+                <button
+                  type="button"
+                  className="k-font-clear"
+                  aria-label={t('appearance.fonts.resetPrimary', { role: primaryName })}
+                  onClick={() => updateFont(role, null)}
+                >
+                  {t('appearance.fonts.reset')}
+                </button>
+              )}
+            </span>
+            <FontPicker
+              label={primaryName}
+              family={primary}
+              defaultLabel={t('appearance.fonts.default')}
+              monospace={role === 'code'}
+              fallback={ROLE_FALLBACK[role]}
+              triggerClassName="k-select--full"
+              error={null}
+              onPick={(id) => updateFont(role, id)}
+            />
+          </div>
+          <div data-setting-row={`font-${role}-cjk`} className="k-row k-field k-font-field">
+            <FlashMark id={`font-${role}-cjk`} />
+            <span className="k-font-field__head">
+              <span>{t('appearance.fonts.cjkLabel')}</span>
+              {cjk && (
+                <button
+                  type="button"
+                  className="k-font-clear"
+                  aria-label={t('appearance.fonts.resetCjk', { role: cjkName })}
+                  onClick={() => updateFont(cjkKey, null)}
+                >
+                  {t('appearance.fonts.reset')}
+                </button>
+              )}
+            </span>
+            <FontPicker
+              label={cjkName}
+              family={cjk}
+              defaultLabel={t('appearance.fonts.cjkDefault')}
+              monospace={false}
+              fallback={ROLE_FALLBACK[role]}
+              sample={t('appearance.fonts.cjkSample')}
+              triggerClassName="k-select--full"
+              error={null}
+              onPick={(id) => updateFont(cjkKey, id)}
+            />
+          </div>
+        </div>
+      </div>
+    </RowShell>
   )
 }
 
@@ -88,6 +206,8 @@ function FontPicker({
   defaultLabel,
   monospace,
   fallback,
+  sample,
+  triggerClassName,
   error,
   onPick,
 }: {
@@ -98,6 +218,9 @@ function FontPicker({
   monospace: boolean
   /** The stack each face is drawn over in the menu. */
   fallback: string
+  /** Optional short sample shown on the right of each menu item (e.g. CJK characters). */
+  sample?: string
+  triggerClassName?: string
   error: string | null
   onPick(id: string | null): void
 }) {
@@ -168,7 +291,7 @@ function FontPicker({
           render={
             <button
               type="button"
-              className="ui-ss-select k-select k-select--wide"
+              className={cn('ui-ss-select k-select', triggerClassName ?? 'k-select--wide')}
               aria-label={label}
             />
           }
@@ -192,24 +315,32 @@ function FontPicker({
               if (limit < choices.length && ahead < list.clientHeight) setDrawn(limit + PAGE)
             }}
           >
-            {(choice: FontChoice) => (
-              <ComboboxItem
-                key={choice.id ?? ''}
-                value={choice}
-                className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2 [content-visibility:auto]"
-              >
-                <span
-                  className="truncate text-menu text-primary"
-                  style={
-                    choice.id && !choice.custom
-                      ? { fontFamily: terminalFontStack(choice.id, fallback) }
-                      : undefined
-                  }
+            {(choice: FontChoice) => {
+              const previewStyle =
+                choice.id && !choice.custom
+                  ? { fontFamily: fontStack(choice.id, fallback) }
+                  : undefined
+              return (
+                <ComboboxItem
+                  key={choice.id ?? ''}
+                  value={choice}
+                  className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2 [content-visibility:auto]"
                 >
-                  {choice.label}
-                </span>
-              </ComboboxItem>
-            )}
+                  <span className="truncate text-menu text-primary" style={previewStyle}>
+                    {choice.label}
+                  </span>
+                  {sample && previewStyle && (
+                    <span
+                      aria-hidden
+                      className="ml-auto shrink-0 text-small text-tertiary"
+                      style={previewStyle}
+                    >
+                      {sample}
+                    </span>
+                  )}
+                </ComboboxItem>
+              )
+            }}
           </ComboboxList>
           <ComboboxEmpty>{t(monospace ? 'fonts.noMonospaceMatch' : 'fonts.noMatch')}</ComboboxEmpty>
           {fonts === null && open && (

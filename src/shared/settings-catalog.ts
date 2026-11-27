@@ -10,6 +10,7 @@ import type { Platform } from './platform'
 import { PLUGIN_SETTING_CHARS } from './plugins'
 import {
   APP_ICONS,
+  cjkFontKey,
   isFontFamilyName,
   MAX_FONT_FAMILY_CHARS,
   type UserFontRole,
@@ -263,6 +264,31 @@ function userFont(role: UserFontRole): CatalogEntry {
       const fonts = { ...file.appearance.fonts }
       if (value === '' || value === null) delete fonts[role]
       else fonts[role] = String(value)
+      return { appearance: { fonts } }
+    },
+  }
+}
+
+/** An optional Chinese face for one kind of text; empty falls back to the system Chinese face. */
+function userCjkFont(role: UserFontRole): CatalogEntry {
+  const key = cjkFontKey(role)
+  return {
+    section: 'appearance',
+    row: `font-${role}-cjk`,
+    group: 'appearance.groups.fonts',
+    name: `appearance.fonts.${role}.cjkName`,
+    description: `appearance.fonts.${role}.cjkDescription`,
+    keywords: 'appearance.fonts.cjkKeywords',
+    part: 'desktop',
+    access: 'change',
+    kind: 'text',
+    chars: MAX_FONT_FAMILY_CHARS,
+    check: (value) => value === '' || isFontFamilyName(value),
+    get: (file) => file.appearance.fonts[key] ?? null,
+    patch: (value, file) => {
+      const fonts = { ...file.appearance.fonts }
+      if (value === '' || value === null) delete fonts[key]
+      else fonts[key] = String(value)
       return { appearance: { fonts } }
     },
   }
@@ -631,8 +657,11 @@ const ENTRIES = {
     ),
   },
   'appearance.font-ui': userFont('ui'),
+  'appearance.font-ui-cjk': userCjkFont('ui'),
   'appearance.font-prose': userFont('prose'),
+  'appearance.font-prose-cjk': userCjkFont('prose'),
   'appearance.font-code': userFont('code'),
+  'appearance.font-code-cjk': userCjkFont('code'),
   'appearance.sidebar-hover': {
     section: 'appearance',
     row: 'sidebar-hover',

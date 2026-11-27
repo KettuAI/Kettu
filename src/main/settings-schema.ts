@@ -34,7 +34,7 @@ import {
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
-  USER_FONT_ROLES,
+  USER_FONT_KEYS,
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { isComputerApp, isStopShortcut } from '@shared/computer-use'
@@ -195,7 +195,7 @@ const isUserFonts: Check = (value, path) => {
     return `"${path}" must be an object`
   }
   for (const [role, family] of Object.entries(value)) {
-    if (!(USER_FONT_ROLES as readonly string[]).includes(role)) {
+    if (!(USER_FONT_KEYS as readonly string[]).includes(role)) {
       return `"${path}" names an unknown text "${role}"`
     }
     const problem = checkFontFamily(family, `${path}.${role}`)
