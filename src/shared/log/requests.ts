@@ -137,6 +137,57 @@ export interface DeviceAnswer {
   error?: string
 }
 
+/** 已配对设备单次请求回答从解密请求到写出最后一帧的送达耗时。 */
+export interface DeviceDelivery {
+  device: string
+  /** 从解密请求到写出最后一帧的总耗时（毫秒）。 */
+  ms: number
+  /** 从解密请求到回答入队的主机处理耗时（毫秒）。 */
+  hostMs: number
+  /** 在设备发件箱中排队等待写出的耗时（毫秒）。 */
+  queueMs: number
+  /** 加密并写出所有帧直至最后一帧完成的耗时（毫秒）。 */
+  writeMs: number
+  /** 入队时排在前面的待发与在途字节数。 */
+  queuedBytes: number
+  /** 本条回答的 UTF-8 字节数。 */
+  bytes: number
+  /** 若返回错误，则为错误码。 */
+  error?: string
+}
+
+/** 已配对设备单次实时更新（如补丁批次或摘要事件）从刷出到写出完成的耗时。 */
+export interface DeviceLiveUpdate {
+  device: string
+  /** 从刷出入队到写出最后一帧的总耗时（毫秒）。 */
+  ms: number
+  /** 在发件箱中等待窗口或节流节奏的耗时（毫秒）。 */
+  queueMs: number
+  /** 加密并写出所有帧直至最后一帧完成的耗时（毫秒）。 */
+  writeMs: number
+  /** 入队时排在前面的待发与在途字节数。 */
+  queuedBytes: number
+  /** 本次写出消息的 UTF-8 字节数。 */
+  bytes: number
+  /** 若多批补丁在队列中合并，记录合并批次数。 */
+  merged?: number
+  /** 关联的会话 ID（如有）。 */
+  sessionId?: string
+}
+
+/** 已配对设备单次推送从入队到被推送网关接收的耗时。 */
+export interface DevicePushTiming {
+  device: string
+  /** 推送通道与类型，不含正文或令牌。 */
+  kind: 'alert' | 'background' | 'activity' | 'web-push'
+  /** 从入队到网关返回接收的总耗时（毫秒）。 */
+  ms: number
+  /** 最终成功那次请求发送到网关返回接收的耗时（毫秒）。 */
+  gatewayMs: number
+  /** 尝试次数（含重试）。 */
+  attempts: number
+}
+
 /**
  * Logs a paired device's answer at `info` when it was slow or large, so a slow screen on a device
  * splits into the host's time and the network's. Call it under the request's operation.
@@ -151,6 +202,61 @@ export function logDeviceAnswer(method: string, answer: DeviceAnswer): void {
     bytes,
     ...(shared ? { shared } : {}),
     ...(error ? { error } : {}),
+  })
+}
+
+/**
+ * 记录远程主机侧单次请求从解密到写出回答最后一帧的送达耗时与前方队列积压字节；
+ * 慢请求、大回答、队列积压明显或出错时写 `info`，其余写 `debug`，统一归入 request 日志与诊断包。
+ */
+export function logDeviceDelivery(method: string, delivery: DeviceDelivery): void {
+  const { device, ms, hostMs, queueMs, writeMs, queuedBytes, bytes, error } = delivery
+  const notable =
+    ms >= SLOW_ANSWER_MS ||
+    bytes >= LARGE_ANSWER_BYTES ||
+    queuedBytes >= LARGE_ANSWER_BYTES ||
+    error !== undefined
+  writeLog(notable ? 'info' : 'debug', 'request', `${method} delivered`, {
+    device,
+    ms,
+    hostMs,
+    queueMs,
+    writeMs,
+    queuedBytes,
+    bytes,
+    ...(error ? { error } : {}),
+  })
+}
+
+/**
+ * 记录远程主机侧单次实时更新从刷出到写完的耗时与前方积压字节；
+ * 慢更新、大消息或队列积压明显时写 `info`，其余写 `debug`。
+ */
+export function logDeviceLiveUpdate(kind: string, update: DeviceLiveUpdate): void {
+  const { device, ms, queueMs, writeMs, queuedBytes, bytes, merged, sessionId } = update
+  const notable =
+    ms >= SLOW_ANSWER_MS || bytes >= LARGE_ANSWER_BYTES || queuedBytes >= LARGE_ANSWER_BYTES
+  writeLog(notable ? 'info' : 'debug', 'request', `${kind} written`, {
+    device,
+    ms,
+    queueMs,
+    writeMs,
+    queuedBytes,
+    bytes,
+    ...(merged && merged > 1 ? { merged } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  })
+}
+
+/** 记录单次推送从入队到推送网关接收的耗时，归入 request 日志与诊断包。 */
+export function logDevicePush(push: DevicePushTiming): void {
+  const { device, kind, ms, gatewayMs, attempts } = push
+  writeLog('info', 'request', 'push accepted', {
+    device,
+    kind,
+    ms,
+    gatewayMs,
+    attempts,
   })
 }
 

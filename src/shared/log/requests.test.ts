@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeLog } from './process-log'
-import { isReadMethod, logRequest, REQUEST_REPEAT_MS, summarizeParams } from './requests'
+import {
+  isReadMethod,
+  LARGE_ANSWER_BYTES,
+  logDeviceDelivery,
+  logDeviceLiveUpdate,
+  logDevicePush,
+  logRequest,
+  REQUEST_REPEAT_MS,
+  SLOW_ANSWER_MS,
+  summarizeParams,
+} from './requests'
 
 vi.mock('./process-log', () => ({ writeLog: vi.fn() }))
 
@@ -111,5 +121,169 @@ describe('logRequest', () => {
     logRequest('usage.summary', SUMMARY, 'd-4')
     logRequest('usage.summary', SUMMARY, null)
     expect(written()).toHaveLength(3)
+  })
+})
+
+describe('设备送达耗时日志', () => {
+  const written = () => vi.mocked(writeLog).mock.calls
+
+  beforeEach(() => {
+    vi.mocked(writeLog).mockClear()
+  })
+
+  it('按耗时、大小、队列积压与错误区分回答送达日志级别', () => {
+    logDeviceDelivery('sessions.list', {
+      device: 'd-1',
+      ms: 40,
+      hostMs: 25,
+      queueMs: 5,
+      writeMs: 10,
+      queuedBytes: 512,
+      bytes: 1024,
+    })
+    logDeviceDelivery('sessions.open', {
+      device: 'd-1',
+      ms: SLOW_ANSWER_MS,
+      hostMs: 120,
+      queueMs: 90,
+      writeMs: 40,
+      queuedBytes: 128_000,
+      bytes: 4096,
+    })
+    logDeviceDelivery('sessions.prompt', {
+      device: 'd-2',
+      ms: 20,
+      hostMs: 15,
+      queueMs: 0,
+      writeMs: 5,
+      queuedBytes: 0,
+      bytes: 128,
+      error: 'busy',
+    })
+
+    expect(written()).toEqual([
+      [
+        'debug',
+        'request',
+        'sessions.list delivered',
+        {
+          device: 'd-1',
+          ms: 40,
+          hostMs: 25,
+          queueMs: 5,
+          writeMs: 10,
+          queuedBytes: 512,
+          bytes: 1024,
+        },
+      ],
+      [
+        'info',
+        'request',
+        'sessions.open delivered',
+        {
+          device: 'd-1',
+          ms: SLOW_ANSWER_MS,
+          hostMs: 120,
+          queueMs: 90,
+          writeMs: 40,
+          queuedBytes: 128_000,
+          bytes: 4096,
+        },
+      ],
+      [
+        'info',
+        'request',
+        'sessions.prompt delivered',
+        {
+          device: 'd-2',
+          ms: 20,
+          hostMs: 15,
+          queueMs: 0,
+          writeMs: 5,
+          queuedBytes: 0,
+          bytes: 128,
+          error: 'busy',
+        },
+      ],
+    ])
+  })
+
+  it('记录实时更新从刷出到写出的耗时及合并批次信息', () => {
+    logDeviceLiveUpdate('session.patches', {
+      device: 'd-1',
+      ms: 12,
+      queueMs: 4,
+      writeMs: 8,
+      queuedBytes: 0,
+      bytes: 200,
+      sessionId: 's-1',
+    })
+    logDeviceLiveUpdate('session.patches', {
+      device: 'd-1',
+      ms: 310,
+      queueMs: 280,
+      writeMs: 30,
+      queuedBytes: LARGE_ANSWER_BYTES,
+      bytes: 8000,
+      merged: 4,
+      sessionId: 's-1',
+    })
+
+    expect(written()).toEqual([
+      [
+        'debug',
+        'request',
+        'session.patches written',
+        {
+          device: 'd-1',
+          ms: 12,
+          queueMs: 4,
+          writeMs: 8,
+          queuedBytes: 0,
+          bytes: 200,
+          sessionId: 's-1',
+        },
+      ],
+      [
+        'info',
+        'request',
+        'session.patches written',
+        {
+          device: 'd-1',
+          ms: 310,
+          queueMs: 280,
+          writeMs: 30,
+          queuedBytes: LARGE_ANSWER_BYTES,
+          bytes: 8000,
+          merged: 4,
+          sessionId: 's-1',
+        },
+      ],
+    ])
+  })
+
+  it('以 info 级别记录推送从入队到网关接收耗时', () => {
+    logDevicePush({
+      device: 'd-9',
+      kind: 'alert',
+      ms: 640,
+      gatewayMs: 180,
+      attempts: 2,
+    })
+
+    expect(written()).toEqual([
+      [
+        'info',
+        'request',
+        'push accepted',
+        {
+          device: 'd-9',
+          kind: 'alert',
+          ms: 640,
+          gatewayMs: 180,
+          attempts: 2,
+        },
+      ],
+    ])
   })
 })

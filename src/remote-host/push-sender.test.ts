@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as requestLog from '@shared/log/requests'
 import { currentPrimitives } from '@shared/remote/primitives'
 import {
   DEFAULT_CHOICES,
@@ -210,5 +211,59 @@ describe('sending a push', () => {
     expect(hidden).not.toHaveProperty('project')
     expect(hidden).not.toHaveProperty('plan')
     expect(hidden).toMatchObject({ kind: 'running', sessionId: 's1' })
+  })
+
+  it('记录推送从入队到网关接收的总耗时、网关耗时与重试次数', async () => {
+    let clock = 5000
+    const spy = vi.spyOn(requestLog, 'logDevicePush')
+    try {
+      const key = await importRelayKey(await newRelaySeed())
+      const hostId = await relayHostId(key.publicKey)
+      const device = await currentPrimitives().generateKeyPair(false)
+      let done: () => void = () => {}
+      const finished = new Promise<void>((resolve) => (done = resolve))
+      let call = 0
+      const sender = new PushSender({
+        url: URL,
+        key,
+        hostId,
+        hostName: () => 'Studio',
+        token: () => ACCESS_TOKEN,
+        device: () => ({
+          publicKey: Buffer.from(device.publicKey).toString('base64'),
+          push: {
+            target: { apns: { token: DEVICE_TOKEN, environment: 'sandbox' } },
+            choices: DEFAULT_CHOICES,
+          },
+        }),
+        unregistered: () => {},
+        log: () => {},
+        now: () => clock,
+        retry: { firstMs: 1, maxMs: 5, attempts: 3 },
+        fetch: async () => {
+          call++
+          if (call === 1) {
+            clock += 120
+            return Response.json({ error: 'apns' }, { status: 502 })
+          }
+          clock += 85
+          done()
+          return Response.json({ ok: true }, { status: 200 })
+        },
+      })
+      sender.send(job)
+      await finished
+      // 等待 attempt 返回后记录完成
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(spy).toHaveBeenCalledWith({
+        device: 'phone',
+        kind: 'alert',
+        ms: 205,
+        gatewayMs: 85,
+        attempts: 2,
+      })
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

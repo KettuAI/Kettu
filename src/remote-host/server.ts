@@ -115,7 +115,14 @@ import { bytesSource, Downloads, fileSource } from './downloads'
 import { HostForwards } from './forwards'
 import { ArtifactFrames, FRAME_PATH } from './frames'
 import type { DeviceNotifications } from './notifications'
-import { IN_FLIGHT_BYTES, Outbox, type OutboxLimits } from './outbox'
+import { logDeviceDelivery, logDeviceLiveUpdate } from '@shared/log/requests'
+import {
+  IN_FLIGHT_BYTES,
+  Outbox,
+  type OutboxLimits,
+  type OutboxTrace,
+  type OutboxWriteTiming,
+} from './outbox'
 import type { PairingCode, PairingCodes } from './pairing'
 import { SessionTitles } from './titles'
 import { UploadCounts, UploadError, Uploads } from './uploads'
@@ -1125,6 +1132,9 @@ class DeviceSession {
   private closing: Promise<void> | null = null
   /** The id of the last request the device sent that was read here, which a resume reports. */
   private lastRequest = 0
+  /** 已解密、尚待写出回答最后一帧的设备请求，按请求 ID 记录方法名与解密时刻。 */
+  private readonly pendingRequests = new Map<number, { method: string; decryptedAt: number }>()
+  private readonly now: () => number
   private port: PortChannel | null
   private terminal: DeviceTerminal | null = null
   private devices: DeviceDevices | null = null
@@ -1164,12 +1174,15 @@ class DeviceSession {
     port: PortChannel,
   ) {
     const { options } = server
+    this.now = options.now ?? Date.now
     this.port = port
     this.resumable = version >= RESUME_VERSION
     this.standbys = version >= KEEPALIVE_VERSION
     this.outbox = new Outbox({
       acks: this.resumable,
       limits: options.outboxLimits,
+      now: this.now,
+      onWritten: (timing) => this.recordTiming(timing),
       dropped: (count) =>
         options.log('info', `Dropped ${count} messages for device ${device.id}, which is behind`),
       overflowed: () => {
@@ -1406,6 +1419,7 @@ class DeviceSession {
     this.server.forgetToken(this.token)
     this.token = null
     this.outbox.close()
+    this.pendingRequests.clear()
     this.uploads.closeAll()
     this.downloads.closeAll()
     this.forwards.close()
@@ -1520,9 +1534,20 @@ class DeviceSession {
   /** A message from the device once welcomed. */
   private fromDevice(value: unknown): void {
     if (typeof value !== 'object' || value === null) return
-    const { type, id, name, stream, size, received, ms } = value as Record<string, unknown>
+    const { type, id, method, name, stream, size, received, ms } = value as Record<string, unknown>
     if (type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)) {
       this.lastRequest = Math.max(this.lastRequest, id)
+      if (id >= 0) {
+        // 限制挂起请求追踪表上限，防止异常设备只发不读导致内存增长
+        if (this.pendingRequests.size >= 4096) {
+          const oldest = this.pendingRequests.keys().next().value
+          if (oldest !== undefined) this.pendingRequests.delete(oldest)
+        }
+        this.pendingRequests.set(id, {
+          method: typeof method === 'string' ? method : 'unknown',
+          decryptedAt: this.now(),
+        })
+      }
     }
     switch (type) {
       case 'ack':
@@ -1950,9 +1975,76 @@ class DeviceSession {
     }
   }
 
+  /** 为即将入队发件箱的消息提取回答或实时更新的送达追踪上下文。 */
+  private traceFor(value: unknown): OutboxTrace | undefined {
+    if (typeof value !== 'object' || value === null) return undefined
+    const msg = value as Record<string, unknown>
+    if ((msg.type === 'response' || msg.type === 'error') && typeof msg.id === 'number') {
+      const pending = this.pendingRequests.get(msg.id)
+      if (!pending) return undefined
+      this.pendingRequests.delete(msg.id)
+      const errorCode =
+        msg.type === 'error' &&
+        typeof msg.error === 'object' &&
+        msg.error !== null &&
+        typeof (msg.error as { code?: unknown }).code === 'string'
+          ? (msg.error as { code: string }).code
+          : undefined
+      return {
+        kind: 'answer',
+        method: pending.method,
+        startedAt: pending.decryptedAt,
+        ...(errorCode ? { error: errorCode } : {}),
+      }
+    }
+    if (msg.type === 'event' && typeof msg.event === 'object' && msg.event !== null) {
+      const ev = msg.event as Record<string, unknown>
+      if (typeof ev.type !== 'string') return undefined
+      const sessionId = liveEventSessionId(ev)
+      return {
+        kind: 'live',
+        eventType: ev.type,
+        ...(sessionId ? { sessionId } : {}),
+        startedAt: this.now(),
+      }
+    }
+    return undefined
+  }
+
+  /** 将发件箱最后一帧写出完成时的送达耗时写入 request 日志。 */
+  private recordTiming(timing: OutboxWriteTiming): void {
+    const { trace, enqueuedAt, sendStartedAt, writtenAt, queuedBytes, bytes, merged } = timing
+    const queueMs = Math.max(0, Math.round(sendStartedAt - enqueuedAt))
+    const writeMs = Math.max(0, Math.round(writtenAt - sendStartedAt))
+    if (trace.kind === 'answer') {
+      logDeviceDelivery(trace.method, {
+        device: this.device.id,
+        ms: Math.max(0, Math.round(writtenAt - trace.startedAt)),
+        hostMs: Math.max(0, Math.round(enqueuedAt - trace.startedAt)),
+        queueMs,
+        writeMs,
+        queuedBytes,
+        bytes,
+        ...(trace.error ? { error: trace.error } : {}),
+      })
+      return
+    }
+    logDeviceLiveUpdate(trace.eventType, {
+      device: this.device.id,
+      ms: Math.max(0, Math.round(writtenAt - trace.startedAt)),
+      queueMs,
+      writeMs,
+      queuedBytes,
+      bytes,
+      ...(merged > 1 ? { merged } : {}),
+      ...(trace.sessionId ? { sessionId: trace.sessionId } : {}),
+    })
+  }
+
   private send(value: unknown): void {
     if (!this.live) return
-    this.outbox.push({ kind: 'json', value }).catch((error: unknown) => {
+    const trace = this.traceFor(value)
+    this.outbox.push({ kind: 'json', value }, trace).catch((error: unknown) => {
       if (!this.live) return
       const { type, id } = value as { type?: unknown; id?: unknown }
       this.server.options.log(
@@ -1963,10 +2055,22 @@ class DeviceSession {
       if ((type === 'response' || type === 'error') && typeof id === 'number') {
         const message = t('remote.answerTooLong')
         const failed = { type: 'error', id, error: { code: 'internal', message } }
-        this.outbox.push({ kind: 'json', value: failed }).catch(() => {})
+        const failedTrace: OutboxTrace | undefined =
+          trace?.kind === 'answer' ? { ...trace, error: 'internal' } : undefined
+        this.outbox.push({ kind: 'json', value: failed }, failedTrace).catch(() => {})
       }
     })
   }
+}
+
+/** 从实时事件对象中提取关联会话 ID（若存在）。 */
+function liveEventSessionId(event: Record<string, unknown>): string | undefined {
+  if (typeof event.sessionId === 'string') return event.sessionId
+  const batch = event.batch as { sessionId?: unknown } | undefined
+  if (typeof batch?.sessionId === 'string') return batch.sessionId
+  const summary = event.summary as { id?: unknown } | undefined
+  if (typeof summary?.id === 'string') return summary.id
+  return undefined
 }
 
 /** Built when needed, so its words follow the language the host was last told. */

@@ -5,6 +5,7 @@
 // subscription is gone ends it. The log says which device and why, never the content or the
 // subscription.
 
+import { logDevicePush } from '@shared/log/requests'
 import { MAX_PUSH_BODY_TEXT, MAX_PUSH_TITLE, pushTag, type PushContent } from '@shared/remote/push'
 import { decodeRelayBytes, type RelayKey } from '@shared/remote/relay'
 import { MAX_WEB_PUSH_PAYLOAD, signWebPush, type StoredWebPush } from '@shared/remote/web-push'
@@ -50,6 +51,8 @@ export interface WebPushSenderOptions {
 
 interface Entry {
   job: WebAlert
+  /** 推送入队时刻（毫秒），用于统计从入队到推送服务接收的总耗时。 */
+  queuedAt: number
   cancelled: boolean
 }
 
@@ -74,7 +77,7 @@ export class WebPushSender {
     if (this.stopped || !this.options.device(job.deviceId)) return
     const queue = this.queues.get(job.deviceId) ?? []
     for (const entry of queue) if (entry.job.subject === job.subject) entry.cancelled = true
-    queue.push({ job, cancelled: false })
+    queue.push({ job, queuedAt: this.now(), cancelled: false })
     this.queues.set(job.deviceId, queue)
     void this.run(job.deviceId)
   }
@@ -105,11 +108,13 @@ export class WebPushSender {
   private async deliver(deviceId: string, entry: Entry): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       if (entry.cancelled || this.stopped) return
-      const failure = await this.attempt(deviceId, entry.job).catch((error: unknown): Failure => ({
-        retry: true,
-        afterMs: null,
-        reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
-      }))
+      const failure = await this.attempt(deviceId, entry, attempt).catch(
+        (error: unknown): Failure => ({
+          retry: true,
+          afterMs: null,
+          reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
+        }),
+      )
       if (!failure?.retry) return
       if (attempt >= this.retry.attempts) {
         this.options.log(
@@ -135,7 +140,12 @@ export class WebPushSender {
   }
 
   /** One try: null once the push service took it, or why not. */
-  private async attempt(deviceId: string, job: WebAlert): Promise<Failure | null> {
+  private async attempt(
+    deviceId: string,
+    entry: Entry,
+    attemptNumber: number,
+  ): Promise<Failure | null> {
+    const { job } = entry
     const device = this.options.device(deviceId)
     const devicePublicKey = device && publicKeyBytes(device.publicKey)
     if (!device || !devicePublicKey) return { retry: false }
@@ -154,6 +164,7 @@ export class WebPushSender {
       return { retry: false }
     }
     const body = encryptWebPush(payload, p256dh, secrets.auth)
+    const sentAt = this.now()
     const response = await this.fetch(web.endpoint, {
       method: 'POST',
       headers: {
@@ -176,7 +187,17 @@ export class WebPushSender {
       body: new Uint8Array(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
-    if (response.ok) return null
+    if (response.ok) {
+      const acceptedAt = this.now()
+      logDevicePush({
+        device: deviceId,
+        kind: 'web-push',
+        ms: Math.max(0, Math.round(acceptedAt - entry.queuedAt)),
+        gatewayMs: Math.max(0, Math.round(acceptedAt - sentAt)),
+        attempts: attemptNumber,
+      })
+      return null
+    }
     const reason = `status ${response.status}`
     if (response.status === 404 || response.status === 410) {
       this.options.log('info', `The push service no longer takes device ${deviceId}'s subscription`)
