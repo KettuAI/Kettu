@@ -16,58 +16,70 @@ import { backgroundText, hasNamedBackground, type RowStatus } from './row-status
 export function SessionIndicator({
   status,
   expiring,
+  label,
   className,
 }: {
   status: RowStatus
   /** The session's prompt cache, in its last minutes. */
   expiring: KnownExpiry | null
+  /** Custom aria-label and hover title, used for aggregated folder status. */
+  label?: string
   className?: string
 }) {
   const { t } = useTranslation('sidebar')
 
   let mark = null
   if (status.waiting > 0) {
+    const text = label ?? t('indicator.waiting', { count: status.waiting })
     mark = (
       <span
         role="img"
-        aria-label={t('indicator.waiting', { count: status.waiting })}
+        aria-label={text}
+        title={label}
         className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
       />
     )
   } else if (status.failed) {
+    const text = label ?? t('indicator.error')
     mark = (
-      <span role="img" aria-label={t('indicator.error')} className="grid text-danger">
+      <span role="img" aria-label={text} title={label} className="grid text-danger">
         <Glyph icon={Alert02Icon} size={14} />
       </span>
     )
   } else if (status.running) {
+    const text = label ?? t('indicator.running')
     mark = (
-      <span role="img" aria-label={t('indicator.running')} className="grid">
+      <span role="img" aria-label={text} title={label} className="grid">
         <TurnDots phase="working" />
       </span>
     )
   } else if (status.background) {
-    const label = hasNamedBackground(status.background)
-      ? t('indicator.background', { work: backgroundText(t, status.background) })
-      : t('indicator.backgroundUnnamed')
+    const text =
+      label ??
+      (hasNamedBackground(status.background)
+        ? t('indicator.background', { work: backgroundText(t, status.background) })
+        : t('indicator.backgroundUnnamed'))
     mark = (
-      <span role="img" aria-label={label} title={label} className="grid">
+      <span role="img" aria-label={text} title={text} className="grid">
         <BackgroundDots />
       </span>
     )
   } else if (status.starting) {
+    const text = label ?? t('indicator.starting')
     mark = (
-      <span role="img" aria-label={t('indicator.starting')} className="grid">
+      <span role="img" aria-label={text} title={label} className="grid">
         <TurnDots phase="thinking" />
       </span>
     )
   } else if (expiring) {
     mark = <CacheRing cache={expiring} />
   } else if (status.unread) {
+    const text = label ?? t('indicator.unread')
     mark = (
       <span
         role="img"
-        aria-label={t('indicator.unread')}
+        aria-label={text}
+        title={label}
         className="size-1.5 rounded-full bg-(--accent)"
       />
     )
