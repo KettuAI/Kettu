@@ -7552,16 +7552,24 @@ export class SessionManager {
       return null
     }
     let commands = 0
+    let monitors = 0
+    let scheduled = 0
     for (const task of live.thread.session.background ?? []) {
-      if (task.status === 'running') commands++
+      if (task.status !== 'running') continue
+      if (task.schedule?.mode === 'timer' || task.schedule?.mode === 'cron') scheduled++
+      else if (task.kind === 'monitor') monitors++
+      else commands++
     }
+    const totalScheduled = Math.max(scheduled, live.scheduled)
     const subagents = this.workingSubagents(live).length
-    if (commands + subagents === 0) {
+    if (commands + monitors + totalScheduled + subagents === 0) {
       return idleWaiting ? { commands: 0, subagents: 0, reportsBack: true, unnamed: true } : null
     }
     return {
       commands,
       subagents,
+      ...(monitors > 0 ? { monitors } : {}),
+      ...(totalScheduled > 0 ? { scheduled: totalScheduled } : {}),
       reportsBack: idleWaiting || live.connection?.reportsBack === true,
     }
   }
@@ -7575,9 +7583,15 @@ export class SessionManager {
   private backgroundWork(live: Live): BackgroundWork | null {
     const commands: string[] = []
     const tasks: string[] = []
+    let listedScheduled = 0
     for (const task of live.thread.session.background ?? []) {
       if (task.status !== 'running') continue
-      ;(task.kind === 'shell' ? commands : tasks).push(task.title)
+      if (task.schedule?.mode === 'timer' || task.schedule?.mode === 'cron') {
+        listedScheduled++
+        tasks.push(task.title)
+      } else {
+        ;(task.kind === 'shell' ? commands : tasks).push(task.title)
+      }
     }
     const subagents = this.workingSubagents(live).map(
       ({ child }) =>
@@ -7585,10 +7599,11 @@ export class SessionManager {
         child.thread.session.title ??
         t('session.untitled'),
     )
+    const extraScheduled = Math.max(0, live.scheduled - listedScheduled)
     const named = commands.length + tasks.length + subagents.length > 0
     const unnamed = live.background && !named
-    if (!named && !unnamed && live.scheduled === 0) return null
-    return { commands, tasks, subagents, scheduled: live.scheduled, unnamed }
+    if (!named && !unnamed && extraScheduled === 0) return null
+    return { commands, tasks, subagents, scheduled: extraScheduled, unnamed }
   }
 
   /** What ending the session's agent would stop; null when nothing runs. */

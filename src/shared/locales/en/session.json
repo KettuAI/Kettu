@@ -67,6 +67,13 @@
     "subagents_other": "{{count}} sub-agents",
     "commands_one": "{{count}} command",
     "commands_other": "{{count}} commands",
+    "monitors_one": "{{count}} monitor",
+    "monitors_other": "{{count}} monitors",
+    "scheduled_one": "{{count}} scheduled task",
+    "scheduled_other": "{{count}} scheduled tasks",
+    "timerLeft": "timer ({{left}} left)",
+    "cronExpr": "scheduled ({{cron}})",
+    "listSeparator": ", ",
     "both": "{{subagents}} and {{commands}}",
     "openBoard": "Open board"
   },

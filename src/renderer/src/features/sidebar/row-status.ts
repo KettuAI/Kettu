@@ -2,12 +2,21 @@ import type { TFunction } from 'i18next'
 import type { StillRunning } from '@shared/agent-host'
 import type { SessionNode } from '@renderer/stores/sessions'
 
-/** What runs on after a turn: background commands, sub-agents, or unnamed background tasks. */
-export type Background = Pick<StillRunning, 'commands' | 'subagents' | 'unnamed'>
+/** What runs on after a turn: background commands, monitors, schedules, sub-agents, or unnamed tasks. */
+export type Background = Pick<
+  StillRunning,
+  'commands' | 'subagents' | 'monitors' | 'scheduled' | 'unnamed'
+>
 
-/** Whether `background` has named commands or sub-agents to enumerate. */
+/** Whether `background` has named commands, monitors, schedules, or sub-agents to enumerate. */
 export function hasNamedBackground(background: Background): boolean {
-  return background.commands + background.subagents > 0
+  return (
+    background.commands +
+      background.subagents +
+      (background.monitors ?? 0) +
+      (background.scheduled ?? 0) >
+    0
+  )
 }
 
 /** What a row's status slot can show. */
@@ -31,13 +40,24 @@ export function joinBackground(
 ): Background | null {
   let commands = 0
   let subagents = 0
+  let monitors = 0
+  let scheduled = 0
   let unnamed = false
   for (const item of items) {
     commands += item?.commands ?? 0
     subagents += item?.subagents ?? 0
+    monitors += item?.monitors ?? 0
+    scheduled += item?.scheduled ?? 0
     if (item?.unnamed) unnamed = true
   }
-  if (commands + subagents > 0) return { commands, subagents }
+  if (commands + subagents + monitors + scheduled > 0) {
+    return {
+      commands,
+      subagents,
+      ...(monitors > 0 ? { monitors } : {}),
+      ...(scheduled > 0 ? { scheduled } : {}),
+    }
+  }
   return unnamed ? { commands: 0, subagents: 0, unnamed: true } : null
 }
 
@@ -69,10 +89,21 @@ export function rowStatus(node: SessionNode, rolledUp: boolean): RowStatus {
 }
 
 /** What runs on, in words: "2 sub-agents, 1 command". */
-export function backgroundText(t: TFunction<'sidebar'>, { commands, subagents }: Background) {
-  const agents = t('stillRunning.subagents', { count: subagents })
-  const shell = t('stillRunning.commands', { count: commands })
-  if (commands === 0) return agents
-  if (subagents === 0) return shell
-  return t('stillRunning.both', { subagents: agents, commands: shell })
+export function backgroundText(
+  t: TFunction<'sidebar'>,
+  { commands, subagents, monitors = 0, scheduled = 0 }: Background,
+) {
+  if (monitors === 0 && scheduled === 0) {
+    const agents = t('stillRunning.subagents', { count: subagents })
+    const shell = t('stillRunning.commands', { count: commands })
+    if (commands === 0) return agents
+    if (subagents === 0) return shell
+    return t('stillRunning.both', { subagents: agents, commands: shell })
+  }
+  const parts: string[] = []
+  if (subagents > 0) parts.push(t('stillRunning.subagents', { count: subagents }))
+  if (commands > 0) parts.push(t('stillRunning.commands', { count: commands }))
+  if (monitors > 0) parts.push(t('stillRunning.monitors', { count: monitors }))
+  if (scheduled > 0) parts.push(t('stillRunning.scheduled', { count: scheduled }))
+  return parts.join(t('stillRunning.listSeparator'))
 }

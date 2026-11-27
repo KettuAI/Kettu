@@ -122,6 +122,50 @@ describe('agy transcript tail parsing', () => {
       hasToolCalls: false,
     })
   })
+
+  it('skips trailing CHECKPOINT lines and surfaces latestPlanner behind SYSTEM_MESSAGE or GENERIC', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'agy-wait-'))
+    tempDirs.push(dir)
+    const file = path.join(dir, 'transcript.jsonl')
+    await writeFile(
+      file,
+      [
+        JSON.stringify({ step_index: 1, type: 'USER_INPUT', status: 'DONE' }),
+        JSON.stringify({
+          step_index: 2,
+          type: 'PLANNER_RESPONSE',
+          status: 'DONE',
+          content: 'Monitoring build.',
+        }),
+        JSON.stringify({ step_index: 3, type: 'SYSTEM_MESSAGE', status: 'DONE' }),
+        JSON.stringify({ step_index: 4, type: 'CHECKPOINT', status: 'DONE' }),
+      ].join('\n') + '\n',
+    )
+    expect(await readLatestAgyTranscriptTail(file)).toEqual({
+      stepIndex: 3,
+      type: 'SYSTEM_MESSAGE',
+      status: 'DONE',
+      hasToolCalls: false,
+      latestPlanner: { stepIndex: 2, status: 'DONE', hasToolCalls: false },
+    })
+
+    // Stops lookback at USER_INPUT so an earlier turn's PLANNER_RESPONSE is never leaked across turns.
+    const nextFile = path.join(dir, 'next.jsonl')
+    await writeFile(
+      nextFile,
+      [
+        JSON.stringify({ step_index: 2, type: 'PLANNER_RESPONSE', status: 'DONE' }),
+        JSON.stringify({ step_index: 3, type: 'USER_INPUT', status: 'DONE' }),
+        JSON.stringify({ step_index: 4, type: 'SYSTEM_MESSAGE', status: 'DONE' }),
+      ].join('\n') + '\n',
+    )
+    expect(await readLatestAgyTranscriptTail(nextFile)).toEqual({
+      stepIndex: 4,
+      type: 'SYSTEM_MESSAGE',
+      status: 'DONE',
+      hasToolCalls: false,
+    })
+  })
 })
 
 describe('AgyBackgroundWait', () => {
@@ -591,6 +635,130 @@ describe('AgyBackgroundWait', () => {
     tail = { stepIndex: 3, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
     await vi.advanceTimersByTimeAsync(100)
     expect(events).toEqual([true])
+    tracker.stop()
+  })
+
+  it('enters waiting when trailing SYSTEM_MESSAGE or GENERIC follows a fresh tool-less PLANNER_RESPONSE', async () => {
+    vi.useFakeTimers()
+    const events: boolean[] = []
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => tail,
+      settleMs: 100,
+      retryDelaysMs: [150, 300],
+      onWaitingChange: (_id, waiting) => events.push(waiting),
+    })
+
+    tracker.onPromptStart('s-1', 1_000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Case 1: trailing SYSTEM_MESSAGE (e.g. system reminder) after fresh tool-less DONE planner.
+    tracker.onUpdate('s-1', msgChunk('Waiting for cron.'), false)
+    tracker.onUpdate('s-1', usageUpdate(1_200), false)
+    tail = {
+      stepIndex: 3,
+      type: 'SYSTEM_MESSAGE',
+      status: 'DONE',
+      hasToolCalls: false,
+      latestPlanner: { stepIndex: 2, status: 'DONE', hasToolCalls: false },
+    }
+    // Gives one brief retry on SYSTEM_MESSAGE in case it is a wakeup about to stream.
+    await vi.advanceTimersByTimeAsync(100)
+    expect(events).toEqual([])
+    await vi.advanceTimersByTimeAsync(150)
+    expect(events).toEqual([true])
+
+    // Wakeup clears waiting.
+    tracker.onUpdate('s-1', msgChunk('Checked status, still waiting.'), false)
+    expect(events).toEqual([true, false])
+
+    // Case 2: trailing GENERIC after fresh tool-less DONE planner enters waiting cleanly.
+    tracker.onUpdate('s-1', usageUpdate(1_400), false)
+    tail = {
+      stepIndex: 5,
+      type: 'GENERIC',
+      status: 'DONE',
+      hasToolCalls: false,
+      latestPlanner: { stepIndex: 4, status: 'DONE', hasToolCalls: false },
+    }
+    await vi.advanceTimersByTimeAsync(100)
+    expect(events).toEqual([true, false, true])
+    tracker.stop()
+  })
+
+  it('handles unchanged usage_update, active background fallback after slow flush, and multi-round wakeup loops', async () => {
+    vi.useFakeTimers()
+    const events: [boolean, string | undefined][] = []
+    let activeBg = true
+    let tail: AgyTranscriptTail | null = {
+      stepIndex: 0,
+      type: 'USER_INPUT',
+      status: 'DONE',
+      hasToolCalls: false,
+    }
+    const tracker = new AgyBackgroundWait({
+      tailReader: async () => tail,
+      hasActiveBackground: () => activeBg,
+      settleMs: 100,
+      fallbackMs: 500,
+      retryDelaysMs: [100, 200],
+      onWaitingChange: (_id, waiting, reason) => events.push([waiting, reason]),
+    })
+
+    tracker.onPromptStart('s-1', 1_000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Round 1: agy 1.5.18 usage_update -> tool_call, then chunkless silent wait with unchanged `used`,
+    // while disk stays on GENERIC RUNNING past retry window -> active background prevents infinite spin.
+    tracker.onUpdate('s-1', usageUpdate(1_500), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('c-mon', 'run_command', 'in_progress'), false)
+    tail = { stepIndex: 2, type: 'GENERIC', status: 'RUNNING', hasToolCalls: false }
+
+    // Next step emits usage_update with the SAME `used` (no text chunk) and no tool_call.
+    tracker.onUpdate('s-1', usageUpdate(1_500), false)
+    // Config-only window size change must still be ignored if tested separately; here size is unchanged.
+    await vi.advanceTimersByTimeAsync(100 + 100 + 200)
+    expect(events).toEqual([[true, undefined]])
+
+    // Round 2: background notification wakes the session (reason: 'activity').
+    tracker.onUpdate('s-1', thoughtChunk('60s notification arrived.'), false)
+    expect(events).toEqual([
+      [true, undefined],
+      [false, 'activity'],
+    ])
+    tracker.onUpdate('s-1', usageUpdate(1_800), false)
+    await vi.advanceTimersByTimeAsync(15)
+    tracker.onUpdate('s-1', toolCall('c-check', 'manage_task', 'in_progress'), false)
+    tracker.onUpdate('s-1', toolUpdate('c-check', 'completed'), false)
+
+    // Agent decides to keep waiting silently after checking status -> emits only usage_update.
+    tail = { stepIndex: 4, type: 'PLANNER_RESPONSE', status: 'DONE', hasToolCalls: false }
+    tracker.onUpdate('s-1', usageUpdate(1_900), false)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(events).toEqual([
+      [true, undefined],
+      [false, 'activity'],
+      [true, undefined],
+    ])
+
+    // Round 3: user steers a message (reason: 'steer'), then background finishes and activeBg clears.
+    const gen = tracker.generationOf('s-1')
+    tracker.onSteered('s-1', gen)
+    expect(events.at(-1)).toEqual([false, 'steer'])
+
+    activeBg = false
+    tracker.onUpdate('s-1', msgChunk('All finished.'), false)
+    tail = { stepIndex: 5, type: 'GENERIC', status: 'DONE', hasToolCalls: false }
+    tracker.onUpdate('s-1', usageUpdate(2_100), false)
+    await vi.advanceTimersByTimeAsync(600)
+    // Without active background tasks and without a fresh PLANNER_RESPONSE DONE, stays conservative.
+    expect(events).toHaveLength(4)
     tracker.stop()
   })
 })

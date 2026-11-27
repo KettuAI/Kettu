@@ -146,6 +146,7 @@ import {
 import { PromptChain, steersAgy, type ChainAnswer } from './agy-steering'
 import {
   agyAutoAllowed,
+  agyPlanUpdate,
   fromAgy,
   inWholeFile,
   onAgyOwnFiles,
@@ -856,6 +857,11 @@ export class AcpConnection implements AgentConnection {
       return mapSessionUpdate(update, ctx)
     }
     if (this.agy && onAgyOwnFiles(update, ctx)) return { patches: [], effects: [] }
+    if (this.agy) {
+      const plan = agyPlanUpdate(update, ctx)
+      if (plan === 'suppress') return { patches: [], effects: [] }
+      if (plan !== null) return mapSessionUpdate({ sessionUpdate: 'plan', ...plan }, ctx)
+    }
     const shaped = this.agy
       ? fromAgy(throughGateway(update))
       : this.naming === 'code'
@@ -971,6 +977,7 @@ export class AcpConnection implements AgentConnection {
     this.pending.delete(sessionId)
     this.agyPlans.delete(sessionId)
     this.agyBuildModes.delete(sessionId)
+    this.agyCommands.get(sessionId)?.dispose()
     this.agyCommands.delete(sessionId)
     this.agyMetrics?.forget(sessionId)
     this.agyWait?.forget(sessionId)
@@ -999,6 +1006,8 @@ export class AcpConnection implements AgentConnection {
 
   close(): void {
     this.configQueues.clear()
+    for (const commands of this.agyCommands.values()) commands.dispose()
+    this.agyCommands.clear()
     this.agyMetrics?.stop()
     this.agyWait?.stop()
     this.connection.close()
@@ -1123,6 +1132,13 @@ export class AcpConnection implements AgentConnection {
               prompting: (id) => this.prompting.has(id),
               load: (childId, parentId, quiet) => this.loadSubagent(childId, parentId, quiet),
               settled: (id) => void this.switchPending(id),
+              childEnded: (parentId, childId) => {
+                const commands = this.agyCommands.get(parentId)
+                const target = this.targets.get(parentId)
+                if (commands && target && commands.onSenderEvent(childId, Date.now())) {
+                  this.showCommands(target, commands)
+                }
+              },
               log: (level, message) => this.hooks.log(level, message),
             },
           )
@@ -1139,14 +1155,25 @@ export class AcpConnection implements AgentConnection {
               this.hooks.agyTailReader !== undefined
                 ? this.hooks.agyTailReader
                 : agyTailReader(this.hooks.home, (id) => this.agyAppDataDirOf(id)),
+            hasActiveBackground: (sessionId) =>
+              this.agyCommands.get(sessionId)?.hasActiveBackground === true ||
+              this.subagents?.running(sessionId) === true,
             settleMs: this.hooks.agyWaitSettleMs,
             fallbackMs: this.hooks.agyWaitFallbackMs,
             retryDelaysMs: this.hooks.agyWaitRetryDelaysMs,
-            onWaitingChange: (sessionId, waiting) => {
+            onWaitingChange: (sessionId, waiting, reason) => {
               const target = this.targets.get(sessionId)
               if (!target) return
               const commands = this.agyCommands.get(sessionId)
-              if (commands?.setWaiting(waiting)) this.showCommands(target, commands)
+              if (commands) {
+                const now = Date.now()
+                const changed = waiting
+                  ? commands.setWaiting(true, now)
+                  : reason === 'activity'
+                    ? commands.onWakeup(now) || commands.setWaiting(false, now)
+                    : commands.setWaiting(false, now)
+                if (changed) this.showCommands(target, commands)
+              }
               target.apply({
                 patches: [],
                 effects: [{ kind: 'waitingBackground', waiting }],
@@ -1439,6 +1466,7 @@ export class AcpConnection implements AgentConnection {
     this.configQueues.delete(sessionId)
     this.agyAppDataDirs.delete(sessionId)
     this.agySessionGrants.delete(sessionId)
+    this.agyCommands.get(sessionId)?.dispose()
     this.agyCommands.delete(sessionId)
     this.agyOpened.delete(sessionId)
     this.agyRawCommands.delete(sessionId)
@@ -1560,18 +1588,35 @@ export class AcpConnection implements AgentConnection {
    */
   private noteCommand(sessionId: string, update: SessionUpdate, target: SessionTarget): void {
     if (!this.agy) return
+    if (update.sessionUpdate === 'session_message' && update.senderSessionId) {
+      const commands = this.agyCommands.get(sessionId)
+      if (commands?.onSenderEvent(update.senderSessionId, Date.now())) {
+        this.showCommands(target, commands)
+      }
+      return
+    }
     if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') return
     if (target.context().replaying) return
     const inTurn = this.prompting.has(sessionId)
     let commands = this.agyCommands.get(sessionId)
     if (!commands) {
       if (!inTurn) return
-      commands = new AgyCommands()
+      commands = new AgyCommands({
+        onChange: () => {
+          const current = this.targets.get(sessionId)
+          const tracked = this.agyCommands.get(sessionId)
+          if (!current || !tracked || tracked !== commands) return
+          this.showCommands(current, tracked)
+          if (!this.prompting.has(sessionId) && !this.runsCommands(sessionId)) {
+            void this.switchPending(sessionId)
+          }
+        },
+      })
       this.agyCommands.set(sessionId, commands)
     }
     if (!commands.follow(update, inTurn, Date.now())) return
     this.showCommands(target, commands)
-    if (!inTurn && !commands.running) void this.switchPending(sessionId)
+    if (!inTurn && !this.runsCommands(sessionId)) void this.switchPending(sessionId)
   }
 
   /** The turn ended: the commands still running carry on, on the session board. */
@@ -1588,17 +1633,20 @@ export class AcpConnection implements AgentConnection {
       effects: [
         { kind: 'tasks', tasks: commands.tasks() },
         { kind: 'backgroundRunning', running: commands.running, listed: false },
+        { kind: 'scheduled', jobs: commands.scheduledCount },
       ],
     })
   }
 
   /**
-   * Whether one of agy's commands outlived its turn and runs on, or one of its sub-agents runs,
-   * which a restart would stop.
+   * Whether one of agy's commands or scheduled jobs outlived its turn and runs on, or one of its
+   * sub-agents runs, which a restart would stop.
    */
   private runsCommands(sessionId: string): boolean {
+    const commands = this.agyCommands.get(sessionId)
     return (
-      this.agyCommands.get(sessionId)?.running === true ||
+      commands?.running === true ||
+      (commands?.scheduledCount ?? 0) > 0 ||
       this.subagents?.running(sessionId) === true
     )
   }

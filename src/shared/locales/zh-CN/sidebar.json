@@ -493,6 +493,9 @@
   "stillRunning": {
     "subagents_other": "{{count}} 个子智能体",
     "commands_other": "{{count}} 条命令",
+    "monitors_other": "{{count}} 个监控任务",
+    "scheduled_other": "{{count}} 个定时任务",
+    "listSeparator": "、",
     "both": "{{subagents}}、{{commands}}"
   },
   "subagents": {

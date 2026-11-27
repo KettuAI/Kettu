@@ -45,13 +45,19 @@ export function TaskDetail({
   const notes = [output?.truncated && t('detail.truncated'), live && t('detail.refreshed')].filter(
     Boolean,
   )
+  const commandLabel =
+    task.schedule?.mode === 'timer'
+      ? 'detail.timer'
+      : task.schedule?.mode === 'cron'
+        ? 'detail.schedule'
+        : task.kind === 'monitor'
+          ? 'detail.watching'
+          : 'detail.command'
   return (
     <div className="kb-detail" data-selectable="">
       {command && (
         <>
-          <span className="kb-detail__label">
-            {t(task.kind === 'monitor' ? 'detail.watching' : 'detail.command')}
-          </span>
+          <span className="kb-detail__label">{t(commandLabel)}</span>
           <pre className="kb-detail__command">{task.command ?? task.title}</pre>
         </>
       )}

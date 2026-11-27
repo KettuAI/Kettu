@@ -972,6 +972,10 @@ export interface SessionSummary {
 export interface StillRunning {
   commands: number
   subagents: number
+  /** Running monitors (e.g. timeout-watched commands). Optional for older hosts. */
+  monitors?: number
+  /** Running scheduled timers or recurring crons. Optional for older hosts. */
+  scheduled?: number
   /** The agent starts a turn of its own to report once that work ends. */
   reportsBack: boolean
   /** Background work without a listed command or sub-agent (e.g. a timer or internal task). */

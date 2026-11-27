@@ -39,6 +39,8 @@
   "detail": {
     "command": "命令",
     "watching": "监控对象",
+    "timer": "定时器",
+    "schedule": "定时计划",
     "output": "输出",
     "noOutput": "还没有输出。",
     "readFailed": "无法读取输出：{{error}}",

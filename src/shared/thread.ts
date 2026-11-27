@@ -192,6 +192,24 @@ export interface SideChatSaw {
   fellBackFrom: 'claude' | 'codex' | 'fork' | null
 }
 
+/** Optional schedule or monitor metadata for timers, recurring crons, and timeout-watched commands. */
+export interface BackgroundTaskSchedule {
+  /** One-shot countdown timer, recurring cron job, or timeout-monitored command. */
+  mode: 'timer' | 'cron' | 'timeout'
+  /** When a one-shot timer or next timeout check is due, in ms since epoch. */
+  fireAt?: number
+  /** Configured duration or notification timeout in seconds. */
+  durationSeconds?: number
+  /** Standard 5-field cron expression for recurring jobs. */
+  cron?: string
+  /** Early-cancel condition for one-shot timers (`never`, `any`, or sender id). */
+  condition?: string
+  /** Whether the task is a daemon that outlives its turn. */
+  daemon?: boolean
+  /** Maximum number of triggers for a bounded recurring job. */
+  maxIterations?: number
+}
+
 /** A command or monitor an agent runs beside its turn, as the session board lists it. */
 export interface BackgroundTaskView {
   id: string
@@ -210,6 +228,8 @@ export interface BackgroundTaskView {
    * while it does. Kettu can neither stop it nor read its output before the call ends.
    */
   entryId?: string
+  /** Optional timer, cron, or timeout-watch metadata. */
+  schedule?: BackgroundTaskSchedule
 }
 
 /** A session's hold on the computer, which the label on its composer shows. */
