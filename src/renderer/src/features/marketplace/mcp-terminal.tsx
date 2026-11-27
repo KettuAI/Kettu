@@ -656,11 +656,11 @@ function TurnOffDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
         )}
         {plan && plan.removed.length > 0 && (
           <Group title={t('mcpTerminal.removedGroup')} count={plan.removed.length}>
-            {plan.removed.map((name) => (
+            {plan.removed.map((entry) => (
               <Entry
-                key={name}
+                key={entry}
                 icon={File01Icon}
-                name={name}
+                name={entry}
                 detail={say('goesWithout', row.target, { agent: name })}
                 tag={t('mcpTerminal.removed')}
                 tone="removed"
