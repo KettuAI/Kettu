@@ -1835,6 +1835,57 @@ describe("the thread database's comments", () => {
     db.close()
   })
 
+  it('deletes a thread and cascades its comments while leaving sibling threads intact', () => {
+    const db = withArtifact()
+    add(db, T1)
+    add(db, T2)
+    db.replyThread({
+      id: ID,
+      project: '/p',
+      threadId: T1,
+      author: agent,
+      body: 'Reply on T1',
+      at: 6,
+    })
+    db.replyThread({
+      id: ID,
+      project: null,
+      threadId: T2,
+      author: owner,
+      body: 'Follow-up on T2',
+      at: 7,
+    })
+
+    db.deleteThread({ id: ID, project: null, threadId: T1 })
+
+    const remaining = db.artifactThreads({ id: ID, project: null })
+    expect(remaining.map((t) => t.id)).toEqual([T2])
+    expect(remaining[0]?.comments).toHaveLength(2)
+
+    const raw = (db as unknown as { db: DatabaseSync }).db
+    expect(
+      raw
+        .prepare(
+          'SELECT COUNT(*) AS n FROM artifact_comments WHERE artifact_id = ? AND thread_id = ?',
+        )
+        .get(ID, T1)!.n,
+    ).toBe(0)
+    expect(
+      raw
+        .prepare(
+          'SELECT COUNT(*) AS n FROM artifact_comments WHERE artifact_id = ? AND thread_id = ?',
+        )
+        .get(ID, T2)!.n,
+    ).toBe(2)
+
+    // Deleting a missing thread, another project's thread, or one in Recently deleted fails cleanly.
+    expect(() => db.deleteThread({ id: ID, project: null, threadId: T1 })).toThrow(/no thread/)
+    expect(() => db.deleteThread({ id: ID, project: '/q', threadId: T2 })).toThrow(ThreadDbError)
+    db.deleteArtifact({ id: ID, project: null, at: 8 })
+    expect(() => db.deleteThread({ id: ID, project: null, threadId: T2 })).toThrow(ThreadDbError)
+    db.close()
+  })
+
   it('adds the comment tables to a database of version 5, keeping its artifacts', () => {
     const file = tempFile()
     mkdirSync(path.dirname(file), { recursive: true })

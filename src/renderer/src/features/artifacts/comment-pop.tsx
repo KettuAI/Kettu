@@ -3,7 +3,9 @@ import {
   ArrowUp02Icon,
   Cancel01Icon,
   Comment01Icon,
+  Delete02Icon,
   Location01Icon,
+  PlusSignIcon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { motion, useReducedMotionConfig } from 'motion/react'
@@ -17,6 +19,16 @@ import {
 import type { VersionSummary } from '@shared/artifacts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
@@ -174,9 +186,12 @@ export function ThreadPop({
   versions,
   at,
   inline = false,
+  canResolve = true,
   onClose,
   onRepin,
   onReopened,
+  onDelete = null,
+  onNewThread = null,
 }: {
   artifactId: string
   thread: CommentThread
@@ -185,11 +200,17 @@ export function ThreadPop({
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
   inline?: boolean
+  /** Whether the artifact allows changing comment state; false in Recently deleted. */
+  canResolve?: boolean
   onClose: () => void
   /** Starts pinning it again with the next click; null where the host cannot. */
   onRepin: (() => void) | null
   /** Called after a resolved thread is reopened from inside the popover. */
   onReopened?: () => void
+  /** Requests deleting this thread with confirmation; null when unavailable. */
+  onDelete?: (() => void) | null
+  /** Starts a separate new comment thread on the same element; null when unavailable. */
+  onNewThread?: (() => void) | null
 }) {
   const { t } = useTranslation('artifacts')
   const [reply, setReply] = useState('')
@@ -229,14 +250,27 @@ export function ThreadPop({
         <>
           <span className="k-vt-thread__head">
             <b title={anchorLabel(thread.anchor)}>{anchorLabel(thread.anchor)}</b>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Icon icon={Tick02Icon} size={14} />}
-              onClick={resolve}
-            >
-              {resolved ? t('comments.reopen') : t('comments.resolve')}
-            </Button>
+            {canResolve && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Icon icon={Tick02Icon} size={14} />}
+                onClick={resolve}
+              >
+                {resolved ? t('comments.reopen') : t('comments.resolve')}
+              </Button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                aria-label={t('comments.delete')}
+                title={t('comments.delete')}
+                onClick={onDelete}
+                className="k-vt-icon k-vt-icon--danger"
+              >
+                <Icon icon={Delete02Icon} size={14} />
+              </button>
+            )}
             <button
               type="button"
               aria-label={t('comments.close')}
@@ -285,7 +319,7 @@ export function ThreadPop({
               {error}
             </p>
           )}
-          {!resolved && (
+          {!resolved && canResolve && (
             <span className="k-vt-reply">
               <textarea
                 value={reply}
@@ -319,9 +353,71 @@ export function ThreadPop({
               </button>
             </span>
           )}
+          {onNewThread && (
+            <div className="k-vt-thread__foot">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Icon icon={PlusSignIcon} size={14} />}
+                onClick={onNewThread}
+              >
+                {t('comments.newThread')}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </ToolPop>
+  )
+}
+
+/** Explicit confirmation dialog before permanently deleting a comment thread. */
+export function DeleteCommentDialog({
+  thread,
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  thread: CommentThread | null
+  busy: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const { t } = useTranslation('artifacts')
+  const count = thread?.comments.length ?? 0
+  return (
+    <AlertDialog
+      open={thread !== null}
+      onOpenChange={(open) => {
+        if (!open && !busy) onCancel()
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {count > 1 ? t('comments.deleteTitleReplies') : t('comments.deleteTitle')}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {count > 1
+              ? t('comments.deleteDescriptionReplies', { count })
+              : t('comments.deleteDescription')}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="k-av-error">
+            {t('comments.deleteFailed', { error })}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>{t('comments.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={busy} onClick={onConfirm}>
+            {busy ? t('comments.deleting') : t('comments.deleteConfirm')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

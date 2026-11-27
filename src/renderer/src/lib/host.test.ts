@@ -26,6 +26,12 @@ describe('the host an artifact request goes to', () => {
     learnArtifactHost(id(1), HOST_A)
     expect(routeOf('artifacts.read', { id: id(1) })).toBe(HOST_A)
     expect(routeOf('artifacts.delete', { id: id(1), permanently: true })).toBe(HOST_A)
+    expect(
+      routeOf('artifacts.deleteComment', {
+        id: id(1),
+        threadId: 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D3',
+      }),
+    ).toBe(HOST_A)
     expect(routeOf('artifacts.runtime', { artifactId: id(1), message: {} })).toBe(HOST_A)
     expect(artifactRefOf(id(1))).toBe(`${HOST_A}:${id(1)}`)
   })

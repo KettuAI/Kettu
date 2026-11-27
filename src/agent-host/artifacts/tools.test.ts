@@ -570,3 +570,53 @@ describe('reopening a resolved thread', () => {
     expect(isPending(stored!)).toBe(true)
   })
 })
+
+describe('deleting a comment thread', () => {
+  it('removes the thread and its replies from storage and notifies watchers', async () => {
+    const id = await create({ html: '<h1>Title</h1><p>Body</p>' })
+    const anchor = {
+      version: 1,
+      path: 'index.html',
+      page: null,
+      offset: 14,
+      tag: 'p',
+      text: 'Body',
+      missing: false,
+    }
+    const first = await store.addThread(id, {
+      anchor,
+      author: { person: 'owner', session: null },
+      body: 'Accidental comment',
+    })
+    const second = await store.addThread(id, {
+      anchor,
+      author: { person: 'owner', session: null },
+      body: 'Keep this comment',
+    })
+    await store.reply(id, first.id, {
+      author: { person: 'owner', session: caller.sessionId },
+      body: 'Agent reply',
+    })
+
+    const notified: string[] = []
+    const deps = (
+      store as unknown as { deps: { comments?: (ports: Iterable<string>, id: string) => void } }
+    ).deps
+    const prevComments = deps.comments
+    deps.comments = (_ports, artifactId) => {
+      notified.push(artifactId)
+    }
+    store.watch(id, 'port-1')
+    try {
+      await store.deleteThread(id, first.id)
+    } finally {
+      store.unwatch(id, 'port-1')
+      deps.comments = prevComments
+    }
+
+    expect(notified).toEqual([id])
+    const remaining = await store.threads(id)
+    expect(remaining.map((t) => t.id)).toEqual([second.id])
+    await expect(store.deleteThread(id, first.id)).rejects.toMatchObject({ code: 'not_found' })
+  })
+})

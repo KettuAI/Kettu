@@ -2220,6 +2220,11 @@ export interface HostContract {
     params: { id: string; threadId: string; resolved: boolean }
     result: CommentThread
   }
+  // Permanently deletes one comment thread and all comments in it.
+  'artifacts.deleteComment': {
+    params: { id: string; threadId: string }
+    result: void
+  }
   // Pins the user's thread, whose element is gone, to another place of the latest version.
   'artifacts.repin': {
     params: { id: string; threadId: string; anchor: CommentAnchor }
@@ -2759,6 +2764,7 @@ export const HOST_METHODS = [
   'artifacts.comment',
   'artifacts.reply',
   'artifacts.resolve',
+  'artifacts.deleteComment',
   'artifacts.markSent',
   'artifacts.repin',
   'artifacts.editElement',

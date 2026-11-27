@@ -661,6 +661,12 @@ export class ArtifactStore {
     return thread
   }
 
+  /** Permanently deletes one comment thread and notifies every watcher of the artifact. */
+  async deleteThread(id: string, threadId: string, { project }: Reach = {}): Promise<void> {
+    await this.call('deleteThread', { id, project: project ?? null, threadId })
+    this.commented(id)
+  }
+
   /** Pins a thread to another place, where it is found again from now on. */
   async repin(id: string, threadId: string, anchor: CommentAnchor): Promise<CommentThread> {
     const threads = await this.call('threads', { id, project: null })

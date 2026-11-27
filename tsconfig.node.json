@@ -41,6 +41,7 @@
   // The shared package's own globals are for its own check alone; Node's types replace them here.
   "exclude": [
     "src/shared/artifact-runtime/runtime.ts",
+    "src/shared/artifact-runtime/runtime.test.ts",
     "src/shared/runtime.d.ts",
     "src/shared/node_modules"
   ]

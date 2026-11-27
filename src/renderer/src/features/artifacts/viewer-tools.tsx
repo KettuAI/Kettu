@@ -38,8 +38,8 @@ import {
   whenArtifactHostConnected,
 } from './artifact-host'
 import { docLayout } from './canvas-model'
-import { CommentDraft, ThreadPop } from './comment-pop'
-import { pinsFor, threadNumbers } from './comment-threads'
+import { CommentDraft, DeleteCommentDialog, ThreadPop } from './comment-pop'
+import { matchingOpenThread, pinsFor, threadNumbers } from './comment-threads'
 import { CommentsCard } from './comments-card'
 import { sendThreads, type CommentsArtifact } from './comment-send'
 import { EditPanel, type HeldBy } from './edit-panel'
@@ -136,13 +136,30 @@ export function useViewerTools(input: ToolsInput) {
       ? picked
       : (targets.sessions[0]?.id ?? NEW_SESSION)
   const targetName = useTargetName()
-  // An older host cannot move a thread's anchor, so it offers no Pin again.
+  // An older host cannot move a thread's anchor or delete comment threads, so hide unsupported acts.
+  const canEditComments = input.editable !== 'deleted'
   const canRepin = useArtifactRecord(id, 'repin') && input.editable === 'yes'
+  const canDeleteComment = useArtifactRecord(id, 'deleteComment') && canEditComments
 
   const [tab, setTab] = useState<'open' | 'resolved'>('open')
   const [selected, setSelected] = useState<string | null>(null)
   /** A thread opened from the Comments card (e.g. missing anchor, View mode, or resolved thread). */
   const [cardThread, setCardThread] = useState<{ id: string; at: Box | null } | null>(null)
+  /** An explicit new-thread draft opened from an existing thread on the same element. */
+  const [forcedDraft, setForcedDraft] = useState<{
+    artifactId: string
+    anchor: CommentAnchor
+    at: Box | null
+  } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    artifactId: string
+    thread: CommentThread
+    onDeleted?: () => void
+  } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const activeForcedDraft = forcedDraft?.artifactId === id ? forcedDraft : null
+  const activeDeleteTarget = deleteTarget?.artifactId === id ? deleteTarget : null
   const focusSeq = useRef(0)
   const [repinning, setRepinning] = useState<string | null>(null)
   const [ask, setAsk] = useState<{ at: Box | null; subject: AskSubject } | null>(null)
@@ -158,20 +175,34 @@ export function useViewerTools(input: ToolsInput) {
     },
     [],
   )
-  // A direct click on the page (another pin or a draft pick) supersedes a card-opened thread.
+  // A direct click on the page (another pin or a draft pick) supersedes a card-opened thread
+  // and any explicit new-thread draft.
   useEffect(() => {
     if (!editor) return
     return editor.subscribe(() => {
       const state = editor.get()
-      if (state.pin || state.picked) closeCardThread()
+      if (state.pin || state.picked) {
+        closeCardThread()
+        setForcedDraft(null)
+      }
     })
   }, [editor, closeCardThread])
-  const activeCardThread = commentsOpen && !editing.pin ? cardThread : null
-  const openThread = editing.pin
-    ? ((threads ?? []).find((th) => numbers.get(th.id) === editing.pin!.n) ?? null)
-    : activeCardThread
-      ? ((threads ?? []).find((th) => th.id === activeCardThread.id) ?? null)
-      : null
+  // A click in Comment pins a draft there, or reuses an existing open thread on the same element.
+  const draftPick = editing.mode === 'comment' ? editing.picked : null
+  const draftAnchor = draftPick && !repinning && shown && latest ? anchorOf(draftPick, shown) : null
+  const matchedPickThread = draftAnchor
+    ? matchingOpenThread(threads ?? [], draftAnchor, selected)
+    : null
+  const activeCardThread = commentsOpen && !editing.pin && !matchedPickThread ? cardThread : null
+  const openThread = repinning
+    ? null
+    : editing.pin
+      ? ((threads ?? []).find((th) => numbers.get(th.id) === editing.pin!.n) ?? null)
+      : matchedPickThread
+        ? matchedPickThread
+        : activeCardThread
+          ? ((threads ?? []).find((th) => th.id === activeCardThread.id) ?? null)
+          : null
   const openThreadNumber = editing.pin
     ? editing.pin.n
     : openThread
@@ -181,7 +212,11 @@ export function useViewerTools(input: ToolsInput) {
     ? editing.pin.point
       ? pointBox(editing.pin.point)
       : null
-    : (activeCardThread?.at ?? null)
+    : matchedPickThread
+      ? draftPick?.point
+        ? pointBox(draftPick.point)
+        : null
+      : (activeCardThread?.at ?? null)
 
   // Pins show while the comments do: the open ones, or the resolved ones in their tab.
   useEffect(() => {
@@ -206,26 +241,37 @@ export function useViewerTools(input: ToolsInput) {
     [id, title, head, summaryVersion, summaryProject],
   )
 
-  // A click in Comment pins a draft there, or the thread being pinned again.
-  const draftPick = editing.mode === 'comment' ? editing.picked : null
   useEffect(() => {
     if (!repinning || !shown || !editor) return
     return editor.subscribe(() => {
       const state = editor.get()
-      if (state.mode !== 'comment' || !state.picked) return
+      if (state.mode !== 'comment') return
+      let anchor: CommentAnchor
+      if (state.picked) {
+        anchor = anchorOf(state.picked, shown)
+        editor.clearPick()
+      } else if (state.pin) {
+        const hit = (threads ?? []).find((th) => numbers.get(th.id) === state.pin!.n)
+        editor.clearPin()
+        if (!hit || hit.anchor.missing || (hit.anchor.offset === null && hit.anchor.tag === null)) {
+          return
+        }
+        anchor = { ...hit.anchor, version: shown.version, missing: false }
+      } else {
+        return
+      }
       setRepinning(null)
-      editor.clearPick()
       host('artifacts.repin', {
         id,
         threadId: repinning,
-        anchor: anchorOf(state.picked, shown),
+        anchor,
       }).catch((reason: unknown) =>
         toast(t('comments.repinFailed', { error: errorMessage(reason) }), undefined, {
           tone: 'warning',
         }),
       )
     })
-  }, [repinning, shown, editor, id, t])
+  }, [repinning, shown, editor, id, t, threads, numbers])
 
   const sendPending = useCallback(() => {
     const pending = (threads ?? []).filter(isPending)
@@ -242,6 +288,7 @@ export function useViewerTools(input: ToolsInput) {
     (next: ViewerMode) => {
       if (input.mode !== 'comment' || next === 'comment') return
       setRepinning(null)
+      setForcedDraft(null)
       closeCardThread()
       const count = (threads ?? []).filter(isPending).length
       if (count === 0) return
@@ -259,6 +306,7 @@ export function useViewerTools(input: ToolsInput) {
     setSelected(thread.id)
     setAsk(null)
     setRepinning(null)
+    setForcedDraft(null)
     editor?.clearPick()
     editor?.clearPin()
     const outcome = input.content.reveal(thread)
@@ -271,6 +319,59 @@ export function useViewerTools(input: ToolsInput) {
     } else {
       apply(outcome)
     }
+  }
+
+  const requestDelete = (thread: CommentThread, onDeleted?: () => void) => {
+    if (!canDeleteComment) return
+    setDeleteError(null)
+    setDeleteTarget({ artifactId: id, thread, onDeleted })
+  }
+
+  const confirmDelete = () => {
+    if (!activeDeleteTarget || deleting) return
+    const { thread, onDeleted } = activeDeleteTarget
+    setDeleting(true)
+    setDeleteError(null)
+    host('artifacts.deleteComment', { id, threadId: thread.id })
+      .then(
+        () => {
+          setDeleteTarget(null)
+          if (selected === thread.id) setSelected(null)
+          if (repinning === thread.id) setRepinning(null)
+          if (cardThread?.id === thread.id) closeCardThread()
+          if (openThread?.id === thread.id) {
+            editor?.clearPin()
+            editor?.clearPick()
+            closeCardThread()
+          } else if (openThread && editing.pin) {
+            // Deleting an earlier thread shifts pin numbers, so anchor the open popover by id.
+            setCardThread({ id: openThread.id, at: openThreadAt })
+            editor?.clearPin()
+          }
+          onDeleted?.()
+        },
+        (reason: unknown) => setDeleteError(errorMessage(reason)),
+      )
+      .finally(() => setDeleting(false))
+  }
+
+  const resolveFromCard = (thread: CommentThread, nextResolved: boolean) => {
+    if (!canEditComments) return
+    host('artifacts.resolve', { id, threadId: thread.id, resolved: nextResolved })
+      .then(() => {
+        if (nextResolved && openThread?.id === thread.id) {
+          editor?.clearPin()
+          editor?.clearPick()
+          closeCardThread()
+        } else if (!nextResolved) {
+          setTab('open')
+        }
+      })
+      .catch((reason: unknown) =>
+        toast(t('comments.resolveFailed', { error: errorMessage(reason) }), undefined, {
+          tone: 'warning',
+        }),
+      )
   }
 
   // Beside a session there is no popover: what is selected rides above its composer.
@@ -372,7 +473,12 @@ export function useViewerTools(input: ToolsInput) {
       }}
     />
   )
-  const docThread = (thread: CommentThread, n: number, close: () => void) => (
+  const docThread = (
+    thread: CommentThread,
+    n: number,
+    close: () => void,
+    onNewThread?: (() => void) | null,
+  ) => (
     <ThreadPop
       key={thread.id}
       artifactId={id}
@@ -381,9 +487,16 @@ export function useViewerTools(input: ToolsInput) {
       versions={versions}
       at={null}
       inline
+      canResolve={canEditComments}
       onClose={close}
       onRepin={null}
       onReopened={() => setTab('open')}
+      onDelete={canDeleteComment ? () => requestDelete(thread, close) : null}
+      onNewThread={
+        latest && input.editable === 'yes' && thread.resolvedAt === null && !thread.anchor.missing
+          ? (onNewThread ?? null)
+          : null
+      }
     />
   )
 
@@ -461,7 +574,9 @@ export function useViewerTools(input: ToolsInput) {
   let right: RightContent | null = null
   const close = () => {
     closeCardThread()
+    setForcedDraft(null)
     editor?.clearPin()
+    editor?.clearPick()
     setViewerState(id, (s) => ({ right: null, version: s.right === 'history' ? null : s.version }))
   }
   const propsShown =
@@ -524,6 +639,9 @@ export function useViewerTools(input: ToolsInput) {
               : null
           }
           onFocus={focusThread}
+          canResolve={canEditComments}
+          onResolve={resolveFromCard}
+          onDelete={canDeleteComment ? (thread) => requestDelete(thread) : null}
           hint={
             input.mode === 'comment'
               ? t(input.doc ? 'comments.hintCanvas' : 'comments.hintPage')
@@ -541,9 +659,9 @@ export function useViewerTools(input: ToolsInput) {
   }
 
   // The popovers over the content.
-  let overlay: React.ReactNode = null
+  let popover: React.ReactNode = null
   if (ask && artifactInfo) {
-    overlay = (
+    popover = (
       <AskPop
         key={ask.at ? `${ask.at.left},${ask.at.top}` : 'middle'}
         at={ask.at}
@@ -570,8 +688,27 @@ export function useViewerTools(input: ToolsInput) {
         onClose={() => setAsk(null)}
       />
     )
+  } else if (activeForcedDraft && shown && latest) {
+    popover = (
+      <CommentDraft
+        key={`new:${activeForcedDraft.anchor.path}:${activeForcedDraft.anchor.page?.number ?? ''}:${activeForcedDraft.anchor.offset ?? activeForcedDraft.anchor.tag ?? ''}:${activeForcedDraft.at?.left ?? ''},${activeForcedDraft.at?.top ?? ''}`}
+        anchor={activeForcedDraft.anchor}
+        at={activeForcedDraft.at}
+        waiting={waiting}
+        onCancel={() => setForcedDraft(null)}
+        onSave={async (body) => {
+          await saveComment(activeForcedDraft.anchor, body)
+          setForcedDraft(null)
+        }}
+      />
+    )
   } else if (openThread) {
-    overlay = (
+    const canStartNewHere =
+      latest &&
+      input.editable === 'yes' &&
+      openThread.resolvedAt === null &&
+      !openThread.anchor.missing
+    popover = (
       <ThreadPop
         key={openThread.id}
         artifactId={id}
@@ -579,17 +716,37 @@ export function useViewerTools(input: ToolsInput) {
         n={openThreadNumber}
         versions={versions}
         at={openThreadAt}
+        canResolve={canEditComments}
         onClose={() => {
           editor?.clearPin()
+          editor?.clearPick()
           closeCardThread()
         }}
         onReopened={() => setTab('open')}
+        onDelete={canDeleteComment ? () => requestDelete(openThread) : null}
+        onNewThread={
+          canStartNewHere && shown
+            ? () => {
+                const anchor = draftAnchor ?? {
+                  ...openThread.anchor,
+                  version: shown.version,
+                  missing: false,
+                }
+                const at = openThreadAt
+                editor?.clearPin()
+                editor?.clearPick()
+                closeCardThread()
+                setForcedDraft({ artifactId: id, anchor, at })
+              }
+            : null
+        }
         onRepin={
           canRepin && editor && !summary?.type && openThread.anchor.missing
             ? () => {
                 setRepinning(openThread.id)
                 closeCardThread()
                 editor.clearPin()
+                editor.clearPick()
                 if (input.mode !== 'comment') {
                   setViewerState(id, { mode: 'comment', right: 'comments' })
                 }
@@ -599,31 +756,52 @@ export function useViewerTools(input: ToolsInput) {
         }
       />
     )
-  } else if (draftPick && !repinning && editor && shown && latest) {
-    const anchor = anchorOf(draftPick, shown)
-    overlay = (
+  } else if (draftPick && draftAnchor && !repinning && editor && shown && latest) {
+    popover = (
       <CommentDraft
         key={`${draftPick.page}:${draftPick.selection.src}:${draftPick.point?.x},${draftPick.point?.y}`}
-        anchor={anchor}
+        anchor={draftAnchor}
         at={draftPick.point ? pointBox(draftPick.point) : null}
         waiting={waiting}
         onCancel={() => editor.clearPick()}
         onSave={async (body) => {
-          await saveComment(anchor, body)
+          await saveComment(draftAnchor, body)
           editor.clearPick()
         }}
       />
     )
   }
 
+  const overlay: React.ReactNode =
+    popover || activeDeleteTarget ? (
+      <>
+        {popover}
+        <DeleteCommentDialog
+          thread={activeDeleteTarget?.thread ?? null}
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => {
+            setDeleteTarget(null)
+            setDeleteError(null)
+          }}
+          onConfirm={confirmDelete}
+        />
+      </>
+    ) : null
+
   /** Esc closes a popover first. */
   const escape = (): boolean => {
+    if (activeDeleteTarget) return true
     if (ask) {
       setAsk(null)
       return true
     }
     if (repinning) {
       setRepinning(null)
+      return true
+    }
+    if (activeForcedDraft) {
+      setForcedDraft(null)
       return true
     }
     if (activeCardThread) {

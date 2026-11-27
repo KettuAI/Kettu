@@ -44,6 +44,22 @@ type Answer = {
   done?: unknown
 }
 
+/**
+ * The open pin anchored to the exact source element at `src`, if any: prefers the currently active
+ * open pin on that element, otherwise the latest one. Resolved (`done`) and lost pins are ignored
+ * so clicking an element with only resolved comments still starts a new draft.
+ */
+export function openPinForSource(pins: readonly Pin[], src: number | null): number | null {
+  if (src === null) return null
+  let fallback: number | null = null
+  for (const pin of pins) {
+    if (pin.src !== src || pin.kind === 'done' || pin.kind === 'lost') continue
+    if (pin.active) return pin.n
+    fallback = pin.n
+  }
+  return fallback
+}
+
 export function start(config: RuntimeConfig): void {
   // Taken before the page's own scripts run, which may replace them.
   const fetch = window.fetch.bind(window)
@@ -443,11 +459,15 @@ export function start(config: RuntimeConfig): void {
     }
   }
 
-  function describe(element: Element): PageSelection {
+  function sourceOffset(element: Element): number | null {
     // An element from other markup the page put in, or one a script made, has no place here.
     const raw = element.getAttribute(SOURCE)
     const own = raw?.startsWith(`${config.mark}:`) ? raw.slice(config.mark.length + 1) : null
-    const src = own !== null && /^\d{1,9}$/.test(own) ? Number(own) : null
+    return own !== null && /^\d{1,9}$/.test(own) ? Number(own) : null
+  }
+
+  function describe(element: Element): PageSelection {
+    const src = sourceOffset(element)
     const text = (element as HTMLElement).innerText ?? element.textContent ?? ''
     const ancestors: string[] = []
     for (let up = element.parentElement; up && up !== document.body; up = up.parentElement) {
@@ -470,6 +490,19 @@ export function start(config: RuntimeConfig): void {
       (pin) => x >= pin.x && x <= pin.x + 20 && y >= pin.y && y <= pin.y + 20,
     )
     return hit ? hit.n : null
+  }
+
+  function sendPin(pin: number): void {
+    const answer: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'select',
+      channel,
+      selection: null,
+      pin,
+    }
+    if (config.transport === 'port') viaPort(answer)
+    else void request(answer).catch(() => {})
   }
 
   function stopTyping(report: boolean): void {
@@ -611,21 +644,20 @@ export function start(config: RuntimeConfig): void {
         if (!mode) return
         const pin = pinAt(message.x, message.y)
         if (pin !== null) {
-          const answer: Message = {
-            v: RUNTIME_VERSION,
-            id: nextId(),
-            kind: 'select',
-            channel,
-            selection: null,
-            pin,
-          }
-          if (config.transport === 'port') viaPort(answer)
-          else void request(answer).catch(() => {})
+          sendPin(pin)
           return
         }
-        if (typing && typing.element.contains(elementAt(message.x, message.y))) return
+        const element = elementAt(message.x, message.y)
+        if (mode === 'comment' && element) {
+          const openPin = openPinForSource(pins, sourceOffset(element))
+          if (openPin !== null) {
+            sendPin(openPin)
+            return
+          }
+        }
+        if (typing && typing.element.contains(element)) return
         stopTyping(true)
-        pick(elementAt(message.x, message.y), true)
+        pick(element, true)
         return
       }
       case 'select-reveal': {

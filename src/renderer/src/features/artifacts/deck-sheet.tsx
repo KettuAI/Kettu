@@ -53,7 +53,7 @@ import {
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import { threadNumbers } from './comment-threads'
+import { matchingOpenThread, threadNumbers } from './comment-threads'
 import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { PlaceAsk, SheetWalk } from './change-walk'
 import { sheetSave } from './sheet-save'
@@ -99,7 +99,12 @@ export interface DeckComments {
   /** The comment being written under an element, pinned to `anchor`, until it saves or `close`. */
   draft: (anchor: CommentAnchor, close: () => void) => ReactNode
   /** What opens under an element for one of its threads, numbered as its pin. */
-  thread: (thread: CommentThread, number: number, close: () => void) => ReactNode
+  thread: (
+    thread: CommentThread,
+    number: number,
+    close: () => void,
+    onNewThread?: (() => void) | null,
+  ) => ReactNode
 }
 
 interface Draft {
@@ -345,10 +350,23 @@ export function DeckSheet({
         case 'layout':
           setLayout(report)
           return
-        case 'pick':
-          setOpenThread(null)
-          setDraft({ slide: report.slide, tag: report.tag, text: report.text, box: report.box })
+        case 'pick': {
+          const anchor = slideAnchor(
+            version,
+            report.slide,
+            deck?.slides[report.slide - 1]?.title ?? null,
+            { tag: report.tag, text: report.text },
+          )
+          const existing = matchingOpenThread(comments.threads ?? [], anchor, openThread)
+          if (existing) {
+            setDraft(null)
+            setOpenThread(existing.id)
+          } else {
+            setOpenThread(null)
+            setDraft({ slide: report.slide, tag: report.tag, text: report.text, box: report.box })
+          }
           return
+        }
         case 'save':
           setSave(report)
           // What did not save is kept beyond this viewer, until it saves or is discarded.
@@ -669,7 +687,21 @@ export function DeckSheet({
                       className="ads-pop"
                       style={{ top: y, left: Math.max(8, Math.min(x, shownW - 328)) }}
                     >
-                      {comments.thread(open.thread, open.n, () => setOpenThread(null))}
+                      {comments.thread(
+                        open.thread,
+                        open.n,
+                        () => setOpenThread(null),
+                        () => {
+                          const targetSlide = open.thread.anchor.page?.number ?? current
+                          setOpenThread(null)
+                          setDraft({
+                            slide: targetSlide,
+                            tag: open.thread.anchor.tag ?? 'div',
+                            text: open.thread.anchor.text,
+                            box: found?.box ?? { x: 0, y: 0, width: 0, height: 0 },
+                          })
+                        },
+                      )}
                     </div>
                   )
                 })()}

@@ -5608,6 +5608,7 @@ export class AgentHost {
         artifacts.reply(id, threadId, { body, author: { person: OWNER, session: null } }),
       'artifacts.resolve': ({ id, threadId, resolved }) =>
         artifacts.resolve(id, threadId, resolved),
+      'artifacts.deleteComment': ({ id, threadId }) => artifacts.deleteThread(id, threadId),
       'artifacts.repin': ({ id, threadId, anchor }) => artifacts.repin(id, threadId, anchor),
       'artifacts.markSent': ({ id, threadIds, sessionId }) =>
         artifacts.markSent(id, threadIds, sessionId),

@@ -226,7 +226,8 @@ export interface HostInfo extends AppInfo {
  * `held` in presence. `links`: `places` in the artifact tools' results. `pageErrors`: the page
  * script the host serves its pages with reports their uncaught errors. `documentSheet`: comment
  * threads anchor on a document's blocks in its Markdown, and the page script passes on what the
- * document viewer reports of its layout. `repin`: `artifacts.repin`.
+ * document viewer reports of its layout. `repin`: `artifacts.repin`. `deleteComment`:
+ * `artifacts.deleteComment`.
  */
 export const ARTIFACT_RECORDS = [
   'seen',
@@ -236,6 +237,7 @@ export const ARTIFACT_RECORDS = [
   'pageErrors',
   'documentSheet',
   'repin',
+  'deleteComment',
 ] as const
 export type ArtifactRecord = (typeof ARTIFACT_RECORDS)[number]
 
