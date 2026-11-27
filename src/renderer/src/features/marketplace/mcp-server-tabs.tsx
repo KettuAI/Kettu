@@ -10,6 +10,7 @@ import {
   SquareLock02Icon,
 } from '@hugeicons/core-free-icons'
 import { harnessOf, type AgentId } from '@shared/agents'
+import { MCP_TERMINAL_APPS } from '@shared/mcp-terminal'
 import type { MarketServer } from '@shared/marketplace'
 import type {
   McpCallRecord,
@@ -543,6 +544,10 @@ function CallRow({
                     })
                   : t('mcp.page.inTerminal', { agent: agentName(call.agentId) })}
               </span>
+            </span>
+          ) : call.app ? (
+            <span className="k-mcp-session k-mcp-muted">
+              <span>{t('mcp.page.inApp', { app: MCP_TERMINAL_APPS[call.app] })}</span>
             </span>
           ) : (
             <span className="k-mcp-muted">{t('mcp.page.terminal')}</span>

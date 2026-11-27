@@ -186,6 +186,18 @@ describe('createValidators', () => {
     })
   })
 
+  it('takes a terminal takeover for an agent or a known app alone', () => {
+    expect(posix['market.mcpTerminalPlan']({ target: 'codex~work' })).toEqual({
+      target: 'codex~work',
+    })
+    expect(posix['market.mcpTerminalOff']({ target: 'app:vscode' })).toEqual({
+      target: 'app:vscode',
+    })
+    rejects(() => posix['market.mcpTerminalPlan']({ target: 'app:notepad' }))
+    rejects(() => posix['market.mcpTerminalPlan']({ target: 'app:__proto__' }))
+    rejects(() => posix['market.mcpTerminalPlan']({ agentId: 'codex' }))
+  })
+
   it('checks the connection methods: servers Kettu keeps and logins of Connect', () => {
     expect(posix['market.connect']({ serverId: 'app.linear/linear' })).toEqual({
       serverId: 'app.linear/linear',

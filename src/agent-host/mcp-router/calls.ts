@@ -13,6 +13,7 @@ import {
   type McpCallRecord,
   type McpCallResult,
 } from '@shared/mcp-insight'
+import { terminalApp, type McpTerminalApp } from '@shared/mcp-terminal'
 import { notifyStorageWrite, type LogFn } from '../storage'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -47,6 +48,7 @@ export function callLine(record: McpCallRecord): string {
     ...(record.sessionId === null && record.folder !== undefined
       ? { folder: record.folder.slice(0, MAX_FOLDER) }
       : {}),
+    ...(record.sessionId === null && record.app !== undefined ? { app: record.app } : {}),
   }
   return `${JSON.stringify(kept)}\n`
 }
@@ -60,7 +62,7 @@ function readLine(line: string): McpCallRecord | null {
     return null
   }
   if (!isRecord(raw)) return null
-  const { at, serverId, sessionId, agentId, tool, ms, bytes, result, error, folder } = raw
+  const { at, serverId, sessionId, agentId, tool, ms, bytes, result, error, folder, app } = raw
   if (typeof at !== 'number' || typeof serverId !== 'string' || typeof tool !== 'string') {
     return null
   }
@@ -79,6 +81,9 @@ function readLine(line: string): McpCallRecord | null {
     result: result as McpCallResult,
     ...(typeof error === 'string' ? { error } : {}),
     ...(typeof folder === 'string' && sessionId === null ? { folder } : {}),
+    ...(typeof app === 'string' && sessionId === null && terminalApp(`app:${app}`) === app
+      ? { app: app as McpTerminalApp }
+      : {}),
   }
 }
 

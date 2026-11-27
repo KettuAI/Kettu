@@ -47,7 +47,7 @@ import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
 import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
-import { harnessOf, isAgentId, takesStartMode, type HarnessId } from '@shared/agents'
+import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
@@ -229,7 +229,7 @@ import {
 } from './marketplace/mcp-discovery'
 import { harnessProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
 import { parseMcpPaste } from './marketplace/mcp-paste'
-import { importedServer, type ConfiguredMcp } from './marketplace/mcp-config'
+import { importedServer, type ConfiguredMcp, type McpConfigFile } from './marketplace/mcp-config'
 import { findCommand, isExecutableFile, type Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
@@ -340,10 +340,19 @@ import {
   McpTerminal,
   McpTerminalStale,
   newTerminalKey,
+  terminalGets,
   terminalLedgerFile,
   writeConnectFile,
 } from './marketplace/mcp-terminal'
 import type { RouterCaller } from './mcp-router/router'
+import { installedTerminalApps } from './marketplace/mcp-terminal-apps'
+import {
+  isTerminalTarget,
+  MCP_TERMINAL_APPS,
+  terminalApp,
+  type McpTerminalApp,
+  type McpTerminalTarget,
+} from '@shared/mcp-terminal'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
@@ -685,6 +694,7 @@ export class AgentHost {
   private readonly mcpTerminal: McpTerminal
   /** The connect file's key, which a terminal's bridge brings; new at each start of the service. */
   private terminalKey: string | null = null
+  private appsSeen: { at: number; apps: Promise<McpTerminalApp[]> } | null = null
   private backupKey: Buffer | null = null
   private readonly mcpBackupKeyCalls = new Map<number, (error: string | null) => void>()
   /** Who waits for the library to hold a change, checked as each settings change arrives. */
@@ -1110,6 +1120,7 @@ export class AgentHost {
           sessionId,
           agentId: sessionId ? this.sessions.sessionAgent(sessionId) : (terminal?.agentId ?? null),
           ...(terminal ? { folder: terminal.folder } : {}),
+          ...(terminal?.app ? { app: terminal.app } : {}),
           tool: outcome.tool,
           ms: outcome.ms,
           bytes: outcome.bytes,
@@ -1147,19 +1158,38 @@ export class AgentHost {
       log,
       ledger: terminalLedgerFile(options.userDataPath, log),
       library: () => this.settings.marketplace.mcp,
-      agents: () =>
-        this.agents
+      owners: async () => [
+        ...this.agents
           .mcpDiscoveryAgents()
-          .map(({ id, harness, folder }) => ({ id, harness, folder })),
-      files: (agentId) =>
-        mcpConfigPaths(
-          platform,
-          home,
-          this.agents.mcpDiscoveryAgents().filter(({ id }) => id === agentId),
-          [],
-          (name, agent) => this.env.get(name, agent),
-          true,
-        ),
+          .map(({ id, harness, folder }) => ({ id, harness, app: null, folder })),
+        ...(await this.terminalApps()).map((app) => ({
+          id: `app:${app}` as const,
+          harness: null,
+          app,
+          folder: null,
+        })),
+      ],
+      files: (target) => {
+        const app = terminalApp(target)
+        const paths = (
+          agents: ReturnType<AgentManager['mcpDiscoveryAgents']>,
+          agentOnly: boolean,
+        ): McpConfigFile[] =>
+          mcpConfigPaths(
+            platform,
+            home,
+            agents,
+            [],
+            (name, agent) => this.env.get(name, agent),
+            agentOnly,
+          )
+        return app
+          ? paths([], false).filter((file) => file.app === MCP_TERMINAL_APPS[app] && !file.project)
+          : paths(
+              this.agents.mcpDiscoveryAgents().filter(({ id }) => id === target),
+              true,
+            )
+      },
       claudeSettings: (agentId) => {
         const configured = this.env.get('CLAUDE_CONFIG_DIR', agentId)?.trim()
         const folder =
@@ -1173,7 +1203,7 @@ export class AgentHost {
       },
       dataArg: () => bridgeDataArg(platform, home, process.env, options.userDataPath),
       key: () => this.backupKey,
-      importOwn: (agentId, items) => this.importOwnMcp(agentId, items),
+      importOwn: (target, items) => this.importOwnMcp(target, items),
       giveTo: (agentId, serverIds) => this.giveMcpTo(agentId, serverIds),
       changed: () => this.hub.broadcast({ type: 'market.discoveryChanged' }),
     })
@@ -3161,9 +3191,35 @@ export class AgentHost {
     })
   }
 
-  /** An agent's own entries into the library for it alone, as the import window would. */
+  /** The apps a takeover can change that are installed, looked for again after a minute. */
+  private terminalApps(): Promise<McpTerminalApp[]> {
+    const now = Date.now()
+    if (!this.appsSeen || now - this.appsSeen.at > 60_000) {
+      const { platform } = this.options
+      this.appsSeen = {
+        at: now,
+        apps: installedTerminalApps({
+          platform,
+          home: this.options.homeDir ?? os.homedir(),
+          env: this.env.agentEnv(),
+          find: (command) =>
+            findCommand(command, {
+              platform,
+              env: this.env.agentEnv() as Env,
+              isExecutable: (file) => isExecutableFile(file, platform),
+            }),
+        }),
+      }
+    }
+    return this.appsSeen.apps
+  }
+
+  /**
+   * A file's own entries into the library, as the import window would: an agent's for it alone,
+   * an app's for every agent, as the import window offers them.
+   */
   private async importOwnMcp(
-    agentId: AgentId,
+    target: McpTerminalTarget,
     items: readonly { source: McpConfigSource; name: string }[],
   ): Promise<void> {
     const discovery = await this.mcpDiscovery.scan()
@@ -3173,10 +3229,14 @@ export class AgentHost {
           (item) =>
             item.path === source.path &&
             item.agentId === source.agentId &&
+            item.app === source.app &&
             item.name === source.entryName &&
             !item.project,
         )
-        if (found) return { id: row.id, sourceId: found.id, name, agents: [agentId] }
+        if (found) {
+          const agents = terminalApp(target) ? ('all' as const) : [target as AgentId]
+          return { id: row.id, sourceId: found.id, name, agents }
+        }
       }
       throw new McpTerminalStale(`${source.entryName ?? name} changed. Review it again.`)
     })
@@ -3224,7 +3284,8 @@ export class AgentHost {
    * folder it runs in, with the servers that agent gets there. Null answers it with no tools.
    */
   private terminalCaller(agent: string | null, cwd: string): RouterCaller | null {
-    if (!agent || !isAgentId(agent) || !this.mcpTerminal.isOn(agent)) return null
+    if (!agent || !isTerminalTarget(agent) || !this.mcpTerminal.isOn(agent)) return null
+    const app = terminalApp(agent)
     const folder = path.isAbsolute(cwd) ? path.resolve(cwd) : (this.options.homeDir ?? os.homedir())
     const project = this.projects
       .list()
@@ -3235,14 +3296,14 @@ export class AgentHost {
       )
       .sort((a, b) => b.length - a.length)[0]
     const servers = this.settings.marketplace.mcp.filter(
-      (server) => serverFor(server, agent) && servedInProject(server.projects, project ?? ''),
+      (server) => terminalGets(server, agent) && servedInProject(server.projects, project ?? ''),
     )
     return {
       key: `terminal:${mcpId()}`,
       sessionId: null,
       folder,
       servers: new Set(servers.map((server) => server.id)),
-      terminal: { agentId: agent },
+      terminal: app ? { agentId: null, app } : { agentId: agent as AgentId },
     }
   }
 
@@ -4713,25 +4774,25 @@ export class AgentHost {
       'market.dismissMcpNotice': ({ id }) => this.mcpDiscovery.dismiss(id),
       'market.importMcp': ({ choices }) => this.installMcp(this.mcpDiscovery.prepare(choices)),
       'market.mcpTerminal': () => this.mcpTerminal.rows(),
-      'market.mcpTerminalPlan': async ({ agentId }) => {
+      'market.mcpTerminalPlan': async ({ target }) => {
         await this.ensureBackupKey()
-        return this.mcpTerminalCall(() => this.mcpTerminal.plan(agentId))
+        return this.mcpTerminalCall(() => this.mcpTerminal.plan(target))
       },
-      'market.mcpTerminalOn': async ({ agentId, planId }) => {
+      'market.mcpTerminalOn': async ({ target, planId }) => {
         await this.ensureBackupKey()
-        await this.mcpTerminalCall(() => this.mcpTerminal.turnOn(agentId, planId))
+        await this.mcpTerminalCall(() => this.mcpTerminal.turnOn(target, planId))
       },
-      'market.mcpTerminalOffPlan': ({ agentId }) =>
-        this.mcpTerminalCall(() => this.mcpTerminal.offPlan(agentId)),
-      'market.mcpTerminalOff': ({ agentId }) =>
-        this.mcpTerminalCall(() => this.mcpTerminal.turnOff(agentId)),
-      'market.mcpTerminalDrift': ({ agentId }) =>
-        this.mcpTerminalCall(() => this.mcpTerminal.drifts(agentId)),
-      'market.mcpTerminalResolve': ({ agentId, choices }) =>
-        this.mcpTerminalCall(() => this.mcpTerminal.resolve(agentId, choices)),
-      'market.mcpTerminalBackups': ({ agentId }) => this.mcpTerminal.backups(agentId),
-      'market.mcpTerminalRestore': ({ agentId, backupId }) =>
-        this.mcpTerminalCall(() => this.mcpTerminal.restore(agentId, backupId)),
+      'market.mcpTerminalOffPlan': ({ target }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.offPlan(target)),
+      'market.mcpTerminalOff': ({ target }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.turnOff(target)),
+      'market.mcpTerminalDrift': ({ target }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.drifts(target)),
+      'market.mcpTerminalResolve': ({ target, choices }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.resolve(target, choices)),
+      'market.mcpTerminalBackups': ({ target }) => this.mcpTerminal.backups(target),
+      'market.mcpTerminalRestore': ({ target, backupId }) =>
+        this.mcpTerminalCall(() => this.mcpTerminal.restore(target, backupId)),
       'market.previewMcp': ({ text }, { portId }) => this.previewMcp(text, portId),
       'market.addMcp': ({ choices }, { portId }) => this.addMcp(choices, portId),
       'market.checkMcp': ({ serverId }) => {

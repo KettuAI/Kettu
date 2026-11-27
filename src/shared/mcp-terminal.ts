@@ -1,15 +1,40 @@
-// An agent's CLI in a terminal using Kettu's MCP servers: Kettu writes one bridge entry per server
-// into the agent's own file, after a backup, and keeps a record of what it wrote.
+// An agent's CLI in a terminal, or an app, using Kettu's MCP servers: Kettu writes one bridge
+// entry per server into its own file, after a backup, and keeps a record of what it wrote.
 
-import type { AgentId } from './agents'
+import { isAgentId, type AgentId } from './agents'
 import type { McpDiscoveryFileError } from './mcp-discovery'
 
-/** Why Kettu cannot take over an agent's file. */
+/** The apps whose MCP file Kettu can take over, by the name discovery lists them under. */
+export const MCP_TERMINAL_APPS = {
+  'claude-desktop': 'Claude Desktop',
+  cursor: 'Cursor',
+  vscode: 'VS Code',
+  windsurf: 'Windsurf',
+  zed: 'Zed',
+} as const
+
+export type McpTerminalApp = keyof typeof MCP_TERMINAL_APPS
+
+/** Whose file a takeover changes: an agent's, or an app's as `app:<id>`. */
+export type McpTerminalTarget = AgentId | `app:${McpTerminalApp}`
+
+/** The app a target is, or null for an agent. */
+export function terminalApp(target: string): McpTerminalApp | null {
+  if (!target.startsWith('app:')) return null
+  const app = target.slice(4)
+  return Object.hasOwn(MCP_TERMINAL_APPS, app) ? (app as McpTerminalApp) : null
+}
+
+export function isTerminalTarget(value: unknown): value is McpTerminalTarget {
+  return typeof value === 'string' && (isAgentId(value) || terminalApp(value) !== null)
+}
+
+/** Why Kettu cannot take over a file. */
 export type McpTerminalUnsupported = 'format' | 'no-bridge'
 
-/** One agent's row in Marketplace › MCP › Terminal and apps, and on its page in Settings. */
+/** One agent's or app's row in Marketplace › MCP › Terminal and apps; an agent's is on its page too. */
 export interface McpTerminalRow {
-  agentId: AgentId
+  target: McpTerminalTarget
   /** The file Kettu changes, where the agent's CLI reads its servers. */
   file: string
   on: boolean
@@ -23,6 +48,8 @@ export interface McpTerminalRow {
   changed: number
   /** The file cannot be read now, so Kettu writes nothing to it. */
   error?: McpDiscoveryFileError['reason']
+  /** Apps that read this same file, which this row's switch covers too. */
+  shared?: McpTerminalApp[]
 }
 
 /** One file of a takeover's change, its changed key shown before and after, keys masked. */
@@ -40,7 +67,7 @@ export interface McpTerminalFileChange {
 
 /** What turning a takeover on will do, shown before anything is written. */
 export interface McpTerminalPlan {
-  agentId: AgentId
+  target: McpTerminalTarget
   /** Confirms the plan: turning on refuses when the file changed since. */
   id: string
   files: McpTerminalFileChange[]
@@ -52,7 +79,7 @@ export interface McpTerminalPlan {
 
 /** What turning a takeover off puts back and removes. */
 export interface McpTerminalOffPlan {
-  agentId: AgentId
+  target: McpTerminalTarget
   /** The agent's own entries that come back, as they were. */
   back: { name: string; command: string; keys: boolean }[]
   /** Kettu's entries the terminal goes without. */

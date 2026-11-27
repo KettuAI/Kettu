@@ -35,6 +35,7 @@ import {
 } from '@shared/memory'
 import { catalogSkillId, skillRepositoryId, type SkillSource } from '@shared/marketplace'
 import { MAX_TOOLS_OFF } from '@shared/mcp-insight'
+import { isTerminalTarget, type McpTerminalTarget } from '@shared/mcp-terminal'
 import {
   DIRECTORY_CURSOR,
   HANDLE,
@@ -209,6 +210,12 @@ function optionalString(o: Fields, key: string, max: number): string | undefined
 function agentId(o: Fields, key = 'agentId'): AgentId {
   const value = string(o, key, ID_CHARS)
   if (!isAgentId(value)) throw invalidParams(t('agent.unknown', { agent: value }))
+  return value
+}
+
+function terminalTarget(o: Fields): McpTerminalTarget {
+  const value = string(o, 'target', ID_CHARS)
+  if (!isTerminalTarget(value)) throw invalidParams('target is not an agent or an app')
   return value
 }
 
@@ -1704,16 +1711,16 @@ export function createValidators(platform: Platform): Validators {
     'market.keys': none,
     'market.discoverMcp': none,
     'market.mcpTerminal': none,
-    'market.mcpTerminalPlan': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalPlan': (params) => ({ target: terminalTarget(fields(params)) }),
     'market.mcpTerminalOn': (params) => {
       const o = fields(params)
       const planId = string(o, 'planId', 64)
       if (!/^[0-9a-f]{64}$/.test(planId)) throw invalidParams('planId is not a plan')
-      return { agentId: agentId(o), planId }
+      return { target: terminalTarget(o), planId }
     },
-    'market.mcpTerminalOffPlan': (params) => ({ agentId: agentId(fields(params)) }),
-    'market.mcpTerminalOff': (params) => ({ agentId: agentId(fields(params)) }),
-    'market.mcpTerminalDrift': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalOffPlan': (params) => ({ target: terminalTarget(fields(params)) }),
+    'market.mcpTerminalOff': (params) => ({ target: terminalTarget(fields(params)) }),
+    'market.mcpTerminalDrift': (params) => ({ target: terminalTarget(fields(params)) }),
     'market.mcpTerminalResolve': (params) => {
       const o = fields(params)
       const choices = fields(o.choices)
@@ -1727,14 +1734,14 @@ export function createValidators(platform: Platform): Validators {
         }
         out[name] = choice
       }
-      return { agentId: agentId(o), choices: out }
+      return { target: terminalTarget(o), choices: out }
     },
-    'market.mcpTerminalBackups': (params) => ({ agentId: agentId(fields(params)) }),
+    'market.mcpTerminalBackups': (params) => ({ target: terminalTarget(fields(params)) }),
     'market.mcpTerminalRestore': (params) => {
       const o = fields(params)
       const backupId = string(o, 'backupId', 64)
       if (!/^[0-9a-f-]{36}$/.test(backupId)) throw invalidParams('backupId is not a backup')
-      return { agentId: agentId(o), backupId }
+      return { target: terminalTarget(o), backupId }
     },
     'market.dismissMcpNotice': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'market.importMcp': mcpChoices,

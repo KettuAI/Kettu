@@ -14,6 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { AgentId } from '@shared/agents'
+import type { McpTerminalApp } from '@shared/mcp-terminal'
 import { runOf, type MarketServer } from '@shared/marketplace'
 import {
   MCP_STDERR_BYTES,
@@ -82,8 +83,8 @@ export interface RouterCaller {
   servers: ReadonlySet<string>
   /** For a token a folder's sessions share: those sessions, else absent. */
   sessions?: ReadonlySet<string>
-  /** A bridge started from an agent's own file in a terminal, with no session behind it. */
-  terminal?: { agentId: AgentId | null }
+  /** A bridge started from an agent's or app's own file, with no session behind it. */
+  terminal?: { agentId: AgentId | null; app?: McpTerminalApp }
 }
 
 /** A call through the router, for its record, with who made it. */
@@ -92,8 +93,8 @@ export interface RouterCall {
   /** The session it came from, when the caller's token tells one. */
   sessionId: string | null
   outcome: CallOutcome
-  /** For a call from a terminal: the agent the bridge named and the folder it ran in. */
-  terminal?: { agentId: AgentId | null; folder: string }
+  /** For a call from a terminal or an app: the agent or app the bridge named, and its folder. */
+  terminal?: { agentId: AgentId | null; app?: McpTerminalApp; folder: string }
 }
 
 /** What a command server runs, its keys filled in. */
@@ -479,9 +480,7 @@ export class McpRouter {
           serverId,
           sessionId: sessionOf(caller),
           outcome,
-          ...(caller.terminal
-            ? { terminal: { agentId: caller.terminal.agentId, folder: caller.folder } }
-            : {}),
+          ...(caller.terminal ? { terminal: { ...caller.terminal, folder: caller.folder } } : {}),
         }),
     }
   }

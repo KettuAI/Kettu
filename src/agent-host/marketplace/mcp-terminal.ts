@@ -1,5 +1,6 @@
-// An agent's CLI in a terminal using Kettu's MCP library: with the user's consent, per agent, Kettu
-// imports the agent's own servers, backs its file up and puts one bridge entry per server in it.
+// An agent's CLI in a terminal, or an app, using Kettu's MCP library: with the user's consent, per
+// agent or app, Kettu imports its own servers, backs its file up and puts one bridge entry per server
+// in it.
 // It keeps a record of what it wrote, with a digest of each entry, and changes only those keys:
 // an entry changed outside Kettu is the user's to decide on and is never written back unasked.
 // Backups and the entries an agent had before are sealed with a key kept in the key store, since
@@ -22,14 +23,18 @@ import type { AgentId, HarnessId } from '@shared/agents'
 import { MARKET_NAME, serverFor, type MarketServer } from '@shared/marketplace'
 import { mcpFingerprint } from '@shared/mcp-fingerprint'
 import type { McpConfigSource } from '@shared/mcp-discovery'
-import type {
-  McpTerminalBackup,
-  McpTerminalChoice,
-  McpTerminalDrift,
-  McpTerminalFileChange,
-  McpTerminalOffPlan,
-  McpTerminalPlan,
-  McpTerminalRow,
+import {
+  MCP_TERMINAL_APPS,
+  terminalApp,
+  type McpTerminalApp,
+  type McpTerminalBackup,
+  type McpTerminalChoice,
+  type McpTerminalDrift,
+  type McpTerminalFileChange,
+  type McpTerminalOffPlan,
+  type McpTerminalPlan,
+  type McpTerminalRow,
+  type McpTerminalTarget,
 } from '@shared/mcp-terminal'
 import { addLogSecret } from '@shared/log/process-log'
 import { JsonFile, type LogFn } from '../storage'
@@ -72,10 +77,19 @@ const TAG_BYTES = 16
 const CLAUDE_LOCK_STALE_MS = 10_000
 const CLAUDE_LOCK_WAIT_MS = 5_000
 
-export interface TerminalAgent {
-  id: AgentId
-  harness: HarnessId
-  folder: string | null
+/** An agent, or an app installed on this computer, whose file a takeover changes. */
+export type TerminalOwner =
+  | { id: AgentId; harness: HarnessId; app: null; folder: string | null }
+  | { id: `app:${McpTerminalApp}`; harness: null; app: McpTerminalApp; folder: null }
+
+/**
+ * Whether a library server goes into an owner's file: an app gets only the servers for every
+ * agent, since it is no agent the user could give one to.
+ */
+export function terminalGets(server: MarketServer, target: McpTerminalTarget): boolean {
+  return terminalApp(target)
+    ? server.on && server.agents === 'all'
+    : serverFor(server, target as AgentId)
 }
 
 interface Entry {
@@ -113,6 +127,7 @@ interface Target {
 
 interface Ledger {
   version: 1
+  /** By agent id, or `app:<id>` for an app. */
   agents: Record<string, Target>
 }
 
@@ -320,9 +335,10 @@ export interface McpTerminalDeps {
   log: LogFn
   ledger: JsonFile<Ledger>
   library(): readonly MarketServer[]
-  agents(): readonly TerminalAgent[]
-  /** The agent's own user-level MCP files, as discovery reads them. */
-  files(agentId: AgentId): McpConfigFile[]
+  /** The agents on this computer, then the apps installed on it. */
+  owners(): Promise<readonly TerminalOwner[]>
+  /** The agent's or app's own user-level MCP files, as discovery reads them. */
+  files(target: McpTerminalTarget): McpConfigFile[]
   /** Claude Code's settings file for this agent, where turned-off tools are denied. */
   claudeSettings(agentId: AgentId): string
   /** How an entry starts the bridge, or null when this build has none. */
@@ -331,9 +347,12 @@ export interface McpTerminalDeps {
   dataArg(): string | null
   /** The key store's backup key, or null when it cannot keep one now. */
   key(): Buffer | null
-  /** Imports these entries of the agent's file into the library, for this agent, and waits for it. */
+  /**
+   * Imports these entries of the file into the library, for this agent or, for an app, for every
+   * agent, and waits for it.
+   */
   importOwn(
-    agentId: AgentId,
+    target: McpTerminalTarget,
     items: readonly { source: McpConfigSource; name: string }[],
   ): Promise<void>
   /** Gives library servers to this agent too, and waits for the library to say so. */
@@ -341,9 +360,9 @@ export interface McpTerminalDeps {
   changed(): void
 }
 
-/** One read of an agent's file, with what Kettu's record makes of it. */
+/** One read of an agent's or app's file, with what Kettu's record makes of it. */
 interface Reading {
-  agent: TerminalAgent
+  owner: TerminalOwner
   file: McpConfigFile
   format: TerminalFormat
   text: string
@@ -391,19 +410,19 @@ export class McpTerminal {
   }
 
   /** Whether an agent's terminal uses Kettu's servers now, as the bridge asks on each connect. */
-  isOn(agentId: string): boolean {
-    return this.ledger?.agents[agentId]?.on === true
+  isOn(targetId: string): boolean {
+    return this.ledger?.agents[targetId]?.on === true
   }
 
-  private agent(agentId: AgentId): TerminalAgent {
-    const agent = this.deps.agents().find((item) => item.id === agentId)
-    if (!agent) throw new Error('No such agent on this computer')
-    return agent
+  private async owner(target: McpTerminalTarget): Promise<TerminalOwner> {
+    const owner = (await this.deps.owners()).find((item) => item.id === target)
+    if (!owner) throw new Error('No such agent or app on this computer')
+    return owner
   }
 
-  /** The file an agent's servers are taken over in: the first that exists, else the first. */
-  private async fileOf(agentId: AgentId): Promise<McpConfigFile | null> {
-    const files = this.deps.files(agentId).filter((file) => !file.project)
+  /** The file a target's servers are taken over in: the first that exists, else the first. */
+  private async fileOf(target: McpTerminalTarget): Promise<McpConfigFile | null> {
+    const files = this.deps.files(target).filter((file) => !file.project)
     for (const file of files) {
       if (
         await stat(file.path).then(
@@ -416,12 +435,9 @@ export class McpTerminal {
     return files[0] ?? null
   }
 
-  private async read(agentId: AgentId, target?: Target): Promise<Reading> {
-    const agent = this.agent(agentId)
-    const file = target
-      ? (this.deps.files(agentId).find((item) => item.path === target.file) ??
-        (await this.fileOf(agentId)))
-      : await this.fileOf(agentId)
+  private async read(id: McpTerminalTarget, target?: Target): Promise<Reading> {
+    const owner = await this.owner(id)
+    const file = await this.fileFor(id, target)
     if (!file) throw new McpConfigError('unreadable')
     const format = terminalFormat(file.layout)
     if (!format) throw new McpConfigError('unreadable')
@@ -431,7 +447,7 @@ export class McpTerminal {
     const container = serversKey(config, file.layout)
     if (!container) throw new McpConfigError('invalid-server')
     return {
-      agent,
+      owner,
       file,
       format,
       text,
@@ -442,11 +458,20 @@ export class McpTerminal {
     }
   }
 
+  private async fileFor(id: McpTerminalTarget, target?: Target): Promise<McpConfigFile | null> {
+    return target
+      ? (this.deps.files(id).find((item) => item.path === target.file) ?? (await this.fileOf(id)))
+      : await this.fileOf(id)
+  }
+
+  /** The tool setting outside the entries; apps have none Kettu writes, so the router filters. */
   private toolSetting(reading: Reading): ToolSetting | null {
-    switch (reading.agent.harness) {
+    const { owner } = reading
+    if (owner.app) return null
+    switch (owner.harness) {
       case 'claude-code':
         return {
-          file: this.deps.claudeSettings(reading.agent.id),
+          file: this.deps.claudeSettings(owner.id),
           key: ['permissions', 'deny'],
           kind: 'list',
           item: claudeRule,
@@ -464,17 +489,27 @@ export class McpTerminal {
   }
 
   private source(reading: Reading, name: string): McpConfigSource {
-    return { path: reading.file.path, agentId: reading.agent.id, entryName: name }
+    return sourceIn(reading.owner, reading.file.path, name)
   }
 
   private entryValue(reading: Reading, launch: BridgeLaunch, server: MarketServer): unknown {
-    const args = bridgeArgs(launch, server.name, reading.agent.id, this.deps.dataArg())
+    return this.bridgeValue(reading, launch, server.name, server.toolsOff ?? [])
+  }
+
+  private bridgeValue(
+    reading: Reading,
+    launch: BridgeLaunch,
+    name: string,
+    toolsOff: readonly string[],
+  ): unknown {
+    const { owner } = reading
+    const args = bridgeArgs(launch, name, owner.id, this.deps.dataArg())
     return bridgeEntry(
       reading.file.layout,
-      reading.agent.harness,
+      owner.app ? { app: owner.app } : { harness: owner.harness },
       launch.command,
       args,
-      server.toolsOff ?? [],
+      toolsOff,
     )
   }
 
@@ -510,7 +545,7 @@ export class McpTerminal {
     launch: BridgeLaunch,
     force: ReadonlySet<string> = new Set(),
   ): { edits: EntryEdit[]; entries: Record<string, Entry>; replaced: Dictionary } {
-    const given = this.deps.library().filter((server) => serverFor(server, reading.agent.id))
+    const given = this.deps.library().filter((server) => terminalGets(server, reading.owner.id))
     const byId = new Map(given.map((server) => [server.id, server]))
     const drifted = new Set(
       this.drift(reading, target)
@@ -557,7 +592,7 @@ export class McpTerminal {
           (item) =>
             !placed.has(item.id) &&
             words[2] === item.name &&
-            words[words.indexOf('--agent') + 1] === reading.agent.id,
+            words[words.indexOf('--agent') + 1] === reading.owner.id,
         )
         if (server) place(name, server, raw)
         continue
@@ -641,7 +676,7 @@ export class McpTerminal {
    * entries removed outside Kettu.
    */
   private async write(
-    agentId: AgentId,
+    targetId: McpTerminalTarget,
     target: Target,
     reason: McpTerminalBackup['reason'],
     writes: { path: string; before: string; existed: boolean; text: string; claude: boolean }[],
@@ -686,24 +721,24 @@ export class McpTerminal {
       }
       next = { ...next, backups: kept }
     }
-    await this.save({ ...ledger, agents: { ...ledger.agents, [agentId]: next } })
+    await this.save({ ...ledger, agents: { ...ledger.agents, [targetId]: next } })
   }
 
   /** Brings an agent's file in line with the library, for a takeover that is on. */
   private async syncOne(
-    agentId: AgentId,
+    targetId: McpTerminalTarget,
     force: ReadonlySet<string> = new Set(),
     reason: McpTerminalBackup['reason'] = 'update',
   ): Promise<void> {
     const ledger = await this.load()
-    const target = ledger.agents[agentId]
+    const target = ledger.agents[targetId]
     const launch = this.deps.launch()
     if (!target || !launch) return
     if (!target.on) {
-      if (Object.keys(target.entries).length > 0) await this.offNow(agentId, target)
+      if (Object.keys(target.entries).length > 0) await this.offNow(targetId, target)
       return
     }
-    const reading = await this.read(agentId, target)
+    const reading = await this.read(targetId, target)
     const { edits, entries, replaced } = this.compute(reading, target, launch, force)
     let originals = target.originals
     if (Object.keys(replaced).length > 0) {
@@ -738,7 +773,7 @@ export class McpTerminal {
     const next: Target = { ...target, entries, tools, originals }
     if (writes.length === 0 && entryDigest(next) === entryDigest(target)) return
     try {
-      await this.write(agentId, target, reason, writes, next)
+      await this.write(targetId, target, reason, writes, next)
     } catch (error) {
       if (originals !== target.originals) await this.dropBlob(originals)
       throw error
@@ -750,13 +785,13 @@ export class McpTerminal {
   sync(): Promise<void> {
     return this.run(async () => {
       const ledger = await this.load()
-      for (const agentId of Object.keys(ledger.agents)) {
+      for (const targetId of Object.keys(ledger.agents)) {
         try {
-          await this.syncOne(agentId as AgentId)
+          await this.syncOne(targetId as McpTerminalTarget)
         } catch (error) {
           this.deps.log(
             'warn',
-            `Could not update ${agentId}'s MCP file: ${(error as Error).message}`,
+            `Could not update ${targetId}'s MCP file: ${(error as Error).message}`,
           )
         }
       }
@@ -764,20 +799,26 @@ export class McpTerminal {
     })
   }
 
-  /** The rows of Terminal and apps: every agent on this computer, with what Kettu did. */
+  /**
+   * The rows of Terminal and apps: every agent and installed app on this computer, with what Kettu
+   * did. An app reading the same file as an agent before it is that agent's row, not one of its own.
+   */
   rows(): Promise<McpTerminalRow[]> {
     return this.run(async () => {
       const ledger = await this.load()
       const rows: McpTerminalRow[] = []
-      for (const agent of this.deps.agents()) {
-        const target = ledger.agents[agent.id]
-        const file = target
-          ? (this.deps.files(agent.id).find((item) => item.path === target.file) ??
-            (await this.fileOf(agent.id)))
-          : await this.fileOf(agent.id)
+      const byFile = new Map<string, McpTerminalRow>()
+      for (const owner of await this.deps.owners()) {
+        const target = ledger.agents[owner.id]
+        const file = await this.fileFor(owner.id, target)
         if (!file) continue
+        const earlier = byFile.get(path.resolve(file.path))
+        if (earlier && owner.app && !target) {
+          earlier.shared = [...(earlier.shared ?? []), owner.app]
+          continue
+        }
         const row: McpTerminalRow = {
-          agentId: agent.id,
+          target: owner.id,
           file: file.path,
           on: target?.on === true,
           own: 0,
@@ -790,7 +831,7 @@ export class McpTerminal {
         else if (!this.deps.launch()) row.unsupported = 'no-bridge'
         try {
           if (terminalFormat(file.layout)) {
-            const reading = await this.read(agent.id, target)
+            const reading = await this.read(owner.id, target)
             row.own = Object.entries(reading.servers).filter(
               ([name, raw]) => !target?.entries[name] && !isBridgeEntry(raw),
             ).length
@@ -800,18 +841,19 @@ export class McpTerminal {
           row.error = error instanceof McpConfigError ? error.reason : 'unreadable'
         }
         rows.push(row)
+        byFile.set(path.resolve(file.path), row)
       }
       return rows
     })
   }
 
   /** What turning it on would do, written nowhere yet. */
-  plan(agentId: AgentId): Promise<McpTerminalPlan> {
+  plan(targetId: McpTerminalTarget): Promise<McpTerminalPlan> {
     // The agent's own entries stay here: they may hold keys written in the file.
     return this.run(async () => {
-      const next = await this.planNow(agentId)
+      const next = await this.planNow(targetId)
       return {
-        agentId: next.agentId,
+        target: next.target,
         id: next.id,
         files: next.files,
         imports: next.imports,
@@ -820,11 +862,14 @@ export class McpTerminal {
     })
   }
 
-  private async planNow(agentId: AgentId): Promise<McpTerminalPlan & { own: Own[] }> {
+  private async planNow(
+    targetId: McpTerminalTarget,
+  ): Promise<McpTerminalPlan & { own: Own[]; owner: TerminalOwner }> {
     const launch = this.deps.launch()
     if (!launch) throw new Error('This build has no MCP bridge')
     if (!this.deps.key()) throw new Error('Kettu cannot keep a sealed backup on this computer now')
-    const reading = await this.read(agentId)
+    const reading = await this.read(targetId)
+    await this.notShared(reading)
     const library = this.deps.library()
     const own = this.ownEntries(reading, library)
     const secrets = own.flatMap(({ configured }) => Object.values(configured?.secrets ?? {}))
@@ -833,20 +878,17 @@ export class McpTerminal {
     const entries: McpTerminalPlan['entries'] = []
     for (const item of own) {
       if (!item.libraryName) continue
-      const args = bridgeArgs(launch, item.libraryName, agentId, this.deps.dataArg())
-      const server = item.server
-      after[item.name] = bridgeEntry(
-        reading.file.layout,
-        reading.agent.harness,
-        launch.command,
-        args,
-        server?.toolsOff ?? [],
+      after[item.name] = this.bridgeValue(
+        reading,
+        launch,
+        item.libraryName,
+        item.server?.toolsOff ?? [],
       )
       entries.push({ name: item.name, replaces: true })
     }
     const covered = new Set(own.map((item) => item.server?.id).filter(Boolean))
     for (const server of library) {
-      if (!serverFor(server, agentId) || covered.has(server.id)) continue
+      if (!terminalGets(server, reading.owner.id) || covered.has(server.id)) continue
       if (server.name in reading.servers) continue
       after[server.name] = this.entryValue(reading, launch, server)
       entries.push({ name: server.name, replaces: false })
@@ -899,10 +941,32 @@ export class McpTerminal {
         ]),
       )
       .digest('hex')
-    return { agentId, id, files, imports, entries, own }
+    return { target: targetId, id, files, imports, entries, own, owner: reading.owner }
   }
 
-  /** The agent's own entries, with the library server each is or the name it is imported as. */
+  /**
+   * One file has one record: an app reading an agent's file is turned on through that agent, and
+   * an agent not while an app's record of its file is on.
+   */
+  private async notShared(reading: Reading): Promise<void> {
+    const file = path.resolve(reading.file.path)
+    const ledger = await this.load()
+    for (const owner of await this.deps.owners()) {
+      // Only an app and an agent can share a file.
+      if (!owner.app === !reading.owner.app) continue
+      if (owner.app && !ledger.agents[owner.id]?.on) continue
+      const other = await this.fileFor(owner.id, ledger.agents[owner.id])
+      if (other && path.resolve(other.path) === file) {
+        throw new Error(
+          owner.app
+            ? `${MCP_TERMINAL_APPS[owner.app]} uses this same file through Kettu; turn it off there first`
+            : 'An agent reads this same file; turn it on for that agent',
+        )
+      }
+    }
+  }
+
+  /** The file's own entries, with the library server each is or the name it is imported as. */
   private ownEntries(reading: Reading, library: readonly MarketServer[]): Own[] {
     const names = new Set(library.map((server) => server.name))
     const out: Own[] = []
@@ -915,7 +979,8 @@ export class McpTerminal {
       }
       const print = mcpFingerprint(endpointOf(configured.spec))
       const server = library.find((item) => fingerprintOf(item) === print) ?? null
-      if (server && !server.on) {
+      // An app takes only what every agent gets, so a server kept for some agents stays its own.
+      if (server && (!server.on || (reading.owner.app && server.agents !== 'all'))) {
         out.push({ name, raw, configured, server: null, libraryName: null })
         continue
       }
@@ -930,31 +995,32 @@ export class McpTerminal {
    * Turns it on as the plan said: the agent's own servers go into the library first, then the
    * file is backed up and its entries replaced. Refused when the file changed since the plan.
    */
-  turnOn(agentId: AgentId, planId: string): Promise<void> {
+  turnOn(targetId: McpTerminalTarget, planId: string): Promise<void> {
     return this.run(async () => {
-      const plan = await this.planNow(agentId)
+      const plan = await this.planNow(targetId)
       if (plan.id !== planId) throw new McpTerminalStale('The file changed. Review it again.')
       const imports = plan.own.filter((item) => !item.server && item.libraryName)
       if (imports.length > 0) {
         await this.deps.importOwn(
-          agentId,
+          targetId,
           imports.map((item) => ({
-            source: this.sourceOf(plan, item.name),
+            source: sourceIn(plan.owner, plan.files[0]!.path, item.name),
             name: item.libraryName!,
           })),
         )
       }
+      const { owner } = plan
       const give = plan.own
         .map((item) => item.server)
-        .filter((server): server is MarketServer => !!server && !serverFor(server, agentId))
-      if (give.length > 0)
+        .filter((server): server is MarketServer => !!server && !terminalGets(server, owner.id))
+      if (give.length > 0 && !owner.app)
         await this.deps.giveTo(
-          agentId,
+          owner.id,
           give.map((server) => server.id),
         )
       const ledger = await this.load()
       const file = plan.files[0]!.path
-      const before = ledger.agents[agentId]
+      const before = ledger.agents[targetId]
       const target: Target = {
         on: true,
         file,
@@ -965,7 +1031,7 @@ export class McpTerminal {
         originals: null,
         backups: before?.backups ?? [],
       }
-      const reading = await this.read(agentId, target)
+      const reading = await this.read(targetId, target)
       const launch = this.deps.launch()!
       const { edits, entries, replaced } = this.compute(reading, target, launch)
       const originals =
@@ -994,7 +1060,7 @@ export class McpTerminal {
         }
       }
       try {
-        await this.write(agentId, { ...target, on: false }, 'takeover', writes, {
+        await this.write(targetId, { ...target, on: false }, 'takeover', writes, {
           ...target,
           entries,
           tools,
@@ -1009,17 +1075,13 @@ export class McpTerminal {
     })
   }
 
-  private sourceOf(plan: { files: McpTerminalFileChange[]; agentId: AgentId }, name: string) {
-    return { path: plan.files[0]!.path, agentId: plan.agentId, entryName: name }
-  }
-
   /** What turning it off puts back and removes. */
-  offPlan(agentId: AgentId): Promise<McpTerminalOffPlan> {
+  offPlan(targetId: McpTerminalTarget): Promise<McpTerminalOffPlan> {
     return this.run(async () => {
-      const target = (await this.load()).agents[agentId]
-      if (!target) return { agentId, back: [], removed: [], tools: 0 }
+      const target = (await this.load()).agents[targetId]
+      if (!target) return { target: targetId, back: [], removed: [], tools: 0 }
       const originals = await this.originals(target)
-      const reading = await this.read(agentId, target).catch(() => null)
+      const reading = await this.read(targetId, target).catch(() => null)
       const changed = new Set(reading ? this.drift(reading, target).map(({ name }) => name) : [])
       const back: McpTerminalOffPlan['back'] = []
       const removed: string[] = []
@@ -1034,29 +1096,29 @@ export class McpTerminal {
           })
         } else removed.push(name)
       }
-      return { agentId, back, removed, tools: target.tools.length }
+      return { target: targetId, back, removed, tools: target.tools.length }
     })
   }
 
   /** Turns it off: Kettu's entries go, the agent's own come back as they were, keys included. */
-  turnOff(agentId: AgentId): Promise<void> {
+  turnOff(targetId: McpTerminalTarget): Promise<void> {
     return this.run(async () => {
-      const target = (await this.load()).agents[agentId]
+      const target = (await this.load()).agents[targetId]
       if (!target) return
-      await this.offNow(agentId, target)
+      await this.offNow(targetId, target)
       this.deps.changed()
     })
   }
 
-  private async offNow(agentId: AgentId, target: Target): Promise<void> {
+  private async offNow(targetId: McpTerminalTarget, target: Target): Promise<void> {
     const ledger = await this.load()
     const offTarget: Target = { ...target, on: false }
     let reading: Reading
     try {
-      reading = await this.read(agentId, target)
+      reading = await this.read(targetId, target)
     } catch (error) {
       // Kept as written, for a later try; meanwhile the bridge answers with no tools.
-      await this.save({ ...ledger, agents: { ...ledger.agents, [agentId]: offTarget } })
+      await this.save({ ...ledger, agents: { ...ledger.agents, [targetId]: offTarget } })
       throw error
     }
     const originals = await this.originals(target)
@@ -1097,7 +1159,7 @@ export class McpTerminal {
       }
     }
     try {
-      await this.write(agentId, target, 'off', writes, {
+      await this.write(targetId, target, 'off', writes, {
         ...offTarget,
         entries: {},
         tools: [],
@@ -1105,28 +1167,28 @@ export class McpTerminal {
         originals: null,
       })
     } catch (error) {
-      await this.save({ ...ledger, agents: { ...ledger.agents, [agentId]: offTarget } })
+      await this.save({ ...ledger, agents: { ...ledger.agents, [targetId]: offTarget } })
       throw error
     }
     await this.dropBlob(target.originals)
   }
 
   /** The entries Kettu wrote that changed outside Kettu. */
-  drifts(agentId: AgentId): Promise<McpTerminalDrift[]> {
+  drifts(targetId: McpTerminalTarget): Promise<McpTerminalDrift[]> {
     return this.run(async () => {
-      const target = (await this.load()).agents[agentId]
+      const target = (await this.load()).agents[targetId]
       if (!target) return []
-      return this.drift(await this.read(agentId, target), target)
+      return this.drift(await this.read(targetId, target), target)
     })
   }
 
   /** The user's choice for each changed entry: keep the file's, or put Kettu's back. */
-  resolve(agentId: AgentId, choices: Record<string, McpTerminalChoice>): Promise<void> {
+  resolve(targetId: McpTerminalTarget, choices: Record<string, McpTerminalChoice>): Promise<void> {
     return this.run(async () => {
       const ledger = await this.load()
-      const target = ledger.agents[agentId]
+      const target = ledger.agents[targetId]
       if (!target?.on) return
-      const reading = await this.read(agentId, target)
+      const reading = await this.read(targetId, target)
       const drifted = new Set(this.drift(reading, target).map(({ name }) => name))
       const entries = { ...target.entries }
       const kept = new Set(target.kept)
@@ -1140,16 +1202,16 @@ export class McpTerminal {
       }
       await this.save({
         ...ledger,
-        agents: { ...ledger.agents, [agentId]: { ...target, entries, kept: [...kept] } },
+        agents: { ...ledger.agents, [targetId]: { ...target, entries, kept: [...kept] } },
       })
-      await this.syncOne(agentId, force, 'apply')
+      await this.syncOne(targetId, force, 'apply')
       this.deps.changed()
     })
   }
 
-  backups(agentId: AgentId): Promise<McpTerminalBackup[]> {
+  backups(targetId: McpTerminalTarget): Promise<McpTerminalBackup[]> {
     return this.run(async () => {
-      const target = (await this.load()).agents[agentId]
+      const target = (await this.load()).agents[targetId]
       // Newest first; the first backup is kept at the front of the record whatever its time.
       return (target?.backups ?? [])
         .map((backup, index) => ({ backup, index }))
@@ -1168,10 +1230,10 @@ export class McpTerminal {
    * Puts every file of a backup back as it was then, after backing up what they hold now. The one
    * from before the takeover turns it off.
    */
-  restore(agentId: AgentId, backupId: string): Promise<void> {
+  restore(targetId: McpTerminalTarget, backupId: string): Promise<void> {
     return this.run(async () => {
       const ledger = await this.load()
-      const target = ledger.agents[agentId]
+      const target = ledger.agents[targetId]
       const backup = target?.backups.find((item) => item.id === backupId)
       if (!target || !backup) throw new Error('No such backup')
       const writes: Parameters<McpTerminal['write']>[3] = []
@@ -1183,7 +1245,7 @@ export class McpTerminal {
           before: now ?? '',
           existed: now !== null,
           text,
-          claude: file.path === target.file && this.isClaude(agentId),
+          claude: file.path === target.file && (await this.isClaude(targetId)),
         })
       }
       const next: Target = backup.first
@@ -1195,20 +1257,29 @@ export class McpTerminal {
             tools: backup.tools,
             kept: backup.kept,
           }
-      await this.write(agentId, target, 'restore', writes, next)
+      await this.write(targetId, target, 'restore', writes, next)
       if (backup.first) await this.dropBlob(target.originals)
       this.deps.changed()
     })
   }
 
-  private isClaude(agentId: AgentId): boolean {
-    return this.deps.agents().find((agent) => agent.id === agentId)?.harness === 'claude-code'
+  private async isClaude(targetId: McpTerminalTarget): Promise<boolean> {
+    return (
+      (await this.deps.owners()).find((owner) => owner.id === targetId)?.harness === 'claude-code'
+    )
   }
 
   /** The names of the entries Kettu wrote into an agent's file, for its own sessions. */
-  written(agentId: AgentId): string[] {
-    return Object.keys(this.ledger?.agents[agentId]?.entries ?? {})
+  written(targetId: McpTerminalTarget): string[] {
+    return Object.keys(this.ledger?.agents[targetId]?.entries ?? {})
   }
+}
+
+/** Where an entry of an owner's file comes from, as discovery names it. */
+function sourceIn(owner: TerminalOwner, file: string, name: string): McpConfigSource {
+  return owner.app
+    ? { path: file, app: MCP_TERMINAL_APPS[owner.app], entryName: name }
+    : { path: file, agentId: owner.id, entryName: name }
 }
 
 interface Own {

@@ -2572,6 +2572,12 @@
   color: var(--success);
 }
 
+.k-mcp-terminal-app-icon {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: var(--radius-sm);
+}
+
 .k-mcp-terminal-meta {
   display: inline-flex;
   flex-wrap: wrap;

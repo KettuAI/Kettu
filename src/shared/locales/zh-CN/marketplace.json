@@ -1225,13 +1225,14 @@
   "mcpTerminal": {
     "title": "终端和应用",
     "count": "{{count}} 个里有 {{using}} 个用 Kettu 的服务器",
-    "lede": "让你在终端里运行的智能体也用 Kettu 的 MCP 服务器。Kettu 改每个文件之前先备份。",
-    "failed": "读不了智能体的配置文件。",
+    "lede": "让你在终端里运行的智能体和这台电脑上的应用也用 Kettu 的 MCP 服务器。Kettu 改每个文件之前先备份。",
+    "failed": "读不了智能体和应用的配置文件。",
     "uses": "用 Kettu 的服务器",
     "noOwn": "没有自己的服务器",
     "own_other": "自己的 {{count}} 个服务器",
     "changed_other": "{{count}} 个条目在 Kettu 之外被改过",
     "backedUp": "{{when}}备份",
+    "shared": "{{apps}} 也读这个文件",
     "invalidJson": "JSON 格式不对",
     "unsupported": {
       "format": "Kettu 还不能写这个智能体的文件",
@@ -1245,9 +1246,9 @@
     "turnOn": "打开",
     "cancel": "取消",
     "alsoInTerminal": "终端里也用 Kettu 的 MCP 服务器",
-    "loginNote": "Kettu 没有设成登录时启动。打开 Kettu 之前，终端里连不上这些服务器。",
+    "loginNote": "Kettu 没有设成登录时启动。打开 Kettu 之前，终端和应用里连不上这些服务器。",
     "openAtLogin": "登录时启动 Kettu",
-    "loginHint": "终端里的服务器经过 Kettu 连接，Kettu 要开着。",
+    "loginHint": "终端和应用里的服务器经过 Kettu 连接，Kettu 要开着。",
     "onTitle": "在 {{agent}} 的终端里用 Kettu 的 MCP 服务器",
     "onSub_other": "Kettu 会改 {{count}} 个文件：",
     "onlyKey": "只改 {{key}}",
@@ -1303,8 +1304,27 @@
     "kettuServers_other": "经过 Kettu 的 {{count}} 个服务器",
     "restore": "恢复",
     "restoreWarn": "这之后对文件做的改动会丢掉。",
-    "sealed": "带密钥的备份是加密的，密钥存在钥匙串里。",
-    "restored": "{{file}} 已恢复"
+    "sealed": "所有备份都加密，密钥存在钥匙串里。",
+    "restored": "{{file}} 已恢复",
+    "app": {
+      "switch": "{{agent}} 也用 Kettu 的服务器",
+      "onTitle": "在 {{agent}} 里用 Kettu 的 MCP 服务器",
+      "rule": "{{agent}} 拿到的是 Kettu 交给所有智能体的服务器。",
+      "importsFirst": "先把 {{agent}} 自己的服务器导入 Kettu，交给所有智能体",
+      "noServers": "Kettu 还没有交给所有智能体的服务器。",
+      "turnedOn": "{{agent}} 现在用 Kettu 的服务器",
+      "offTitle": "{{agent}} 不再用 Kettu 的服务器？",
+      "goesWithout": "{{agent}} 不再有这个服务器",
+      "turnedOff": "{{agent}} 改回用自己的服务器",
+      "leaveOutHint": "{{agent}} 不再有这个服务器",
+      "restartNote": {
+        "claude-desktop": "退出再打开 Claude Desktop 后生效。",
+        "cursor": "重启 Cursor 后生效。",
+        "vscode": "VS Code 会自己读到改动，每个新服务器第一次启动前会请你确认信任。",
+        "windsurf": "在 Windsurf 里刷新 MCP 服务器后生效。",
+        "zed": "Zed 会自己读到改动。"
+      }
+    }
   },
   "mcp": {
     "addTitle": "添加 MCP 服务器",
@@ -1481,6 +1501,7 @@
       "terminal": "不在会话里",
       "inTerminal": "终端里的 {{agent}}",
       "inTerminalAt": "终端里的 {{agent}} · {{folder}}",
+      "inApp": "来自 {{app}}",
       "result": {
         "ok": "成功",
         "tool-error": "工具出错",

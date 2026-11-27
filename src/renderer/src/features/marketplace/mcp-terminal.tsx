@@ -9,23 +9,29 @@ import {
   Alert02Icon,
   Clock01Icon,
   Shield01Icon,
+  ComputerIcon,
 } from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/agents'
-import type {
-  McpTerminalBackup,
-  McpTerminalChoice,
-  McpTerminalDrift,
-  McpTerminalOffPlan,
-  McpTerminalPlan,
-  McpTerminalRow,
+import {
+  MCP_TERMINAL_APPS,
+  terminalApp,
+  type McpTerminalApp,
+  type McpTerminalBackup,
+  type McpTerminalChoice,
+  type McpTerminalDrift,
+  type McpTerminalOffPlan,
+  type McpTerminalPlan,
+  type McpTerminalRow,
+  type McpTerminalTarget,
 } from '@shared/mcp-terminal'
 import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { RadioGroup } from '@renderer/components/ui/radio-group'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Diff } from '@renderer/features/session/markdown'
@@ -40,6 +46,7 @@ import { useApply } from '@renderer/features/settings/use-apply'
 import { mediumAgo } from '@renderer/lib/format'
 import { isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { loadSiteIcons, requestSiteIcon, useSiteIcon } from '@renderer/stores/site-icons'
 import { useAgentName } from './hooks'
 import { McpConfirmation } from './mcp-confirmation'
 import { homeShort } from './model'
@@ -61,6 +68,77 @@ function fileReason(
   error: NonNullable<McpTerminalRow['error']>,
 ): string {
   return error === 'invalid-json' ? t('mcpTerminal.invalidJson') : t(`mcp.files.${error}`)
+}
+
+/** The strings an app says in its own words, since it runs in no terminal. */
+type AppWording =
+  | 'switch'
+  | 'onTitle'
+  | 'turnedOn'
+  | 'offTitle'
+  | 'turnedOff'
+  | 'goesWithout'
+  | 'leaveOutHint'
+  | 'noServers'
+  | 'restartNote'
+
+/** A target's name, and the strings that differ for an agent and an app. */
+function useWording(): {
+  nameOf(target: McpTerminalTarget): string
+  say(key: AppWording, target: McpTerminalTarget, values: { agent?: string }): string
+} {
+  const { t } = useTranslation('marketplace')
+  const agentName = useAgentName()
+  return {
+    nameOf: (target) => {
+      const app = terminalApp(target)
+      return app ? MCP_TERMINAL_APPS[app] : agentName(target as AgentId)
+    },
+    say: (key, target, values) => {
+      const app = terminalApp(target)
+      if (!app) return t(`mcpTerminal.${key}`, values)
+      return key === 'restartNote'
+        ? t(`mcpTerminal.app.restartNote.${app}`)
+        : t(`mcpTerminal.app.${key}`, values)
+    },
+  }
+}
+
+/** The site whose icon an app shows, for apps with no mark of their own here. */
+const APP_SITES: Partial<Record<McpTerminalApp, string>> = {
+  vscode: 'https://code.visualstudio.com',
+  windsurf: 'https://windsurf.com',
+  zed: 'https://zed.dev',
+}
+
+const APP_MARKS: Partial<Record<McpTerminalApp, AgentId>> = {
+  'claude-desktop': 'claude-code',
+  cursor: 'cursor',
+}
+
+/** An agent's mark, or an app's: Claude's and Cursor's own, else its site's icon. */
+function TargetIcon({ target }: { target: McpTerminalTarget }) {
+  const { hostId } = useHostScope()
+  const app = terminalApp(target)
+  const mark = app ? APP_MARKS[app] : (target as AgentId)
+  const site = app ? (APP_SITES[app] ?? null) : null
+  const icon = useSiteIcon(site ?? '')
+  useEffect(() => {
+    if (!site || icon) return
+    loadSiteIcons()
+    requestSiteIcon(site)
+  }, [site, icon])
+  return (
+    <span className="k-mcp-found-icon">
+      {mark ? (
+        <AgentMark agent={mark} size={20} hostId={hostId} dot={null} />
+      ) : icon ? (
+        <SiteIconImage className="k-mcp-terminal-app-icon" src={icon} />
+      ) : (
+        <Icon icon={ComputerIcon} size={19} />
+      )}
+    </span>
+  )
 }
 
 function failed(error: unknown): string {
@@ -115,6 +193,13 @@ function RowFacts({ row }: { row: McpTerminalRow }) {
         </span>
       )}
       {file}
+      {row.shared && (
+        <span>
+          {t('mcpTerminal.shared', {
+            apps: row.shared.map((app) => MCP_TERMINAL_APPS[app]).join(', '),
+          })}
+        </span>
+      )}
       {row.on && row.backedUpAt !== null && (
         <span>{t('mcpTerminal.backedUp', { when: mediumAgo(row.backedUpAt) })}</span>
       )}
@@ -126,9 +211,9 @@ function RowFacts({ row }: { row: McpTerminalRow }) {
 function TerminalControls({ row, menu = true }: { row: McpTerminalRow; menu?: boolean }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  const agentName = useAgentName()
+  const { nameOf, say } = useWording()
   const [dialog, setDialog] = useState<Dialog>(null)
-  const name = agentName(row.agentId)
+  const name = nameOf(row.target)
   const disabled = !!row.unsupported || (!!row.error && !row.on)
   return (
     <>
@@ -138,7 +223,7 @@ function TerminalControls({ row, menu = true }: { row: McpTerminalRow; menu?: bo
         </Button>
       )}
       <SettingSwitch
-        label={t('mcpTerminal.switch', { agent: name })}
+        label={say('switch', row.target, { agent: name })}
         checked={row.on}
         disabled={disabled}
         onChange={(on) => setDialog(on ? 'on' : 'off')}
@@ -189,7 +274,7 @@ function TerminalDialogs({
 }) {
   return (
     <>
-      {dialog === 'on' && <TurnOnDialog agentId={row.agentId} close={close} />}
+      {dialog === 'on' && <TurnOnDialog target={row.target} close={close} />}
       {dialog === 'off' && <TurnOffDialog row={row} close={close} />}
       {dialog === 'drift' && <DriftDialog row={row} close={close} />}
       {dialog === 'backups' && <BackupsDialog row={row} close={close} />}
@@ -200,15 +285,11 @@ function TerminalDialogs({
 /** Marketplace › MCP › Terminal and apps: one row per agent on this computer. */
 export function TerminalGroup() {
   const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
-  const agentName = useAgentName()
+  const { nameOf } = useWording()
   const { rows, error, reload } = useTerminalRows()
   const login = useLoginState()
   const [apply] = useApply()
-  const shown = rows?.filter((row) => !row.error || row.on) ?? []
-  const unreadable = (rows ?? []).flatMap((row) =>
-    row.error && !row.on ? [{ ...row, error: row.error }] : [],
-  )
+  const shown = rows ?? []
   const using = shown.filter((row) => row.on).length
   return (
     <section className="ui-as-int-section k-mcp-section" aria-labelledby="k-mcp-terminal">
@@ -238,32 +319,15 @@ export function TerminalGroup() {
       <div className="k-mcp-rows">
         {shown.map((row) => (
           <ItemRow
-            key={row.agentId}
-            title={agentName(row.agentId)}
-            icon={
-              <span className="k-mcp-found-icon">
-                <AgentMark agent={row.agentId} size={20} hostId={scope.hostId} dot={null} />
-              </span>
-            }
+            key={row.target}
+            title={nameOf(row.target)}
+            icon={<TargetIcon target={row.target} />}
             meta={<RowFacts row={row} />}
             line={null}
             end={<TerminalControls row={row} />}
           />
         ))}
       </div>
-      {unreadable.map((row) => (
-        <div className="k-mcp-file-error" key={row.agentId}>
-          <span>
-            {t('mcp.fileError', {
-              path: homeShort(row.file),
-              reason: fileReason(t, row.error),
-            })}
-          </span>
-          <SetButton size="sm" variant="ghost" onClick={() => void scope.api.showItem(row.file)}>
-            {t('mcp.showFile')}
-          </SetButton>
-        </div>
-      ))}
       {login.local && !login.on && using > 0 && (
         <div className="k-mcp-terminal-login" role="status">
           <Icon icon={Alert02Icon} size={15} />
@@ -285,7 +349,7 @@ export function TerminalGroup() {
 export function AgentTerminalRow({ agentId }: { agentId: AgentId }) {
   const { t } = useTranslation('marketplace')
   const { rows } = useTerminalRows()
-  const row = rows?.find((item) => item.agentId === agentId)
+  const row = rows?.find((item) => item.target === agentId)
   if (!row) return null
   return (
     <RowFrame
@@ -360,10 +424,10 @@ function Note({
 }
 
 /** Turning it on: what changes, in plain words, with the exact change under them. */
-function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
+function TurnOnDialog({ target, close }: { target: McpTerminalTarget; close(): void }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  const agentName = useAgentName()
+  const { nameOf, say } = useWording()
   const login = useLoginState()
   const [apply] = useApply()
   const [plan, setPlan] = useState<McpTerminalPlan | null>(null)
@@ -371,24 +435,25 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
   const [atLogin, setAtLogin] = useState(true)
   const [exact, setExact] = useState(false)
   const [working, setWorking] = useState(false)
-  const name = agentName(agentId)
+  const name = nameOf(target)
+  const app = terminalApp(target)
   useEffect(() => {
     let live = true
-    scope.request('market.mcpTerminalPlan', { agentId }).then(
+    scope.request('market.mcpTerminalPlan', { target }).then(
       (next) => live && setPlan(next),
       (reason: unknown) => live && setError(failed(reason)),
     )
     return () => {
       live = false
     }
-  }, [scope, agentId])
+  }, [scope, target])
   const turnOn = async () => {
     if (!plan) return
     setWorking(true)
     try {
-      await scope.request('market.mcpTerminalOn', { agentId, planId: plan.id })
+      await scope.request('market.mcpTerminalOn', { target, planId: plan.id })
       if (login.local && !login.on && atLogin) apply({ general: { openAtLogin: true } })
-      toast(t('mcpTerminal.turnedOn', { agent: name }), undefined, { tone: 'success' })
+      toast(say('turnedOn', target, { agent: name }), undefined, { tone: 'success' })
       void scope.useMarketplaceStore.getState().loadTerminal()
       close()
     } catch (reason) {
@@ -402,7 +467,7 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
     <McpConfirmation
       open
       onOpenChange={(open) => !open && close()}
-      title={t('mcpTerminal.onTitle', { agent: name })}
+      title={say('onTitle', target, { agent: name })}
     >
       <SettingsDialogBody className="k-mcp-terminal-dialog">
         {!plan && !error && <Spinner />}
@@ -435,9 +500,14 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
                 </SetButton>
               </div>
             ))}
+            {app && (
+              <Note icon={InformationCircleIcon}>{t('mcpTerminal.app.rule', { agent: name })}</Note>
+            )}
             {plan.imports.length > 0 && (
               <Group
-                title={t('mcpTerminal.importsFirst', { agent: name })}
+                title={t(app ? 'mcpTerminal.app.importsFirst' : 'mcpTerminal.importsFirst', {
+                  agent: name,
+                })}
                 count={plan.imports.length}
               >
                 {plan.imports.map((item) => (
@@ -459,7 +529,7 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
             )}
             <Group title={t('mcpTerminal.thenGets', { agent: name })} count={plan.entries.length}>
               {plan.entries.length === 0 && (
-                <p className="k-mkt-section-note">{t('mcpTerminal.noServers')}</p>
+                <p className="k-mkt-section-note">{say('noServers', target, {})}</p>
               )}
               {plan.entries.map((entry) => (
                 <Entry
@@ -511,7 +581,7 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
           </>
         )}
       </SettingsDialogBody>
-      <SettingsDialogFooter start={<span>{t('mcpTerminal.restartNote', { agent: name })}</span>}>
+      <SettingsDialogFooter start={<span>{say('restartNote', target, { agent: name })}</span>}>
         <SetButton size="md" variant="ghost" onClick={close}>
           {t('mcpTerminal.cancel')}
         </SetButton>
@@ -526,26 +596,26 @@ function TurnOnDialog({ agentId, close }: { agentId: AgentId; close(): void }) {
 function TurnOffDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  const agentName = useAgentName()
+  const { nameOf, say } = useWording()
   const [plan, setPlan] = useState<McpTerminalOffPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
-  const name = agentName(row.agentId)
+  const name = nameOf(row.target)
   useEffect(() => {
     let live = true
-    scope.request('market.mcpTerminalOffPlan', { agentId: row.agentId }).then(
+    scope.request('market.mcpTerminalOffPlan', { target: row.target }).then(
       (next) => live && setPlan(next),
       (reason: unknown) => live && setError(failed(reason)),
     )
     return () => {
       live = false
     }
-  }, [scope, row.agentId])
+  }, [scope, row.target])
   const turnOff = async () => {
     setWorking(true)
     try {
-      await scope.request('market.mcpTerminalOff', { agentId: row.agentId })
-      toast(t('mcpTerminal.turnedOff', { agent: name }), undefined, { tone: 'success' })
+      await scope.request('market.mcpTerminalOff', { target: row.target })
+      toast(say('turnedOff', row.target, { agent: name }), undefined, { tone: 'success' })
       void scope.useMarketplaceStore.getState().loadTerminal()
       close()
     } catch (reason) {
@@ -557,7 +627,7 @@ function TurnOffDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
     <McpConfirmation
       open
       onOpenChange={(open) => !open && close()}
-      title={t('mcpTerminal.offTitle', { agent: name })}
+      title={say('offTitle', row.target, { agent: name })}
     >
       <SettingsDialogBody className="k-mcp-terminal-dialog">
         <p className="k-mcp-terminal-sub">
@@ -586,12 +656,12 @@ function TurnOffDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
         )}
         {plan && plan.removed.length > 0 && (
           <Group title={t('mcpTerminal.removedGroup')} count={plan.removed.length}>
-            {plan.removed.map((name) => (
+            {plan.removed.map((entry) => (
               <Entry
-                key={name}
+                key={entry}
                 icon={File01Icon}
-                name={name}
-                detail={t('mcpTerminal.goesWithout', { agent: agentName(row.agentId) })}
+                name={entry}
+                detail={say('goesWithout', row.target, { agent: name })}
                 tag={t('mcpTerminal.removed')}
                 tone="removed"
               />
@@ -620,15 +690,15 @@ function TurnOffDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
 function DriftDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  const agentName = useAgentName()
+  const { nameOf, say } = useWording()
   const [drifts, setDrifts] = useState<McpTerminalDrift[] | null>(null)
   const [choices, setChoices] = useState<Record<string, McpTerminalChoice>>({})
   const [error, setError] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
-  const name = agentName(row.agentId)
+  const name = nameOf(row.target)
   useEffect(() => {
     let live = true
-    scope.request('market.mcpTerminalDrift', { agentId: row.agentId }).then(
+    scope.request('market.mcpTerminalDrift', { target: row.target }).then(
       (next) => {
         if (!live) return
         setDrifts(next)
@@ -639,11 +709,11 @@ function DriftDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
     return () => {
       live = false
     }
-  }, [scope, row.agentId])
+  }, [scope, row.target])
   const applyChoices = async () => {
     setWorking(true)
     try {
-      await scope.request('market.mcpTerminalResolve', { agentId: row.agentId, choices })
+      await scope.request('market.mcpTerminalResolve', { target: row.target, choices })
       void scope.useMarketplaceStore.getState().loadTerminal()
       void scope.useMarketplaceStore.getState().loadDiscovery()
       close()
@@ -698,7 +768,7 @@ function DriftDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
                       ]
                         .filter(Boolean)
                         .join(' · ')
-                    : t('mcpTerminal.leaveOutHint', { agent: name })
+                    : say('leaveOutHint', row.target, { agent: name })
                 }
               />
               <Choice
@@ -737,18 +807,18 @@ function BackupsDialog({ row, close }: { row: McpTerminalRow; close(): void }) {
   const [working, setWorking] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    scope.request('market.mcpTerminalBackups', { agentId: row.agentId }).then(
+    scope.request('market.mcpTerminalBackups', { target: row.target }).then(
       (next) => live && setBackups(next),
       (reason: unknown) => live && setError(failed(reason)),
     )
     return () => {
       live = false
     }
-  }, [scope, row.agentId])
+  }, [scope, row.target])
   const restore = async (backupId: string) => {
     setWorking(backupId)
     try {
-      await scope.request('market.mcpTerminalRestore', { agentId: row.agentId, backupId })
+      await scope.request('market.mcpTerminalRestore', { target: row.target, backupId })
       toast(t('mcpTerminal.restored', { file: homeShort(row.file) }), undefined, {
         tone: 'success',
       })
