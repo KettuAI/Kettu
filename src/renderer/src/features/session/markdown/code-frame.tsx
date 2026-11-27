@@ -5,8 +5,10 @@ import {
   useContext,
   useState,
   type ComponentProps,
+  type ComponentType,
   type CSSProperties,
   type ReactNode,
+  type Ref,
 } from 'react'
 import { TextWrapIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -20,7 +22,18 @@ import { isCommandLanguage, useSessionPlatform } from './command'
 import { LiveContext, ReplyContext } from './live'
 import { SvgBlock } from './svg-block'
 
-const MermaidBlock = lazy(() => import('./mermaid-block'))
+let loadedMermaidBlock: ComponentType<BlockProps> | null = null
+let mermaidBlockPromise: Promise<{ default: ComponentType<BlockProps> }> | null = null
+
+function loadMermaidBlock(): Promise<{ default: ComponentType<BlockProps> }> {
+  mermaidBlockPromise ??= import('./mermaid-block').then((module) => {
+    loadedMermaidBlock = module.default
+    return module
+  })
+  return mermaidBlockPromise
+}
+
+const MermaidBlock = lazy(loadMermaidBlock)
 const MathBlock = lazy(() => import('./math').then((m) => ({ default: m.MathBlock })))
 
 function codeOf(children: ReactNode): string {
@@ -56,6 +69,8 @@ export function BlockCode({ node, className, children }: ComponentProps<'code'> 
     return <ReplyCommand sessionId={reply} {...props} />
   }
   if (language === 'mermaid') {
+    const Loaded = loadedMermaidBlock
+    if (Loaded) return <Loaded {...props} />
     return (
       <Suspense fallback={<CodeFrame {...props} />}>
         <MermaidBlock {...props} />
@@ -100,7 +115,8 @@ export function CodeFrame({
   meta,
   isIncomplete,
   name,
-}: BlockProps & { name?: ReactNode }) {
+  frameRef,
+}: BlockProps & { name?: ReactNode; frameRef?: Ref<HTMLDivElement> }) {
   const { t } = useTranslation('session')
   const [wrap, setWrap] = useState(false)
   // A block that arrives while the reply is being written stays open, so it never shrinks under
@@ -115,6 +131,7 @@ export function CodeFrame({
   const foldable = !isIncomplete && foldLines(code, true).hidden > 0
   return (
     <BlockFrame
+      ref={frameRef}
       data-wrap={wrap || undefined}
       // The number column fits the block's last line number.
       style={

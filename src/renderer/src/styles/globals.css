@@ -1839,6 +1839,18 @@
     opacity: 1;
   }
 }
+/* Isolate Mermaid's temporary measurement container from the document flow and layout tree. */
+body > div[id^='dkettu-mermaid-'] {
+  position: fixed;
+  top: -100000px;
+  left: -100000px;
+  width: 1024px;
+  height: 768px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  contain: strict;
+}
 /* Streamdown's code block inside the frame: only its highlighted body, with the line numbers in
    an 18 px column 14 px from the edge. */
 .block-frame [data-streamdown='code-block'] {

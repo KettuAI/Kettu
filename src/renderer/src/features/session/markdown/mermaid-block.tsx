@@ -1,10 +1,11 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Download01Icon, SourceCodeIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { createMermaidPlugin } from '@streamdown/mermaid'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock } from 'streamdown'
 import { useDark } from '@renderer/hooks/use-dark'
+import { useNearView } from '@renderer/features/session/media/near-view'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useThemesStore } from '@renderer/stores/themes'
 import {
   BlockAction,
@@ -16,124 +17,68 @@ import {
 } from './block-frame'
 import { CodeFrame, type BlockProps } from './code-frame'
 import { downloadText } from './download'
+import {
+  getCachedMermaidPicture,
+  getMermaidThemeSnapshot,
+  mermaidCacheKey,
+  refreshMermaidThemeSnapshot,
+  requestMermaidPicture,
+  type MermaidRenderResult,
+} from './mermaid-render'
 import { openPicture } from './open-picture'
-
-const plugin = createMermaidPlugin()
-
-/**
- * The diagram's colors from the theme's tokens, read as values: Mermaid derives shades from them,
- * which a `var()` would defeat.
- */
-function themeVariables(): Record<string, string> {
-  const style = getComputedStyle(document.documentElement)
-  const token = (name: string) => style.getPropertyValue(name).trim()
-  const surface = token('--bg-surface')
-  const text = token('--text-primary')
-  const line = token('--border-default')
-  return {
-    background: surface,
-    mainBkg: surface,
-    primaryColor: surface,
-    secondaryColor: token('--bg-subtle'),
-    tertiaryColor: token('--bg-subtle'),
-    primaryBorderColor: line,
-    secondaryBorderColor: line,
-    tertiaryBorderColor: line,
-    nodeBorder: line,
-    clusterBkg: token('--bg-subtle'),
-    clusterBorder: line,
-    primaryTextColor: text,
-    secondaryTextColor: text,
-    tertiaryTextColor: text,
-    textColor: text,
-    titleColor: text,
-    edgeLabelBackground: surface,
-    lineColor: token('--border-strong'),
-    fontFamily: getComputedStyle(document.body).fontFamily || 'sans-serif',
-    fontSize: '12px',
-  }
-}
-
-type Drawn = { url: string; width: number; xml: string } | { error: string | null } | null
-
-const SVG_NS = 'http://www.w3.org/2000/svg'
-
-/**
- * The diagram as a picture: an `<img>` runs none of the SVG's scripts and loads nothing it
- * references. Mermaid sizes its SVG to its container, so the picture takes the size its view box
- * gives it instead. `xml` is the same SVG on a page of the theme's background, for the viewer and
- * the saved file, which are not seen on the thread's.
- */
-function pictureOf(
-  svg: string,
-  background: string,
-): { url: string; width: number; xml: string } | { error: string } {
-  // Labels with a line break are HTML inside the SVG, with a bare `<br>` that XML parsing rejects,
-  // so it is read as HTML and written back as XML.
-  const root = new DOMParser().parseFromString(svg, 'text/html').body.querySelector('svg')
-  if (!root) return { error: 'The output holds no SVG.' }
-  const [x = 0, y = 0, width, height] = (root.getAttribute('viewBox') ?? '')
-    .split(/[\s,]+/)
-    .map(Number)
-  if (!width || !height) return { error: 'The SVG has no usable view box.' }
-  root.setAttribute('width', String(width))
-  root.setAttribute('height', String(height))
-  root.removeAttribute('style')
-  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}`
-  const page = root.ownerDocument.createElementNS(SVG_NS, 'rect')
-  page.setAttribute('x', String(x))
-  page.setAttribute('y', String(y))
-  page.setAttribute('width', String(width))
-  page.setAttribute('height', String(height))
-  page.setAttribute('fill', background)
-  // The diagram's own styles may name `rect`.
-  page.setAttribute('style', `fill: ${background}`)
-  root.prepend(page)
-  return { url, width, xml: new XMLSerializer().serializeToString(root) }
-}
 
 /**
  * A Mermaid diagram, drawn in the theme's colors and drawn again when the theme changes, with
  * its source a click away. Mermaid's strict security level sanitizes the labels, and the picture
- * is an image. While the block streams it shows as code.
+ * is an image. Rendered SVGs live in a bounded module-level LRU cache so switching back to a
+ * session paints immediately without re-running Mermaid. While the block streams it shows as code.
  */
 export default function MermaidBlock(props: BlockProps) {
   const { code, isIncomplete } = props
   const { t } = useTranslation('session')
   const dark = useDark()
   const theme = useThemesStore((s) => s.shown)
+  const fonts = useSettingsStore((s) => s.settings.appearance.fonts)
   const uid = useId()
-  const id = `mermaid-${uid.replace(/[^\w-]/g, '')}`
+  const frameRef = useRef<HTMLDivElement>(null)
   const [source, setSource] = useState(false)
-  const [drawn, setDrawn] = useState<Drawn>(null)
+  const [settled, setSettled] = useState<{ key: string; result: MermaidRenderResult } | null>(null)
+
+  const snapshot = getMermaidThemeSnapshot(dark, theme, fonts)
+  const cacheKey = mermaidCacheKey(code, snapshot.themeKey)
+  const cached = isIncomplete ? undefined : getCachedMermaidPicture(code, snapshot.themeKey)
+  const drawn: MermaidRenderResult | null =
+    cached ?? (settled?.key === cacheKey ? settled.result : null)
+
+  const hasObserver = typeof IntersectionObserver === 'function'
+  const near = useNearView(frameRef, !isIncomplete && !drawn && hasObserver)
+  const shouldRender = !isIncomplete && !drawn && (!hasObserver || near)
 
   useEffect(() => {
-    if (isIncomplete) return
+    if (!shouldRender) return
     let current = true
-    const variables = themeVariables()
-    const mermaid = plugin.getMermaid({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'base',
-      themeVariables: variables,
-      // Nodes take the cards' 6 px corners and a 30 px height.
-      themeCSS: '.node rect { rx: 6px; ry: 6px; }',
-      flowchart: { htmlLabels: false, padding: 8 },
+
+    // Re-read computed tokens in case appearance styles settled after render.
+    const live = refreshMermaidThemeSnapshot(dark, theme, fonts)
+    const liveCacheKey = mermaidCacheKey(code, live.themeKey)
+
+    const handle = requestMermaidPicture({
+      code,
+      themeKey: live.themeKey,
+      variables: live.variables,
     })
-    mermaid.render(id, code).then(
-      ({ svg }) => {
-        if (!current) return
-        setDrawn(pictureOf(svg, variables.background ?? ''))
-      },
-      (error: unknown) =>
-        current && setDrawn({ error: error instanceof Error ? error.message : String(error) }),
-    )
+    void handle.promise.then((result) => {
+      if (!current) return
+      setSettled({ key: liveCacheKey, result })
+    })
     return () => {
       current = false
+      handle.cancel()
     }
-  }, [code, isIncomplete, id, dark, theme])
+  }, [shouldRender, code, snapshot.themeKey, dark, theme, fonts])
 
-  if (isIncomplete || !drawn) return <CodeFrame {...props} />
+  if (isIncomplete) return <CodeFrame {...props} />
+  if (!drawn) return <CodeFrame {...props} frameRef={frameRef} />
   const failed = 'error' in drawn
   const download = !failed && (
     <BlockAction
