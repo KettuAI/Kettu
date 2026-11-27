@@ -1,7 +1,8 @@
 import type { ControlStep } from '@shared/control'
 import type { SessionView, ThreadState } from '@shared/thread'
+import { writingEntryId } from '@shared/turn-phase'
 
-export { awaitsAnswer, turnPhase, type TurnPhase } from '@shared/turn-phase'
+export { awaitsAnswer, turnPhase, writingEntryId, type TurnPhase } from '@shared/turn-phase'
 
 // These are read on every streamed chunk, so a long run of tool calls is read no further back.
 const LOOKBACK = 64
@@ -65,24 +66,13 @@ const writingIds = new WeakMap<ThreadState, string | null>()
 const lastUserIds = new WeakMap<ThreadState, string | null>()
 
 /**
- * The message the agent is still writing, when it is the turn's latest entry; once anything else
- * follows it, it reads as written even before the agent says so.
+ * The message the agent is still writing, cached per thread state object; shares the same quiet
+ * entry and boundary rules as `turnPhase`.
  */
 export function writingId(state: ThreadState | null | undefined): string | null {
   if (!state) return null
   if (writingIds.has(state)) return writingIds.get(state)!
-  if (state.session.waitingBackground) {
-    writingIds.set(state, null)
-    return null
-  }
-  let found: string | null = null
-  for (let i = state.order.length - 1; i >= 0; i--) {
-    const entry = state.byId[state.order[i]!]
-    // A plan or a notice may land while the message still streams; a subagent's card follows it.
-    if (!entry || entry.kind === 'plan' || entry.kind === 'notice') continue
-    found = entry.kind === 'agent' && entry.streaming ? entry.id : null
-    break
-  }
+  const found = writingEntryId(state)
   writingIds.set(state, found)
   return found
 }
