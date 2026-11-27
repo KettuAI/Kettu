@@ -1,0 +1,122 @@
+diff --git a/web/pdf_viewer.mjs b/web/pdf_viewer.mjs
+index 8e4a82d3e8cde9f27ee4878534afeed701f1c017..8645a47a02f668be1d1b5615b39be4441ef27ee6 100644
+--- a/web/pdf_viewer.mjs
++++ b/web/pdf_viewer.mjs
+@@ -6317,11 +6317,61 @@ class TextLayerBuilder {
+     }
+     this.#selectionChangeAC = new AbortController();
+     const signal = globalAbortSignal ? AbortSignal.any([this.#selectionChangeAC.signal, globalAbortSignal]) : this.#selectionChangeAC.signal;
++    // Patched for mozilla/pdf.js#22466: avoid mutating .textLayer DOM or cloning
++    // ranges on global keyup/selectionchange events outside rendered text layers.
++    const isDirty = (end, textLayer) => textLayer.classList.contains("selecting") || end.style.width !== "" || end.style.height !== "" || textLayer.lastElementChild !== end;
++    const hasDirtyTextLayer = () => {
++      for (const [textLayerDiv, endDiv] of this.#textLayers) {
++        if (isDirty(endDiv, textLayerDiv)) {
++          return true;
++        }
++      }
++      return false;
++    };
++    const isNodeInTextLayer = node => {
++      if (!node) {
++        return false;
++      }
++      const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
++      const textLayer = el?.closest?.(".textLayer");
++      return !!textLayer && this.#textLayers.has(textLayer);
++    };
++    const selectionTouchesTextLayer = selection => {
++      if (!selection || selection.rangeCount === 0) {
++        return false;
++      }
++      for (let i = 0; i < selection.rangeCount; i++) {
++        const range = selection.getRangeAt(i);
++        const ancestor = range.commonAncestorContainer;
++        if (isNodeInTextLayer(ancestor)) {
++          return true;
++        }
++        if (!range.collapsed && ancestor.nodeType !== Node.TEXT_NODE && typeof ancestor.contains === "function") {
++          for (const textLayerDiv of this.#textLayers.keys()) {
++            if (ancestor.contains(textLayerDiv)) {
++              return true;
++            }
++          }
++        }
++      }
++      return false;
++    };
+     const reset = (end, textLayer) => {
+-      textLayer.append(end);
+-      end.style.width = "";
+-      end.style.height = "";
+-      textLayer.classList.remove("selecting");
++      if (!isDirty(end, textLayer)) {
++        return;
++      }
++      if (textLayer.lastElementChild !== end) {
++        textLayer.append(end);
++      }
++      if (end.style.width !== "") {
++        end.style.width = "";
++      }
++      if (end.style.height !== "") {
++        end.style.height = "";
++      }
++      if (textLayer.classList.contains("selecting")) {
++        textLayer.classList.remove("selecting");
++      }
+     };
+     let isPointerDown = false;
+     document.addEventListener("pointerdown", () => {
+@@ -6342,17 +6392,28 @@ class TextLayerBuilder {
+       signal
+     });
+     document.addEventListener("keyup", () => {
+-      if (!isPointerDown) {
+-        this.#textLayers.forEach(reset);
++      if (isPointerDown || !hasDirtyTextLayer()) {
++        return;
+       }
++      this.#textLayers.forEach(reset);
+     }, {
+       signal
+     });
+     var isFirefoxOrModernChromium, prevRange;
+     document.addEventListener("selectionchange", () => {
+       const selection = document.getSelection();
+-      if (selection.rangeCount === 0) {
+-        this.#textLayers.forEach(reset);
++      if (!selection || selection.rangeCount === 0) {
++        prevRange = undefined;
++        if (hasDirtyTextLayer()) {
++          this.#textLayers.forEach(reset);
++        }
++        return;
++      }
++      if (!selectionTouchesTextLayer(selection)) {
++        prevRange = undefined;
++        if (hasDirtyTextLayer()) {
++          this.#textLayers.forEach(reset);
++        }
+         return;
+       }
+       const activeTextLayers = new Set();
+@@ -6369,11 +6430,17 @@ class TextLayerBuilder {
+       }
+       for (const [textLayerDiv, endDiv] of this.#textLayers) {
+         if (activeTextLayers.has(textLayerDiv)) {
+-          textLayerDiv.classList.add("selecting");
++          if (!textLayerDiv.classList.contains("selecting")) {
++            textLayerDiv.classList.add("selecting");
++          }
+         } else {
+           reset(endDiv, textLayerDiv);
+         }
+       }
++      if (activeTextLayers.size === 0) {
++        prevRange = undefined;
++        return;
++      }
+       if (isFirefoxOrModernChromium === undefined) {
+         isFirefoxOrModernChromium = getComputedStyle(this.#textLayers.values().next().value).getPropertyValue("-moz-user-select") === "none";
+         if (!isFirefoxOrModernChromium) {
