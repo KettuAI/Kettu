@@ -24,6 +24,7 @@ import { Diff } from '@renderer/features/session/markdown'
 import { monthDay } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
+import './mcp-tool-changes.css'
 
 /** After a server's name: how many of its tools changed, and whether they are held back. */
 export function McpToolChangesTag({ changes }: { changes: McpToolChanges }) {
@@ -68,7 +69,7 @@ export function McpToolChangesDialog({
   open,
   onOpenChange,
 }: {
-  server: MarketServer
+  server: Pick<MarketServer, 'id' | 'title'>
   changes: McpToolChanges | null
   open: boolean
   onOpenChange(open: boolean): void
@@ -89,7 +90,7 @@ function ChangesForm({
   changes,
   onDone,
 }: {
-  server: MarketServer
+  server: Pick<MarketServer, 'id' | 'title'>
   changes: McpToolChanges | null
   onDone(): void
 }) {

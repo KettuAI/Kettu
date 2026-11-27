@@ -1566,17 +1566,30 @@ export class AgentHost {
         // The other harnesses start what their own files declare, so Kettu running them too
         // would start them twice.
         if (!FOLDER_HELD_HARNESSES.has(harness)) {
-          return { servers: [], settings: null, harnessServers: [], turnsOff: true }
+          return {
+            servers: [],
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+          }
         }
+        const ownFiles = harnessProjectMcpPaths(harness, cwd, platform)
         const [servers, settings, own] = await Promise.all([
           folderServers(cwd, platform),
           folderSettings(harness, cwd, platform),
-          readOwnMcpServers(harnessProjectMcpPaths(harness, cwd, platform)),
+          readOwnMcpServers(ownFiles),
         ])
+        const relative = new Set(
+          ownFiles.map((file) => path.relative(cwd, file.path) || path.basename(file.path)),
+        )
         return {
           servers,
           settings,
           harnessServers: own.map((server) => server.name),
+          harnessDigests: servers
+            .filter((server) => server.files.some((file) => relative.has(file)))
+            .map((server) => server.digest),
           // OpenCode has no way to turn one of a folder's servers off that Kettu checked.
           turnsOff: harness !== 'opencode',
         }
@@ -1615,15 +1628,15 @@ export class AgentHost {
         library: async (sessionId, record, connection, transports, taken, project = []) => {
           const handed = new Map<string, McpHanded>()
           this.sessionMcp.set(sessionId, handed)
-          const library = [
-            ...this.settings.marketplace.mcp,
-            ...project.map((server) => this.projectServer(server)),
-          ]
-          if (library.length === 0) return []
           const folder =
             record.worktree && record.worktree.removed !== 'branch'
               ? record.worktree.path
               : record.projectPath
+          const library = [
+            ...this.settings.marketplace.mcp,
+            ...project.map((server) => this.projectServer(server, folder)),
+          ]
+          if (library.length === 0) return []
           const realFolder = folder ? await realpath(folder).catch(() => null) : null
           const projects = [...new Set([folder, realFolder].filter((p): p is string => Boolean(p)))]
           const own = await readOwnMcpServers(
@@ -3141,7 +3154,7 @@ export class AgentHost {
    * same server of two folders, whose values may differ, runs as two. Its tool changes are held
    * like those of a server added by hand.
    */
-  private projectServer(server: FolderServer): MarketServer {
+  private projectServer(server: FolderServer, folder: string): MarketServer {
     const id = `project:${createHash('sha256')
       .update(JSON.stringify([server.files, server.digest, server.secrets]))
       .digest('hex')
@@ -3157,7 +3170,11 @@ export class AgentHost {
       on: true,
     }
     this.projectServers.set(id, entry)
-    this.projectKeys.set(id, new Map(Object.entries(server.secrets)))
+    const keys = new Map(Object.entries(server.secrets))
+    this.projectKeys.set(id, keys)
+    // The list a first check sees once the user allowed it is what is accepted; later changes
+    // are held for the user in the session's context popover.
+    if (this.mcpToolChanges.latest(id) === null) void this.checkMcpServer(entry, keys, folder)
     return entry
   }
 
@@ -3242,8 +3259,10 @@ export class AgentHost {
       const changes = this.mcpToolChanges.changes(server.id, toolGuard(server))
       const tools = this.mcpToolInfos(server, known, changes)
       const carry = agentId ? carryOf(agentId, how === 'gateway') : 'full'
+      const project = this.projectServers.has(id)
       out.push({
         serverId: id,
+        ...(project ? { project: true as const, changes } : {}),
         // The library's name, though the agent may know it by another, such as with -kettu.
         name: server.name,
         title: server.title,
@@ -4396,7 +4415,7 @@ export class AgentHost {
         ),
       'market.mcpToolDiff': ({ serverId }) => this.mcpToolChanges.diff(serverId),
       'market.acceptMcpTools': ({ serverId, names }) => {
-        if (!this.settings.marketplace.mcp.some((server) => server.id === serverId)) {
+        if (!this.routedServers().some((server) => server.id === serverId)) {
           throw new HostError('not_found', 'This MCP server is no longer installed.')
         }
         this.mcpToolChanges.accept(serverId, names)
@@ -5074,8 +5093,8 @@ export class AgentHost {
       'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerProjectMcp(sessionId, entryId, decision, fromDevice(device))
       },
-      'sessions.answerProjectHooks': ({ sessionId, entryId, decision }, { device }) => {
-        sessions.answerProjectHooks(sessionId, entryId, decision, fromDevice(device))
+      'sessions.answerProjectHooks': ({ sessionId, entryId }) => {
+        sessions.answerProjectHooks(sessionId, entryId)
       },
       'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) =>
         sessions.answerReport(sessionId, entryId, outcome, fromDevice(device)),

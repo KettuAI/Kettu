@@ -140,7 +140,6 @@ import {
   type ComputerUseView,
   type DeclaredHook,
   type DeclaredItem,
-  type ProjectHooksDecision,
   type ProjectMcpDecision,
   type ProjectMcpEntry,
   type QueuedPrompt,
@@ -246,7 +245,12 @@ import type { GitEventDraft, GitServiceApi } from './git/api'
 import { canonicalizePath, isInside, pathKey, samePath } from './paths'
 import type { ProjectHooksAnswers } from './project-hooks'
 import type { AnsweredServer, ProjectMcpAnswers } from './project-mcp'
-import type { FolderServer, FolderSettings } from './project-settings'
+import {
+  folderHandOff,
+  type FolderDeclared,
+  type FolderServer,
+  type FolderSettings,
+} from './project-settings'
 import { HELPER_SETTINGS } from './claude/project-hooks'
 import { REPORTS_PER_DAY, type ReportDraft } from './report-tool'
 import { isOutOfCredit } from './out-of-credit'
@@ -992,21 +996,6 @@ const TITLE_LENGTH = 60
 const ACCOUNT_CHANGED_REASON = 'account changed'
 const PROJECT_ALLOWED_REASON = "the folder's own settings allowed"
 
-/** What a folder's own files declare, as the host reads it for a session's agent. */
-export interface FolderDeclared {
-  /** The servers of every harness's project files, which Kettu runs once allowed. */
-  servers: FolderServer[]
-  /** The agent's harness's other project settings, where Kettu holds them behind a switch. */
-  settings: FolderSettings | null
-  /** The names of the servers the agent's harness itself would start from those files. */
-  harnessServers: string[]
-  /**
-   * Whether the harness turns those servers off one by one when it loads the folder; one that
-   * cannot loads the folder only once every one of them may start.
-   */
-  turnsOff: boolean
-}
-
 /** What an attach hands on of what the session's folder declares. */
 interface ProjectState {
   servers: FolderServer[]
@@ -1019,6 +1008,8 @@ interface ProjectAsk {
   servers: FolderServer[]
   settings: FolderSettings | null
   files: string[]
+  /** The servers the harness runs itself once the folder's settings may apply. */
+  selfRun?: string[]
 }
 
 /** A session's open card for its folder, with what its answer is kept for. */
@@ -4501,24 +4492,23 @@ export class SessionManager {
     const hooks = this.deps.projectHooks
     const settingsAllowed =
       settings && hooks ? hooks.allowed(folder, settings.digest, settings.harness) : null
-    const unanswered = declared.servers.filter((server) => answers.allowed(folder, server) === null)
-    const askSettings = settings && settingsAllowed === null ? settings : null
-    if (unanswered.length > 0 || askSettings) {
+    const plan = folderHandOff(
+      declared,
+      (server) => answers.allowed(folder, server),
+      settingsAllowed,
+    )
+    if (plan.unanswered.length > 0 || plan.askSettings) {
       this.askProject(sessionId, folder, {
-        servers: unanswered,
-        settings: askSettings,
-        files: [...unanswered.flatMap((server) => server.files), ...(askSettings?.files ?? [])],
+        servers: plan.unanswered,
+        settings: plan.askSettings,
+        files: [
+          ...plan.unanswered.flatMap((server) => server.files),
+          ...(plan.askSettings?.files ?? []),
+        ],
+        selfRun: plan.selfRun,
       })
     }
-    const allowed = declared.servers.filter((server) => answers.allowed(folder, server) === true)
-    const own = declared.servers.filter((server) => declared.harnessServers.includes(server.name))
-    return {
-      servers: allowed,
-      trusted:
-        settingsAllowed === true &&
-        (declared.turnsOff || own.every((server) => allowed.includes(server))),
-      declared: declared.harnessServers,
-    }
+    return { servers: plan.servers, trusted: plan.trusted, declared: declared.harnessServers }
   }
 
   /** Lets the user answer, in the session's thread, for the hooks its folder's settings declare. */
@@ -4579,10 +4569,12 @@ export class SessionManager {
       if (added.length === 0 && !settings) return
       card.servers.push(...added.map(({ name, digest }) => ({ name, digest })))
       if (settings) card.settings = { harness: settings.harness, digest: settings.digest }
+      const selfRun = [...new Set([...(open.selfRun ?? []), ...(ask.selfRun ?? [])])]
       const changes = {
         servers: [...open.servers, ...added.map(({ name, target }) => ({ name, target }))],
         items: settings ? settings.items : (open.items ?? []),
         files: [...new Set([...(open.files ?? []), ...ask.files])],
+        ...(selfRun.length > 0 ? { selfRun } : {}),
       }
       this.emit(live, [{ op: 'entry.update', id: card.entryId, changes }])
       return
@@ -4593,6 +4585,7 @@ export class SessionManager {
       servers: ask.servers.map(({ name, target }) => ({ name, target })),
       items: ask.settings?.items ?? [],
       files: [...new Set(ask.files)],
+      ...(ask.selfRun && ask.selfRun.length > 0 ? { selfRun: ask.selfRun } : {}),
       decision: null,
       after: agentEntryBefore(live.thread),
     }
@@ -4685,12 +4678,7 @@ export class SessionManager {
    * An answer to a card of an older version that held a folder's hooks alone; none is open any
    * more, since such a card is no longer made and an open one ended with its session.
    */
-  answerProjectHooks(
-    sessionId: string,
-    entryId: string,
-    _decision: ProjectHooksDecision,
-    _device?: FromDevice,
-  ): void {
+  answerProjectHooks(sessionId: string, entryId: string): void {
     this.recordOf(sessionId)
     const entry = this.live.get(sessionId)?.thread.byId[entryId]
     if (entry?.kind === 'project_hooks' && entry.decision !== null) {

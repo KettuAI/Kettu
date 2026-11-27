@@ -344,6 +344,8 @@
   "projectMcp": {
     "where": "Declared in the project’s .mcp.json. Once used, they run on this computer as you.",
     "whereFiles": "From the project’s {{files}}. Once used, they run on this computer as you; until then this session works without them.",
+    "selfRun_one": "{{agent}} runs {{names}} itself once used, so Kettu shows no calls or tool changes for it.",
+    "selfRun_other": "{{agent}} runs {{names}} itself once used, so Kettu shows no calls or tool changes for them.",
     "everything": "What this project runs or changes",
     "kind": {
       "server": "MCP server",

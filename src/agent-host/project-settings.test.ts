@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { folderServers, folderSettings } from './project-settings'
+import { folderHandOff, folderServers, folderSettings } from './project-settings'
 
 let dir: string
 let repo: string
@@ -133,5 +133,52 @@ describe('the settings a folder declares for one harness', () => {
   it('has none for a harness Kettu holds no settings for this way', async () => {
     await put('.codex/config.toml', 'model = "a"\n')
     expect(await folderSettings('claude-code', repo, platform)).toBeNull()
+  })
+})
+
+describe('what an attach hands on of a folder', () => {
+  const server = (name: string, digest: string) => ({
+    name,
+    target: name,
+    digest,
+    spec: { type: 'stdio' as const, command: name, args: [], env: [] },
+    secrets: {},
+    files: ['opencode.json'],
+  })
+  const db = server('db', 'd1')
+  const web = server('web', 'd2')
+  const settings = { harness: 'opencode' as const, items: [], files: [], digest: 's' }
+  const declared = (turnsOff: boolean) => ({
+    servers: [db, web],
+    settings,
+    harnessServers: ['db'],
+    harnessDigests: ['d1'],
+    turnsOff,
+  })
+
+  it('applies nothing and asks for everything before the user answers', () => {
+    const plan = folderHandOff(declared(true), () => null, null)
+    expect(plan).toMatchObject({ servers: [], trusted: false, askSettings: settings })
+    expect(plan.unanswered).toEqual([db, web])
+  })
+
+  it('keeps the folder held while its settings are refused, Kettu running the allowed servers', () => {
+    const plan = folderHandOff(declared(true), () => true, false)
+    expect(plan).toMatchObject({ servers: [db, web], trusted: false, askSettings: null })
+  })
+
+  it('never hands a server the harness then starts itself from its own file', () => {
+    const plan = folderHandOff(declared(false), () => true, true)
+    expect(plan.trusted).toBe(true)
+    expect(plan.servers).toEqual([web])
+    expect(plan.selfRun).toEqual(['db'])
+    // A harness that turns its own servers off gets Kettu's copy instead.
+    expect(folderHandOff(declared(true), () => true, true).servers).toEqual([db, web])
+  })
+
+  it('holds a harness that cannot turn one off until every one of its servers may start', () => {
+    const plan = folderHandOff(declared(false), (item) => item !== db, true)
+    expect(plan.trusted).toBe(false)
+    expect(plan.servers).toEqual([web])
   })
 })

@@ -781,6 +781,8 @@ export interface ProjectMcpEntry {
   servers: DeclaredMcpServer[]
   items?: DeclaredItem[]
   files?: string[]
+  /** The servers the session's harness runs itself once allowed, which Kettu does not run. */
+  selfRun?: string[]
   decision: ProjectMcpAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
@@ -2139,6 +2141,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.items === undefined || isListOf(value.items, isDeclaredItem)) &&
         (value.files === undefined ||
           isListOf(value.files, (item): item is string => typeof item === 'string')) &&
+        (value.selfRun === undefined ||
+          isListOf(value.selfRun, (item): item is string => typeof item === 'string')) &&
         (value.decision === null || isProjectAnswer(value.decision)) &&
         (value.after === null || typeof value.after === 'string')
       )

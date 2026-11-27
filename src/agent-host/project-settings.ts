@@ -227,7 +227,7 @@ async function codexSettings(cwd: string, platform: Platform): Promise<FolderSet
       } catch {
         readable = false
       }
-      const { mcp_servers: _servers, ...rest } = data
+      const rest = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'mcp_servers'))
       const keys = Object.keys(rest)
       if (!readable || keys.length > 0) files.push(p.relative(base, config) || config)
       if (!readable) items.push({ kind: 'setting', target: p.relative(base, config) })
@@ -279,7 +279,9 @@ async function openCodeSettings(cwd: string, platform: Platform): Promise<Folder
       const relative = p.relative(base, config)
       const parsed: unknown = parseJsonc(text, [], { allowTrailingComma: true })
       const data = isRecord(parsed) ? parsed : {}
-      const { mcp: _mcp, $schema: _schema, ...rest } = data
+      const rest = Object.fromEntries(
+        Object.entries(data).filter(([key]) => key !== 'mcp' && key !== '$schema'),
+      )
       if (Object.keys(rest).length === 0 && isRecord(parsed)) continue
       files.push(relative)
       if (!isRecord(parsed)) items.push({ kind: 'setting', target: relative })
@@ -359,4 +361,58 @@ function openCodeItems(config: Record<string, unknown>): DeclaredItem[] {
     }
   }
   return items
+}
+
+/** What a folder's own files declare, as the host reads it for a session's agent. */
+export interface FolderDeclared {
+  /** The servers of every harness's project files, which Kettu runs once allowed. */
+  servers: FolderServer[]
+  /** The agent's harness's other project settings, where Kettu holds them behind a switch. */
+  settings: FolderSettings | null
+  /** The names of the servers the agent's harness itself would start from those files. */
+  harnessServers: string[]
+  /** The digests of those servers, by content, whatever name another file gives one. */
+  harnessDigests: string[]
+  /**
+   * Whether the harness turns those servers off one by one when it loads the folder. One that
+   * cannot loads the folder only once every one of them may start, and then runs them itself, so
+   * Kettu hands it none of them.
+   */
+  turnsOff: boolean
+}
+
+/**
+ * What a session's attach hands on of what its folder declares: the servers nobody answered for
+ * and the harness's settings when nobody answered for them, both asked about; the servers Kettu
+ * runs for the session; whether the harness may load the folder; and the servers it then runs
+ * itself. Nothing applies before the user allowed it.
+ */
+export function folderHandOff(
+  declared: FolderDeclared,
+  allowed: (server: FolderServer) => boolean | null,
+  settingsAllowed: boolean | null,
+): {
+  unanswered: FolderServer[]
+  askSettings: FolderSettings | null
+  servers: FolderServer[]
+  trusted: boolean
+  selfRun: string[]
+} {
+  const unanswered = declared.servers.filter((server) => allowed(server) === null)
+  const askSettings = declared.settings && settingsAllowed === null ? declared.settings : null
+  const own = declared.servers.filter((server) => declared.harnessDigests.includes(server.digest))
+  const started = declared.servers.filter((server) => allowed(server) === true)
+  const trusted =
+    declared.settings !== null &&
+    settingsAllowed === true &&
+    (declared.turnsOff || own.every((server) => started.includes(server)))
+  return {
+    unanswered,
+    askSettings,
+    // A harness that loads the folder and cannot turn its servers off runs them itself.
+    servers:
+      trusted && !declared.turnsOff ? started.filter((server) => !own.includes(server)) : started,
+    trusted,
+    selfRun: declared.turnsOff ? [] : own.map((server) => server.name),
+  }
 }

@@ -266,6 +266,8 @@
       "reconnect": "Reconnect",
       "turnOff": "Turn off for this session",
       "openPage": "Open server page",
+      "project": "This project’s",
+      "review": "Review",
       "actionFailed": "{{name}}: {{error}}"
     }
   },

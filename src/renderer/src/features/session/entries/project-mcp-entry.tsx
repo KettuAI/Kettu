@@ -71,7 +71,18 @@ export const ProjectMcpEntry = memo(function ProjectMcpEntry({
       glyph={PlugSocketIcon}
       reason={
         whole
-          ? t('projectMcp.whereFiles', { files: (entry.files ?? []).join(', ') })
+          ? [
+              t('projectMcp.whereFiles', { files: (entry.files ?? []).join(', ') }),
+              ...(entry.selfRun && entry.selfRun.length > 0
+                ? [
+                    t('projectMcp.selfRun', {
+                      agent: agentName,
+                      names: entry.selfRun.join(', '),
+                      count: entry.selfRun.length,
+                    }),
+                  ]
+                : []),
+            ].join(' ')
           : t('projectMcp.where')
       }
       preview={rows}
