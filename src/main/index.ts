@@ -129,11 +129,13 @@ import { devUserDataPath } from './user-data'
 import {
   applyVerbose,
   logsFolder,
+  markCleanExit,
   markRunning,
   openAppLog,
   watchConsole,
   watchProcesses,
 } from './app-log'
+import { WindowsSessionEndWatcher } from './windows-session-end'
 import { redactLogText } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
 import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
@@ -1100,6 +1102,7 @@ async function start(): Promise<void> {
       sendCommand({ kind: 'open-updates' }),
     )
   }
+  let windowsSessionEnd: WindowsSessionEndWatcher | null = null
   quit = new QuitFlow({
     settings: () => settings.get(),
     busySessions: (timeoutMs) => agentHost.busy(timeoutMs),
@@ -1125,6 +1128,10 @@ async function start(): Promise<void> {
         signIns.store.flush(),
         siteIcons.flush(),
       ])
+    },
+    onCleanExit: () => {
+      windowsSessionEnd?.stop()
+      markCleanExit()
     },
     installUpdate: () => updater.installNow(),
     moveApp: () => updater.moveNow(),
@@ -1340,10 +1347,23 @@ async function start(): Promise<void> {
   ipcReady = true
   installMenu(menuDeps)
 
+  const handleSystemShutdown = (): void => {
+    markCleanExit()
+    windowsSessionEnd?.stop()
+    quitFlow.systemShutdown()
+    updater.systemShutdown()
+  }
+  windowsSessionEnd = new WindowsSessionEndWatcher({
+    onSessionEnd: handleSystemShutdown,
+  })
+  app.on('will-quit', () => windowsSessionEnd?.stop())
+
   app.on('browser-window-created', (_, window) => {
     // The thumbnails' offscreen windows load no app page and keep their own guards, and computer
     // use's windows over the desktop are none of the app's windows.
     if (window.webContents.isOffscreen() || isOverlayWindow(window)) return
+    // A real app window receives Windows session-end directly, so the tray-only fallback is not needed.
+    windowsSessionEnd?.dispose()
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
@@ -1360,15 +1380,9 @@ async function start(): Promise<void> {
     })
     artifacts.watchWindow(window.webContents)
     window.once('show', () => applyBadgeTo(window))
-    window.on('session-end', () => {
-      quitFlow.systemShutdown()
-      updater.systemShutdown()
-    })
+    window.on('session-end', handleSystemShutdown)
   })
-  powerMonitor.on('shutdown', () => {
-    quitFlow.systemShutdown()
-    updater.systemShutdown()
-  })
+  powerMonitor.on('shutdown', handleSystemShutdown)
   powerMonitor.on('suspend', () => agentHost.power('suspend'))
   // Elsewhere the host reads the battery itself.
   if (process.platform === 'win32') {
@@ -1398,7 +1412,13 @@ async function start(): Promise<void> {
     if (!quitFlow.quitting) showMainWindow()
   })
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin' && !quitFlow.staysInBackground) app.quit()
+    if (process.platform !== 'darwin' && !quitFlow.staysInBackground) {
+      app.quit()
+      return
+    }
+    if (process.platform === 'win32' && quitFlow.staysInBackground && !quitFlow.quitting) {
+      windowsSessionEnd?.ensureHiddenWatcher()
+    }
   })
 }
 

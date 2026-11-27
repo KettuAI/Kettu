@@ -20,6 +20,8 @@ export interface QuitDeps {
   busyTerminals(timeoutMs: number): Promise<BusyTerminal[]>
   /** Stops both hosts and flushes every pending write. */
   shutDown(): Promise<void>
+  /** Runs once shutdown is finished and quitting is irreversible, before handing off to quit/update. */
+  onCleanExit?(): void
   installUpdate(): Promise<void>
   /** Update on a read-only volume: moves the app to /Applications; false when it stays. */
   moveApp(): Promise<boolean>
@@ -103,6 +105,7 @@ export class QuitFlow {
     void this.run(reason, confirmed).catch((error: unknown) => {
       log.error('Quit failed; quitting anyway', error)
       this.phase = 'done'
+      this.deps.onCleanExit?.()
       app.quit()
     })
     return true
@@ -257,6 +260,7 @@ export class QuitFlow {
     await this.deps.shutDown()
     log.info(`Hosts stopped and state flushed in ${(performance.now() - started).toFixed(1)} ms`)
     this.phase = 'done'
+    this.deps.onCleanExit?.()
     if (reason === 'update') {
       // After the install starts: it may first wait for the update to be prepared.
       await this.deps.installUpdate()

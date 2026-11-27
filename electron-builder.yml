@@ -124,6 +124,7 @@ nsis:
   # place. The install mode page stays, defaulting to the current user.
   oneClick: false
   allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
 
