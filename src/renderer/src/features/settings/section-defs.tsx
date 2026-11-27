@@ -175,6 +175,7 @@ import {
   OpenAtLogin,
   OpenLinksIn,
   OutlineSummaries,
+  PromptCacheDropNotice,
   Proxy,
   RecordSteps,
   ReduceMotion,
@@ -332,6 +333,12 @@ export function useGeneralSection(): SectionDef {
         setting: 'general.outline-summaries',
         group: thread,
         render: () => <OutlineSummaries label={t('general.outlineSummaries.name')} />,
+      },
+      {
+        id: 'prompt-cache-drop-notice',
+        setting: 'general.prompt-cache-drop-notice',
+        group: thread,
+        render: () => <PromptCacheDropNotice label={t('general.promptCacheDropNotice.name')} />,
       },
       {
         id: 'open-at-login',

@@ -133,6 +133,11 @@
       "description": "A small model writes the outline when you open it.",
       "keywords": "outline titles summary model credits"
     },
+    "promptCacheDropNotice": {
+      "name": "Prompt cache drop notice",
+      "description": "Show a notice after a turn when measured prompt cache hits drop sharply.",
+      "keywords": "prompt cache hit miss drop notice warning tokens cost"
+    },
     "cloud": {
       "name": "Use Kettu cloud",
       "note": "The services Kettu runs, with a free Kettu account: the relay that reaches this computer from anywhere, iPhone notifications, the web app, sharing to Kettu and problem reports.",

@@ -3,6 +3,7 @@
 
 import { isAgentId, type AgentId } from './agents'
 import type { LastRequest } from './model-requests'
+import type { PromptCacheDrop } from './prompt-cache'
 import type { BrowserOriginAnswer } from './browser'
 import {
   isControlOutcome,
@@ -118,6 +119,11 @@ export interface SessionView {
   speed?: OutputSpeed
   /** Ephemeral: the main thread's latest request, for an agent whose stream counts its tokens. */
   lastRequest?: LastRequest
+  /**
+   * Ephemeral: measured prompt cache hit drop after the latest completed turn, compared against
+   * the prior comparable baseline; null once the next turn starts or when no drop occurred.
+   */
+  cacheDrop?: PromptCacheDrop | null
   /**
    * Ephemeral: the agent's guess at the user's next message after a turn, which the empty
    * composer offers; null once the next turn starts.

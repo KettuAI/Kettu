@@ -503,6 +503,17 @@ const ENTRIES = {
     access: 'change',
     ...flag('thread', 'outlineSummaries', (file) => file.thread.outlineSummaries),
   },
+  'general.prompt-cache-drop-notice': {
+    section: 'general',
+    row: 'prompt-cache-drop-notice',
+    group: 'general.groups.thread',
+    name: 'general.promptCacheDropNotice.name',
+    description: 'general.promptCacheDropNotice.description',
+    keywords: 'general.promptCacheDropNotice.keywords',
+    part: 'desktop',
+    access: 'change',
+    ...flag('thread', 'promptCacheDropNotice', (file) => file.thread.promptCacheDropNotice),
+  },
   'general.open-at-login': {
     section: 'general',
     row: 'open-at-login',
