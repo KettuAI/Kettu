@@ -41,10 +41,10 @@ function threadOf(entries: ThreadEntry[]): ThreadState {
   }
 }
 
-function itemsFor(entries: ThreadEntry[], live = false, still = false): Item[] {
+function itemsFor(entries: ThreadEntry[], live = false): Item[] {
   const thread = threadOf(entries)
   const { order, signature } = withoutHidden(thread.order, signatureOf(thread))
-  return buildItems(order, signature, live, still)
+  return buildItems(order, signature, live)
 }
 
 describe('signatureOf turn_end classification', () => {
@@ -134,7 +134,7 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
     ])
   })
 
-  it('attaches still-running state to the reply footer after suppressing trailing empty end_turns', () => {
+  it('keeps the settled reply footer clean without mounting thread-level still-running items (#2951)', () => {
     const entries = [
       user('u1'),
       agent('a1', 'Running in background.'),
@@ -142,7 +142,7 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
       turnEnd('e2', 12),
       turnEnd('e3', 7),
     ]
-    const items = itemsFor(entries, false, true)
+    const items = itemsFor(entries, false)
 
     expect(items.at(-1)).toEqual({
       key: 'reply:u1',
@@ -151,9 +151,7 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
       endId: 'e1',
       latest: true,
       toolIds: [],
-      still: true,
     })
-    expect(items.some((item) => item.type === 'still')).toBe(false)
   })
 
   it('suppresses trailing empty end_turns even when non-work entries appear after the real turn_end', () => {
@@ -260,15 +258,15 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
     ])
   })
 
-  it('renders a stopped reply footer with still-running notice and no live TurnStatus when waitingBackground settles (#2855)', () => {
+  it('renders a stopped reply footer and no live TurnStatus when waitingBackground settles (#2855, #2951)', () => {
     const entries = [
       user('u1', 'Run worker'),
       tool('t1'),
       agent('a1', 'Started.'),
       turnEnd('e1', 12_000),
     ]
-    // SessionView passes working=false and still=true during waitingBackground.
-    const items = itemsFor(entries, false, true)
+    // SessionView passes working=false during waitingBackground; background work lives in the dock.
+    const items = itemsFor(entries, false)
     expect(items.some((item) => item.type === 'status')).toBe(false)
     expect(items.at(-1)).toEqual({
       key: 'reply:u1',
@@ -277,7 +275,6 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
       endId: 'e1',
       latest: true,
       toolIds: ['t1'],
-      still: true,
     })
   })
 
@@ -290,7 +287,7 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
       user('u2', 'Follow-up during background wait'),
       turnEnd('e2', 1_500, 'cancelled'),
     ]
-    const items = itemsFor(entries, false, false)
+    const items = itemsFor(entries, false)
     expect(items).toEqual([
       { key: 'u1', type: 'entry', id: 'u1', turnStart: true, char: 'u', endId: undefined },
       { key: 'run:t1', type: 'run', ids: ['t1'], signature: 't' },

@@ -8,7 +8,7 @@ import { forkSession } from '@renderer/app/actions'
 import { MessageActions } from '@renderer/components/affect/message-actions'
 import { ForkIcon } from '@renderer/components/fork-icon'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { longAgo, mediumAgo } from '@renderer/lib/format'
+import { fullTime, longAgo, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -17,7 +17,6 @@ import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
-import { StillRunningLine } from '../still-running-line'
 import { lastUserEntryId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
@@ -145,8 +144,8 @@ export function UserActions({
 
 /**
  * Under a turn's reply: the files the turn changed, how the turn ended when it did not end on its
- * own, then Copy for the turn's messages, Fork where the agent can fork from it and when the reply
- * came. The actions show while the pointer is over the reply.
+ * own, then Copy for the turn's messages, Fork where the agent can fork from it, and the merged
+ * timestamp and turn duration on hover or focus.
  */
 export const ReplyFooter = memo(
   function ReplyFooter({
@@ -157,7 +156,6 @@ export const ReplyFooter = memo(
     toolIds,
     endId,
     latest,
-    still,
   }: {
     replyKey: string
     sessionId: string
@@ -166,8 +164,6 @@ export const ReplyFooter = memo(
     toolIds: string[]
     endId: string | null
     latest: boolean
-    /** What runs on after its turn shows under its end. */
-    still: boolean
   }) {
     const { t } = useTranslation('session')
     const lastId = agentIds.at(-1)!
@@ -235,10 +231,17 @@ export const ReplyFooter = memo(
         : t('replyFooter.fork')
 
     const completedDuration = completedTurnDuration(end, at)
-    const when =
-      at !== undefined ? (
-        <span className="flex min-w-0 items-center gap-1.5 truncate tabular">
-          <Came at={at} />
+    const metaTitle = completedDuration?.title ?? (at !== undefined ? fullTime(at) : undefined)
+    const meta =
+      at !== undefined || completedDuration ? (
+        <span className="ks-reply-foot__meta tabular" title={metaTitle}>
+          {at !== undefined && <Came at={at} />}
+          {at !== undefined && completedDuration && (
+            <span className="ks-reply-foot__sep" aria-hidden>
+              {' · '}
+            </span>
+          )}
+          {completedDuration && <span>{completedDuration.label}</span>}
         </span>
       ) : undefined
     return (
@@ -251,17 +254,10 @@ export const ReplyFooter = memo(
             className={animation}
           />
         )}
-        {still && <StillRunningLine sessionId={sessionId} />}
         <div
           className={cn('ks-reply-foot', animation)}
           data-shown={hovered || forking ? '' : undefined}
-          data-has-duration={completedDuration ? '' : undefined}
         >
-          {completedDuration && (
-            <span className="ks-reply-foot__duration" title={completedDuration.title}>
-              {completedDuration.label}
-            </span>
-          )}
           <div className="ks-reply-foot__actions">
             <MessageActions
               quiet={false}
@@ -283,7 +279,7 @@ export const ReplyFooter = memo(
                     ]
                   : []
               }
-              after={when}
+              after={meta}
             />
           </div>
           {error && (
@@ -301,7 +297,6 @@ export const ReplyFooter = memo(
     a.projectPath === b.projectPath &&
     a.endId === b.endId &&
     a.latest === b.latest &&
-    a.still === b.still &&
     sameIds(a.agentIds, b.agentIds) &&
     sameIds(a.toolIds, b.toolIds),
 )

@@ -52,6 +52,10 @@
     "lineReports_other": "后台还在跑 {{work}} · 跑完会接着汇报",
     "lineUnnamed": "后台还有任务在运行",
     "lineUnnamedReports": "后台还有任务在运行 · 跑完会接着汇报",
+    "dockRunning": "{{work}}运行中",
+    "dockUnnamed": "后台任务运行中",
+    "reportsBack": "完成后会自动汇报",
+    "summaryUnnamed": "后台任务",
     "subagents_other": "{{count}} 个子智能体",
     "commands_other": "{{count}} 条命令",
     "monitors_other": "{{count}} 个监控任务",
@@ -60,7 +64,7 @@
     "cronExpr": "定时任务（{{cron}}）",
     "listSeparator": "、",
     "both": "{{subagents}}和 {{commands}}",
-    "openBoard": "打开看板"
+    "openBoard": "查看看板"
   },
   "tool": {
     "verb": {

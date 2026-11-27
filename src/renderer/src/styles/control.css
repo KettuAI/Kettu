@@ -1,103 +1,428 @@
 /* A surface an agent and the user share, the same on every surface: the label on the composer's top
    edge, the pill and the bubble on the surface, the agent's pointer and the light along its edge. */
 
-/* ---------- The labels on the composer's top edge ---------- */
-.ctl-labels {
+/* ---------- Unified composer live dock (U4 x U1) ---------- */
+.ks-dock {
   position: relative;
-  z-index: 1;
-  align-self: center;
-  inline-size: max-content;
-  max-inline-size: calc(100% - var(--spacing) * 6);
-  max-block-size: min(30dvh, calc(var(--row-height) * 4.5));
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: var(--hairline) solid var(--border-strong);
-  border-block-end: 0;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  z-index: 5;
+  width: 100%;
+}
+.ks-dock[data-open] {
+  z-index: 30;
+}
+.ks-dock__card {
+  overflow: hidden;
+  border-radius: 13px;
   background: var(--card);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-card);
 }
-.ctl-labels:empty {
-  display: none;
-}
-.kettu-queue + .ctl-labels {
-  inline-size: 100%;
-}
-.ctl-label {
+.ks-dock__row {
   display: flex;
   align-items: center;
-  gap: calc(var(--spacing) * 2);
-  min-block-size: var(--row-height);
-  padding-block: var(--spacing);
-  padding-inline: calc(var(--spacing) * 3) calc(var(--spacing) * 2);
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 6px 0 11px;
+  border: 0;
+  background: transparent;
   font-size: var(--text-hint);
   line-height: var(--text-hint--line-height);
   color: var(--text-secondary);
+  text-align: left;
 }
-.ctl-label + .ctl-label {
-  border-block-start: var(--hairline) solid var(--border-subtle);
+.ks-dock__row--clickable {
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
-.ctl-label[data-control='asks'] {
+.ks-dock__row--clickable:hover {
+  background: var(--bg-hover);
+}
+.ks-dock__row--clickable:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1.5px;
+}
+.ks-dock__row[data-tone='amber'] {
   background: var(--tone-amber-fill);
 }
-.ctl-label__actions {
-  display: flex;
-  flex: none;
-  gap: var(--spacing);
+.ks-dock__row[data-tone='amber'] .ks-dock__mark {
+  color: var(--tone-amber);
 }
-.ctl-label__text {
+/* Computer Use owns the whole machine: solid fox orange while the agent drives it. */
+.ks-dock__row[data-tone='computer'] {
+  background: var(--computer-label);
+  color: color-mix(in srgb, var(--on-fill) 88%, transparent);
+}
+.ks-dock__row[data-tone='computer'] .ks-dock__mark {
+  color: var(--on-fill);
+}
+.ks-dock__row[data-tone='computer'] .ks-dock__text b {
+  font-weight: var(--weight-semibold);
+  color: var(--on-fill);
+}
+.ks-dock__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--icon-size);
+  color: var(--text-secondary);
+}
+.ks-dock__row[data-priority='3'] .ks-dock__mark {
+  color: var(--text-primary);
+}
+.ks-dock__dots {
+  width: 12px;
+  height: 12px;
+}
+.ks-dock__text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ctl-label__text b {
+.ks-dock__text b,
+.ks-dock__bg-head {
   font-weight: var(--weight-medium);
   color: var(--text-primary);
 }
-.ctl-label__text i {
-  margin: 0 6px;
+.ks-dock__text i {
+  margin: 0 5px;
   font-style: normal;
   color: var(--text-tertiary);
 }
-.ctl-label__mark {
-  display: grid;
+.ks-dock__sub {
+  color: var(--text-tertiary);
+}
+.ks-dock__actions {
+  display: flex;
   flex: none;
-  place-items: center;
-  inline-size: var(--icon-size);
+  align-items: center;
+  gap: 4px;
 }
-.ctl-label[data-control='asks'] .ctl-label__mark {
+.ks-dock__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  font-size: var(--text-hint);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__btn:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+.ks-dock__btn--amber {
+  background: var(--tone-amber-halo);
   color: var(--tone-amber);
+  box-shadow: inset 0 0 0 var(--hairline) var(--tone-amber-edge);
 }
-/* The computer is the whole machine: while the agent has it the label is solid fox. */
-.ctl-label[data-surface='computer'][data-control='agent'] {
-  background: var(--computer-label);
-  color: color-mix(in srgb, var(--on-fill) 86%, transparent);
+.ks-dock__btn--amber:hover {
+  background: color-mix(in srgb, var(--tone-amber-dot) 26%, transparent);
 }
-.ctl-label[data-surface='computer'][data-control='agent'] .ctl-label__text b {
-  font-weight: var(--weight-semibold);
-  color: var(--on-fill);
-}
-.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'] {
+.ks-dock__btn--on-fox {
   background: color-mix(in srgb, var(--on-fill) 20%, transparent);
   color: var(--on-fill);
 }
-.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button']:hover {
+.ks-dock__btn--on-fox:hover {
   background: color-mix(in srgb, var(--on-fill) 30%, transparent);
 }
-.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'][data-quiet] {
+.ks-dock__btn--on-fox-quiet {
+  background: transparent;
+  color: color-mix(in srgb, var(--on-fill) 92%, transparent);
+}
+.ks-dock__btn--on-fox-quiet:hover {
+  background: color-mix(in srgb, var(--on-fill) 14%, transparent);
+  color: var(--on-fill);
+}
+.ks-dock__btn--handback {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
+}
+.ks-dock__btn--handback:hover {
+  background: var(--bg-selected);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-strong);
+}
+.ks-dock__btn--takeover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.ks-dock__btn--takeover:hover {
+  background: var(--bg-selected);
+}
+.ks-dock__board-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 7px 0 8px;
+  border-radius: 7px;
+  font-size: var(--text-hint);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__row--clickable:hover .ks-dock__board-pill {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.ks-dock__group-meta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+  color: var(--text-tertiary);
+}
+.ks-dock__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.ks-dock__chev {
+  transition: transform var(--duration-base) var(--ease-out-quint);
+}
+.ks-dock__chev--open {
+  transform: rotate(180deg);
+}
+
+/* Tier 2 compact summary strip (29px): caps total dock height at 65px. */
+.ks-dock__summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 29px;
+  min-height: 29px;
+  padding: 0 6px 0 11px;
+  border-block-start: var(--hairline) solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 58%, var(--card));
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__summary:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 85%, var(--card));
+}
+.ks-dock__segments {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+.ks-dock__sep {
+  flex: none;
+  color: var(--text-disabled);
+}
+.ks-dock__seg {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.ks-dock__seg[data-tone='amber'] {
+  font-weight: var(--weight-medium);
+  color: var(--tone-amber);
+}
+.ks-dock__seg--action {
+  margin: -1px -4px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__seg--action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.ks-dock__seg--action:focus-visible,
+.ks-dock__toggle:focus-visible,
+.ks-dock__subaction:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+.ks-dock__seg-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+}
+.ks-dock__seg-dot--amber {
+  background: var(--tone-amber-dot);
+}
+.ks-dock__seg-dot--fox {
+  background: var(--thread-fox);
+}
+.ks-dock__toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 21px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Upward floating popover anchored 7px above the dock; never pushes thread height. */
+.ks-dock__popover {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(100% + 7px);
+  z-index: 30;
+  overflow: hidden;
+  border-radius: 13px;
+  background: var(--popover);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-strong),
+    var(--elevation-popover);
+  animation: ks-dock-pop 160ms var(--ease-out-quint) both;
+}
+@keyframes ks-dock-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.ks-dock__popover-list {
+  max-height: min(320px, 45dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ks-dock__popover-item + .ks-dock__popover-item,
+.ks-dock__popover-item + .ks-dock__group,
+.ks-dock__group + .ks-dock__popover-item,
+.ks-dock__group + .ks-dock__group {
+  border-block-start: var(--hairline) solid var(--border-subtle);
+}
+.ks-dock__sublist {
+  max-height: 132px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px 0 5px;
+  border-block-start: var(--hairline) solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 42%, var(--popover));
+}
+.ks-dock__sublist[data-solo-group] {
+  padding: 4px 0;
+  border-block-start: 0;
   background: transparent;
 }
-.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'][data-quiet]:hover {
-  background: color-mix(in srgb, var(--on-fill) 14%, transparent);
+.ks-dock__subitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px 0 35px;
+  font-size: var(--text-hint);
+  color: var(--text-secondary);
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
-.ctl-label[data-surface='computer'][data-control='waiting'] {
-  color: var(--attention);
+.ks-dock__subitem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
-.ctl-label[data-surface='computer'][data-control='waiting'] .ctl-label__text b {
-  color: var(--attention);
+.ks-dock__subdot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--border-strong);
 }
+.ks-dock__subitem[data-acting] .ks-dock__subdot {
+  background: var(--pane-agent);
+  box-shadow: 0 0 0 2px var(--thread-fox-halo);
+}
+.ks-dock__subname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ks-dock__subaction {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+.ks-dock__subitem:hover .ks-dock__subaction,
+.ks-dock__subitem:focus-within .ks-dock__subaction {
+  opacity: 1;
+}
+.ks-dock__subaction:hover {
+  background: var(--bg-selected);
+}
+@media (hover: none), (pointer: coarse) {
+  .ks-dock__subaction {
+    opacity: 1;
+  }
+}
+
 /* The app's own icon, as the system draws it. */
 .ctl-app-icon {
   display: grid;
@@ -519,6 +844,7 @@
 
 /* Reduce motion: the light stands still and flares nowhere; nothing bobs, glides or rings. */
 @media (prefers-reduced-motion: reduce) {
+  .ks-dock__popover,
   .ctl-light,
   .ctl-light *,
   .ctl-pill__in,
@@ -528,6 +854,10 @@
   .ctl-click,
   .ctl-pointer__ring {
     animation: none !important;
+  }
+  .ks-dock__chev,
+  .ks-dock__subaction {
+    transition: none !important;
   }
   .ctl-light__flare,
   .ctl-pointer__ring,
@@ -539,9 +869,12 @@
   }
 }
 :root[data-reduce-motion='always'] {
-  & :is(.ctl-light, .ctl-light *, .ctl-pill__in, .ctl-pill-nudge),
+  & :is(.ks-dock__popover, .ctl-light, .ctl-light *, .ctl-pill__in, .ctl-pill-nudge),
   & :is(.ctl-pill-nudge *, .ctl-bubble, .ctl-click, .ctl-pointer__ring) {
     animation: none !important;
+  }
+  & :is(.ks-dock__chev, .ks-dock__subaction) {
+    transition: none !important;
   }
   & :is(.ctl-light__flare, .ctl-pointer__ring, .ctl-click) {
     display: none;
