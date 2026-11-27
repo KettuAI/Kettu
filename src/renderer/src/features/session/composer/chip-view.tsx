@@ -63,7 +63,9 @@ export function ChipView({
                 ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
                 : state === 'selected'
                   ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_1.5px_var(--control-on)]'
-                  : 'bg-raised shadow-[0_0_0_0.5px_var(--border-default),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_var(--border-strong),var(--elevation-raised)]',
+                  : chip.kind === 'skill'
+                    ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_28%,var(--border-default)),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_45%,var(--border-strong)),var(--elevation-raised)]'
+                    : 'bg-raised shadow-[0_0_0_0.5px_var(--border-default),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_var(--border-strong),var(--elevation-raised)]',
             ),
       )}
     >

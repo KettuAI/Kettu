@@ -5,7 +5,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { open, readdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -43,6 +43,7 @@ import type { HostedContext } from '../driver'
 import { formFields, isWebUrl } from '../elicitation'
 import type { Env } from '../find-command'
 import { t } from '../i18n'
+import { frontmatter } from '../marketplace/frontmatter'
 import {
   addTokenTotals,
   firstUserMessage,
@@ -409,6 +410,83 @@ function missingSession(error: unknown): boolean {
     text.includes('No conversation found with session ID') ||
     text === 'Query closed before response received'
   )
+}
+
+const SKILL_FILE = 'SKILL.md'
+const SKILL_FRONTMATTER_BYTES = 16 * 1024
+
+async function readSkillHead(file: string): Promise<string | null> {
+  let handle
+  try {
+    handle = await open(file, 'r')
+    if (!(await handle.stat()).isFile()) return null
+    const buffer = Buffer.alloc(SKILL_FRONTMATTER_BYTES)
+    const { bytesRead } = await handle.read(buffer, 0, SKILL_FRONTMATTER_BYTES, 0)
+    return buffer.subarray(0, bytesRead).toString('utf8')
+  } catch {
+    return null
+  } finally {
+    await handle?.close()
+  }
+}
+
+async function readSkillNamesFromDir(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const names: string[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+    if (entry.name.startsWith('.')) continue
+    const text = await readSkillHead(path.join(dir, entry.name, SKILL_FILE))
+    if (text === null) continue
+    const fields = frontmatter(text)
+    const name = (fields.name ?? entry.name).trim() || entry.name
+    names.push(name)
+  }
+  return names
+}
+
+/**
+ * Discovers Claude Code skill names on disk (project, user config, shared `.agents/skills`, and
+ * local plugins such as Kettu's skill plugin) so slash commands can be tagged with `kind: 'skill'`
+ * immediately on session open, before the first turn's `system.init` message arrives.
+ */
+export async function scanClaudeSkillsOnDisk(
+  cwd: string,
+  home: string,
+  configDir: string,
+  localPlugins: readonly string[] = [],
+): Promise<Set<string>> {
+  const dirs = [
+    path.join(cwd, '.claude', 'skills'),
+    path.join(configDir, 'skills'),
+    path.join(cwd, '.agents', 'skills'),
+    path.join(home, '.agents', 'skills'),
+  ]
+  const found = new Set<string>()
+  const lists = await Promise.all(dirs.map(readSkillNamesFromDir))
+  for (const list of lists) {
+    for (const name of list) found.add(name)
+  }
+  await Promise.all(
+    localPlugins.map(async (pluginDir) => {
+      let pluginName: string | null = null
+      try {
+        const raw = await readFile(path.join(pluginDir, '.claude-plugin', 'plugin.json'), 'utf8')
+        const manifest = JSON.parse(raw) as { name?: unknown }
+        if (typeof manifest.name === 'string' && manifest.name.trim()) {
+          pluginName = manifest.name.trim()
+        }
+      } catch {
+        // A plugin without a readable manifest still contributes its bare skill names.
+      }
+      const names = await readSkillNamesFromDir(path.join(pluginDir, 'skills'))
+      for (const name of names) {
+        found.add(name)
+        if (pluginName) found.add(`${pluginName}:${name}`)
+      }
+    }),
+  )
+  return found
 }
 
 /** Kettu's prompt as the content of Claude Code's user message. */
@@ -1239,6 +1317,13 @@ export class ClaudeConnection implements AgentConnection {
     session.query = query
     this.context.hooks.traffic('out', { method: 'query', sessionId, resume: how.resume })
     const reading = this.read(session, query)
+    const home = this.env.HOME || this.env.USERPROFILE || os.homedir()
+    const configDir = this.env[CONFIG_DIR] || path.join(home, '.claude')
+    const diskSkills = bare
+      ? Promise.resolve(new Set<string>())
+      : scanClaudeSkillsOnDisk(cwd, home, configDir, options.localPlugins).catch(
+          () => new Set<string>(),
+        )
     let init
     try {
       init = await query.initializationResult()
@@ -1257,6 +1342,7 @@ export class ClaudeConnection implements AgentConnection {
       query.close()
       throw this.closedError()
     }
+    for (const name of await diskSkills) session.skills.add(name)
     this.reportAccount(init.account)
     session.models = init.models ?? []
     const model =
@@ -1389,9 +1475,9 @@ export class ClaudeConnection implements AgentConnection {
         session.terminal = new Set(Array.isArray(terminal) ? (terminal as string[]) : [])
         const skills = system.skills
         if (Array.isArray(skills)) {
-          session.skills = new Set(
-            skills.filter((name): name is string => typeof name === 'string'),
-          )
+          for (const name of skills) {
+            if (typeof name === 'string' && name) session.skills.add(name)
+          }
         }
         const version = session.version ?? system.claude_code_version
         if (typeof version === 'string') this.terminalCommands.remember(version, session.terminal)

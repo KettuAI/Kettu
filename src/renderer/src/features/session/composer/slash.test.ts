@@ -4,9 +4,11 @@ import {
   activeSlashItems,
   applySlashChoice,
   insertSkill,
+  keepsCompletedSlash,
   leadingCommand,
   placeCommand,
   slashAt,
+  slashPopoverAt,
 } from './slash'
 
 const COMPACT: SlashCommand = { name: 'compact', description: 'Compact context' }
@@ -119,5 +121,67 @@ describe('composer slash commands and stackable skills', () => {
     const text = '/compact foo /stat bar'
     const placed = placeCommand(text, slashAt(text, 18)!, 'status', ['compact', 'status'])
     expect(placed).toEqual({ text: '/status foo bar', caret: 12 })
+  })
+})
+
+describe('slashPopoverAt and completed-slash suppression', () => {
+  it('closes immediately after choosing a skill and does not reopen at its trailing boundary', () => {
+    const chosen = applySlashChoice('/code', slashAt('/code', 5)!, REVIEW_SKILL, COMMANDS)
+    const completed = { start: 0, name: REVIEW_SKILL.name }
+
+    // Caret after the trailing space closes the popover.
+    expect(slashPopoverAt(chosen.text, chosen.caret, COMMANDS, completed)).toBeNull()
+    expect(keepsCompletedSlash(chosen.text, completed, slashAt(chosen.text, chosen.caret))).toBe(
+      true,
+    )
+
+    // Caret settling on the chip edge right before the space must not reopen the popover.
+    expect(slashPopoverAt(chosen.text, chosen.caret - 1, COMMANDS, completed)).toBeNull()
+    expect(slashPopoverAt(chosen.text, chosen.caret - 1, COMMANDS, null)).toBeNull()
+
+    // Deleting the trailing space right after choosing keeps the popover closed until the chip goes.
+    const withoutSpace = chosen.text.trimEnd()
+    expect(slashPopoverAt(withoutSpace, withoutSpace.length, COMMANDS, completed)).toBeNull()
+    expect(
+      keepsCompletedSlash(withoutSpace, completed, slashAt(withoutSpace, withoutSpace.length)),
+    ).toBe(true)
+  })
+
+  it('reopens cleanly when typing a second slash after a chosen skill', () => {
+    const completed = { start: 0, name: REVIEW_SKILL.name }
+    const text = '/code-review /sec'
+    const raw = slashAt(text, text.length)
+
+    expect(keepsCompletedSlash(text, completed, raw)).toBe(false)
+    expect(slashPopoverAt(text, text.length, COMMANDS, completed)).toEqual({
+      start: 13,
+      query: 'sec',
+    })
+  })
+
+  it('clears completed suppression once the chosen token is removed or edited', () => {
+    const completed = { start: 0, name: REVIEW_SKILL.name }
+
+    expect(keepsCompletedSlash('', completed, slashAt('', 0))).toBe(false)
+    expect(keepsCompletedSlash('/code-revie', completed, slashAt('/code-revie', 11))).toBe(false)
+    expect(slashPopoverAt('/code-revie', 11, COMMANDS, null)).toEqual({
+      start: 0,
+      query: 'code-revie',
+    })
+  })
+
+  it('still opens while typing a prefix or editing in the middle of a slash word', () => {
+    // Still typing at end of text (no trailing space yet).
+    expect(slashPopoverAt('/code-review', 12, COMMANDS, null)).toEqual({
+      start: 0,
+      query: 'code-review',
+    })
+    // Caret in the middle of a word before whitespace.
+    expect(slashPopoverAt('/code-review ', 5, COMMANDS, null)).toEqual({
+      start: 0,
+      query: 'code-review',
+    })
+    // Leading exclusive command edge before whitespace stays closed.
+    expect(slashPopoverAt('/compact ', 8, COMMANDS, null)).toBeNull()
   })
 })

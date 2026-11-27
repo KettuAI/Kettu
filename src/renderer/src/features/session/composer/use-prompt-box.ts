@@ -343,9 +343,11 @@ export function usePromptBox({
   }
   /** Puts `next` in the box with the caret at `at`, the end by default. */
   const update = (next: string, at = next.length) => {
-    changed(next)
+    closeHistory()
+    writeDraft(draft, next)
     editor.current?.setText(next, at)
     source.set(next, at)
+    onActivity?.()
   }
 
   /** Empties the box for a send. */

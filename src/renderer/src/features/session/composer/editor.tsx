@@ -65,6 +65,11 @@ const fromBox = Annotation.define<boolean>()
 // The guess at the next message an empty box offers.
 const suggestionOf = Facet.define<string, string | null>({ combine: (values) => values[0] ?? null })
 
+/** Normalizes suggestion preview text so embedded newlines do not push the Tab keycap off-clamp. */
+function suggestionPreviewText(suggestion: string): string {
+  return suggestion.replace(/\s+/g, ' ').trim()
+}
+
 /** What an empty box shows: the placeholder, or the suggestion with the key that takes it. */
 function emptyBox(placeholder: string, suggestion: string | null): Extension {
   if (!suggestion) return placeholderText(placeholder)
@@ -72,10 +77,10 @@ function emptyBox(placeholder: string, suggestion: string | null): Extension {
   wrap.className = 'cm-suggestion'
   const text = document.createElement('span')
   text.className = 'cm-suggestion-text'
-  text.textContent = suggestion
+  text.textContent = suggestionPreviewText(suggestion)
   const key = document.createElement('kbd')
   key.className =
-    'inline-flex h-5 min-w-5 flex-none items-center justify-center rounded-tile bg-card px-1.5 font-sans text-xs font-medium text-secondary shadow-outline'
+    'cm-suggestion-key relative -top-px mr-0.5 ml-2 inline-flex h-5 min-w-5 flex-none items-center justify-center rounded-tile bg-card px-1.5 align-middle font-sans text-xs font-medium text-secondary shadow-outline'
   key.textContent = 'Tab'
   wrap.append(text, key)
   return [suggestionOf.of(suggestion), placeholderText(wrap)]
@@ -136,6 +141,14 @@ const theme = EditorView.theme({
     width: '100%',
   },
   '.cm-line': { padding: '0' },
+  // Cap wrapped empty-box suggestions to 4 lines so an unusually long guess never blows out the
+  // composer height while the inline placeholder keeps the empty editor's caret one line tall.
+  '.cm-line:has(.cm-suggestion)': {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: '4',
+    overflow: 'hidden',
+  },
   // One line, cut with an ellipsis, so a long placeholder does not make the caret two lines tall.
   '.cm-placeholder': {
     maxWidth: '100%',
@@ -147,22 +160,23 @@ const theme = EditorView.theme({
     // composer stays editable for the native context menu.
     pointerEvents: 'none',
   },
-  // The key stays whole at the end of the line, its edge too; the suggestion before it is cut.
-  '.cm-placeholder:has(.cm-suggestion)': { overflow: 'visible' },
+  // Inline flow lets long Tab suggestions wrap naturally across lines with the Tab keycap trailing
+  // at the end of the text, without making the placeholder an inline-block box that stretches the
+  // empty editor's native caret to multiple lines tall.
+  '.cm-placeholder:has(.cm-suggestion)': {
+    display: 'inline',
+    overflow: 'visible',
+    textOverflow: 'clip',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+  },
   '.cm-suggestion': {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 'calc(var(--spacing) * 2)',
-    maxWidth: '100%',
-    // Room for the key's ring and shadow at the right edge of the box, which clips them.
-    paddingRight: 'calc(var(--spacing) * 0.5)',
-    verticalAlign: 'top',
+    display: 'inline',
   },
   '.cm-suggestion-text': {
-    minWidth: '0',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    display: 'inline',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   // The command as marks, colored text as a sent message shows it, so the caret moves through it.
   '.cm-chip-command': { color: 'var(--control-on)', fontWeight: 'var(--font-weight-medium)' },

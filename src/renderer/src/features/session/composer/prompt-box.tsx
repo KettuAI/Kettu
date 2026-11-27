@@ -51,7 +51,14 @@ import {
 import { usePromptChips } from './prompt-chips'
 import { ResizeGrip } from './resize-grip'
 import { commandSourceName } from './command-source'
-import { applySlashChoice, orderSlashMatches, slashAt } from './slash'
+import {
+  applySlashChoice,
+  keepsCompletedSlash,
+  orderSlashMatches,
+  slashAt,
+  slashPopoverAt,
+  type CompletedSlash,
+} from './slash'
 import { slashKeys } from './slash-list'
 import { addDraftMention } from './plugin-mentions'
 import { useMentionList, type MentionList } from './use-mention-list'
@@ -131,6 +138,9 @@ export function PromptBox({
   const { draft, projectPath, disabled, source, attachments, update, editor, setCaret } = box
   // The `/` whose list Esc or leaving the box closed.
   const [slashDismissed, setSlashDismissed] = useState<number | null>(null)
+  // The slash token just chosen from the list, kept suppressed if selection lands on its edge or
+  // the user deletes its trailing space before deleting the chip itself.
+  const [completedSlash, setCompletedSlash] = useState<CompletedSlash | null>(null)
   // The `@` whose popover Esc or a click elsewhere closed.
   const [mentionDismissed, setMentionDismissed] = useState<number | null>(null)
   // While an input method composes: whether the mention popover was open when it started.
@@ -144,8 +154,12 @@ export function PromptBox({
   const listId = useId()
 
   // Read from the text as values, so a key or a caret move renders the box only when one changes.
+  const completedAlive = useBoxText(box, (text, caret) =>
+    keepsCompletedSlash(text, completedSlash, slashAt(text, caret)),
+  )
+  if (completedSlash !== null && !completedAlive) setCompletedSlash(null)
   const slashKey = useBoxText(box, (text, caret) => {
-    const found = slashAt(text, caret)
+    const found = slashPopoverAt(text, caret, commands, completedSlash)
     return found ? `${found.start}:${found.query}` : null
   })
   const slash = useMemo(() => {
@@ -313,7 +327,11 @@ export function PromptBox({
     if (isPluginRow(item)) choosePlugin(item)
     else if (isMentionRow(item)) choose(item)
     else if (slash) {
-      const next = applySlashChoice(source.text, slash, item, commands)
+      const current = editor.current?.text() ?? source.text
+      const next = applySlashChoice(current, slash, item, commands)
+      const insertedStart = isSkillCommand(item) ? slash.start : 0
+      setCompletedSlash({ start: insertedStart, name: item.name })
+      setSlashDismissed(insertedStart)
       update(next.text, next.caret)
     }
   }
