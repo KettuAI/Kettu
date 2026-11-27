@@ -4046,7 +4046,8 @@ export class AgentManager {
   private connectionHooks(slot: Slot): ConnectionHooks {
     const { diagnostics, acpMessages } = this.deps
     const agentId = slot.id
-    const acp = protocolFor(slot.def, this.deps, slot.protocol) === 'acp'
+    const protocol = protocolFor(slot.def, this.deps, slot.protocol)
+    const acp = protocol === 'acp' || protocol === 'acp-folders'
     return {
       traffic: (direction, message) => {
         diagnostics.traffic(agentId, direction, message)

@@ -1,7 +1,7 @@
 // The driver of each protocol an agent speaks, and the one an agent starts through.
 
 import type { AgentId } from '@shared/thread'
-import { ACP_DRIVER } from './acp/driver'
+import { ACP_DRIVER, ACP_FOLDERS_DRIVER } from './acp/driver'
 import { CLAUDE_SDK_DRIVER } from './claude/driver'
 import { CLINE_SDK_DRIVER } from './cline/driver'
 import { protocolOf, type AgentDefinition, type AgentProtocol } from './catalog'
@@ -14,6 +14,7 @@ import { PI_DRIVER } from './pi/driver'
 
 export const DRIVERS: Readonly<Record<AgentProtocol, AgentDriver>> = {
   acp: ACP_DRIVER,
+  'acp-folders': ACP_FOLDERS_DRIVER,
   'claude-sdk': CLAUDE_SDK_DRIVER,
   'cline-sdk': CLINE_SDK_DRIVER,
   'codex-app-server': CODEX_DRIVER,

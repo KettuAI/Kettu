@@ -79,6 +79,7 @@ import {
   findSessionFile,
   listSessionFiles,
   piFolders,
+  piSessionDir,
   removeSessionFile,
   type PiFolders,
 } from './session-files'
@@ -664,10 +665,15 @@ export class PiConnection implements AgentConnection {
     }
     for (const root of session.options.skillRoots ?? []) args.push('--skill', root)
     if (session.hidden && start.kind !== 'fork') args.push('--no-session')
-    else if (start.kind === 'fork') args.push('--fork', start.file)
-    else if (start.kind === 'resume') {
-      // Without a file pi was never prompted in it, and takes the id for a session it starts.
-      args.push(...(start.file ? ['--session', start.file] : ['--session-id', session.id]))
+    else {
+      // Where the user's own settings keep them, never where the folder's `.pi` says.
+      const own = { ...env, ...spec.env }
+      args.push('--session-dir', await piSessionDir(own, this.platform, session.cwd))
+      if (start.kind === 'fork') args.push('--fork', start.file)
+      else if (start.kind === 'resume') {
+        // Without a file pi was never prompted in it, and takes the id for a session it starts.
+        args.push(...(start.file ? ['--session', start.file] : ['--session-id', session.id]))
+      }
     }
     const stop = new AbortController()
     const child = this.context.spawn({

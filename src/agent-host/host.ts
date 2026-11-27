@@ -413,7 +413,12 @@ async function memoryCall<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /** The harnesses whose sessions hold a folder's own servers and settings for the user. */
-const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex', 'opencode'])
+const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set([
+  'claude-code',
+  'codex',
+  'opencode',
+  'kilo',
+])
 
 export interface HostOptions {
   userDataPath: string
@@ -1687,8 +1692,9 @@ export class AgentHost {
           harnessDigests: servers
             .filter((server) => server.files.some((file) => relative.has(file)))
             .map((server) => server.digest),
-          // OpenCode has no way to turn one of a folder's servers off that Kettu checked.
-          turnsOff: harness !== 'opencode',
+          // OpenCode and Kilo Code have no way to turn one of a folder's servers off that Kettu
+          // checked.
+          turnsOff: harness !== 'opencode' && harness !== 'kilo',
         }
       },
       portOpen: (portId) => this.hub.has(portId),

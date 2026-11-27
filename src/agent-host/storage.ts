@@ -1636,7 +1636,7 @@ export function projectMcpFile(userDataPath: string, log: LogFn): JsonFile<Proje
     version: PROJECT_MCP_VERSION,
     migrations: PROJECT_MCP_MIGRATIONS,
     parse: parseProjectMcpFile,
-    empty: () => ({ version: 2, folders: {} }),
+    empty: () => ({ version: 3, folders: {} }),
     log,
     // Written at once: a refusal lost to a quit would start the server next time.
     debounceMs: 0,

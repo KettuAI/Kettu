@@ -251,7 +251,8 @@ export async function folderSettings(
     case 'codex':
       return codexSettings(cwd, platform)
     case 'opencode':
-      return openCodeSettings(cwd, platform)
+    case 'kilo':
+      return openCodeSettings(harness, cwd, platform)
     default:
       return null
   }
@@ -307,16 +308,30 @@ async function codexSettings(cwd: string, platform: Platform): Promise<FolderSet
   return { harness: 'codex', items, files: [...new Set(files)], digest: sha(parts) }
 }
 
-const OPENCODE_CONFIGS = ['opencode.json', 'opencode.jsonc']
+/** Where OpenCode, and Kilo Code, which reads OpenCode's files too, keep a project's config. */
+const OPENCODE_FAMILY = {
+  opencode: { configs: ['opencode.json', 'opencode.jsonc'], folders: ['.opencode'] },
+  kilo: {
+    configs: ['kilo.json', 'kilo.jsonc', 'opencode.json', 'opencode.jsonc'],
+    folders: ['.kilo', '.opencode'],
+  },
+} as const
 const OPENCODE_CODE_FOLDERS = new Set(['plugin', 'plugins', 'tool', 'tools'])
 
 /**
  * OpenCode's project config: `opencode.json[c]` and `.opencode` from the repository's root down to
  * `cwd`, with plugins, provider addresses, shell, formatter and language server commands, remote
  * instructions and references named, and every file under `.opencode`, whose plugins and tools
- * run as code. OpenCode loads none of it with its project config turned off.
+ * run as code; Kilo Code's adds `kilo.json[c]` and `.kilo`. Neither loads any of it with its
+ * project config turned off.
  */
-async function openCodeSettings(cwd: string, platform: Platform): Promise<FolderSettings | null> {
+async function openCodeSettings(
+  harness: keyof typeof OPENCODE_FAMILY,
+  cwd: string,
+  platform: Platform,
+): Promise<FolderSettings | null> {
+  const { configs: names, folders } = OPENCODE_FAMILY[harness]
+  const isConfig = (file: string): boolean => (names as readonly string[]).includes(file)
   const p = platform === 'win32' ? path.win32 : path.posix
   const base = p.resolve(cwd)
   const items: DeclaredItem[] = []
@@ -324,8 +339,8 @@ async function openCodeSettings(cwd: string, platform: Platform): Promise<Folder
   const parts: unknown[] = []
   for (const root of await projectRoots(cwd, platform)) {
     const configs = [
-      ...OPENCODE_CONFIGS.map((name) => p.join(root, name)),
-      ...OPENCODE_CONFIGS.map((name) => p.join(root, '.opencode', name)),
+      ...names.map((name) => p.join(root, name)),
+      ...folders.flatMap((folder) => names.map((name) => p.join(root, folder, name))),
     ]
     for (const config of configs) {
       const text = await readText(config)
@@ -342,22 +357,24 @@ async function openCodeSettings(cwd: string, platform: Platform): Promise<Folder
       items.push(...openCodeItems(rest))
       parts.push([relative, isRecord(parsed) ? rest : sha(text)])
     }
-    const folder = p.join(root, '.opencode')
-    const under = (await filesUnder(folder, base, platform)).filter(
-      (file) => !OPENCODE_CONFIGS.includes(p.basename(file)),
-    )
-    for (const file of under) {
-      const top = p.relative(folder, p.join(base, file)).split(p.sep)[0] ?? ''
-      items.push({
-        kind: OPENCODE_CODE_FOLDERS.has(top) ? 'plugin' : 'setting',
-        target: clip(file),
-      })
-      files.push(file)
+    for (const name of folders) {
+      const folder = p.join(root, name)
+      const under = (await filesUnder(folder, base, platform)).filter(
+        (file) => !isConfig(p.basename(file)),
+      )
+      for (const file of under) {
+        const top = p.relative(folder, p.join(base, file)).split(p.sep)[0] ?? ''
+        items.push({
+          kind: OPENCODE_CODE_FOLDERS.has(top) ? 'plugin' : 'setting',
+          target: clip(file),
+        })
+        files.push(file)
+      }
+      parts.push(await filesDigest(base, under, platform))
     }
-    parts.push(await filesDigest(base, under, platform))
   }
   if (items.length === 0) return null
-  return { harness: 'opencode', items, files: [...new Set(files)], digest: sha(parts) }
+  return { harness, items, files: [...new Set(files)], digest: sha(parts) }
 }
 
 function openCodeItems(config: Record<string, unknown>): DeclaredItem[] {

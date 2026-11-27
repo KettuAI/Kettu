@@ -368,6 +368,20 @@ describe('starting a session', () => {
     ])
   })
 
+  it("keeps a session's file where the user's pi keeps it, whatever the folder's .pi says", async () => {
+    const { connection, spawned, cwd, agentDir } = await connect()
+    await mkdir(path.join(cwd, '.pi'), { recursive: true })
+    await writeFile(
+      path.join(cwd, '.pi', 'settings.json'),
+      JSON.stringify({ sessionDir: './transcripts' }),
+    )
+    await connection.newSession(cwd, {})
+    const { args } = spawned[0]!.options
+    expect(args[args.indexOf('--session-dir') + 1]).toBe(
+      path.join(agentDir, 'sessions', folderName(path.resolve(cwd))),
+    )
+  })
+
   it("runs the user's pi in RPC mode with Kettu's extension, and takes pi's id for it", async () => {
     const { connection, spawned, cwd } = await connect()
     const opened = await connection.newSession(cwd, { mcpServers: [KETTU] })
@@ -378,7 +392,8 @@ describe('starting a session', () => {
     expect(options.cwd).toBe(cwd)
     expect(options.args.slice(0, 4)).toEqual(['--mode', 'rpc', '--no-themes', '-e'])
     expect(options.args[4]).toMatch(/kettu-[0-9a-f]{12}\.mjs$/)
-    expect(options.args).toHaveLength(5)
+    expect(options.args.slice(5, 6)).toEqual(['--session-dir'])
+    expect(options.args).toHaveLength(7)
     // A token reaches pi in its environment alone, never on its command line.
     expect(options.args.join(' ')).not.toContain('session-token')
     expect(JSON.parse(options.env.KETTU_MCP_SERVERS!)).toMatchObject([
@@ -465,7 +480,12 @@ describe('starting a session', () => {
     const init = await connection.initialize()
     expect(init.capabilities).toMatchObject({ mcpHttp: false, mcpStdio: false, steering: true })
     await connection.newSession(cwd, { mcpServers: [KETTU] })
-    expect(spawned[0]!.options.args).toEqual(['--mode', 'rpc', '--no-themes'])
+    expect(spawned[0]!.options.args.slice(0, 4)).toEqual([
+      '--mode',
+      'rpc',
+      '--no-themes',
+      '--session-dir',
+    ])
     expect(spawned[0]!.options.env.KETTU_MCP_SERVERS).toBeUndefined()
     const oldest = await connect({ version: '0.81.0' })
     expect((await oldest.connection.initialize()).capabilities.steering).toBe(false)

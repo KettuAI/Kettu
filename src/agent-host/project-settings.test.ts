@@ -141,6 +141,7 @@ describe('what an attach hands on of a folder', () => {
     name,
     target: name,
     digest,
+    namesDigest: digest,
     spec: { type: 'stdio' as const, command: name, args: [], env: [] },
     secrets: {},
     files: ['opencode.json'],
