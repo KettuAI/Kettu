@@ -15,7 +15,12 @@ import { preparedFile, PreparedRecords, type PreparedFile } from './prepared'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { HostError } from './errors'
-import { SessionManager, type SessionEvents } from './sessions'
+import {
+  SessionManager,
+  type SessionEvents,
+  type SessionManagerDeps,
+  type SessionTimings,
+} from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
 import { FakeChild, FakeClaudeSdk } from './testing/fake-claude-sdk'
 import { EMPTY_SESSION, type StoredThread } from './threads/model'
@@ -24,12 +29,16 @@ import type { WorktreeInspection } from './worktrees/api'
 import type { WorktreeManager } from './worktrees/manager'
 
 let dir: string
+const managers: SessionManager[] = []
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), 'kettu-sessions-'))
 })
 
 afterEach(async () => {
+  const created = managers.splice(0)
+  for (const sessions of created) sessions.shutdown()
+  await Promise.all(created.map((sessions) => sessions.flush()))
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -46,6 +55,8 @@ function manager(
     options?: AgentOptionsStore
     prepared?: PreparedRecords
     worktrees?: Partial<WorktreeManager>
+    timings?: Partial<SessionTimings>
+    settingsTargets?: SessionManagerDeps['settingsTargets']
   } = {},
 ) {
   const added: string[] = []
@@ -84,8 +95,12 @@ function manager(
     ...(extra.outside ? { outside: extra.outside } : {}),
     ...(extra.prepared ? { prepared: extra.prepared } : {}),
     ...(extra.worktrees ? { worktrees: extra.worktrees as WorktreeManager } : {}),
+    ...(extra.timings ? { timings: extra.timings } : {}),
+    ...(extra.settingsTargets ? { settingsTargets: extra.settingsTargets } : {}),
   } satisfies ConstructorParameters<typeof SessionManager>[0]
-  return { sessions: new SessionManager(deps), added, agents: deps.agents }
+  const sessions = new SessionManager(deps)
+  managers.push(sessions)
+  return { sessions, added, agents: deps.agents }
 }
 
 /** An agent that lists `pages` of session ids for any folder, one page per call. */
@@ -532,7 +547,11 @@ describe('cross-folder Codex session import into a target project', () => {
     expect(reassigned.archivedAt).toBeNull()
     expect(sessions.list('/projects/current')).toHaveLength(0)
     expect(sessions.list('/projects/destination').map((s) => s.id)).toEqual([imported.id])
-    await vi.waitFor(async () => expect((await index())?.sessions).toHaveLength(1))
+    await sessions.flush()
+    expect((await index())?.sessions).toMatchObject([
+      { id: imported.id, projectPath: '/projects/destination' },
+    ])
+    expect((await index())?.sessions[0]?.archivedAt).toBeUndefined()
   })
 
   it('opens and continues a migrated Codex session cleanly under the target project path', async () => {
@@ -2348,5 +2367,177 @@ describe('agent-started turns and empty turn_end deduplication', () => {
     )
     expect(notices).toHaveLength(1)
     await sessions.flush()
+  })
+})
+
+describe('session manager shutdown and flush cleanup', () => {
+  it('cancels pending listed-title retries and prepared settings watchers on shutdown', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo, { recursive: true })
+
+    let seq = 0
+    let firstListed!: () => void
+    const listedOnce = new Promise<void>((resolve) => (firstListed = resolve))
+    const newSession = vi.fn(async () => ({ sessionId: `acp-${++seq}`, config: [] }))
+    const listSessions = vi.fn(async () => {
+      firstListed()
+      return {
+        sessions: [{ sessionId: 'acp-2', title: null, updatedAt: null, cwd: repo }],
+        nextCursor: null,
+      }
+    })
+    const prompt = vi.fn(async () => ({
+      stopReason: 'end_turn' as StopReason,
+      tokens: null,
+      models: [],
+    }))
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      register: () => {},
+      unregister: () => {},
+      reopen: () => {},
+      newSession,
+      setConfigOption: async () => [],
+      listSessions,
+      prompt,
+      cancel: async () => {},
+      deleteSession: async () => {},
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      init: {
+        capabilities: {
+          listSessions: true,
+          ownTitles: 'listed' as const,
+          deleteSession: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'Agent',
+      isDisabled: () => false,
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+
+    const { sessions } = manager(
+      {},
+      {
+        agents,
+        timings: { listedTitleRetryMs: 100, settingsDelayMs: 20 },
+        settingsTargets: () => [{ dir: repo, names: ['settings.json'] }],
+      },
+    )
+    await sessions.load()
+
+    await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-1')
+    const created = await sessions.create({ agentId: 'claude-code', projectPath: repo })
+    expect(newSession).toHaveBeenCalledTimes(2)
+
+    await sessions.prompt(created.id, [{ type: 'text', text: 'First turn' }])
+    await listedOnce
+    // Let readListedTitle resume from await listSessions and arm live.listedTitleTimer.
+    await new Promise((resolve) => setImmediate(resolve))
+
+    sessions.shutdown()
+    await writeFile(path.join(repo, 'settings.json'), '{"changed":true}')
+    await new Promise((resolve) => setTimeout(resolve, 140))
+
+    expect(listSessions).toHaveBeenCalledTimes(1)
+    expect(newSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('flushes session index, prepared records, and agent options together', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo, { recursive: true })
+
+    const prepared = new PreparedRecords(preparedFile(dir, log))
+    await prepared.load()
+    const options = new AgentOptionsStore({
+      file: agentOptionsFile(dir, log),
+      changed: () => {},
+    })
+    await options.load()
+
+    const config = [
+      {
+        id: 'model',
+        name: 'Model',
+        category: 'model' as const,
+        type: 'select' as const,
+        value: 'default',
+        choices: [{ value: 'default', name: 'Default' }],
+      },
+    ]
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      register: () => {},
+      unregister: () => {},
+      reopen: () => {},
+      newSession: async () => ({ sessionId: 'acp-prep', config }),
+      setConfigOption: async () => config,
+      listSessions: async () => ({
+        sessions: [{ sessionId: 'acp-imported', title: 'Imported', updatedAt: null, cwd: repo }],
+        nextCursor: null,
+      }),
+      deleteSession: async () => {},
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      init: {
+        capabilities: {
+          listSessions: true,
+          deleteSession: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'Claude Code',
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+
+    const { sessions } = manager({}, { agents, prepared, options })
+    await sessions.load()
+
+    await sessions.prepare({ agentId: 'claude-code', projectPath: repo }, 'win-1')
+    const imported = await sessions.importSession({
+      agentId: 'claude-code',
+      projectPath: repo,
+      acpSessionId: 'acp-imported',
+    })
+    await sessions.archive(imported.id)
+
+    sessions.shutdown()
+    await sessions.flush()
+
+    const savedSessions = await index()
+    expect(savedSessions?.sessions).toMatchObject([
+      { id: imported.id, archivedAt: expect.any(Number) },
+    ])
+    const savedPrepared = JSON.parse(
+      await readFile(path.join(dir, 'state', 'prepared-sessions.json'), 'utf8'),
+    ) as PreparedFile
+    expect(savedPrepared.sessions).toEqual([
+      { agentId: 'claude-code', acpSessionId: 'acp-prep', cwd: repo },
+    ])
+    const savedOptions = JSON.parse(
+      await readFile(path.join(dir, 'state', 'agent-options.json'), 'utf8'),
+    ) as { agents: Record<string, unknown> }
+    expect(savedOptions.agents['claude-code']).toBeDefined()
   })
 })
