@@ -6,6 +6,7 @@ import {
   prependEntries,
   threadFromSnapshot,
   UnknownEntryError,
+  type ContentRef,
   type OlderPage,
   type PatchBatch,
   type PlanEntry,
@@ -14,7 +15,8 @@ import {
   type ThreadState,
   type UserContent,
 } from '@shared/thread'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, sessionHost } from '@renderer/lib/host'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { forgetOutline, invalidateOutlines } from '@renderer/features/session/outline/outline-cache'
 
 // The renderer's replicas of the sessions it shows. Each starts from a snapshot of the latest
@@ -83,10 +85,11 @@ type UserEntry = Extract<ThreadEntry, { kind: 'user' }>
 /** A message sent from this window that the host has not put in the thread yet. */
 interface Sending {
   entry: UserEntry
-  text: string
   sentAt: number
-  /** The thread's last entry when it was sent, if the replica was loaded. */
+  /** The thread's last real entry when it was sent, if the replica was loaded. */
   after: string | null
+  /** True when the replica was loaded and held no real entries yet at send time. */
+  empty: boolean
 }
 const sending = new Map<string, Sending[]>()
 let sendingCount = 0
@@ -222,12 +225,19 @@ function flush(): void {
     }
     try {
       const live = replica.state.session.status !== 'starting'
-      const echoes = echoesOf(batch)
-      if (live) markFresh(batch, echoes)
+      const resets = batch.patches.some((patch) => patch.op === 'thread.reset')
       let state = applyPatches(replica.state, batch.patches, {
         partial: replica.older !== null,
       })
-      if (sending.has(batch.sessionId)) state = settleSending(batch.sessionId, state, echoes)
+      if (resets) {
+        if (sending.has(batch.sessionId)) state = settleSnapshot(batch.sessionId, state)
+      } else {
+        const matched = matchBatchEchoes(batch)
+        if (live) markFresh(batch, matched.entries)
+        if (sending.has(batch.sessionId)) {
+          state = applySettledSending(batch.sessionId, state, matched)
+        }
+      }
       next ??= { ...replicas }
       next[batch.sessionId] = { ...replica, state, seq: batch.seq }
     } catch (error) {
@@ -258,11 +268,11 @@ function dropQueuedFor(sessionId: string): void {
   }
 }
 
-function markFresh(batch: PatchBatch, echoes: readonly UserEntry[]): void {
+function markFresh(batch: PatchBatch, echoes: ReadonlySet<UserEntry>): void {
   const now = performance.now()
   for (const patch of batch.patches) {
     // A message shown while it was sending is already in view.
-    if (patch.op !== 'entry.add' || echoes.includes(patch.entry as UserEntry)) continue
+    if (patch.op !== 'entry.add' || echoes.has(patch.entry as UserEntry)) continue
     let entries = fresh.get(batch.sessionId)
     if (!entries) fresh.set(batch.sessionId, (entries = new Map()))
     for (const [id, at] of entries) if (now - at >= FRESH_FOR_MS) entries.delete(id)
@@ -524,6 +534,66 @@ export function reloadSession(sessionId: string): Promise<void> {
 const textOf = (content: readonly UserContent[]) =>
   content.map((part) => (part.type === 'text' ? part.text : '')).join('')
 
+function refsOf(content: readonly UserContent[]): ContentRef[] {
+  const refs: ContentRef[] = []
+  for (const part of content) {
+    if (part.type === 'ref') refs.push(part.ref)
+  }
+  return refs
+}
+
+function sameRef(a: ContentRef, b: ContentRef): boolean {
+  switch (a.kind) {
+    case 'attachment':
+      if (b.kind !== 'attachment') return false
+      if (a.attachment.id && b.attachment.id) return a.attachment.id === b.attachment.id
+      return a.attachment.type === b.attachment.type && a.attachment.name === b.attachment.name
+    case 'image':
+      if (b.kind !== 'image' || a.mimeType !== b.mimeType) return false
+      if ('blob' in a && 'blob' in b) return a.blob === b.blob
+      if ('data' in a && 'data' in b) return a.data === b.data
+      return true
+    case 'audio':
+      return (
+        b.kind === 'audio' && a.mimeType === b.mimeType && a.size === b.size && a.name === b.name
+      )
+    case 'video':
+      return (
+        b.kind === 'video' && a.mimeType === b.mimeType && a.size === b.size && a.name === b.name
+      )
+    case 'link':
+      return b.kind === 'link' && a.uri === b.uri && a.name === b.name
+    case 'terminal':
+      return b.kind === 'terminal' && a.terminalId === b.terminalId
+    case 'page':
+      return b.kind === 'page' && a.tabId === b.tabId
+    case 'device':
+      return b.kind === 'device' && a.deviceId === b.deviceId
+    case 'plugin':
+      return (
+        b.kind === 'plugin' &&
+        a.pluginId === b.pluginId &&
+        a.source === b.source &&
+        a.item === b.item
+      )
+    case 'unsupported':
+      return b.kind === 'unsupported' && a.label === b.label
+  }
+}
+
+/**
+ * Whether a host user entry carries the same text and attachment/ref fingerprint as an optimistic
+ * send, allowing host-enriched fields such as expanded slash commands, settled attachment metadata,
+ * or stored image blobs.
+ */
+function sameContent(a: readonly UserContent[], b: readonly UserContent[]): boolean {
+  if (textOf(a) !== textOf(b)) return false
+  const refsA = refsOf(a)
+  const refsB = refsOf(b)
+  if (refsA.length !== refsB.length) return false
+  return refsA.every((ref, i) => sameRef(ref, refsB[i]!))
+}
+
 /**
  * Shows a message the user sent at the end of the session's thread at once. The host's own entry
  * takes its place when it comes; the returned function takes it away before that, for a send that
@@ -532,12 +602,13 @@ const textOf = (content: readonly UserContent[]) =>
 export function showSending(sessionId: string, content: UserContent[]): () => void {
   const replica = useThreadsStore.getState().replicas[sessionId]
   const order = replica?.state?.order ?? []
+  const after = replica?.state ? (order.findLast((id) => !id.startsWith('sending-')) ?? null) : null
   const list = sending.get(sessionId) ?? []
   const item: Sending = {
     entry: { kind: 'user', id: `sending-${++sendingCount}`, content, at: Date.now() },
-    text: textOf(content),
     sentAt: Date.now(),
-    after: replica?.state ? (order.findLast((id) => !id.startsWith('sending-')) ?? null) : null,
+    after,
+    empty: Boolean(replica?.state) && after === null,
   }
   list.push(item)
   sending.set(sessionId, list)
@@ -560,42 +631,69 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
 }
 
 /**
- * A message a person sent, which a send's entry is: from a window, or carrying this client's device
- * when the session's host is another computer or this is the web client. Includes steered echoes
- * so an optimistic sending entry never leaks if a host delivers a follow-up as steered.
+ * A message a person sent from this client: unmarked from a local window, or carrying `device`
+ * when this is the web client (matching this browser's device id once welcomed) or the session lives
+ * on another host. Excludes agent-to-agent (`from`), card approvals, and Kettu system messages, and
+ * includes `steered` echoes so an optimistic sending entry never leaks if a host delivers a
+ * follow-up as steered.
  */
-function isOwnMessage(entry: ThreadEntry): entry is UserEntry {
-  return entry.kind === 'user' && !entry.from && !entry.approval && !entry.kettu
+function isOwnMessage(sessionId: string, entry: ThreadEntry): entry is UserEntry {
+  if (entry.kind !== 'user' || entry.from || entry.approval || entry.kettu) return false
+  if (isWebClient()) {
+    if (!entry.device) return false
+    const ownDeviceId = useWebHostStore.getState().host?.device.id ?? null
+    return ownDeviceId === null || entry.device.id === ownDeviceId
+  }
+  if (sessionHost(sessionId) !== null) return Boolean(entry.device)
+  return !entry.device
 }
 
-/** The batch's new messages that take the place of messages sending, oldest first. */
-function echoesOf(batch: PatchBatch): UserEntry[] {
-  const waiting = sending.get(batch.sessionId)?.length ?? 0
-  if (waiting === 0) return []
-  const echoes: UserEntry[] = []
+interface MatchedEchoes {
+  entries: Set<UserEntry>
+  settledIds: string[]
+  remaining: Sending[]
+}
+
+const NO_ECHOES: MatchedEchoes = { entries: new Set(), settledIds: [], remaining: [] }
+
+/**
+ * Matches the batch's new user entries against pending optimistic sends, oldest first. Scans until
+ * every pending send has matched so an unrelated message earlier in the batch never hides a real
+ * echo that follows it.
+ */
+function matchBatchEchoes(batch: PatchBatch): MatchedEchoes {
+  const list = sending.get(batch.sessionId)
+  if (!list || list.length === 0) return NO_ECHOES
+  const remaining = [...list]
+  const entries = new Set<UserEntry>()
+  const settledIds: string[] = []
   for (const patch of batch.patches) {
-    if (patch.op === 'entry.add' && isOwnMessage(patch.entry)) echoes.push(patch.entry)
-    if (echoes.length === waiting) break
+    if (patch.op !== 'entry.add' || !isOwnMessage(batch.sessionId, patch.entry)) continue
+    const echo = patch.entry
+    const at = remaining.findIndex((item) => sameContent(item.entry.content, echo.content))
+    if (at < 0) continue
+    const [gone] = remaining.splice(at, 1)
+    if (gone) {
+      entries.add(echo)
+      settledIds.push(gone.entry.id)
+    }
+    if (remaining.length === 0) break
   }
-  return echoes
+  return { entries, settledIds, remaining }
 }
 
-/** Takes away the messages `echoes` stand for, and keeps the others at the thread's end. */
-function settleSending(sessionId: string, state: ThreadState, echoes: readonly UserEntry[]) {
-  const list = sending.get(sessionId) ?? []
-  for (const echo of echoes) {
-    const text = textOf(echo.content)
-    const at = list.findIndex((item) => item.text === text)
-    // Only match a steered user message when its text matches a pending optimistic send so an
-    // unrelated steered message from another device never clears a different local send.
-    if (at < 0 && echo.steered) continue
-    const [gone] = list.splice(at >= 0 ? at : 0, 1)
-    if (gone) state = withoutEntry(state, gone.entry.id)
-  }
-  if (list.length === 0) {
+/** Takes away the optimistic entries `matched` settled, and keeps the others at the thread's end. */
+function applySettledSending(
+  sessionId: string,
+  state: ThreadState,
+  matched: MatchedEchoes,
+): ThreadState {
+  for (const id of matched.settledIds) state = withoutEntry(state, id)
+  if (matched.remaining.length === 0) {
     sending.delete(sessionId)
     return state
   }
+  sending.set(sessionId, matched.remaining)
   return withSending(sessionId, state)
 }
 
@@ -608,10 +706,11 @@ function settleSnapshot(sessionId: string, state: ThreadState): ThreadState {
     for (let i = state.order.length - 1; i > start; i--) {
       const id = state.order[i]!
       const entry = state.byId[id]
-      if (!entry || taken.has(id) || !isOwnMessage(entry)) continue
-      if (textOf(entry.content) !== item.text) continue
-      // Without the entry it followed, only a message from about the send's time is its own.
-      if (start < 0 && (entry.at ?? 0) < item.sentAt - ECHO_SKEW_MS) continue
+      if (!entry || taken.has(id) || !isOwnMessage(sessionId, entry)) continue
+      if (!sameContent(item.entry.content, entry.content)) continue
+      // Without the entry it followed (and when the thread already had history), only a message
+      // from about the send's time is its own.
+      if (start < 0 && !item.empty && (entry.at ?? 0) < item.sentAt - ECHO_SKEW_MS) continue
       taken.add(id)
       return true
     }
