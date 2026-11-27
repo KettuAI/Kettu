@@ -898,7 +898,8 @@
       }
     },
     "notice": {
-      "rerouted": "Codex 从 {{from}} 换到了 {{to}}"
+      "rerouted": "Codex 从 {{from}} 换到了 {{to}}",
+      "configWarning": "Codex 配置警告"
     },
     "command": {
       "plan": {

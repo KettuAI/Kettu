@@ -523,6 +523,36 @@ export interface McpServerStartupNotification {
   failureReason?: 'reauthenticationRequired' | null
 }
 
+export interface TextPosition {
+  /** 1-based line number. */
+  line: number
+  /** 1-based column number (in Unicode scalar values). */
+  column: number
+}
+
+export interface TextRange {
+  start: TextPosition
+  end: TextPosition
+}
+
+export interface WarningNotification {
+  message: string
+  threadId?: string | null
+}
+
+export interface DeprecationNoticeNotification {
+  summary: string
+  details?: string | null
+}
+
+export interface ConfigWarningNotification {
+  summary: string
+  details?: string | null
+  path?: string | null
+  range?: TextRange | null
+  threadId?: string | null
+}
+
 export type ReviewTarget =
   | { type: 'uncommittedChanges' }
   | { type: 'baseBranch'; branch: string }

@@ -40,8 +40,16 @@ import {
   type AsyncQuestionItem,
   type QuestionReply,
 } from './async-questions'
+import {
+  buildCodexConfigWarningNotice,
+  configWarningDedupeKey,
+  isCodexConfigWarningMessage,
+  parseConfigWarningNotification,
+  type CodexConfigWarningContext,
+} from './config-warning'
 import type {
   CommandAction,
+  ConfigWarningNotification,
   FileUpdateChange,
   ThreadItem,
   ThreadTokenUsage,
@@ -254,10 +262,43 @@ export class ThreadMapper {
   private readonly reasoningParts = new Map<string, ReasoningParts>()
   /** Thoughts with a summary, whose raw reasoning is not shown beside it. */
   private readonly summarized = new Set<string>()
+  /** Deduplication keys for config warnings already emitted in this thread. */
+  private readonly seenConfigWarnings = new Set<string>()
+  /** Context used to label known config file layers (e.g. `codexHome` vs thread `cwd`). */
+  private configContext: CodexConfigWarningContext
   /** When the thread last sent the model something: a message, a tool's result, a request's end. */
   private sentAt: number | null = null
   /** When the request running now first showed output, if it has. */
   private firstOutputAt: number | null = null
+
+  constructor(configContext: CodexConfigWarningContext = {}) {
+    this.configContext = { ...configContext }
+  }
+
+  /** Updates the `codexHome` and `cwd` metadata used when formatting config warnings. */
+  setConfigContext(configContext: CodexConfigWarningContext): void {
+    this.configContext = { ...this.configContext, ...configContext }
+  }
+
+  private addConfigWarning(
+    ctx: MapperContext,
+    out: MapperOutput,
+    warning: ConfigWarningNotification,
+  ): void {
+    const key = configWarningDedupeKey(warning)
+    const summaryKey = warning.summary.trim()
+    if (
+      this.seenConfigWarnings.has(key) ||
+      (summaryKey && this.seenConfigWarnings.has(summaryKey))
+    ) {
+      return
+    }
+    const notice = buildCodexConfigWarningNotice(warning, ctx.nextId(), this.configContext)
+    if (!notice) return
+    this.seenConfigWarnings.add(key)
+    if (summaryKey) this.seenConfigWarnings.add(summaryKey)
+    addEntry(ctx, out, notice)
+  }
 
   /** Maps one notification; null for one this mapper does not take. */
   notification(method: string, params: unknown, ctx: MapperContext): MapperOutput | null {
@@ -319,14 +360,25 @@ export class ThreadMapper {
           }),
         })
         break
-      case 'warning':
-        addEntry(ctx, out, {
-          kind: 'notice',
-          id: ctx.nextId(),
-          severity: 'warning',
-          title: String(p.message ?? ''),
-        })
+      case 'configWarning': {
+        const warning = parseConfigWarningNotification(p)
+        if (warning) this.addConfigWarning(ctx, out, warning)
         break
+      }
+      case 'warning': {
+        const message = String(p.message ?? '')
+        if (isCodexConfigWarningMessage(message)) {
+          this.addConfigWarning(ctx, out, { summary: message })
+        } else {
+          addEntry(ctx, out, {
+            kind: 'notice',
+            id: ctx.nextId(),
+            severity: 'warning',
+            title: message,
+          })
+        }
+        break
+      }
       default:
         return null
     }

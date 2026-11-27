@@ -902,7 +902,8 @@
       }
     },
     "notice": {
-      "rerouted": "Codex switched from {{from}} to {{to}}"
+      "rerouted": "Codex switched from {{from}} to {{to}}",
+      "configWarning": "Codex configuration warning"
     },
     "command": {
       "plan": {

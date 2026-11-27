@@ -481,6 +481,9 @@ export type ThreadEntry =
       // The agent's entry before it, to put it back after a replay: set on the notices Kettu
       // adds itself, never on an agent's, which its replay sends again.
       after?: string | null
+      // Structured metadata for an agent configuration warning; optional so older clients still
+      // render `title` and `description` cleanly.
+      configWarning?: ConfigWarningDetail
     }
   | {
       kind: 'compaction'
@@ -516,6 +519,40 @@ export type ThreadEntry =
   | McpChangeEntry // Kettu's own record of an agent adding or switching an MCP server, and its answer
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
+
+/** Source location of a configuration warning reported by an agent (e.g. Codex `config.toml`). */
+export interface ConfigWarningSource {
+  /** Configuration layer when reported (e.g. `user`, `project`, `system`, `profile`). */
+  layer?: string
+  /** Path to the configuration file that triggered the warning. */
+  path: string
+  /** 1-based start line, when the agent reported a range. */
+  line?: number
+  /** 1-based start column, when the agent reported a range. */
+  column?: number
+}
+
+/**
+ * Structured metadata for a configuration warning notice. Optional on `notice` entries so older
+ * desktop, web, and mobile clients still render `title` and `description` cleanly.
+ */
+export interface ConfigWarningDetail {
+  /** Agent harness that emitted the configuration warning. */
+  agent: 'codex'
+  /**
+   * High-level session impact inferred from the warning structure:
+   * - `deprecated`: deprecated setting that still takes effect
+   * - `ignored`: unrecognized or removed setting ignored by the agent
+   * - `invalid`: invalid configuration that fell back to defaults
+   */
+  impact?: 'deprecated' | 'ignored' | 'invalid'
+  /** Concrete config file locations reported by the protocol or structured warning lines. */
+  sources?: ConfigWarningSource[]
+  /** Optional details reported separately from the warning summary. */
+  details?: string
+  /** Official configuration documentation link for resolving the warning. */
+  docsUrl?: string
+}
 
 /** What one plugin attached to a message before it was sent. */
 export interface PluginAttached {
@@ -1871,6 +1908,32 @@ function isProblemReportOutcome(value: unknown): value is ProblemReportOutcome {
   return value.kind === 'saved' || value.kind === 'skipped'
 }
 
+function isConfigWarningSource(value: unknown): value is ConfigWarningSource {
+  return (
+    isRecord(value) &&
+    typeof value.path === 'string' &&
+    (value.layer === undefined || typeof value.layer === 'string') &&
+    (value.line === undefined ||
+      (typeof value.line === 'number' && Number.isInteger(value.line) && value.line >= 1)) &&
+    (value.column === undefined ||
+      (typeof value.column === 'number' && Number.isInteger(value.column) && value.column >= 1))
+  )
+}
+
+function isConfigWarningDetail(value: unknown): value is ConfigWarningDetail {
+  return (
+    isRecord(value) &&
+    value.agent === 'codex' &&
+    (value.impact === undefined ||
+      value.impact === 'deprecated' ||
+      value.impact === 'ignored' ||
+      value.impact === 'invalid') &&
+    (value.sources === undefined || isListOf(value.sources, isConfigWarningSource)) &&
+    (value.details === undefined || typeof value.details === 'string') &&
+    (value.docsUrl === undefined || typeof value.docsUrl === 'string')
+  )
+}
+
 const isListOf = <T>(value: unknown, guard: (item: unknown) => item is T): value is T[] =>
   Array.isArray(value) && value.every(guard)
 
@@ -1921,13 +1984,15 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return (
         typeof value.severity === 'string' &&
         typeof value.title === 'string' &&
+        (value.description === undefined || typeof value.description === 'string') &&
         (value.cause === undefined ||
           value.cause === 'agent_stopped' ||
           value.cause === 'out_of_credit' ||
           value.cause === 'turn_failed' ||
           value.cause === 'reports_paused') &&
         (value.model === undefined || typeof value.model === 'string') &&
-        (value.after === undefined || value.after === null || typeof value.after === 'string')
+        (value.after === undefined || value.after === null || typeof value.after === 'string') &&
+        (value.configWarning === undefined || isConfigWarningDetail(value.configWarning))
       )
     case 'compaction':
       return typeof value.status === 'string' && typeof value.summary === 'string'

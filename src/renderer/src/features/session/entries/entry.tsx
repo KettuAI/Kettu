@@ -68,7 +68,7 @@ export const Entry = memo(function Entry({
     case 'plan':
       return null
     case 'notice':
-      return <NoticeEntry {...props} />
+      return <NoticeEntry {...props} projectPath={projectPath} />
     case 'compaction':
       return <CompactionEntry {...props} />
     case 'turn_end':

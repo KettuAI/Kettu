@@ -965,6 +965,61 @@ describe('isThreadEntry', () => {
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'warning', title: 'x', model: 1 }),
     ).toBe(false)
+    expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'warning',
+        title: 'Codex configuration warning',
+        description: '`[features].multi_agent` is deprecated.',
+        configWarning: {
+          agent: 'codex',
+          impact: 'deprecated',
+          sources: [{ layer: 'user', path: '/Users/dev/.codex/config.toml', line: 4, column: 1 }],
+          details: 'Use [agents] instead.',
+          docsUrl: 'https://developers.openai.com/codex/config-reference',
+        },
+      }),
+    ).toBe(true)
+    expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'warning',
+        title: 'Codex configuration warning',
+        configWarning: { agent: 'other' },
+      }),
+    ).toBe(false)
+    expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'warning',
+        title: 'Codex configuration warning',
+        configWarning: { agent: 'codex', impact: 'unknown' },
+      }),
+    ).toBe(false)
+    expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'warning',
+        title: 'Codex configuration warning',
+        configWarning: {
+          agent: 'codex',
+          sources: [{ path: '/Users/dev/.codex/config.toml', line: 0 }],
+        },
+      }),
+    ).toBe(false)
+    expect(
+      isThreadEntry({
+        kind: 'notice',
+        id: 'n',
+        severity: 'warning',
+        title: 'x',
+        description: 123,
+      }),
+    ).toBe(false)
   })
 })
 

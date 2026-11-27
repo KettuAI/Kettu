@@ -41,6 +41,7 @@ import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { TurnDots } from '../turn-dots'
 import { writingId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { ConfigWarningEntry } from './config-warning'
 import { CutTurnEnd } from './cut-turn'
 import { FailedTurnActions, LimitContinueLine } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
@@ -289,7 +290,11 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
 
 const NOTICE_ICON = { info: InformationCircleIcon, warning: Alert02Icon, error: AlertCircleIcon }
 
-export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: EntryProps) {
+export const NoticeEntry = memo(function NoticeEntry({
+  sessionId,
+  entryId,
+  projectPath,
+}: EntryProps & { projectPath?: string }) {
   const entry = useEntry(sessionId, entryId, 'notice')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
@@ -307,6 +312,18 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
   if (entry.cause === 'out_of_credit') {
     return (
       <OutOfCreditEnd title={entry.title} description={entry.description} className={animation} />
+    )
+  }
+  if (entry.configWarning) {
+    return (
+      <ConfigWarningEntry
+        sessionId={sessionId}
+        projectPath={projectPath}
+        title={entry.title}
+        description={entry.description}
+        detail={entry.configWarning}
+        className={animation}
+      />
     )
   }
   const glyph = NOTICE_ICON[entry.severity]

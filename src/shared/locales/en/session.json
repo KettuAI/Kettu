@@ -1035,6 +1035,38 @@
       "details": "Details",
       "copy": "Copy the message"
     },
+    "configWarning": {
+      "title": "Codex configuration warning",
+      "impact": {
+        "deprecated": {
+          "badge": "Deprecated · still active",
+          "note": "This setting is deprecated, but still takes effect in this session. Update or remove it when convenient."
+        },
+        "ignored": {
+          "badge": "Removed · ignored",
+          "note": "This setting is unrecognized or removed and is ignored by Codex, so it does not affect this session."
+        },
+        "invalid": {
+          "badge": "Invalid · using defaults",
+          "note": "Codex could not load this configuration and fell back to default settings."
+        }
+      },
+      "layer": {
+        "user": "User config",
+        "project": "Project config",
+        "system": "System config",
+        "profile": "Profile config",
+        "managed": "Managed config",
+        "mdm": "Managed config"
+      },
+      "sourceLabel": "Config file",
+      "openConfig": "Open config file",
+      "viewInFiles": "View in Files",
+      "openShort": "Open",
+      "viewShort": "View",
+      "copyPath": "Copy path",
+      "docs": "Codex config docs"
+    },
     "width": {
       "label": "Resize the content width"
     },

@@ -85,6 +85,7 @@ import {
   type Settings,
 } from './config'
 import { estimateMcpServers, estimateSkills } from './context'
+import { configWarningDedupeKey, parseConfigWarningNotification } from './config-warning'
 import { childThreads, childTurnEffect, ThreadMapper } from './mapper'
 import {
   errorDetail,
@@ -96,6 +97,7 @@ import {
 } from './mcp-status'
 import type {
   CollaborationMode,
+  ConfigWarningNotification,
   GetAccountRateLimitsResponse,
   GetAccountResponse,
   InitializeResponse,
@@ -150,6 +152,8 @@ const PENDING_UPDATES = 2_000
 const PENDING_TTL_MS = 60_000
 const CLOSED_THREADS = 256
 const KNOWN_CHILDREN = 1_000
+const RECENT_CONFIG_WARNINGS = 64
+const STARTUP_CONFIG_WARNINGS = 16
 
 // Codex starts the turn of a goal set on an idle thread by itself, right after the goal.
 const GOAL_TURN_GRACE_MS = 1_000
@@ -477,6 +481,12 @@ export class CodexConnection implements AgentConnection {
   private modelsReadAt: number | null = null
   private modelsRead: Promise<Model[]> | null = null
   private initialized = false
+  /** The Codex home folder `initialize` reported, for recognizing user-level config files. */
+  private codexHome: string | null = null
+  /** Recent process-level `configWarning` notifications indexed by trimmed summary. */
+  private readonly recentConfigWarnings = new Map<string, ConfigWarningNotification>()
+  /** Startup parse/load `configWarning` notifications with file locations not repeated per thread. */
+  private readonly startupConfigWarnings = new Map<string, ConfigWarningNotification>()
   /** The skill folders last set on app-server, as JSON. */
   private skillRoots: string | null = null
   private account: AgentAccount | null = null
@@ -581,6 +591,10 @@ export class CodexConnection implements AgentConnection {
       : answer)
     this.rpc.notify('initialized')
     this.initialized = true
+    this.codexHome =
+      typeof response.codexHome === 'string' && response.codexHome.trim()
+        ? response.codexHome.trim()
+        : null
     // `<client>/<Codex version> (...)`, the only place app-server says its version.
     const version = /^[^/\s]+\/(\S+)/.exec(response.userAgent ?? '')?.[1] ?? null
     void this.refreshAccount()
@@ -756,12 +770,15 @@ export class CodexConnection implements AgentConnection {
           serviceTier: initialServiceTier(response.serviceTier, model),
         }
     const seen = this.threads.get(id)
+    const configContext = { codexHome: this.codexHome, cwd }
+    const mapper = seen?.mapper ?? new ThreadMapper(configContext)
+    mapper.setConfigContext(configContext)
     const record = threadRecord(id, settings, {
       cwd,
       hidden,
       known: true,
       prompted: false,
-      mapper: seen?.mapper ?? new ThreadMapper(),
+      mapper,
     })
     record.historyMode = response.thread.historyMode ?? seen?.historyMode
     record.usage = seen?.usage ?? null
@@ -793,6 +810,11 @@ export class CodexConnection implements AgentConnection {
     })
     const record = await this.record(response.thread.id, cwd, response, hidden)
     record.settings = { ...record.settings, mode: DEFAULT_MODE }
+    if (!hidden && this.startupConfigWarnings.size > 0) {
+      for (const warning of this.startupConfigWarnings.values()) {
+        this.deliver(record.id, { method: 'configWarning', params: warning })
+      }
+    }
     return { sessionId: record.id, config: await this.config(record) }
   }
 
@@ -1198,12 +1220,13 @@ export class CodexConnection implements AgentConnection {
 
   private child(id: string, parent: string): ThreadRecord {
     const from = this.threads.get(parent)
+    const cwd = from?.cwd ?? null
     const record = threadRecord(id, from?.settings ?? UNKNOWN_SETTINGS, {
-      cwd: from?.cwd ?? null,
+      cwd,
       hidden: false,
       known: false,
       prompted: true,
-      mapper: new ThreadMapper(),
+      mapper: new ThreadMapper({ codexHome: this.codexHome, cwd }),
     })
     this.threads.set(id, record)
     return record
@@ -1219,7 +1242,7 @@ export class CodexConnection implements AgentConnection {
       hidden: false,
       known: false,
       prompted: true,
-      mapper: new ThreadMapper(),
+      mapper: new ThreadMapper({ codexHome: this.codexHome, cwd: null }),
     })
     this.threads.set(id, created)
     return created
@@ -1273,6 +1296,28 @@ export class CodexConnection implements AgentConnection {
     if (target) target.apply({ patches: [], effects } satisfies MapperOutput)
   }
 
+  private recordConfigWarning(warning: ConfigWarningNotification): void {
+    const summaryKey = warning.summary.trim()
+    if (summaryKey) {
+      this.recentConfigWarnings.delete(summaryKey)
+      this.recentConfigWarnings.set(summaryKey, warning)
+      if (this.recentConfigWarnings.size > RECENT_CONFIG_WARNINGS) {
+        this.recentConfigWarnings.delete(this.recentConfigWarnings.keys().next().value!)
+      }
+    }
+    // Keep startup parse/load config warnings that carry a concrete path so newly opened sessions
+    // surface them even when Codex does not repeat them as per-thread `warning` notifications.
+    if (this.threads.size === 0 && warning.path && (warning.range || warning.details)) {
+      const key = configWarningDedupeKey(warning)
+      if (
+        !this.startupConfigWarnings.has(key) &&
+        this.startupConfigWarnings.size < STARTUP_CONFIG_WARNINGS
+      ) {
+        this.startupConfigWarnings.set(key, warning)
+      }
+    }
+  }
+
   private onNotification(method: string, params: unknown): void {
     const p = (params ?? {}) as Record<string, unknown>
     switch (method) {
@@ -1298,9 +1343,20 @@ export class CodexConnection implements AgentConnection {
         this.turnError(p)
         return
       case 'deprecationNotice':
-      case 'configWarning':
         this.hooks.log('warn', `Codex: ${String(p.summary ?? p.message ?? method)}`)
         return
+      case 'configWarning': {
+        const parsed = parseConfigWarningNotification(p)
+        const pathNote = parsed?.path ? ` (${parsed.path})` : ''
+        this.hooks.log('warn', `Codex: ${String(p.summary ?? p.message ?? method)}${pathNote}`)
+        if (!parsed) return
+        if (parsed.threadId) {
+          this.deliver(parsed.threadId, { method: 'configWarning', params: parsed })
+          return
+        }
+        this.recordConfigWarning(parsed)
+        return
+      }
     }
     const threadId = typeof p.threadId === 'string' ? p.threadId : null
     if (!threadId) {
@@ -1333,7 +1389,21 @@ export class CodexConnection implements AgentConnection {
         break
       }
     }
-    if (!QUIET.has(method)) this.deliver(threadId, { method, params })
+    if (!QUIET.has(method)) {
+      if (method === 'warning' && typeof p.message === 'string') {
+        const matched = this.recentConfigWarnings.get(p.message.trim())
+        if (matched) {
+          this.deliver(threadId, {
+            method: 'configWarning',
+            params: { ...matched, summary: p.message },
+          })
+        } else {
+          this.deliver(threadId, { method, params })
+        }
+      } else {
+        this.deliver(threadId, { method, params })
+      }
+    }
     if (method === 'item/started' || method === 'item/completed') {
       const item = p.item as ThreadItem
       if (isAsyncQuestion(item)) void this.askAsync(threadId, item)

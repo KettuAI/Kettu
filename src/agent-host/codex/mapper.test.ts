@@ -9,7 +9,7 @@ import { commandFacts, diffHunks, fenced, stripShellPrefix, ThreadMapper } from 
 
 function run(
   notifications: [string, unknown, number?][],
-  options: { replaying?: boolean; title?: string } = {},
+  options: { replaying?: boolean; title?: string; codexHome?: string; cwd?: string } = {},
 ) {
   let thread: ThreadState = threadFromSnapshot({
     session: {
@@ -37,7 +37,10 @@ function run(
     entries: [],
     seq: 0,
   })
-  const mapper = new ThreadMapper()
+  const mapper = new ThreadMapper({
+    ...(options.codexHome ? { codexHome: options.codexHome } : {}),
+    ...(options.cwd ? { cwd: options.cwd } : {}),
+  })
   const scope = newTurnScope()
   const effects: MapperEffect[] = []
   let n = 0
@@ -653,5 +656,119 @@ describe('other items', () => {
       },
     )
     expect(replayed.effects.filter((e) => e.kind === 'interruptibleWait')).toEqual([])
+  })
+
+  it('maps configWarning with path, range, details, and inferred config layer', () => {
+    const { entries } = run(
+      [
+        [
+          'configWarning',
+          {
+            summary: 'Invalid configuration; using defaults.',
+            details: '/Users/dev/.codex/config.toml:1:22: unclosed array, expected `]`',
+            path: '/Users/dev/.codex/config.toml',
+            range: { start: { line: 1, column: 22 }, end: { line: 1, column: 22 } },
+          },
+        ],
+        [
+          'configWarning',
+          {
+            summary: '`[features].multi_agent` is deprecated. It still controls the V1 fallback.',
+            details: null,
+            path: '/Users/dev/project/.codex/config.toml',
+            range: { start: { line: 4, column: 1 }, end: { line: 4, column: 18 } },
+          },
+        ],
+      ],
+      { codexHome: '/Users/dev/.codex', cwd: '/Users/dev/project' },
+    )
+
+    expect(entries).toHaveLength(2)
+    expect(entries[0]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description:
+        'Invalid configuration; using defaults.\n/Users/dev/.codex/config.toml:1:22: unclosed array, expected `]`',
+      configWarning: {
+        agent: 'codex',
+        impact: 'invalid',
+        sources: [{ layer: 'user', path: '/Users/dev/.codex/config.toml', line: 1, column: 22 }],
+        details: '/Users/dev/.codex/config.toml:1:22: unclosed array, expected `]`',
+        docsUrl: 'https://developers.openai.com/codex/config-reference',
+      },
+    })
+    expect(entries[1]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description: '`[features].multi_agent` is deprecated. It still controls the V1 fallback.',
+      configWarning: {
+        agent: 'codex',
+        impact: 'deprecated',
+        sources: [
+          { layer: 'project', path: '/Users/dev/project/.codex/config.toml', line: 4, column: 1 },
+        ],
+        docsUrl: 'https://developers.openai.com/codex/config-reference',
+      },
+    })
+  })
+
+  it('distinguishes deprecated vs ignored config warnings, extracts structured layer paths, and avoids guessing missing paths', () => {
+    const deprecatedMsg =
+      '`[features].multi_agent` is deprecated. It still controls the V1 fallback. ' +
+      '`[agents].enabled = false` disables subagent tools.'
+    const ignoredMsg =
+      'Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.\n' +
+      '  project (/Users/dev/repo/.codex/config.toml): `unknown_project_key` is ignored.\n' +
+      '  user (/Users/dev/.codex/config.toml): `disable_response_storage` is ignored.'
+
+    const { entries } = run([
+      ['warning', { threadId: 'thread-1', message: deprecatedMsg }],
+      ['warning', { threadId: 'thread-1', message: ignoredMsg }],
+      // Duplicate of the same warning in one thread should be ignored.
+      ['configWarning', { summary: deprecatedMsg, details: null }],
+      // Regular non-config runtime warning keeps plain notice rendering.
+      ['warning', { threadId: 'thread-1', message: 'Approaching rate limit.' }],
+    ])
+
+    expect(entries).toHaveLength(3)
+    expect(entries[0]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description: deprecatedMsg,
+      configWarning: {
+        agent: 'codex',
+        impact: 'deprecated',
+        docsUrl: 'https://developers.openai.com/codex/config-reference',
+      },
+    })
+    expect(
+      entries[0]?.kind === 'notice' ? entries[0].configWarning?.sources : undefined,
+    ).toBeUndefined()
+
+    expect(entries[1]).toMatchObject({
+      kind: 'notice',
+      severity: 'warning',
+      title: 'Codex configuration warning',
+      description: ignoredMsg,
+      configWarning: {
+        agent: 'codex',
+        impact: 'ignored',
+        sources: [
+          { layer: 'project', path: '/Users/dev/repo/.codex/config.toml' },
+          { layer: 'user', path: '/Users/dev/.codex/config.toml' },
+        ],
+        docsUrl: 'https://developers.openai.com/codex/config-reference',
+      },
+    })
+
+    expect(entries[2]).toEqual({
+      kind: 'notice',
+      id: 'e:3',
+      severity: 'warning',
+      title: 'Approaching rate limit.',
+    })
   })
 })
