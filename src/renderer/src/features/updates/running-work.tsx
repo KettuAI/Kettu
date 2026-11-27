@@ -5,6 +5,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { runningFor } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
+import { cn } from '@renderer/lib/utils'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { Glyph } from '@renderer/features/shell/glyph'
 
@@ -21,18 +22,20 @@ export function RunningWorkList({
   sessions,
   terminals,
   now,
+  className,
 }: {
   sessions: BusySession[]
   terminals: BusyTerminal[]
   now: number
+  className?: string
 }) {
   const { t } = useTranslation('updates')
   return (
-    <ul className="mt-3.5 flex min-w-0 flex-col text-ui">
+    <ul className={cn('mt-3.5 flex min-w-0 flex-col text-ui', className)}>
       {sessions.map((s) => (
         <li
           key={s.sessionId}
-          className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
+          className="flex h-8.5 shrink-0 items-center gap-2.5 border-b border-border-soft"
         >
           <AgentMark agent={s.agentId} size={16} />
           <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
@@ -53,11 +56,11 @@ export function RunningWorkList({
       {terminals.map((terminal) => (
         <li
           key={terminal.id}
-          className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
+          className="flex h-8.5 shrink-0 items-center gap-2.5 border-b border-border-soft"
         >
-          <Glyph icon={ComputerTerminal01Icon} className="text-icon" />
+          <Glyph icon={ComputerTerminal01Icon} className="shrink-0 text-icon" />
           <span className="min-w-0 flex-1 truncate font-mono text-xs">{terminal.title}</span>
-          <span className="text-small text-tertiary">{t('quit.terminal')}</span>
+          <span className="shrink-0 text-small text-tertiary">{t('quit.terminal')}</span>
         </li>
       ))}
     </ul>

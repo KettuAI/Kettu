@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { RunningWork } from '@shared/ipc'
@@ -15,6 +15,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { errorMessage } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { openUpdateDialog, useUpdatesStore } from '@renderer/stores/updates'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { RunningWorkList } from './running-work'
@@ -67,6 +68,150 @@ function warnOnFailure(call: Promise<void>, what: string): void {
   call.catch((error: unknown) => console.warn(`Could not ${what}: ${errorMessage(error)}`))
 }
 
+export interface UpdateDialogViewProps {
+  open: boolean
+  version: string | null
+  highlights: string[]
+  work: RunningWork | null
+  waiting: boolean
+  now: number
+  defaultButton: RefObject<HTMLButtonElement | null>
+  onOpenChange: (open: boolean) => void
+  onRestartNow: () => void
+  onRestartWhenIdle: () => void
+  onStopWaiting: () => void
+}
+
+/**
+ * Presentation for the update-ready dialog: pins the title and footer actions while letting long
+ * release highlights, running work lists, and notes scroll inside a viewport-bounded body.
+ */
+export function UpdateDialogView({
+  open,
+  version,
+  highlights,
+  work,
+  waiting,
+  now,
+  defaultButton,
+  onOpenChange,
+  onRestartNow,
+  onRestartWhenIdle,
+  onStopWaiting,
+}: UpdateDialogViewProps) {
+  const { t } = useTranslation('updates')
+  const sessions = work?.sessions ?? []
+  const terminals = work?.terminals ?? []
+  const busy = sessions.length + terminals.length > 0
+  const waitable = sessions.some(restartWaitsFor)
+  // Waiting covers turns and subagents; terminal commands and background tasks still stop.
+  const notWaited = terminals.length > 0 || sessions.some((s) => !restartWaitsFor(s))
+
+  const note = waiting
+    ? t('dialog.waiting')
+    : waitable
+      ? `${t('dialog.waitable')}${notWaited ? t('dialog.notWaited') : ''}`
+      : busy
+        ? t('dialog.stops')
+        : t('dialog.note')
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent
+        initialFocus={defaultButton}
+        className="flex flex-col gap-0 overflow-hidden px-0 pt-5 pb-4.5 data-[size=default]:sm:max-w-[460px]"
+      >
+        <AlertDialogHeader className="shrink-0 px-5.5">
+          <AlertDialogTitle>{t('dialog.title', { version: version ?? '' })}</AlertDialogTitle>
+        </AlertDialogHeader>
+        <div
+          data-slot="update-dialog-body"
+          className={cn(
+            highlights.length > 0 || busy ? 'mt-3.5' : 'mt-3',
+            'min-h-0 flex-1 overflow-y-auto px-5.5',
+          )}
+        >
+          {highlights.length > 0 && (
+            <ul className="list-disc pl-4.5 text-ui leading-relaxed text-foreground">
+              {highlights.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+          {busy && (
+            <>
+              <p
+                className={cn(
+                  highlights.length > 0 ? 'mt-4' : 'mt-0.5',
+                  'text-control text-secondary',
+                )}
+              >
+                {waiting || waitable ? t('dialog.working') : t('dialog.running')}
+              </p>
+              <RunningWorkList sessions={sessions} terminals={terminals} now={now} />
+            </>
+          )}
+          <AlertDialogDescription
+            className={cn(
+              (highlights.length > 0 || busy) && 'mt-3',
+              'flex gap-2 rounded-[10px] bg-(--shell-chip) px-3 py-2.5 text-hint leading-normal text-secondary',
+            )}
+          >
+            <Glyph
+              icon={InformationCircleIcon}
+              size={14}
+              className="mt-0.5 shrink-0 text-tertiary"
+            />
+            {note}
+          </AlertDialogDescription>
+        </div>
+        <AlertDialogFooter className="mt-4.5 shrink-0 items-center px-5.5">
+          {version !== null && (
+            <a
+              href={releaseUrl(version)}
+              target="_blank"
+              rel="noreferrer"
+              className="mr-auto text-control text-secondary underline underline-offset-2 hover:text-foreground focus-ring"
+            >
+              {t('dialog.releaseNotes')}
+            </a>
+          )}
+          {waiting ? (
+            <>
+              <Button variant="ghost" size="dialog" onClick={onStopWaiting}>
+                {t('dialog.stopWaiting')}
+              </Button>
+              <Button variant="outline" size="dialog" onClick={onRestartNow}>
+                {t('dialog.restart')}
+              </Button>
+              <AlertDialogCancel ref={defaultButton} variant="default">
+                {t('dialog.keepWaiting')}
+              </AlertDialogCancel>
+            </>
+          ) : waitable ? (
+            <>
+              <AlertDialogCancel variant="ghost">{t('dialog.later')}</AlertDialogCancel>
+              <Button variant="outline" size="dialog" onClick={onRestartNow}>
+                {t('dialog.restart')}
+              </Button>
+              <AlertDialogAction ref={defaultButton} onClick={onRestartWhenIdle}>
+                {t('dialog.restartWhenIdle')}
+              </AlertDialogAction>
+            </>
+          ) : (
+            <>
+              <AlertDialogCancel variant="outline">{t('dialog.later')}</AlertDialogCancel>
+              <AlertDialogAction ref={defaultButton} onClick={onRestartNow}>
+                {t('dialog.restart')}
+              </AlertDialogAction>
+            </>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 /**
  * A downloaded update, before the restart into it: its version, what it changed in the user's
  * language, the work a restart would stop, and Restart now or Later. With sessions working it
@@ -74,7 +219,7 @@ function warnOnFailure(call: Promise<void>, what: string): void {
  * the update card opens it; it never opens itself.
  */
 export function UpdateDialog() {
-  const { t, i18n } = useTranslation('updates')
+  const { i18n } = useTranslation('updates')
   const defaultButton = useRef<HTMLButtonElement>(null)
   const open = useUpdatesStore((s) => s.dialogOpen)
   const state = useUpdatesStore((s) => s.status?.state ?? null)
@@ -86,12 +231,7 @@ export function UpdateDialog() {
   const notes = ready?.notes
   const highlights =
     (i18n.language.startsWith('zh') ? notes?.['zh-CN'] : undefined) ?? notes?.en ?? []
-  const sessions = work?.sessions ?? []
-  const terminals = work?.terminals ?? []
-  const busy = sessions.length + terminals.length > 0
-  const waitable = sessions.some(restartWaitsFor)
-  // Waiting covers turns and subagents; terminal commands and background tasks still stop.
-  const notWaited = terminals.length > 0 || sessions.some((s) => !restartWaitsFor(s))
+  const busy = (work?.sessions.length ?? 0) + (work?.terminals.length ?? 0) > 0
 
   const restartNow = () => {
     openUpdateDialog(false)
@@ -108,87 +248,19 @@ export function UpdateDialog() {
     warnOnFailure(window.kettu.updates.cancelRestartWhenIdle(), 'stop waiting to restart')
   }
 
-  const note = waiting
-    ? t('dialog.waiting')
-    : waitable
-      ? `${t('dialog.waitable')}${notWaited ? t('dialog.notWaited') : ''}`
-      : busy
-        ? t('dialog.stops')
-        : t('dialog.note')
-
   return (
-    <AlertDialog open={shown} onOpenChange={(next) => openUpdateDialog(next)}>
-      <AlertDialogContent
-        initialFocus={defaultButton}
-        className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[460px]"
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t('dialog.title', { version: ready?.version ?? '' })}
-          </AlertDialogTitle>
-        </AlertDialogHeader>
-        {highlights.length > 0 && (
-          <ul className="mt-3.5 list-disc pl-4.5 text-ui leading-relaxed text-foreground">
-            {highlights.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        )}
-        {busy && (
-          <>
-            <p className="mt-4 text-control text-secondary">
-              {waiting || waitable ? t('dialog.working') : t('dialog.running')}
-            </p>
-            <RunningWorkList sessions={sessions} terminals={terminals} now={now} />
-          </>
-        )}
-        <AlertDialogDescription className="mt-3 flex gap-2 rounded-[10px] bg-(--shell-chip) px-3 py-2.5 text-hint leading-normal text-secondary">
-          <Glyph icon={InformationCircleIcon} size={14} className="mt-0.5 shrink-0 text-tertiary" />
-          {note}
-        </AlertDialogDescription>
-        <AlertDialogFooter className="mt-4.5 items-center">
-          {ready && (
-            <a
-              href={releaseUrl(ready.version)}
-              target="_blank"
-              rel="noreferrer"
-              className="mr-auto text-control text-secondary underline underline-offset-2 hover:text-foreground focus-ring"
-            >
-              {t('dialog.releaseNotes')}
-            </a>
-          )}
-          {waiting ? (
-            <>
-              <Button variant="ghost" size="dialog" onClick={stopWaiting}>
-                {t('dialog.stopWaiting')}
-              </Button>
-              <Button variant="outline" size="dialog" onClick={restartNow}>
-                {t('dialog.restart')}
-              </Button>
-              <AlertDialogCancel ref={defaultButton} variant="default">
-                {t('dialog.keepWaiting')}
-              </AlertDialogCancel>
-            </>
-          ) : waitable ? (
-            <>
-              <AlertDialogCancel variant="ghost">{t('dialog.later')}</AlertDialogCancel>
-              <Button variant="outline" size="dialog" onClick={restartNow}>
-                {t('dialog.restart')}
-              </Button>
-              <AlertDialogAction ref={defaultButton} onClick={restartWhenIdle}>
-                {t('dialog.restartWhenIdle')}
-              </AlertDialogAction>
-            </>
-          ) : (
-            <>
-              <AlertDialogCancel variant="outline">{t('dialog.later')}</AlertDialogCancel>
-              <AlertDialogAction ref={defaultButton} onClick={restartNow}>
-                {t('dialog.restart')}
-              </AlertDialogAction>
-            </>
-          )}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <UpdateDialogView
+      open={shown}
+      version={ready?.version ?? null}
+      highlights={highlights}
+      work={work}
+      waiting={waiting}
+      now={now}
+      defaultButton={defaultButton}
+      onOpenChange={(next) => openUpdateDialog(next)}
+      onRestartNow={restartNow}
+      onRestartWhenIdle={restartWhenIdle}
+      onStopWaiting={stopWaiting}
+    />
   )
 }
