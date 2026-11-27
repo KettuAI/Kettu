@@ -723,17 +723,19 @@ export interface AgentProcessesFile {
 /**
  * The user's answers about the MCP servers each folder declares itself, by the folder's path key:
  * by each server's content digest, whether it may start (`all`: every one, later ones too).
- * `named` holds answers an older version kept by server name, which the server of that name takes
- * over the next time it is seen.
+ * `earlier` holds answers an older version kept by a digest of the server's names alone, and
+ * `named` those kept by server name; the server they stand for takes them over the next time it is
+ * seen.
  */
 export interface ProjectMcpFile {
-  version: 2
+  version: 3
   folders: Record<string, ProjectMcpFolder>
 }
 
 export interface ProjectMcpFolder {
   all?: true
   servers: Record<string, boolean>
+  earlier?: Record<string, boolean>
   named?: { use: string[]; skip: string[] }
 }
 
@@ -755,7 +757,7 @@ export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
 export const RETURNED_VERSION = 1
-export const PROJECT_MCP_VERSION = 2
+export const PROJECT_MCP_VERSION = 3
 export const PROJECT_HOOKS_VERSION = 2
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
@@ -781,6 +783,20 @@ export const PROJECT_MCP_MIGRATIONS: Readonly<Record<number, Migration>> = {
         ...(value.all === true ? { all: true } : {}),
         servers: {},
         ...(use.length > 0 || skip.length > 0 ? { named: { use, skip } } : {}),
+      }
+    }
+    return { folders }
+  },
+  // Digests left out the values of a server's variables and headers, which can change what runs.
+  2: (data) => {
+    const folders: Record<string, unknown> = {}
+    for (const [folder, value] of Object.entries(isRecord(data.folders) ? data.folders : {})) {
+      if (!isRecord(value)) continue
+      const { servers, ...rest } = value
+      folders[folder] = {
+        ...rest,
+        servers: {},
+        ...(isRecord(servers) && Object.keys(servers).length > 0 ? { earlier: servers } : {}),
       }
     }
     return { folders }
@@ -1269,20 +1285,26 @@ export function parseProjectMcpFile(data: Record<string, unknown>): ProjectMcpFi
   const names = (list: unknown) => (Array.isArray(list) ? list.filter(isString) : [])
   for (const [folder, value] of Object.entries(data.folders)) {
     if (!isRecord(value)) continue
-    const servers: Record<string, boolean> = {}
-    for (const [digest, allowed] of Object.entries(isRecord(value.servers) ? value.servers : {})) {
-      if (typeof allowed === 'boolean') servers[digest] = allowed
+    const answers = (map: unknown) => {
+      const kept: Record<string, boolean> = {}
+      for (const [digest, allowed] of Object.entries(isRecord(map) ? map : {})) {
+        if (typeof allowed === 'boolean') kept[digest] = allowed
+      }
+      return kept
     }
+    const servers = answers(value.servers)
+    const earlier = answers(value.earlier)
     const named = isRecord(value.named)
       ? { use: names(value.named.use), skip: names(value.named.skip) }
       : null
     folders[folder] = {
       ...(value.all === true ? { all: true as const } : {}),
       servers,
+      ...(Object.keys(earlier).length > 0 ? { earlier } : {}),
       ...(named && (named.use.length > 0 || named.skip.length > 0) ? { named } : {}),
     }
   }
-  return { version: 2, folders }
+  return { version: 3, folders }
 }
 
 // An answer that does not parse is dropped, which only asks again.

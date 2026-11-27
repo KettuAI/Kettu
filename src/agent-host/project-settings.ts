@@ -1,7 +1,7 @@
 // What a folder declares for itself that an agent would run or change: the MCP servers of every
 // harness's project files, which Kettu runs once the user agrees, and, per harness, the rest of
 // its project settings (plugins, hooks, commands, environment, providers), which wait for the same
-// answer. Only names, commands and addresses are kept for the card; values never are.
+// answer. Only names, commands and addresses are shown on the card; values never are.
 
 import { createHash } from 'node:crypto'
 import { lstat, readdir, readFile } from 'node:fs/promises'
@@ -9,7 +9,7 @@ import path from 'node:path'
 import { parse as parseToml } from '@decimalturn/toml-patch'
 import { parse as parseJsonc } from 'jsonc-parser'
 import type { HarnessId } from '@shared/agents'
-import type { McpSpec } from '@shared/marketplace'
+import type { McpSpec, McpValue } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
 import type { DeclaredItem, DeclaredMcpServer } from '@shared/thread'
 import { readMcpConfig } from './marketplace/mcp-discovery'
@@ -23,6 +23,7 @@ const MAX_LISTED = 200
 /** A server a folder's own files declare, by its content digest, and how to run it. */
 export interface FolderServer extends DeclaredMcpServer {
   digest: string
+  namesDigest: string
   spec: McpSpec
   /** The values its files give, which Kettu passes to its process or requests and shows nowhere. */
   secrets: Record<string, string>
@@ -51,10 +52,30 @@ function sha(value: unknown): string {
 }
 
 /**
- * A server's content as its answer is kept: the command and arguments, or the URL, and the names of
- * its variables and headers, never their values. Any change to these asks again.
+ * A server's content as its answer is kept: the command and arguments, or the URL, and its
+ * variables and headers with their values, since one changed value such as `NODE_OPTIONS` can make
+ * the same command run another program. Only this hash is kept, never a value.
  */
-export function serverDigest(spec: McpSpec): string {
+export function serverDigest(
+  spec: McpSpec,
+  secrets: Readonly<Record<string, string>> = {},
+): string {
+  const entries = (values: readonly McpValue[]) =>
+    values
+      .map((v): [string, string | null] => [
+        v.name,
+        'value' in v ? v.value : Object.hasOwn(secrets, v.name) ? secrets[v.name]! : null,
+      ])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return sha(
+    spec.type === 'stdio'
+      ? ['stdio', spec.command, spec.args, entries(spec.env)]
+      : ['http', spec.transport ?? 'streamable-http', spec.url, entries(spec.headers)],
+  )
+}
+
+/** The digest an earlier version kept answers by, of the names alone, to take those answers over. */
+export function namesDigest(spec: McpSpec): string {
   const names = (values: readonly { name: string }[]) => values.map((v) => v.name).sort()
   return sha(
     spec.type === 'stdio'
@@ -82,7 +103,7 @@ export async function folderServers(cwd: string, platform: Platform): Promise<Fo
   const byDigest = new Map<string, FolderServer>()
   const names = new Set<string>()
   const add = (configured: ConfiguredMcp, file: string): void => {
-    const digest = serverDigest(configured.spec)
+    const digest = serverDigest(configured.spec, configured.secrets)
     const relative = p.relative(root, file) || p.basename(file)
     const known = byDigest.get(digest)
     if (known) {
@@ -93,6 +114,7 @@ export async function folderServers(cwd: string, platform: Platform): Promise<Fo
       name: configured.name,
       target: targetOf(configured.spec),
       digest,
+      namesDigest: namesDigest(configured.spec),
       spec: configured.spec,
       secrets: { ...configured.secrets },
       files: [relative],
