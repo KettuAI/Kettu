@@ -24,7 +24,7 @@ import type { CardResets } from '@renderer/lib/plan-readings'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
-import { hasModelGroups, type PlanCard } from './model'
+import { hasModelGroups, joinPlanTier, type PlanCard } from './model'
 
 /**
  * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
@@ -53,6 +53,8 @@ export function PlanLimitCard({
   const [detailsOpen, setDetailsOpen] = useState(false)
   // With every host shown, which of them the account is on.
   const hosts = useWindowHost().kind === 'all' ? card.hostIds.map(hostName).join(' · ') : null
+  const plan = card.account?.label ? joinPlanTier(card.account.label, card.account.tier) : null
+  const hasFooter = card.balances.length > 0 || Boolean(card.resets)
   return (
     <HoverCard open={detailsOpen && !dragging} onOpenChange={setDetailsOpen}>
       <HoverCardTrigger
@@ -76,18 +78,29 @@ export function PlanLimitCard({
       >
         <CardFace card={card} />
       </HoverCardTrigger>
-      <HoverCardContent side="right" align="start" sideOffset={6} className="w-76">
-        <div className="mb-2.5 flex min-w-0 items-center gap-1.5">
-          <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
-          <span className="min-w-0 truncate text-small font-semibold text-primary">
-            {card.agentName}
-          </span>
-          {hosts && (
-            <span className="ml-auto min-w-0 shrink truncate text-hint text-tertiary">{hosts}</span>
+      <HoverCardContent side="right" align="start" sideOffset={6} className="w-77 p-3">
+        <div className="mb-2.5 flex flex-col gap-0.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
+              <span className="min-w-0 truncate text-small font-semibold text-primary">
+                {card.agentName}
+              </span>
+            </span>
+            {plan ? (
+              <span className="kettu-ctx__tier">{plan}</span>
+            ) : (
+              hosts && (
+                <span className="min-w-0 shrink truncate text-hint text-tertiary">{hosts}</span>
+              )
+            )}
+          </div>
+          {plan && hosts && (
+            <span className="min-w-0 truncate text-hint text-tertiary">{hosts}</span>
           )}
         </div>
-        <PlanPart limits={card.limits} account={card.account} />
-        {card.resets && <ResetsPart resets={card.resets} />}
+        <PlanPart limits={card.limits} account={card.account} showHeader={false} />
+        {hasFooter && <HoverFooter balances={card.balances} resets={card.resets} />}
       </HoverCardContent>
     </HoverCard>
   )
@@ -228,25 +241,60 @@ function CardFace({ card }: { card: PlanCard }) {
   )
 }
 
-/** The reset credits an account holds, under its windows: how many, then when each runs out. */
-function ResetsPart({ resets }: { resets: CardResets }) {
+/** 侧边栏悬浮卡底部紧凑脚注：展示积分/额度余额与重置次数，对齐 L1 精修排版。 */
+function HoverFooter({
+  balances,
+  resets,
+}: {
+  balances: PlanCard['balances']
+  resets: CardResets | null
+}) {
   const { t } = useTranslation('usage')
   return (
-    <div className="mt-3 flex flex-col gap-1.25 text-hint">
-      <div className="text-small font-medium text-tertiary">
-        {t('resets.count', { count: resets.count })}
-      </div>
-      {resets.each ? (
-        resets.each.map((credit) => (
-          <div key={credit.id} className="truncate text-secondary tabular">
-            {credit.until === null
-              ? t('resets.never')
-              : t('resets.until', { time: monthDayTime(credit.until) })}
+    <div className="kettu-plan-hover__foot">
+      {balances.map((balance) => (
+        <div key={`${balance.label}/${balance.currency}`} className="kettu-plan-hover__foot-row">
+          <span className="min-w-0 truncate">{balanceLabel(balance.label)}</span>
+          <span className="kettu-plan-hover__foot-val tabular">
+            {planBalance(
+              balance.amount,
+              balance.currency,
+              balance.currency === 'credits'
+                ? t('limits.units.credits')
+                : balance.currency === 'requests'
+                  ? t('limits.units.premiumRequests')
+                  : balance.currency,
+            )}
+          </span>
+        </div>
+      ))}
+      {resets &&
+        (resets.each && resets.each.length === 1 ? (
+          <div className="kettu-plan-hover__foot-row">
+            <span className="min-w-0 truncate">{t('resets.count', { count: resets.count })}</span>
+            <span className="kettu-plan-hover__foot-val tabular">
+              {resets.each[0]!.until === null
+                ? t('resets.never')
+                : t('resets.until', { time: monthDayTime(resets.each[0]!.until) })}
+            </span>
           </div>
-        ))
-      ) : (
-        <div className="text-secondary">{t('resets.unknown')}</div>
-      )}
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            <div className="kettu-plan-hover__foot-row">
+              <span className="min-w-0 truncate">{t('resets.count', { count: resets.count })}</span>
+              {!resets.each && (
+                <span className="kettu-plan-hover__foot-val">{t('resets.unknown')}</span>
+              )}
+            </div>
+            {resets.each?.map((credit) => (
+              <div key={credit.id} className="truncate text-right text-secondary tabular">
+                {credit.until === null
+                  ? t('resets.never')
+                  : t('resets.until', { time: monthDayTime(credit.until) })}
+              </div>
+            ))}
+          </div>
+        ))}
     </div>
   )
 }
