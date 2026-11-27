@@ -111,6 +111,12 @@
         "gone": "这张定时任务卡片已不再等待回答",
         "answered": "这张定时任务卡片已经回答过了"
       },
+      "mcp": {
+        "gone": "这张 MCP 服务器卡片已不再等待回答",
+        "answered": "这张 MCP 服务器卡片已经回答过了",
+        "noChange": "找不到这次对 MCP 服务器的更改",
+        "noUndo": "这次更改不能撤销"
+      },
       "step": {
         "gone": "这一步已不再等待回答",
         "answered": "这一步已经回答过了"
@@ -251,7 +257,10 @@
     "routineCreate": "想新建定时任务「{{name}}」",
     "routineUpdate": "想修改定时任务「{{name}}」",
     "routineDelete": "想删除定时任务「{{name}}」",
-    "routineRun": "想立即运行定时任务「{{name}}」"
+    "routineRun": "想立即运行定时任务「{{name}}」",
+    "mcpAdd": "想添加 MCP 服务器「{{name}}」",
+    "mcpOn": "想开启 MCP 服务器「{{name}}」",
+    "mcpOff": "想关闭 MCP 服务器「{{name}}」"
   },
   "routines": {
     "busy": "此定时任务已经有一个运行正在工作",

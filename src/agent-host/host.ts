@@ -188,6 +188,7 @@ import { PublishDrafts } from './marketplace/publish-drafts'
 import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import { ROUTINE_WAIT_MS, RoutineTools } from './routines/tools'
+import { MCP_WAIT_MS, McpStaleUndo, McpTools } from './marketplace/mcp-tools'
 import {
   SETTINGS_WAIT_MS,
   SettingsTools,
@@ -619,6 +620,8 @@ export class AgentHost {
   private readonly mcpDiscovery: McpDiscoveryService
   private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
   private readonly mcpCheckStates = new Map<string, McpCheck>()
+  /** The checks going now, by server id, which a second ask joins. */
+  private readonly mcpChecking = new Map<string, Promise<McpCheck>>()
   /** When each server was last checked after a failed call. */
   private readonly failureChecks = new Map<string, number>()
   private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
@@ -669,6 +672,8 @@ export class AgentHost {
   /** The settings tools of Kettu's MCP service. */
   private readonly settingsTools: SettingsTools
   private readonly routineTools: RoutineTools
+  /** The MCP library tools of Kettu's MCP service. */
+  private readonly mcpTools: McpTools
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -925,6 +930,44 @@ export class AgentHost {
       ask: (sessionId, ask) => this.sessions.routineAsked(sessionId, ask, ROUTINE_WAIT_MS),
       settle: (sessionId, entryId, outcome) =>
         this.sessions.routineSettled(sessionId, entryId, outcome),
+    })
+    this.mcpTools = new McpTools({
+      servers: () => this.settings.marketplace.mcp,
+      insight: (serverId) => this.mcpInsight(serverId)[0] ?? null,
+      lastCheck: (serverId) => this.mcpCheckStates.get(serverId) ?? null,
+      check: (server, project) =>
+        this.checkMcpServer(server, this.marketKeys.get(server.id) ?? new Map(), project),
+      failedCalls: (serverId, limit) => this.mcpCalls.list({ serverId, failed: true, limit }),
+      logs: (serverId) => this.mcpLogs().filter((log) => log.serverId === serverId),
+      mask: (serverId) => this.mcpMask(serverId),
+      keysSet: (serverId) =>
+        keyState(this.settings.marketplace.mcp, this.marketKeys)[serverId] ?? [],
+      agents: () => this.agents.statuses(),
+      project: async (value) => {
+        const found = this.projects.find(value)
+        if (found) return found.path
+        const canonical = await this.projects.resolveDirectory(value).catch(() => null)
+        return canonical === null ? null : (this.projects.find(canonical)?.path ?? null)
+      },
+      sessionFolder: (sessionId) =>
+        this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId),
+      catalogServer: async (id) => {
+        const catalog = await this.marketCatalog.catalog(false, true)
+        const listed = catalog.sections.flatMap((section) => section.items)
+        const found = listed.find((item) => item.id === id)
+        if (found) return found
+        const search = await this.marketCatalog.search(id.split('/').pop() ?? id)
+        return search.items.find((item) => item.id === id) ?? null
+      },
+      put: async (servers) => {
+        await this.settingsCall({
+          kind: 'change',
+          patch: { marketplace: { mcpEdit: { put: servers } } },
+        })
+      },
+      ask: (sessionId, ask) => this.sessions.mcpAsked(sessionId, ask, MCP_WAIT_MS),
+      settle: (sessionId, entryId, outcome, restore) =>
+        this.sessions.mcpSettled(sessionId, entryId, outcome, restore),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -1319,6 +1362,7 @@ export class AgentHost {
       market: this.marketTools,
       settings: this.settingsTools,
       routines: this.routineTools,
+      mcp: this.mcpTools,
       plugins: this.pluginTools,
       skills: {
         of: (sessionId) => {
@@ -1615,6 +1659,7 @@ export class AgentHost {
           this.marketTools.turnEnded(sessionId)
           this.settingsTools.turnEnded(sessionId)
           this.routineTools.turnEnded(sessionId)
+          this.mcpTools.turnEnded(sessionId)
           if (this.deviceTurns.delete(sessionId)) {
             this.options.send({ type: 'host:device-turn-ended', sessionId })
           }
@@ -2740,6 +2785,21 @@ export class AgentHost {
     this.sessions.settingsSettled(sessionId, entryId, { kind: 'changed', undone: true })
   }
 
+  /** Undo on the line of an agent's MCP switches: they go back, unless one changed again since. */
+  private async undoMcp(sessionId: string, entryId: string): Promise<void> {
+    const restore = this.sessions.mcpChange(sessionId, entryId)
+    try {
+      await this.mcpTools.undo(restore)
+    } catch (error) {
+      if (error instanceof McpStaleUndo) {
+        this.sessions.mcpSettled(sessionId, entryId, { kind: 'done', stale: true })
+        throw new HostError('conflict', error.message)
+      }
+      throw new HostError('unavailable', (error as Error).message)
+    }
+    this.sessions.mcpSettled(sessionId, entryId, { kind: 'done', undone: true })
+  }
+
   private previewMcp(text: string, portId: string): McpDiscoveryRow[] {
     this.mcpDrafts.delete(portId)
     const drafts = new Map(parseMcpPaste(text).map((entry) => [mcpId(), entry]))
@@ -2786,7 +2846,7 @@ export class AgentHost {
     })
     if (error) throw new HostError('unavailable', error)
     for (const { server, secrets, project } of entries) {
-      this.checkMcpServer(server, new Map(Object.entries(secrets)), project)
+      void this.checkMcpServer(server, new Map(Object.entries(secrets)), project)
     }
     this.hub.broadcast({ type: 'market.discoveryChanged' })
     return entries.map(({ server }) => server.id)
@@ -2811,18 +2871,25 @@ export class AgentHost {
     const folder = sessionId
       ? (this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId))
       : null
-    this.checkMcpServer(server, this.marketKeys.get(serverId) ?? new Map(), folder ?? undefined)
+    void this.checkMcpServer(
+      server,
+      this.marketKeys.get(serverId) ?? new Map(),
+      folder ?? undefined,
+    )
   }
 
+  /** Checks a server, or joins the check already going, and gives what it found. */
   private checkMcpServer(
     server: MarketServer,
     keys: ReadonlyMap<string, string>,
     project?: string,
-  ): void {
-    if (this.mcpCheckStates.get(server.id)?.state === 'checking') return
-    const changed = (check: McpCheck): void => {
+  ): Promise<McpCheck> {
+    const going = this.mcpChecking.get(server.id)
+    if (going) return going
+    const changed = (check: McpCheck): McpCheck => {
       this.mcpCheckStates.set(server.id, check)
       this.hub.broadcast({ type: 'market.mcpCheckChanged', serverId: server.id, check })
+      return check
     }
     changed({ state: 'checking' })
     const env = this.env.agentEnv()
@@ -2830,7 +2897,7 @@ export class AgentHost {
       server.spec.type === 'http' && server.spec.oauth
         ? this.marketConnections.token(server.id)
         : null
-    void Promise.all([token, import('./marketplace/mcp-check')])
+    const checked = Promise.all([token, import('./marketplace/mcp-check')])
       .then(([bearer, { checkMcp }]) =>
         checkMcp(server, keys, {
           env,
@@ -2842,6 +2909,9 @@ export class AgentHost {
         }),
       )
       .then(changed, () => changed({ state: 'error', reason: 'cannot-connect' }))
+      .finally(() => this.mcpChecking.delete(server.id))
+    this.mcpChecking.set(server.id, checked)
+    return checked
   }
 
   /** `market-result`: main's or the daemon's answer to a Marketplace call. */
@@ -4163,7 +4233,7 @@ export class AgentHost {
       'market.checkMcp': ({ serverId }) => {
         const server = this.settings.marketplace.mcp.find(({ id }) => id === serverId)
         if (!server) throw new HostError('not_found', 'This MCP server is no longer installed.')
-        this.checkMcpServer(server, this.marketKeys.get(server.id) ?? new Map())
+        void this.checkMcpServer(server, this.marketKeys.get(server.id) ?? new Map())
       },
       'market.mcpChecks': () => Object.fromEntries(this.mcpCheckStates),
       'market.connect': ({ serverId }) => this.marketConnections.connect(serverId),
@@ -4180,6 +4250,9 @@ export class AgentHost {
       'market.mcpInstances': ({ serverId }) => this.mcpRouter.instancesOf(serverId),
       'market.mcpCalls': async (query) => ({ calls: await this.mcpCalls.list(query) }),
       'market.mcpLogs': ({ serverId }) => this.mcpLogs().filter((log) => log.serverId === serverId),
+      'market.answerMcpChange': ({ sessionId, entryId, decision }, { device }) =>
+        this.sessions.answerMcp(sessionId, entryId, decision, fromDevice(device)),
+      'market.undoMcpChange': ({ sessionId, entryId }) => this.undoMcp(sessionId, entryId),
       'market.mcpStop': async ({ serverId, instance }) => {
         if (!(await this.mcpRouter.stopInstance(serverId, instance))) {
           throw new HostError('not_found', 'The server has no such instance')

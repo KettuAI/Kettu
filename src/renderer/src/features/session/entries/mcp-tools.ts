@@ -129,6 +129,11 @@ const TARGETS = {
   update_routine: ['name', 'routine'],
   delete_routine: ['routine'],
   run_routine: ['routine'],
+  list_mcp_servers: [],
+  read_mcp_server: ['server'],
+  check_mcp_server: ['server'],
+  add_mcp_server: ['name', 'catalog'],
+  switch_mcp_servers: [],
 } satisfies Record<KettuTool, readonly Target[]>
 
 const known = (tool: string): tool is KettuTool => Object.hasOwn(TARGETS, tool)

@@ -48,6 +48,7 @@ const GROUPS: { id: McpToolGroup; icon: IconSvgElement }[] = [
   { id: 'workflows', icon: Flowchart01Icon },
   { id: 'settings', icon: Settings02Icon },
   { id: 'routines', icon: TimeScheduleIcon },
+  { id: 'mcp', icon: PlugSocketIcon },
   { id: 'plugins', icon: PlugSocketIcon },
 ]
 

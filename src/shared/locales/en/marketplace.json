@@ -1176,6 +1176,7 @@
       "workflows": "Workflows",
       "settings": "Settings",
       "routines": "Routines",
+      "mcp": "MCP servers",
       "plugins": "Plugins"
     },
     "new": "New",

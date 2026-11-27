@@ -1752,6 +1752,21 @@ export function createValidators(platform: Platform): Validators {
         decision: o.decision,
       }
     },
+    'market.answerMcpChange': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'confirm' && o.decision !== 'decline') {
+        throw invalidParams('decision must be confirm or decline')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
+    'market.undoMcpChange': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ID_CHARS) }
+    },
     'settings.undoChange': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), entryId: string(o, 'entryId', ID_CHARS) }

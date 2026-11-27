@@ -111,6 +111,12 @@
         "gone": "This Routine card is no longer waiting for an answer",
         "answered": "This Routine card was already answered"
       },
+      "mcp": {
+        "gone": "This MCP server card is no longer waiting for an answer",
+        "answered": "This MCP server card was already answered",
+        "noChange": "This MCP server change is no longer on record",
+        "noUndo": "This change cannot be undone"
+      },
       "step": {
         "gone": "This step is no longer waiting for an answer",
         "answered": "This step was already answered"
@@ -254,7 +260,10 @@
     "routineCreate": "Wants to create the Routine {{name}}",
     "routineUpdate": "Wants to change the Routine {{name}}",
     "routineDelete": "Wants to delete the Routine {{name}}",
-    "routineRun": "Wants to run the Routine {{name}} now"
+    "routineRun": "Wants to run the Routine {{name}} now",
+    "mcpAdd": "Wants to add the MCP server {{name}}",
+    "mcpOn": "Wants to turn on the MCP server {{name}}",
+    "mcpOff": "Wants to turn off the MCP server {{name}}"
   },
   "routines": {
     "busy": "This routine already has a run working",

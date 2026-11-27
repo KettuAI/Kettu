@@ -775,6 +775,7 @@ export type McpToolGroup =
   | 'workflows'
   | 'settings'
   | 'routines'
+  | 'mcp'
   | 'plugins'
 
 export interface McpToolSummary {
@@ -1307,6 +1308,14 @@ export interface HostContract {
   'market.mcpLogs': { params: { serverId: string }; result: McpServerLog[] }
   // Stops one instance; the next request of its sessions starts it again.
   'market.mcpStop': { params: { serverId: string; instance: string }; result: void }
+  // Any window's or device's answer to a card an agent's MCP tool shows: do it or not; the first
+  // counts.
+  'market.answerMcpChange': {
+    params: { sessionId: string; entryId: string; decision: 'confirm' | 'decline' }
+    result: void
+  }
+  // Undo on the line of an agent's switches: puts back what they did, unless one changed since.
+  'market.undoMcpChange': { params: { sessionId: string; entryId: string }; result: void }
   // The plugins each Claude Code and Codex agent has of its own, which Kettu only lists.
   'market.ownPlugins': { params: { refresh?: boolean }; result: AgentOwnPlugins }
   // The skills catalog and each agent's own skills.
@@ -2416,6 +2425,8 @@ export const HOST_METHODS = [
   'market.mcpCalls',
   'market.mcpLogs',
   'market.mcpStop',
+  'market.answerMcpChange',
+  'market.undoMcpChange',
   'market.ownPlugins',
   'market.skills',
   'market.skillRepository',
