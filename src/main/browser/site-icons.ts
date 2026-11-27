@@ -100,21 +100,37 @@ export function pickFavicon(favicons: readonly unknown[], pageUrl: string): stri
   return null
 }
 
+function serviceIconUrl(domain: string): string {
+  const query = new URLSearchParams({ domain, sz: String(SERVICE_ICON_SIZE) })
+  return `https://www.google.com/s2/favicons?${query}`
+}
+
 /**
- * The address of Google's favicon service for a link's site: only its host, and only a name under
- * a public suffix, so an address, an intranet name or a link's path never reaches Google. Null
- * for anything else.
+ * The addresses of Google's favicon service to try for a link's site, in order: its full host,
+ * then its registrable domain when the host is a subdomain of it. Only names under a public
+ * suffix, so an address, an intranet name or a link's path never reaches Google; empty for
+ * anything else.
  */
-export function linkIconUrl(url: string): string | null {
+export function linkIconUrls(url: string): string[] {
   const site = URL.parse(url)
-  if (site === null) return null
-  if (site.protocol !== 'http:' && site.protocol !== 'https:') return null
-  if (site.username !== '' || site.password !== '') return null
+  if (site === null) return []
+  if (site.protocol !== 'http:' && site.protocol !== 'https:') return []
+  if (site.username !== '' || site.password !== '') return []
   const host = site.hostname.replace(/\.$/, '')
   const name = parse(host)
-  if (name.isIp !== false || name.domain === null || name.isIcann !== true) return null
-  const query = new URLSearchParams({ domain: host, sz: String(SERVICE_ICON_SIZE) })
-  return `https://www.google.com/s2/favicons?${query}`
+  if (name.isIp !== false || name.domain === null || name.isIcann !== true) return []
+  const urls = [serviceIconUrl(host)]
+  if (name.domain !== host) urls.push(serviceIconUrl(name.domain))
+  return urls
+}
+
+/**
+ * The primary address of Google's favicon service for a link's site: only its host, and only a
+ * name under a public suffix, so an address, an intranet name or a link's path never reaches
+ * Google. Null for anything else.
+ */
+export function linkIconUrl(url: string): string | null {
+  return linkIconUrls(url)[0] ?? null
 }
 
 /** A `data:` icon as it is kept: an image type, base64, and small enough; null otherwise. */
@@ -172,11 +188,17 @@ export class SiteIcons {
   private sites = new Map<string, Site>()
   /** Icons loaded for a link's site that the site was never opened for, by origin. */
   private readonly linked = new Map<string, string>()
+  /** Icons loaded from Google's favicon service, by service URL, so subdomains share a fallback. */
+  private readonly fetched = new Map<string, string>()
   private readonly loading = new Map<string, Loading>()
   /** Sites a link's icon is being loaded for. */
   private readonly asking = new Set<string>()
-  /** Sites whose last load for a link failed: when, and how many in a row. */
+  /** In-flight favicon-service loads, by service URL, so concurrent fallbacks share one request. */
+  private readonly fetching = new Map<string, Promise<string | null>>()
+  /** Favicon-service URLs whose last load failed: when, and how many in a row. */
   private readonly failed = new Map<string, { at: number; count: number }>()
+  /** Incremented on `clear()` so in-flight link loads do not write back after a clear. */
+  private generation = 0
   private fileRead = false
   /** What was asked before the file was read, done in order once it is. */
   private readonly queued: (() => void)[] = []
@@ -229,16 +251,17 @@ export class SiteIcons {
   }
 
   /**
-   * A link in a reply has no icon for its site: loads it from Google's favicon service, and sends
+   * A link in a reply has no icon for its site: loads it from Google's favicon service, trying
+   * the full host first and its registrable domain next when the full host has no icon, and sends
    * it again to a window that asks later, without counting the site as opened, which the
-   * first-visit confirmation reads. A loaded icon is never loaded again; a failed load, such as
-   * the service answering a site it has no icon for with a 404, leaves the link's globe and is
-   * tried again once `retryDelay` has passed. Only the hosts `linkIconUrl` allows.
+   * first-visit confirmation reads. A loaded icon is never loaded again; a failed source, such as
+   * the service answering a host it has no icon for with a 404, is tried again once `retryDelay`
+   * has passed. Only the hosts `linkIconUrls` allows.
    */
   async link(url: string): Promise<void> {
-    const source = linkIconUrl(url)
+    const sources = linkIconUrls(url)
     const origin = originOf(url)
-    if (source === null || origin === null || this.sites.get(origin)?.icon) return
+    if (sources.length === 0 || origin === null || this.sites.get(origin)?.icon) return
     const linked = this.linked.get(origin)
     // A window that was reloaded or opened since has lost the icon sent before, so it is sent again.
     if (linked !== undefined) {
@@ -246,16 +269,18 @@ export class SiteIcons {
       return
     }
     if (this.asking.has(origin)) return
-    const failure = this.failed.get(origin)
-    if (failure && Date.now() - failure.at < retryDelay(failure.count)) return
+    const gen = this.generation
     this.asking.add(origin)
-    const icon = await this.fetchIcon(source, new AbortController().signal)
-    this.asking.delete(origin)
-    if (icon === null) {
-      this.failed.set(origin, { at: Date.now(), count: (failure?.count ?? 0) + 1 })
-      return
+    let icon: string | null = null
+    try {
+      for (const source of sources) {
+        icon = await this.fetchLinkSource(source, gen)
+        if (icon !== null || this.generation !== gen) break
+      }
+    } finally {
+      if (this.generation === gen) this.asking.delete(origin)
     }
-    this.failed.delete(origin)
+    if (icon === null || this.generation !== gen) return
     this.linked.set(origin, icon)
     this.deps.changed({ kind: 'link', origin, icon })
   }
@@ -263,9 +288,13 @@ export class SiteIcons {
   /** Forgets every site, with the browser's other data, and writes that at once. */
   async clear(): Promise<void> {
     this.whenRead(() => {
+      this.generation++
       for (const loading of this.loading.values()) stop(loading)
       this.loading.clear()
+      this.asking.clear()
+      this.fetching.clear()
       this.linked.clear()
+      this.fetched.clear()
       this.failed.clear()
       this.sites.clear()
       this.deps.changed({ kind: 'cleared' })
@@ -369,6 +398,36 @@ export class SiteIcons {
     site.icon = icon
     this.deps.changed({ kind: 'set', origin, icon })
     this.save()
+  }
+
+  /**
+   * Loads one favicon-service URL for `link`, reusing a fetched icon, deduplicating concurrent
+   * requests for the same source and respecting per-source failure backoff.
+   */
+  private async fetchLinkSource(source: string, gen: number): Promise<string | null> {
+    const cached = this.fetched.get(source)
+    if (cached !== undefined) return cached
+    const pending = this.fetching.get(source)
+    if (pending !== undefined) return pending
+    const failure = this.failed.get(source)
+    if (failure && Date.now() - failure.at < retryDelay(failure.count)) return null
+    const load = (async () => {
+      const icon = await this.fetchIcon(source, new AbortController().signal)
+      if (this.generation !== gen) return null
+      if (icon === null) {
+        this.failed.set(source, { at: Date.now(), count: (failure?.count ?? 0) + 1 })
+        return null
+      }
+      this.failed.delete(source)
+      this.fetched.set(source, icon)
+      return icon
+    })()
+    this.fetching.set(source, load)
+    try {
+      return await load
+    } finally {
+      if (this.fetching.get(source) === load) this.fetching.delete(source)
+    }
   }
 
   private async fetchIcon(url: string, signal: AbortSignal): Promise<string | null> {
