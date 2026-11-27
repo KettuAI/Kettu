@@ -32,7 +32,10 @@ const search = {
 describe('comparing tool definitions', () => {
   it('reads keys in another order as the same definition', () => {
     const reordered = {
-      inputSchema: { properties: { limit: { type: 'number' }, q: { type: 'string' } }, type: 'object' },
+      inputSchema: {
+        properties: { limit: { type: 'number' }, q: { type: 'string' } },
+        type: 'object',
+      },
       description: 'Searches the docs.',
       name: 'search',
     }
@@ -140,9 +143,9 @@ describe('what the user accepted', () => {
     tools.seen('manual:b', [search], 'list')
     tools.keep(new Set(['manual:b']))
     await tools.flush()
-    const kept = JSON.parse(
-      await readFile(path.join(dir, 'state', 'mcp-tools.json'), 'utf8'),
-    ) as { servers: Record<string, unknown> }
+    const kept = JSON.parse(await readFile(path.join(dir, 'state', 'mcp-tools.json'), 'utf8')) as {
+      servers: Record<string, unknown>
+    }
     expect(Object.keys(kept.servers)).toEqual(['manual:b'])
     tools.seen('manual:a', [{ ...search, description: 'Other.' }], 'list')
     expect(tools.changes('manual:a', 'hold')).toBeNull()

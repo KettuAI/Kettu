@@ -25,11 +25,6 @@ import { monthDay } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 
-export function useMcpToolChanges(serverId: string): McpToolChanges | null {
-  const { useMarketplaceStore } = useHostScope()
-  return useMarketplaceStore((s) => s.mcpToolChanges[serverId] ?? null)
-}
-
 /** After a server's name: how many of its tools changed, and whether they are held back. */
 export function McpToolChangesTag({ changes }: { changes: McpToolChanges }) {
   const { t } = useTranslation('marketplace')

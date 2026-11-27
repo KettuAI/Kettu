@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { MarketConnection, MarketServer, McpSpec } from '@shared/marketplace'
-import type { McpServerInsight } from '@shared/mcp-insight'
+import type { McpServerInsight, McpToolChanges } from '@shared/mcp-insight'
 import type { AgentId } from '@shared/thread'
 import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
@@ -184,4 +184,10 @@ export function useMcpInsight(server: MarketServer): McpServerInsight | null {
     }
   }, [request, server.id, changed])
   return insight
+}
+
+/** How a server's tools differ from those the user accepted, or null when they do not. */
+export function useMcpToolChanges(serverId: string): McpToolChanges | null {
+  const { useMarketplaceStore } = useHostScope()
+  return useMarketplaceStore((s) => s.mcpToolChanges[serverId] ?? null)
 }

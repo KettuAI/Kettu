@@ -202,7 +202,7 @@ export class ToolChanges {
   constructor(
     private readonly file: JsonFile<ToolsFile> | null,
     private readonly options: {
-      /** What a server's tools differ by changed, so clients and agents can hear of it. */
+      /** How a server's tools differ from what was accepted changed: clients and agents hear. */
       changed?(serverId: string): void
       now?: () => number
     } = {},
