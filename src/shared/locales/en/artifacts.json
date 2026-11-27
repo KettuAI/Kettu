@@ -503,6 +503,8 @@
     "replyPlaceholder": "Reply",
     "newThread": "New thread",
     "locate": "Locate on page",
+    "anchorOffscreen": "Element out of view",
+    "backToAnchor": "Back to element",
     "viewThread": "View thread",
     "delete": "Delete",
     "deleteTitle": "Delete comment?",

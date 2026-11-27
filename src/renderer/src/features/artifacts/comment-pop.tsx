@@ -1,5 +1,9 @@
 import { useRef, useState } from 'react'
 import {
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowUp01Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   Comment01Icon,
@@ -36,15 +40,25 @@ import { useNow } from '@renderer/lib/use-now'
 import { anchorLabel } from './anchors'
 import { StateTag, Writer } from './comments-card'
 import { threadState } from './comment-threads'
-import { sendKey, usePopPlace } from './pop-place'
+import { sendKey, usePopPlace, type LiveAnchor, type OffscreenEdge } from './pop-place'
 
 const POP_W = 320
 
 type Box = { left: number; top: number; right: number; bottom: number }
 
+const OFFSCREEN_ICON: Record<OffscreenEdge, typeof ArrowUp01Icon> = {
+  top: ArrowUp01Icon,
+  bottom: ArrowDown01Icon,
+  left: ArrowLeft01Icon,
+  right: ArrowRight01Icon,
+}
+
 /** A popover in the content area, beside `at`, rising in as the cards do. */
 export function ToolPop({
   at,
+  clip = null,
+  liveAnchor = null,
+  onReturnToAnchor = null,
   inline = false,
   width = POP_W,
   label,
@@ -54,6 +68,12 @@ export function ToolPop({
 }: {
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
+  /** Optional visible viewport clip in window coordinates. */
+  clip?: Box | null
+  /** Live anchor tracker for dynamic repositioning during iframe/host scrolling. */
+  liveAnchor?: LiveAnchor | null
+  /** Scrolls the anchored element back into view when the popover docks at a viewport edge. */
+  onReturnToAnchor?: (() => void) | null
   /** Laid out by what holds it, as under a document's block, instead of placed beside `at`. */
   inline?: boolean
   width?: number
@@ -62,8 +82,9 @@ export function ToolPop({
   className?: string
   children: () => React.ReactNode
 }) {
+  const { t } = useTranslation('artifacts')
   const ref = useRef<HTMLDivElement>(null)
-  usePopPlace(ref, at, width, !inline)
+  const offscreen = usePopPlace(ref, at, width, !inline, { clip, live: liveAnchor })
   const reduce = useReducedMotionConfig()
   return (
     <motion.div
@@ -72,6 +93,7 @@ export function ToolPop({
       aria-label={label}
       className={`k-vt-pop ${className ?? ''}`}
       data-inline={inline || undefined}
+      data-offscreen={offscreen ?? undefined}
       style={inline ? undefined : { width }}
       initial={reduce ? false : { y: 6, filter: 'blur(6px)' }}
       animate={{ y: 0, filter: 'blur(0px)', transition: { duration: reduce ? 0 : 0.24 } }}
@@ -83,6 +105,18 @@ export function ToolPop({
         onClose()
       }}
     >
+      {!inline && offscreen && onReturnToAnchor && (
+        <div className="k-vt-pop__dock" data-edge={offscreen}>
+          <span className="k-vt-pop__dock-note">
+            <Icon icon={OFFSCREEN_ICON[offscreen]} size={13} />
+            <span>{t('comments.anchorOffscreen')}</span>
+          </span>
+          <button type="button" className="k-vt-pop__dock-back" onClick={onReturnToAnchor}>
+            <Icon icon={Location01Icon} size={13} />
+            <span>{t('comments.backToAnchor')}</span>
+          </button>
+        </div>
+      )}
       {children()}
     </motion.div>
   )
@@ -95,6 +129,8 @@ export function ToolPop({
 export function CommentDraft({
   anchor,
   at,
+  liveAnchor = null,
+  onReturnToAnchor = null,
   inline = false,
   waiting = null,
   onCancel,
@@ -103,6 +139,8 @@ export function CommentDraft({
   anchor: CommentAnchor
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
+  liveAnchor?: LiveAnchor | null
+  onReturnToAnchor?: (() => void) | null
   inline?: boolean
   /** Said while the computer is away: the comment is saved once it is back. */
   waiting?: string | null
@@ -128,6 +166,8 @@ export function CommentDraft({
   return (
     <ToolPop
       at={at}
+      liveAnchor={liveAnchor}
+      onReturnToAnchor={onReturnToAnchor}
       inline={inline}
       label={t('comments.new')}
       onClose={onCancel}
@@ -185,6 +225,8 @@ export function ThreadPop({
   n,
   versions,
   at,
+  liveAnchor = null,
+  onReturnToAnchor = null,
   inline = false,
   canResolve = true,
   onClose,
@@ -199,6 +241,8 @@ export function ThreadPop({
   versions: readonly VersionSummary[] | null
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
+  liveAnchor?: LiveAnchor | null
+  onReturnToAnchor?: (() => void) | null
   inline?: boolean
   /** Whether the artifact allows changing comment state; false in Recently deleted. */
   canResolve?: boolean
@@ -241,6 +285,8 @@ export function ThreadPop({
   return (
     <ToolPop
       at={at}
+      liveAnchor={liveAnchor}
+      onReturnToAnchor={onReturnToAnchor}
       inline={inline}
       label={t('comments.threadLabel', { n })}
       onClose={onClose}

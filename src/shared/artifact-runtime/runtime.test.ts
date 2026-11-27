@@ -142,6 +142,11 @@ describe('artifact runtime select-pick behavior', () => {
     return {
       sent,
       postDrive,
+      listeners,
+      fakeWindow,
+      dispatchWindow: (type: string) => {
+        for (const fn of listeners.get(type) ?? []) fn({})
+      },
       flushRaf: () => {
         const batch = rafQueue.splice(0)
         for (const cb of batch) cb()
@@ -266,9 +271,206 @@ describe('artifact runtime select-pick behavior', () => {
     postDrive({ v: RUNTIME_VERSION, kind: 'select-pick', x: 150, y: 150 })
     expect(sent.at(-1)).toMatchObject({
       kind: 'select',
-      selection: { path: 'index.html', src: 10, tag: 'div' },
+      selection: {
+        path: 'index.html',
+        src: 10,
+        tag: 'div',
+        box: { x: 100, y: 100, width: 200, height: 120 },
+      },
     })
     expect(sent.at(-1)).not.toHaveProperty('pin')
+  })
+
+  it('tracks live anchor bounds across rAF-throttled scroll and resize, scrolls back smoothly, and cleans up listeners', () => {
+    let parentRect: FakeRect = {
+      left: 100,
+      top: 120,
+      right: 420,
+      bottom: 720,
+      width: 320,
+      height: 600,
+    }
+    const parent = makeFakeElement('div', 'm:10', 'Long container', parentRect)
+    parent.getBoundingClientRect = () => parentRect
+    const child = makeFakeElement('p', 'm:25', 'Inner paragraph', {
+      left: 120,
+      top: 160,
+      right: 300,
+      bottom: 200,
+      width: 180,
+      height: 40,
+    })
+
+    const { sent, postDrive, listeners, fakeWindow, dispatchWindow, flushRaf } = mountRuntime({
+      parent,
+      child,
+      hitAt: () => parent,
+    })
+
+    // Reveal returns the full highlight box of the element, not a fixed 20x20 pin stub.
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-reveal',
+      src: 10,
+      channel: 'channel-0001',
+    })
+    expect(sent.at(-1)).toMatchObject({
+      kind: 'select',
+      selection: null,
+      located: { src: 10, box: { x: 100, y: 120, width: 320, height: 600 } },
+    })
+
+    // No scroll/resize listeners before anchor tracking starts.
+    expect(listeners.get('scroll')?.size ?? 0).toBe(0)
+    expect(listeners.get('resize')?.size ?? 0).toBe(0)
+
+    // Start tracking by source offset: emits immediate initial snapshot and installs listeners.
+    sent.length = 0
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: 'channel-0001',
+      target: 10,
+    })
+    expect(listeners.get('scroll')?.size).toBe(1)
+    expect(listeners.get('resize')?.size).toBe(1)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      kind: 'select',
+      channel: 'channel-0001',
+      selection: null,
+      anchor: {
+        box: { x: 100, y: 120, width: 320, height: 600 },
+        viewport: { width: 800, height: 600 },
+      },
+    })
+
+    // Multiple scroll events within a single frame coalesce into one rAF-throttled update.
+    sent.length = 0
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 100)
+    parentRect = { left: 100, top: -640, right: 420, bottom: -40, width: 320, height: 600 }
+    dispatchWindow('scroll')
+    dispatchWindow('scroll')
+    dispatchWindow('scroll')
+    expect(sent).toHaveLength(0)
+    flushRaf()
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      kind: 'select',
+      anchor: {
+        box: { x: 100, y: -640, width: 320, height: 600 },
+        viewport: { width: 800, height: 600 },
+      },
+    })
+
+    // Unchanged geometry does not emit duplicate reports.
+    sent.length = 0
+    nowSpy.mockReturnValue(Date.now() + 200)
+    dispatchWindow('scroll')
+    flushRaf()
+    expect(sent).toHaveLength(0)
+
+    // Viewport resize updates the anchor report.
+    fakeWindow.innerWidth = 640
+    fakeWindow.innerHeight = 480
+    nowSpy.mockReturnValue(Date.now() + 300)
+    dispatchWindow('resize')
+    flushRaf()
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      anchor: { viewport: { width: 640, height: 480 } },
+    })
+
+    // Back-to-anchor command smoothly scrolls the element back into the center of the viewport.
+    postDrive({ v: RUNTIME_VERSION, kind: 'select-scroll-anchor' })
+    expect(parent.scrollIntoView).toHaveBeenCalledWith({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'smooth',
+    })
+
+    // Stopping anchor tracking removes listeners so subsequent scrolls send nothing.
+    sent.length = 0
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: 'channel-0001',
+      target: null,
+    })
+    expect(listeners.get('scroll')?.size ?? 0).toBe(0)
+    expect(listeners.get('resize')?.size ?? 0).toBe(0)
+    parentRect = { left: 100, top: 80, right: 420, bottom: 680, width: 320, height: 600 }
+    dispatchWindow('scroll')
+    flushRaf()
+    expect(sent).toHaveLength(0)
+    nowSpy.mockRestore()
+  })
+
+  it('tracks and scrolls back to a script-generated picked element with src = null', () => {
+    let dynamicRect: FakeRect = {
+      left: 50,
+      top: 80,
+      right: 250,
+      bottom: 200,
+      width: 200,
+      height: 120,
+    }
+    const dynamicEl = makeFakeElement('section', '', 'Dynamic card', dynamicRect)
+    dynamicEl.removeAttribute('data-kettu-src')
+    dynamicEl.getBoundingClientRect = () => dynamicRect
+    const unused = makeFakeElement('p', 'm:25', 'Unused', {
+      left: 0,
+      top: 0,
+      right: 10,
+      bottom: 10,
+      width: 10,
+      height: 10,
+    })
+
+    const { sent, postDrive, dispatchWindow, flushRaf } = mountRuntime({
+      parent: dynamicEl,
+      child: unused,
+      hitAt: () => dynamicEl,
+    })
+
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-mode',
+      mode: 'comment',
+      channel: 'channel-0001',
+      accent: '#0060e2',
+    })
+    postDrive({ v: RUNTIME_VERSION, kind: 'select-pick', x: 100, y: 120 })
+    expect(sent.at(-1)).toMatchObject({
+      selection: { src: null, tag: 'section', box: { x: 50, y: 80, width: 200, height: 120 } },
+    })
+
+    sent.length = 0
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: 'channel-0001',
+      target: 'picked',
+    })
+    expect(sent.at(-1)).toMatchObject({
+      anchor: { box: { x: 50, y: 80, width: 200, height: 120 } },
+    })
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 100)
+    dynamicRect = { left: 50, top: 750, right: 250, bottom: 870, width: 200, height: 120 }
+    dispatchWindow('scroll')
+    flushRaf()
+    expect(sent.at(-1)).toMatchObject({
+      anchor: { box: { x: 50, y: 750, width: 200, height: 120 } },
+    })
+
+    postDrive({ v: RUNTIME_VERSION, kind: 'select-scroll-anchor', target: 'picked' })
+    expect(dynamicEl.scrollIntoView).toHaveBeenCalledWith({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'smooth',
+    })
+    nowSpy.mockRestore()
   })
 })
 
@@ -292,6 +494,7 @@ interface FakeElement {
   setAttribute: (name: string, value: string) => void
   removeAttribute: (name: string) => void
   getBoundingClientRect: () => FakeRect
+  scrollIntoView: ReturnType<typeof vi.fn>
   contains: (node: unknown) => boolean
 }
 
@@ -318,6 +521,7 @@ function makeFakeElement(
       attrs.delete(name)
     },
     getBoundingClientRect: () => rect,
+    scrollIntoView: vi.fn(),
     contains: (node) => node === el,
   }
   return el

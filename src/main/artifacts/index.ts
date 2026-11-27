@@ -35,6 +35,8 @@ const MAX_URL_CHARS = 2_048
 const NAME_CHARS = 200
 /** The picks a page may report each second; a page that sends more loses the rest. */
 export const PICKS_PER_SECOND = 20
+/** The anchor bounds updates a page may report each second while a popover tracks scrolling. */
+export const ANCHOR_UPDATES_PER_SECOND = 70
 /** The errors the frames of one artifact may report each second; more are dropped. */
 export const PAGE_ERRORS_PER_SECOND = 10
 
@@ -99,6 +101,7 @@ export class Artifacts {
   private readonly files: ArtifactFiles
   private readonly windows = new Set<WebContents>()
   private readonly picks = new ReportLimit(PICKS_PER_SECOND)
+  private readonly anchors = new ReportLimit(ANCHOR_UPDATES_PER_SECOND)
   private readonly errors = new ReportLimit(PAGE_ERRORS_PER_SECOND)
   /** The origin ids whose latest version declares what reads beyond the page, as last served. */
   private readonly declaredStrict = new Set<string>()
@@ -162,7 +165,8 @@ export class Artifacts {
 
   /** A page's pick, for the windows that opened its origin; the page's data is checked already. */
   private selected(host: string, message: SelectMessage): void {
-    if (!this.picks.allow(host)) return
+    const limiter = message.anchor !== undefined ? this.anchors : this.picks
+    if (!limiter.allow(host)) return
     const origin = `${ARTIFACT_SCHEME}://${host}`
     for (const contents of this.windows) {
       if (!contents.isDestroyed() && this.origins.isOpenedIn(contents, origin)) {

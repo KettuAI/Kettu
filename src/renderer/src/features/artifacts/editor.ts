@@ -19,12 +19,26 @@ export type ViewportBox = { left: number; top: number; right: number; bottom: nu
 
 export type EditorMode = 'select' | 'comment' | null
 
+/** Which element in which page frame an open popover is currently tracking. */
+export interface AnchorTrackSpec {
+  page: number | null
+  target: number | 'picked'
+}
+
+/** Live window-coordinate bounds of a tracked anchor and its visible iframe clip. */
+export interface TrackedAnchor {
+  box: ViewportBox | null
+  clip: ViewportBox | null
+}
+
 /** An element picked in a page: the canvas page it is on, or null for a single page. */
 export interface Picked {
   page: number | null
   selection: PageSelection
-  /** Where the pointer picked it, in the window, for the comment box; null when not by pointer. */
+  /** Where the pointer picked it, in the window, as fallback; null when not by pointer. */
   point: { x: number; y: number } | null
+  /** Initial highlight bounding box in window coordinates, when reported with the pick. */
+  box: ViewportBox | null
 }
 
 /** A comment pin clicked in a page: its number, the canvas page it is on and where. */
@@ -32,6 +46,8 @@ export interface PinClick {
   n: number
   page: number | null
   point: { x: number; y: number } | null
+  /** Initial bounding box of the pin's anchored element in window coordinates, when reported. */
+  box: ViewportBox | null
 }
 
 export interface EditorState {
@@ -100,12 +116,18 @@ export class ArtifactEditor {
   private state: EditorState = { mode: null, picked: null, pin: null, typing: false }
   private readonly typedListeners = new Set<(text: string, done: boolean) => void>()
   private readonly listeners = new Set<() => void>()
+  private readonly anchorListeners = new Set<() => void>()
   private readonly frames = new Set<EditorFrame>()
   private pins: (page: number | null) => Pin[] = () => []
   private pickedBy: EditorFrame | null = null
   private pointing: { frame: EditorFrame; x: number; y: number } | null = null
   private pointFrame = 0
   private wanted: { page: number | null; src: number } | null = null
+  private anchorSpec: AnchorTrackSpec | null = null
+  private anchorContainer: HTMLElement | null = null
+  private anchorFrame: EditorFrame | null = null
+  private anchorRawBox: PageBox | null = null
+  private anchorState: TrackedAnchor | null = null
 
   /** `origin` is the artifact's URL as `artifact:open` gave it, without its last slash. */
   constructor(private readonly origin: string) {}
@@ -127,14 +149,27 @@ export class ArtifactEditor {
     let lastPick: { x: number; y: number } | null = null
     const locating = new Map<number, (box: PageBox | null) => void>()
     const frame: EditorFrame = {
-      link: new FrameLink(this.origin, (selection, { located, pin, typed }) => {
+      link: new FrameLink(this.origin, (selection, { located, pin, pinBox, typed, anchor }) => {
         if (located) {
           locating.get(located.src)?.(located.box)
           locating.delete(located.src)
           return
         }
+        if (anchor) {
+          if (this.anchorFrame === frame) this.updateAnchor(frame, anchor.box)
+          return
+        }
         if (pin !== undefined) {
-          if (this.state.mode) this.set({ pin: { n: pin, page: frame.page, point: lastPick } })
+          if (this.state.mode) {
+            this.set({
+              pin: {
+                n: pin,
+                page: frame.page,
+                point: lastPick,
+                box: pinBox ? frame.link.viewportBox(pinBox) : null,
+              },
+            })
+          }
           lastPick = null
           return
         }
@@ -168,6 +203,7 @@ export class ArtifactEditor {
         if (!frame.link.hasFrame()) return Promise.resolve(null)
         return new Promise((resolve) => {
           const finish = (box: PageBox | null): void => {
+            if (box) frame.link.scrollHostToBox(box, this.anchorContainer)
             resolve(box ? frame.link.viewportBox(box) : null)
           }
           locating.get(src)?.(null)
@@ -223,11 +259,17 @@ export class ArtifactEditor {
         frame.link.open()
         this.frames.add(frame)
         this.drive(frame)
+        if (this.anchorSpec && this.anchorSpec.page === frame.page) this.syncAnchorFrame()
       },
       release: () => {
         this.frames.delete(frame)
         frame.link.dispose()
         if (this.pickedBy === frame) this.pickedBy = null
+        if (this.anchorFrame === frame) {
+          this.anchorFrame = null
+          this.anchorRawBox = null
+          if (this.anchorSpec) this.syncAnchorFrame()
+        }
       },
     }
     return frame
@@ -304,14 +346,118 @@ export class ArtifactEditor {
   }
 
   /**
-   * Reveals the element at `src` in the open frame for `page` and returns its pin's window box so
-   * a thread popover can anchor beside it; returns null when the frame or element is unavailable.
+   * Reveals the element at `src` in the open frame for `page` and returns its highlight box in
+   * window coordinates so a thread popover can anchor beside it; returns null when unavailable.
    */
   revealPin(page: number | null, src: number): Promise<ViewportBox | null> {
-    for (const frame of this.frames) {
+    const list = [...this.frames]
+    for (let i = list.length - 1; i >= 0; i--) {
+      const frame = list[i]!
       if (frame.page === page && frame.link.hasFrame()) return frame.reveal(src)
     }
     return Promise.resolve(null)
+  }
+
+  /** Subscribes to live anchor bounds updates without re-rendering general editor subscribers. */
+  subscribeAnchor = (listener: () => void): (() => void) => {
+    this.anchorListeners.add(listener)
+    return () => this.anchorListeners.delete(listener)
+  }
+
+  /** Latest window-space anchor box and visible iframe clip, or null when not yet reported. */
+  getAnchor = (): TrackedAnchor | null => this.anchorState
+
+  /**
+   * Starts tracking the viewport-relative bounds of an element while a popover is open, or stops
+   * tracking when `spec` is null.
+   */
+  trackAnchor(spec: AnchorTrackSpec | null, container: HTMLElement | null = null): void {
+    const same =
+      this.anchorSpec?.page === spec?.page &&
+      this.anchorSpec?.target === spec?.target &&
+      this.anchorContainer === container
+    if (same && (spec === null || this.anchorFrame !== null)) return
+    this.anchorSpec = spec
+    this.anchorContainer = container
+    this.anchorRawBox = null
+    this.setAnchorState(null)
+    this.syncAnchorFrame()
+  }
+
+  /** Recomputes tracked anchor window coordinates after host-side scroll, pan, zoom, or resize. */
+  recomputeAnchor(): void {
+    if (!this.anchorFrame || !this.anchorRawBox) return
+    this.updateAnchor(this.anchorFrame, this.anchorRawBox)
+  }
+
+  /** Smoothly scrolls the tracked anchor back into view inside both the iframe and any host scroller. */
+  scrollToAnchor(): void {
+    if (!this.anchorSpec) return
+    const frame = this.anchorFrame ?? this.findAnchorFrame(this.anchorSpec)
+    if (!frame) return
+    if (this.anchorRawBox) frame.link.scrollHostToBox(this.anchorRawBox, this.anchorContainer)
+    frame.link.post({
+      v: RUNTIME_VERSION,
+      kind: 'select-scroll-anchor',
+      target: this.anchorSpec.target,
+    })
+  }
+
+  private findAnchorFrame(spec: AnchorTrackSpec): EditorFrame | null {
+    if (
+      spec.target === 'picked' &&
+      this.pickedBy &&
+      this.pickedBy.page === spec.page &&
+      this.pickedBy.link.hasFrame()
+    ) {
+      return this.pickedBy
+    }
+    const list = [...this.frames]
+    for (let i = list.length - 1; i >= 0; i--) {
+      const frame = list[i]!
+      if (frame.page === spec.page && frame.link.hasFrame()) return frame
+    }
+    return null
+  }
+
+  private syncAnchorFrame(): void {
+    const nextFrame = this.anchorSpec ? this.findAnchorFrame(this.anchorSpec) : null
+    if (this.anchorFrame && this.anchorFrame !== nextFrame) {
+      this.anchorFrame.link.forget('select-anchor')
+      this.anchorFrame.link.post({
+        v: RUNTIME_VERSION,
+        kind: 'select-anchor',
+        channel: this.anchorFrame.link.channel,
+        target: null,
+      })
+    }
+    this.anchorFrame = nextFrame
+    if (!nextFrame || !this.anchorSpec) return
+    nextFrame.link.post({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: nextFrame.link.channel,
+      target: this.anchorSpec.target,
+    })
+  }
+
+  private updateAnchor(frame: EditorFrame, rawBox: PageBox | null): void {
+    this.anchorRawBox = rawBox
+    const box = rawBox ? frame.link.viewportBox(rawBox) : null
+    const clip = frame.link.visibleBounds(this.anchorContainer)
+    this.setAnchorState({ box, clip })
+  }
+
+  private setAnchorState(next: TrackedAnchor | null): void {
+    const prev = this.anchorState
+    if (
+      boxesEqual(prev?.box ?? null, next?.box ?? null) &&
+      boxesEqual(prev?.clip ?? null, next?.clip ?? null)
+    ) {
+      if ((prev === null) === (next === null)) return
+    }
+    this.anchorState = next
+    for (const listener of this.anchorListeners) listener()
   }
 
   /** Closes the thread of the pin last clicked. */
@@ -366,10 +512,16 @@ export class ArtifactEditor {
       tell: true,
     })
     const again = this.pickedBy === frame && was?.selection.src === selection?.src
+    const box = selection?.box ? frame.link.viewportBox(selection.box) : null
     this.pickedBy = selection ? frame : null
     this.set({
       picked: selection
-        ? { page: frame.page, selection, point: point ?? (again ? was!.point : null) }
+        ? {
+            page: frame.page,
+            selection,
+            point: point ?? (again ? was!.point : null),
+            box: box ?? (again ? was!.box : null),
+          }
         : null,
       pin: null,
       // The same element picked again, by a double click's second click, keeps being typed.
@@ -406,8 +558,25 @@ export class ArtifactEditor {
 
   dispose(): void {
     cancelAnimationFrame(this.pointFrame)
+    this.anchorSpec = null
+    this.anchorContainer = null
+    this.anchorFrame = null
+    this.anchorRawBox = null
+    this.anchorState = null
+    this.anchorListeners.clear()
     for (const frame of [...this.frames]) frame.release()
   }
+}
+
+function boxesEqual(a: ViewportBox | null, b: ViewportBox | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    Math.abs(a.left - b.left) < 0.25 &&
+    Math.abs(a.top - b.top) < 0.25 &&
+    Math.abs(a.right - b.right) < 0.25 &&
+    Math.abs(a.bottom - b.bottom) < 0.25
+  )
 }
 
 const IDLE: EditorState = { mode: null, picked: null, pin: null, typing: false }

@@ -21,9 +21,11 @@ import { listenPageErrors, receivePageError } from './page-errors'
 
 /** The picks a frame may report each second over its port; more are dropped. */
 const PICKS_PER_SECOND = 20
+/** The anchor bounds updates a frame may report each second over its port while scrolling. */
+const ANCHOR_UPDATES_PER_SECOND = 70
 
-/** What a select message carries besides the pick: a located element, a pin or typed text. */
-export type PickExtra = Pick<SelectMessage, 'located' | 'pin' | 'typed'>
+/** What a select message carries besides the pick: a located element, a pin, typed text, or live anchor bounds. */
+export type PickExtra = Pick<SelectMessage, 'located' | 'pin' | 'pinBox' | 'typed' | 'anchor'>
 type PickListener = (selection: PageSelection | null, extra: PickExtra) => void
 type KeyListener = (key: PageKey) => void
 type DocListener = (report: DocReport) => void
@@ -62,7 +64,9 @@ function deliver(origin: string, message: SelectMessage): void {
     entry.listener(message.selection, {
       located: message.located,
       pin: message.pin,
+      pinBox: message.pinBox,
       typed: message.typed,
+      anchor: message.anchor,
     })
 }
 
@@ -88,10 +92,14 @@ type Sticky =
   | 'select-mode'
   | 'select-pins'
   | 'select-source'
+  | 'select-anchor'
   | 'select-keys'
   | 'select-doc'
   | 'select-deck'
   | 'params'
+
+const CLIP_OVERFLOW = new Set(['hidden', 'auto', 'scroll', 'clip'])
+const SCROLL_OVERFLOW = new Set(['auto', 'scroll'])
 
 /**
  * One frame's link: messages into its page, of which the last mode, pins and pick are sent again
@@ -107,6 +115,8 @@ export class FrameLink {
   private readonly sticky = new Map<Sticky, DriveMessage>()
   private second = 0
   private picks = 0
+  private anchorSecond = 0
+  private anchorUpdates = 0
   private onKey: KeyListener | null = null
   private onDoc: DocListener | null = null
   private onDeck: DeckListener | null = null
@@ -140,6 +150,128 @@ export class FrameLink {
       top: rect.top + box.y * scaleY,
       right: rect.left + (box.x + box.width) * scaleX,
       bottom: rect.top + (box.y + box.height) * scaleY,
+    }
+  }
+
+  /**
+   * Visible window-coordinate bounds of this iframe, clipped by scrolling/overflowing host
+   * ancestors (such as an opened canvas frame's scroller) and the window viewport. When the whole
+   * iframe lies outside its host clip, returns the host clip so popovers dock at its visible edge.
+   */
+  visibleBounds(
+    container?: HTMLElement | null,
+  ): { left: number; top: number; right: number; bottom: number } | null {
+    const frame = this.frame
+    if (!frame) return null
+    const rect = frame.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    let clipLeft = -Infinity
+    let clipTop = -Infinity
+    let clipRight = Infinity
+    let clipBottom = Infinity
+    let current = frame.parentElement ?? null
+    const getStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null
+    while (current) {
+      const style = getStyle ? getStyle(current) : null
+      const clipX =
+        current === container || (style !== null && CLIP_OVERFLOW.has(style.overflowX ?? ''))
+      const clipY =
+        current === container || (style !== null && CLIP_OVERFLOW.has(style.overflowY ?? ''))
+      if (clipX || clipY) {
+        const bounds = current.getBoundingClientRect()
+        if (clipX) {
+          clipLeft = Math.max(clipLeft, bounds.left)
+          clipRight = Math.min(clipRight, bounds.right)
+        }
+        if (clipY) {
+          clipTop = Math.max(clipTop, bounds.top)
+          clipBottom = Math.min(clipBottom, bounds.bottom)
+        }
+      }
+      if (current === container) break
+      current = current.parentElement ?? null
+    }
+    if (typeof window !== 'undefined' && typeof window.innerWidth === 'number') {
+      clipLeft = Math.max(clipLeft, 0)
+      clipRight = Math.min(clipRight, window.innerWidth)
+    }
+    if (typeof window !== 'undefined' && typeof window.innerHeight === 'number') {
+      clipTop = Math.max(clipTop, 0)
+      clipBottom = Math.min(clipBottom, window.innerHeight)
+    }
+    const left = Math.max(rect.left, clipLeft)
+    const top = Math.max(rect.top, clipTop)
+    const right = Math.min(rect.right, clipRight)
+    const bottom = Math.min(rect.bottom, clipBottom)
+    if (right > left && bottom > top) return { left, top, right, bottom }
+    if (
+      Number.isFinite(clipLeft) &&
+      Number.isFinite(clipTop) &&
+      Number.isFinite(clipRight) &&
+      Number.isFinite(clipBottom) &&
+      clipRight > clipLeft &&
+      clipBottom > clipTop
+    ) {
+      return { left: clipLeft, top: clipTop, right: clipRight, bottom: clipBottom }
+    }
+    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+  }
+
+  /**
+   * Smoothly scrolls the nearest host-side scroll container (for example a long canvas frame's
+   * `.k-ce-open` scroller) so `box` returns to the center of the visible area.
+   */
+  scrollHostToBox(box: PageBox, container?: HTMLElement | null): void {
+    const frame = this.frame
+    const target = this.viewportBox(box)
+    if (!frame || !target) return
+    const getStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null
+    let current = frame.parentElement ?? null
+    while (current) {
+      const style = getStyle ? getStyle(current) : null
+      const scrollY =
+        current.scrollHeight > current.clientHeight &&
+        (style === null || SCROLL_OVERFLOW.has(style.overflowY ?? ''))
+      const scrollX =
+        current.scrollWidth > current.clientWidth &&
+        (style === null || SCROLL_OVERFLOW.has(style.overflowX ?? ''))
+      if (scrollY || scrollX) {
+        const bounds = current.getBoundingClientRect()
+        const centerX = (target.left + target.right) / 2
+        const centerY = (target.top + target.bottom) / 2
+        const nextLeft = scrollX
+          ? Math.max(
+              0,
+              Math.min(
+                current.scrollWidth - current.clientWidth,
+                current.scrollLeft + (centerX - (bounds.left + bounds.width / 2)),
+              ),
+            )
+          : current.scrollLeft
+        const nextTop = scrollY
+          ? Math.max(
+              0,
+              Math.min(
+                current.scrollHeight - current.clientHeight,
+                current.scrollTop + (centerY - (bounds.top + bounds.height / 2)),
+              ),
+            )
+          : current.scrollTop
+        if (
+          Math.abs(nextLeft - current.scrollLeft) > 1 ||
+          Math.abs(nextTop - current.scrollTop) > 1
+        ) {
+          if (typeof current.scrollTo === 'function') {
+            current.scrollTo({ left: nextLeft, top: nextTop, behavior: 'smooth' })
+          } else {
+            current.scrollLeft = nextLeft
+            current.scrollTop = nextTop
+          }
+        }
+        break
+      }
+      if (current === container) break
+      current = current.parentElement ?? null
     }
   }
 
@@ -198,6 +330,7 @@ export class FrameLink {
       message.kind === 'select-mode' ||
       message.kind === 'select-pins' ||
       message.kind === 'select-source' ||
+      message.kind === 'select-anchor' ||
       message.kind === 'select-keys' ||
       message.kind === 'select-doc' ||
       message.kind === 'select-deck'
@@ -249,7 +382,8 @@ export class FrameLink {
       const parsed = parsePageMessage(event.data)
       if (!parsed) return
       if (parsed.kind === 'select') {
-        if (parsed.message.channel !== this.channel || !this.allowPick()) return
+        const allowed = parsed.message.anchor !== undefined ? this.allowAnchor() : this.allowPick()
+        if (parsed.message.channel !== this.channel || !allowed) return
         deliver(this.origin, parsed.message)
         return
       }
@@ -271,5 +405,14 @@ export class FrameLink {
       this.picks = 0
     }
     return ++this.picks <= PICKS_PER_SECOND
+  }
+
+  private allowAnchor(): boolean {
+    const second = Math.floor(Date.now() / 1000)
+    if (second !== this.anchorSecond) {
+      this.anchorSecond = second
+      this.anchorUpdates = 0
+    }
+    return ++this.anchorUpdates <= ANCHOR_UPDATES_PER_SECOND
   }
 }

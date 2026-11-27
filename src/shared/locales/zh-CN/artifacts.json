@@ -481,6 +481,8 @@
     "replyPlaceholder": "回复",
     "newThread": "新建独立对话",
     "locate": "定位到元素",
+    "anchorOffscreen": "锚点已离开视口",
+    "backToAnchor": "回到锚点",
     "viewThread": "查看对话",
     "delete": "删除",
     "deleteTitle": "删除这条评论？",

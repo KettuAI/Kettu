@@ -188,4 +188,173 @@ describe('ArtifactEditor.revealPin', () => {
     await expect(timedOut).resolves.toBeNull()
     editor.dispose()
   })
+
+  it('captures highlight boxes on picks and pins, tracks live scroll updates, and scrolls both iframe and host container back', async () => {
+    const { ArtifactEditor } = await import('./editor')
+    const origin = 'http://127.0.0.1:4123'
+    const editor = new ArtifactEditor(origin)
+    const posted: DriveMessage[] = []
+    const frame = editor.frame(0)
+
+    let hostScrollTop = 500
+    const hostScrollTo = vi.fn(({ top }: { left?: number; top?: number; behavior?: string }) => {
+      if (typeof top === 'number') hostScrollTop = top
+    })
+    const hostScroller = {
+      scrollHeight: 2400,
+      clientHeight: 600,
+      scrollWidth: 800,
+      clientWidth: 800,
+      get scrollTop() {
+        return hostScrollTop
+      },
+      set scrollTop(v: number) {
+        hostScrollTop = v
+      },
+      scrollLeft: 0,
+      scrollTo: hostScrollTo,
+      parentElement: null,
+      getBoundingClientRect: () => ({
+        left: 100,
+        top: 50,
+        width: 800,
+        height: 600,
+        right: 900,
+        bottom: 650,
+        x: 100,
+        y: 50,
+        toJSON: () => ({}),
+      }),
+    }
+
+    let iframeTop = 50 - hostScrollTop
+    const iframe = makeIframe(posted, {
+      left: 100,
+      top: iframeTop,
+      width: 800,
+      height: 2400,
+      offsetWidth: 800,
+      offsetHeight: 2400,
+    })
+    ;(iframe as unknown as { parentElement: unknown }).parentElement = hostScroller
+    iframe.getBoundingClientRect = () => ({
+      left: 100,
+      top: iframeTop,
+      width: 800,
+      height: 2400,
+      right: 900,
+      bottom: iframeTop + 2400,
+      x: 100,
+      y: iframeTop,
+      toJSON: () => ({}),
+    })
+    vi.stubGlobal('getComputedStyle', (el?: unknown) =>
+      el === hostScroller
+        ? { overflowX: 'hidden', overflowY: 'auto' }
+        : { getPropertyValue: () => '#0060e2' },
+    )
+
+    frame.link.attach(iframe)
+    frame.open()
+    editor.setMode('comment')
+
+    // Picking an element translates its reported highlight box into window coordinates.
+    for (const handler of selectedHandlers) {
+      handler({
+        origin,
+        message: {
+          v: RUNTIME_VERSION,
+          id: 'k-pick',
+          kind: 'select',
+          channel: frame.link.channel,
+          selection: {
+            path: 'index.html',
+            src: 42,
+            tag: 'div',
+            text: 'Long block',
+            textOnly: false,
+            style: {},
+            box: { x: 40, y: 100, width: 300, height: 200 },
+          },
+        },
+      })
+    }
+    expect(editor.get().picked?.box).toEqual({
+      left: 140,
+      top: iframeTop + 100,
+      right: 440,
+      bottom: iframeTop + 300,
+    })
+
+    // Tracking the anchor sends `select-anchor` and updates anchor listeners without churning editor subscribers.
+    const generalListener = vi.fn()
+    const anchorListener = vi.fn()
+    editor.subscribe(generalListener)
+    editor.subscribeAnchor(anchorListener)
+
+    editor.trackAnchor({ page: 0, target: 42 }, hostScroller as unknown as HTMLElement)
+    expect(posted.at(-1)).toEqual({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: frame.link.channel,
+      target: 42,
+    })
+
+    for (const handler of selectedHandlers) {
+      handler({
+        origin,
+        message: {
+          v: RUNTIME_VERSION,
+          id: 'k-anchor',
+          kind: 'select',
+          channel: frame.link.channel,
+          selection: null,
+          anchor: {
+            box: { x: 40, y: 100, width: 300, height: 200 },
+            viewport: { width: 800, height: 2400 },
+          },
+        },
+      })
+    }
+    expect(generalListener).not.toHaveBeenCalled()
+    expect(anchorListener).toHaveBeenCalledTimes(1)
+    expect(editor.getAnchor()).toEqual({
+      box: { left: 140, top: -350, right: 440, bottom: -150 },
+      clip: { left: 100, top: 50, right: 900, bottom: 650 },
+    })
+
+    // Host-side scroll (like a long opened canvas frame) updates window coordinates via recomputeAnchor().
+    hostScrollTop = 80
+    iframeTop = 50 - hostScrollTop
+    editor.recomputeAnchor()
+    expect(editor.getAnchor()?.box).toEqual({
+      left: 140,
+      top: 70,
+      right: 440,
+      bottom: 270,
+    })
+
+    // Scroll away again, then invoke scrollToAnchor(): scrolls both the host scroller and the iframe smoothly.
+    hostScrollTop = 900
+    iframeTop = 50 - hostScrollTop
+    editor.recomputeAnchor()
+    editor.scrollToAnchor()
+    expect(hostScrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
+    expect(posted.at(-1)).toEqual({
+      v: RUNTIME_VERSION,
+      kind: 'select-scroll-anchor',
+      target: 42,
+    })
+
+    // Stopping tracking tells the iframe to stop and clears the sticky message.
+    editor.trackAnchor(null)
+    expect(posted.at(-1)).toEqual({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: frame.link.channel,
+      target: null,
+    })
+    expect(editor.getAnchor()).toBeNull()
+    editor.dispose()
+  })
 })

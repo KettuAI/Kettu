@@ -499,6 +499,64 @@
 .k-vt-pop[data-inline] {
   position: relative;
 }
+.k-vt-pop__dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 6px 5px 8px;
+  border-radius: 8px;
+  background: var(--subtle);
+}
+.k-vt-thread > .k-vt-pop__dock {
+  padding: 6px 8px 6px 14px;
+  border-radius: 0;
+  box-shadow: inset 0 -0.5px 0 var(--line);
+}
+.k-vt-pop__dock-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-vt-pop__dock-note > svg {
+  flex: none;
+}
+.k-vt-pop__dock-note > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-vt-pop__dock-back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--control-on-tint);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--control-on);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.k-vt-pop__dock-back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-vt-pop__dock-back:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
 .k-vt-pop__foot {
   display: flex;
   align-items: center;
