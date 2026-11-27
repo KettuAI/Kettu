@@ -36,9 +36,9 @@ describe('attentionTarget for a plan limit', () => {
 })
 
 describe('pushedAttention for a plan limit', () => {
-  it('pushes none to devices, which take only sessions, routines and tasks', () => {
+  it('forwards plan-limit alerts to devices so opted-in devices receive them', () => {
     const message = { type: 'host:attention', ...limit() } as Parameters<typeof pushedAttention>[0]
-    expect(pushedAttention(message)).toBeNull()
+    expect(pushedAttention(message)).toEqual(message)
   })
 })
 

@@ -477,6 +477,7 @@ export interface SessionEvents {
     body: string,
     request?: AttentionRequest,
     facts?: RequestFacts,
+    meta?: { changedFiles?: number },
   ): void
   badge(count: number): void
   /** What waits for the user now, by session, each change of it. */
@@ -11037,6 +11038,9 @@ export class SessionManager {
           ? t('attention.done', { title: this.titleOf(live) })
           : this.titleOf(live),
         changed > 0 ? t('attention.withChanges', { text, count: changed }) : text,
+        undefined,
+        undefined,
+        changed > 0 ? { changedFiles: changed } : undefined,
       )
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)

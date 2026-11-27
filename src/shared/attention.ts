@@ -76,12 +76,12 @@ export function attentionTarget(
 type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
 
 /**
- * What devices are pushed for an attention message: a workflow task's goes as its step's session,
- * which is what they open, and not at all when no step has a session. A plan limit is not pushed:
- * it is the desktop's notice of the account, which devices do not take.
+ * What devices are pushed for an attention message: sessions, routines and plan-limit alerts go
+ * straight through (plan-limit is filtered per device by its `planLimits` switch); a workflow
+ * task goes as its step's session, which is what devices open, and not at all when no step has one.
  */
 export function pushedAttention(message: AttentionMessage): AttentionMessage | null {
-  if (message.kind === 'plan-limit') return null
+  if (message.kind === 'plan-limit') return message
   if (!('taskId' in message)) return message
   if (message.sessionId === undefined) return null
   return {

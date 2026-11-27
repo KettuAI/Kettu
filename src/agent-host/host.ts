@@ -2098,8 +2098,11 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, request, facts) => {
+        attention: (sessionId, kind, title, body, request, facts, meta) => {
           if (kind === 'error') this.sessionFailed(sessionId)
+          const agentId = this.sessions.has(sessionId)
+            ? this.sessions.summary(sessionId).agentId
+            : undefined
           if (kind !== 'turn-ended' && this.pluginHooks.wants('session.needsUser')) {
             this.pluginHooks.emit('session.needsUser', this.sessions.summary(sessionId), {
               reason: kind,
@@ -2110,6 +2113,8 @@ export class AgentHost {
               type: 'host:attention',
               sessionId,
               kind,
+              ...(agentId ? { agentId } : {}),
+              ...(meta?.changedFiles ? { changedFiles: meta.changedFiles } : {}),
               title,
               body,
               ...(request?.allow

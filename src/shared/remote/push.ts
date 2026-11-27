@@ -113,6 +113,8 @@ export interface NotificationChoices {
   routines: boolean
   /** A device of the account asks to be added, or a device joined the host. */
   device: boolean
+  /** 套餐额度预警（90%）、触顶或重置推送开关（可选，默认关闭以兼容旧设备）。 */
+  planLimits?: boolean
   /** Only while the user is not at the host, when the host can tell: the desktop app can. */
   onlyAway: boolean
   /** Titles and text; without them a notification says only which host needs the user. */
@@ -208,6 +210,7 @@ const SWITCHES = [
   'errors',
   'routines',
   'device',
+  'planLimits',
   'onlyAway',
   'details',
 ] as const satisfies readonly (keyof NotificationChoices)[]
@@ -309,14 +312,18 @@ export type PushEvent =
   | {
       kind: 'permission'
       sessionId: string
+      agentId?: string
       requestId?: string
       actions?: PushActions
+      actionKind?: 'execute' | 'edit' | 'review' | 'question'
+      quickOptions?: LiveQuickOptions
     }
   | {
       kind: 'turn-ended'
       sessionId: string
       agentId?: string
       workedMs?: number
+      changedFiles?: number
       project?: string
     }
   | {
@@ -326,9 +333,16 @@ export type PushEvent =
       exitCode?: number
       project?: string
     }
-  | { kind: 'routine-ended'; sessionId: string }
+  | { kind: 'routine-ended'; sessionId: string; agentId?: string }
   /** An agent's routines paused near a plan limit; it opens the Routines page. */
   | { kind: 'routine-paused'; agentId: string }
+  /** 套餐额度预警（90%）、触顶或窗口重置通知，点击直达用量页。 */
+  | {
+      kind: 'plan-limit'
+      agentId: string
+      limitLevel?: 'warning' | 'reached' | 'reset'
+      label?: string
+    }
   /** A device of the account asks to be added; it opens the request's card. */
   | { kind: 'device-request'; requestId: number }
   /** A device joined the host, which the device may remove. */
