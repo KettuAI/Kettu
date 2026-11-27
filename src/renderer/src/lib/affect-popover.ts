@@ -22,6 +22,41 @@ export const POPOVER_RIGHT_GAP = 12
 /** Minimum padding kept between a popover and its clipping container edges (`8px`). */
 export const POPOVER_MARGIN = 8
 
+const CLIP_OVERFLOW = /(auto|scroll|hidden|clip)/
+
+/**
+ * Walks up from `el.parentElement` to find the nearest box-generating ancestor for layout
+ * measurement, skipping `display: contents` wrappers whose `getBoundingClientRect()` returns an
+ * all-zero rect.
+ */
+export function resolvePopoverAnchor(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (getComputedStyle(node).display !== 'contents') return node
+  }
+  return null
+}
+
+/**
+ * Computes the intersection of the viewport and every box-generating ancestor that clips or bounds
+ * `el`. Ancestors with `display: contents` generate no box and are skipped so an `overflow` style
+ * on them never collapses the clip box to 0×0.
+ */
+export function resolvePopoverClipBox(el: HTMLElement): PopoverRect {
+  let box: PopoverRect = { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 }
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node === document.body || node === document.documentElement) continue
+    const style = getComputedStyle(node)
+    if (style.display === 'contents') continue
+    const isShell = node.classList.contains('ui-as')
+    const clipX = isShell || CLIP_OVERFLOW.test(style.overflowX || style.overflow)
+    const clipY = isShell || CLIP_OVERFLOW.test(style.overflowY || style.overflow)
+    if (clipX || clipY) {
+      box = intersectClipAxes(box, node.getBoundingClientRect(), clipX, clipY)
+    }
+  }
+  return box
+}
+
 export interface PopoverLayoutInput {
   preferredSide: AffectPopoverSide
   preferredAlign: AffectPopoverAlign
@@ -241,4 +276,82 @@ export function resolvePopoverLayout({
   })
 
   return { side, align, maxHeight, overflow, dx, dy }
+}
+
+/**
+ * Measures an `affectUI` `Popover` element against its box-generating positioning anchor and clip
+ * box, applies placement attributes/styles (`data-side`, `data-align`, `--as-popover-max-h`,
+ * `data-overflow`, `translate`), and preserves inner scroll positions across re-measurements.
+ */
+export function applyPopoverLayout(
+  el: HTMLElement,
+  preferredSide: AffectPopoverSide,
+  preferredAlign: AffectPopoverAlign,
+): PopoverLayout | null {
+  const anchor = resolvePopoverAnchor(el)
+  if (!anchor) return null
+
+  const list = el.querySelector<HTMLElement>(':scope > .ui-as-menu__list')
+  const card = el.querySelector<HTMLElement>('.ui-pmc__card')
+  const savedListScroll = list?.scrollTop ?? 0
+  const savedCardScroll = card?.scrollTop ?? 0
+  const savedElScroll = el.scrollTop
+
+  el.dataset.side = preferredSide
+  el.dataset.align = preferredAlign
+  el.style.translate = ''
+  el.style.removeProperty('--as-popover-max-h')
+  el.removeAttribute('data-overflow')
+
+  const box = resolvePopoverClipBox(el)
+  const anchorRect = anchor.getBoundingClientRect()
+  const scaleX = anchor.offsetWidth > 0 ? anchorRect.width / anchor.offsetWidth : 1
+  const scaleY = anchor.offsetHeight > 0 ? anchorRect.height / anchor.offsetHeight : 1
+  const elRect = el.getBoundingClientRect()
+  const contentWidth = el.offsetWidth || (scaleX > 0 ? elRect.width / scaleX : elRect.width)
+  const contentHeight = el.offsetHeight || (scaleY > 0 ? elRect.height / scaleY : elRect.height)
+
+  const layout = resolvePopoverLayout({
+    preferredSide,
+    preferredAlign,
+    anchor: anchorRect,
+    clip: box,
+    contentWidth,
+    contentHeight,
+    scaleX,
+    scaleY,
+  })
+
+  el.dataset.side = layout.side
+  el.dataset.align = layout.align
+  if (layout.maxHeight !== null) {
+    el.style.setProperty('--as-popover-max-h', `${layout.maxHeight}px`)
+  }
+  el.toggleAttribute('data-overflow', layout.overflow)
+
+  // Classic scrollbars can slightly widen a constrained menu; re-check horizontal offset after clamping.
+  let dx = layout.dx
+  if (layout.overflow) {
+    const constrainedWidth = el.offsetWidth || contentWidth
+    if (Math.abs(constrainedWidth - contentWidth) > 0.5) {
+      dx = resolveHorizontalPlacement({
+        preferredAlign: layout.align,
+        side: layout.side,
+        anchor: anchorRect,
+        clip: box,
+        contentWidth: constrainedWidth,
+        scaleX,
+      }).dx
+    }
+  }
+
+  if (dx || layout.dy) {
+    el.style.translate = `${dx}px ${layout.dy}px`
+  }
+
+  if (list && savedListScroll > 0) list.scrollTop = savedListScroll
+  if (card && savedCardScroll > 0) card.scrollTop = savedCardScroll
+  if (savedElScroll > 0) el.scrollTop = savedElScroll
+
+  return layout
 }

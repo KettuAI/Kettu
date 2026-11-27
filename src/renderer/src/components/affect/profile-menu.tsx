@@ -1,7 +1,7 @@
 // affectUI - licensed under https://www.affectui.com/license, not under this project's open-source license.
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 /*
  * Profile Menu (Clean) – an account card with the signed-in user, menu actions and profile setup progress, in a single self-contained file.
@@ -65,6 +65,26 @@ export type ProfileMenuProps = {
 // Counts get separators; anything that isn't a finite number reads as 0
 const count = new Intl.NumberFormat("en");
 const finite = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
+
+/** Clamps a flyout submenu's top offset (relative to `.ui-pmc`) so it stays inside the viewport. */
+export function clampSubmenuTop({
+  preferredTop,
+  rootTop,
+  sideHeight,
+  viewportHeight,
+  margin = 8,
+}: {
+  preferredTop: number;
+  rootTop: number;
+  sideHeight: number;
+  viewportHeight: number;
+  margin?: number;
+}): number {
+  if (viewportHeight <= margin * 2 || sideHeight <= 0) return preferredTop;
+  const minTop = margin - rootTop;
+  const maxTop = Math.max(minTop, viewportHeight - margin - sideHeight - rootTop);
+  return Math.min(Math.max(preferredTop, minTop), maxTop);
+}
 
 export function ProfileMenu({
   name,
@@ -142,6 +162,25 @@ export function ProfileMenu({
     }
   };
   const subItem = sub ? list.find((item) => item.id === sub.id && item.submenu?.length) : undefined;
+  // Keep the flyout submenu inside the viewport vertically when the window is short or the row sits near the bottom
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const side = sideRef.current;
+    if (!sub || !root || !side) return;
+    const clamp = () => {
+      const sideHeight = side.getBoundingClientRect().height || side.offsetHeight;
+      const clamped = clampSubmenuTop({
+        preferredTop: sub.top,
+        rootTop: root.getBoundingClientRect().top,
+        sideHeight,
+        viewportHeight: window.innerHeight,
+      });
+      side.style.top = `${clamped}px`;
+    };
+    clamp();
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [sub]);
   // When any row of a list carries a check or a submenu arrow, every row keeps that column, so shortcuts line up
   const keepsEnd = (rows: ProfileMenuItem[], nested: boolean) =>
     rows.some((r) => !r.heading && !r.control && (r.checked !== undefined || (!nested && !!r.submenu?.length)));
@@ -381,7 +420,7 @@ const defaultItems: ProfileMenuItem[] = [
 
 /* ---------- Styles ---------- */
 
-const css = /* css */ `
+export const css = /* css */ `
 /* Colors and motion as variables – override them on .ui-pmc */
 .ui-pmc {
   --ui-pmc-card: #ffffff;
@@ -567,6 +606,9 @@ const css = /* css */ `
   z-index: 1;
   left: calc(100% + 4px);
   width: 240px;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px;
   border-radius: 10px;
   background: var(--ui-pmc-card);
