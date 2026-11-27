@@ -183,7 +183,13 @@ import { createHash } from 'node:crypto'
 import { Answers, answersFile } from './mcp-router/answers'
 import { McpRouter } from './mcp-router/router'
 import { McpCalls } from './mcp-router/calls'
-import { ToolChanges, toolGuard, toolsFile, trustedSource } from './mcp-router/tool-changes'
+import {
+  PROJECT_SERVER,
+  ToolChanges,
+  toolGuard,
+  toolsFile,
+  trustedSource,
+} from './mcp-router/tool-changes'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -244,7 +250,17 @@ import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
-import { folderServers, folderSettings, type FolderServer } from './project-settings'
+import {
+  codexUntrusted,
+  folderNotice,
+  folderServers,
+  folderSettings,
+  geminiTrusted,
+  grokTrusted,
+  projectRoots,
+  type FolderDeclared,
+  type FolderServer,
+} from './project-settings'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
@@ -408,7 +424,13 @@ async function memoryCall<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /** The harnesses whose sessions hold a folder's own servers and settings for the user. */
-const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex', 'opencode'])
+const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set([
+  'claude-code',
+  'codex',
+  'opencode',
+  'kilo',
+  'qwen',
+])
 
 export interface HostOptions {
   userDataPath: string
@@ -1640,7 +1662,79 @@ export class AgentHost {
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
       folderDeclared: async (cwd, agentId) => {
+        // Grok loads a repository's own servers only where the user trusts it in Grok, by its
+        // root. Kettu never grants that trust, which Grok would keep for good, so it runs the ones
+        // the user allows, and none Grok starts itself in a repository the user trusted.
+        const grokDeclared = async (agent: AgentId, folder: string): Promise<FolderDeclared> => {
+          const root = (await projectRoots(folder, platform))[0] ?? folder
+          const store = path.join(
+            this.env.get('GROK_HOME', agent)?.trim() || path.join(home, '.grok'),
+            'trusted_folders.toml',
+          )
+          const [atRoot, here, trusted] = await Promise.all([
+            folderServers(root, platform),
+            root === folder ? Promise.resolve([]) : folderServers(folder, platform),
+            grokTrusted(store, folder, platform),
+          ])
+          const own = new Set(
+            harnessProjectMcpPaths('grok', root, platform).map((file) =>
+              path.relative(root, file.path),
+            ),
+          )
+          const selfRun = new Set(
+            trusted
+              ? atRoot
+                  .filter((server) => server.files.some((file) => own.has(file)))
+                  .map((server) => server.digest)
+              : [],
+          )
+          const seen = new Set(atRoot.map((server) => server.digest))
+          const servers = [...atRoot, ...here.filter((server) => !seen.has(server.digest))]
+          return {
+            servers: servers.filter((server) => !selfRun.has(server.digest)),
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+          }
+        }
+        const codexUserUntrusted = (agent: AgentId, folder: string): Promise<boolean> => {
+          const config = mcpConfigPaths(
+            platform,
+            home,
+            this.agents.mcpDiscoveryAgents().filter(({ id }) => id === agent),
+            [],
+            (name, of) => this.env.get(name, of),
+            true,
+          ).find((file) => file.layout === 'codex')
+          return config ? codexUntrusted(config.path, folder, platform) : Promise.resolve(false)
+        }
         const harness = harnessOf(agentId)
+        if (harness === 'grok') return grokDeclared(agentId, cwd)
+        if (harness === 'gemini') {
+          // Its own folder trust holds the folder; Kettu only keeps its `.env` from where it is
+          // not trusted.
+          const variable = (name: string) => this.env.get(name, agentId)
+          const gemini = path.join(home, '.gemini')
+          const ownTrust = await geminiTrusted(
+            {
+              trustList:
+                variable('GEMINI_CLI_TRUSTED_FOLDERS_PATH')?.trim() ||
+                path.join(gemini, 'trustedFolders.json'),
+              settings: path.join(gemini, 'settings.json'),
+            },
+            cwd,
+            variable,
+          )
+          return {
+            servers: [],
+            settings: null,
+            harnessServers: [],
+            harnessDigests: [],
+            turnsOff: true,
+            ownTrust,
+          }
+        }
         // The other harnesses start what their own files declare, so Kettu running them too
         // would start them twice.
         if (!FOLDER_HELD_HARNESSES.has(harness)) {
@@ -1650,14 +1744,18 @@ export class AgentHost {
             harnessServers: [],
             harnessDigests: [],
             turnsOff: true,
+            notice: await folderNotice(harness, cwd, platform),
           }
         }
         const ownFiles = harnessProjectMcpPaths(harness, cwd, platform)
-        const [servers, settings, own] = await Promise.all([
+        const [servers, found, own, untrusted] = await Promise.all([
           folderServers(cwd, platform),
           folderSettings(harness, cwd, platform),
           readOwnMcpServers(ownFiles),
+          harness === 'codex' ? codexUserUntrusted(agentId, cwd) : false,
         ])
+        // What the user's own Codex keeps untrusted never loads, so there is nothing to ask.
+        const settings = untrusted ? null : found
         const relative = new Set(
           ownFiles.map((file) => path.relative(cwd, file.path) || path.basename(file.path)),
         )
@@ -1668,8 +1766,9 @@ export class AgentHost {
           harnessDigests: servers
             .filter((server) => server.files.some((file) => relative.has(file)))
             .map((server) => server.digest),
-          // OpenCode has no way to turn one of a folder's servers off that Kettu checked.
-          turnsOff: harness !== 'opencode',
+          // OpenCode and Kilo Code have no way to turn one of a folder's servers off that Kettu
+          // checked.
+          turnsOff: harness !== 'opencode' && harness !== 'kilo',
         }
       },
       portOpen: (portId) => this.hub.has(portId),
@@ -3383,7 +3482,7 @@ export class AgentHost {
    * like those of a server added by hand.
    */
   private projectServer(server: FolderServer, folder: string): MarketServer {
-    const id = `project:${createHash('sha256')
+    const id = `${PROJECT_SERVER}${createHash('sha256')
       .update(JSON.stringify([server.files, server.digest, server.secrets]))
       .digest('hex')
       .slice(0, 24)}`

@@ -151,6 +151,15 @@ describe('what the user accepted', () => {
     expect(tools.changes('manual:a', 'hold')).toBeNull()
   })
 
+  it("keeps a folder's own server, which the router knows only once a session attaches", () => {
+    const tools = new ToolChanges(null)
+    tools.seen('project:abc', [search], 'list')
+    // The host starts, and its library holds no folder's server yet.
+    tools.keep(new Set())
+    tools.seen('project:abc', [search, { name: 'export_rows' }], 'list')
+    expect(tools.changes('project:abc', 'hold')?.added).toEqual(['export_rows'])
+  })
+
   it('drops what Kettu did not write, and holds every tool of a server too large to read', () => {
     const parsed = parseToolsFile({
       servers: {

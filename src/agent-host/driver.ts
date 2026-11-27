@@ -101,6 +101,8 @@ export interface HostedContext extends DriverContext {
   clineHostPath?: string | null
   /** Where Claude Code's flag settings are written for its processes; a test may leave it out. */
   claudeSettingsDir?: string
+  /** The environment that turns a folder's own config off, for an `acp-folders` agent. */
+  folderConfigOff?: Readonly<Record<string, string>>
 }
 
 export interface HostedDriver extends StoredConfig {

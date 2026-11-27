@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ProjectMcpAnswers } from './project-mcp'
-import { serverDigest } from './project-settings'
+import { namesDigest, serverDigest } from './project-settings'
 import { migrate, parseProjectMcpFile, PROJECT_MCP_MIGRATIONS, projectMcpFile } from './storage'
 
 let dir: string
@@ -37,6 +37,7 @@ const command = (name: string, args: string[] = [], env: string[] = []) => ({
 })
 
 const db = command('db', ['db-server'])
+const webSpec = { type: 'stdio' as const, command: 'npx', args: ['web-server'], env: [] }
 const web = command('web', ['web-server'])
 
 describe("a folder's own MCP servers", () => {
@@ -76,10 +77,49 @@ describe("a folder's own MCP servers", () => {
     expect(store.allowed('/repo', { ...allowed[0]!, name: 'renamed' })).toBe(true)
   })
 
-  it('never take a value for part of what is asked about', () => {
-    const spec = (value: string) =>
-      serverDigest({ type: 'stdio', command: 'x', args: [], env: [{ name: 'K', value }] })
-    expect(spec('one')).toBe(spec('two'))
+  it('ask again once only the value of a variable or a header changes', async () => {
+    const store = await answers()
+    const spec = {
+      type: 'stdio' as const,
+      command: 'node',
+      args: ['server.js'],
+      env: [{ name: 'NODE_OPTIONS', input: true as const, secret: true, required: true }],
+    }
+    const server = (value: string) => ({
+      name: 'db',
+      digest: serverDigest(spec, { NODE_OPTIONS: value }),
+    })
+    store.answer('/repo', [server('--max-old-space-size=4096')], 'use')
+    expect(store.allowed('/repo', server('--max-old-space-size=4096'))).toBe(true)
+    expect(store.allowed('/repo', server('--require /tmp/evil.js'))).toBeNull()
+    const remote = (value: string) =>
+      serverDigest({
+        type: 'http',
+        url: 'https://a.example/mcp',
+        transport: 'streamable-http',
+        headers: [{ name: 'X-Key', value }],
+      })
+    expect(remote('one')).not.toBe(remote('two'))
+  })
+
+  it('keep only a hash of the values, never a value', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo)
+    const store = await answers()
+    const spec = {
+      type: 'stdio' as const,
+      command: 'x',
+      args: [],
+      env: [{ name: 'TOKEN', input: true as const, secret: true, required: true }],
+    }
+    store.answer(
+      repo,
+      [{ name: 'db', digest: serverDigest(spec, { TOKEN: 'sk-secret-value' }) }],
+      'use',
+    )
+    await store.flush()
+    const saved = await readFile(path.join(dir, 'state', 'project-mcp.json'), 'utf8')
+    expect(saved).not.toContain('sk-secret-value')
   })
 
   it('let every server of the folder start after all, later ones too, but not a refused one', async () => {
@@ -112,7 +152,7 @@ describe("a folder's own MCP servers", () => {
     expect(again.allowed(repo, web)).toBe(false)
     const saved = JSON.parse(await readFile(path.join(dir, 'state', 'project-mcp.json'), 'utf8'))
     expect(saved).toEqual({
-      version: 2,
+      version: 3,
       folders: { [repo]: { servers: { [db.digest]: true, [web.digest]: false } } },
     })
     const { readdir } = await import('node:fs/promises')
@@ -134,26 +174,80 @@ describe("a folder's own MCP servers", () => {
     await store.flush()
     const saved = JSON.parse(await readFile(path.join(dir, 'state', 'project-mcp.json'), 'utf8'))
     expect(saved).toEqual({
-      version: 2,
+      version: 3,
       folders: { '/repo': { servers: { [db.digest]: true, [web.digest]: false } } },
+    })
+  })
+
+  it('take over the answers kept by a digest of names alone, once for the server seen then', async () => {
+    const spec = {
+      type: 'stdio' as const,
+      command: 'npx',
+      args: ['db-server'],
+      env: [{ name: 'TOKEN', input: true as const, secret: true, required: true }],
+    }
+    const seen = {
+      name: 'db',
+      digest: serverDigest(spec, { TOKEN: 'a' }),
+      namesDigest: namesDigest(spec),
+    }
+    const refused = command('web', ['web-server'])
+    await mkdir(path.join(dir, 'state'))
+    await writeFile(
+      path.join(dir, 'state', 'project-mcp.json'),
+      JSON.stringify({
+        version: 2,
+        folders: {
+          '/repo': {
+            servers: { [namesDigest(spec)]: true, [namesDigest(webSpec)]: false },
+          },
+        },
+      }),
+    )
+    const store = await answers()
+    expect(store.allowed('/repo', seen)).toBe(true)
+    expect(store.allowed('/repo', { ...refused, namesDigest: namesDigest(webSpec) })).toBe(false)
+    // Taken over by the full digest: another value now asks again.
+    const changed = { ...seen, digest: serverDigest(spec, { TOKEN: 'b' }) }
+    expect(store.allowed('/repo', changed)).toBeNull()
+    expect(store.allowed('/repo', seen)).toBe(true)
+    await store.flush()
+    const saved = JSON.parse(await readFile(path.join(dir, 'state', 'project-mcp.json'), 'utf8'))
+    expect(saved).toEqual({
+      version: 3,
+      folders: { '/repo': { servers: { [seen.digest]: true, [refused.digest]: false } } },
     })
   })
 
   it('migrate a file another version wrote, keeping every answer and all', () => {
     const migrated = migrate(
       { version: 1, folders: { '/repo': { all: true, use: ['db'], skip: [] }, '/none': {} } },
-      2,
+      3,
       PROJECT_MCP_MIGRATIONS,
     )
     expect(migrated).toEqual({
       kind: 'ok',
       from: 1,
       data: {
-        version: 2,
+        version: 3,
         folders: {
           '/repo': { all: true, servers: {}, named: { use: ['db'], skip: [] } },
           '/none': { servers: {} },
         },
+      },
+    })
+    expect(
+      migrate(
+        { version: 2, folders: { '/repo': { all: true, servers: { d: true, e: false } } } },
+        3,
+        PROJECT_MCP_MIGRATIONS,
+      ),
+    ).toEqual({
+      kind: 'ok',
+      from: 2,
+      data: {
+        version: 3,
+        folders: { '/repo': { all: true, servers: {}, earlier: { d: true, e: false } } },
       },
     })
   })
@@ -168,7 +262,7 @@ describe("a folder's own MCP servers", () => {
         },
       }),
     ).toEqual({
-      version: 2,
+      version: 3,
       folders: {
         '/repo': { all: true, servers: { a: true }, named: { use: ['db'], skip: [] } },
         '/other': { servers: { c: false } },

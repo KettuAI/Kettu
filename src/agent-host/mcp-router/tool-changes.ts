@@ -34,6 +34,9 @@ export interface ToolsFile {
 /** How the server's tools were seen: a full list, or a later page of one the router passed on. */
 export type Sighting = 'list' | 'page'
 
+/** How the id of a folder's own server starts, which the host registers as a session attaches. */
+export const PROJECT_SERVER = 'project:'
+
 export const MAX_TOOL_SERVERS = 500
 export const MAX_SERVER_TOOLS = 2_000
 /** The most read back of one server, as JSON. */
@@ -329,9 +332,15 @@ export class ToolChanges {
     return true
   }
 
-  /** Only the servers the library still keeps stay. */
+  /**
+   * Only the servers the library still keeps stay, and every folder's own server: the router
+   * knows one only once a session in its folder attaches, so its accepted tools outlive a restart.
+   * Its id changes with its content, so what was accepted never stands for a changed server.
+   */
   keep(serverIds: ReadonlySet<string>): void {
-    const gone = Object.keys(this.data.servers).filter((id) => !serverIds.has(id))
+    const gone = Object.keys(this.data.servers).filter(
+      (id) => !serverIds.has(id) && !id.startsWith(PROJECT_SERVER),
+    )
     if (gone.length === 0) return
     const servers = { ...this.data.servers }
     for (const id of gone) {

@@ -5,12 +5,14 @@ import type { JsonFile, ProjectMcpFile, ProjectMcpFolder } from './storage'
 export interface AnsweredServer {
   name: string
   digest: string
+  /** The digest of its names alone, which an earlier version kept answers by. */
+  namesDigest?: string
 }
 
 /**
  * The user's answers about the MCP servers a folder's own config declares, by the folder's path
- * key and each server's content digest, so a changed command, argument, variable name, URL or
- * header name asks again. A server nobody answered for is held like a refused one, so a
+ * key and each server's content digest, so a changed command, argument, URL, variable or header,
+ * value included, asks again. A server nobody answered for is held like a refused one, so a
  * repository cannot start a program before the user agrees.
  */
 export class ProjectMcpAnswers {
@@ -32,23 +34,48 @@ export class ProjectMcpAnswers {
     if (!answers) return null
     if (Object.hasOwn(answers.servers, server.digest)) {
       if (answers.servers[server.digest] === false) return false
-    } else if (answers.named) {
-      // An answer an older version kept by name stands for the server of that name as it is now.
-      const { use, skip } = answers.named
-      const kept = skip.includes(server.name) ? false : use.includes(server.name) ? true : null
-      if (kept !== null) {
-        const rest = (list: string[]) => list.filter((name) => name !== server.name)
-        const named = { use: rest(use), skip: rest(skip) }
-        this.set(folder, {
-          ...answers,
-          servers: { ...answers.servers, [server.digest]: kept },
-          ...(named.use.length > 0 || named.skip.length > 0 ? { named } : { named: undefined }),
-        })
-        return kept
-      }
+    } else {
+      const kept = this.takeOver(folder, answers, server)
+      if (kept !== null) return kept
     }
     if (answers.all) return true
     return Object.hasOwn(answers.servers, server.digest) ? answers.servers[server.digest]! : null
+  }
+
+  /**
+   * An answer an older version kept, by the server's names alone or by its name, stands for the
+   * server as it is now and is kept by its digest from then on.
+   */
+  private takeOver(
+    folder: string,
+    answers: ProjectMcpFolder,
+    server: AnsweredServer,
+  ): boolean | null {
+    const earlier = answers.earlier ?? {}
+    if (server.namesDigest !== undefined && Object.hasOwn(earlier, server.namesDigest)) {
+      const kept = earlier[server.namesDigest]!
+      const rest = Object.fromEntries(
+        Object.entries(earlier).filter(([digest]) => digest !== server.namesDigest),
+      )
+      this.set(folder, {
+        ...answers,
+        servers: { ...answers.servers, [server.digest]: kept },
+        earlier: Object.keys(rest).length > 0 ? rest : undefined,
+      })
+      return kept
+    }
+    if (!answers.named) return null
+    const { use, skip } = answers.named
+    const kept = skip.includes(server.name) ? false : use.includes(server.name) ? true : null
+    if (kept === null) return null
+    const without = (list: string[]) => list.filter((name) => name !== server.name)
+    const named = { use: without(use), skip: without(skip) }
+    this.set(folder, {
+      ...answers,
+      servers: { ...answers.servers, [server.digest]: kept },
+      named: named.use.length > 0 || named.skip.length > 0 ? named : undefined,
+    })
+    return kept
   }
 
   /** Of `servers`, those that may not start in the folder. */
@@ -72,8 +99,9 @@ export class ProjectMcpAnswers {
 
   private set(folder: string, answers: ProjectMcpFolder): void {
     if (answers.named === undefined) delete answers.named
+    if (answers.earlier === undefined) delete answers.earlier
     this.folders = { ...this.folders, [folder]: answers }
-    this.file.save({ version: 2, folders: this.folders })
+    this.file.save({ version: 3, folders: this.folders })
   }
 
   private of(folder: string): ProjectMcpFolder | undefined {

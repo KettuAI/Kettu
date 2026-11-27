@@ -6167,8 +6167,11 @@ button.kettu-ctx__part-row:focus-visible {
   margin-inline-start: 6px;
   color: var(--composer-muted);
 }
-.kettu-ctx__mcp-title .k-mcp-held-tag {
-  margin-inline-start: 6px;
+.kettu-ctx__mcp-held {
+  display: flex;
+  margin-block-start: 2px;
+}
+.kettu-ctx__mcp-held .k-mcp-held-tag {
   font-size: 11px;
 }
 .kettu-ctx__mcp-facts {

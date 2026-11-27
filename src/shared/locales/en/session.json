@@ -367,7 +367,8 @@
       "all": "All of this project’s used",
       "skip": "Not used",
       "timeout": "Not answered"
-    }
+    },
+    "notice": "<b>{{agent}}</b> runs this project’s {{names}} with its first message; nothing holds them back. From {{files}}."
   },
   "projectHooks": {
     "where": "This project’s .claude settings run these commands by themselves, such as when a session starts, on this computer as you. Until you allow them, this session runs no such commands, your own included.",

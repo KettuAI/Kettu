@@ -1,4 +1,5 @@
 import type { AgentDefinition } from '../catalog'
+import { geminiFolderHold } from '../folder-holds'
 
 export const GEMINI: AgentDefinition = {
   id: 'gemini',
@@ -6,6 +7,9 @@ export const GEMINI: AgentDefinition = {
   name: 'Gemini CLI',
   registryId: 'gemini',
   launch: { kind: 'package', package: '@google/gemini-cli', command: 'gemini', args: ['--acp'] },
+  // Its own folder trust holds the rest (0.68.0); the folders it trusts run on a second process.
+  protocol: 'acp-folders',
+  folderConfigOff: geminiFolderHold,
   requiresNode: '>=22',
   install: {
     hint: 'detect.hint.node',

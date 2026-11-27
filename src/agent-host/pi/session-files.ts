@@ -26,14 +26,33 @@ export interface PiFolders {
 
 /** Pi's folders as its own environment and settings place them. */
 export async function piFolders(env: Env, platform: Platform): Promise<PiFolders> {
+  const { sessions, adapterMap } = await placed(env, platform)
+  return { sessions: sessions.dir, adapterMap }
+}
+
+async function placed(
+  env: Env,
+  platform: Platform,
+): Promise<{ sessions: { dir: string; byFolder: boolean }; adapterMap: string }> {
   const home = getEnv(env, platform === 'win32' ? 'USERPROFILE' : 'HOME', platform) ?? os.homedir()
   const named = getEnv(env, 'PI_CODING_AGENT_DIR', platform)?.trim()
   const agentDir = named ? path.resolve(named) : path.join(home, '.pi', 'agent')
   const adapterMap = path.join(home, ...ADAPTER_MAP)
   const fromEnv = getEnv(env, 'PI_CODING_AGENT_SESSION_DIR', platform)?.trim()
-  if (fromEnv) return { sessions: path.resolve(fromEnv), adapterMap }
+  if (fromEnv) return { sessions: { dir: path.resolve(fromEnv), byFolder: false }, adapterMap }
   const fromSettings = await sessionDirSetting(agentDir)
-  return { sessions: fromSettings ?? path.join(agentDir, 'sessions'), adapterMap }
+  if (fromSettings) return { sessions: { dir: fromSettings, byFolder: false }, adapterMap }
+  return { sessions: { dir: path.join(agentDir, 'sessions'), byFolder: true }, adapterMap }
+}
+
+/**
+ * The folder pi keeps `cwd`'s sessions in by the user's own environment and settings, which Kettu
+ * passes as `--session-dir`: a project's `.pi/settings.json` would otherwise move them into the
+ * repository, even in a folder pi does not trust.
+ */
+export async function piSessionDir(env: Env, platform: Platform, cwd: string): Promise<string> {
+  const { sessions } = await placed(env, platform)
+  return sessions.byFolder ? path.join(sessions.dir, folderName(path.resolve(cwd))) : sessions.dir
 }
 
 async function sessionDirSetting(agentDir: string): Promise<string | null> {

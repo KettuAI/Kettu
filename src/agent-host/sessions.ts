@@ -251,6 +251,7 @@ import type { AnsweredServer, ProjectMcpAnswers } from './project-mcp'
 import {
   folderHandOff,
   type FolderDeclared,
+  type FolderNotice,
   type FolderServer,
   type FolderSettings,
 } from './project-settings'
@@ -1453,6 +1454,8 @@ export class SessionManager {
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own servers and settings while it waits. */
   private readonly projectCards = new Map<string, ProjectCard>()
+  /** The digest of what each session's notice last named. */
+  private readonly projectNotices = new Map<string, string>()
   /** Memory proposals and writes being answered or taken back, by session and entry, with who. */
   private readonly memoryAnswers = new Map<string, FromDevice | null>()
   /** Each setup that waits, by the computer use service's request id, with who said Not now. */
@@ -4627,7 +4630,37 @@ export class SessionManager {
         selfRun: plan.selfRun,
       })
     }
+    if (declared.notice) this.noticeProject(sessionId, declared.notice)
     return { servers: plan.servers, trusted: plan.trusted, declared: declared.harnessServers }
+  }
+
+  /**
+   * Names, once in the session, what its folder makes a harness with no switch for it run on the
+   * first message, which goes out as usual; again only once that changes.
+   */
+  private noticeProject(sessionId: string, notice: FolderNotice): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const shown = this.projectNotices.get(sessionId)
+    if (shown === notice.digest) return
+    const earlier = live.thread.order.some((id) => {
+      const entry = live.thread.byId[id]
+      return entry?.kind === 'project_mcp' && entry.notice === true
+    })
+    this.projectNotices.set(sessionId, notice.digest)
+    // After a restart only a change shows it again.
+    if (shown === undefined && earlier) return
+    const entry: ProjectMcpEntry = {
+      kind: 'project_mcp',
+      id: this.nextId(live),
+      servers: notice.servers,
+      items: notice.items,
+      files: notice.files,
+      notice: true,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
   }
 
   /** Lets the user answer, in the session's thread, for the hooks its folder's settings declare. */

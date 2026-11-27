@@ -283,7 +283,11 @@ export interface AgentLauncher {
   launch(def: AgentDefinition, spec: LaunchSpec, env: Env, output: LaunchOutput): LaunchedAgent
 }
 
-/** Spawns real processes, in the home directory; each session's folder travels as `cwd`. */
+/**
+ * Spawns real processes, in the home directory; each session's folder travels as `cwd`. Codebuddy
+ * Code and Cursor read a folder's own settings, hooks and MCP servers from their process's folder,
+ * so it must never be a session's.
+ */
 export function processLauncher(platform: Platform, timings?: StopTimings): AgentLauncher {
   return {
     launch: (_def, spec, env, output) =>
@@ -1559,7 +1563,8 @@ export class AgentManager {
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
-    const { launched, connection } = this.connect(slot, spec, env)
+    const folderConfigOff = await this.folderConfigOff(slot, env)
+    const { launched, connection } = this.connect(slot, spec, env, folderConfigOff)
     void launched.exited.then((info) => this.onExit(slot, launched, connection, info))
 
     const abort = new AbortController()
@@ -1692,10 +1697,20 @@ export class AgentManager {
    * Starts the agent through its protocol's driver: over the stdio of the process the launcher
    * spawns, or as a run in the host whose processes are recorded and stopped as the agent's own.
    */
+  /** What turns the folder's own config off for an `acp-folders` agent, its files written first. */
+  private async folderConfigOff(slot: Slot, env: Env): Promise<Record<string, string> | null> {
+    const off = slot.def.folderConfigOff
+    if (!off) return null
+    if (typeof off !== 'function') return { ...off }
+    const dir = path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id)
+    return off(dir, env, this.deps.platform)
+  }
+
   private connect(
     slot: Slot,
     spec: LaunchSpec,
     env: Env,
+    folderConfigOff: Record<string, string> | null = null,
   ): { launched: AgentRun; connection: AgentConnection } {
     const driver = this.driver(slot)
     const home = this.ownHome(slot)
@@ -1736,6 +1751,7 @@ export class AgentManager {
         nodeRuntime: this.deps.nodeRuntime,
         clineHostPath: this.deps.clineHostPath ?? null,
         ...(this.deps.claudeSettingsDir ? { claudeSettingsDir: this.deps.claudeSettingsDir } : {}),
+        ...(folderConfigOff ? { folderConfigOff } : {}),
       })
     } catch (error) {
       slot.launched = null
@@ -4046,7 +4062,8 @@ export class AgentManager {
   private connectionHooks(slot: Slot): ConnectionHooks {
     const { diagnostics, acpMessages } = this.deps
     const agentId = slot.id
-    const acp = protocolFor(slot.def, this.deps, slot.protocol) === 'acp'
+    const protocol = protocolFor(slot.def, this.deps, slot.protocol)
+    const acp = protocol === 'acp' || protocol === 'acp-folders'
     return {
       traffic: (direction, message) => {
         diagnostics.traffic(agentId, direction, message)

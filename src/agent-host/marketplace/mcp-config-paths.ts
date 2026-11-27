@@ -145,8 +145,11 @@ export function mcpConfigPaths(
 const PROJECT_FILES: [string, McpConfigFile['layout'], string?][] = [
   ['.mcp.json', 'standard'],
   ['.codex/config.toml', 'codex'],
+  ['.grok/config.toml', 'codex'],
   ['opencode.json', 'opencode'],
   ['opencode.jsonc', 'opencode'],
+  ['kilo.json', 'opencode'],
+  ['kilo.jsonc', 'opencode'],
   ['.gemini/settings.json', 'standard'],
   ['.agents/mcp_config.json', 'standard'],
   ['.pi/mcp.json', 'standard'],
@@ -209,6 +212,17 @@ export function harnessProjectMcpPaths(
       return [own('.codex/config.toml', 'codex')]
     case 'opencode':
       return [own('opencode.json', 'opencode'), own('opencode.jsonc', 'opencode')]
+    case 'grok':
+      // Read at the repository's root, which the caller passes as `cwd`.
+      return [
+        own('.mcp.json', 'standard'),
+        own('.cursor/mcp.json', 'standard'),
+        own('.grok/config.toml', 'codex'),
+      ]
+    case 'kilo':
+      return ['kilo.json', 'kilo.jsonc', 'opencode.json', 'opencode.jsonc'].map((file) =>
+        own(file, 'opencode'),
+      )
     default:
       return []
   }

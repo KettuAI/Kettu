@@ -141,7 +141,14 @@ export type LaunchKind =
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
 export type AgentProtocol =
-  'acp' | 'claude-sdk' | 'cline-sdk' | 'codex-app-server' | 'dsh-sdk' | 'opencode-server' | 'pi-rpc'
+  | 'acp'
+  | 'acp-folders'
+  | 'claude-sdk'
+  | 'cline-sdk'
+  | 'codex-app-server'
+  | 'dsh-sdk'
+  | 'opencode-server'
+  | 'pi-rpc'
 
 /**
  * An interface of the harness's own that an agent runs on in place of the definition's protocol
@@ -164,6 +171,14 @@ export interface AgentDefinition {
   registryId: string
   /** The protocol it speaks; ACP when not given. */
   protocol?: AgentProtocol
+  /**
+   * The environment that turns a folder's own config off for every session of its process, which
+   * `acp-folders` runs it with until the user lets a folder's own settings apply; or what writes
+   * the files it names into Kettu's folder `dir` for the agent, before each start.
+   */
+  folderConfigOff?:
+    | Readonly<Record<string, string>>
+    | ((dir: string, env: Env, platform: Platform) => Promise<Record<string, string>>)
   preferred?: PreferredProtocol
   launch: LaunchKind
   requiresNode?: string
