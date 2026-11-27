@@ -29,6 +29,7 @@ import {
   pathLookup,
   resolveShell,
   shellEnvironment,
+  type ShellLog,
   type ShellSpec,
 } from './shell'
 import { hasRunningChildProcess, type WindowsProcess } from './windows-busy'
@@ -98,6 +99,7 @@ export interface TerminalManagerOptions {
   loadPty: () => Promise<PtySpawn>
   findOnPath?: FindOnPath
   warn?: (message: string) => void
+  log?: ShellLog
   /** Reads the Windows process table once per busy check, or null when it cannot be read. */
   windowsProcesses?: () => Promise<readonly WindowsProcess[] | null>
   /** Whether a port serves a paired device, which never pauses the pty; none do when absent. */
@@ -192,7 +194,8 @@ export class TerminalManager {
   private readonly controls: SurfaceControls
 
   constructor(private readonly options: TerminalManagerOptions) {
-    this.findOnPath = options.findOnPath ?? pathLookup(options.env, options.platform)
+    this.findOnPath =
+      options.findOnPath ?? pathLookup(options.env, options.platform, { log: options.log })
     this.controls = new SurfaceControls({
       changed: (id) => {
         const terminal = this.terminals.get(id)
@@ -255,6 +258,7 @@ export class TerminalManager {
       this.options.env,
       this.shellPath,
       this.findOnPath,
+      this.options.log,
     )
     const terminal: Terminal = {
       info: {
@@ -721,6 +725,7 @@ export class TerminalManager {
       this.options.env,
       this.shellPath,
       this.findOnPath,
+      this.options.log,
     )
     // The name the user or the agent gave the tab stays; the new shell has run nothing yet.
     Object.assign(terminal.info, {

@@ -38,6 +38,10 @@ function warn(message: string): void {
   writeLog('warn', 'host', message)
 }
 
+function logShell(level: 'info' | 'warn', message: string, data?: Record<string, unknown>): void {
+  writeLog(level, 'shell', message, data)
+}
+
 async function loadPty(): Promise<PtySpawn> {
   const pty = await import('node-pty')
   return (file, args, options) => pty.spawn(file, args, options)
@@ -66,6 +70,7 @@ export function startTerminalHost(
       windowsProcesses:
         message.platform === 'win32' ? () => listWindowsProcesses(process.env) : undefined,
       warn,
+      log: logShell,
       isDevicePort: (port) => server?.isDevice(port) ?? false,
       handedBack: (sessionId, durationMs) =>
         send({ type: 'terminal-host:handed-back', sessionId, durationMs: Math.round(durationMs) }),
