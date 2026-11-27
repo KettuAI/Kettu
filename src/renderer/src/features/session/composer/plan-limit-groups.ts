@@ -4,6 +4,25 @@ import { windowParts, type WindowKind, type WindowParts } from '@shared/plan-lim
 /** 单个窗口条目在组卡片中的标签展示模式 */
 export type PlanLimitLabelMode = 'window' | 'scope' | 'full'
 
+/** 柔波液面槽四档色阶（按已用占比统一判定，切换 Used / Left 口径颜色保持恒定） */
+export type PlanWaveTier = 'safe' | 'mid' | 'warn' | 'crit'
+
+/**
+ * 判定套餐限额窗口对应的柔波色阶（配色 1）：
+ * - `safe`：0–49% 已用（51–100% 剩余），晴空冰川蓝
+ * - `mid`：50–69% 已用（31–50% 剩余），钴靛紫蓝
+ * - `warn`：70–89% 已用（11–30% 剩余），琥珀金
+ * - `crit`：90–100% 已用（0–10% 剩余）或已触顶，朱红
+ */
+export function planWaveTier(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): PlanWaveTier {
+  if (limit.state === 'reached') return 'crit'
+  const used = Math.round(limit.usedPercent ?? 0)
+  if (used >= 90) return 'crit'
+  if (used >= 70) return 'warn'
+  if (used >= 50) return 'mid'
+  return 'safe'
+}
+
 export interface PlanLimitItem {
   limit: PlanLimit
   parts: WindowParts

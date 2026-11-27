@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanLimit } from '@shared/agent-host'
-import { groupPlanLimits } from './plan-limit-groups'
+import { groupPlanLimits, planWaveTier } from './plan-limit-groups'
 
 const NOW = Date.UTC(2026, 10, 24, 19, 36)
 
@@ -144,5 +144,20 @@ describe('groupPlanLimits', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0]!.kind).toBe('solo')
     expect(groups[0]!.items[0]!.labelMode).toBe('full')
+  })
+})
+
+describe('planWaveTier', () => {
+  it('按四档已用百分比临界点准确归档，并优先处理 reached 状态与空值', () => {
+    expect(planWaveTier({ usedPercent: null, state: 'ok' })).toBe('safe')
+    expect(planWaveTier({ usedPercent: 0, state: 'ok' })).toBe('safe')
+    expect(planWaveTier({ usedPercent: 49.4, state: 'ok' })).toBe('safe')
+    expect(planWaveTier({ usedPercent: 49.5, state: 'ok' })).toBe('mid')
+    expect(planWaveTier({ usedPercent: 69.4, state: 'ok' })).toBe('mid')
+    expect(planWaveTier({ usedPercent: 69.5, state: 'ok' })).toBe('warn')
+    expect(planWaveTier({ usedPercent: 89.4, state: 'warning' })).toBe('warn')
+    expect(planWaveTier({ usedPercent: 89.5, state: 'warning' })).toBe('crit')
+    expect(planWaveTier({ usedPercent: 100, state: 'reached' })).toBe('crit')
+    expect(planWaveTier({ usedPercent: 20, state: 'reached' })).toBe('crit')
   })
 })

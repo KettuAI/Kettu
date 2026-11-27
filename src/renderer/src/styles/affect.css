@@ -5623,23 +5623,23 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   font-variant-numeric: tabular-nums;
 }
 
-/* Four-level usage semantic colors shared by the context ring, tray limits, context bar, and plan limits. */
-:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit, .kettu-ctx__main) {
+/* Four-level usage semantic colors shared by the context ring, tray limits, and context bar. */
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-ctx__main) {
   --meter: var(--composer-meter-ok);
   --meter-wash: var(--composer-meter-ok-wash);
   --meter-text: var(--composer-ink);
 }
-:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit, .kettu-ctx__main)[data-level='mid'] {
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-ctx__main)[data-level='mid'] {
   --meter: var(--composer-meter-mid);
   --meter-wash: var(--composer-meter-mid-wash);
   --meter-text: var(--composer-ink);
 }
-:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit, .kettu-ctx__main)[data-level='high'] {
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-ctx__main)[data-level='high'] {
   --meter: var(--composer-meter-high);
   --meter-wash: var(--composer-meter-high-wash);
   --meter-text: var(--plan-warn-text);
 }
-:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit, .kettu-ctx__main)[data-level='full'] {
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-ctx__main)[data-level='full'] {
   --meter: var(--composer-meter-full);
   --meter-wash: var(--composer-meter-full-wash);
   --meter-text: var(--plan-bad-text);
@@ -6410,8 +6410,8 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-ctx__plan {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 9px 14px 10px;
+  gap: 9px;
+  padding: 10px 14px 12px;
   border-top: 0.5px solid var(--composer-line);
 }
 .kettu-ctx__plan-head {
@@ -6431,10 +6431,11 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-ctx__plan-view {
   display: inline-flex;
   align-items: center;
-  margin-left: 5px;
-  padding: 0 4px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0 5px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--composer-muted);
   outline: none;
@@ -6453,7 +6454,7 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-ctx__tier {
   flex: none;
   height: 20px;
-  padding: 0 6px;
+  padding: 0 6.5px;
   border-radius: 5px;
   background: var(--composer-chip-hover);
   font-size: 11px;
@@ -6462,48 +6463,62 @@ button.kettu-ctx__part-row:focus-visible {
   color: var(--composer-text);
   white-space: nowrap;
 }
-/* 套餐限额分组双轨卡片（方案 A）：组名独占顶行零折行，组内窗口左右并排对照 */
+/* 套餐限额 L1 横向柔波液面槽（配色 1：冰川蓝 → 钴靛紫蓝 → 琥珀金 → 朱红） */
 .kettu-plan-groups {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 .kettu-plan-group {
-  padding: 7px 10px 8px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--composer-strong) 2.8%, transparent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--composer-strong) 7%, transparent);
-}
-.kettu-plan-group[data-current] {
-  background: color-mix(in srgb, var(--control-on) 4.5%, transparent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--control-on) 22%, transparent);
-}
-.kettu-plan-group[data-solo] {
-  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5.5px;
 }
 .kettu-plan-group__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  padding: 0 1px;
 }
 .kettu-plan-group__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   line-height: 16px;
-  color: var(--composer-ink);
+  color: var(--composer-muted);
+}
+.kettu-plan-group__name > span:last-child {
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.kettu-plan-group__badge {
+.kettu-plan-group[data-current] .kettu-plan-group__name {
+  color: var(--composer-ink);
+}
+.kettu-plan-group__dot {
   flex: none;
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
-  color: var(--control-on);
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--control-on);
+}
+.kettu-plan-group__badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--control-on) 15%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  color: var(--primary-foreground);
   white-space: nowrap;
 }
 .kettu-plan-group__models {
@@ -6512,6 +6527,7 @@ button.kettu-ctx__part-row:focus-visible {
   line-height: 16px;
   color: var(--composer-faint);
   white-space: nowrap;
+  cursor: default;
   transition: color var(--duration-fast);
 }
 .kettu-plan-group__models:hover {
@@ -6520,107 +6536,213 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-plan-group__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 .kettu-plan-group__grid[data-single] {
   grid-template-columns: minmax(0, 1fr);
 }
-.kettu-limit {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(odd):not(:last-child) {
-  padding-right: 10px;
-}
-.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(even) {
-  padding-left: 10px;
-  border-left: 0.5px solid var(--composer-line);
-}
 .kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(odd):last-child {
   grid-column: 1 / -1;
 }
-.kettu-plan-group__grid:not([data-single]) > .kettu-limit:nth-child(n + 3) {
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 0.5px solid var(--composer-line);
+.kettu-limit {
+  --wave-color: var(--plan-wave-safe);
+  --wave-alt: var(--plan-wave-safe-alt);
+  --wave-val: var(--composer-strong);
+  --wave-fill-b: var(--plan-wave-b);
+  --wave-edge-opacity: var(--plan-wave-stroke);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2.5px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 10px 8.5px;
+  border-radius: 10px;
+  background: var(--plan-wave-surface);
+  box-shadow: inset 0 0 0 0.5px var(--plan-wave-border);
+  transition:
+    box-shadow var(--duration-fast),
+    background-color var(--duration-fast);
+}
+.kettu-limit[data-compact] {
+  padding: 8.5px 10px;
+}
+.kettu-limit:hover {
+  box-shadow: inset 0 0 0 0.5px var(--plan-wave-border-hover);
+}
+.kettu-limit[data-tier='mid'] {
+  --wave-color: var(--plan-wave-mid);
+  --wave-alt: var(--plan-wave-mid-alt);
+  --wave-val: var(--composer-strong);
+}
+.kettu-limit[data-tier='warn'] {
+  --wave-color: var(--plan-wave-warn);
+  --wave-alt: var(--plan-wave-warn-alt);
+  --wave-val: var(--plan-warn-text);
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(in srgb, var(--wave-color) var(--plan-wave-ring), transparent);
+}
+.kettu-limit[data-tier='crit'] {
+  --wave-color: var(--plan-wave-crit);
+  --wave-alt: var(--plan-wave-crit-alt);
+  --wave-val: var(--plan-bad-text);
+  --wave-fill-b: var(--plan-wave-crit-b);
+  --wave-edge-opacity: var(--plan-wave-crit-stroke);
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(in srgb, var(--wave-color) var(--plan-wave-crit-ring), transparent);
+}
+/* 0% 已耗尽空槽：叠加极淡红底晕，一眼识别触顶状态 */
+.kettu-limit[data-tier='crit'][data-zero] {
+  background: color-mix(in srgb, var(--wave-color) 5%, var(--plan-wave-surface));
+}
+/* 当前活跃组轻焦点描边（仅安全/过半档位生效，不覆盖预警/危急色） */
+.kettu-plan-group[data-current] .kettu-limit:is([data-tier='safe'], [data-tier='mid']) {
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(in srgb, var(--wave-color) var(--plan-wave-ring), transparent);
+}
+.kettu-limit__wave {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.kettu-limit__wave-edge {
+  fill: none;
+  stroke: var(--wave-color);
+  stroke-opacity: var(--wave-edge-opacity);
+  stroke-width: 1.15;
+}
+.kettu-limit__wave-hi {
+  stroke: var(--plan-wave-hi);
+  stroke-width: 1;
+  opacity: 0.65;
+}
+@keyframes kettu-wave-float-a {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4.5px);
+  }
+}
+@keyframes kettu-wave-float-b {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4.5px);
+  }
+}
+.kettu-limit__wave-front {
+  animation: kettu-wave-float-a 5.4s ease-in-out infinite;
+}
+.kettu-limit__wave-back {
+  animation: kettu-wave-float-b 7.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-limit__wave-front,
+  .kettu-limit__wave-back {
+    animation: none;
+  }
 }
 .kettu-limit__row {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
-  line-height: 16px;
+  line-height: 17px;
 }
 .kettu-limit__label {
   min-width: 0;
   overflow: hidden;
-  font-size: 11.5px;
-  font-weight: 400;
-  color: var(--composer-text);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--composer-ink);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .kettu-limit__value {
   flex: none;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--meter-text);
+  letter-spacing: -0.015em;
+  color: var(--wave-val);
   text-align: right;
 }
-.kettu-limit__bar {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--composer-chip-hover);
-}
-.kettu-limit__bar > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--meter);
-  transition:
-    width var(--duration-slow) var(--ease-out-quint),
-    background-color var(--duration-fast);
-}
-.kettu-limit__bar > span[data-tiny] {
-  min-width: 6px;
-}
 .kettu-limit__meta {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 2px 6px;
   min-width: 0;
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--composer-muted);
 }
 .kettu-limit__reset {
   display: inline-flex;
   align-items: center;
-  gap: 3.5px;
+  gap: 3px;
+  min-width: 0;
   max-width: 100%;
-  font-size: 10.5px;
-  line-height: 14px;
-  color: var(--composer-faint);
   white-space: nowrap;
 }
 .kettu-limit__reset > svg {
   flex: none;
-  opacity: 0.78;
+  opacity: 0.72;
 }
 .kettu-limit__reset > span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.kettu-limit[data-level='full'] .kettu-limit__reset {
-  color: var(--plan-bad-text);
+.kettu-limit[data-tier='warn'] .kettu-limit__reset {
+  color: var(--wave-val);
+  opacity: 0.88;
+}
+.kettu-limit[data-tier='crit'] .kettu-limit__reset {
+  color: var(--wave-val);
 }
 .kettu-limit__amount {
   min-width: 0;
   overflow: hidden;
-  font-size: 10.5px;
-  line-height: 14px;
-  color: var(--composer-faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* 侧边栏账号悬浮卡底部紧凑脚注（积分余额 / 重置卡） */
+.kettu-plan-hover__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--composer-line);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--composer-muted);
+}
+.kettu-plan-hover__foot-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.kettu-plan-hover__foot-val {
+  flex: none;
+  max-width: 65%;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--composer-ink);
   white-space: nowrap;
   text-overflow: ellipsis;
 }

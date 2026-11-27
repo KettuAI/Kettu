@@ -87,7 +87,12 @@ import { REQUESTS_ICON } from '@renderer/features/requests/icon'
 import { readsModelRequests } from '@renderer/features/requests/support'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { groupPlanLimits, type PlanLimitGroup, type PlanLimitItem } from './plan-limit-groups'
+import {
+  groupPlanLimits,
+  planWaveTier,
+  type PlanLimitGroup,
+  type PlanLimitItem,
+} from './plan-limit-groups'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -1263,7 +1268,115 @@ function itemLabel(item: PlanLimitItem): string {
 }
 
 /**
- * 分组双轨卡片列表：按模型组/服务商聚合，组名独占顶行彻底避免折行，组内窗口左右双列并排对照。
+ * 单张一体化零接缝柔波液面 SVG：
+ * 整片液面与前后双波在单张 SVG 内连续绘制，避免任何 DPI 或界面缩放下出现拼接竖缝。
+ */
+function PlanWaveFill({ percent, wide }: { percent: number; wide: boolean }) {
+  const uid = useId()
+  if (percent <= 0) return null
+
+  const width = wide ? 280 : 150
+  const height = 60
+
+  // 满槽（>=99%）：整块平顺液面 + 顶部极细玻璃微高光
+  if (percent >= 99) {
+    return (
+      <svg
+        className="kettu-limit__wave"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop
+              offset="0%"
+              style={{ stopColor: 'var(--wave-color)', stopOpacity: 'var(--plan-wave-a)' }}
+            />
+            <stop
+              offset="100%"
+              style={{ stopColor: 'var(--wave-color)', stopOpacity: 'var(--wave-fill-b)' }}
+            />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width={width} height={height} fill={`url(#${uid})`} />
+        <line x1="0" y1="0.75" x2={width} y2="0.75" className="kettu-limit__wave-hi" />
+      </svg>
+    )
+  }
+
+  // 极低非零值保留至少 12px 视觉波幅，避免警示液面消失或压成直线
+  const rawX = (percent / 100) * width
+  const x = Math.max(12, Math.min(width - 4, rawX))
+  const amp = percent <= 10 ? 2.1 : 3.2
+  const backOffset = percent <= 10 ? 2.4 : 3.6
+
+  const frontPath = [
+    'M -2 -10',
+    `L ${(x + 0.2).toFixed(1)} -10`,
+    `C ${(x - amp).toFixed(1)} 6, ${(x + amp).toFixed(1)} 22, ${(x - amp * 0.4).toFixed(1)} 36`,
+    `C ${(x - amp * 1.1).toFixed(1)} 48, ${(x + amp * 0.9).toFixed(1)} 58, ${x.toFixed(1)} 70`,
+    'L -2 70 Z',
+  ].join(' ')
+
+  const frontEdge = [
+    `M ${(x + 0.2).toFixed(1)} -10`,
+    `C ${(x - amp).toFixed(1)} 6, ${(x + amp).toFixed(1)} 22, ${(x - amp * 0.4).toFixed(1)} 36`,
+    `C ${(x - amp * 1.1).toFixed(1)} 48, ${(x + amp * 0.9).toFixed(1)} 58, ${x.toFixed(1)} 70`,
+  ].join(' ')
+
+  const bx = Math.min(width - 1, x + backOffset)
+  const backPath = [
+    'M -2 -10',
+    `L ${(bx - 0.5).toFixed(1)} -10`,
+    `C ${(bx + amp).toFixed(1)} 8, ${(bx - amp * 0.9).toFixed(1)} 24, ${(bx + amp * 0.5).toFixed(1)} 40`,
+    `C ${(bx + amp).toFixed(1)} 52, ${(bx - amp * 0.6).toFixed(1)} 62, ${bx.toFixed(1)} 70`,
+    'L -2 70 Z',
+  ].join(' ')
+
+  const frontGradId = `${uid}-f`
+  const backGradId = `${uid}-b`
+
+  return (
+    <svg
+      className="kettu-limit__wave"
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={frontGradId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop
+            offset="0%"
+            style={{ stopColor: 'var(--wave-color)', stopOpacity: 'var(--plan-wave-a)' }}
+          />
+          <stop
+            offset="100%"
+            style={{ stopColor: 'var(--wave-color)', stopOpacity: 'var(--wave-fill-b)' }}
+          />
+        </linearGradient>
+        <linearGradient id={backGradId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style={{ stopColor: 'var(--wave-alt)', stopOpacity: 0 }} />
+          <stop offset="72%" style={{ stopColor: 'var(--wave-alt)', stopOpacity: 0.03 }} />
+          <stop
+            offset="100%"
+            style={{ stopColor: 'var(--wave-alt)', stopOpacity: 'var(--plan-wave-back)' }}
+          />
+        </linearGradient>
+      </defs>
+      <g className="kettu-limit__wave-back">
+        <path d={backPath} fill={`url(#${backGradId})`} />
+      </g>
+      <g className="kettu-limit__wave-front">
+        <path d={frontPath} fill={`url(#${frontGradId})`} />
+        <path d={frontEdge} className="kettu-limit__wave-edge" />
+      </g>
+    </svg>
+  )
+}
+
+/**
+ * 套餐限额分组柔波液面槽：按模型组/服务商聚合，组内窗口以独立柔波液面胶囊双列对照展示。
  * 同时供上下文弹窗（PlanLimits）与侧边栏账号悬浮卡（PlanPart）复用。
  */
 function PlanLimitGroups({
@@ -1299,6 +1412,28 @@ function PlanLimitGroups({
         const heading = headingOf(group)
         const modelsTip = group.models.length > 0 ? group.models.join(' · ') : null
         const single = group.items.length === 1
+        // 组内预先计算各条目的重置时间与附加额度，使同组胶囊保持统一高度；全组均无元信息时走紧凑布局
+        const prepared = group.items.map((item) => {
+          const { limit } = item
+          const reset = limit.resetsAt ? planResetShort(limit.resetsAt, now) : null
+          const unit =
+            limit.amount?.unit === 'credits'
+              ? t('usage:limits.units.credits')
+              : limit.amount?.unit === 'requests'
+                ? t('usage:limits.units.premiumRequests')
+                : limit.amount?.unit
+          const amountText = limit.amount
+            ? planAmount(
+                limit.amount.used,
+                limit.amount.total,
+                limit.amount.unit,
+                unit ?? limit.amount.unit,
+              )
+            : null
+          return { item, reset, amountText }
+        })
+        const groupHasMeta = prepared.some(({ reset, amountText }) => Boolean(reset || amountText))
+
         return (
           <div
             key={group.id}
@@ -1309,7 +1444,8 @@ function PlanLimitGroups({
             {heading && (
               <div className="kettu-plan-group__head">
                 <span className="kettu-plan-group__name" title={heading}>
-                  {heading}
+                  {group.current && <span className="kettu-plan-group__dot" aria-hidden />}
+                  <span>{heading}</span>
                 </span>
                 {group.current ? (
                   modelsTip ? (
@@ -1335,31 +1471,30 @@ function PlanLimitGroups({
               </div>
             )}
             <div className="kettu-plan-group__grid" data-single={single ? '' : undefined}>
-              {group.items.map((item) => {
+              {prepared.map(({ item, reset, amountText }, index) => {
                 const { limit } = item
                 const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
                 const fill = limit.usedPercent === null ? 0 : Math.min(100, Math.max(0, shown))
-                const reset = limit.resetsAt ? planResetShort(limit.resetsAt, now) : null
-                const unit =
-                  limit.amount?.unit === 'credits'
-                    ? t('usage:limits.units.credits')
-                    : limit.amount?.unit === 'requests'
-                      ? t('usage:limits.units.premiumRequests')
-                      : limit.amount?.unit
-                const amountText = limit.amount
-                  ? planAmount(
-                      limit.amount.used,
-                      limit.amount.total,
-                      limit.amount.unit,
-                      unit ?? limit.amount.unit,
-                    )
-                  : null
+                const tier = planWaveTier(limit)
+                const isFullWidth =
+                  single || (index === prepared.length - 1 && prepared.length % 2 === 1)
                 return (
                   <div
                     key={limit.window}
                     className="kettu-limit"
-                    data-level={METER[usageTone(limit)]}
+                    role="meter"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={fill}
+                    aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
+                      limit: limitLabel(limit),
+                    })}
+                    data-tier={tier}
+                    data-compact={!groupHasMeta ? '' : undefined}
+                    data-zero={fill === 0 ? '' : undefined}
+                    data-full={fill >= 99 ? '' : undefined}
                   >
+                    <PlanWaveFill percent={fill} wide={isFullWidth} />
                     <div className="kettu-limit__row">
                       <span className="kettu-limit__label" title={limitLabel(limit)}>
                         {itemLabel(item)}
@@ -1368,36 +1503,23 @@ function PlanLimitGroups({
                         {limit.usedPercent === null ? '—' : `${shown}%`}
                       </span>
                     </div>
-                    <div
-                      className="kettu-limit__bar"
-                      role="meter"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={fill}
-                      aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
-                        limit: limitLabel(limit),
-                      })}
-                    >
-                      <span
-                        data-tiny={fill > 0 && fill <= 3 ? '' : undefined}
-                        style={{ width: `${fill}%` }}
-                      />
-                    </div>
-                    {(reset || amountText) && (
+                    {groupHasMeta && (
                       <div className="kettu-limit__meta">
-                        {reset && limit.resetsAt && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={<span className="kettu-limit__reset tabular" />}
-                            >
-                              <Glyph icon={RefreshIcon} size={10} />
-                              <span>{reset}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        <span className="kettu-limit__reset tabular">
+                          {reset && limit.resetsAt ? (
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="kettu-limit__reset" />}>
+                                <Glyph icon={RefreshIcon} size={10} />
+                                <span>{reset}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            '\u00a0'
+                          )}
+                        </span>
                         {amountText && (
                           <span className="kettu-limit__amount tabular" title={amountText}>
                             {amountText}
@@ -1656,17 +1778,23 @@ function EstimateList({
   )
 }
 
-/** 侧边栏账号悬浮卡中的套餐与限额详情，复用统一的分组双轨卡片布局 */
+/** 侧边栏账号悬浮卡中的套餐与限额详情，复用统一的 L1 柔波液面槽布局 */
 export function PlanPart({
   limits,
   account,
+  showHeader = true,
 }: {
   limits: PlanLimit[]
   account: AgentAccount | null
+  /** 悬浮卡已将套餐芯片合并至顶行时传 false，避免重复展示“Plan limits · Left”副标题 */
+  showHeader?: boolean
 }) {
   const { t } = useTranslation(['composer', 'common'])
   const view = useLimitView()
   const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
+  if (!showHeader) {
+    return <PlanLimitGroups limits={limits} />
+  }
   return (
     <div className="flex flex-col gap-2 text-hint">
       <div className="flex items-center justify-between gap-2">

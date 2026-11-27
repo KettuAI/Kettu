@@ -230,6 +230,28 @@
   --limit-warn: #e5a000;
   --limit-bad: #dc3f3a;
 
+  /* 套餐限额柔波液面槽（配色 1：0–49% 晴空冰川蓝 → 50–69% 钴靛紫蓝 → 70–89% 琥珀金 → 90%+ 朱红） */
+  --plan-wave-surface: #f5f6f8;
+  --plan-wave-border: rgb(15 23 42 / 8%);
+  --plan-wave-border-hover: rgb(15 23 42 / 15%);
+  --plan-wave-hi: rgb(255 255 255 / 65%);
+  --plan-wave-safe: #1a8ae8;
+  --plan-wave-safe-alt: #44b2fa;
+  --plan-wave-mid: #5c56d6;
+  --plan-wave-mid-alt: #847ef6;
+  --plan-wave-warn: #e09800;
+  --plan-wave-warn-alt: #f4b82a;
+  --plan-wave-crit: #e03e38;
+  --plan-wave-crit-alt: #f66656;
+  --plan-wave-a: 0.09;
+  --plan-wave-b: 0.21;
+  --plan-wave-back: 0.11;
+  --plan-wave-stroke: 0.36;
+  --plan-wave-crit-b: 0.27;
+  --plan-wave-crit-stroke: 0.48;
+  --plan-wave-ring: 26%;
+  --plan-wave-crit-ring: 34%;
+
   /* The context ring: under 50% used, 50 to 79%, 80 to 94%, and 95% or more. */
   --usage-green: #2b9a3f;
   --usage-blue: #2a78d6;
@@ -850,6 +872,27 @@
     --limit-warn: #d4a017;
     --limit-bad: #e5605a;
 
+    --plan-wave-surface: rgb(255 255 255 / 4.4%);
+    --plan-wave-border: rgb(255 255 255 / 8.5%);
+    --plan-wave-border-hover: rgb(255 255 255 / 16%);
+    --plan-wave-hi: rgb(255 255 255 / 14%);
+    --plan-wave-safe: #369af6;
+    --plan-wave-safe-alt: #60c0ff;
+    --plan-wave-mid: #7c78f8;
+    --plan-wave-mid-alt: #9e9aff;
+    --plan-wave-warn: #e2aa1c;
+    --plan-wave-warn-alt: #f8c846;
+    --plan-wave-crit: #ee605a;
+    --plan-wave-crit-alt: #fe8072;
+    --plan-wave-a: 0.14;
+    --plan-wave-b: 0.3;
+    --plan-wave-back: 0.16;
+    --plan-wave-stroke: 0.52;
+    --plan-wave-crit-b: 0.36;
+    --plan-wave-crit-stroke: 0.62;
+    --plan-wave-ring: 36%;
+    --plan-wave-crit-ring: 44%;
+
     --usage-green: #4cc15a;
     --usage-blue: #3987e5;
     --usage-orange: #f2a03d;
@@ -1258,6 +1301,27 @@
   --limit-warn: #d4a017;
   --limit-bad: #e5605a;
 
+  --plan-wave-surface: rgb(255 255 255 / 4.4%);
+  --plan-wave-border: rgb(255 255 255 / 8.5%);
+  --plan-wave-border-hover: rgb(255 255 255 / 16%);
+  --plan-wave-hi: rgb(255 255 255 / 14%);
+  --plan-wave-safe: #369af6;
+  --plan-wave-safe-alt: #60c0ff;
+  --plan-wave-mid: #7c78f8;
+  --plan-wave-mid-alt: #9e9aff;
+  --plan-wave-warn: #e2aa1c;
+  --plan-wave-warn-alt: #f8c846;
+  --plan-wave-crit: #ee605a;
+  --plan-wave-crit-alt: #fe8072;
+  --plan-wave-a: 0.14;
+  --plan-wave-b: 0.3;
+  --plan-wave-back: 0.16;
+  --plan-wave-stroke: 0.52;
+  --plan-wave-crit-b: 0.36;
+  --plan-wave-crit-stroke: 0.62;
+  --plan-wave-ring: 36%;
+  --plan-wave-crit-ring: 44%;
+
   --usage-green: #4cc15a;
   --usage-blue: #3987e5;
   --usage-orange: #f2a03d;
@@ -1605,6 +1669,18 @@
   --plan-bad-text: var(--danger);
   --plan-bad-chip: color-mix(in srgb, var(--danger) 12%, transparent);
   --plan-bad-chip-text: var(--danger);
+  --plan-wave-surface: color-mix(in srgb, var(--composer-strong) 3.8%, transparent);
+  --plan-wave-border: color-mix(in srgb, var(--composer-strong) 8.5%, transparent);
+  --plan-wave-border-hover: color-mix(in srgb, var(--composer-strong) 16%, transparent);
+  --plan-wave-hi: color-mix(in srgb, var(--bg-surface) 45%, transparent);
+  --plan-wave-safe: var(--limit-ok);
+  --plan-wave-safe-alt: color-mix(in srgb, var(--limit-ok) 72%, var(--bg-app));
+  --plan-wave-mid: color-mix(in srgb, var(--limit-ok) 58%, var(--series-2));
+  --plan-wave-mid-alt: color-mix(in srgb, var(--series-2) 64%, var(--limit-ok));
+  --plan-wave-warn: var(--limit-warn);
+  --plan-wave-warn-alt: color-mix(in srgb, var(--limit-warn) 76%, var(--bg-app));
+  --plan-wave-crit: var(--limit-bad);
+  --plan-wave-crit-alt: color-mix(in srgb, var(--limit-bad) 76%, var(--bg-app));
   --tray-edge: var(--border-subtle);
   --sketch-accent: var(--context-1);
   --series-1: var(--context-1);
