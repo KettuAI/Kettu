@@ -258,7 +258,7 @@
       },
       "tools_one": "{{count}} tool",
       "tools_other": "{{count}} tools",
-      "perTurn": "{{tokens}} / turn",
+      "perTurn": "~{{tokens}} tokens / turn",
       "offHere": "Off for this session",
       "turnOn": "Turn on",
       "signIn": "Sign in",

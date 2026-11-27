@@ -250,7 +250,7 @@
       },
       "tools_one": "{{count}} 个工具",
       "tools_other": "{{count}} 个工具",
-      "perTurn": "每轮 {{tokens}}",
+      "perTurn": "每轮约 {{tokens}} token",
       "offHere": "这个会话里关了",
       "turnOn": "打开",
       "signIn": "登录",
