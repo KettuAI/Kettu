@@ -54,6 +54,7 @@ import {
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { Blockquote } from './alert'
+import { restoreIpv6Hrefs } from './bare-host-links'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, pictureRun, spacedImages } from './local-images'
@@ -309,9 +310,12 @@ const components: Components = {
   kbd: Key,
 }
 
-// The alerts are marked after the sanitizer, which would drop the mark.
+// Restore IPv6 host brackets before rehype-harden parses anchor URLs, and mark alerts after the
+// sanitizer, which would drop the mark.
 const rehypePlugins: NonNullable<StreamdownProps['rehypePlugins']> = [
-  ...Object.values(defaultRehypePlugins),
+  ...Object.entries(defaultRehypePlugins).flatMap(([name, plugin]) =>
+    name === 'harden' ? [restoreIpv6Hrefs, plugin] : [plugin],
+  ),
   githubAlerts,
 ]
 
