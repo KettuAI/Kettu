@@ -44,6 +44,10 @@ export interface RenderedTurn {
   agentId: AgentId
   user: string
   assistant: string
+  /** Earlier steps before the turn's final agent reply, when the turn has both. */
+  steps?: string
+  /** The turn's final agent reply (and any turn-end note after it), when present. */
+  reply?: string
 }
 
 export interface CarriedContext {
@@ -95,9 +99,14 @@ export function historyBudget(window: number | undefined, budget = HISTORY_BUDGE
 
 const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')
 
+const OMITTED = '[... omitted ...]'
+const STEPS_OMITTED = '[... earlier steps omitted ...]'
+const MIN_HISTORY_USER_BYTES = 2 * 1024
+
 /** The start of `text` within `max` bytes, cut at a character and marked as cut. */
 export function cutStart(text: string, max: number): string {
   if (bytes(text) <= max) return text
+  if (max <= 3) return '.'.repeat(Math.max(0, max))
   let out = ''
   let used = 0
   for (const char of text) {
@@ -110,8 +119,9 @@ export function cutStart(text: string, max: number): string {
 }
 
 /** The end of `text` within `max` bytes, where the latest of a long reply is. */
-function cutEnd(text: string, max: number): string {
+export function cutEnd(text: string, max: number): string {
   if (bytes(text) <= max) return text
+  if (max <= 3) return '.'.repeat(Math.max(0, max))
   const chars = [...text]
   let out = ''
   let used = 0
@@ -122,6 +132,125 @@ function cutEnd(text: string, max: number): string {
     used += size
   }
   return `...${out}`
+}
+
+/** Keeps the head and tail of `text` within `max` UTF-8 bytes, separated by `marker`. */
+function cutMiddle(text: string, max: number, marker = OMITTED, headRatio = 0.35): string {
+  if (bytes(text) <= max) return text
+  const overhead = bytes(marker) + 4
+  if (max <= overhead + 16) return cutEnd(text, max)
+  const room = max - overhead
+  const headBudget = Math.max(8, Math.floor(room * headRatio))
+  const head = cutStart(text, headBudget)
+  const tailBudget = room - bytes(head)
+  const tail = cutEnd(text, tailBudget)
+  return `${head}\n\n${marker}\n\n${tail}`
+}
+
+/**
+ * Fits a turn's assistant record within `max` UTF-8 bytes while prioritizing the turn's final
+ * agent reply so long tool logs never crowd it out.
+ */
+export function trimTurnAssistant(
+  turn: Pick<RenderedTurn, 'assistant' | 'steps' | 'reply'>,
+  max: number,
+): string {
+  if (bytes(turn.assistant) <= max) return turn.assistant
+  const { steps, reply } = turn
+  if (reply !== undefined && reply !== '') {
+    if (steps !== undefined && steps !== '') {
+      const replyBytes = bytes(reply)
+      const markerBytes = bytes(STEPS_OMITTED)
+      if (replyBytes <= max) {
+        const room = max - replyBytes - markerBytes - 4
+        if (room >= 512) {
+          // Keep both the opening and closing steps around the omission marker.
+          const stepsRoom = room - 2
+          const head = cutStart(steps, Math.floor(stepsRoom * 0.35))
+          const tail = cutEnd(steps, stepsRoom - bytes(head))
+          return `${head}\n\n${STEPS_OMITTED}\n\n${tail}\n\n${reply}`
+        }
+        if (room >= 128) {
+          const tail = cutEnd(steps, room)
+          return `${STEPS_OMITTED}\n\n${tail}\n\n${reply}`
+        }
+        if (replyBytes + markerBytes + 2 <= max) {
+          return `${STEPS_OMITTED}\n\n${reply}`
+        }
+        return reply
+      }
+      const withMarker = max - markerBytes - 2
+      if (withMarker >= 256) {
+        return `${STEPS_OMITTED}\n\n${cutMiddle(reply, withMarker, OMITTED, 0.5)}`
+      }
+      return cutMiddle(reply, max, OMITTED, 0.5)
+    }
+    return cutMiddle(reply, max, OMITTED, 0.5)
+  }
+  return cutMiddle(turn.assistant, max, OMITTED, 0.3)
+}
+
+/**
+ * Formats one turn for `read_session_history` within `max` UTF-8 bytes, keeping the assistant's
+ * final reply intact when a long user prompt or heavy tool output exceeds the per-turn budget.
+ */
+export function formatHistoryTurn(turn: RenderedTurn, agentLabel: string, max: number): string {
+  const assistantRaw = turn.assistant || '(no reply)'
+  const prefix = 'The user:\n'
+  const middle = `\n\n${agentLabel}:\n`
+  const full = `${prefix}${turn.user}${middle}${assistantRaw}`
+  if (bytes(full) <= max) return full
+
+  const overhead = bytes(prefix) + bytes(middle)
+  const bodyBudget = Math.max(0, max - overhead)
+  const userWant = bytes(turn.user)
+  const assistantWant = bytes(assistantRaw)
+
+  const userSoftCap = Math.min(userWant, Math.floor(bodyBudget / 3))
+  const userFloor = Math.min(userWant, Math.min(MIN_HISTORY_USER_BYTES, Math.floor(bodyBudget / 4)))
+
+  let userBudget: number
+  if (assistantWant <= bodyBudget - userSoftCap) {
+    userBudget = bodyBudget - assistantWant
+  } else {
+    const replyNeed = turn.reply ? bytes(turn.reply) + bytes(STEPS_OMITTED) + 2 : 0
+    if (replyNeed > bodyBudget - userSoftCap) {
+      userBudget = Math.max(userFloor, Math.min(userSoftCap, bodyBudget - replyNeed))
+    } else {
+      userBudget = userSoftCap
+    }
+  }
+
+  const userText = cutStart(turn.user, userBudget)
+  const assistantBudget = Math.max(0, bodyBudget - bytes(userText))
+  const assistantText =
+    turn.assistant === ''
+      ? cutStart('(no reply)', assistantBudget)
+      : trimTurnAssistant(turn, assistantBudget)
+  return `${prefix}${userText}${middle}${assistantText}`
+}
+
+/**
+ * The final non-blank agent reply of the thread's latest turn. Stops at the latest non-steered
+ * user entry so a turn that only ran tools never returns an earlier turn's reply, while still
+ * falling back to the latest non-blank agent entry when the thread has no user entry at all.
+ */
+export function latestTurnReply(entries: readonly ThreadEntry[]): string | null {
+  const parts: string[] = []
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]
+    if (!entry) continue
+    if (entry.kind === 'agent') {
+      if (entry.markdown.trim() !== '') parts.unshift(entry.markdown)
+      continue
+    }
+    if (parts.length > 0) {
+      if (entry.kind === 'thought') continue
+      break
+    }
+    if (entry.kind === 'user' && !entry.steered) return null
+  }
+  return parts.length > 0 ? parts.join('\n\n') : null
 }
 
 function contentText(content: readonly UserContent[]): string {
@@ -236,11 +365,29 @@ export function threadTurns(
 ): RenderedTurn[] {
   const turns: RenderedTurn[] = []
   let agentId = firstAgent
-  let lines: string[] = []
+  let items: { kind: 'agent' | 'turn_end' | 'step'; text: string }[] = []
   const close = (): void => {
     const turn = turns[turns.length - 1]
-    if (turn) turn.assistant = lines.join('\n\n')
-    lines = []
+    if (turn) {
+      turn.assistant = items.map((item) => item.text).join('\n\n')
+      let end = items.length
+      while (end > 0 && items[end - 1]!.kind === 'turn_end') end -= 1
+      if (end > 0 && items[end - 1]!.kind === 'agent') {
+        let start = end - 1
+        while (start > 0 && items[start - 1]!.kind === 'agent') start -= 1
+        turn.reply = items
+          .slice(start)
+          .map((item) => item.text)
+          .join('\n\n')
+        if (start > 0) {
+          turn.steps = items
+            .slice(0, start)
+            .map((item) => item.text)
+            .join('\n\n')
+        }
+      }
+    }
+    items = []
   }
   for (const entry of entries) {
     if (entry.kind === 'takeover') {
@@ -260,9 +407,13 @@ export function threadTurns(
     }
     if (turns.length === 0) continue
     // What its turn did before a compaction inside it is in the agent's summary, not its record.
-    if (entry.id === after) lines = []
+    if (entry.id === after) items = []
     const line = assistantLine(entry, agentName, detail)
-    if (line !== null) lines.push(line)
+    if (line !== null) {
+      const kind =
+        entry.kind === 'agent' ? 'agent' : entry.kind === 'turn_end' ? 'turn_end' : 'step'
+      items.push({ kind, text: line })
+    }
   }
   close()
   return turns

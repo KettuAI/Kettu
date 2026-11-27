@@ -549,9 +549,11 @@ function prepareAll(db: DatabaseSync) {
       SELECT json_extract(json, '$.markdown') AS markdown FROM entries
       WHERE session_id = ? AND kind = 'agent' AND instr(json, 'github.com/') > 0
       ORDER BY pos DESC`),
+    // Sidebar card preview keeps the session's most recent non-blank reply across turns.
     lastReply: sql(`
       SELECT substr(json_extract(json, '$.markdown'), 1, ?) AS markdown FROM entries
-      WHERE session_id = ? AND kind = 'agent' AND json_extract(json, '$.markdown') <> ''
+      WHERE session_id = ? AND kind = 'agent'
+        AND trim(json_extract(json, '$.markdown'), char(9, 10, 13, 32)) <> ''
       ORDER BY pos DESC LIMIT 1`),
     lastTurnMs: sql(`
       SELECT json_extract(json, '$.durationMs') AS ms FROM entries
