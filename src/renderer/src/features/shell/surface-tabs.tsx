@@ -79,12 +79,18 @@ import { DeviceRow } from '@renderer/features/devices/device-row'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { requestCloseAllTerminals } from '@renderer/features/terminal/close-all-terminals-model'
+import { toast } from '@renderer/components/ui/toast'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { i18n } from '@renderer/lib/i18n'
 import { hasBand, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
-import { restorePages, useBrowserStore } from '@renderer/stores/browser'
+import {
+  markTakenOverBrowserTabClosing,
+  restorePages,
+  useBrowserStore,
+} from '@renderer/stores/browser'
 import {
   closeDevice,
   devicesOf,
@@ -774,6 +780,15 @@ export function SurfaceTabs({
         else void killTerminal(item.id)
       } else if (item.kind === 'browser') {
         if (!sessionId) return
+        const state = useBrowserStore.getState().bySession[sessionId]
+        const closingTab = state?.tabs.find((tab) => tab.id === item.id)
+        const endsTakeover =
+          item.control === 'you' &&
+          (pagesLeft <= 1 || (state?.agentTab === item.id && !closingTab?.opener))
+        if (endsTakeover) {
+          markTakenOverBrowserTabClosing(sessionId)
+          toast(i18n.t('control:note.closed.browserTab'), undefined, { tone: 'info' })
+        }
         // The last tab closes the page with it.
         if (pagesLeft > 1) void window.kettu.browser.closeTab(sessionId, item.id)
         else void window.kettu.browser.close(sessionId)
@@ -792,11 +807,14 @@ export function SurfaceTabs({
   const close = useCallback(
     (item: SurfaceItem) => {
       const next = nextAfterClose(items, item)
+      if (next === 'empty' && item.kind === 'browser' && item.control === 'you' && sessionId) {
+        markTakenOverBrowserTabClosing(sessionId)
+      }
       if (next === 'empty') leaveEmptySidePanel(panel)
       else if (next !== 'keep') selectSurface(panel, next.select)
       drop(item, browserTabs ?? 0)
     },
-    [items, panel, browserTabs, drop],
+    [items, panel, sessionId, browserTabs, drop],
   )
 
   // A shell still running asks first, as do a file with unsaved edits and an artifact with

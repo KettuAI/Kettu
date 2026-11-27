@@ -1,5 +1,6 @@
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { activeBrowserControl } from '@shared/browser'
 import type { AgentId } from '@shared/thread'
 import { ControlLabel } from '@renderer/components/control/control-label'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
@@ -16,9 +17,8 @@ export function BrowserLabel({
   hostId: string | null
 }) {
   const { t } = useTranslation('control')
-  const control = useBrowserStore((s) => s.bySession[sessionId]?.control)
+  const active = useBrowserStore((s) => activeBrowserControl(s.bySession[sessionId]))
   const agent = useControlAgent(agentId, hostId)
-  const active = control && control.kind !== 'idle' ? control : null
   const failed = (error: unknown) => console.error('Could not reach the page', error)
   return (
     <AnimatePresence>

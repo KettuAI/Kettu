@@ -213,6 +213,10 @@ export interface BrowserViewsDeps {
   removed?(sessionId: string): void
   /** A session's browser closed its last tab: nothing drives it now. */
   ended?(sessionId: string): void
+  /** The agent's current tab closed while other tabs stay open: control of it ended. */
+  agentTabClosed?(sessionId: string): void
+  /** The user closed the browser side panel while holding takeover control. */
+  panelClosed?(sessionId: string): void
   /** A page opened a site, and later named its icons, which links in replies show. */
   siteOpened?(pageUrl: string, favicons?: string[]): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
@@ -407,6 +411,21 @@ export class BrowserViews {
   }
 
   /**
+   * The user closed the browser side panel while holding takeover control: hide the views and
+   * immediately release takeover so the agent and UI do not stay stuck waiting for hand-back.
+   */
+  releaseTakeover(sessionId: string): void {
+    const browser = this.browsers.get(sessionId)
+    if (browser) {
+      browser.shown = false
+      browser.frozen = false
+      this.present(browser)
+    }
+    this.deps.panelClosed?.(sessionId)
+    this.syncOverlay()
+  }
+
+  /**
    * Destroys every tab of the session's browser. The session stays, so the next navigation starts
    * a new tab; hiding still only takes the pages off screen. The browser keeps whether the pane
    * shows it and its frame, which the pane reports only when it mounts and its page appears.
@@ -417,8 +436,8 @@ export class BrowserViews {
     for (const tab of this.tabsOf(browser)) this.dropTab(tab)
     browser.strip.clear()
     this.origins.close(sessionId)
-    this.emit(browser)
     this.deps.ended?.(sessionId)
+    this.emit(browser)
     this.syncOverlay()
   }
 
@@ -447,9 +466,13 @@ export class BrowserViews {
     const browser = this.browsers.get(sessionId)
     if (!browser?.strip.has(tabId)) return
     if (browser.strip.size === 1) return this.close(sessionId)
+    const wasAgent = browser.strip.agent === tabId
     const tab = this.tabs.get(tabId)
     if (tab) this.dropTab(tab)
     browser.strip.remove(tabId)
+    if (wasAgent && browser.strip.agent === null) {
+      this.deps.agentTabClosed?.(sessionId)
+    }
     this.present(browser)
     this.emit(browser)
     this.syncOverlay()
@@ -1484,13 +1507,17 @@ export class BrowserViews {
   private closedItself(tab: Tab): void {
     const browser = this.browsers.get(tab.sessionId)
     if (!browser || !browser.strip.has(tab.id)) return
+    const wasAgent = browser.strip.agent === tab.id
     this.tabs.delete(tab.id)
     browser.strip.remove(tab.id)
     if (browser.strip.size === 0) {
       this.origins.close(tab.sessionId)
-      this.emit(browser)
       this.deps.ended?.(tab.sessionId)
+      this.emit(browser)
     } else {
+      if (wasAgent && browser.strip.agent === null) {
+        this.deps.agentTabClosed?.(tab.sessionId)
+      }
       this.present(browser)
       this.emit(browser)
     }
@@ -1610,7 +1637,10 @@ export class BrowserViews {
       }
       if (!held) return
       event.preventDefault()
-      if (input.type === 'keyDown' && !input.isAutoRepeat) this.held(tab, null)
+      if (input.type === 'keyDown' && !input.isAutoRepeat) {
+        if (input.key === 'Escape') this.dismissBubble(tab)
+        else this.held(tab, null)
+      }
     })
     contents.on('before-mouse-event', (event, mouse) => {
       if (!isHeldMouse(mouse.type) || !this.holdsInput(tab)) return
@@ -1725,6 +1755,11 @@ export class BrowserViews {
   /** A click or key of the user's was held back on the page itself: the overlay shows it. */
   private held(tab: Tab, at: ControlPoint | null): void {
     if (this.overlayTab === tab.id) this.overlay.send({ type: 'held', at })
+  }
+
+  /** Escape on the page itself dismisses any open held-input bubble on its overlay. */
+  private dismissBubble(tab: Tab): void {
+    if (this.overlayTab === tab.id) this.overlay.dismissBubble()
   }
 
   /** An app shortcut typed in the page or its overlay goes to the window; true when it was one. */

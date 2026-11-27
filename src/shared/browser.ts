@@ -1,4 +1,4 @@
-import type { SurfaceControl } from './control'
+import type { ActiveControl, SurfaceControl } from './control'
 
 /** The partition every page in the side panel's browser uses, shared by all sessions. */
 export const BROWSER_PARTITION = 'persist:kettu-browser'
@@ -292,6 +292,22 @@ export interface BrowserState {
   control: SurfaceControl
   /** A new site that waits for the user, or the answer just given, for the pane's bar. */
   originRequest: BrowserOriginRequest | null
+}
+
+/**
+ * The active browser control for UI surfaces (label, turn status). Returns null when idle or when
+ * takeover/ask control no longer has a live agent tab (all tabs closed or the agent tab is gone).
+ */
+export function activeBrowserControl(state: BrowserState | undefined): ActiveControl | null {
+  const control = state?.control
+  if (!control || control.kind === 'idle') return null
+  if (
+    (control.kind === 'you' || control.kind === 'asks') &&
+    (state.tabs.length === 0 || state.agentTab === null)
+  ) {
+    return null
+  }
+  return control
 }
 
 /** The browser tools the `kettu` MCP server offers, which main runs on the page. */

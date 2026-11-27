@@ -29,6 +29,16 @@ const PILL_DEFAULT = { width: 360, height: 60 }
 /** How long a still may take to get on screen before the capture it is for goes on without it. */
 const STILL_SHOWN_MS = 400
 
+/** Whether a point in the window's contentView space lies outside the overlay rectangle. */
+export function isOutsideBounds(point: { x: number; y: number }, bounds: Rectangle): boolean {
+  return (
+    point.x < bounds.x ||
+    point.x >= bounds.x + bounds.width ||
+    point.y < bounds.y ||
+    point.y >= bounds.y + bounds.height
+  )
+}
+
 export interface PageOverlayDeps {
   window(): BrowserWindow | null
   /** The system's language, which the page reads as the window's does. */
@@ -67,6 +77,9 @@ export class PageOverlay {
   private stills = 0
   /** The still its page draws now, and who waits to hear that it is on screen. */
   private still: { id: number; shown: ((shown: boolean) => void) | null } | null = null
+  /** Host window currently watched for outside clicks, Escape and blur while the agent holds the page. */
+  private hostWindow: BrowserWindow | null = null
+  private unbindHost: (() => void) | null = null
 
   constructor(private readonly deps: PageOverlayDeps) {}
 
@@ -91,6 +104,7 @@ export class PageOverlay {
     this.at = at
     this.state = state
     this.place()
+    this.syncHostWatch()
     this.send({ type: 'state', state })
     // The keys a focused page would take go to the overlay, which holds them back.
     if (state.layout === 'full' && !covered && at.contents.isFocused()) {
@@ -145,11 +159,18 @@ export class PageOverlay {
 
   /** Takes the overlay off the page; it may be shown again. */
   hide(): void {
+    this.clearHostWatch()
     if (!this.view || !this.at) return
     this.dropStill()
     this.at.parent.removeChildView(this.view)
     this.at = null
     this.state = null
+  }
+
+  /** Dismisses any visible held-input bubble in the overlay. */
+  dismissBubble(): void {
+    if (this.state?.layout !== 'full' || this.state.control.kind !== 'agent') return
+    this.send({ type: 'dismiss' })
   }
 
   send(event: ControlOverlayEvent): void {
@@ -218,6 +239,7 @@ export class PageOverlay {
       const sessionId = this.at?.sessionId
       if (sessionId && this.deps.key(sessionId, input)) event.preventDefault()
     })
+    contents.on('blur', () => this.dismissBubble())
     const ownFrame = (frame: Electron.WebFrameMain | null): boolean =>
       frame !== null && frame === contents.mainFrame && frame.url === overlayEntry().url
     contents.ipc.handle(OVERLAY_CHANNELS.settings, (event) => {
@@ -292,5 +314,55 @@ export class PageOverlay {
       width,
       height,
     })
+  }
+
+  /**
+   * Watches the host window while the overlay covers the page for an agent turn so clicking any
+   * area outside the browser (chat thread, composer, top bar, toolbars), pressing Escape or
+   * switching windows dismisses the held-input bubble immediately.
+   */
+  private syncHostWatch(): void {
+    const watching = this.state?.layout === 'full' && this.state.control.kind === 'agent'
+    const window = watching ? this.deps.window() : null
+    if (!window || window.isDestroyed()) {
+      this.clearHostWatch()
+      return
+    }
+    if (this.hostWindow === window) return
+    this.clearHostWatch()
+    const hostContents = window.webContents
+    const onMouse = (_event: Electron.Event, mouse: Electron.MouseInputEvent): void => {
+      if (mouse.type !== 'mouseDown') return
+      const bounds = this.at?.bounds
+      if (bounds) {
+        const zoom = hostContents.isDestroyed() ? 1 : hostContents.getZoomFactor() || 1
+        const point = { x: mouse.x * zoom, y: mouse.y * zoom }
+        if (!isOutsideBounds(point, bounds)) return
+      }
+      this.dismissBubble()
+    }
+    const onInput = (_event: Electron.Event, input: Input): void => {
+      if (input.type === 'keyDown' && !input.isAutoRepeat && input.key === 'Escape') {
+        this.dismissBubble()
+      }
+    }
+    const onBlur = (): void => this.dismissBubble()
+    hostContents.on('before-mouse-event', onMouse)
+    hostContents.on('before-input-event', onInput)
+    window.on('blur', onBlur)
+    this.hostWindow = window
+    this.unbindHost = () => {
+      if (!hostContents.isDestroyed()) {
+        hostContents.off('before-mouse-event', onMouse)
+        hostContents.off('before-input-event', onInput)
+      }
+      if (!window.isDestroyed()) window.off('blur', onBlur)
+    }
+  }
+
+  private clearHostWatch(): void {
+    this.unbindHost?.()
+    this.unbindHost = null
+    this.hostWindow = null
   }
 }

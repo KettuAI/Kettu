@@ -387,6 +387,10 @@ async function start(): Promise<void> {
       browserTools?.forget(sessionId)
       remoteBrowser.pageClosed(sessionId)
     },
+    agentTabClosed: (sessionId) => browserTools?.agentTabClosed(sessionId),
+    panelClosed: (sessionId) => {
+      browserTools?.releaseTakeover(sessionId)
+    },
     failed: (sessionId, kind, message) => browserTools?.pageFailed(sessionId, kind, message),
     origins: browserOrigins,
     originAsked: (request) => {

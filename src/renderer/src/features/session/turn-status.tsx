@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { activeBrowserControl } from '@shared/browser'
 import { duration, tokens } from '@renderer/lib/format'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { deviceInUse, useDevicesStore } from '@renderer/stores/devices'
@@ -66,7 +67,7 @@ export const TurnStatus = memo(function TurnStatus({
   const asked = useThreadsStore((s) => askedStep(s.replicas[sessionId]?.state))
   // The session's page on this computer: the user holds it, or a call of the agent's acts on it.
   const page = useBrowserStore((s) => {
-    const control = s.bySession[sessionId]?.control
+    const control = activeBrowserControl(s.bySession[sessionId])
     if (control?.kind === 'you') return 'you'
     return control?.kind === 'agent' && control.acting ? 'using' : null
   })

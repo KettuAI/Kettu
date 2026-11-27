@@ -428,6 +428,8 @@ export type ControlOverlayEvent =
   | { type: 'act'; at: ControlPoint | null; click: boolean }
   /** The user's input reached the surface itself and was held back there. */
   | { type: 'held'; at: ControlPoint | null }
+  /** Dismisses the held-input bubble early (e.g. click outside the browser or Escape). */
+  | { type: 'dismiss' }
   /**
    * A still of the surface to draw over all of it while a capture changes how it draws, as a data
    * URL; null takes the still off.

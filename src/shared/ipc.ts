@@ -553,6 +553,8 @@ export interface IpcInvokeContract {
   'browser:take-over': { args: [sessionId: string]; result: void }
   /** Hand back: the agent goes on with the page. */
   'browser:hand-back': { args: [sessionId: string]; result: void }
+  /** Release takeover when the user closes the browser panel while holding the tab. */
+  'browser:release-takeover': { args: [sessionId: string]; result: void }
   /** Done or Skip on a step the agent asked the user to do on the page. */
   'browser:answer-ask': { args: [sessionId: string, outcome: ControlOutcome]; result: void }
   /** The pane's bar or the thread's card: what the user answered a new site's request. */
@@ -1129,6 +1131,8 @@ export interface KettuApi {
     takeOver(sessionId: string): Promise<void>
     /** Hand back: the agent goes on with the page. */
     handBack(sessionId: string): Promise<void>
+    /** Release takeover when the user closes the browser panel while holding the tab. */
+    releaseTakeover(sessionId: string): Promise<void>
     /** Done or Skip on a step the agent asked the user to do on the page. */
     answerAsk(sessionId: string, outcome: ControlOutcome): Promise<void>
     /** The pane's bar or the thread's card: what the user answered a new site's request. */

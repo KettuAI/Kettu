@@ -72,6 +72,10 @@
       "terminal": "<b>{{agent}}</b> 开始使用你的终端「<b>{{name}}</b>」",
       "browser": "<b>{{agent}}</b> 开始使用你的标签页「<b>{{name}}</b>」",
       "device": "<b>{{agent}}</b> 开始使用「<b>{{name}}</b>」"
+    },
+    "closed": {
+      "browserTab": "已关闭浏览器标签，接管已结束并已通知智能体",
+      "browserPanel": "已关闭浏览器面板，接管已结束并已通知智能体"
     }
   },
   "status": {

@@ -72,6 +72,10 @@
       "terminal": "<b>{{agent}}</b> started using your terminal <b>{{name}}</b>",
       "browser": "<b>{{agent}}</b> started using your tab <b>{{name}}</b>",
       "device": "<b>{{agent}}</b> started using <b>{{name}}</b>"
+    },
+    "closed": {
+      "browserTab": "Browser tab closed — takeover ended and the agent was notified",
+      "browserPanel": "Browser panel closed — takeover ended and the agent was notified"
     }
   },
   "status": {

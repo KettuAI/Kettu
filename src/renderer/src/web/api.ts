@@ -609,6 +609,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       thaw: async () => {},
       takeOver: () => unsupported('show the browser'),
       handBack: () => unsupported('show the browser'),
+      releaseTakeover: async () => {},
       answerAsk: () => unsupported('show the browser'),
       answerOrigin: () => unsupported('show the browser'),
       allowedSites: async () => [],

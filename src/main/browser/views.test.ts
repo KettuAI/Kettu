@@ -28,6 +28,8 @@ class FakeDebugger extends EventEmitter {
 
   async sendCommand(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     this.commands.push({ method, params })
+    if (method === 'Accessibility.getFullAXTree') return { nodes: [] }
+    if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'f1' } } }
     return {}
   }
 }
@@ -150,10 +152,15 @@ vi.mock('electron', () => ({
   },
 }))
 
+const overlayDismissCalls: number[] = []
+const overlaySentEvents: unknown[] = []
+
 vi.mock('./overlay', () => ({
   PageOverlay: class {
     sessionId: string | null = null
-    show(): void {}
+    show(at: { sessionId: string }): void {
+      this.sessionId = at.sessionId
+    }
     move(): void {}
     covers(): boolean {
       return false
@@ -162,10 +169,19 @@ vi.mock('./overlay', () => ({
       return false
     }
     dropStill(): void {}
-    hide(): void {}
-    send(): void {}
+    hide(): void {
+      this.sessionId = null
+    }
+    dismissBubble(): void {
+      overlayDismissCalls.push(Date.now())
+    }
+    send(event: unknown): void {
+      overlaySentEvents.push(event)
+    }
     lookChanged(): void {}
-    destroy(): void {}
+    destroy(): void {
+      this.sessionId = null
+    }
   },
 }))
 
@@ -190,6 +206,7 @@ if (!process.versions.chrome) {
 }
 
 const { BrowserViews } = await import('./views')
+const { BrowserTools } = await import('./tools')
 
 const TALL_PANE: BrowserBounds = { x: 400, y: 64, width: 780, height: 920, radius: 10 }
 const WIDE_PANE: BrowserBounds = { x: 200, y: 64, width: 1440, height: 900, radius: 10 }
@@ -233,6 +250,8 @@ function metricsCommands(view: FakeWebContentsView): SentCommand[] {
 
 beforeEach(() => {
   createdViews.length = 0
+  overlayDismissCalls.length = 0
+  overlaySentEvents.length = 0
 })
 
 describe('BrowserViews desktop full-height layout & viewport modes (#2764)', () => {
@@ -650,5 +669,269 @@ describe('BrowserViews.openLink session tab reuse and creation (#2858)', () => {
     expect(latestState()?.tabs.find((tab) => tab.id === agentTabId)?.url).toBe(
       'http://localhost:3000/agent',
     )
+  })
+})
+
+function makeToolsHarness() {
+  const states: BrowserState[] = []
+  const opened: string[] = []
+  const fakeWindow = {
+    isDestroyed: () => false,
+    contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
+    webContents: { focus: vi.fn() },
+  }
+  const toolsRef: { current: InstanceType<typeof BrowserTools> | null } = { current: null }
+  const views = new BrowserViews({
+    window: () => fakeWindow as never,
+    send: (state) => states.push(state),
+    control: (sessionId) => toolsRef.current?.control(sessionId) ?? IDLE_CONTROL,
+    isInjecting: (tabId) => toolsRef.current?.isInjecting(tabId) ?? false,
+    created: (tabId, contents) => toolsRef.current?.watch(tabId, contents),
+    closed: (tabId) => toolsRef.current?.forgetTab(tabId),
+    ended: (sessionId) => toolsRef.current?.forget(sessionId),
+    agentTabClosed: (sessionId) => toolsRef.current?.agentTabClosed(sessionId),
+    panelClosed: (sessionId) => {
+      toolsRef.current?.releaseTakeover(sessionId)
+    },
+    settings: () => ({ appearance: { zoom: 1 } }) as never,
+    themes: () => ({}) as never,
+    origins: {
+      read: () => ({}),
+      write: async () => {},
+    } as never,
+  })
+  const tools = new BrowserTools({
+    views,
+    controlChanged: (sessionId) => views.controlChanged(sessionId),
+    opened: (sessionId) => opened.push(sessionId),
+    log: vi.fn(),
+  })
+  toolsRef.current = tools
+  views.show('s1')
+  views.setBounds('s1', WIDE_PANE)
+  const latestState = () => states.at(-1)
+  return { views, tools, states, opened, latestState }
+}
+
+/** Starts a tool call and waits until it enters SurfaceControls' waiting state (waiting(true)). */
+function startWaitingCall(
+  tools: InstanceType<typeof BrowserTools>,
+  callId: number,
+  sessionId: string,
+  tool: string,
+  args: Record<string, unknown>,
+) {
+  let resolveWaiting!: () => void
+  const enteredWait = new Promise<void>((resolve) => {
+    resolveWaiting = resolve
+  })
+  const promise = tools.call(callId, sessionId, tool, args, '', (waiting) => {
+    if (waiting) resolveWaiting()
+  })
+  return { promise, enteredWait }
+}
+
+describe('Browser takeover cleanup when closing tabs or the browser panel (#2927)', () => {
+  it('immediately ends takeover and notifies the waiting agent when closing the taken-over tab among multiple tabs', async () => {
+    const { views, tools, latestState } = makeToolsHarness()
+
+    const nav = await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/app' })
+    expect('result' in nav).toBe(true)
+    const agentTabId = views.agentTab('s1')!
+
+    // User opens an unrelated tab alongside the agent tab and takes over the agent tab.
+    const userTabId = views.newTab('s1')!
+    tools.takeOver('s1')
+    expect(tools.control('s1').kind).toBe('you')
+    expect(latestState()?.control.kind).toBe('you')
+
+    // Agent calls another browser tool and waits for hand-back.
+    const { promise: waitingCall, enteredWait } = startWaitingCall(
+      tools,
+      2,
+      's1',
+      'browser_snapshot',
+      {},
+    )
+    await enteredWait
+
+    // Closing the taken-over agent tab immediately clears control and wakes the waiting agent.
+    views.closeTab('s1', agentTabId)
+    const answer = await waitingCall
+
+    expect(tools.control('s1')).toEqual(IDLE_CONTROL)
+    expect(latestState()?.control).toEqual(IDLE_CONTROL)
+    expect(latestState()?.agentTab).toBeNull()
+    expect(latestState()?.tabs.map((tab) => tab.id)).toEqual([userTabId])
+    expect(answer).toEqual({
+      error: {
+        code: 'no_page',
+        message: expect.stringMatching(/closed/i),
+      },
+    })
+  })
+
+  it('immediately clears takeover without emitting stale control when closing the last tab / browser', async () => {
+    const { views, tools, states } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/only' })
+    const agentTabId = views.agentTab('s1')!
+    tools.takeOver('s1')
+    const { promise: waitingAsk, enteredWait } = startWaitingCall(
+      tools,
+      2,
+      's1',
+      'browser_ask_user',
+      {
+        step: 'sign_in',
+        reason: 'Sign in to continue',
+      },
+    )
+    await enteredWait
+
+    const beforeClose = states.length
+    views.closeTab('s1', agentTabId)
+    const answer = await waitingAsk
+
+    const emittedAfterClose = states.slice(beforeClose)
+    expect(emittedAfterClose.length).toBeGreaterThan(0)
+    // Every state emitted after closing the browser already reflects idle control.
+    expect(emittedAfterClose.every((state) => state.control.kind === 'idle')).toBe(true)
+    expect(emittedAfterClose.at(-1)?.tabs).toEqual([])
+    expect(tools.control('s1')).toEqual(IDLE_CONTROL)
+    expect(answer).toEqual({
+      error: {
+        code: 'no_page',
+        message: expect.stringMatching(/closed/i),
+      },
+    })
+  })
+
+  it('releases takeover and wakes waiting calls when closing the browser panel during takeover, without disturbing agent-mode hide', async () => {
+    const { views, tools, opened, latestState } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/panel' })
+    expect(opened).toEqual(['s1'])
+
+    // Hiding / calling releaseTakeover while the agent (not user) holds control leaves it intact.
+    views.releaseTakeover('s1')
+    expect(tools.control('s1').kind).toBe('agent')
+
+    // Once the user takes over, closing the browser panel clears takeover and notifies the waiting agent.
+    views.show('s1')
+    tools.takeOver('s1')
+    const { promise: waitingCall, enteredWait } = startWaitingCall(
+      tools,
+      2,
+      's1',
+      'browser_snapshot',
+      {},
+    )
+    await enteredWait
+
+    views.releaseTakeover('s1')
+    const answer = await waitingCall
+
+    expect(tools.control('s1')).toEqual(IDLE_CONTROL)
+    expect(latestState()?.control).toEqual(IDLE_CONTROL)
+    expect(answer).toEqual({
+      error: {
+        code: 'no_page',
+        message: expect.stringMatching(/closed/i),
+      },
+    })
+  })
+
+  it('does not restart agent control if the browser panel closes while a call is preparing readyAgentTab', async () => {
+    const { views, tools, latestState } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/race' })
+    tools.takeOver('s1')
+
+    // Start a call and immediately close the panel before readyAgentTab resolves.
+    const racingCall = tools.call(2, 's1', 'browser_snapshot', {})
+    views.releaseTakeover('s1')
+    const answer = await racingCall
+
+    expect(tools.control('s1')).toEqual(IDLE_CONTROL)
+    expect(latestState()?.control).toEqual(IDLE_CONTROL)
+    expect(answer).toEqual({
+      error: {
+        code: 'no_page',
+        message: expect.stringMatching(/closed/i),
+      },
+    })
+  })
+
+  it('does not end takeover when closing an unrelated user tab', async () => {
+    const { views, tools, latestState } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/agent' })
+    const agentTabId = views.agentTab('s1')!
+    const unrelatedTabId = views.newTab('s1')!
+
+    tools.takeOver('s1')
+    const { promise: waitingCall, enteredWait } = startWaitingCall(
+      tools,
+      2,
+      's1',
+      'browser_snapshot',
+      {},
+    )
+    await enteredWait
+    let settled = false
+    void waitingCall.then(() => {
+      settled = true
+    })
+
+    // Closing the user's unrelated tab must not disturb the taken-over agent tab.
+    views.closeTab('s1', unrelatedTabId)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(settled).toBe(false)
+    expect(tools.control('s1').kind).toBe('you')
+    expect(latestState()?.control.kind).toBe('you')
+    expect(latestState()?.agentTab).toBe(agentTabId)
+
+    // Handing back completes the waiting call normally.
+    tools.handBack('s1')
+    const answer = await waitingCall
+    expect('result' in answer).toBe(true)
+  })
+
+  it('lets an agent-initiated browser_tabs(close) succeed cleanly without aborting itself', async () => {
+    const { tools } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/self-close' })
+    const closed = await tools.call(2, 's1', 'browser_tabs', { action: 'close' })
+
+    expect('result' in closed).toBe(true)
+    expect(tools.control('s1')).toEqual(IDLE_CONTROL)
+  })
+
+  it('dismisses the overlay bubble instead of nudging held input on Escape in an agent-held page', async () => {
+    const { tools } = makeToolsHarness()
+
+    await tools.call(1, 's1', 'browser_navigate', { url: 'http://localhost:3000/esc' })
+    const view = createdViews.at(-1)!
+    const preventDefault = vi.fn()
+
+    view.webContents.emit(
+      'before-input-event',
+      { preventDefault },
+      {
+        type: 'keyDown',
+        key: 'Escape',
+        code: 'Escape',
+        isAutoRepeat: false,
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false,
+      },
+    )
+
+    expect(preventDefault).toHaveBeenCalled()
+    expect(overlayDismissCalls).toHaveLength(1)
+    expect(overlaySentEvents).toEqual([])
   })
 })

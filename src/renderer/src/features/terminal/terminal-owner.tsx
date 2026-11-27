@@ -132,7 +132,12 @@ export function TerminalControl({
   const agent = useControlAgent(owner.agentId, hostId)
   const agentName = agent?.name ?? t('agent')
   const bubble = useHeldBubble()
-  const { held } = bubble
+  const { held, clear: clearBubble } = bubble
+  const holds = control?.kind === 'agent'
+
+  useEffect(() => {
+    if (!holds) clearBubble()
+  }, [holds, clearBubble])
 
   useEffect(
     () =>
@@ -144,7 +149,6 @@ export function TerminalControl({
   )
 
   const takeOver = () => takeOverTerminal(terminal.id)
-  const holds = control?.kind === 'agent'
   return (
     <>
       <AnimatePresence>{holds && <SurfaceLight key="light" radius={radius} />}</AnimatePresence>
@@ -157,6 +161,7 @@ export function TerminalControl({
           hint={t('bubble.hintTerminal', { keys: isMac ? '⌃C' : 'Ctrl+C' })}
           leaving={bubble.bubble.leaving}
           onTakeOver={takeOver}
+          onDismiss={bubble.dismiss}
         />
       )}
       <PillDock kind="terminal" className="kp-tbox__pill">

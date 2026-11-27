@@ -11,11 +11,12 @@ import type {
 import { BROWSER_TOOL_NAMES, MAX_SESSION_TABS } from '@shared/browser'
 import {
   CONTROL_WAIT_MS,
+  ControlWait,
   SurfaceControls,
   type ControlOutcome,
   type SurfaceControl,
 } from '@shared/control'
-import { BrowserCdp, ToolFailure } from './cdp'
+import { BrowserCdp, ToolFailure, waitFailure } from './cdp'
 import { listTabs, tabsText } from './tabs'
 import type { BrowserViews, NavigateResult } from './views'
 
@@ -43,6 +44,10 @@ export class BrowserTools {
   readonly cdp: BrowserCdp
   /** Sessions that already had their page opened for an agent's navigation. */
   private readonly opened = new Set<string>()
+  /** Sessions currently running an agent-initiated `browser_tabs(close)` so it does not abort itself. */
+  private readonly closingByAgent = new Set<string>()
+  /** Incremented whenever a session's tab/panel closes so calls mid-readyAgentTab fail as `gone`. */
+  private readonly closeGeneration = new Map<string, number>()
 
   constructor(private readonly deps: BrowserToolsDeps) {
     this.controls = new SurfaceControls({
@@ -137,10 +142,38 @@ export class BrowserTools {
     this.cdp.forget(tabId)
   }
 
+  /** The agent's current tab closed while other tabs stay open: end control and wake waiters. */
+  agentTabClosed(sessionId: string): void {
+    this.bumpClosed(sessionId)
+    this.controls.forget(sessionId)
+    if (!this.closingByAgent.has(sessionId)) this.cdp.pageClosed(sessionId)
+  }
+
+  /**
+   * The user closed the browser side panel while holding takeover control: release takeover at
+   * once and tell any waiting call that the browser closed. Non-takeover states stay untouched.
+   */
+  releaseTakeover(sessionId: string): boolean {
+    if (this.controls.state(sessionId).kind !== 'you') return false
+    this.bumpClosed(sessionId)
+    this.controls.forget(sessionId)
+    this.cdp.pageClosed(sessionId)
+    this.opened.delete(sessionId)
+    return true
+  }
+
   /** The session's browser is gone: nothing more drives it. */
   forget(sessionId: string): void {
+    this.bumpClosed(sessionId)
     this.controls.forget(sessionId)
+    if (!this.closingByAgent.has(sessionId)) this.cdp.pageClosed(sessionId)
     this.opened.delete(sessionId)
+  }
+
+  private bumpClosed(sessionId: string): void {
+    if (!this.closingByAgent.has(sessionId)) {
+      this.closeGeneration.set(sessionId, (this.closeGeneration.get(sessionId) ?? 0) + 1)
+    }
   }
 
   /**
@@ -182,11 +215,15 @@ export class BrowserTools {
       if (waits === (on ? 1 : 0)) report(on)
     }
     this.deps.views.setOriginWait(sessionId, callId, wait)
+    const generation = this.closeGeneration.get(sessionId) ?? 0
     try {
       // The agent's tab keeps the agent's size, and a released one loads again, before the call
       // reads or acts on it.
       if (tool !== 'browser_navigate' && tool !== 'browser_tabs') {
         await this.deps.views.readyAgentTab(sessionId)
+        if ((this.closeGeneration.get(sessionId) ?? 0) !== generation) {
+          throw waitFailure(new ControlWait('gone'))
+        }
       }
       const result = await this.cdp.call(sessionId, tool, args, {
         // Before the harness's own limit for one tool call, from when it reached main.
@@ -249,7 +286,12 @@ export class BrowserTools {
       case 'close': {
         const id = args.index === undefined ? views.agentTab(sessionId) : at(args.index)
         if (id === null) throw new ToolFailure('no_page', 'The browser has no tab to close.')
-        views.closeTab(sessionId, id)
+        this.closingByAgent.add(sessionId)
+        try {
+          views.closeTab(sessionId, id)
+        } finally {
+          this.closingByAgent.delete(sessionId)
+        }
         done = 'Closed the tab.'
         break
       }
