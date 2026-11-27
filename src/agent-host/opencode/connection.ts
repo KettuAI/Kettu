@@ -7,6 +7,7 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { carriedEffort } from '@shared/effort'
+import type { Platform } from '@shared/platform'
 import type {
   ConfigOption,
   FormField,
@@ -40,6 +41,7 @@ import {
 import type { HostedContext } from '../driver'
 import { t } from '../i18n'
 import type { OpenCodeSessions } from '../model-requests/opencode'
+import { pathKey } from '../paths'
 import { addTokenTotals, type MapperContext, type MapperOutput } from '../session-updates'
 import { assistantMessageId, SessionMapper, tokenTotals } from './mapper'
 import {
@@ -83,9 +85,11 @@ const PENDING_EVENTS = 2_000
 const CLOSED_SESSIONS = 256
 /** How long a folder's models, agents and commands are taken as read. */
 const OFFER_TTL_MS = 60_000
-/** A folder the server has just opened lists its agents a moment later: how often it is asked. */
-const OFFER_RETRIES = 40
-const OFFER_RETRY_MS = 150
+/** A folder the server has just opened activates its plugins a moment later: how often it is asked. */
+const OFFER_RETRIES = 60
+const OFFER_RETRY_MS = 100
+/** Extra polls to wait for models to settle once built-in agents are already listed. */
+const MODEL_SETTLE_RETRIES = 10
 /** How far the clock that stamps OpenCode's messages may be from the one that times the stream. */
 const CLOCK_SLACK_MS = 2_000
 /** How long a folder's changes settle before its sessions get their options again. */
@@ -473,6 +477,10 @@ export class OpenCodeConnection implements AgentConnection {
   private readonly unregistered = new Set<string>()
   private pendingCount = 0
   private readonly offers = new Map<string, { offer: Offer; at: number }>()
+  /** Bumped on folder invalidation so an in-flight read cannot cache a stale snapshot. */
+  private readonly offerGenerations = new Map<string, number>()
+  private globalOfferGeneration = 0
+  private readonly offerRetryMs: number
   /** The MCP servers each folder has on this server, by name, as the configuration last put. */
   private readonly mounted = new Map<string, Map<string, string>>()
   private readonly stream = new AbortController()
@@ -489,9 +497,28 @@ export class OpenCodeConnection implements AgentConnection {
   constructor(
     private readonly context: HostedContext,
     private readonly start: StartServer = startServer,
+    options: { offerRetryMs?: number } = {},
   ) {
+    this.offerRetryMs = options.offerRetryMs ?? OFFER_RETRY_MS
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve))
     this.up = new Promise((resolve) => (this.streamIsUp = resolve))
+  }
+
+  private get platform(): Platform {
+    return this.context.platform ?? (process.platform as Platform)
+  }
+
+  private folderKey(cwd: string): string {
+    return pathKey(cwd, this.platform)
+  }
+
+  private sameFolder(a: string, b: string): boolean {
+    const resolve = this.platform === 'win32' ? path.win32.resolve : path.posix.resolve
+    return this.folderKey(resolve(a)) === this.folderKey(resolve(b))
+  }
+
+  private offerGeneration(key: string): string {
+    return `${this.globalOfferGeneration}:${this.offerGenerations.get(key) ?? 0}`
   }
 
   get isClosed(): boolean {
@@ -671,15 +698,31 @@ export class OpenCodeConnection implements AgentConnection {
   // What a folder offers.
 
   private async offer(cwd: string, fresh = false): Promise<Offer> {
-    const known = this.offers.get(cwd)
+    const key = this.folderKey(cwd)
+    const known = this.offers.get(key)
     if (known && !fresh && Date.now() - known.at < OFFER_TTL_MS) return known.offer
     const query = locationQuery(cwd)
+    const waitRetry = (): Promise<void> =>
+      new Promise((resolve) => setTimeout(resolve, this.offerRetryMs))
     const list = async <T>(route: string): Promise<T[]> => {
       const answer = await this.loaded(() =>
         this.api.request<{ data?: T[] }>('GET', `${route}?${query}`),
       )
       return Array.isArray(answer?.data) ? answer.data : []
     }
+    const listModels = (): Promise<ModelInfo[]> =>
+      // The model list holds each provider's settings, keys among them, so only these fields stay.
+      list<ModelInfo>('/api/model').then((all) =>
+        all
+          .filter((model) => model.enabled !== false)
+          .map(({ id, providerID, name, variants, limit }): ModelInfo => ({
+            id,
+            providerID,
+            name,
+            variants: (variants ?? []).map((variant) => ({ id: variant.id })),
+            ...(limit?.context ? { limit: { context: limit.context } } : {}),
+          })),
+      )
     const listAgents = (): Promise<AgentInfo[]> =>
       list<AgentInfo>('/api/agent').then((all) =>
         all.map(({ id, name, description, mode, hidden }) => ({
@@ -692,48 +735,62 @@ export class OpenCodeConnection implements AgentConnection {
       )
     const listCommands = (): Promise<CommandInfo[]> =>
       list<CommandInfo>('/api/command').catch(() => [])
-    // The model list holds each provider's settings, keys among them, so only these fields stay.
-    const read = Promise.all([
-      list<ModelInfo>('/api/model').then((all) =>
-        all
-          .filter((model) => model.enabled !== false)
-          .map(({ id, providerID, name, variants, limit }): ModelInfo => ({
-            id,
-            providerID,
-            name,
-            variants: (variants ?? []).map((variant) => ({ id: variant.id })),
-            ...(limit?.context ? { limit: { context: limit.context } } : {}),
-          })),
-      ),
-      listAgents(),
-      listCommands(),
-      this.api
-        .request<{ data?: ModelRef | null }>('GET', `/api/model/default?${query}`)
+    const readDefault = (): Promise<ModelRef | null> =>
+      this.loaded(() =>
+        this.api.request<{ data?: ModelRef | null }>('GET', `/api/model/default?${query}`),
+      )
         .then((answer) => answer?.data ?? null)
-        .catch(() => null),
-    ])
-    const [models, first, early, standard] = await read.catch((error: unknown) => {
-      throw this.requestError(error)
-    })
-    let agents = first
-    let commands = early
-    // Every folder has OpenCode's own agents, so a list without any is one not loaded yet.
-    for (let tries = 0; agents.length === 0 && tries < OFFER_RETRIES && !this.done; tries++) {
-      await new Promise((resolve) => setTimeout(resolve, OFFER_RETRY_MS))
-      ;[agents, commands] = await Promise.all([listAgents(), listCommands()]).catch(
+        .catch(() => null)
+    const pluginsReady = async (): Promise<boolean> => {
+      try {
+        const answer = await this.loaded(() =>
+          this.api.request<{ data?: unknown[] }>('GET', `/api/plugin?${query}`),
+        )
+        return !Array.isArray(answer?.data) || answer.data.length > 0
+      } catch {
+        return true
+      }
+    }
+    const readSnapshot = (): Promise<[ModelInfo[], AgentInfo[], CommandInfo[], ModelRef | null]> =>
+      Promise.all([listModels(), listAgents(), listCommands(), readDefault()]).catch(
         (error: unknown) => {
           throw this.requestError(error)
         },
       )
+
+    for (let pass = 0; ; pass++) {
+      const generation = this.offerGeneration(key)
+      // OpenCode activates built-in and configured provider plugins asynchronously on a cold
+      // folder; wait until plugins finish settling before trusting the model snapshot.
+      for (let tries = 0; tries < OFFER_RETRIES && !this.done; tries++) {
+        if (await pluginsReady()) break
+        await waitRetry()
+      }
+      let [models, agents, commands, standard] = await readSnapshot()
+      // Every folder has OpenCode's own agents, so an empty agent list, a missing default model,
+      // or a momentarily empty model list indicates the folder's catalog is still settling.
+      let settleTries = 0
+      for (let tries = 0; tries < OFFER_RETRIES && !this.done; tries++) {
+        const missingDefault = standard !== null && !findModel(models, modelValue(standard))
+        const settlingModels =
+          (models.length === 0 || missingDefault) && settleTries < MODEL_SETTLE_RETRIES
+        if (agents.length > 0 && !settlingModels) break
+        if (agents.length > 0 && (models.length === 0 || missingDefault)) settleTries++
+        await waitRetry()
+        ;[models, agents, commands, standard] = await readSnapshot()
+      }
+      const offer: Offer = {
+        models,
+        agents,
+        commands,
+        defaultModel: standard ? { id: standard.id, providerID: standard.providerID } : null,
+      }
+      if (this.offerGeneration(key) === generation) {
+        this.offers.set(key, { offer, at: Date.now() })
+        return offer
+      }
+      if (pass >= 2 || this.done) return offer
     }
-    const offer: Offer = {
-      models,
-      agents,
-      commands,
-      defaultModel: standard ? { id: standard.id, providerID: standard.providerID } : null,
-    }
-    this.offers.set(cwd, { offer, at: Date.now() })
-    return offer
   }
 
   private config(session: Session, offer: Offer): ConfigOption[] {
@@ -748,31 +805,43 @@ export class OpenCodeConnection implements AgentConnection {
    * commands as they now are, once the changes have settled.
    */
   private refresh(directory: string | null): void {
-    const folders =
-      directory === null
-        ? [...new Set([...this.sessions.values()].map((session) => session.cwd))]
-        : [directory]
-    for (const cwd of folders) {
-      this.offers.delete(cwd)
-      if (this.refreshing.has(cwd)) continue
+    const targets = new Map<string, string>()
+    if (directory === null) {
+      this.globalOfferGeneration++
+      this.offers.clear()
+      for (const session of this.sessions.values()) {
+        const key = this.folderKey(session.cwd)
+        if (!targets.has(key)) targets.set(key, session.cwd)
+      }
+    } else {
+      const key = this.folderKey(directory)
+      this.offerGenerations.set(key, (this.offerGenerations.get(key) ?? 0) + 1)
+      this.offers.delete(key)
+      const matched = [...this.sessions.values()].find(
+        (session) => this.folderKey(session.cwd) === key,
+      )
+      targets.set(key, matched?.cwd ?? directory)
+    }
+    for (const [key, cwd] of targets) {
+      if (this.refreshing.has(key)) continue
       const timer = setTimeout(() => {
-        this.refreshing.delete(cwd)
-        this.detached(this.republish(cwd))
+        this.refreshing.delete(key)
+        this.detached(this.republish(key, cwd))
       }, REFRESH_MS)
       timer.unref?.()
-      this.refreshing.set(cwd, timer)
+      this.refreshing.set(key, timer)
     }
   }
 
-  private async republish(cwd: string): Promise<void> {
+  private async republish(key: string, cwd: string): Promise<void> {
     const open = (): Session[] =>
       [...this.sessions.values()].filter(
-        (session) => session.cwd === cwd && !session.hidden && !session.listed,
+        (session) => this.folderKey(session.cwd) === key && !session.hidden && !session.listed,
       )
     if (this.done || open().length === 0) return
     let offer: Offer
     try {
-      offer = await this.offer(cwd)
+      offer = await this.offer(cwd, true)
     } catch (error) {
       this.hooks.log('warn', `Could not read what OpenCode offers: ${(error as Error).message}`)
       return
@@ -866,10 +935,11 @@ export class OpenCodeConnection implements AgentConnection {
    * given is left alone.
    */
   private async mount(cwd: string, servers: readonly McpServer[]): Promise<void> {
-    let mounted = this.mounted.get(cwd)
+    const key = this.folderKey(cwd)
+    let mounted = this.mounted.get(key)
     if (!mounted) {
       mounted = new Map()
-      this.mounted.set(cwd, mounted)
+      this.mounted.set(key, mounted)
     }
     for (const server of servers) {
       const config = mcpConfig(server)
@@ -1016,7 +1086,7 @@ export class OpenCodeConnection implements AgentConnection {
     )
     const fork = made.data
     try {
-      if (path.resolve(fork.location.directory) !== path.resolve(cwd)) {
+      if (!this.sameFolder(fork.location.directory, cwd)) {
         await this.call('POST', `/api/session/${fork.id}/move`, { directory: cwd })
       }
     } catch (error) {
@@ -1467,13 +1537,20 @@ export class OpenCodeConnection implements AgentConnection {
     if (typeof value !== 'string') {
       throw new AgentRequestError('agent_error', t('agentRun.takesChoice', { option: optionId }))
     }
-    const offer = await this.offer(session.cwd)
+    const key = this.folderKey(session.cwd)
+    const cached = this.offers.get(key)
+    const fromCache = cached !== undefined && Date.now() - cached.at < OFFER_TTL_MS
+    let offer = await this.offer(session.cwd)
     const route = `/api/session/${sessionId}`
-    const current = session.chosen.model ?? offer.defaultModel
     switch (optionId) {
       case CONFIG.model: {
-        const model = findModel(offer.models, value)
+        let model = findModel(offer.models, value)
+        if (!model && fromCache) {
+          offer = await this.offer(session.cwd, true)
+          model = findModel(offer.models, value)
+        }
         if (!model) throw new AgentRequestError('agent_error', t('agentRun.noModel', { value }))
+        const current = session.chosen.model ?? offer.defaultModel
         // An effort the new model lacks goes to the nearest lower one it has, else to its default.
         const variant = current?.variant
         const variants = (model.variants ?? []).map((item) => item.id)
@@ -1488,8 +1565,19 @@ export class OpenCodeConnection implements AgentConnection {
         break
       }
       case CONFIG.effort: {
-        const model = current ? findModel(offer.models, modelValue(current)) : null
-        const known = value === DEFAULT_EFFORT || model?.variants?.some((item) => item.id === value)
+        const findEffort = (source: Offer): { current: ModelRef | null; known: boolean } => {
+          const current = session.chosen.model ?? source.defaultModel
+          const model = current ? findModel(source.models, modelValue(current)) : null
+          const known =
+            value === DEFAULT_EFFORT ||
+            (model?.variants?.some((item) => item.id === value) ?? false)
+          return { current, known }
+        }
+        let { current, known } = findEffort(offer)
+        if ((!current || !known) && fromCache) {
+          offer = await this.offer(session.cwd, true)
+          ;({ current, known } = findEffort(offer))
+        }
         if (!current || !known) {
           throw new AgentRequestError('agent_error', t('agentRun.noEffort', { value }))
         }
@@ -1503,7 +1591,12 @@ export class OpenCodeConnection implements AgentConnection {
         break
       }
       case CONFIG.mode: {
-        if (!modes(offer.agents).some((agent) => agent.id === value)) {
+        let found = modes(offer.agents).some((agent) => agent.id === value)
+        if (!found && fromCache) {
+          offer = await this.offer(session.cwd, true)
+          found = modes(offer.agents).some((agent) => agent.id === value)
+        }
+        if (!found) {
           throw new AgentRequestError('agent_error', t('agentRun.noMode', { value }))
         }
         if (!session.listed) await this.call('POST', `${route}/agent`, { agent: value })
@@ -1687,7 +1780,10 @@ export class OpenCodeConnection implements AgentConnection {
         session.stepModel = model ? modelValue(model) : null
         // The context is the running model's, also for a subagent and after a switch.
         const known = model
-          ? findModel(this.offers.get(session.cwd)?.offer.models ?? [], modelValue(model))
+          ? findModel(
+              this.offers.get(this.folderKey(session.cwd))?.offer.models ?? [],
+              modelValue(model),
+            )
           : null
         session.mapper.window(known?.limit?.context ?? null)
         break
@@ -1889,7 +1985,7 @@ export class OpenCodeConnection implements AgentConnection {
 
   private publishConfig(session: Session): void {
     if (session.hidden) return
-    const known = this.offers.get(session.cwd)?.offer
+    const known = this.offers.get(this.folderKey(session.cwd))?.offer
     if (!known) return
     this.deliver(session.id, {
       patches: [{ op: 'session.update', changes: { config: this.config(session, known) } }],

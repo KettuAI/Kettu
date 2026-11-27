@@ -6318,6 +6318,8 @@ export class SessionManager {
     this.attachedOn(live, setup.harnessVersion, false)
     live.failure = null
     const { agentId } = live.record
+    // The cache names options the agent may fail to report on start, so read it before `started`.
+    const cached = this.deps.options?.get(agentId)?.config ?? []
     const own = setup.config
     const replaced =
       this.deps.options?.started(
@@ -6374,7 +6376,10 @@ export class SessionManager {
     }
     // The first message never goes out with a value the user did not choose.
     const wanted = Object.entries(live.startValues).flatMap(([id, value]): ConfigOption[] => {
-      const option = config.find((o) => o.id === id) ?? own.find((o) => o.id === id)
+      const option =
+        config.find((o) => o.id === id) ??
+        own.find((o) => o.id === id) ??
+        cached.find((o) => o.id === id && o.category !== 'thought_level')
       return option ? [{ ...option, value }] : []
     })
     const notice = lostValuesNotice(lostValues(wanted, config), { subject: 'start', held: true })

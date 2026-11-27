@@ -3,6 +3,7 @@
 // and sends the events OpenCode 2.3.2 sent for the same work.
 
 import { afterEach, describe, expect, it } from 'vitest'
+import type { Platform } from '@shared/platform'
 import { AgentRequestError, type McpServer, type PermissionAnswer } from '../connection'
 import type { HostedContext } from '../driver'
 import {
@@ -34,11 +35,15 @@ interface Setup {
 
 const open: OpenCodeConnection[] = []
 
-async function connect(server = new FakeServer()): Promise<Setup> {
+async function connect(
+  server = new FakeServer(),
+  options: { platform?: Platform; offerRetryMs?: number } = {},
+): Promise<Setup> {
   const traffic: unknown[] = []
   const log: string[] = []
   const context = {
     def: { id: 'opencode', name: 'OpenCode' },
+    ...(options.platform ? { platform: options.platform } : {}),
     hooks: {
       traffic: (_direction: string, message: unknown) => traffic.push(message),
       account: () => {},
@@ -52,7 +57,11 @@ async function connect(server = new FakeServer()): Promise<Setup> {
     exited: new Promise(() => {}),
     stop: () => {},
   }
-  const connection = new OpenCodeConnection(context, async () => running)
+  const connection = new OpenCodeConnection(
+    context,
+    async () => running,
+    options.offerRetryMs !== undefined ? { offerRetryMs: options.offerRetryMs } : {},
+  )
   open.push(connection)
   await connection.initialize('0.0.0')
   return { server, connection, traffic, log }
@@ -225,6 +234,227 @@ describe('options', () => {
       { name: 'ship', description: 'Ship' },
       { name: 'compact', description: expect.any(String) },
     ])
+  })
+
+  it('waits for cold-folder plugins to activate so custom provider models are offered and selectable', async () => {
+    const setup = await connect(new FakeServer(), { offerRetryMs: 5 })
+    let pluginPolls = 0
+    const settled = (): boolean => pluginPolls >= 3
+    setup.server.on('GET', /^\/api\/plugin\?/, () => {
+      pluginPolls++
+      return { data: settled() ? [{ id: 'opencode.config.provider' }] : [] }
+    })
+    setup.server.on('GET', /^\/api\/model\?/, () => ({
+      data: settled()
+        ? [
+            { ...MODEL, name: 'DeepSeek Flash', variants: [{ id: 'low' }, { id: 'high' }] },
+            { id: 'my-model', providerID: 'custom-provider', name: '', variants: [{ id: 'high' }] },
+          ]
+        : [{ ...MODEL, name: 'DeepSeek Flash' }],
+    }))
+
+    const { sessionId, config } = await setup.connection.newSession(CWD)
+    expect(pluginPolls).toBe(3)
+    const model = config.find((option) => option.id === 'model')
+    expect(model?.choices).toContainEqual({
+      value: 'custom-provider/my-model',
+      name: 'custom-provider/my-model',
+    })
+
+    const next = await setup.connection.setConfigOption(
+      sessionId,
+      'model',
+      'custom-provider/my-model',
+    )
+    expect(next.find((option) => option.id === 'model')?.value).toBe('custom-provider/my-model')
+    expect(setup.server.posts(/\/model$/).map((sent) => sent.body)).toEqual([
+      { model: { id: 'my-model', providerID: 'custom-provider' } },
+    ])
+  })
+
+  it('re-reads models and defaultModel when a cold folder settles without a plugin endpoint', async () => {
+    const setup = await connect(new FakeServer(), { offerRetryMs: 5 })
+    let agentReads = 0
+    let modelReads = 0
+    let defaultReads = 0
+    setup.server.on('GET', /^\/api\/agent\?/, () => {
+      agentReads++
+      return {
+        data: agentReads < 3 ? [] : [{ id: 'build', name: 'Build', mode: 'primary' }],
+      }
+    })
+    setup.server.on('GET', /^\/api\/model\?/, () => {
+      modelReads++
+      return {
+        data:
+          modelReads < 3
+            ? []
+            : [
+                { ...MODEL, name: 'DeepSeek Flash' },
+                { id: 'my-model', providerID: 'custom-provider', name: 'My Model' },
+              ],
+      }
+    })
+    setup.server.on('GET', /^\/api\/model\/default/, () => {
+      defaultReads++
+      if (defaultReads === 1) {
+        throw new ServerError(503, null, 'Location plugins did not finish activating')
+      }
+      return { data: { id: 'my-model', providerID: 'custom-provider' } }
+    })
+
+    const { config } = await setup.connection.newSession(CWD)
+    expect(agentReads).toBe(3)
+    expect(modelReads).toBe(3)
+    expect(config.find((option) => option.id === 'model')).toMatchObject({
+      value: 'custom-provider/my-model',
+      choices: expect.arrayContaining([
+        { value: 'custom-provider/my-model', name: 'custom-provider/My Model' },
+      ]),
+    })
+  })
+
+  it('refreshes a cached folder offer once when switching to a newly added custom model', async () => {
+    const setup = await connect(new FakeServer(), { offerRetryMs: 5 })
+    let hasCustom = false
+    setup.server.on('GET', /^\/api\/model\?/, () => ({
+      data: hasCustom
+        ? [
+            { ...MODEL, name: 'DeepSeek Flash' },
+            { id: 'my-model', providerID: 'custom-provider', name: 'My Model' },
+          ]
+        : [{ ...MODEL, name: 'DeepSeek Flash' }],
+    }))
+
+    const { id } = await session(setup)
+    hasCustom = true
+    const next = await setup.connection.setConfigOption(id, 'model', 'custom-provider/my-model')
+    expect(next.find((option) => option.id === 'model')?.value).toBe('custom-provider/my-model')
+    expect(setup.server.posts(/\/model$/).map((sent) => sent.body)).toEqual([
+      { model: { id: 'my-model', providerID: 'custom-provider' } },
+    ])
+  })
+
+  it('invalidates Windows folder offers across case/slash variants and drops stale in-flight reads', async () => {
+    const winCwd = 'C:\\work\\app'
+    const setup = await connect(new FakeServer(), { platform: 'win32', offerRetryMs: 5 })
+    let phase = 1
+    let releaseFirstModelRead = (): void => {}
+    let modelCalls = 0
+    setup.server.on('POST', /^\/api\/session$/, () => ({
+      data: {
+        id: 'ses_win_1',
+        time: { created: 1, updated: 2 },
+        location: { directory: winCwd },
+        title: 'Win',
+      },
+    }))
+    setup.server.on('POST', /^\/api\/session\/ses_win_1\/fork$/, () => ({
+      data: {
+        id: 'ses_win_fork',
+        time: { created: 1, updated: 2 },
+        location: { directory: 'c:/work/app/' },
+        title: 'Fork',
+      },
+    }))
+    setup.server.on('GET', /^\/api\/model\?/, async () => {
+      modelCalls++
+      if (modelCalls === 1) {
+        return { data: [{ ...MODEL, name: 'DeepSeek Flash' }] }
+      }
+      if (modelCalls === 2) {
+        await new Promise<void>((resolve) => (releaseFirstModelRead = resolve))
+        return { data: [{ ...MODEL, name: 'DeepSeek Flash' }] }
+      }
+      return {
+        data:
+          phase >= 2
+            ? [
+                { ...MODEL, name: 'DeepSeek Flash' },
+                { id: 'my-model', providerID: 'custom-provider', name: 'My Model' },
+              ]
+            : [{ ...MODEL, name: 'DeepSeek Flash' }],
+      }
+    })
+
+    const opened = await setup.connection.newSession(winCwd)
+    const thread = new TestThread(opened.sessionId)
+    setup.connection.register(opened.sessionId, thread)
+
+    // Forking into the same Windows folder spelled with different case/slashes does not move it.
+    await setup.connection.forkSession(opened.sessionId, winCwd)
+    expect(setup.server.posts(/\/move$/)).toEqual([])
+
+    // Start a fresh options read that stalls, then invalidate with a Windows-variant directory path.
+    const inFlight = setup.connection.newSession(winCwd, { hidden: 'options' })
+    await settle()
+    phase = 2
+    setup.server.push({
+      type: 'provider.updated',
+      location: { directory: 'c:/work/app/' },
+      data: {},
+    })
+    releaseFirstModelRead()
+    const listed = await inFlight
+    expect(listed.config.find((option) => option.id === 'model')?.choices).toContainEqual({
+      value: 'custom-provider/my-model',
+      name: 'custom-provider/My Model',
+    })
+
+    // Wait for the debounced republish to push the updated model list to the open Windows session.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(
+      thread.state.session.config.find((option) => option.id === 'model')?.choices,
+    ).toContainEqual({
+      value: 'custom-provider/my-model',
+      name: 'custom-provider/My Model',
+    })
+  })
+
+  it('restores a custom provider model and variants when resuming or loading on a cold folder', async () => {
+    const setup = await connect(new FakeServer(), { offerRetryMs: 5 })
+    let pluginPolls = 0
+    setup.server.on('GET', /^\/api\/plugin\?/, () => {
+      pluginPolls++
+      return { data: pluginPolls >= 2 ? [{ id: 'opencode.config.provider' }] : [] }
+    })
+    setup.server.on('GET', /^\/api\/model\?/, () => ({
+      data:
+        pluginPolls >= 2
+          ? [
+              { ...MODEL, name: 'DeepSeek Flash' },
+              {
+                id: 'my-model',
+                providerID: 'custom-provider',
+                name: 'My Model',
+                variants: [{ id: 'low' }, { id: 'high' }],
+              },
+            ]
+          : [],
+    }))
+    setup.server.on('GET', /^\/api\/session\/ses_1$/, () => ({
+      data: {
+        ...setup.server.info(SES),
+        model: { id: 'my-model', providerID: 'custom-provider', variant: 'high' },
+      },
+    }))
+
+    const resumed = await setup.connection.resumeSession(SES, CWD)
+    expect(resumed.config.find((option) => option.id === 'model')).toMatchObject({
+      value: 'custom-provider/my-model',
+      choices: expect.arrayContaining([
+        { value: 'custom-provider/my-model', name: 'custom-provider/My Model' },
+      ]),
+    })
+    expect(resumed.config.find((option) => option.id === 'effort')).toMatchObject({
+      value: 'high',
+    })
+
+    const loaded = await setup.connection.loadSession(SES, CWD)
+    expect(loaded.config.find((option) => option.id === 'model')?.value).toBe(
+      'custom-provider/my-model',
+    )
+    expect(loaded.config.find((option) => option.id === 'effort')?.value).toBe('high')
   })
 })
 

@@ -313,6 +313,42 @@ describe('OpenCodeClient.providers', () => {
     })
     await expect(client.providers()).rejects.toThrow('OpenCode could not list its providers.')
   })
+
+  it('keeps custom providers without a display name and parses BOM/CRLF stdout on Windows', async () => {
+    const payload =
+      '\uFEFF' +
+      JSON.stringify({
+        location: { directory: 'C:\\work' },
+        data: [
+          {
+            id: 'custom-provider',
+            methods: [KEY],
+            connections: [{ type: 'credential', id: 'cred_custom', label: 'API', method: 'key' }],
+          },
+        ],
+      }) +
+      '\r\n'
+    const runProgram = async (options: ProgramOptions): Promise<ProgramRun> => {
+      const [, , route] = options.args
+      if (route === '/api/integration') return run(payload)
+      if (route === '/api/experimental/usage/limits') return run('', 1, 'HTTP 404 Not Found\r\n')
+      throw new Error(`unexpected ${options.args.join(' ')}`)
+    }
+    const client = new OpenCodeClient({
+      program: 'C:\\Users\\developer\\AppData\\Roaming\\npm\\opencode.cmd',
+      env: {},
+      platform: 'win32',
+      runProgram,
+    })
+    const providers = await client.providers()
+    expect(providers).toEqual([
+      expect.objectContaining({
+        id: 'custom-provider',
+        name: 'custom-provider',
+        accounts: [{ id: 'cred_custom', label: 'API', method: 'key', needsAuth: false }],
+      }),
+    ])
+  })
 })
 
 describe('OpenCodeClient.action', () => {
