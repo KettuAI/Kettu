@@ -159,6 +159,7 @@ export function sessionMenuGroups(
               ? (['pullRequest'] as const)
               : []),
             'copyResume',
+            'copySessionId',
             'showInFolder',
             'exportConversation',
           ],

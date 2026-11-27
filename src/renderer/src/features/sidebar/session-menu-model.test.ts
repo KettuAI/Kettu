@@ -70,3 +70,57 @@ describe('sessionMenuGroups closeTerminals item', () => {
     )
   })
 })
+
+describe('sessionMenuGroups copySessionId item', () => {
+  it('places copySessionId right after copyResume in both row and more menus', () => {
+    const rowGroup = sessionMenuGroups(BASE_SUMMARY, { ...BASE_CONTEXT, place: 'row' }).find(
+      (group) => group.includes('copySessionId'),
+    )
+    const moreGroup = sessionMenuGroups(BASE_SUMMARY, { ...BASE_CONTEXT, place: 'more' }).find(
+      (group) => group.includes('copySessionId'),
+    )
+    expect(rowGroup).toEqual([
+      'openInSplit',
+      'copyResume',
+      'copySessionId',
+      'showInFolder',
+      'exportConversation',
+    ])
+    expect(moreGroup).toEqual(['copyResume', 'copySessionId', 'exportConversation'])
+  })
+
+  it('keeps copySessionId in row and more menus on web/remote hosts and without a resume command', () => {
+    const remoteContext: SessionMenuContext = {
+      ...BASE_CONTEXT,
+      local: false,
+      terminal: false,
+      resume: false,
+    }
+    const rowGroup = sessionMenuGroups(BASE_SUMMARY, { ...remoteContext, place: 'row' }).find(
+      (group) => group.includes('copySessionId'),
+    )
+    const moreGroup = sessionMenuGroups(BASE_SUMMARY, { ...remoteContext, place: 'more' }).find(
+      (group) => group.includes('copySessionId'),
+    )
+    expect(rowGroup).toEqual(['openInSplit', 'copySessionId', 'exportConversation'])
+    expect(moreGroup).toEqual(['copySessionId', 'exportConversation'])
+  })
+
+  it('includes copySessionId for sub-sessions and keeps subagent menus consistent across places', () => {
+    const subSession = { ...BASE_SUMMARY, parentId: 'parent-1', origin: 'user' as const }
+    expect(sessionMenuGroups(subSession, { ...BASE_CONTEXT, place: 'row' }).flat()).toContain(
+      'copySessionId',
+    )
+    expect(sessionMenuGroups(subSession, { ...BASE_CONTEXT, place: 'more' }).flat()).toContain(
+      'copySessionId',
+    )
+
+    const subagent = { ...BASE_SUMMARY, parentId: 'parent-1', origin: 'subagent' as const }
+    expect(sessionMenuGroups(subagent, { ...BASE_CONTEXT, place: 'row' }).flat()).not.toContain(
+      'copySessionId',
+    )
+    expect(sessionMenuGroups(subagent, { ...BASE_CONTEXT, place: 'more' }).flat()).not.toContain(
+      'copySessionId',
+    )
+  })
+})
