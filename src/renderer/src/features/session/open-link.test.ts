@@ -204,6 +204,7 @@ function makeTerminal(id: string, overrides: Partial<TerminalInfo> = {}): Termin
 interface Env {
   windowOpen: ReturnType<typeof vi.fn>
   browserNavigate: ReturnType<typeof vi.fn>
+  browserOpenLink: ReturnType<typeof vi.fn>
   siteOpened: ReturnType<typeof vi.fn>
   settingsUpdate: ReturnType<typeof vi.fn>
 }
@@ -218,6 +219,7 @@ async function setupEnv(client: 'desktop' | 'web' = 'desktop') {
   })
   const windowOpen = vi.fn()
   const browserNavigate = vi.fn(() => Promise.resolve())
+  const browserOpenLink = vi.fn(() => Promise.resolve())
   const siteOpened = vi.fn(() => Promise.resolve())
   const settingsUpdate = vi.fn(() => Promise.resolve({}))
   const never = new Promise(() => {})
@@ -233,6 +235,7 @@ async function setupEnv(client: 'desktop' | 'web' = 'desktop') {
       },
       browser: {
         navigate: browserNavigate,
+        openLink: browserOpenLink,
         siteOpened,
         siteIcons: vi.fn(() => Promise.resolve({})),
         loadSiteIcon: vi.fn(() => Promise.resolve()),
@@ -276,7 +279,7 @@ async function setupEnv(client: 'desktop' | 'web' = 'desktop') {
   const xtermRegistry = await import('@renderer/features/terminal/xterm-registry')
   const gitSteps = await import('@renderer/features/git/steps')
 
-  const env: Env = { windowOpen, browserNavigate, siteOpened, settingsUpdate }
+  const env: Env = { windowOpen, browserNavigate, browserOpenLink, siteOpened, settingsUpdate }
   return {
     env,
     openLink,
@@ -338,7 +341,8 @@ describe('session link routing helper (#2848)', () => {
     expect(handled).toBe(true)
     expect(viewStore.useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'sess-1' })
     expect(viewStore.useViewStore.getState().sidePane['sess-1']).toBe('browser')
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
     expect(env.windowOpen).not.toHaveBeenCalled()
     expect(openLink.useLinkConfirmStore.getState().request).toBeNull()
   })
@@ -361,7 +365,7 @@ describe('session link routing helper (#2848)', () => {
     const onOpen = vi.fn()
     const props = openLink.sessionLinkProps(PR_URL, 'sess-1', { onOpen })
 
-    // Mod-click toggles to the external browser.
+    // Mod-click toggles to the external browser (unchanged Cmd/Ctrl+click behavior).
     const preventMod = vi.fn()
     props.onClick({
       button: 0,
@@ -373,9 +377,10 @@ describe('session link routing helper (#2848)', () => {
     expect(preventMod).toHaveBeenCalledTimes(1)
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(env.windowOpen).toHaveBeenCalledWith(PR_URL, '_blank', 'noreferrer')
+    expect(env.browserOpenLink).not.toHaveBeenCalled()
     expect(env.browserNavigate).not.toHaveBeenCalled()
 
-    // Middle-click opens at the default destination (session browser).
+    // Middle-click opens at the default destination (session browser via openLink).
     const preventAux = vi.fn()
     props.onAuxClick({
       button: 1,
@@ -384,7 +389,27 @@ describe('session link routing helper (#2848)', () => {
     } as never)
     expect(preventAux).toHaveBeenCalledTimes(1)
     expect(onOpen).toHaveBeenCalledTimes(2)
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
+
+    // When default destination is external browser, Mod-click still flips to session browser via openLink.
+    settingsStore.useSettingsStore.setState((s) => ({
+      settings: {
+        ...s.settings,
+        thread: { ...s.settings.thread, openLinksIn: 'browser', confirmLinks: false },
+      },
+    }))
+    env.browserOpenLink.mockClear()
+    env.windowOpen.mockClear()
+    props.onClick({
+      button: 0,
+      metaKey: true,
+      ctrlKey: false,
+      defaultPrevented: false,
+      preventDefault: vi.fn(),
+    } as never)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.windowOpen).not.toHaveBeenCalled()
   })
 
   it('opens the global LinkConfirmHost store in ask mode and remembers site preferences on confirm', async () => {
@@ -408,12 +433,13 @@ describe('session link routing helper (#2848)', () => {
       sessionId: 'sess-1',
       open: true,
     })
-    expect(env.browserNavigate).not.toHaveBeenCalled()
+    expect(env.browserOpenLink).not.toHaveBeenCalled()
     expect(env.windowOpen).not.toHaveBeenCalled()
 
     // Confirming with remember=true updates alwaysOpenIn and opens in the chosen session browser.
     openLink.confirmLinkOpen('session', true)
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
     expect(env.settingsUpdate).toHaveBeenCalledWith({
       thread: { alwaysOpenIn: { 'github.com': 'session' } },
     })
@@ -441,11 +467,12 @@ describe('session link routing helper (#2848)', () => {
     }))
 
     openLink.openSessionLink(PR_URL, 'sess-1')
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-1', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', PR_URL)
     expect(openLink.useLinkConfirmStore.getState().request).toBeNull()
 
     openLink.openSessionLink(LOCAL_URL, 'sess-1')
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-1', LOCAL_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-1', LOCAL_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
     expect(openLink.useLinkConfirmStore.getState().request).toBeNull()
   })
 
@@ -466,6 +493,7 @@ describe('session link routing helper (#2848)', () => {
     openLink.openSessionLink(PR_URL, 'sess-1')
     openLink.openSessionLink(LOCAL_URL, 'sess-1')
 
+    expect(env.browserOpenLink).not.toHaveBeenCalled()
     expect(env.browserNavigate).not.toHaveBeenCalled()
     expect(env.windowOpen).toHaveBeenNthCalledWith(1, PR_URL, '_blank', 'noreferrer')
     expect(env.windowOpen).toHaveBeenNthCalledWith(2, LOCAL_URL, '_blank', 'noreferrer')
@@ -526,13 +554,13 @@ describe('terminal and git toast link routing (#2848)', () => {
     expect(
       xtermRegistry.openTerminalLink('term-1', { metaKey: false, ctrlKey: false }, LOCAL_URL),
     ).toBe(false)
-    expect(env.browserNavigate).not.toHaveBeenCalled()
+    expect(env.browserOpenLink).not.toHaveBeenCalled()
 
     // Mod+Click on localhost opens directly in the terminal's session browser without asking.
     expect(
       xtermRegistry.openTerminalLink('term-1', { metaKey: true, ctrlKey: false }, LOCAL_URL),
     ).toBe(true)
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-term', LOCAL_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-term', LOCAL_URL)
     expect(openLink.useLinkConfirmStore.getState().request).toBeNull()
 
     // Mod+Click in session mode uses owner.sessionId when terminal.sessionId is absent.
@@ -546,7 +574,7 @@ describe('terminal and git toast link routing (#2848)', () => {
     expect(
       xtermRegistry.openTerminalLink('term-owner', { metaKey: true, ctrlKey: false }, PR_URL),
     ).toBe(true)
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-owner', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-owner', PR_URL)
 
     // Non-session terminal opens externally.
     expect(
@@ -596,7 +624,8 @@ describe('terminal and git toast link routing (#2848)', () => {
     expect(action).toBeDefined()
     action?.onClick()
 
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-wt', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-wt', PR_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
     expect(env.windowOpen).not.toHaveBeenCalled()
   })
 })
@@ -671,7 +700,8 @@ describe('representative session UI call sites route clicks cleanly (#2848)', ()
       preventDefault: preventOutput,
     })
     expect(preventOutput).toHaveBeenCalledTimes(1)
-    expect(env.browserNavigate).toHaveBeenCalledWith('sess-ui', PR_URL)
+    expect(env.browserOpenLink).toHaveBeenCalledWith('sess-ui', PR_URL)
+    expect(env.browserNavigate).not.toHaveBeenCalled()
 
     // 3. PrBarChip renders without target="_blank" and passes sessionId through.
     const chipHtml = renderToStaticMarkup(

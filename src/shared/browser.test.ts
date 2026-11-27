@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalBrowserUrl,
   desktopViewportFor,
   fitPageViewport,
   fitViewport,
   isFixedFrameViewport,
   PAGE_SIZES,
   pageSizeOf,
+  sameBrowserUrl,
   samePageSize,
   SIZE_LINE_ROOM,
   type BrowserBounds,
@@ -172,5 +174,40 @@ describe('fitViewport & page size helpers', () => {
     expect('error' in pageSizeOf({ size: 'fit' })).toBe(true)
     expect(samePageSize(PAGE_SIZES.desktop, { ...PAGE_SIZES.desktop })).toBe(true)
     expect(samePageSize(PAGE_SIZES.desktop, null)).toBe(false)
+  })
+})
+
+describe('canonicalBrowserUrl & sameBrowserUrl (#2858)', () => {
+  it('normalizes scheme/host casing, default ports, trailing slashes, and empty fragments', () => {
+    expect(canonicalBrowserUrl('HTTPS://Example.COM:443')).toBe('https://example.com/')
+    expect(canonicalBrowserUrl('http://EXAMPLE.com:80/docs/')).toBe('http://example.com/docs')
+    expect(canonicalBrowserUrl('https://example.com/docs///#')).toBe('https://example.com/docs')
+    expect(sameBrowserUrl('https://example.com', 'https://example.com/')).toBe(true)
+    expect(sameBrowserUrl('https://example.com:443/guide', 'https://example.com/guide/')).toBe(true)
+    expect(sameBrowserUrl('http://localhost:80/app#', 'http://localhost/app')).toBe(true)
+    expect(
+      sameBrowserUrl('https://example.com/guide/#install', 'https://example.com/guide#install'),
+    ).toBe(true)
+  })
+
+  it('keeps distinct queries, non-empty hashes, ports, and paths separate', () => {
+    expect(sameBrowserUrl('https://example.com/search?q=a', 'https://example.com/search?q=b')).toBe(
+      false,
+    )
+    expect(sameBrowserUrl('https://example.com/docs#a', 'https://example.com/docs#b')).toBe(false)
+    expect(sameBrowserUrl('https://example.com/docs', 'https://example.com/docs#a')).toBe(false)
+    expect(sameBrowserUrl('http://localhost:5173/#/a', 'http://localhost:5173/#/b')).toBe(false)
+    expect(sameBrowserUrl('http://localhost:3000/', 'http://localhost:5173/')).toBe(false)
+    expect(sameBrowserUrl('https://a@example.com/', 'https://b@example.com/')).toBe(false)
+  })
+
+  it('returns null / false for empty, blank, or non-http(s) URLs', () => {
+    expect(canonicalBrowserUrl(null)).toBeNull()
+    expect(canonicalBrowserUrl(undefined)).toBeNull()
+    expect(canonicalBrowserUrl('')).toBeNull()
+    expect(canonicalBrowserUrl('about:blank')).toBeNull()
+    expect(canonicalBrowserUrl('file:///tmp/index.html')).toBeNull()
+    expect(sameBrowserUrl('about:blank', 'about:blank')).toBe(false)
+    expect(sameBrowserUrl(null, 'https://example.com')).toBe(false)
   })
 })

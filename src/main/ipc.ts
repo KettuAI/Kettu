@@ -1023,6 +1023,10 @@ export function registerIpcHandlers({
     const address = browserUrl(url)
     if (browserViews.paneControl(page)) browserViews.navigate(page, address)
   })
+  // Opening a link from the thread selects a matching tab or opens a user tab without disturbing the agent's.
+  handle('browser:open-link', 2, (_, id, url) =>
+    browserViews.openLink(sessionId(id), browserUrl(url)),
+  )
   handle('browser:back', 1, (_, id) => {
     if (browserViews.paneControl(sessionId(id))) browserViews.back(sessionId(id))
   })

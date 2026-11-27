@@ -7,6 +7,7 @@ import type { HandlerDetails, Input, WebContents, WindowOpenHandlerResponse } fr
 import {
   AGENT_VIEWPORT,
   BROWSER_PARTITION,
+  canonicalBrowserUrl,
   desktopViewportFor,
   fitPageViewport,
   MAX_SESSION_TABS,
@@ -484,6 +485,52 @@ export class BrowserViews {
     const browser = this.browser(sessionId)
     const tab = this.selectedTab(browser) ?? this.addTab(browser, { select: true, agent: false })
     this.open(tab, url)
+  }
+
+  /**
+   * Opens a link from the session UI in the session's browser: selects an already-open tab on the
+   * same URL without reloading it, else reuses a blank selected user tab, else opens a new tab
+   * (falling back to navigating an existing tab when the session is at `MAX_SESSION_TABS`).
+   */
+  openLink(sessionId: string, url: string): void {
+    if (!isHttp(url)) throw new Error('A browser page opens an http or https address only')
+    const browser = this.browser(sessionId)
+    const target = canonicalBrowserUrl(url)
+    const selected = this.selectedTab(browser)
+    const match =
+      target !== null
+        ? selected && canonicalBrowserUrl(this.urlOf(selected)) === target
+          ? selected
+          : (this.tabsOf(browser).find((tab) => canonicalBrowserUrl(this.urlOf(tab)) === target) ??
+            null)
+        : null
+    if (match) {
+      if (browser.strip.select(match.id)) {
+        this.present(browser)
+        this.emit(browser)
+        this.syncOverlay()
+      }
+      return
+    }
+    if (this.isReusableBlankTab(browser, selected)) {
+      this.open(selected, url)
+      return
+    }
+    if (browser.strip.size >= MAX_SESSION_TABS) {
+      const fallback =
+        selected && !this.holdsInput(selected)
+          ? selected
+          : (this.tabsOf(browser).findLast((tab) => !this.holdsInput(tab)) ?? selected)
+      if (!fallback) return
+      if (browser.strip.select(fallback.id)) this.present(browser)
+      this.open(fallback, url)
+      this.syncOverlay()
+      return
+    }
+    const tab = this.addTab(browser, { select: true, agent: false })
+    this.present(browser)
+    this.open(tab, url)
+    this.syncOverlay()
   }
 
   /** The tab the agent's calls act on, which it keeps from then on; null when there is none. */
@@ -1818,9 +1865,16 @@ export class BrowserViews {
     }
   }
 
+  private isReusableBlankTab(browser: Browser, tab: Tab | null): tab is Tab {
+    if (!tab) return false
+    if (browser.strip.agent === tab.id || browser.strip.byOf(tab.id) === 'agent') return false
+    return this.urlOf(tab) === null && !tab.loading && !tab.asking && !tab.released
+  }
+
   private urlOf(tab: Tab): string | null {
     const contents = this.contentsOf(tab)
-    const url = contents?.getURL() || tab.lastUrl
+    const current = contents?.getURL()
+    const url = current && current !== 'about:blank' ? current : tab.lastUrl
     return url && url !== 'about:blank' ? url : null
   }
 

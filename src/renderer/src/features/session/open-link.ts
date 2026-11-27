@@ -90,8 +90,8 @@ function hasSessionTarget(sessionId: string | null): boolean {
 }
 
 /**
- * Opens a link in the default browser, or in the session's page in Kettu's browser, which the
- * session's side panel then shows.
+ * Opens a link in the default browser, or in the session's browser in Kettu (selecting a matching
+ * tab without reloading or opening a new tab), which the session's side panel then shows.
  */
 export function openLinkIn(url: string, destination: LinkDestination, sessionId: string | null) {
   // Either place makes the site one opened from Kettu, which is not asked about as new again.
@@ -110,7 +110,7 @@ export function openLinkIn(url: string, destination: LinkDestination, sessionId:
     }
     toggleSidePane(sessionId, 'browser', true)
     window.kettu.browser
-      .navigate(sessionId, url)
+      .openLink(sessionId, url)
       .catch((e: unknown) => toast(i18n.t('session:link.openFailed', { error: errorMessage(e) })))
     return
   }
