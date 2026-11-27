@@ -2221,6 +2221,12 @@ body > div[id^='dkettu-mermaid-'] {
   --diffs-dark-bg: var(--bg-code-block);
 }
 
+/* Compact line height for inline working-tree previews inside the Git changes list. */
+.git-inline-diff {
+  --diffs-line-height: 20px;
+  font-variant-ligatures: none;
+}
+
 /* The Files pane keeps theme tints; lines picked to mention take the selection's fox tint. */
 .files-diff {
   --diffs-light-bg: var(--bg-code-block);

@@ -23,12 +23,20 @@ function useWideEnough(box: HTMLElement | null, watch: boolean): boolean {
   return watch && wide
 }
 
-function DiffImpl({ path, oldText, newText, className }: DiffProps) {
+function DiffImpl({
+  path,
+  oldText,
+  newText,
+  overflow = 'wrap',
+  layout = 'auto',
+  className,
+}: DiffProps) {
   const dark = useDark()
   const theme = useCodeThemes()
   const chosen = useDiffStyle((s) => s.style)
   const [box, setBox] = useState<HTMLDivElement | null>(null)
-  const diffStyle: DiffStyle = useWideEnough(box, chosen === 'split') ? 'split' : 'unified'
+  const wideEnough = useWideEnough(box, layout !== 'unified' && chosen === 'split')
+  const diffStyle: DiffStyle = wideEnough ? 'split' : 'unified'
   const files = useMemo(
     () => ({
       oldFile: oldText === null ? null : { name: path, contents: oldText },
@@ -41,14 +49,14 @@ function DiffImpl({ path, oldText, newText, className }: DiffProps) {
       theme,
       themeType: dark ? ('dark' as const) : ('light' as const),
       diffStyle,
-      overflow: 'wrap' as const,
+      overflow,
       diffIndicators: 'bars' as const,
       hunkSeparators: 'line-info-basic' as const,
       lineDiffType: 'word' as const,
       disableFileHeader: true,
       preferredHighlighter: 'shiki-js' as const,
     }),
-    [dark, theme, diffStyle],
+    [dark, theme, diffStyle, overflow],
   )
   const pool = useMemo(() => getDiffsPool(), [])
   return (
