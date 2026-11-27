@@ -6,7 +6,7 @@ import { parseMcpConfig, type ConfigLayout } from './mcp-config'
 import { claudeProjectMcpPaths } from './mcp-config-paths'
 import { McpDiscoveryService, readMcpConfig, readOwnMcpServers } from './mcp-discovery'
 import { parseMcpPaste } from './mcp-paste'
-import { ALL_TRANSPORTS, libraryServers } from './servers'
+import { ALL_TRANSPORTS, libraryServers, parseMarketKeys, serverHeaders } from './servers'
 import type { MarketServer } from '@shared/marketplace'
 
 describe('MCP configuration readers', () => {
@@ -107,6 +107,172 @@ describe('MCP configuration readers', () => {
           { name: 'Authorization', input: true },
           { name: 'X-Ref', value: '${VARIABLE}' },
         ],
+      })
+    } finally {
+      service.stop()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reads Codex http_headers and merges them with headers, env_http_headers and bearer_token_env_var', () => {
+    const text = [
+      '[mcp_servers.inline]',
+      'url = "https://mcp.example.com/inline"',
+      'http_headers = { Authorization = "Bearer inline-secret", "X-Ref" = "${REF_VAR}", "X-Team" = "core" }',
+      '',
+      '[mcp_servers.combined]',
+      'url = "https://mcp.example.com/combined"',
+      'bearer_token_env_var = "BEARER_VAR"',
+      '',
+      '[mcp_servers.combined.headers]',
+      '"X-Legacy" = "legacy-secret"',
+      '"X-Override" = "from-headers"',
+      '',
+      '[mcp_servers.combined.http_headers]',
+      'authorization = "Bearer stale-hardcoded"',
+      '"x-override" = "from-http-headers"',
+      '"X-Static" = "static-secret"',
+      '"x-env-override" = "stale-literal"',
+      '',
+      '[mcp_servers.combined.env_http_headers]',
+      '"X-Env-Override" = "OVERRIDE_VAR"',
+      '"X-Env-Only" = "ONLY_VAR"',
+    ].join('\n')
+
+    const parsed = parseMcpConfig(text, { path: '/demo/.codex/config.toml', layout: 'codex' })
+    expect(parsed.error).toBeUndefined()
+    expect(parsed.servers).toHaveLength(2)
+
+    const [inline, combined] = parsed.servers
+    expect(inline).toMatchObject({
+      name: 'inline',
+      secrets: { Authorization: 'Bearer inline-secret', 'X-Team': 'core' },
+      spec: {
+        type: 'http',
+        url: 'https://mcp.example.com/inline',
+        headers: [
+          { name: 'Authorization', input: true, secret: true, required: true },
+          { name: 'X-Ref', value: '${REF_VAR}' },
+          { name: 'X-Team', input: true, secret: true, required: true },
+        ],
+      },
+    })
+
+    // Precedence: headers < http_headers < env_http_headers < bearer_token_env_var,
+    // deduplicated case-insensitively without keeping overridden literals in secrets.
+    expect(combined).toMatchObject({
+      name: 'combined',
+      secrets: {
+        'X-Legacy': 'legacy-secret',
+        'x-override': 'from-http-headers',
+        'X-Static': 'static-secret',
+      },
+      spec: {
+        type: 'http',
+        url: 'https://mcp.example.com/combined',
+        headers: [
+          { name: 'X-Legacy', input: true, secret: true, required: true },
+          { name: 'x-override', input: true, secret: true, required: true },
+          { name: 'Authorization', value: 'Bearer ${BEARER_VAR}' },
+          { name: 'X-Static', input: true, secret: true, required: true },
+          { name: 'X-Env-Override', value: '${OVERRIDE_VAR}' },
+          { name: 'X-Env-Only', value: '${ONLY_VAR}' },
+        ],
+      },
+    })
+  })
+
+  it('rejects malformed http_headers without leaking values', () => {
+    const badType = parseMcpConfig(
+      '[mcp_servers.api]\nurl = "https://mcp.example.com/mcp"\nhttp_headers = "secret-token"\n',
+      { path: '/demo/.codex/config.toml', layout: 'codex' },
+    )
+    expect(badType.servers).toEqual([])
+    expect(badType.error?.reason).toBe('invalid-server')
+    expect(JSON.stringify(badType)).not.toContain('secret-token')
+
+    const badValue = parseMcpConfig(
+      '[mcp_servers.api]\nurl = "https://mcp.example.com/mcp"\nhttp_headers = { Authorization = 123 }\n',
+      { path: '/demo/.codex/config.toml', layout: 'codex' },
+    )
+    expect(badValue.servers).toEqual([])
+    expect(badValue.error?.reason).toBe('invalid-server')
+  })
+
+  it('flags Codex http_headers keys during discovery, detects cross-agent differences and forwards imported headers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kettu-codex-headers-'))
+    const codexFile = {
+      agentId: 'codex' as const,
+      path: join(root, 'config.toml'),
+      layout: 'codex' as const,
+    }
+    const claudeFile = {
+      agentId: 'claude-code' as const,
+      path: join(root, '.claude.json'),
+      layout: 'claude' as const,
+    }
+    const service = new McpDiscoveryService({
+      files: () => [codexFile, claudeFile],
+      library: () => [],
+      changed: () => {},
+    })
+    try {
+      await writeFile(
+        codexFile.path,
+        [
+          '[mcp_servers.remote]',
+          'url = "https://mcp.example.com/mcp"',
+          'bearer_token_env_var = "API_BEARER"',
+          '',
+          '[mcp_servers.remote.http_headers]',
+          '"X-Api-Key" = "codex-secret-key"',
+          '"X-Workspace" = "eng"',
+          '',
+          '[mcp_servers.remote.env_http_headers]',
+          '"X-Env-Header" = "EXTRA_HEADER"',
+        ].join('\n'),
+      )
+      await writeFile(
+        claudeFile.path,
+        JSON.stringify({
+          mcpServers: {
+            remote: {
+              url: 'https://mcp.example.com/mcp',
+              headers: { 'X-Api-Key': 'claude-secret-key', 'X-Workspace': 'eng' },
+            },
+          },
+        }),
+      )
+
+      const discovered = await service.scan()
+      expect(discovered.servers).toHaveLength(1)
+      expect(JSON.stringify(discovered)).not.toContain('codex-secret-key')
+      expect(JSON.stringify(discovered)).not.toContain('claude-secret-key')
+      const row = discovered.servers[0]!
+      expect(row.differentKeys).toEqual(['X-Api-Key'])
+      const codexSource = row.sources.find((source) => source.agentId === 'codex')!
+      expect(codexSource.keys).toEqual(['X-Api-Key', 'X-Workspace'])
+
+      const [prepared] = service.prepare([
+        { id: row.id, sourceId: codexSource.id, name: 'remote', agents: ['codex'] },
+      ])
+      expect(prepared?.secrets).toEqual({
+        'X-Api-Key': 'codex-secret-key',
+        'X-Workspace': 'eng',
+      })
+      expect(JSON.stringify(prepared?.server)).not.toContain('codex-secret-key')
+
+      const held = parseMarketKeys({ [prepared!.server.id]: prepared!.secrets })!
+      expect(
+        serverHeaders(prepared!.server, held, {
+          env: { API_BEARER: 'env-bearer', EXTRA_HEADER: 'env-extra' },
+          platform: 'darwin',
+        }),
+      ).toEqual({
+        'X-Api-Key': 'codex-secret-key',
+        'X-Workspace': 'eng',
+        'X-Env-Header': 'env-extra',
+        Authorization: 'Bearer env-bearer',
       })
     } finally {
       service.stop()

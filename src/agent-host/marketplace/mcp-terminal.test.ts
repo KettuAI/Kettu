@@ -19,7 +19,7 @@ import {
   type TerminalOwner,
 } from './mcp-terminal'
 import { bridgeEntry, editServers, isBridgeEntry, mergeList } from './mcp-terminal-files'
-import type { McpConfigFile } from './mcp-config'
+import { parseMcpConfig, type McpConfigFile } from './mcp-config'
 
 const BRIDGE = '/Applications/Kettu.app/Contents/Resources/helpers/kettu-mcp-bridge'
 const SECRET = 'ghp_secret_value_1234'
@@ -162,14 +162,25 @@ async function fixture(owner: TerminalOwner, file: McpConfigFile): Promise<Fixtu
     key: () => Buffer.alloc(32, 3),
     importOwn: async (target, items) => {
       state.imports += items.length
-      for (const { name } of items) {
+      const configPath = join(home, file.path)
+      const parsed = parseMcpConfig(await readFile(configPath, 'utf8'), {
+        ...file,
+        path: configPath,
+      })
+      for (const { source, name } of items) {
+        const matched = parsed.servers.find((entry) => entry.name === source.entryName)
         library.push({
           id: `manual:${name}`,
           name,
           title: name,
           source: 'manual',
           version: null,
-          spec: { type: 'stdio', command: 'npx', args: ['-y', `${name}-mcp`], env: [] },
+          spec: matched?.spec ?? {
+            type: 'stdio',
+            command: 'npx',
+            args: ['-y', `${name}-mcp`],
+            env: [],
+          },
           agents: target.startsWith('app:') ? 'all' : [target as AgentId],
           on: true,
         })
@@ -402,6 +413,86 @@ describe('a takeover of Codex', () => {
       await f.terminal.turnOff(codex.id)
       expect(parseToml(await readFile(file, 'utf8'))).toMatchObject({
         mcp_servers: { notes: { command: 'npx', args: ['-y', 'notes-mcp'] } },
+      })
+    } finally {
+      await rm(f.root, { recursive: true, force: true })
+    }
+  })
+
+  it('flags Codex remote http_headers secrets on takeover and restores http_headers when turned off', async () => {
+    const codex: TerminalOwner = { id: 'codex', harness: 'codex', app: null, folder: null }
+    const f = await fixture(codex, { path: 'config.toml', layout: 'codex', agentId: codex.id })
+    try {
+      const file = join(f.home, 'config.toml')
+      await writeFile(
+        file,
+        [
+          '# mine',
+          'model = "gpt"',
+          '',
+          '[mcp_servers.remote]',
+          'url = "https://mcp.example.com/mcp"',
+          'bearer_token_env_var = "REMOTE_TOKEN"',
+          '',
+          '[mcp_servers.remote.http_headers]',
+          '"X-Api-Key" = "' + SECRET + '"',
+          '',
+          '[mcp_servers.remote.env_http_headers]',
+          '"X-Env" = "ENV_KEY"',
+          '',
+        ].join('\n'),
+      )
+
+      const plan = await f.terminal.plan(codex.id)
+      expect(plan.imports).toEqual([
+        { name: 'remote', command: 'https://mcp.example.com/mcp', keys: true },
+      ])
+      expect(JSON.stringify(plan)).not.toContain(SECRET)
+
+      await f.terminal.turnOn(codex.id, plan.id)
+      expect(f.imports).toBe(1)
+      expect(f.library[0]?.spec).toMatchObject({
+        type: 'http',
+        url: 'https://mcp.example.com/mcp',
+        headers: [
+          { name: 'X-Api-Key', input: true, secret: true, required: true },
+          { name: 'X-Env', value: '${ENV_KEY}' },
+          { name: 'Authorization', value: 'Bearer ${REMOTE_TOKEN}' },
+        ],
+      })
+
+      const taken = await readFile(file, 'utf8')
+      expect(taken).toContain('# mine')
+      expect(taken).not.toContain(SECRET)
+      expect(parseToml(taken)).toMatchObject({
+        model: 'gpt',
+        mcp_servers: {
+          remote: {
+            command: BRIDGE,
+            args: ['mcp', 'connect', 'remote', '--agent', 'codex'],
+            env_vars: ['KETTU_MCP_SESSION'],
+          },
+        },
+      })
+
+      const off = await f.terminal.offPlan(codex.id)
+      expect(off.back).toEqual([
+        { name: 'remote', command: 'https://mcp.example.com/mcp', keys: true },
+      ])
+
+      await f.terminal.turnOff(codex.id)
+      const restored = await readFile(file, 'utf8')
+      expect(restored).toContain('# mine')
+      expect(parseToml(restored)).toEqual({
+        model: 'gpt',
+        mcp_servers: {
+          remote: {
+            url: 'https://mcp.example.com/mcp',
+            bearer_token_env_var: 'REMOTE_TOKEN',
+            http_headers: { 'X-Api-Key': SECRET },
+            env_http_headers: { 'X-Env': 'ENV_KEY' },
+          },
+        },
       })
     } finally {
       await rm(f.root, { recursive: true, force: true })
