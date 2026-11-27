@@ -158,6 +158,7 @@
   "turnNotice": {
     "open": "打开",
     "finished_other": "{{count}} 个会话已结束",
-    "waiting_other": "{{count}} 个会话需要你看一下"
+    "waiting_other": "{{count}} 个会话需要你看一下",
+    "andMore_other": "{{names}} 等另外 {{count}} 个会话"
   }
 }

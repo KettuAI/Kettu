@@ -160,6 +160,8 @@
     "finished_one": "{{count}} session finished",
     "finished_other": "{{count}} sessions finished",
     "waiting_one": "{{count}} session needs a look",
-    "waiting_other": "{{count}} sessions need a look"
+    "waiting_other": "{{count}} sessions need a look",
+    "andMore_one": "{{names}}, and {{count}} more",
+    "andMore_other": "{{names}}, and {{count}} more"
   }
 }

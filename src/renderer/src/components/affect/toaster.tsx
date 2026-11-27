@@ -695,7 +695,7 @@ export function Toaster({
 
 /* ---------- Styles ---------- */
 
-const css = /* css */ `
+export const css = /* css */ `
 /* Colors and motion as variables – override them on .ui-ts */
 .ui-ts {
   --ui-ts-card: #ffffff;
@@ -775,8 +775,8 @@ const css = /* css */ `
 .ui-ts__toast[data-behind] .ui-ts__timer { opacity: 0; }
 
 .ui-ts__text { position: relative; flex: 1; min-width: 0; }
-.ui-ts__title { color: var(--ui-ts-ink); font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
-.ui-ts__desc { margin-top: 1px; font-size: 13px; line-height: 18px; color: var(--ui-ts-muted); overflow-wrap: anywhere; }
+.ui-ts__title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--ui-ts-ink); font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
+.ui-ts__desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-top: 1px; font-size: 13px; line-height: 18px; color: var(--ui-ts-muted); overflow-wrap: anywhere; }
 /* Changed text slides in with a soft blur; the old text fades out on top */
 .ui-ts__copy[data-changed] { animation: ui-ts-text-in 300ms var(--ui-ts-ease) both; }
 .ui-ts__ghost { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; animation: ui-ts-text-out 220ms ease both; }
