@@ -808,6 +808,18 @@ describe('isThreadEntry', () => {
       after: 't:1',
     },
     {
+      kind: 'project_mcp',
+      id: 'e:29',
+      servers: [{ name: 'db', target: 'npx db-mcp' }],
+      items: [
+        { kind: 'plugin', target: '.opencode/plugin/run.ts' },
+        { kind: 'env', target: 'OPENAI_BASE_URL' },
+      ],
+      files: ['.mcp.json', 'opencode.json'],
+      decision: 'use',
+      after: null,
+    },
+    {
       kind: 'project_hooks',
       id: 'e:27',
       hooks: [{ event: 'PreToolUse', target: './check.sh' }],
@@ -887,6 +899,9 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...mcp, servers: [{ name: 'db' }] })).toBe(false)
     expect(isThreadEntry({ ...mcp, decision: 'allow' })).toBe(false)
     expect(isThreadEntry({ ...mcp, after: undefined })).toBe(false)
+    expect(isThreadEntry({ ...mcp, items: [{ kind: 'secret', target: 'x' }] })).toBe(false)
+    expect(isThreadEntry({ ...mcp, items: [{ kind: 'env' }] })).toBe(false)
+    expect(isThreadEntry({ ...mcp, files: ['.mcp.json', 3] })).toBe(false)
     const hooks = valid.find((entry) => entry.kind === 'project_hooks')!
     expect(isThreadEntry({ ...hooks, hooks: [{ target: './check.sh' }] })).toBe(false)
     expect(isThreadEntry({ ...hooks, decision: 'once' })).toBe(false)

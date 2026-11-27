@@ -808,6 +808,18 @@ describe('the Claude Agent SDK driver', () => {
     expect(sdk.last.flagSettings).toBeUndefined()
   })
 
+  it("keeps the folder's servers off even when its own settings approve them", async () => {
+    const { sdk, connection } = await setup()
+    const repo = await repoWithServers()
+    await mkdir(path.join(repo, '.claude'), { recursive: true })
+    await writeFile(
+      path.join(repo, '.claude', 'settings.local.json'),
+      JSON.stringify({ enableAllProjectMcpServers: true, enabledMcpjsonServers: ['db', 'web'] }),
+    )
+    await connection.newSession(repo, {})
+    expect(sdk.last.flagSettings).toMatchObject({ disabledMcpjsonServers: ['db', 'web'] })
+  })
+
   it('suppresses a .mcp.json alias listed in replaces without denying Kettu servers', async () => {
     const { sdk, connection } = await setup()
     const repo = await repoWithServers()

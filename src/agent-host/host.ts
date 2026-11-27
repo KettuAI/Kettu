@@ -390,6 +390,9 @@ async function memoryCall<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/** The harnesses whose sessions hold a folder's own servers and settings for the user. */
+const FOLDER_HELD_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex', 'opencode'])
+
 export interface HostOptions {
   userDataPath: string
   appVersion: string
@@ -1560,12 +1563,23 @@ export class AgentHost {
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
       folderDeclared: async (cwd, agentId) => {
         const harness = harnessOf(agentId)
+        // The other harnesses start what their own files declare, so Kettu running them too
+        // would start them twice.
+        if (!FOLDER_HELD_HARNESSES.has(harness)) {
+          return { servers: [], settings: null, harnessServers: [], turnsOff: true }
+        }
         const [servers, settings, own] = await Promise.all([
           folderServers(cwd, platform),
           folderSettings(harness, cwd, platform),
           readOwnMcpServers(harnessProjectMcpPaths(harness, cwd, platform)),
         ])
-        return { servers, settings, harnessServers: own.map((server) => server.name) }
+        return {
+          servers,
+          settings,
+          harnessServers: own.map((server) => server.name),
+          // OpenCode has no way to turn one of a folder's servers off that Kettu checked.
+          turnsOff: harness !== 'opencode',
+        }
       },
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
@@ -3207,7 +3221,7 @@ export class AgentHost {
 
   /** A server's tools differ from what was accepted in another way: clients and agents hear. */
   private mcpToolsChanged(serverId: string): void {
-    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    const server = this.routedServers().find((item) => item.id === serverId)
     const changes = server ? this.mcpToolChanges.changes(serverId, toolGuard(server)) : null
     this.hub.broadcast({ type: 'market.mcpToolsChanged', serverId, changes })
     if (server && toolGuard(server) === 'hold') this.mcpRouter.heldChanged(serverId)
@@ -3220,8 +3234,9 @@ export class AgentHost {
     const agentId = this.sessions.sessionAgent(sessionId)
     const off = this.mcpRouter.offIn(sessionId)
     const out: SessionMcpServer[] = []
+    const servers = this.routedServers()
     for (const [id, { name, how }] of handed) {
-      const server = this.settings.marketplace.mcp.find((item) => item.id === id)
+      const server = servers.find((item) => item.id === id)
       if (!server) continue
       const known = this.mcpRouter.knownTools(server)
       const changes = this.mcpToolChanges.changes(server.id, toolGuard(server))
@@ -3262,8 +3277,9 @@ export class AgentHost {
 
   /** Every MCP server instance's stderr for a problem report, with keys masked. */
   private mcpLogs(): NonNullable<DiagnosticsBundle['mcpLogs']> {
+    const servers = this.routedServers()
     return this.mcpRouter.logsOf().map((log) => {
-      const server = this.settings.marketplace.mcp.find((item) => item.id === log.serverId)
+      const server = servers.find((item) => item.id === log.serverId)
       return {
         ...log,
         server: server?.name ?? log.serverId,

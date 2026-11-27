@@ -117,7 +117,10 @@ export async function folderServers(cwd: string, platform: Platform): Promise<Fo
  * The folders a harness reads its project config from for `cwd`: `cwd` and each folder above it
  * up to the nearest one holding `.git`, farthest first; `cwd` alone outside a repository.
  */
-async function projectRoots(cwd: string, platform: Platform): Promise<string[]> {
+export async function projectRoots(
+  cwd: string,
+  platform: Platform = process.platform as Platform,
+): Promise<string[]> {
   const p = platform === 'win32' ? path.win32 : path.posix
   const dirs: string[] = []
   let dir = p.resolve(cwd)

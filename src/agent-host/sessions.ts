@@ -1000,6 +1000,11 @@ export interface FolderDeclared {
   settings: FolderSettings | null
   /** The names of the servers the agent's harness itself would start from those files. */
   harnessServers: string[]
+  /**
+   * Whether the harness turns those servers off one by one when it loads the folder; one that
+   * cannot loads the folder only once every one of them may start.
+   */
+  turnsOff: boolean
 }
 
 /** What an attach hands on of what the session's folder declares. */
@@ -4409,7 +4414,7 @@ export class SessionManager {
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): Promise<SessionOptions> {
-    const project = await this.projectState(record)
+    const project = await this.projectState(sessionId, record)
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
     const reached = own.length > 0
@@ -4475,7 +4480,7 @@ export class SessionManager {
    * settings; and the names its files declare that the harness must not start itself. Whatever
    * nobody answered for waits for the user in the session's thread and stays held meanwhile.
    */
-  private async projectState(record: SessionRecord): Promise<ProjectState> {
+  private async projectState(sessionId: string, record: SessionRecord): Promise<ProjectState> {
     const none: ProjectState = { servers: [], trusted: false, declared: [] }
     const read = this.deps.folderDeclared
     const answers = this.deps.projectMcp
@@ -4499,15 +4504,19 @@ export class SessionManager {
     const unanswered = declared.servers.filter((server) => answers.allowed(folder, server) === null)
     const askSettings = settings && settingsAllowed === null ? settings : null
     if (unanswered.length > 0 || askSettings) {
-      this.askProject(record.id, folder, {
+      this.askProject(sessionId, folder, {
         servers: unanswered,
         settings: askSettings,
         files: [...unanswered.flatMap((server) => server.files), ...(askSettings?.files ?? [])],
       })
     }
+    const allowed = declared.servers.filter((server) => answers.allowed(folder, server) === true)
+    const own = declared.servers.filter((server) => declared.harnessServers.includes(server.name))
     return {
-      servers: declared.servers.filter((server) => answers.allowed(folder, server) === true),
-      trusted: settingsAllowed === true,
+      servers: allowed,
+      trusted:
+        settingsAllowed === true &&
+        (declared.turnsOff || own.every((server) => allowed.includes(server))),
       declared: declared.harnessServers,
     }
   }
