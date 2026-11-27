@@ -8,6 +8,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
 import { splitName } from './levels'
+import { splitChoiceName } from './model-list'
 import { modelOption, type Notice } from './use-out-of-credit'
 import { Glyph } from '@renderer/features/shell/glyph'
 
@@ -27,9 +28,8 @@ export function OutOfCreditStrip({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const option = modelOption(config)
-  const name =
-    notice.model &&
-    splitName(option?.choices?.find((c) => c.value === notice.model)?.name ?? notice.model)[1]
+  const choice = option?.choices?.find((c) => c.value === notice.model)
+  const name = notice.model && (choice ? splitChoiceName(choice)[1] : splitName(notice.model)[1])
 
   const retry = () => {
     setSending(true)

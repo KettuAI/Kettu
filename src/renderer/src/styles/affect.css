@@ -6837,12 +6837,16 @@ button.kettu-ctx__part-row:focus-visible {
   text-overflow: ellipsis;
 }
 .kettu-model-picker .ui-mdpc__fly-group {
+  min-width: 0;
+  overflow: hidden;
   padding: 8px 8px 2px;
   font-size: 10px;
   font-weight: var(--weight-medium);
   line-height: 16px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--ui-mdpc-muted);
 }
 .kettu-model-picker .ui-mdpc__fly-group:first-child {

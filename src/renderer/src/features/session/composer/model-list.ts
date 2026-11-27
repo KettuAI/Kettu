@@ -103,17 +103,40 @@ function compareVersions(a: readonly number[], b: readonly number[]): number {
   return 0
 }
 
-function providerOf(choice: Choice): string {
+function providerOf(choice: Pick<Choice, 'value' | 'name' | 'group' | 'modelId'>): string {
   if (choice.group) return choice.group
+  if (choice.modelId && choice.value.endsWith(`/${choice.modelId}`)) {
+    const prefix = choice.value.slice(0, -(choice.modelId.length + 1))
+    if (prefix) return prefix
+  }
   const named = choice.name.lastIndexOf('/')
   if (named > 0) return choice.name.slice(0, named)
   const valued = choice.value.lastIndexOf('/')
   return valued > 0 ? choice.value.slice(0, valued) : ''
 }
 
+/**
+ * Splits a choice's display name into its provider prefix and model name. Prefers an explicit
+ * `group` or `modelId`-derived provider prefix so model names containing `/` stay intact.
+ */
+export function splitChoiceName(
+  choice: Pick<Choice, 'value' | 'name' | 'group' | 'modelId'>,
+): [prefix: string, rest: string] {
+  const provider = providerOf(choice)
+  if (
+    provider &&
+    choice.name.startsWith(`${provider}/`) &&
+    choice.name.length > provider.length + 1
+  ) {
+    return [`${provider}/`, choice.name.slice(provider.length + 1)]
+  }
+  if (choice.group) return ['', choice.name]
+  return splitName(choice.name)
+}
+
 /** Reads one model: its family and version from its name, else from its id. */
 function readModel(choice: Choice, order: number): ModelRead {
-  const name = splitName(choice.name)[1]
+  const name = splitChoiceName(choice)[1]
   const provider = providerOf(choice)
   const isDefault = isDefaultChoice(choice)
   const base = { choice, value: choice.value, name, provider, order, isDefault, older: false }

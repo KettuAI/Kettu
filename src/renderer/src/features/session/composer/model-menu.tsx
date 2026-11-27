@@ -140,7 +140,11 @@ export function ModelMenu({
     // A row's name keeps the model alone, so a long one is not cut; its qualifier leads the line under it.
     const [short, qualifier] = read.isDefault ? [read.name, ''] : splitQualifier(read.name)
     const description =
-      [qualifier, uses ? t('controls.defaultUses', { model: uses }) : read.choice.description]
+      [
+        qualifier,
+        !uses && lists.several ? read.provider : '',
+        uses ? t('controls.defaultUses', { model: uses }) : read.choice.description,
+      ]
         .filter(Boolean)
         .join(' · ') || undefined
     // The agent's Default takes the bars of the model it runs, when the agent says which.

@@ -139,8 +139,17 @@ function CheckRow({
   )
 }
 
-export function ChoiceName({ name, className }: { name: string; className?: string }) {
-  const [prefix, rest] = splitName(name)
+export function ChoiceName({
+  name,
+  prefix: givenPrefix,
+  className,
+}: {
+  name: string
+  /** Optional provider prefix already split from `name` by `splitChoiceName`. */
+  prefix?: string
+  className?: string
+}) {
+  const [prefix, rest] = givenPrefix !== undefined ? [givenPrefix, name] : splitName(name)
   return (
     <span className={cn('block min-w-0 truncate font-medium', className)}>
       {prefix && <span className="text-muted-foreground">{prefix}</span>}
