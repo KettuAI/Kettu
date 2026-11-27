@@ -33,16 +33,15 @@ import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { backTo } from '@renderer/app/history'
 import { count, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { currentLocale, i18n } from '@renderer/lib/i18n'
+import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { AGENT_NAMES } from '@renderer/stores/agents'
-import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
 import { RunSettings } from './run-settings'
@@ -91,7 +90,6 @@ import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
 import { FlowChart, FlowSkeleton, StepsOutline } from './workflow-flow'
 
 // Bound to the namespace only: each call reads the language shown at the time.
-const tm = i18n.getFixedT(null, 'marketplace')
 
 const KIND = {
   skill: 'skill',

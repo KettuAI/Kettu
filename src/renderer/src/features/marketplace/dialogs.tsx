@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { toast } from '@renderer/components/ui/toast'
 import { SetButton } from '@renderer/features/settings/controls'
@@ -497,14 +496,3 @@ function isGithubUrl(text: string): boolean {
     return false
   }
 }
-
-/** A header or variable as the add dialog edits it. */
-interface ValueDraft {
-  key: number
-  name: string
-  value: string
-  secret: boolean
-}
-
-const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/

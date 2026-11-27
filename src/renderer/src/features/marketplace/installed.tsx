@@ -24,7 +24,7 @@ import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
-import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
@@ -34,14 +34,11 @@ import {
   useConnection,
   useConnectionText,
   useKettuSwitches,
+  useKeptServers,
 } from './hooks'
 import {
-  catalogEntry,
-  fromCatalog,
-  fromKept,
   homeShort,
   keptItemKey,
-  matchesQuery,
   matchesText,
   oauthFlow,
   parentPath,
@@ -56,7 +53,6 @@ import { workflowMatches } from './workflow-model'
 import { useWorkflows } from './workflow-actions'
 import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
-import { PlainTile } from './tiles'
 import { isPluginItem, pluginDescription, pluginTitle } from './plugin-model'
 import { useInstalledPlugins, usePluginItemOff, usePluginPublisher } from './plugin-hooks'
 import { FromPlugin, PluginInstalledRow } from './plugin-ui'
@@ -358,23 +354,6 @@ function Facts({ facts }: { facts: (string | null | undefined)[] }) {
 }
 
 /** The servers Kettu keeps, from the registry or added by hand, matching the search. */
-export function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
-  const scope = useHostScope()
-  const { useSettingsStore, useMarketplaceStore } = scope
-  const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
-  // The catalog gives a kept server its mark, badge and line once it has answered.
-  useMarketplaceStore((s) => s.catalog)
-  const needle = query.trim().toLocaleLowerCase()
-  return kept
-    .map((server) => ({ server, listing: listingOf(scope, server) }))
-    .filter(({ listing, server }) => matchesQuery(listing, query) || server.name.includes(needle))
-}
-
-function listingOf(scope: HostScope, server: MarketServer): Listing {
-  const entry = server.source === 'registry' ? catalogEntry(scope, server.id) : null
-  return entry ? { ...fromCatalog(entry), title: server.title } : fromKept(server)
-}
-
 function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()

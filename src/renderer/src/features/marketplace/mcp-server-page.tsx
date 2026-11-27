@@ -8,8 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { useHostScope } from '@renderer/stores/host-scope'
 import { changeServer, disconnectServer } from './actions'
 import { KeysDialog, UninstallDialog } from './dialogs'
-import { useAgentName, useConnection } from './hooks'
-import { McpCheckButton, McpSignIn, McpState, useMcpState, useTransportName } from './mcp-library'
+import { useAgentName, useConnection, useMcpState, useTransportName } from './hooks'
+import { McpCheckButton, McpSignIn, McpState } from './mcp-library'
 import { homeShort, type Listing } from './model'
 import { ExternalLink } from './parts'
 import { RunSettings } from './run-settings'
@@ -31,9 +31,9 @@ export function McpServerPageBody({
     'overview',
     'tools',
     'calls',
-    ...(server.spec.type === 'stdio' ? ['logs'] : []),
+    ...(server.spec.type === 'stdio' ? (['logs'] as const) : []),
     'settings',
-  ]
+  ] as const
   return (
     <>
       {check?.state === 'error' && (

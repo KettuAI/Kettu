@@ -18,29 +18,17 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { changeServer, setServerOn } from './actions'
 import { ConnectButton } from './connect'
-import { useAgentName, useChoosableAgents, useConnection } from './hooks'
-import { useKeptServers } from './installed'
-import { keptItemKey, oauthFlow, type Listing } from './model'
+import {
+  useAgentName,
+  useChoosableAgents,
+  useKeptServers,
+  useMcpState,
+  useTransportName,
+} from './hooks'
+import { keptItemKey, type Listing } from './model'
 import { McpFileErrors, McpImportDialog } from './mcp-review'
 import { ItemRow, QuietNote, SkeletonRows } from './rows'
 import { serverSubject } from './tile-art'
-
-export function useMcpState(server: MarketServer) {
-  const { useMarketplaceStore } = useHostScope()
-  const check = useMarketplaceStore((s) => s.mcpChecks[server.id])
-  const connection = useConnection(server.id)
-  if (check?.state === 'checking') return check
-  if (check?.state === 'needs-sign-in' && connection?.state === 'connected') return undefined
-  if (oauthFlow(server.spec) && connection && connection.state !== 'connected') {
-    return check?.state === 'error' ? check : ({ state: 'needs-sign-in' } as const)
-  }
-  return check
-}
-
-export function useTransportName(spec: McpSpec): string {
-  const { t } = useTranslation('marketplace')
-  return spec.type === 'stdio' ? t('mcp.command') : t(`listing.transport.${spec.transport}`)
-}
 
 function hostname(spec: McpSpec): string {
   if (spec.type !== 'http') return ''
@@ -61,7 +49,7 @@ export function McpState({ server, check }: { server: MarketServer; check?: McpC
           status: check.status,
           host: hostname(server.spec),
         })
-      : t(`mcp.state.${state}`)
+      : t(`mcp.state.${check?.state ?? 'idle'}`)
   return (
     <span
       className="k-mcp-state"

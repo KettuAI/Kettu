@@ -15,6 +15,7 @@ export function mcpConfigPaths(
   agents: readonly AgentConfig[],
   projects: readonly string[],
   getEnv: (key: string, agent?: AgentId) => string | undefined,
+  agentOnly = false,
 ): McpConfigFile[] {
   const p = platform === 'win32' ? path.win32 : path.posix
   const files: McpConfigFile[] = []
@@ -114,6 +115,8 @@ export function mcpConfigPaths(
         break
     }
   }
+
+  if (agentOnly) return files
 
   const config = userConfig('XDG_CONFIG_HOME') ?? p.join(home, '.config')
   const appData =

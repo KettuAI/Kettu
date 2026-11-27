@@ -4,6 +4,7 @@ import { lstat, open, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { MARKET_NAME, type MarketServer } from '@shared/marketplace'
 import { mcpFingerprint } from '@shared/mcp-fingerprint'
+import { endpointOf, type OwnServer } from './servers'
 import { JsonFile, type LogFn } from '../storage'
 import type {
   McpDiscovery,
@@ -53,6 +54,29 @@ export async function readMcpConfig(
       },
     }
   }
+}
+
+async function readMcpConfigs(files: readonly McpConfigFile[]) {
+  const configured: ConfiguredMcp[] = []
+  const errors: McpDiscovery['errors'] = []
+  const firstFound = new Set<string>()
+  for (const file of files) {
+    if (file.firstOf && firstFound.has(file.firstOf)) continue
+    const result = await readMcpConfig(file)
+    if (!result) continue
+    if (file.firstOf) firstFound.add(file.firstOf)
+    configured.push(...result.servers)
+    if (result.error) errors.push(result.error)
+  }
+
+  return { configured, errors }
+}
+
+export async function readOwnMcpServers(files: readonly McpConfigFile[]): Promise<OwnServer[]> {
+  const { configured } = await readMcpConfigs(files)
+  const entries = new Map<string, OwnServer>()
+  for (const { name, spec } of configured) entries.set(name, { name, endpoint: endpointOf(spec) })
+  return [...entries.values()]
 }
 
 interface Discovered {
@@ -252,17 +276,7 @@ export class McpDiscoveryService {
     let learned = false
     const files = this.deps.files()
     await this.watchFiles(files)
-    const configured: ConfiguredMcp[] = []
-    const errors: McpDiscovery['errors'] = []
-    const firstFound = new Set<string>()
-    for (const file of files) {
-      if (file.firstOf && firstFound.has(file.firstOf)) continue
-      const result = await readMcpConfig(file)
-      if (!result) continue
-      if (file.firstOf) firstFound.add(file.firstOf)
-      configured.push(...result.servers)
-      if (result.error) errors.push(result.error)
-    }
+    const { configured, errors } = await readMcpConfigs(files)
 
     const library = this.deps.library()
     const fingerprints = new Map<string, string[]>()

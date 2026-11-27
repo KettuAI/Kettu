@@ -197,6 +197,7 @@ import {
 } from './marketplace/servers'
 import {
   McpDiscoveryService,
+  readOwnMcpServers,
   seenMcpFile,
   type PreparedMcpImport,
 } from './marketplace/mcp-discovery'
@@ -1493,38 +1494,51 @@ export class AgentHost {
               )
             : this.artifactService.servers(sessionId, record.projectPath, gateway, suggests)
         },
-        library: (sessionId, record, connection, transports, taken) =>
-          libraryServers(
-            this.settings.marketplace.mcp,
-            this.marketKeys,
-            record.agentId,
-            transports,
-            {
+        library: async (sessionId, record, connection, transports, taken) => {
+          const library = this.settings.marketplace.mcp
+          if (library.length === 0) return []
+          const own = await readOwnMcpServers(
+            mcpConfigPaths(
               platform,
-              taken,
-              env: this.env.agentEnv(),
-              node: options.nodeRuntime,
-              also: [
-                ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
-                ...(record.commandTools?.mcp ?? []),
-              ],
-              oauth: { access: (server) => this.marketConnections.access(server) },
-              router: this.artifactService.routerAccess(
-                sessionId,
-                record.projectPath,
-                this.agents.mcpServersByName(record.agentId) ? connection : null,
+              home,
+              this.agents.mcpDiscoveryAgents().filter(({ id }) => id === record.agentId),
+              record.projectPath ? [record.projectPath] : [],
+              (name, agent) => this.env.get(name, agent),
+              true,
+            ),
+          )
+          return libraryServers(library, this.marketKeys, record.agentId, transports, {
+            platform,
+            taken,
+            own,
+            conflict: (server, name) =>
+              this.diagnostics.log(
+                'warn',
+                `MCP server ${server.name} replaces the configured ${name} in ${record.agentId}`,
               ),
-              bridge: this.mcpBridge,
-              ...(this.agents.toolGateway(record.agentId)
-                ? { gateway: { known: (server) => this.mcpRouter.knownTools(server) } }
-                : {}),
-              fellBack: (server, why) =>
-                this.diagnostics.log(
-                  'warn',
-                  `MCP server ${server.name} for ${record.agentId}: ${why}`,
-                ),
-            },
-          ),
+            env: this.env.agentEnv(),
+            node: options.nodeRuntime,
+            also: [
+              ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
+              ...(record.commandTools?.mcp ?? []),
+            ],
+            oauth: { access: (server) => this.marketConnections.access(server) },
+            router: this.artifactService.routerAccess(
+              sessionId,
+              record.projectPath,
+              this.agents.mcpServersByName(record.agentId) ? connection : null,
+            ),
+            bridge: this.mcpBridge,
+            ...(this.agents.toolGateway(record.agentId)
+              ? { gateway: { known: (server) => this.mcpRouter.knownTools(server) } }
+              : {}),
+            fellBack: (server, why) =>
+              this.diagnostics.log(
+                'warn',
+                `MCP server ${server.name} for ${record.agentId}: ${why}`,
+              ),
+          })
+        },
         libraryPrint: (record) => {
           const also = [
             ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),

@@ -213,7 +213,7 @@ export function createMarketplaceStore(
       const read = ++discoveryRead
       set({ discoveryLoading: true, discoveryError: false })
       try {
-        const discovery = await request('market.discoverMcp')
+        const discovery = await request('market.discoverMcp', undefined)
         if (read === discoveryRead) set({ discovery, discoveryLoading: false })
       } catch {
         if (read === discoveryRead) set({ discoveryError: true, discoveryLoading: false })
@@ -222,7 +222,7 @@ export function createMarketplaceStore(
     async loadMcpChecks() {
       const revision = ++checkRevision
       try {
-        const checks = await request('market.mcpChecks')
+        const checks = await request('market.mcpChecks', undefined)
         if (revision === checkRevision)
           set((state) => ({ mcpChecks: { ...checks, ...state.mcpChecks } }))
       } catch {

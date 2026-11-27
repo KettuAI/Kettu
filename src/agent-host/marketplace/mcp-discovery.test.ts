@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseMcpConfig, type ConfigLayout } from './mcp-config'
-import { McpDiscoveryService, readMcpConfig } from './mcp-discovery'
+import { McpDiscoveryService, readMcpConfig, readOwnMcpServers } from './mcp-discovery'
 import { parseMcpPaste } from './mcp-paste'
+import { ALL_TRANSPORTS, libraryServers } from './servers'
+import type { MarketServer } from '@shared/marketplace'
 
 describe('MCP configuration readers', () => {
   it.each<[ConfigLayout, string]>([
@@ -147,4 +149,63 @@ describe('MCP paste', () => {
   it('does not echo malformed user input in parse errors', () => {
     expect(() => parseMcpPaste('{token="demo-token"')).toThrow('Enter a URL')
   })
+})
+
+it('hands the library copy under the configured name and reports a different same-named server', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kettu-mcp-own-'))
+  const file = { path: join(root, 'config.json'), layout: 'standard' as const }
+  try {
+    await writeFile(
+      file.path,
+      JSON.stringify({
+        mcpServers: {
+          configured: {
+            command: 'npx',
+            args: ['-y', 'fixture@1'],
+            env: { API_KEY: 'fixture-key' },
+          },
+          conflict: { url: 'https://elsewhere.example.test/mcp' },
+        },
+      }),
+    )
+    const own = await readOwnMcpServers([file])
+    expect(JSON.stringify(own)).not.toContain('fixture-key')
+    const entry: MarketServer = {
+      id: 'manual:configured',
+      name: 'library',
+      title: 'Fixture',
+      source: 'manual',
+      version: null,
+      on: true,
+      agents: 'all',
+      spec: { type: 'stdio', command: 'npx', args: ['-y', 'fixture@2'], env: [] },
+    }
+    const conflict: MarketServer = {
+      ...entry,
+      id: 'manual:conflict',
+      name: 'conflict',
+      spec: {
+        type: 'http',
+        url: 'https://library.example.test/mcp',
+        transport: 'streamable-http',
+        headers: [],
+      },
+    }
+    const collisions: string[] = []
+    const offered = libraryServers([entry, conflict], new Map(), 'codex', ALL_TRANSPORTS, {
+      platform: 'linux',
+      own,
+      router: { origin: 'http://127.0.0.1:12345', token: 'fixture', allow: () => {} },
+      conflict: (_, name) => collisions.push(name),
+    })
+    expect(offered.map(({ name }) => name)).toEqual(['configured', 'conflict'])
+    expect(
+      offered.every(
+        (server) => 'url' in server && server.url.startsWith('http://127.0.0.1:12345/'),
+      ),
+    ).toBe(true)
+    expect(collisions).toEqual(['conflict'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })

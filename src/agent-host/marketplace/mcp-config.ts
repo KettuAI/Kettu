@@ -87,7 +87,7 @@ export function configuredMcp(
       ([header, variable]): [string, string] => {
         if (typeof variable !== 'string' || !/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(variable))
           return invalid()
-        return [header, '\${' + variable + '}']
+        return [header, '${' + variable + '}']
       },
     )
     if (typeof server.bearer_token_env_var === 'string') {

@@ -62,6 +62,7 @@ import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
 import {
   marketConnectionChanged,
   marketKeysChanged,
+  useMarketplaceStore,
   marketPluginsChanged,
 } from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
