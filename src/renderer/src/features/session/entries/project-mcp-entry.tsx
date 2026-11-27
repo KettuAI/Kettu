@@ -1,6 +1,9 @@
 import { memo } from 'react'
-import { PlugSocketIcon } from '@hugeicons/core-free-icons'
-import { useTranslation } from 'react-i18next'
+import { InformationCircleIcon, PlugSocketIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Trans, useTranslation } from 'react-i18next'
+import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marker'
+import { cn } from '@renderer/lib/utils'
 import type { ProjectMcpAnswer, ProjectMcpDecision } from '@shared/thread'
 import { host } from '@renderer/lib/host'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -42,6 +45,36 @@ export const ProjectMcpEntry = memo(function ProjectMcpEntry({
   const entry = useEntry(sessionId, entryId, 'project_mcp')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  if (entry.notice) {
+    const names = [
+      ...entry.servers.map((server) => server.name),
+      ...(entry.items ?? []).map((item) => item.target),
+    ]
+    return (
+      <Marker variant="separator" className={cn('text-xs text-muted-foreground', animation)}>
+        <MarkerIcon className="size-3.5">
+          <HugeiconsIcon
+            icon={InformationCircleIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5"
+          />
+        </MarkerIcon>
+        <MarkerContent data-selectable="">
+          <Trans
+            t={t}
+            i18nKey="projectMcp.notice"
+            values={{
+              agent: agentName,
+              names: names.join(', '),
+              files: (entry.files ?? []).join(', '),
+            }}
+            components={{ b: <b className="font-medium" dir="auto" /> }}
+          />
+        </MarkerContent>
+      </Marker>
+    )
+  }
   // A card for the folder's settings as a whole names its files and lists every kind.
   const whole = entry.files !== undefined
   const rows = [

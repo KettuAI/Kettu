@@ -246,6 +246,7 @@ import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
 import {
   codexUntrusted,
+  folderNotice,
   folderServers,
   folderSettings,
   geminiTrusted,
@@ -1737,6 +1738,7 @@ export class AgentHost {
             harnessServers: [],
             harnessDigests: [],
             turnsOff: true,
+            notice: await folderNotice(harness, cwd, platform),
           }
         }
         const ownFiles = harnessProjectMcpPaths(harness, cwd, platform)

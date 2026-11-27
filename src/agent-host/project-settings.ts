@@ -307,6 +307,75 @@ async function filesDigest(base: string, files: readonly string[], platform: Pla
   return parts
 }
 
+/** What a folder makes a harness run that nothing holds back, which the card only names. */
+export interface FolderNotice {
+  servers: DeclaredMcpServer[]
+  items: DeclaredItem[]
+  files: string[]
+  digest: string
+}
+
+/** Where each harness that has no switch for a folder's own config finds what it runs. */
+const NOTICE_PLACES: Partial<
+  Record<HarnessId, { kind: 'hook' | 'plugin'; folder: string; only?: string }[]>
+> = {
+  antigravity: [{ kind: 'hook', folder: '.agents', only: 'hooks.json' }],
+  cline: [
+    { kind: 'plugin', folder: '.cline/plugins' },
+    { kind: 'hook', folder: '.clinerules/hooks' },
+    { kind: 'hook', folder: '.cline/hooks' },
+  ],
+  copilot: [{ kind: 'hook', folder: '.github/hooks' }],
+}
+
+/**
+ * What `cwd` and its repository's root make a harness run on its first message that no switch
+ * holds back: Antigravity's hooks and MCP servers, Cline's plugins and hooks, Copilot's hooks.
+ * Null for any other harness, or a folder with none of them.
+ */
+export async function folderNotice(
+  harness: HarnessId,
+  cwd: string,
+  platform: Platform,
+): Promise<FolderNotice | null> {
+  const places = NOTICE_PLACES[harness]
+  if (!places) return null
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const base = p.resolve(cwd)
+  const roots = [...new Set([base, (await projectRoots(cwd, platform))[0] ?? base])]
+  const items: DeclaredItem[] = []
+  const files: string[] = []
+  const servers: DeclaredMcpServer[] = []
+  for (const root of roots) {
+    for (const place of places) {
+      const folder = p.join(root, ...place.folder.split('/'))
+      const found = (await filesUnder(folder, base, platform)).filter(
+        (file) => !place.only || p.basename(file) === place.only,
+      )
+      for (const file of found) {
+        items.push({ kind: place.kind, target: clip(file) })
+        files.push(file)
+      }
+    }
+    if (harness === 'antigravity') {
+      const file = p.join(root, '.agents', 'mcp_config.json')
+      const read = await readMcpConfig({ path: file, layout: 'standard', project: root })
+      for (const server of read?.servers ?? []) {
+        servers.push({ name: server.name, target: targetOf(server.spec) })
+      }
+      if ((read?.servers.length ?? 0) > 0) files.push(p.relative(base, file))
+    }
+  }
+  if (items.length === 0 && servers.length === 0) return null
+  const unique = [...new Set(files)]
+  return {
+    servers,
+    items,
+    files: unique,
+    digest: sha([servers, await filesDigest(base, unique, platform)]),
+  }
+}
+
 /**
  * What `cwd`'s own files make `harness` run or change besides MCP servers, for the harnesses
  * whose project settings Kettu holds behind a switch; null when they declare nothing.
@@ -586,6 +655,8 @@ export interface FolderDeclared {
   turnsOff: boolean
   /** Whether the harness loads the folder by the user's own trust in it, with nothing to ask. */
   ownTrust?: boolean
+  /** What the harness runs of the folder's that nothing holds back, which the card only names. */
+  notice?: FolderNotice | null
 }
 
 /**

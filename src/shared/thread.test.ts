@@ -820,6 +820,16 @@ describe('isThreadEntry', () => {
       after: null,
     },
     {
+      kind: 'project_mcp',
+      id: 'e:30',
+      servers: [],
+      items: [{ kind: 'hook', target: '.github/hooks/start.json' }],
+      files: ['.github/hooks/start.json'],
+      notice: true,
+      decision: null,
+      after: null,
+    },
+    {
       kind: 'project_hooks',
       id: 'e:27',
       hooks: [{ event: 'PreToolUse', target: './check.sh' }],

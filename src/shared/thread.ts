@@ -783,6 +783,8 @@ export interface ProjectMcpEntry {
   files?: string[]
   /** The servers the session's harness runs itself once allowed, which Kettu does not run. */
   selfRun?: string[]
+  /** Only names what the harness runs anyway, with nothing to answer. */
+  notice?: true
   decision: ProjectMcpAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
@@ -2143,6 +2145,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           isListOf(value.files, (item): item is string => typeof item === 'string')) &&
         (value.selfRun === undefined ||
           isListOf(value.selfRun, (item): item is string => typeof item === 'string')) &&
+        (value.notice === undefined || value.notice === true) &&
         (value.decision === null || isProjectAnswer(value.decision)) &&
         (value.after === null || typeof value.after === 'string')
       )

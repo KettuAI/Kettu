@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   codexUntrusted,
   folderHandOff,
+  folderNotice,
   folderServers,
   folderSettings,
   geminiTrusted,
@@ -281,5 +282,36 @@ describe("the folders the user's own Gemini CLI trusts", () => {
     await writeFile(files().trustList, '{}')
     await writeFile(files().settings, '{ "security": { "folderTrust": { "enabled": false } } }')
     expect(await geminiTrusted(files(), repo, none)).toBe(true)
+  })
+})
+
+describe('what a harness with no switch runs of a folder', () => {
+  const platform = process.platform === 'win32' ? 'win32' : 'darwin'
+
+  it("names Antigravity's hooks and servers, Cline's plugins and hooks, Copilot's hooks", async () => {
+    await put('.agents/hooks.json', '{}')
+    await put(
+      '.agents/mcp_config.json',
+      JSON.stringify({ mcpServers: { db: { command: 'touch', env: { K: 'secret-value' } } } }),
+    )
+    await put('.cline/plugins/run.js', '')
+    await put('.clinerules/hooks/PreToolUse', '')
+    await put('.github/hooks/start.json', '{}')
+    const agy = await folderNotice('antigravity', repo, platform)
+    expect(agy?.servers).toEqual([{ name: 'db', target: 'touch' }])
+    expect(agy?.items).toEqual([{ kind: 'hook', target: path.join('.agents', 'hooks.json') }])
+    expect(JSON.stringify(agy)).not.toContain('secret-value')
+    expect((await folderNotice('cline', repo, platform))?.items).toEqual([
+      { kind: 'plugin', target: path.join('.cline', 'plugins', 'run.js') },
+      { kind: 'hook', target: path.join('.clinerules', 'hooks', 'PreToolUse') },
+    ])
+    expect((await folderNotice('copilot', repo, platform))?.items).toEqual([
+      { kind: 'hook', target: path.join('.github', 'hooks', 'start.json') },
+    ])
+    expect(await folderNotice('codex', repo, platform)).toBeNull()
+  })
+
+  it('has none for a folder without such files', async () => {
+    expect(await folderNotice('copilot', repo, platform)).toBeNull()
   })
 })
