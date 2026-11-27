@@ -368,7 +368,8 @@ export function ComposerEditor({
     }
   }, [parts])
 
-  useEffect(() => {
+  // Reconfigure before paint so clearing the editor on send never flashes the previous suggestion.
+  useLayoutEffect(() => {
     view.current?.dispatch({
       effects: parts.placeholder.reconfigure(emptyBox(placeholder, suggestion)),
     })

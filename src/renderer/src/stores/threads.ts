@@ -8,9 +8,11 @@ import {
   UnknownEntryError,
   type ContentRef,
   type OlderPage,
+  type Patch,
   type PatchBatch,
   type PlanEntry,
   type SessionSnapshot,
+  type SessionStatus,
   type ThreadEntry,
   type ThreadState,
   type UserContent,
@@ -90,9 +92,20 @@ interface Sending {
   after: string | null
   /** True when the replica was loaded and held no real entries yet at send time. */
   empty: boolean
+  /** The suggestion cleared optimistically when this send started, for failure rollback. */
+  clearedSuggestion: string | null
+  /** True once the host updates suggestion or leaves idle, preventing stale rollback. */
+  suggestionSuperseded: boolean
 }
 const sending = new Map<string, Sending[]>()
 let sendingCount = 0
+
+/** An in-flight send without an optimistic entry (such as an agent switch) that hides the old suggestion. */
+interface SuggestionHold {
+  clearedSuggestion: string | null
+  superseded: boolean
+}
+const suggestionHolds = new Map<string, Set<SuggestionHold>>()
 // How far before the send a stored message's host time may lie and still be the send's own.
 const ECHO_SKEW_MS = 10_000
 let queue: PatchBatch[] = []
@@ -172,7 +185,11 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
     state = applyPatches(state, batch.patches, { partial })
     seq = batch.seq
   }
+  if (sending.has(sessionId) || suggestionHolds.has(sessionId)) {
+    markSupersededFromSnapshot(sessionId, state)
+  }
   if (sending.has(sessionId)) state = settleSnapshot(sessionId, state)
+  if (suggestionHolds.has(sessionId)) state = withClearedSuggestion(state)
   setReplica(sessionId, {
     state,
     seq,
@@ -226,16 +243,22 @@ function flush(): void {
     try {
       const live = replica.state.session.status !== 'starting'
       const resets = batch.patches.some((patch) => patch.op === 'thread.reset')
+      if (sending.has(batch.sessionId) || suggestionHolds.has(batch.sessionId)) {
+        markSupersededFromPatches(batch.sessionId, batch.patches)
+      }
       let state = applyPatches(replica.state, batch.patches, {
         partial: replica.older !== null,
       })
       if (resets) {
         if (sending.has(batch.sessionId)) state = settleSnapshot(batch.sessionId, state)
+        if (suggestionHolds.has(batch.sessionId)) state = withClearedSuggestion(state)
       } else {
         const matched = matchBatchEchoes(batch)
         if (live) markFresh(batch, matched.entries)
         if (sending.has(batch.sessionId)) {
-          state = applySettledSending(batch.sessionId, state, matched)
+          state = applySettledSending(batch.sessionId, state, matched, batch.patches)
+        } else if (suggestionHolds.has(batch.sessionId)) {
+          state = withClearedSuggestion(state)
         }
       }
       next ??= { ...replicas }
@@ -517,6 +540,7 @@ export function forgetSession(sessionId: string): void {
   const at = watched.indexOf(sessionId)
   if (at >= 0) watched.splice(at, 1)
   clearSessionBuffers(sessionId)
+  suggestionHolds.delete(sessionId)
   forgetOutline(sessionId)
   useThreadsStore.setState((s) => {
     if (!(sessionId in s.replicas)) return s
@@ -594,12 +618,116 @@ function sameContent(a: readonly UserContent[], b: readonly UserContent[]): bool
   return refsA.every((ref, i) => sameRef(ref, refsB[i]!))
 }
 
+function isIdleStatus(status: SessionStatus): boolean {
+  return status === 'ready' || status === 'closed'
+}
+
+function hasPendingSend(sessionId: string): boolean {
+  return (
+    (sending.get(sessionId)?.length ?? 0) > 0 || (suggestionHolds.get(sessionId)?.size ?? 0) > 0
+  )
+}
+
+function withClearedSuggestion(state: ThreadState): ThreadState {
+  if (state.session.suggestion == null) return state
+  return { ...state, session: { ...state.session, suggestion: null } }
+}
+
+function withRestoredSuggestion(
+  sessionId: string,
+  state: ThreadState,
+  previous: string | null,
+  superseded: boolean,
+): ThreadState {
+  if (
+    previous === null ||
+    superseded ||
+    hasPendingSend(sessionId) ||
+    state.session.suggestion != null ||
+    !isIdleStatus(state.session.status)
+  ) {
+    return state
+  }
+  return { ...state, session: { ...state.session, suggestion: previous } }
+}
+
+function markSupersededFromPatches(sessionId: string, patches: readonly Patch[]): void {
+  const supersedes = patches.some(
+    (patch) =>
+      patch.op === 'session.update' &&
+      ('suggestion' in patch.changes ||
+        (patch.changes.status !== undefined && !isIdleStatus(patch.changes.status))),
+  )
+  if (!supersedes) return
+  for (const item of sending.get(sessionId) ?? []) item.suggestionSuperseded = true
+  for (const hold of suggestionHolds.get(sessionId) ?? []) hold.superseded = true
+}
+
+function markSupersededFromSnapshot(sessionId: string, state: ThreadState): void {
+  const idle = isIdleStatus(state.session.status)
+  const reported = state.session.suggestion ?? null
+  for (const item of sending.get(sessionId) ?? []) {
+    if (!idle || reported !== item.clearedSuggestion) item.suggestionSuperseded = true
+  }
+  for (const hold of suggestionHolds.get(sessionId) ?? []) {
+    if (!idle || reported !== hold.clearedSuggestion) hold.superseded = true
+  }
+}
+
+function hasSuggestionAfter(patches: readonly Patch[], index: number): boolean {
+  let latest: string | null | undefined
+  for (let i = index + 1; i < patches.length; i++) {
+    const patch = patches[i]!
+    if (patch.op === 'session.update' && 'suggestion' in patch.changes) {
+      latest = patch.changes.suggestion
+    }
+  }
+  return latest != null
+}
+
 /**
- * Shows a message the user sent at the end of the session's thread at once. The host's own entry
- * takes its place when it comes; the returned function takes it away before that, for a send that
- * failed or went to the queue.
+ * Optimistically clears the session's next-message suggestion while a send without an optimistic
+ * thread entry (such as an agent switch) is in flight. Call the returned function with `true`
+ * when the send fails to restore the cleared suggestion if it was not superseded meanwhile.
  */
-export function showSending(sessionId: string, content: UserContent[]): () => void {
+export function suppressSuggestion(sessionId: string): (restore?: boolean) => void {
+  const replica = useThreadsStore.getState().replicas[sessionId]
+  const hold: SuggestionHold = {
+    clearedSuggestion: replica?.state?.session.suggestion ?? null,
+    superseded: false,
+  }
+  let holds = suggestionHolds.get(sessionId)
+  if (!holds) suggestionHolds.set(sessionId, (holds = new Set()))
+  holds.add(hold)
+  if (replica?.state && replica.state.session.suggestion != null) {
+    setReplica(sessionId, { ...replica, state: withClearedSuggestion(replica.state) })
+  }
+  return (restore = false) => {
+    const currentHolds = suggestionHolds.get(sessionId)
+    if (!currentHolds?.delete(hold)) return
+    if (currentHolds.size === 0) suggestionHolds.delete(sessionId)
+    if (!restore) return
+    const current = useThreadsStore.getState().replicas[sessionId]
+    if (!current?.state) return
+    const next = withRestoredSuggestion(
+      sessionId,
+      current.state,
+      hold.clearedSuggestion,
+      hold.superseded,
+    )
+    if (next !== current.state) setReplica(sessionId, { ...current, state: next })
+  }
+}
+
+/**
+ * Shows a message the user sent at the end of the session's thread at once and clears any stale
+ * next-message suggestion on the replica. The host's own entry takes its place when it comes; the
+ * returned function takes it away before that, for a send that failed or went to the queue.
+ */
+export function showSending(
+  sessionId: string,
+  content: UserContent[],
+): (options?: { restoreSuggestion?: boolean }) => void {
   const replica = useThreadsStore.getState().replicas[sessionId]
   const order = replica?.state?.order ?? []
   const after = replica?.state ? (order.findLast((id) => !id.startsWith('sending-')) ?? null) : null
@@ -609,6 +737,8 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
     sentAt: Date.now(),
     after,
     empty: Boolean(replica?.state) && after === null,
+    clearedSuggestion: replica?.state?.session.suggestion ?? null,
+    suggestionSuperseded: false,
   }
   list.push(item)
   sending.set(sessionId, list)
@@ -617,7 +747,7 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
   entries.set(item.entry.id, performance.now())
   if (replica?.state)
     setReplica(sessionId, { ...replica, state: withSending(sessionId, replica.state) })
-  return () => {
+  return (options) => {
     const kept = sending.get(sessionId)
     const at = kept?.indexOf(item) ?? -1
     if (!kept || at < 0) return
@@ -625,7 +755,16 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
     if (kept.length === 0) sending.delete(sessionId)
     const current = useThreadsStore.getState().replicas[sessionId]
     if (current?.state) {
-      setReplica(sessionId, { ...current, state: withoutEntry(current.state, item.entry.id) })
+      let next = withoutEntry(current.state, item.entry.id)
+      if (options?.restoreSuggestion) {
+        next = withRestoredSuggestion(
+          sessionId,
+          next,
+          item.clearedSuggestion,
+          item.suggestionSuperseded,
+        )
+      }
+      setReplica(sessionId, { ...current, state: next })
     }
   }
 }
@@ -652,9 +791,16 @@ interface MatchedEchoes {
   entries: Set<UserEntry>
   settledIds: string[]
   remaining: Sending[]
+  /** Index of the last patch in the batch that matched a pending optimistic send, or -1. */
+  lastEchoIndex: number
 }
 
-const NO_ECHOES: MatchedEchoes = { entries: new Set(), settledIds: [], remaining: [] }
+const NO_ECHOES: MatchedEchoes = {
+  entries: new Set(),
+  settledIds: [],
+  remaining: [],
+  lastEchoIndex: -1,
+}
 
 /**
  * Matches the batch's new user entries against pending optimistic sends, oldest first. Scans until
@@ -667,7 +813,9 @@ function matchBatchEchoes(batch: PatchBatch): MatchedEchoes {
   const remaining = [...list]
   const entries = new Set<UserEntry>()
   const settledIds: string[] = []
-  for (const patch of batch.patches) {
+  let lastEchoIndex = -1
+  for (let i = 0; i < batch.patches.length; i++) {
+    const patch = batch.patches[i]!
     if (patch.op !== 'entry.add' || !isOwnMessage(batch.sessionId, patch.entry)) continue
     const echo = patch.entry
     const at = remaining.findIndex((item) => sameContent(item.entry.content, echo.content))
@@ -676,10 +824,11 @@ function matchBatchEchoes(batch: PatchBatch): MatchedEchoes {
     if (gone) {
       entries.add(echo)
       settledIds.push(gone.entry.id)
+      lastEchoIndex = i
     }
     if (remaining.length === 0) break
   }
-  return { entries, settledIds, remaining }
+  return { entries, settledIds, remaining, lastEchoIndex }
 }
 
 /** Takes away the optimistic entries `matched` settled, and keeps the others at the thread's end. */
@@ -687,10 +836,19 @@ function applySettledSending(
   sessionId: string,
   state: ThreadState,
   matched: MatchedEchoes,
+  patches: readonly Patch[],
 ): ThreadState {
   for (const id of matched.settledIds) state = withoutEntry(state, id)
   if (matched.remaining.length === 0) {
     sending.delete(sessionId)
+    if (
+      matched.lastEchoIndex >= 0 &&
+      state.session.suggestion != null &&
+      !hasSuggestionAfter(patches, matched.lastEchoIndex)
+    ) {
+      state = withClearedSuggestion(state)
+    }
+    if (suggestionHolds.has(sessionId)) state = withClearedSuggestion(state)
     return state
   }
   sending.set(sessionId, matched.remaining)
@@ -728,16 +886,20 @@ function settleSnapshot(sessionId: string, state: ThreadState): ThreadState {
 /** `state` with the messages still sending at its end, in the order they were sent. */
 function withSending(sessionId: string, state: ThreadState): ThreadState {
   const list = sending.get(sessionId) ?? []
+  const clearSuggestion = list.length > 0 && state.session.suggestion != null
   const ids = new Set(list.map((item) => item.entry.id))
   const tail = state.order.slice(state.order.length - list.length)
-  if (
-    list.every((item, i) => tail[i] === item.entry.id && state.byId[item.entry.id] === item.entry)
+  const entriesUnchanged = list.every(
+    (item, i) => tail[i] === item.entry.id && state.byId[item.entry.id] === item.entry,
   )
-    return state
+  if (entriesUnchanged && !clearSuggestion) return state
+  const session = clearSuggestion ? { ...state.session, suggestion: null } : state.session
+  if (entriesUnchanged) return { ...state, session }
   const byId = { ...state.byId }
   for (const item of list) byId[item.entry.id] = item.entry
   return {
     ...state,
+    session,
     byId,
     order: [...state.order.filter((id) => !ids.has(id)), ...list.map((item) => item.entry.id)],
   }

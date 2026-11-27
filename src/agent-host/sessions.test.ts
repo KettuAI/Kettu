@@ -63,6 +63,7 @@ function manager(
     worktrees?: Partial<WorktreeManager>
     timings?: Partial<SessionTimings>
     settingsTargets?: SessionManagerDeps['settingsTargets']
+    events?: Partial<SessionEvents>
   } = {},
 ) {
   const added: string[] = []
@@ -97,7 +98,9 @@ function manager(
     reportsDir: path.join(dir, 'reports'),
     diagnostics: new Diagnostics(),
     git: () => null,
-    events: new Proxy({}, { get: () => () => {} }) as SessionEvents,
+    events: new Proxy(extra.events ?? {}, {
+      get: (target, prop) => Reflect.get(target, prop) ?? (() => {}),
+    }) as SessionEvents,
     settings: () => ({ startModes: {}, ...extra.settings }) as never,
     ...(extra.options ? { options: extra.options } : {}),
     ...(extra.outside ? { outside: extra.outside } : {}),
@@ -2809,6 +2812,163 @@ describe('openNew start option guards', () => {
     expect(sentSnap?.session.queuePaused).toBe(false)
     expect(sentSnap?.session.config.find((item) => item.id === 'model')?.value).toBe(
       'custom-provider/my-model',
+    )
+  })
+})
+
+describe('next-message suggestion clearing on send (#2903)', () => {
+  it('emits suggestion: null on turn start even after revive and emits fresh suggestions on turn end', async () => {
+    const repo = path.join(dir, 'repo')
+    await mkdir(repo, { recursive: true })
+    const stored = new Map<string, StoredThread>()
+    const batches: {
+      sessionId: string
+      patches: readonly { op: string; changes?: Record<string, unknown> }[]
+    }[] = []
+    let target: SessionTarget | null = null
+    let promptCalls = 0
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      register: (_acpId: string, next: SessionTarget) => {
+        target = next
+      },
+      unregister: () => {
+        target = null
+      },
+      reopen: () => {},
+      newSession: async () => ({ sessionId: 'acp-1', config: [] }),
+      loadSession: async () => ({ config: [] }),
+      closeSession: async () => {},
+      prompt: async () => {
+        promptCalls++
+        return { stopReason: 'end_turn' as StopReason, tokens: null, models: [] }
+      },
+      cancel: async () => {},
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      init: {
+        capabilities: {
+          loadSession: true,
+          closeSession: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'Claude Code',
+      signedIn: () => {},
+      authRequired: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    const threads: Partial<ThreadStore> = {
+      load: async (id) => stored.get(id) ?? null,
+      write: async (id, change) => {
+        const prev = stored.get(id) ?? {
+          head: change.head,
+          session: { ...EMPTY_SESSION },
+          entries: [],
+          setAside: [],
+        }
+        const entries = change.replace ? [] : [...prev.entries]
+        for (const row of change.entries) {
+          const at = entries.findIndex((item) => item.entry.id === row.entry.id)
+          if (at >= 0) entries[at] = row
+          else entries.push(row)
+        }
+        stored.set(id, {
+          head: change.head,
+          session: change.session ?? prev.session,
+          entries,
+          setAside: change.setAside ?? prev.setAside,
+        })
+      },
+      remove: async (ids) => {
+        for (const id of ids) stored.delete(id)
+      },
+    }
+
+    const { sessions } = manager(
+      {},
+      {
+        agents,
+        threads,
+        settings: { promptSuggestions: true },
+        timings: { flushMs: 0 },
+        events: {
+          patches: (batch) => {
+            batches.push({
+              sessionId: batch.sessionId,
+              patches: batch.patches as readonly {
+                op: string
+                changes?: Record<string, unknown>
+              }[],
+            })
+          },
+        },
+      },
+    )
+    await sessions.load()
+
+    const created = await sessions.create({
+      agentId: 'claude-code',
+      projectPath: repo,
+      prompt: [{ type: 'text', text: 'First turn' }],
+    })
+    sessions.watch(created.id, 'win-1')
+    await vi.waitFor(() => expect(promptCalls).toBe(1))
+    await vi.waitFor(async () =>
+      expect((await sessions.snapshot(created.id))?.session.status).toBe('ready'),
+    )
+
+    // Deliver a suggestion after Turn 1, then release the session to simulate idle close before revive.
+    target!.apply({ patches: [], effects: [{ kind: 'suggestion', text: 'Run tests' }] })
+    await vi.waitFor(async () =>
+      expect((await sessions.snapshot(created.id))?.session.suggestion).toBe('Run tests'),
+    )
+    // Release the live session so the next send revives from stored history without memory-only suggestion.
+    await (
+      sessions as unknown as {
+        closeAll(records: SessionRecord[], keep: boolean): Promise<void>
+        recordOf(id: string): SessionRecord
+      }
+    ).closeAll(
+      [(sessions as unknown as { recordOf(id: string): SessionRecord }).recordOf(created.id)],
+      true,
+    )
+    batches.length = 0
+
+    // Sending on the revived session still explicitly emits `suggestion: null` on turn start.
+    await sessions.queue(created.id, [{ type: 'text', text: 'Run tests' }])
+    await vi.waitFor(() => expect(promptCalls).toBe(2))
+    await vi.waitFor(() =>
+      expect(
+        batches.some(
+          (batch) =>
+            batch.sessionId === created.id &&
+            batch.patches.some(
+              (patch) =>
+                patch.op === 'session.update' &&
+                patch.changes?.status === 'running' &&
+                patch.changes?.suggestion === null,
+            ),
+        ),
+      ).toBe(true),
+    )
+
+    // After Turn 2 finishes, a new suggestion arrives and is exposed cleanly.
+    await vi.waitFor(async () =>
+      expect((await sessions.snapshot(created.id))?.session.status).toBe('ready'),
+    )
+    target!.apply({ patches: [], effects: [{ kind: 'suggestion', text: 'Open a pull request' }] })
+    await vi.waitFor(async () =>
+      expect((await sessions.snapshot(created.id))?.session.suggestion).toBe('Open a pull request'),
     )
   })
 })
