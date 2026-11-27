@@ -1,8 +1,9 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseMcpConfig, type ConfigLayout } from './mcp-config'
+import { claudeProjectMcpPaths } from './mcp-config-paths'
 import { McpDiscoveryService, readMcpConfig, readOwnMcpServers } from './mcp-discovery'
 import { parseMcpPaste } from './mcp-paste'
 import { ALL_TRANSPORTS, libraryServers } from './servers'
@@ -205,6 +206,77 @@ it('hands the library copy under the configured name and reports a different sam
       ),
     ).toBe(true)
     expect(collisions).toEqual(['conflict'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('skips Claude Code servers disabled for the session project when reading own servers', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kettu-claude-disabled-'))
+  const file = {
+    path: join(root, '.claude.json'),
+    layout: 'claude' as const,
+    projects: ['/repo'],
+  }
+  try {
+    const text = JSON.stringify({
+      mcpServers: {
+        disabledUser: { url: 'https://api.githubcopilot.com/mcp/' },
+        activeUser: { url: 'https://active.example.test/mcp' },
+      },
+      projects: {
+        '/repo': {
+          mcpServers: {
+            disabledLocal: { command: 'local-db' },
+            activeLocal: { command: 'local-ok' },
+          },
+          disabledMcpServers: ['disabledUser', 'disabledLocal'],
+        },
+      },
+    })
+    await writeFile(file.path, text)
+    // Discovery still lists all configured entries without respectProjectDisabled.
+    expect(parseMcpConfig(text, file).servers.map((server) => server.name)).toEqual([
+      'disabledUser',
+      'activeUser',
+      'disabledLocal',
+      'activeLocal',
+    ])
+    // Per-session own lookup excludes entries disabled for `/repo`.
+    const own = await readOwnMcpServers([file])
+    expect(own.map((server) => server.name)).toEqual(['activeUser', 'activeLocal'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('reads Claude project .mcp.json ancestors so nearer entries win', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kettu-claude-proj-'))
+  const nested = join(root, 'packages', 'app')
+  try {
+    await mkdir(nested, { recursive: true })
+    await writeFile(
+      join(root, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          shared: { url: 'https://root.example.test/mcp' },
+          override: { command: 'old-cmd' },
+        },
+      }),
+    )
+    await writeFile(
+      join(nested, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          override: { command: 'new-cmd' },
+        },
+      }),
+    )
+    const own = await readOwnMcpServers(claudeProjectMcpPaths(nested, 'darwin'))
+    expect(own).toEqual([
+      { name: 'shared', endpoint: { type: 'http', url: 'https://root.example.test/mcp' } },
+      { name: 'override', endpoint: { type: 'stdio', command: 'new-cmd', args: [] } },
+    ])
   } finally {
     await rm(root, { recursive: true, force: true })
   }

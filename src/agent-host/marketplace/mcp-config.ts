@@ -9,6 +9,8 @@ export type ConfigLayout = 'standard' | 'claude' | 'codex' | 'opencode' | 'vscod
 export interface McpConfigFile extends McpConfigSource {
   layout: ConfigLayout
   projects?: readonly string[]
+  /** Skip servers named in a listed project's `disabledMcpServers` (for a single session). */
+  respectProjectDisabled?: boolean
   firstOf?: string
 }
 
@@ -194,10 +196,25 @@ export function parseMcpConfig(
     }
     switch (file.layout) {
       case 'claude': {
-        add(config.mcpServers, source)
         const projects = object(config.projects)
-        for (const path of file.projects ?? []) {
-          add(object(projects?.[path])?.mcpServers, { ...source, project: path })
+        const disabled = new Set<string>()
+        if (file.respectProjectDisabled) {
+          for (const projectPath of file.projects ?? []) {
+            const list = object(projects?.[projectPath])?.disabledMcpServers
+            if (Array.isArray(list)) {
+              for (const item of list) if (typeof item === 'string') disabled.add(item)
+            }
+          }
+        }
+        add(config.mcpServers, source)
+        for (const projectPath of file.projects ?? []) {
+          add(object(projects?.[projectPath])?.mcpServers, { ...source, project: projectPath })
+        }
+        if (disabled.size > 0) {
+          const active = servers.filter((server) => !disabled.has(server.name))
+          return malformed
+            ? { servers: active, error: { source, reason: 'invalid-server' } }
+            : { servers: active }
         }
         break
       }

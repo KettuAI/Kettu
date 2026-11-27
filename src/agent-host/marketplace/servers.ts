@@ -318,6 +318,11 @@ export function libraryServers(
      * replaces.
      */
     own?: readonly OwnServer[]
+    /**
+     * Servers declared by untrusted project files (such as `.mcp.json`): never used to rename a
+     * library server, only matched by fingerprint so duplicates can be suppressed.
+     */
+    projectOwn?: readonly OwnServer[]
     /** The agent's own server of that name is another server, which Kettu's entry replaces. */
     conflict?(server: MarketServer, own: string): void
     /** The session's project, which a server set to some projects only goes to when it names. */
@@ -330,13 +335,18 @@ export function libraryServers(
   const out: McpServer[] = []
   const allowed: string[] = []
   const own = options.own ?? []
+  const projectOwn = options.projectOwn ?? []
   const ownNames = new Set(own.map((item) => item.name))
   const nameOf = (server: MarketServer): Handed => {
     const print = mcpFingerprint(endpointOf(server.spec))
     if (transports.mcpMergesSameName) {
-      const replaces = own
-        .filter((item) => item.name === server.name || mcpFingerprint(item.endpoint) === print)
-        .map((item) => item.name)
+      const replaces = [
+        ...new Set(
+          [...own, ...projectOwn]
+            .filter((item) => item.name === server.name || mcpFingerprint(item.endpoint) === print)
+            .map((item) => item.name),
+        ),
+      ]
       const taken = (name: string) => used.has(name) || ownNames.has(name)
       let name = server.name
       if (taken(name)) name = `${server.name}-kettu`
@@ -349,14 +359,32 @@ export function libraryServers(
       return replaces.length > 0 ? { name, replaces } : { name }
     }
     // The same server under another name in the agent's own file is handed under that name, so
-    // the agent runs it once, as Kettu's.
-    const same = own.find((item) => mcpFingerprint(item.endpoint) === print && !used.has(item.name))
+    // the agent runs it once, as Kettu's. Prefer the library server's own name when both exist.
+    const same =
+      own.find(
+        (item) =>
+          item.name === server.name &&
+          mcpFingerprint(item.endpoint) === print &&
+          !used.has(item.name),
+      ) ?? own.find((item) => mcpFingerprint(item.endpoint) === print && !used.has(item.name))
     let name = same?.name ?? server.name
     for (let n = 2; used.has(name); n++) name = `${server.name}-${n}`
     used.add(name)
     const clash = own.find((item) => item.name === name && mcpFingerprint(item.endpoint) !== print)
     if (clash) options.conflict?.(server, clash.name)
-    return { name }
+    // Additional copies of the same server under other names (such as a second alias in the
+    // agent's config or a project `.mcp.json` entry) cannot be shadowed by `name` alone.
+    const replaces = [
+      ...new Set(
+        [...own, ...projectOwn]
+          .filter(
+            (item) =>
+              item.name !== name && !used.has(item.name) && mcpFingerprint(item.endpoint) === print,
+          )
+          .map((item) => item.name),
+      ),
+    ]
+    return replaces.length > 0 ? { name, replaces } : { name }
   }
   const router = options.router ?? null
   const gated: string[] = []
