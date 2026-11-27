@@ -7,7 +7,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import type { AskChip, AskMessage } from './ask-subject'
 import { ToolPop } from './comment-pop'
-import { sendKey } from './pop-place'
+import { sendKey, type LiveAnchor } from './pop-place'
 import { sendToSession, useTargetName, type SendTargets } from './send-targets'
 import { ToMenu } from './send-to'
 
@@ -19,6 +19,8 @@ type Box = { left: number; top: number; right: number; bottom: number }
  */
 export function AskPop({
   at,
+  liveAnchor = null,
+  onReturnToAnchor = null,
   chips,
   onRemoveChip,
   targets,
@@ -31,6 +33,8 @@ export function AskPop({
 }: {
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
+  liveAnchor?: LiveAnchor | null
+  onReturnToAnchor?: (() => void) | null
   chips: AskChip[]
   onRemoveChip: ((key: string) => void) | null
   targets: SendTargets
@@ -71,7 +75,15 @@ export function AskPop({
   }
 
   return (
-    <ToolPop at={at} width={340} label={t('ask.label')} onClose={onClose} className="k-vt-ask">
+    <ToolPop
+      at={at}
+      liveAnchor={liveAnchor}
+      onReturnToAnchor={onReturnToAnchor}
+      width={340}
+      label={t('ask.label')}
+      onClose={onClose}
+      className="k-vt-ask"
+    >
       {() =>
         sent ? (
           <span role="status" className="k-vt-ask__done">

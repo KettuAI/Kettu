@@ -542,7 +542,8 @@ export const CanvasEditor = memo(function CanvasEditor({
     }
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [controls, syncLive, artifactId, shownKey])
+    editor?.recomputeAnchor()
+  }, [controls, syncLive, artifactId, shownKey, editor])
 
   const place = useCallback(
     (next: Camera, fit = false) => {
@@ -1496,7 +1497,10 @@ export const CanvasEditor = memo(function CanvasEditor({
             mode={mode}
             reloads={reloads}
             scroller={scroller}
-            onScroll={(scrolled) => place({ ...opened.camera, y: opened.camera.y - scrolled })}
+            onScroll={(scrolled) => {
+              place({ ...opened.camera, y: opened.camera.y - scrolled })
+              editor?.recomputeAnchor()
+            }}
             onKey={onFrameKey}
             onPicked={() => stage.current?.focus({ preventScroll: true })}
             before={

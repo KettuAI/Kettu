@@ -59,14 +59,24 @@ export interface PageSelection {
   style: ElementStyle
   /** The tags of the elements it lies in, outermost first, up to the body; absent from older pages. */
   ancestors?: string[]
+  /** Viewport-relative bounding box of the picked element in iframe CSS pixels. */
+  box?: PageBox
 }
 
-/** Where an element lies in its page, in CSS pixels from the document's top left. */
+/** Where an element lies in its page, in CSS pixels. */
 export interface PageBox {
   x: number
   y: number
   width: number
   height: number
+}
+
+/** Live viewport-relative bounds of the tracked anchor element inside the iframe. */
+export interface AnchorRectReport {
+  /** Element bounding box in iframe viewport CSS pixels, or null when missing or disconnected. */
+  box: PageBox | null
+  /** Iframe inner viewport dimensions in CSS pixels. */
+  viewport: { width: number; height: number }
 }
 
 /** The page's report of a pick, or of the pick cleared. */
@@ -87,8 +97,12 @@ export interface SelectMessage {
   deck?: DeckReport
   /** A pick that landed on a comment pin, by its number, instead of on an element. */
   pin?: number
+  /** Viewport-relative bounding box of the pin's anchored element when a pin is picked. */
+  pinBox?: PageBox
   /** The picked element's text as typed in place after `text-edit`; `done` once typing ends. */
   typed?: { text: string; done: boolean }
+  /** Live viewport-relative bounds of the tracked anchor element while a popover is open. */
+  anchor?: AnchorRectReport
 }
 
 /**
@@ -159,8 +173,17 @@ export type DriveMessage =
   // Which slide a deck's viewer shows and how, and what it does once.
   | DeckDrive
   // Scrolls the element whose start tag lies at `src` into view, as a thread's card asks; when
-  // `channel` is given, answers with its pin's viewport box in `located` so a popover can sit by it.
+  // `channel` is given, answers with its viewport box in `located` so a popover can sit by it.
   | { v: typeof RUNTIME_VERSION; kind: 'select-reveal'; src: number; channel?: string }
+  // Tracks an element's viewport-relative bounds while a popover is open; `null` stops tracking.
+  | {
+      v: typeof RUNTIME_VERSION
+      kind: 'select-anchor'
+      channel: string
+      target: number | 'picked' | null
+    }
+  // Smoothly scrolls the tracked or targeted anchor element back into the center of the viewport.
+  | { v: typeof RUNTIME_VERSION; kind: 'select-scroll-anchor'; target?: number | 'picked' }
   // Scrolls the page while a pick layer over it takes the wheel.
   | { v: typeof RUNTIME_VERSION; kind: 'select-scroll'; dx: number; dy: number }
   // Picks the element around the picked one, reported as a pick.
@@ -293,6 +316,10 @@ function selection(value: unknown): PageSelection | null | undefined {
       .slice(-ANCESTORS)
       .filter((a): a is string => typeof a === 'string' && TAG.test(a))
   }
+  if (value.box !== undefined) {
+    const box = parseBox(value.box)
+    if (box) picked.box = box
+  }
   return picked
 }
 
@@ -341,6 +368,13 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
       return null
     }
     message.pin = pin as number
+    if (value.pinBox !== undefined) {
+      const pinBox = parseBox(value.pinBox)
+      if (!pinBox) return null
+      message.pinBox = pinBox
+    }
+  } else if (value.pinBox !== undefined) {
+    return null
   }
   if (value.typed !== undefined) {
     const typed = value.typed
@@ -353,31 +387,72 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     if (message.pin !== undefined || message.doc || message.deck) return null
     message.typed = { text: typed.text, done: typed.done }
   }
+  if (value.anchor !== undefined) {
+    const anchor = anchorOf(value.anchor)
+    if (
+      !anchor ||
+      picked !== null ||
+      message.located ||
+      message.key ||
+      message.doc ||
+      message.deck ||
+      message.pin !== undefined ||
+      message.typed
+    ) {
+      return null
+    }
+    message.anchor = anchor
+  }
   return message
 }
 
 /** The most pins a page draws. */
 export const MAX_PINS = 1_000
 
+function finiteCoord(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 1e6
+}
+
+function parseBox(value: unknown): PageBox | null {
+  if (!isRecord(value)) return null
+  if (
+    !finiteCoord(value.x) ||
+    !finiteCoord(value.y) ||
+    !finiteCoord(value.width) ||
+    !finiteCoord(value.height) ||
+    value.width < 0 ||
+    value.height < 0
+  ) {
+    return null
+  }
+  return { x: value.x, y: value.y, width: value.width, height: value.height }
+}
+
+function anchorOf(value: unknown): AnchorRectReport | null {
+  if (!isRecord(value)) return null
+  const box = value.box === null ? null : parseBox(value.box)
+  if (value.box !== null && !box) return null
+  const vp = value.viewport
+  if (
+    !isRecord(vp) ||
+    !finiteCoord(vp.width) ||
+    !finiteCoord(vp.height) ||
+    vp.width < 0 ||
+    vp.height < 0
+  ) {
+    return null
+  }
+  return { box, viewport: { width: vp.width, height: vp.height } }
+}
+
 function locatedOf(value: unknown): { src: number; box: PageBox | null } | null {
   if (!isRecord(value)) return null
   const { src, box } = value
   if (!Number.isSafeInteger(src) || (src as number) < 0 || (src as number) > MAX_OFFSET) return null
   if (box === null) return { src: src as number, box: null }
-  if (!isRecord(box)) return null
-  const n = (v: unknown): v is number =>
-    typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 1e6
-  if (
-    !n(box.x) ||
-    !n(box.y) ||
-    !n(box.width) ||
-    !n(box.height) ||
-    box.width < 0 ||
-    box.height < 0
-  ) {
-    return null
-  }
-  return { src: src as number, box: { x: box.x, y: box.y, width: box.width, height: box.height } }
+  const parsed = parseBox(box)
+  if (!parsed) return null
+  return { src: src as number, box: parsed }
 }
 
 /** The most uncaught errors a page reports in one load; the runtime sends no more. */

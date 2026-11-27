@@ -88,4 +88,98 @@ describe('the ancestors of a pick', () => {
       'header',
     ])
   })
+
+  it('reads an optional viewport bounding box on a pick and ignores malformed ones', () => {
+    const withBox = {
+      path: 'index.html',
+      src: 12,
+      tag: 'div',
+      text: 'Card',
+      textOnly: false,
+      style: {},
+      box: { x: 40, y: -20, width: 320, height: 180 },
+    }
+    expect(parseSelectMessage(keyMessage({ selection: withBox }))?.selection?.box).toEqual({
+      x: 40,
+      y: -20,
+      width: 320,
+      height: 180,
+    })
+
+    const badBox = { ...withBox, box: { x: 0, y: 0, width: -10, height: 20 } }
+    expect(parseSelectMessage(keyMessage({ selection: badBox }))?.selection?.box).toBeUndefined()
+  })
+})
+
+describe('pin bounding box and live anchor bounds', () => {
+  it('reads an optional pinBox alongside a pin pick and rejects stray or invalid pinBox', () => {
+    const parsed = parseSelectMessage(
+      keyMessage({ pin: 2, pinBox: { x: 100, y: 80, width: 240, height: 90 } }),
+    )
+    expect(parsed?.pin).toBe(2)
+    expect(parsed?.pinBox).toEqual({ x: 100, y: 80, width: 240, height: 90 })
+
+    expect(
+      parseSelectMessage(keyMessage({ pinBox: { x: 0, y: 0, width: 10, height: 10 } })),
+    ).toBeNull()
+    expect(
+      parseSelectMessage(keyMessage({ pin: 2, pinBox: { x: 0, y: 0, width: -1, height: 10 } })),
+    ).toBeNull()
+  })
+
+  it('reads live anchor rect updates including offscreen negative coordinates and null box', () => {
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          anchor: {
+            box: { x: 24, y: -420, width: 300, height: 200 },
+            viewport: { width: 1024, height: 768 },
+          },
+        }),
+      )?.anchor,
+    ).toEqual({
+      box: { x: 24, y: -420, width: 300, height: 200 },
+      viewport: { width: 1024, height: 768 },
+    })
+
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          anchor: { box: null, viewport: { width: 800, height: 600 } },
+        }),
+      )?.anchor,
+    ).toEqual({
+      box: null,
+      viewport: { width: 800, height: 600 },
+    })
+  })
+
+  it('rejects malformed or mixed anchor messages', () => {
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          anchor: {
+            box: { x: 0, y: 0, width: 10, height: 10 },
+            viewport: { width: -1, height: 600 },
+          },
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          pin: 1,
+          anchor: { box: null, viewport: { width: 800, height: 600 } },
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          key: 'Escape',
+          anchor: { box: null, viewport: { width: 800, height: 600 } },
+        }),
+      ),
+    ).toBeNull()
+  })
 })

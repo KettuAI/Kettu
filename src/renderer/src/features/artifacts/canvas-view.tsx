@@ -205,7 +205,8 @@ export const CanvasView = memo(function CanvasView({
     })
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [pages, titles, controls, syncLive, actions])
+    editor?.recomputeAnchor()
+  }, [pages, titles, controls, syncLive, actions, editor])
 
   const place = useCallback(
     (next: Camera, fit = false) => {

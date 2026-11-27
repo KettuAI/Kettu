@@ -18,8 +18,10 @@ import { DOC_REPORT_EVENT } from './document-sheet'
 import {
   RUNTIME_PATH,
   RUNTIME_VERSION,
+  type AnchorRectReport,
   type DriveMessage,
   type ElementStyle,
+  type PageBox,
   type PageSelection,
   PAGE_ERRORS,
   PAGE_KEYS,
@@ -30,6 +32,8 @@ import {
 const USE_WAIT_MS = 10_000
 const SOURCE = 'data-kettu-src'
 const TEXT_CHARS = 200
+/** Minimum interval between live anchor rect sync messages to stay well within host rate limits. */
+const ANCHOR_SYNC_MIN_MS = 16
 /** How long after the old page left the next version takes its scroll. */
 const SCROLL_KEPT_MS = 10_000
 
@@ -336,6 +340,129 @@ export function start(config: RuntimeConfig): void {
   let frame = 0
   // What a preview changed on the picked element, to put back.
   let original: { element: Element; style: string | null; text: string | null } | null = null
+  // Live anchor tracking while a host popover is anchored to an element in this iframe.
+  let anchorTarget: number | 'picked' | null = null
+  let anchorChannel = ''
+  let anchorFrame = 0
+  let anchorTimer: ReturnType<typeof setTimeout> | null = null
+  let anchorLastSentAt = 0
+  let anchorLastKey: string | null = null
+  let anchorInFlight = false
+  let anchorDirty = false
+  let anchorListening = false
+
+  function rectBox(element: Element | null): PageBox | null {
+    if (!element || !element.isConnected) return null
+    const rect = element.getBoundingClientRect()
+    if (rect.width === 0 && rect.height === 0) return null
+    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+  }
+
+  function resolveAnchorElement(target: number | 'picked' | null): Element | null {
+    if (target === null) return null
+    if (target === 'picked') return picked
+    return sourceElement(target)
+  }
+
+  function snapHalf(n: number): number {
+    return Math.round(n * 2) / 2
+  }
+
+  function anchorSnapshot(): { report: AnchorRectReport; key: string } {
+    const box = rectBox(resolveAnchorElement(anchorTarget))
+    const viewport = { width: window.innerWidth, height: window.innerHeight }
+    const key = box
+      ? `${snapHalf(box.x)},${snapHalf(box.y)},${snapHalf(box.width)},${snapHalf(box.height)}|${viewport.width},${viewport.height}`
+      : `null|${viewport.width},${viewport.height}`
+    return { report: { box, viewport }, key }
+  }
+
+  function sendAnchorReport(force: boolean): void {
+    if (anchorTarget === null || !anchorChannel) return
+    const { report: anchor, key } = anchorSnapshot()
+    if (!force && key === anchorLastKey) return
+    if (config.transport === 'fetch' && anchorInFlight) {
+      anchorDirty = true
+      return
+    }
+    const now = Date.now()
+    const wait = ANCHOR_SYNC_MIN_MS - (now - anchorLastSentAt)
+    if (!force && wait > 0) {
+      if (anchorTimer === null) {
+        anchorTimer = setTimeout(() => {
+          anchorTimer = null
+          scheduleAnchorSync()
+        }, wait)
+      }
+      return
+    }
+    anchorLastKey = key
+    anchorLastSentAt = now
+    const message: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'select',
+      channel: anchorChannel,
+      selection: null,
+      anchor,
+    }
+    if (config.transport === 'port') {
+      viaPort(message)
+      return
+    }
+    anchorInFlight = true
+    void request(message)
+      .catch(() => {})
+      .finally(() => {
+        anchorInFlight = false
+        if (anchorDirty && anchorTarget !== null) {
+          anchorDirty = false
+          scheduleAnchorSync()
+        }
+      })
+  }
+
+  function scheduleAnchorSync(): void {
+    if (anchorTarget === null || anchorFrame) return
+    anchorFrame = requestAnimationFrame(() => {
+      anchorFrame = 0
+      sendAnchorReport(false)
+    })
+  }
+
+  const onAnchorViewportChange = (): void => scheduleAnchorSync()
+
+  function setAnchorTracking(target: number | 'picked' | null, nextChannel?: string): void {
+    if (target === null) {
+      anchorTarget = null
+      anchorLastKey = null
+      anchorDirty = false
+      if (anchorFrame) {
+        cancelAnimationFrame(anchorFrame)
+        anchorFrame = 0
+      }
+      if (anchorTimer !== null) {
+        clearTimeout(anchorTimer)
+        anchorTimer = null
+      }
+      if (anchorListening) {
+        window.removeEventListener('scroll', onAnchorViewportChange, true)
+        window.removeEventListener('resize', onAnchorViewportChange)
+        anchorListening = false
+      }
+      return
+    }
+    anchorTarget = target
+    if (nextChannel) anchorChannel = nextChannel
+    else if (channel) anchorChannel = channel
+    if (!anchorListening) {
+      window.addEventListener('scroll', onAnchorViewportChange, { capture: true, passive: true })
+      window.addEventListener('resize', onAnchorViewportChange, { passive: true })
+      anchorListening = true
+    }
+    anchorLastKey = null
+    sendAnchorReport(true)
+  }
 
   function place(box: HTMLElement, element: Element | null): DOMRect | null {
     if (!element || !element.isConnected) {
@@ -370,6 +497,7 @@ export function start(config: RuntimeConfig): void {
       label!.style.display = 'none'
     }
     drawPins()
+    if (anchorTarget !== null) sendAnchorReport(false)
     // Pages move as they scroll and animate, so the overlay follows them while it shows.
     frame = requestAnimationFrame(draw)
   }
@@ -474,6 +602,7 @@ export function start(config: RuntimeConfig): void {
       if (up === document.documentElement) break
       ancestors.unshift(up.localName.toLowerCase())
     }
+    const box = rectBox(element)
     return {
       path: config.path,
       src,
@@ -482,6 +611,7 @@ export function start(config: RuntimeConfig): void {
       textOnly: element.childElementCount === 0,
       style: lookOf(element),
       ancestors: ancestors.slice(-8),
+      ...(box ? { box } : {}),
     }
   }
 
@@ -493,6 +623,8 @@ export function start(config: RuntimeConfig): void {
   }
 
   function sendPin(pin: number): void {
+    const entry = pins.find((p) => p.n === pin)
+    const pinBox = entry && entry.src !== null ? rectBox(sourceElement(entry.src)) : null
     const answer: Message = {
       v: RUNTIME_VERSION,
       id: nextId(),
@@ -500,6 +632,7 @@ export function start(config: RuntimeConfig): void {
       channel,
       selection: null,
       pin,
+      ...(pinBox ? { pinBox } : {}),
     }
     if (config.transport === 'port') viaPort(answer)
     else void request(answer).catch(() => {})
@@ -576,6 +709,7 @@ export function start(config: RuntimeConfig): void {
     if (picked !== element) resetPreview()
     picked = element
     if (tell) report(element ? describe(element) : null)
+    if (anchorTarget === 'picked') scheduleAnchorSync()
     redraw()
   }
 
@@ -682,16 +816,7 @@ export function start(config: RuntimeConfig): void {
           }
         }
         if (replyChannel) {
-          const rect = element?.getBoundingClientRect() ?? null
-          const box =
-            rect && (rect.width > 0 || rect.height > 0)
-              ? {
-                  x: Math.min(window.innerWidth - 22, Math.max(2, rect.right - 10)),
-                  y: Math.min(window.innerHeight - 22, Math.max(2, rect.top - 10)),
-                  width: 20,
-                  height: 20,
-                }
-              : null
+          const box = rectBox(element)
           const answer: Message = {
             v: RUNTIME_VERSION,
             id: nextId(),
@@ -703,12 +828,40 @@ export function start(config: RuntimeConfig): void {
           if (config.transport === 'port') viaPort(answer)
           else void request(answer).catch(() => {})
         }
+        if (anchorTarget !== null) scheduleAnchorSync()
+        return
+      }
+      case 'select-anchor': {
+        const replyChannel =
+          typeof message.channel === 'string' && message.channel !== '' ? message.channel : channel
+        if (
+          message.target === null ||
+          message.target === 'picked' ||
+          (typeof message.target === 'number' && Number.isSafeInteger(message.target))
+        ) {
+          setAnchorTracking(message.target, replyChannel)
+        }
+        return
+      }
+      case 'select-scroll-anchor': {
+        const target =
+          message.target === 'picked' ||
+          (typeof message.target === 'number' && Number.isSafeInteger(message.target))
+            ? message.target
+            : anchorTarget
+        const element = resolveAnchorElement(target)
+        if (element && element.isConnected) {
+          element.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+          redraw()
+          scheduleAnchorSync()
+        }
         return
       }
       case 'select-scroll':
         if (Number.isFinite(message.dx) && Number.isFinite(message.dy)) {
           window.scrollBy({ left: message.dx, top: message.dy, behavior: 'instant' })
           redraw()
+          scheduleAnchorSync()
         }
         return
       case 'select-up': {
@@ -763,6 +916,7 @@ export function start(config: RuntimeConfig): void {
         for (const [property, value] of Object.entries(message.style)) {
           if (typeof value === 'string') element.style.setProperty(property, value)
         }
+        scheduleAnchorSync()
         return
       }
       case 'preview-text':
@@ -772,9 +926,11 @@ export function start(config: RuntimeConfig): void {
         remember(picked)
         original!.text ??= picked.textContent
         picked.textContent = message.text
+        scheduleAnchorSync()
         return
       case 'preview-reset':
         resetPreview()
+        scheduleAnchorSync()
         return
       case 'select-locate': {
         if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
@@ -807,6 +963,7 @@ export function start(config: RuntimeConfig): void {
       case 'params':
         if (typeof message.values !== 'object' || message.values === null) return
         for (const [name, value] of Object.entries(message.values)) setParam(name, value)
+        scheduleAnchorSync()
         return
       case 'keep-scroll':
         keepScroll = true

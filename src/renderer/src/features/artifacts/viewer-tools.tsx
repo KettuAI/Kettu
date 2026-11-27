@@ -43,9 +43,9 @@ import { matchingOpenThread, pinsFor, threadNumbers } from './comment-threads'
 import { CommentsCard } from './comments-card'
 import { sendThreads, type CommentsArtifact } from './comment-send'
 import { EditPanel, type HeldBy } from './edit-panel'
-import type { ArtifactEditor, EditorState } from './editor'
+import type { AnchorTrackSpec, ArtifactEditor, EditorState } from './editor'
 import { frameHandOff } from './handoff'
-import { pointBox } from './pop-place'
+import { pointBox, unionRects, type LiveAnchor } from './pop-place'
 import { NEW_SESSION, useSendTargets, useTargetName } from './send-targets'
 import type { Presence, ShownVersion } from './use-artifact'
 import { HistoryCard } from './version-history'
@@ -73,8 +73,27 @@ export interface ToolContent {
 /** What Ask is about: frames of a canvas, one element, or the whole artifact. */
 type AskSubject =
   | { kind: 'frames'; ids: string[] }
-  | { kind: 'element'; anchor: CommentAnchor; page: number | null }
+  | { kind: 'element'; anchor: CommentAnchor; page: number | null; fromIframe?: boolean }
   | { kind: 'whole'; path: string }
+
+/** Resolves the canvas page index for a comment thread's anchor, or null for single-page artifacts. */
+function threadPageIndex(
+  thread: CommentThread,
+  doc: CanvasDoc | null,
+  shown: ShownVersion | null,
+): number | null {
+  if (!shown?.canvas) return null
+  if (doc) {
+    const page = doc.pages.find((p) => p.file === thread.anchor.path)
+    if (!page) return null
+    const index = shown.canvas.pages.findIndex((p) => p.id === page.id)
+    return index >= 0 ? index : null
+  }
+  const number = thread.anchor.page?.number
+  if (number === undefined) return null
+  const index = shown.canvas.pages.findIndex((p) => p.number === number)
+  return index >= 0 ? index : null
+}
 
 export interface ToolsInput {
   id: string
@@ -147,8 +166,10 @@ export function useViewerTools(input: ToolsInput) {
   const [cardThread, setCardThread] = useState<{ id: string; at: Box | null } | null>(null)
   /** An explicit new-thread draft opened from an existing thread on the same element. */
   const [forcedDraft, setForcedDraft] = useState<{
+    id: number
     artifactId: string
     anchor: CommentAnchor
+    page: number | null
     at: Box | null
   } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -161,8 +182,9 @@ export function useViewerTools(input: ToolsInput) {
   const activeForcedDraft = forcedDraft?.artifactId === id ? forcedDraft : null
   const activeDeleteTarget = deleteTarget?.artifactId === id ? deleteTarget : null
   const focusSeq = useRef(0)
+  const popSeq = useRef(0)
   const [repinning, setRepinning] = useState<string | null>(null)
-  const [ask, setAsk] = useState<{ at: Box | null; subject: AskSubject } | null>(null)
+  const [ask, setAsk] = useState<{ id: number; at: Box | null; subject: AskSubject } | null>(null)
   const commentsOpen = input.right === 'comments' || input.mode === 'comment'
   const numbers = useMemo(() => threadNumbers(threads ?? []), [threads])
   const closeCardThread = useCallback(() => {
@@ -209,14 +231,17 @@ export function useViewerTools(input: ToolsInput) {
       ? (numbers.get(openThread.id) ?? 0)
       : 0
   const openThreadAt = editing.pin
-    ? editing.pin.point
-      ? pointBox(editing.pin.point)
-      : null
+    ? (editing.pin.box ?? (editing.pin.point ? pointBox(editing.pin.point) : null))
     : matchedPickThread
-      ? draftPick?.point
-        ? pointBox(draftPick.point)
-        : null
+      ? (draftPick?.box ?? (draftPick?.point ? pointBox(draftPick.point) : null))
       : (activeCardThread?.at ?? null)
+  const openThreadPage = editing.pin
+    ? editing.pin.page
+    : matchedPickThread
+      ? (draftPick?.page ?? null)
+      : openThread
+        ? threadPageIndex(openThread, input.doc, shown)
+        : null
 
   // Pins show while the comments do: the open ones, or the resolved ones in their tab.
   useEffect(() => {
@@ -240,6 +265,54 @@ export function useViewerTools(input: ToolsInput) {
         : null,
     [id, title, head, summaryVersion, summaryProject],
   )
+
+  // Track the anchored element inside its iframe whenever an iframe-backed popover is open.
+  let activeAnchorSpec: AnchorTrackSpec | null = null
+  if (ask && artifactInfo) {
+    if (ask.subject.kind === 'element' && ask.subject.fromIframe) {
+      activeAnchorSpec = {
+        page: ask.subject.page,
+        target: ask.subject.anchor.offset !== null ? ask.subject.anchor.offset : 'picked',
+      }
+    }
+  } else if (activeForcedDraft && shown && latest) {
+    if (!activeForcedDraft.anchor.missing && activeForcedDraft.anchor.offset !== null) {
+      activeAnchorSpec = { page: activeForcedDraft.page, target: activeForcedDraft.anchor.offset }
+    }
+  } else if (openThread) {
+    if (!openThread.anchor.missing && openThread.anchor.offset !== null && !summary?.type) {
+      activeAnchorSpec = { page: openThreadPage, target: openThread.anchor.offset }
+    }
+  } else if (draftPick && draftAnchor && !repinning && editor && shown && latest) {
+    activeAnchorSpec = { page: draftPick.page, target: 'picked' }
+  }
+
+  const anchorPage = activeAnchorSpec?.page ?? null
+  const anchorTarget = activeAnchorSpec?.target ?? null
+  useEffect(() => {
+    if (!editor) return
+    if (anchorTarget === null) {
+      editor.trackAnchor(null)
+      return
+    }
+    editor.trackAnchor({ page: anchorPage, target: anchorTarget }, input.area.current)
+    return () => editor.trackAnchor(null)
+  }, [editor, anchorPage, anchorTarget, input.area])
+
+  const liveAnchor = useMemo<LiveAnchor | null>(
+    () =>
+      editor && anchorTarget !== null
+        ? {
+            get: () => editor.getAnchor(),
+            subscribe: (listener) => editor.subscribeAnchor(listener),
+            onHostLayout: () => editor.recomputeAnchor(),
+          }
+        : null,
+    [editor, anchorTarget],
+  )
+  const returnToAnchor = useCallback(() => {
+    editor?.scrollToAnchor()
+  }, [editor])
 
   useEffect(() => {
     if (!repinning || !shown || !editor) return
@@ -406,16 +479,8 @@ export function useViewerTools(input: ToolsInput) {
     const boxes = [...(input.root.current?.querySelectorAll('.k-ce-sel') ?? [])].map((el) =>
       el.getBoundingClientRect(),
     )
-    const at =
-      boxes.length > 0
-        ? {
-            left: Math.min(...boxes.map((b) => b.left)),
-            top: Math.min(...boxes.map((b) => b.top)),
-            right: Math.max(...boxes.map((b) => b.right)),
-            bottom: Math.max(...boxes.map((b) => b.bottom)),
-          }
-        : null
-    setAsk({ at, subject: { kind: 'frames', ids } })
+    const at = unionRects(boxes)
+    setAsk({ id: ++popSeq.current, at, subject: { kind: 'frames', ids } })
   }
 
   /** Ask about the element picked in Edit. */
@@ -423,8 +488,15 @@ export function useViewerTools(input: ToolsInput) {
     if (!editing.picked || !shown) return
     const anchor = anchorOf(editing.picked, shown)
     if (beside) return toComposer(anchor)
-    const at = editing.picked.point ? pointBox(editing.picked.point) : null
-    setAsk({ at, subject: { kind: 'element', anchor, page: editing.picked.page } })
+    const at =
+      editor?.getAnchor()?.box ??
+      editing.picked.box ??
+      (editing.picked.point ? pointBox(editing.picked.point) : null)
+    setAsk({
+      id: ++popSeq.current,
+      at,
+      subject: { kind: 'element', anchor, page: editing.picked.page, fromIframe: true },
+    })
   }
 
   /** Ask about the whole artifact, from a sheet's or a deck's dock; a document names its text file. */
@@ -440,14 +512,14 @@ export function useViewerTools(input: ToolsInput) {
       missing: false,
     }
     if (beside) return toComposer(anchor)
-    setAsk({ at: null, subject: { kind: 'whole', path } })
+    setAsk({ id: ++popSeq.current, at: null, subject: { kind: 'whole', path } })
   }
 
   /** Ask about an anchor a kind found itself, such as words selected in a document, beside `at`. */
   const askAnchor = (anchor: CommentAnchor | null, at: Box | null, wholePath?: string) => {
     if (!anchor) return askWhole(wholePath)
     if (beside) return toComposer(anchor)
-    setAsk({ at, subject: { kind: 'element', anchor, page: null } })
+    setAsk({ id: ++popSeq.current, at, subject: { kind: 'element', anchor, page: null } })
   }
 
   /** A saved comment shows in the card, on its tab, picked. */
@@ -663,8 +735,10 @@ export function useViewerTools(input: ToolsInput) {
   if (ask && artifactInfo) {
     popover = (
       <AskPop
-        key={ask.at ? `${ask.at.left},${ask.at.top}` : 'middle'}
+        key={`ask:${ask.id}`}
         at={ask.at}
+        liveAnchor={liveAnchor}
+        onReturnToAnchor={liveAnchor ? returnToAnchor : null}
         chips={askChips}
         onRemoveChip={
           ask.subject.kind === 'frames'
@@ -691,9 +765,11 @@ export function useViewerTools(input: ToolsInput) {
   } else if (activeForcedDraft && shown && latest) {
     popover = (
       <CommentDraft
-        key={`new:${activeForcedDraft.anchor.path}:${activeForcedDraft.anchor.page?.number ?? ''}:${activeForcedDraft.anchor.offset ?? activeForcedDraft.anchor.tag ?? ''}:${activeForcedDraft.at?.left ?? ''},${activeForcedDraft.at?.top ?? ''}`}
+        key={`new:${activeForcedDraft.id}`}
         anchor={activeForcedDraft.anchor}
         at={activeForcedDraft.at}
+        liveAnchor={liveAnchor}
+        onReturnToAnchor={liveAnchor ? returnToAnchor : null}
         waiting={waiting}
         onCancel={() => setForcedDraft(null)}
         onSave={async (body) => {
@@ -716,6 +792,8 @@ export function useViewerTools(input: ToolsInput) {
         n={openThreadNumber}
         versions={versions}
         at={openThreadAt}
+        liveAnchor={liveAnchor}
+        onReturnToAnchor={liveAnchor ? returnToAnchor : null}
         canResolve={canEditComments}
         onClose={() => {
           editor?.clearPin()
@@ -732,11 +810,12 @@ export function useViewerTools(input: ToolsInput) {
                   version: shown.version,
                   missing: false,
                 }
-                const at = openThreadAt
+                const at = editor?.getAnchor()?.box ?? openThreadAt
+                const page = openThreadPage
                 editor?.clearPin()
                 editor?.clearPick()
                 closeCardThread()
-                setForcedDraft({ artifactId: id, anchor, at })
+                setForcedDraft({ id: ++popSeq.current, artifactId: id, anchor, page, at })
               }
             : null
         }
@@ -761,7 +840,9 @@ export function useViewerTools(input: ToolsInput) {
       <CommentDraft
         key={`${draftPick.page}:${draftPick.selection.src}:${draftPick.point?.x},${draftPick.point?.y}`}
         anchor={draftAnchor}
-        at={draftPick.point ? pointBox(draftPick.point) : null}
+        at={draftPick.box ?? (draftPick.point ? pointBox(draftPick.point) : null)}
+        liveAnchor={liveAnchor}
+        onReturnToAnchor={liveAnchor ? returnToAnchor : null}
         waiting={waiting}
         onCancel={() => editor.clearPick()}
         onSave={async (body) => {
