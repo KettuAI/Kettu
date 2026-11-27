@@ -364,6 +364,31 @@
     "cacheLikelyExpired": "Prompt cache probably expired",
     "noCache": "No prompt cache"
   },
+  "folderStatus": {
+    "waiting_one": "{{count}} session waiting for you",
+    "waiting_other": "{{count}} sessions waiting for you",
+    "failed_one": "{{count}} session with an error",
+    "failed_other": "{{count}} sessions with errors",
+    "running_one": "{{count}} session running",
+    "running_other": "{{count}} sessions running",
+    "starting_one": "{{count}} session starting",
+    "starting_other": "{{count}} sessions starting",
+    "unread_one": "{{count}} unread session",
+    "unread_other": "{{count}} unread sessions",
+    "short": {
+      "waiting_one": "{{count}} waiting for you",
+      "waiting_other": "{{count}} waiting for you",
+      "failed_one": "{{count}} error",
+      "failed_other": "{{count}} errors",
+      "running_one": "{{count}} running",
+      "running_other": "{{count}} running",
+      "starting_one": "{{count}} starting",
+      "starting_other": "{{count}} starting",
+      "unread_one": "{{count}} unread",
+      "unread_other": "{{count}} unread"
+    },
+    "separator": " · "
+  },
   "cache": {
     "expiresIn": "Prompt cache expires in {{time}} · {{lifetime}}",
     "expiresInAbout": "Prompt cache expires in about {{time}} · {{lifetime}}",

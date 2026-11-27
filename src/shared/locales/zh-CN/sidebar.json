@@ -336,6 +336,21 @@
     "cacheLikelyExpired": "提示词缓存可能已过期",
     "noCache": "没有提示词缓存"
   },
+  "folderStatus": {
+    "waiting_other": "{{count}} 个会话等待确认",
+    "failed_other": "{{count}} 个会话出错",
+    "running_other": "{{count}} 个会话运行中",
+    "starting_other": "{{count}} 个会话正在启动",
+    "unread_other": "{{count}} 个会话有未读回复",
+    "short": {
+      "waiting_other": "{{count}} 个等待确认",
+      "failed_other": "{{count}} 个出错",
+      "running_other": "{{count}} 个运行中",
+      "starting_other": "{{count}} 个正在启动",
+      "unread_other": "{{count}} 个未读"
+    },
+    "separator": " · "
+  },
   "cache": {
     "expiresIn": "提示词缓存 {{time}} 后过期 · {{lifetime}}",
     "expiresInAbout": "提示词缓存约 {{time}} 后过期 · {{lifetime}}",

@@ -85,8 +85,9 @@ import { NoProjectMenuItems, ProjectMenuItems } from './project-menu'
 import { RemoveProjectDialog } from './remove-project'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
+import { collapsedFolderStatus, folderStatusText } from './folder-status'
 import { limitRows, rowInSight, ROWS_SHOWN } from './row-limit'
-import { RowEnd } from './session-indicator'
+import { RowEnd, SessionIndicator } from './session-indicator'
 import { SessionRow } from './session-row'
 import { SortableGroup, SortableList } from './sortable-list'
 import { TaskRow } from './task-row'
@@ -482,6 +483,11 @@ function ProjectGroup({
   )
   const tasks = useTasksStore(useShallow((s) => (project ? listedTasks(s.summaries, folders) : [])))
   const rows = useMemo(() => sidebarRows(tree, tasks, byActivity), [tree, tasks])
+  const folderSummary = useMemo(
+    () => collapsedFolderStatus(tree, { collapsed: !open, away, tasks }),
+    [tree, open, away, tasks],
+  )
+  const folderLabel = folderSummary ? folderStatusText(t, folderSummary.counts) : undefined
   if (!project && tree.length === 0) return null
   const limited = limitRows(rows, allShown, (row) => rowInSight(row, shownId))
   // Importing reads the agents' own lists, which only this computer's do.
@@ -542,23 +548,40 @@ function ProjectGroup({
             {hostName}
           </span>
         )}
+        {folderSummary && (
+          <SessionIndicator status={folderSummary.row} expiring={null} label={folderLabel} />
+        )}
       </RowEnd>
     </button>
   )
   const tooltip = project ? (
-    <TooltipContent side="right" className="max-w-sm font-mono break-all">
-      {folders.length > 1 ? (
-        <span className="flex flex-col gap-0.5">
-          {folders.map((folder) => (
-            <span key={folder}>{hostPath(folder)}</span>
-          ))}
+    <TooltipContent side="right" className="max-w-sm">
+      <span className="flex flex-col gap-1">
+        <span className="font-mono break-all">
+          {folders.length > 1 ? (
+            <span className="flex flex-col gap-0.5">
+              {folders.map((folder) => (
+                <span key={folder}>{hostPath(folder)}</span>
+              ))}
+            </span>
+          ) : (
+            hostPath(project.path)
+          )}
         </span>
-      ) : (
-        hostPath(project.path)
-      )}
+        {folderLabel && <span>{folderLabel}</span>}
+      </span>
     </TooltipContent>
   ) : (
-    <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
+    <TooltipContent side="right">
+      {folderLabel ? (
+        <span className="flex flex-col gap-1">
+          <span>{t('project.noProjectTooltip')}</span>
+          <span>{folderLabel}</span>
+        </span>
+      ) : (
+        t('project.noProjectTooltip')
+      )}
+    </TooltipContent>
   )
   const pin = async (pinned: boolean) => {
     try {
