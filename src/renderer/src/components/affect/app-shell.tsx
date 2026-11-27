@@ -62,7 +62,7 @@ import {
 import { FilterMenu, type FilterGroup, type FilterValue } from "./filter-menu";
 import { SetupGuide, type SetupGroup } from "./setup-guide";
 import { CommandMenu, defaultGroups, type CommandGroup } from "./command-menu";
-import { intersectClipAxes, resolveHorizontalPlacement, resolvePopoverLayout, type PopoverRect } from "../../lib/affect-popover";
+import { applyPopoverLayout } from "../../lib/affect-popover";
 
 /*
  * App Shell – the frame every affectUI screen sits in, in a single file.
@@ -1243,24 +1243,6 @@ export function SearchField({
   );
 }
 
-const CLIP_OVERFLOW = /(auto|scroll|hidden|clip)/;
-
-/** Intersection of the viewport and every ancestor that clips or bounds the popover */
-function clipBox(el: HTMLElement): PopoverRect {
-  let box: PopoverRect = { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 };
-  for (let node = el.parentElement; node; node = node.parentElement) {
-    if (node === document.body || node === document.documentElement) continue;
-    const style = getComputedStyle(node);
-    const isShell = node.classList.contains("ui-as");
-    const clipX = isShell || CLIP_OVERFLOW.test(style.overflowX || style.overflow);
-    const clipY = isShell || CLIP_OVERFLOW.test(style.overflowY || style.overflow);
-    if (clipX || clipY) {
-      box = intersectClipAxes(box, node.getBoundingClientRect(), clipX, clipY);
-    }
-  }
-  return box;
-}
-
 /**
  * Small floating panel attached to its trigger. Opens on the preferred side, flips to the side
  * with more room when constrained, and clamps its height so long menus scroll inside the box.
@@ -1311,67 +1293,8 @@ export function Popover({
     if (!open || !el) return;
 
     const update = () => {
-      const anchor = el.parentElement;
-      if (!anchor) return;
-      const list = el.querySelector<HTMLElement>(":scope > .ui-as-menu__list");
-      const savedListScroll = list?.scrollTop ?? 0;
-      const savedElScroll = el.scrollTop;
-
-      el.dataset.side = side;
-      el.dataset.align = align;
-      el.style.translate = "";
-      el.style.removeProperty("--as-popover-max-h");
-      el.removeAttribute("data-overflow");
-
-      const box = clipBox(el);
-      const anchorRect = anchor.getBoundingClientRect();
-      const scaleX = anchor.offsetWidth > 0 ? anchorRect.width / anchor.offsetWidth : 1;
-      const scaleY = anchor.offsetHeight > 0 ? anchorRect.height / anchor.offsetHeight : 1;
-      const elRect = el.getBoundingClientRect();
-      const contentWidth = el.offsetWidth || (scaleX > 0 ? elRect.width / scaleX : elRect.width);
-      const contentHeight = el.offsetHeight || (scaleY > 0 ? elRect.height / scaleY : elRect.height);
-
-      const layout = resolvePopoverLayout({
-        preferredSide: side,
-        preferredAlign: align,
-        anchor: anchorRect,
-        clip: box,
-        contentWidth,
-        contentHeight,
-        scaleX,
-        scaleY,
-      });
-
-      el.dataset.side = layout.side;
-      el.dataset.align = layout.align;
-      if (layout.maxHeight !== null) {
-        el.style.setProperty("--as-popover-max-h", `${layout.maxHeight}px`);
-      }
-      el.toggleAttribute("data-overflow", layout.overflow);
-
-      // Classic scrollbars can slightly widen a constrained menu; re-check horizontal offset after clamping
-      let dx = layout.dx;
-      if (layout.overflow) {
-        const constrainedWidth = el.offsetWidth || contentWidth;
-        if (Math.abs(constrainedWidth - contentWidth) > 0.5) {
-          dx = resolveHorizontalPlacement({
-            preferredAlign: layout.align,
-            side: layout.side,
-            anchor: anchorRect,
-            clip: box,
-            contentWidth: constrainedWidth,
-            scaleX,
-          }).dx;
-        }
-      }
-
-      if (dx || layout.dy) {
-        el.style.translate = `${dx}px ${layout.dy}px`;
-      }
-
-      if (list && savedListScroll > 0) list.scrollTop = savedListScroll;
-      if (savedElScroll > 0) el.scrollTop = savedElScroll;
-
+      const layout = applyPopoverLayout(el, side, align);
+      if (!layout) return;
       setPlace((prev) =>
         prev.side === layout.side && prev.align === layout.align ? prev : { side: layout.side, align: layout.align },
       );
@@ -3414,7 +3337,10 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
 .ui-as-popover[data-side="top"] { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; animation-name: ui-as-popover-up; }
 .ui-as-popover[data-side="top"][data-align="end"] { transform-origin: bottom right; }
 .ui-as-popover[data-side="right"] { top: auto; bottom: 0; left: calc(100% + 12px); transform-origin: bottom left; }
-.ui-as-popover[data-overflow]:not(:has(> .ui-as-menu__list)) { overflow-y: auto; overscroll-behavior: contain; }
+.ui-as-popover[data-overflow]:not(:has(> .ui-as-menu__list, .ui-pmc)) { overflow-y: auto; overscroll-behavior: contain; }
+/* ProfileMenu scrolls its own card when constrained so its flyout side submenu (.ui-pmc__side) stays unclipped */
+.ui-as-popover[data-overflow] .ui-pmc__card { max-height: var(--as-popover-max-h); overflow-y: auto; overscroll-behavior: contain; }
+.ui-as-popover[data-overflow] .ui-pmc__items { max-height: none; overflow: visible; }
 @keyframes ui-as-popover-up { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: none; } }
 /* The Filter Menu at its own size – 13px rows like every other menu, no shrinking */
 .ui-as-popover--filter .ui-fmc { width: 300px; }
