@@ -350,6 +350,7 @@ const api: KettuApi = {
     capture: (id) => invoke('browser:capture', id),
     takeOver: (id) => invoke('browser:take-over', id),
     handBack: (id) => invoke('browser:hand-back', id),
+    releaseTakeover: (id) => invoke('browser:release-takeover', id),
     answerAsk: (id, outcome) => invoke('browser:answer-ask', id, outcome),
     answerOrigin: (id, requestId, decision) =>
       invoke('browser:answer-origin', id, requestId, decision),

@@ -1059,6 +1059,7 @@ export function registerIpcHandlers({
   handle('browser:hand-back', 1, (_, id) =>
     browserViews.controlRequest(sessionId(id), { type: 'hand-back' }),
   )
+  handle('browser:release-takeover', 1, (_, id) => browserViews.releaseTakeover(sessionId(id)))
   handle('browser:answer-ask', 2, (_, id, outcome) => {
     if (!isControlOutcome(outcome)) throw new Error('An answer to a step must be done or skipped')
     browserViews.controlRequest(sessionId(id), { type: 'answer', outcome })

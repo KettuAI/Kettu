@@ -101,6 +101,10 @@ export function DeviceScreen({
   const { t: tc } = useTranslation('control')
   const holds = control?.kind === 'agent'
   const bubble = useHeldBubble()
+  const { clear: clearBubble } = bubble
+  useEffect(() => {
+    if (!holds) clearBubble()
+  }, [holds, clearBubble])
   const [acts, setActs] = useState<{ count: number; at: ControlPoint | null }>({
     count: 0,
     at: null,
@@ -538,6 +542,7 @@ export function DeviceScreen({
             scope={tc('scope.device')}
             leaving={bubble.bubble.leaving}
             onTakeOver={onTakeOver}
+            onDismiss={bubble.dismiss}
           />
         )}
       </div>

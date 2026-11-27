@@ -504,7 +504,7 @@ export function waitFailure(wait: ControlWait): ToolFailure {
     case 'gone':
       return new ToolFailure(
         'no_page',
-        'The page closed. Open one again with browser_navigate if you still need it.',
+        'The browser tab or panel was closed, so control ended. Open a page again with browser_navigate if you still need it.',
       )
   }
 }
@@ -673,6 +673,15 @@ export class BrowserCdp {
     const code = kind === 'crashed' ? 'no_page' : 'timeout'
     const text = `${message} Reload it with browser_reload, or open another with browser_navigate.`
     for (const stop of this.running.get(sessionId) ?? []) stop(new ToolFailure(code, text))
+  }
+
+  /**
+   * The session's agent tab or browser panel closed while a call was in flight: fail it immediately
+   * with `no_page` so the agent learns the surface closed instead of hanging or reporting stopped.
+   */
+  pageClosed(sessionId: string): void {
+    const error = waitFailure(new ControlWait('gone'))
+    for (const stop of this.running.get(sessionId) ?? []) stop(error)
   }
 
   private async dispatch(

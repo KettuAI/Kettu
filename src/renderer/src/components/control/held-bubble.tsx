@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ControlPoint } from '@shared/control'
 import { Button } from '@renderer/components/ui/button'
+import { attachHeldBubbleDismiss, type HeldBubbleEventHost } from './use-held-bubble'
 
 /** Room the bubble keeps from the surface's sides and top. */
 const EDGE = 8
@@ -20,6 +21,7 @@ export function HeldBubble({
   hint,
   leaving,
   onTakeOver,
+  onDismiss,
 }: {
   at: ControlPoint
   agentName: string
@@ -29,9 +31,16 @@ export function HeldBubble({
   hint?: string
   leaving?: boolean
   onTakeOver: () => void
+  /** Called when the user clicks outside the bubble, presses Escape, or the window loses focus. */
+  onDismiss?: () => void
 }) {
   const { t } = useTranslation('control')
   const bubble = useRef<HTMLSpanElement>(null)
+  const dismissRef = useRef(onDismiss)
+
+  useEffect(() => {
+    dismissRef.current = onDismiss
+  }, [onDismiss])
 
   // Placed from its own size before it paints, so it never shows outside the surface first.
   useLayoutEffect(() => {
@@ -46,6 +55,17 @@ export function HeldBubble({
     element.style.setProperty('--ctl-bubble-tip', `${at.x - x}px`)
     element.toggleAttribute('data-below', at.y < element.offsetHeight + GAP + EDGE)
   }, [at.x, at.y])
+
+  const canDismiss = Boolean(onDismiss) && !leaving
+  useEffect(() => {
+    if (!canDismiss) return
+    return attachHeldBubbleDismiss({
+      bubble: () => bubble.current,
+      onDismiss: () => dismissRef.current?.(),
+      doc: document as unknown as HeldBubbleEventHost,
+      win: window as unknown as HeldBubbleEventHost,
+    })
+  }, [canDismiss])
 
   return (
     <span ref={bubble} role="status" className="ctl-bubble" data-leaving={leaving ? '' : undefined}>

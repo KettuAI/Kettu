@@ -9,7 +9,6 @@ import {
 import { AnimatePresence, MotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import {
-  HELD_BUBBLE_MS,
   OVERLAY_PILL_ROOM,
   type ControlOverlayApi,
   type ControlOverlayState,
@@ -20,13 +19,12 @@ import { HeldBubble } from '@renderer/components/control/held-bubble'
 import { PillDock } from '@renderer/components/control/pill-dock'
 import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
+import { useHeldBubble } from '@renderer/components/control/use-held-bubble'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useSurfacePill } from '@renderer/stores/surface-pill'
 
 const overlay = (window.kettu as unknown as ControlOverlayApi).overlay
 
-/** How long the bubble takes to leave. */
-const BUBBLE_LEAVE_MS = 200
 /** The largest wheel step main takes. */
 const MAX_WHEEL = 10_000
 /** The clicks whose rings may still show. */
@@ -42,12 +40,6 @@ export function OverlayRoot() {
   )
 }
 
-interface Bubble {
-  id: number
-  at: ControlPoint
-  leaving: boolean
-}
-
 /**
  * While the agent has the surface it covers all of it: the light along its edges, the agent's
  * pointer, the pill, and a bubble where a click was held back; the wheel goes through. While the
@@ -61,34 +53,26 @@ function OverlayPage() {
     at: null,
   })
   const [pointer, setPointer] = useState<{ at: ControlPoint; clicks: number } | null>(null)
-  const [bubble, setBubble] = useState<Bubble | null>(null)
+  const { bubble, nudge, held: showHeldBubble, dismiss, clear } = useHeldBubble()
   const [clicks, setClicks] = useState<{ id: number; at: ControlPoint }[]>([])
-  const [nudge, setNudge] = useState(0)
   const [still, setStill] = useState<{ id: number; image: string } | null>(null)
   const current = useRef<ControlOverlayState | null>(null)
-  const sequence = useRef(0)
-  const bubbleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const clickSequence = useRef(0)
   const wheel = useRef<{ x: number; y: number; deltaX: number; deltaY: number } | null>(null)
   const pillSize = useRef<{ width: number; height: number } | null>(null)
   const pillAt = useSurfacePill((s) => s.browser)
 
   /** A click or key the agent's turn held back: the pill bobs, and a click gets the bubble. */
-  const held = useCallback((at: ControlPoint | null) => {
-    if (current.current?.control.kind !== 'agent') return
-    setNudge((n) => n + 1)
-    if (!at) return
-    const id = ++sequence.current
-    setBubble({ id, at, leaving: false })
-    setClicks((list) => [...list.slice(1 - KEPT_CLICKS), { id, at }])
-    clearTimeout(bubbleTimer.current)
-    bubbleTimer.current = setTimeout(() => {
-      setBubble((b) => (b?.id === id ? { ...b, leaving: true } : b))
-      bubbleTimer.current = setTimeout(
-        () => setBubble((b) => (b?.id === id ? null : b)),
-        BUBBLE_LEAVE_MS,
-      )
-    }, HELD_BUBBLE_MS)
-  }, [])
+  const held = useCallback(
+    (at: ControlPoint | null) => {
+      if (current.current?.control.kind !== 'agent') return
+      showHeldBubble(at)
+      if (!at) return
+      const id = ++clickSequence.current
+      setClicks((list) => [...list.slice(1 - KEPT_CLICKS), { id, at }])
+    },
+    [showHeldBubble],
+  )
 
   useEffect(() => {
     const off = overlay.onEvent((event) => {
@@ -96,7 +80,7 @@ function OverlayPage() {
         current.current = event.state
         setState(event.state)
         if (event.state.control.kind !== 'agent') {
-          setBubble(null)
+          clear()
           setPointer(null)
         }
         return
@@ -112,25 +96,32 @@ function OverlayPage() {
         setStill(image === null ? null : { id, image })
         return
       }
+      if (event.type === 'dismiss') {
+        dismiss()
+        return
+      }
       held(event.at)
     })
     overlay.request({ type: 'ready' })
     return off
-  }, [held])
+  }, [clear, dismiss, held])
 
-  // Keys typed while the overlay has the keyboard are held back too; Tab and the pill's buttons work.
+  // Keys typed while the overlay has the keyboard are held back too; Escape dismisses the bubble,
+  // and Tab and the pill's buttons work.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.key === 'Tab') return
+      if (event.key === 'Escape') {
+        dismiss()
+        return
+      }
       const button = event.target instanceof HTMLButtonElement
       if (button && (event.key === 'Enter' || event.key === ' ')) return
       held(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [held])
-
-  useEffect(() => () => clearTimeout(bubbleTimer.current), [])
+  }, [dismiss, held])
 
   // Main sizes the overlay to the pill while the user has the surface, and puts it where they
   // dragged it.
@@ -244,6 +235,7 @@ function OverlayPage() {
           scope={scope}
           leaving={bubble.leaving}
           onTakeOver={takeOver}
+          onDismiss={dismiss}
         />
       )}
       <PillDock kind="browser" still={!full} className="ctl-overlay-field" onSize={measurePill}>

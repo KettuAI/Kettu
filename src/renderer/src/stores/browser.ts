@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import type { BrowserState } from '@shared/browser'
+import { activeBrowserControl, type BrowserState } from '@shared/browser'
+import { toast } from '@renderer/components/ui/toast'
+import { i18n } from '@renderer/lib/i18n'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import {
@@ -8,7 +10,7 @@ import {
   replaceSurfaceKey,
   surfaceKey,
 } from '@renderer/stores/surface-tabs'
-import { toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { panelSession, toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
 
 interface BrowserStore {
   /** What main last said about each session's page. */
@@ -145,6 +147,37 @@ export async function restorePages(sessionId: string): Promise<void> {
 }
 
 /**
+ * Sessions whose browser side panel just collapsed (not switched to another tab or session) while
+ * the user held takeover control of the browser.
+ */
+export function closedTakeoverBrowserPanels(
+  prevSidePane: Record<string, SidePane>,
+  nextSidePane: Record<string, SidePane>,
+  bySession: Record<string, BrowserState>,
+): string[] {
+  const closed: string[] = []
+  for (const [panel, prev] of Object.entries(prevSidePane)) {
+    if (prev !== 'browser' || nextSidePane[panel] !== undefined) continue
+    const sessionId = panelSession(panel)
+    if (!sessionId) continue
+    if (activeBrowserControl(bySession[sessionId])?.kind === 'you') {
+      closed.push(sessionId)
+    }
+  }
+  return closed
+}
+
+// Sessions whose taken-over browser tab is closing in the current turn so closing the last tab
+// with `closeSidePanelWithLastTab` does not also emit a duplicate "panel closed" toast.
+const closingTakenOverTabs = new Set<string>()
+
+/** Marks a session's taken-over tab as closing so panel-collapse notifications do not double up. */
+export function markTakenOverBrowserTabClosing(sessionId: string): void {
+  closingTakenOverTabs.add(sessionId)
+  queueMicrotask(() => closingTakenOverTabs.delete(sessionId))
+}
+
+/**
  * Follows the page state main sends, and tells main which sessions still exist, so a page closes
  * once its session leaves the host's memory. The first navigation of a session shows its tab when
  * its side panel is closed or shows the list; one showing another tab keeps it, and the side
@@ -166,6 +199,24 @@ export function initBrowser(): void {
     // A terminal or a device showing has the page's tab beside its own in the row.
     if (!isSurfaceKind(shown)) {
       useBrowserStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
+    }
+  })
+  let prevSidePane = useViewStore.getState().sidePane
+  useViewStore.subscribe((state) => {
+    const nextSidePane = state.sidePane
+    if (nextSidePane === prevSidePane) return
+    const closed = closedTakeoverBrowserPanels(
+      prevSidePane,
+      nextSidePane,
+      useBrowserStore.getState().bySession,
+    )
+    prevSidePane = nextSidePane
+    for (const sessionId of closed) {
+      if (closingTakenOverTabs.has(sessionId)) continue
+      void window.kettu.browser
+        .releaseTakeover(sessionId)
+        .catch((error: unknown) => console.error('Could not release browser takeover', error))
+      toast(i18n.t('control:note.closed.browserPanel'), undefined, { tone: 'info' })
     }
   })
   let known = new Set(Object.keys(useSessionsStore.getState().byId))
