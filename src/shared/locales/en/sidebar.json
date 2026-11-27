@@ -118,6 +118,7 @@
       "showIn": "Show in {{name}}",
       "showArchived": "Show archived",
       "worktreeSettings": "Worktree settings…",
+      "archive": "Archive project…",
       "remove": "Remove project…"
     },
     "edit": {
@@ -138,6 +139,22 @@
       "errorNotAbsolute": "Enter an absolute folder path.",
       "errorDuplicate": "This folder is already added to the project.",
       "errorOtherProject": "This folder already belongs to {{name}}."
+    },
+    "archive": {
+      "title": "Archive {{name}}?",
+      "sessions_one": "Its session stays kept and can be viewed in Settings › Archived.",
+      "sessions_other": "Its {{count}} sessions stay kept and can be viewed in Settings › Archived.",
+      "noSessions": "It leaves the sidebar and can be restored from Settings › Archived any time.",
+      "running_one": "The one running now stops.",
+      "running_other": "The {{count}} running now stop.",
+      "runningWork": "Archiving stops what is running here:",
+      "folderStays": "The folder and its files stay untouched on this computer.",
+      "folderStaysOn": "The folder and its files stay untouched on {{host}}.",
+      "separator": " ",
+      "confirm": "Archive",
+      "confirmStop": "Stop and archive",
+      "archived": "Archived {{name}}",
+      "restored": "Restored {{name}}"
     },
     "remove": {
       "title": "Remove {{name}}?",

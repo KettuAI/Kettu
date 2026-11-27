@@ -658,6 +658,7 @@ describe('the host files', () => {
         missing: true,
         lastOpenedAt: 2,
         pinnedAt: null,
+        archivedAt: null,
         order: null,
       },
     ])
@@ -677,6 +678,90 @@ describe('the host files', () => {
     expect(parseProjectsFile({ projects: [{ ...project, pinnedAt: -1 }] })).toEqual({
       version: 1,
       projects: [project],
+    })
+  })
+
+  it('persists project archive state, clears pin on archive, and unarchives on restore or re-add', async () => {
+    let time = 10
+    const registry = () =>
+      new Projects({
+        file: projectsFile(dir, log),
+        platform: 'linux',
+        now: () => time,
+        realpath: async (value) => value,
+        isDirectory: async () => true,
+      })
+
+    const first = registry()
+    await first.load()
+    await first.add('/work/repo')
+    await first.update(first.matchPrimary('/work/repo'), {
+      name: 'My Repo',
+      folders: ['/work/repo', '/work/repo-docs'],
+    })
+    first.pin(first.matchPrimary('/work/repo'), true)
+    expect(first.list()[0]).toMatchObject({ pinnedAt: 10, archivedAt: null })
+
+    time = 25
+    const archived = first.archive(first.matchPrimary('/work/repo'))
+    expect(archived).toMatchObject({
+      path: '/work/repo',
+      name: 'My Repo',
+      customName: true,
+      folders: ['/work/repo', '/work/repo-docs'],
+      pinnedAt: null,
+      archivedAt: 25,
+    })
+    // Pinning an archived project is ignored while it stays archived.
+    first.pin(first.matchPrimary('/work/repo'), true)
+    expect(first.list()[0]?.pinnedAt).toBeNull()
+    await first.flush()
+
+    const reloaded = registry()
+    await reloaded.load()
+    expect(reloaded.list()[0]).toMatchObject({
+      path: '/work/repo',
+      name: 'My Repo',
+      folders: ['/work/repo', '/work/repo-docs'],
+      pinnedAt: null,
+      archivedAt: 25,
+    })
+
+    // Unarchiving clears archivedAt and updates lastOpenedAt while preserving settings.
+    time = 40
+    const restored = reloaded.unarchive(reloaded.matchPrimary('/work/repo'))
+    expect(restored).toMatchObject({
+      path: '/work/repo',
+      name: 'My Repo',
+      archivedAt: null,
+      lastOpenedAt: 40,
+    })
+    await reloaded.flush()
+    expect((await projectsFile(dir, log).load()).projects[0]?.archivedAt).toBeUndefined()
+
+    // Re-adding an archived project (via primary or extra folder) automatically unarchives it.
+    time = 50
+    reloaded.archive(reloaded.matchPrimary('/work/repo'))
+    time = 60
+    const reopened = await reloaded.add('/work/repo-docs')
+    expect(reopened).toMatchObject({
+      path: '/work/repo',
+      name: 'My Repo',
+      archivedAt: null,
+      lastOpenedAt: 60,
+    })
+
+    // Invalid archivedAt values are dropped cleanly without corrupting projects.json.
+    const base = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
+    for (const bad of [-1, 'later', null, Number.NaN]) {
+      expect(parseProjectsFile({ projects: [{ ...base, archivedAt: bad }] })).toEqual({
+        version: 1,
+        projects: [base],
+      })
+    }
+    expect(parseProjectsFile({ projects: [{ ...base, archivedAt: 123 }] })).toEqual({
+      version: 1,
+      projects: [{ ...base, archivedAt: 123 }],
     })
   })
 

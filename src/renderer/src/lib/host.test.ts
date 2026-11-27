@@ -137,4 +137,32 @@ describe('project update and multi-folder host path qualification', () => {
       projectOwner: onHost(HOST_A, '/work/app'),
     })
   })
+
+  it('routes and qualifies projects.archive and projects.unarchive across hosts', () => {
+    for (const method of ['projects.archive', 'projects.unarchive'] as const) {
+      const params = { path: onHost(HOST_A, '/work/app') }
+      expect(routeOf(method, params)).toBe(HOST_A)
+      expect(toHost(method, params, 0)).toEqual({ path: '/work/app' })
+      const result = fromHost(HOST_A, method, {
+        path: '/work/app',
+        name: 'App',
+        folders: ['/work/app', '/work/docs'],
+        missing: false,
+        lastOpenedAt: 10,
+        pinnedAt: null,
+        archivedAt: method === 'projects.archive' ? 20 : null,
+        order: null,
+      })
+      expect(result).toEqual({
+        path: onHost(HOST_A, '/work/app'),
+        name: 'App',
+        folders: [onHost(HOST_A, '/work/app'), onHost(HOST_A, '/work/docs')],
+        missing: false,
+        lastOpenedAt: 10,
+        pinnedAt: null,
+        archivedAt: method === 'projects.archive' ? 20 : null,
+        order: null,
+      })
+    }
+  })
 })

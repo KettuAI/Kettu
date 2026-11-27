@@ -5,8 +5,13 @@ import { hostPath } from '@renderer/lib/host-paths'
 import { currentLocale } from '@renderer/lib/i18n'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { agentName } from '@renderer/stores/agents'
-import { findProjectForSession } from '@renderer/stores/projects'
-import { listedOrigin, sessionTitle } from '@renderer/stores/sessions'
+import { archivedProjects, findProjectForSession, projectFolders } from '@renderer/stores/projects'
+import {
+  listedOrigin,
+  projectGroupSummaries,
+  sessionArchived,
+  sessionTitle,
+} from '@renderer/stores/sessions'
 
 export type ArchivedGroupBy = 'date' | 'project'
 
@@ -61,6 +66,25 @@ export interface TextPart {
   match: boolean
 }
 
+export interface ArchivedProjectSession {
+  summary: SessionSummary
+  title: string
+  branch: string | null
+  subSessionCount: number
+  /** True when the session itself was archived individually before or after the project. */
+  sessionArchived: boolean
+  updatedAt: number
+  agentId: AgentId
+  agentLabel: string
+}
+
+export interface ArchivedProjectEntry {
+  project: Project
+  archivedAt: number
+  folders: string[]
+  sessions: ArchivedProjectSession[]
+}
+
 export function readArchivedGroupBy(): ArchivedGroupBy {
   const saved = readJson<unknown>(GROUP_BY_KEY, 'date')
   return saved === 'project' ? 'project' : 'date'
@@ -105,6 +129,44 @@ function archivedSubSessionCounts(byId: Record<string, SessionSummary>): Map<str
     if (n > 0) counts.set(id, n)
   }
   return counts
+}
+
+/** Builds view entries for archived projects on `hostId`, with each project's retained history. */
+export function buildArchivedProjects(
+  projects: readonly Project[],
+  byId: Record<string, SessionSummary>,
+  hostId: string | null,
+): ArchivedProjectEntry[] {
+  const subCounts = archivedSubSessionCounts(byId)
+  return archivedProjects(projects, hostId).map((project) => {
+    const own = projectGroupSummaries(byId, project, hostId, projects)
+    const ownIds = new Set(own.map((s) => s.id))
+    const sessions = own
+      .filter(
+        (s) =>
+          listedOrigin(s) &&
+          s.origin !== 'subagent' &&
+          !s.prepared &&
+          !(s.parentId && ownIds.has(s.parentId)),
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((summary): ArchivedProjectSession => ({
+        summary,
+        title: sessionTitle(summary),
+        branch: summary.worktree?.branch ?? null,
+        subSessionCount: subCounts.get(summary.id) ?? 0,
+        sessionArchived: sessionArchived(byId, summary.id),
+        updatedAt: summary.updatedAt,
+        agentId: summary.agentId,
+        agentLabel: agentName(summary.agentId, hostId),
+      }))
+    return {
+      project,
+      archivedAt: project.archivedAt ?? project.lastOpenedAt,
+      folders: projectFolders(project),
+      sessions,
+    }
+  })
 }
 
 /** Builds view entries for the host's archived sessions (already sorted newest archived first). */

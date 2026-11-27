@@ -585,6 +585,17 @@ describe('createValidators', () => {
     rejects(() => windows['paths.drives']({ letters: ['C', 'D'] }))
   })
 
+  it('requires an absolute project path to archive or unarchive a project', () => {
+    for (const method of ['projects.archive', 'projects.unarchive'] as const) {
+      expect(posix[method]({ path: '/Users/me/app' })).toEqual({ path: '/Users/me/app' })
+      rejects(() => posix[method]({ path: 'relative' }))
+      rejects(() => posix[method]({ path: '/app\0/x' }))
+      rejects(() => posix[method]({ path: 'C:\\app' }))
+      expect(windows[method]({ path: 'C:\\app' })).toEqual({ path: 'C:\\app' })
+      rejects(() => windows[method]({ path: '/posix' }))
+    }
+  })
+
   it('requires an absolute project path and an explicit boolean for pinning', () => {
     const pin = posix['projects.pin']
     expect(pin({ path: '/repo', pinned: false })).toEqual({ path: '/repo', pinned: false })

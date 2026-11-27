@@ -10,9 +10,10 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import type { Project } from '@shared/agent-host'
 import type { ReportOrigin } from '@shared/report'
 import type { AgentId, UserContent } from '@shared/thread'
-import { unarchiveSession } from '@renderer/app/actions'
+import { unarchiveProject, unarchiveSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -429,6 +430,50 @@ export function ArchivedComposer({ sessionId }: { sessionId: string }) {
           onClick={() => void restore()}
         >
           {t('view.restore')}
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="px-1 text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** In place of the composer when the session's owning project is archived. */
+export function ArchivedProjectComposer({ project }: { project: Project }) {
+  const { t } = useTranslation('session')
+  const [restoring, setRestoring] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const restore = async () => {
+    setRestoring(true)
+    setError(null)
+    try {
+      await unarchiveProject(project.path)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setRestoring(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="ks-bar">
+        <HugeiconsIcon
+          icon={Archive01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-bar__icon size-4 shrink-0"
+        />
+        <p>{t('view.archivedProjectComposer', { project: project.name })}</p>
+        <Button
+          variant="outline"
+          className="ks-btn"
+          disabled={restoring}
+          onClick={() => void restore()}
+        >
+          {t('view.restoreProject')}
         </Button>
       </div>
       {error && (

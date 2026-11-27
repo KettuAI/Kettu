@@ -2007,6 +2007,8 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'projects.remove': folder,
+    'projects.archive': folder,
+    'projects.unarchive': folder,
     'projects.touch': folder,
     'projects.pin': (params) => {
       const o = fields(params)

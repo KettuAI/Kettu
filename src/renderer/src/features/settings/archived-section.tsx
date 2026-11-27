@@ -7,6 +7,7 @@ import {
   Cancel01Icon,
   Delete02Icon,
   Folder01Icon,
+  FolderMinusIcon,
   GitBranchIcon,
   Search01Icon,
   Tick02Icon,
@@ -14,8 +15,9 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import type { Project } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { deleteSession, unarchiveSession } from '@renderer/app/actions'
+import { deleteSession, unarchiveProject, unarchiveSession } from '@renderer/app/actions'
 import { popupOpen } from '@renderer/app/shortcuts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -33,11 +35,14 @@ import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { toast } from '@renderer/components/ui/toast'
 import { useNearView } from '@renderer/features/session/media/near-view'
+import { RemoveProjectDialog } from '@renderer/features/sidebar/remove-project'
 import { offerWorktreeRemoval } from '@renderer/features/worktrees/remove-worktree-model'
-import { fullTime } from '@renderer/lib/format'
+import { fullTime, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, useSessionsStore } from '@renderer/stores/sessions'
@@ -45,6 +50,7 @@ import { openSearch, openSession } from '@renderer/stores/view'
 import {
   agentFacets,
   buildArchivedEntries,
+  buildArchivedProjects,
   filterArchivedEntries,
   formatArchivedWhen,
   formatMonthHeading,
@@ -58,6 +64,7 @@ import {
   type ArchivedEntry,
   type ArchivedGroup,
   type ArchivedGroupBy,
+  type ArchivedProjectEntry,
   type FacetOption,
 } from './archived-model'
 import { CONFIRM, IconAction, Segmented, SetButton } from './controls'
@@ -118,6 +125,8 @@ function Highlight({ text, query }: { text: string; query: string }) {
 export function ArchivedSection() {
   const { t } = useTranslation(['settings', 'sidebar', 'common'])
   const { hostId } = useHostScope()
+  const otherHost = useOtherHost(hostId)
+  const away = isAway(otherHost?.connection ?? null)
   const now = useNow()
   const byId = useSessionsStore((s) => s.byId)
   const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId, hostId)))
@@ -128,13 +137,22 @@ export function ArchivedSection() {
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const [agentFilter, setAgentFilter] = useState<AgentId | null>(null)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+  const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(() => new Set())
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [busyRestore, setBusyRestore] = useState(false)
   const [deleteTargets, setDeleteTargets] = useState<ArchivedEntry[] | null>(null)
+  const [removingProject, setRemovingProject] = useState<{
+    project: Project
+    open: boolean
+  } | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const noProjectLabel = t('sidebar:project.noProject')
 
+  const archivedProjectEntries = useMemo(
+    () => buildArchivedProjects(projects, byId, hostId),
+    [projects, byId, hostId],
+  )
   const entries = useMemo(
     () => buildArchivedEntries(archived, byId, projects, hostId, noProjectLabel),
     [archived, byId, projects, hostId, noProjectLabel],
@@ -324,7 +342,25 @@ export function ArchivedSection() {
     }
   }
 
-  if (entries.length === 0) {
+  const toggleProjectExpand = (path: string) => {
+    setExpandedProjects((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  const restoreProject = async (project: Project) => {
+    try {
+      await unarchiveProject(project.path)
+      toast(t('archived.projectRestored', { name: project.name }))
+    } catch (error) {
+      toast(errorMessage(error))
+    }
+  }
+
+  if (archivedProjectEntries.length === 0 && entries.length === 0) {
     return <EmptyCard title={t('archived.emptyTitle')} hint={t('archived.emptyHint')} />
   }
 
@@ -341,200 +377,239 @@ export function ArchivedSection() {
 
   return (
     <div className="k-ar">
-      <div className="k-ar-tb">
-        <label className={cn('k-ar-search', query.length > 0 && 'is-has')}>
-          <Icon icon={Search01Icon} size={14} />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={t('archived.searchPlaceholder')}
-            aria-label={t('archived.searchPlaceholder')}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
-              event.stopPropagation()
-              if (query) setQuery('')
-              else event.currentTarget.blur()
-            }}
-          />
-          {query && (
-            <button
-              type="button"
-              className="k-ar-search__clear"
-              aria-label={t('page.clearSearch')}
-              onClick={() => {
-                setQuery('')
-                searchInputRef.current?.focus()
-              }}
-            >
-              <Icon icon={Cancel01Icon} size={12} />
-            </button>
-          )}
-        </label>
-
-        <ProjectFilterMenu
-          value={projectFilter}
-          selectedLabel={activeProject?.projectLabel ?? null}
-          total={projectMenu.total}
-          options={projectMenu.options}
-          onChange={setProjectFilter}
-        />
-
-        <AgentFilterMenu
-          value={agentFilter}
-          selectedLabel={activeAgent?.agentLabel ?? null}
-          total={agentMenu.total}
-          options={agentMenu.options}
-          hostId={hostId}
-          onChange={setAgentFilter}
-        />
-
-        <Segmented<ArchivedGroupBy>
-          label={t('archived.groupBy')}
-          value={groupBy}
-          options={[
-            { value: 'date', label: t('archived.byDate') },
-            { value: 'project', label: t('archived.byProject') },
-          ]}
-          onChange={changeGroupBy}
-        />
-      </div>
-
-      <div className="k-ar-count">
-        {hasFilters ? (
-          <>
-            <span className="k-num">
-              {t('archived.filteredCount', { shown: filtered.length, total: entries.length })}
-            </span>
-            <span aria-hidden="true">·</span>
-            <button type="button" className="k-ar-link" onClick={clearFilters}>
-              {t('archived.clearFilters')}
-            </button>
-          </>
-        ) : groupBy === 'project' ? (
-          <span className="k-num">
-            {t('archived.countInProjects', {
-              sessions: t('archived.count', { count: entries.length }),
-              projects: t('archived.projectCount', { count: totalProjects }),
-            })}
-          </span>
-        ) : (
-          <span className="k-num">{t('archived.count', { count: entries.length })}</span>
-        )}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="k-ar-empty">
-          <div className="k-ar-empty__ico" aria-hidden="true">
-            <Icon icon={Archive01Icon} size={20} />
+      {archivedProjectEntries.length > 0 && (
+        <section className="k-ar-proj-sec" aria-label={t('archived.projectsHeading')}>
+          <div className="k-ar-gh">
+            <h2 className="k-ar-gh__title">{t('archived.projectsHeading')}</h2>
+            <span className="k-ar-gh__count k-num">{archivedProjectEntries.length}</span>
           </div>
-          <p className="k-ar-empty__title">{t('archived.noMatchTitle')}</p>
-          <p className="k-ar-empty__sub">
-            {noMatchDescription(
-              t,
-              query.trim(),
-              activeProject?.projectLabel ?? null,
-              activeAgent?.agentLabel ?? null,
-            )}
-          </p>
-          <div className="k-ar-empty__actions">
-            <SetButton size="sm" onClick={clearFilters}>
-              {t('archived.clearFilters')}
-            </SetButton>
-            <SetButton
-              size="sm"
-              variant="ghost"
-              iconRight={<Icon icon={ArrowRight01Icon} size={13} />}
-              onClick={openConversationsSearch}
-            >
-              {t('archived.searchConversations')}
-            </SetButton>
+          <div className="k-ar-proj-list">
+            {archivedProjectEntries.map((entry) => (
+              <ArchivedProjectCard
+                key={entry.project.path}
+                entry={entry}
+                hostId={hostId}
+                now={now}
+                away={away}
+                expanded={expandedProjects.has(entry.project.path)}
+                onToggle={() => toggleProjectExpand(entry.project.path)}
+                onRestore={() => restoreProject(entry.project)}
+                onRemove={() => setRemovingProject({ project: entry.project, open: true })}
+              />
+            ))}
           </div>
-        </div>
-      ) : (
+        </section>
+      )}
+
+      {entries.length > 0 && (
         <>
-          <div className="k-ar-groups">
-            {groups.map((group, groupIndex) => {
-              const title = headingLabel(group)
-              const startOffset = groupOffsets[groupIndex] ?? 0
-              const isCollapsed = group.kind === 'project' && collapsed.has(group.id)
-              const selectedInGroup = group.entries.filter((e) =>
-                activeSelected.has(e.summary.id),
-              ).length
-              const allInGroup = selectedInGroup === group.entries.length && selectedInGroup > 0
-              const someInGroup = selectedInGroup > 0 && selectedInGroup < group.entries.length
+          {archivedProjectEntries.length > 0 && (
+            <div className="k-ar-gh k-ar-sess-head">
+              <h2 className="k-ar-gh__title">{t('archived.sessionsHeading')}</h2>
+              <span className="k-ar-gh__count k-num">{entries.length}</span>
+            </div>
+          )}
+          <div className="k-ar-tb">
+            <label className={cn('k-ar-search', query.length > 0 && 'is-has')}>
+              <Icon icon={Search01Icon} size={14} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={query}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('archived.searchPlaceholder')}
+                aria-label={t('archived.searchPlaceholder')}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
+                  event.stopPropagation()
+                  if (query) setQuery('')
+                  else event.currentTarget.blur()
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="k-ar-search__clear"
+                  aria-label={t('page.clearSearch')}
+                  onClick={() => {
+                    setQuery('')
+                    searchInputRef.current?.focus()
+                  }}
+                >
+                  <Icon icon={Cancel01Icon} size={12} />
+                </button>
+              )}
+            </label>
 
-              return (
-                <section key={group.id} aria-label={title} className="k-ar-group">
-                  <div className={cn('k-ar-gh', selecting && 'is-selecting')}>
-                    {selecting && (
-                      <Checkbox
-                        checked={allInGroup}
-                        indeterminate={someInGroup}
-                        aria-label={t('archived.selectGroup', { group: title })}
-                        onCheckedChange={() => toggleGroupSelection(group)}
-                      />
-                    )}
-                    {group.kind === 'project' ? (
-                      <button
-                        type="button"
-                        className="k-ar-gh__toggle"
-                        aria-expanded={!isCollapsed}
-                        onClick={() => toggleCollapse(group.id)}
-                      >
-                        <span className="k-ar-gh__fold" aria-hidden="true">
-                          <Icon icon={isCollapsed ? ArrowRight01Icon : ArrowDown01Icon} size={12} />
-                        </span>
-                        <Icon icon={Folder01Icon} size={14} />
-                        <span className="k-ar-gh__title">{title}</span>
-                        <span className="k-ar-gh__count k-num">{group.entries.length}</span>
-                      </button>
-                    ) : (
-                      <>
-                        <h2 className="k-ar-gh__title">{title}</h2>
-                        <span className="k-ar-gh__count k-num">{group.entries.length}</span>
-                      </>
-                    )}
-                  </div>
+            <ProjectFilterMenu
+              value={projectFilter}
+              selectedLabel={activeProject?.projectLabel ?? null}
+              total={projectMenu.total}
+              options={projectMenu.options}
+              onChange={setProjectFilter}
+            />
 
-                  {!isCollapsed && (
-                    <div className="k-ar-rows">
-                      {group.entries.map((entry, idx) => (
-                        <ArchivedRow
-                          key={entry.summary.id}
-                          entry={entry}
-                          mode={groupBy}
-                          bucket={group.bucket}
-                          query={query}
-                          hostId={hostId}
-                          now={now}
-                          eager={startOffset + idx < ARCHIVED_EAGER}
-                          selecting={selecting}
-                          checked={activeSelected.has(entry.summary.id)}
-                          onToggle={() => toggleSelect(entry.summary.id)}
-                          onOpen={() => openSession(entry.summary.id, entry.summary.projectPath)}
-                          onRestore={() => void restoreOne(entry)}
-                          onDelete={() => setDeleteTargets([entry])}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )
-            })}
+            <AgentFilterMenu
+              value={agentFilter}
+              selectedLabel={activeAgent?.agentLabel ?? null}
+              total={agentMenu.total}
+              options={agentMenu.options}
+              hostId={hostId}
+              onChange={setAgentFilter}
+            />
+
+            <Segmented<ArchivedGroupBy>
+              label={t('archived.groupBy')}
+              value={groupBy}
+              options={[
+                { value: 'date', label: t('archived.byDate') },
+                { value: 'project', label: t('archived.byProject') },
+              ]}
+              onChange={changeGroupBy}
+            />
           </div>
 
-          {words.length > 0 && (
-            <div className="k-ar-conv-hint">
-              <span>{t('archived.searchConversationsPrompt')}</span>
-              <button type="button" className="k-ar-link" onClick={openConversationsSearch}>
-                {t('archived.searchConversations')}
-                <Icon icon={ArrowRight01Icon} size={12} />
-              </button>
+          <div className="k-ar-count">
+            {hasFilters ? (
+              <>
+                <span className="k-num">
+                  {t('archived.filteredCount', { shown: filtered.length, total: entries.length })}
+                </span>
+                <span aria-hidden="true">·</span>
+                <button type="button" className="k-ar-link" onClick={clearFilters}>
+                  {t('archived.clearFilters')}
+                </button>
+              </>
+            ) : groupBy === 'project' ? (
+              <span className="k-num">
+                {t('archived.countInProjects', {
+                  sessions: t('archived.count', { count: entries.length }),
+                  projects: t('archived.projectCount', { count: totalProjects }),
+                })}
+              </span>
+            ) : (
+              <span className="k-num">{t('archived.count', { count: entries.length })}</span>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="k-ar-empty">
+              <div className="k-ar-empty__ico" aria-hidden="true">
+                <Icon icon={Archive01Icon} size={20} />
+              </div>
+              <p className="k-ar-empty__title">{t('archived.noMatchTitle')}</p>
+              <p className="k-ar-empty__sub">
+                {noMatchDescription(
+                  t,
+                  query.trim(),
+                  activeProject?.projectLabel ?? null,
+                  activeAgent?.agentLabel ?? null,
+                )}
+              </p>
+              <div className="k-ar-empty__actions">
+                <SetButton size="sm" onClick={clearFilters}>
+                  {t('archived.clearFilters')}
+                </SetButton>
+                <SetButton
+                  size="sm"
+                  variant="ghost"
+                  iconRight={<Icon icon={ArrowRight01Icon} size={13} />}
+                  onClick={openConversationsSearch}
+                >
+                  {t('archived.searchConversations')}
+                </SetButton>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="k-ar-groups">
+                {groups.map((group, groupIndex) => {
+                  const title = headingLabel(group)
+                  const startOffset = groupOffsets[groupIndex] ?? 0
+                  const isCollapsed = group.kind === 'project' && collapsed.has(group.id)
+                  const selectedInGroup = group.entries.filter((e) =>
+                    activeSelected.has(e.summary.id),
+                  ).length
+                  const allInGroup = selectedInGroup === group.entries.length && selectedInGroup > 0
+                  const someInGroup = selectedInGroup > 0 && selectedInGroup < group.entries.length
+
+                  return (
+                    <section key={group.id} aria-label={title} className="k-ar-group">
+                      <div className={cn('k-ar-gh', selecting && 'is-selecting')}>
+                        {selecting && (
+                          <Checkbox
+                            checked={allInGroup}
+                            indeterminate={someInGroup}
+                            aria-label={t('archived.selectGroup', { group: title })}
+                            onCheckedChange={() => toggleGroupSelection(group)}
+                          />
+                        )}
+                        {group.kind === 'project' ? (
+                          <button
+                            type="button"
+                            className="k-ar-gh__toggle"
+                            aria-expanded={!isCollapsed}
+                            onClick={() => toggleCollapse(group.id)}
+                          >
+                            <span className="k-ar-gh__fold" aria-hidden="true">
+                              <Icon
+                                icon={isCollapsed ? ArrowRight01Icon : ArrowDown01Icon}
+                                size={12}
+                              />
+                            </span>
+                            <Icon icon={Folder01Icon} size={14} />
+                            <span className="k-ar-gh__title">{title}</span>
+                            <span className="k-ar-gh__count k-num">{group.entries.length}</span>
+                          </button>
+                        ) : (
+                          <>
+                            <h2 className="k-ar-gh__title">{title}</h2>
+                            <span className="k-ar-gh__count k-num">{group.entries.length}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {!isCollapsed && (
+                        <div className="k-ar-rows">
+                          {group.entries.map((entry, idx) => (
+                            <ArchivedRow
+                              key={entry.summary.id}
+                              entry={entry}
+                              mode={groupBy}
+                              bucket={group.bucket}
+                              query={query}
+                              hostId={hostId}
+                              now={now}
+                              eager={startOffset + idx < ARCHIVED_EAGER}
+                              selecting={selecting}
+                              checked={activeSelected.has(entry.summary.id)}
+                              onToggle={() => toggleSelect(entry.summary.id)}
+                              onOpen={() =>
+                                openSession(entry.summary.id, entry.summary.projectPath)
+                              }
+                              onRestore={() => void restoreOne(entry)}
+                              onDelete={() => setDeleteTargets([entry])}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )
+                })}
+              </div>
+
+              {words.length > 0 && (
+                <div className="k-ar-conv-hint">
+                  <span>{t('archived.searchConversationsPrompt')}</span>
+                  <button type="button" className="k-ar-link" onClick={openConversationsSearch}>
+                    {t('archived.searchConversations')}
+                    <Icon icon={ArrowRight01Icon} size={12} />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -614,6 +689,154 @@ export function ArchivedSection() {
           })
         }}
       />
+
+      {removingProject && (
+        <RemoveProjectDialog
+          project={removingProject.project}
+          open={removingProject.open}
+          onOpenChange={(open) => setRemovingProject({ ...removingProject, open })}
+        />
+      )}
+    </div>
+  )
+}
+
+function ArchivedProjectCard({
+  entry,
+  hostId,
+  now,
+  away,
+  expanded,
+  onToggle,
+  onRestore,
+  onRemove,
+}: {
+  entry: ArchivedProjectEntry
+  hostId: string | null
+  now: number
+  away: boolean
+  expanded: boolean
+  onToggle: () => void
+  onRestore: () => Promise<void>
+  onRemove: () => void
+}) {
+  const { t } = useTranslation('settings')
+  const [restoring, setRestoring] = useState(false)
+  const { project, sessions } = entry
+  const folderTitle = entry.folders.map(hostPath).join('\n')
+
+  const handleRestore = async () => {
+    if (restoring || away) return
+    setRestoring(true)
+    try {
+      await onRestore()
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  return (
+    <div className="k-ar-proj" data-archived-project={project.path}>
+      <div className="k-ar-proj__head">
+        <button
+          type="button"
+          className="k-ar-proj__toggle"
+          aria-expanded={expanded}
+          aria-label={t(expanded ? 'archived.collapseProject' : 'archived.expandProject', {
+            name: project.name,
+          })}
+          onClick={onToggle}
+        >
+          <span className="k-ar-gh__fold" aria-hidden="true">
+            <Icon icon={expanded ? ArrowDown01Icon : ArrowRight01Icon} size={12} />
+          </span>
+          <Icon icon={Folder01Icon} size={16} />
+          <span className="k-ar-proj__meta">
+            <span className="k-ar-proj__name-line">
+              <span className="k-ar-proj__name">{project.name}</span>
+              {project.missing && <span className="k-ar-kids">{t('archived.projectMissing')}</span>}
+            </span>
+            <span className="k-ar-proj__path" title={folderTitle}>
+              {hostPath(project.path)}
+            </span>
+          </span>
+          <span className="k-ar-kids k-num">{t('archived.count', { count: sessions.length })}</span>
+        </button>
+
+        <span
+          className="k-ar-when k-num"
+          title={t('archived.projectArchivedAt', { when: fullTime(entry.archivedAt) })}
+        >
+          {mediumAgo(entry.archivedAt, now)}
+        </span>
+
+        <span className="k-ar-proj__acts">
+          <SetButton
+            size="sm"
+            disabled={away}
+            loading={restoring}
+            icon={<Icon icon={Undo02Icon} size={13} />}
+            onClick={() => void handleRestore()}
+          >
+            {t('archived.restoreProject')}
+          </SetButton>
+          <IconAction
+            label={t('archived.removeProject')}
+            icon={FolderMinusIcon}
+            danger
+            disabled={away}
+            onClick={onRemove}
+          />
+        </span>
+      </div>
+
+      {expanded && (
+        <div className="k-ar-proj__sessions">
+          {sessions.length === 0 ? (
+            <div className="k-ar-proj__empty">{t('archived.projectNoSessions')}</div>
+          ) : (
+            sessions.map((item) => (
+              <div
+                key={item.summary.id}
+                className="k-ar-row"
+                data-archived-project-session={item.summary.id}
+              >
+                <button
+                  type="button"
+                  className="k-ar-hit"
+                  aria-label={t('archived.openRow', { title: item.title })}
+                  onClick={() => openSession(item.summary.id, item.summary.projectPath)}
+                />
+                <span className="k-ar-lead">
+                  <AgentMark agent={item.agentId} size={16} hostId={hostId} />
+                </span>
+                <span className="k-ar-title" title={item.title}>
+                  {item.title}
+                </span>
+                {item.subSessionCount > 0 && (
+                  <span className="k-ar-kids">
+                    <Icon icon={ArrowRight01Icon} size={11} />
+                    {t('archived.subSessions', { count: item.subSessionCount })}
+                  </span>
+                )}
+                {item.sessionArchived && (
+                  <span className="k-ar-kids">{t('archived.projectSessionArchived')}</span>
+                )}
+                <span className="k-ar-sp" />
+                {item.branch !== null && (
+                  <span className="k-ar-br" title={item.branch}>
+                    <Icon icon={GitBranchIcon} size={12} />
+                    <span className="k-ar-br__t">{item.branch}</span>
+                  </span>
+                )}
+                <span className="k-ar-when k-num" title={fullTime(item.updatedAt)}>
+                  {mediumAgo(item.updatedAt, now)}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

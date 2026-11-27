@@ -858,6 +858,7 @@ export interface Project {
   missing: boolean // the folder no longer exists
   lastOpenedAt: number
   pinnedAt?: number | null // absent on hosts that do not support project pins
+  archivedAt?: number | null // absent on hosts that do not support project archiving
   // Its place in the host's order: null until the user moves a project there, absent on hosts
   // that cannot reorder projects. `projects.list` already gives them in this order.
   order?: number | null
@@ -1446,6 +1447,8 @@ export interface HostContract {
     result: Project
   }
   'projects.remove': { params: { path: string }; result: void }
+  'projects.archive': { params: { path: string }; result: Project }
+  'projects.unarchive': { params: { path: string }; result: Project }
   'projects.touch': { params: { path: string }; result: void }
   // A null path pins the No project group.
   'projects.pin': { params: { path: string | null; pinned: boolean }; result: void }
@@ -2497,6 +2500,8 @@ export const HOST_METHODS = [
   'projects.add',
   'projects.update',
   'projects.remove',
+  'projects.archive',
+  'projects.unarchive',
   'projects.touch',
   'projects.pin',
   'projects.move',

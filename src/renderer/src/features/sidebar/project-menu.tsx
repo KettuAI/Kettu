@@ -25,14 +25,15 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
+import { canArchiveProject } from '@renderer/stores/projects'
 import { openSettings } from '@renderer/stores/view'
 import { openProjectTerminal } from './project-menu-model'
 
 /**
  * A project's actions. A context menu is a Base UI menu, so the same items serve the project
  * row's context menu and its More button. A project whose folder is gone keeps only what needs
- * no folder, Remove included. Another host's project has only Pin and Remove, which wait for
- * that host while it is `away`.
+ * no folder, Archive and Remove included. Another host's project has Edit, Pin, Archive and
+ * Remove, which wait for that host while it is `away`.
  */
 export function ProjectMenuItems({
   project,
@@ -40,6 +41,7 @@ export function ProjectMenuItems({
   onEdit,
   onPin,
   onImport,
+  onArchive,
   onRemove,
 }: {
   project: Project
@@ -47,6 +49,7 @@ export function ProjectMenuItems({
   onEdit: () => void
   onPin: (pinned: boolean) => Promise<void>
   onImport: () => void
+  onArchive: () => void
   onRemove: () => void
 }) {
   const { t } = useTranslation('sidebar')
@@ -70,6 +73,12 @@ export function ProjectMenuItems({
       {t(pinned ? 'project.menu.unpin' : 'project.menu.pin')}
     </DropdownMenuItem>
   )
+  const archiveItem = canArchiveProject(project) && (
+    <DropdownMenuItem disabled={away} onClick={onArchive}>
+      <MenuGlyph icon={Archive01Icon} />
+      {t('project.menu.archive')}
+    </DropdownMenuItem>
+  )
   const removeItem = (
     <DropdownMenuItem variant="destructive" disabled={away} onClick={onRemove}>
       <Glyph icon={FolderMinusIcon} size={15} />
@@ -85,6 +94,7 @@ export function ProjectMenuItems({
         </DropdownMenuGroup>
         <DropdownMenuGroup>
           <DropdownMenuSeparator />
+          {archiveItem}
           {removeItem}
         </DropdownMenuGroup>
       </>
@@ -142,6 +152,7 @@ export function ProjectMenuItems({
       </DropdownMenuGroup>
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {archiveItem}
         {removeItem}
       </DropdownMenuGroup>
     </>

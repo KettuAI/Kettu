@@ -89,6 +89,7 @@ export class Projects {
       missing: this.missing.get(this.key(record.path)) ?? false,
       lastOpenedAt: record.lastOpenedAt,
       pinnedAt: record.pinnedAt ?? null,
+      archivedAt: record.archivedAt ?? null,
       order: record.order ?? null,
     }
   }
@@ -172,6 +173,8 @@ export class Projects {
     const existing = this.find(canonical)
     if (existing) {
       existing.lastOpenedAt = this.now()
+      // Re-opening an archived project restores it to the sidebar while keeping its settings.
+      delete existing.archivedAt
       this.missing.set(this.key(canonical), false)
       this.changed()
       return this.toProject(existing)
@@ -336,12 +339,31 @@ export class Projects {
     this.changed()
   }
 
+  /** Hides a project from the sidebar while keeping its record, settings and history. */
+  archive(record: ProjectRecord): Project {
+    if (record.archivedAt !== undefined) return this.toProject(record)
+    delete record.pinnedAt
+    record.archivedAt = this.now()
+    this.changed()
+    return this.toProject(record)
+  }
+
+  /** Restores an archived project back to the sidebar. */
+  unarchive(record: ProjectRecord): Project {
+    if (record.archivedAt === undefined) return this.toProject(record)
+    delete record.archivedAt
+    record.lastOpenedAt = this.now()
+    this.changed()
+    return this.toProject(record)
+  }
+
   touch(record: ProjectRecord): void {
     record.lastOpenedAt = this.now()
     this.changed()
   }
 
   pin(record: ProjectRecord, pinned: boolean): void {
+    if (pinned && record.archivedAt !== undefined) return
     if (pinned === (record.pinnedAt !== undefined)) return
     if (pinned) record.pinnedAt = this.now()
     else delete record.pinnedAt

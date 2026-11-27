@@ -275,7 +275,13 @@ function isProjectCall(method: string): boolean {
 
 /** A host's result as the window names folders, with the sessions it lists learned. */
 export function fromHost(hostId: string, method: string, result: unknown): unknown {
-  if (method === 'projects.list' || method === 'projects.add' || method === 'projects.update') {
+  if (
+    method === 'projects.list' ||
+    method === 'projects.add' ||
+    method === 'projects.update' ||
+    method === 'projects.archive' ||
+    method === 'projects.unarchive'
+  ) {
     qualifyProjects(hostId, result)
   }
   if (method === 'artifacts.list') qualifyArtifacts(hostId, result)
