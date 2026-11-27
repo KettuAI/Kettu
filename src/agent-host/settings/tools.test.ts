@@ -135,6 +135,22 @@ describe('find_settings', () => {
     expect(file().appearance.closeSidePanelWithLastTab).toBe(true)
   })
 
+  it('finds and updates appearance.app-icon in English and Chinese', async () => {
+    const { tools, file } = harness({ fullAccess: true })
+    const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'app icon' })
+    expect(text(en)).toContain('appearance.app-icon')
+    expect(text(en)).toContain('value: Kettu')
+
+    setLocale('zh-CN')
+    const zh = await tools.call(CALLER, FIND_SETTINGS, { query: '应用图标' })
+    expect(text(zh)).toContain('appearance.app-icon')
+    expect(text(zh)).toContain('应用图标 (App icon)')
+
+    const updated = await change(tools, [{ id: 'appearance.app-icon', value: 'paper-sheets' }])
+    expect(updated.isError).toBeUndefined()
+    expect(file().appearance.appIcon).toBe('paper-sheets')
+  })
+
   it('fills the placeholders of a row’s words', async () => {
     const { tools } = harness()
     const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'zoom' }))

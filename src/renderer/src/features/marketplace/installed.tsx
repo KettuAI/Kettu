@@ -177,7 +177,7 @@ function KettuSection() {
           <div className="ui-as-int-grid">
             <ItemRow
               title={server.title}
-              icon={<BrandIcon size={40} className="k-mkt-kettu-tile" />}
+              icon={<BrandIcon size={40} icon="kettu" className="k-mkt-kettu-tile" />}
               tag={<Pill>{t('kettu.builtIn')}</Pill>}
               line={[
                 server.running ? t('kettu.running') : t('kettu.notRunning'),
@@ -484,7 +484,7 @@ function BuiltinSkillRow({ skill }: { skill: BuiltinSkill }) {
   return (
     <ItemRow
       title={displayTitle(skill.name)}
-      icon={<BrandIcon size={40} className="k-mkt-kettu-tile" />}
+      icon={<BrandIcon size={40} icon="kettu" className="k-mkt-kettu-tile" />}
       tag={<Pill>{t('kettu.builtIn')}</Pill>}
       line={skill.description}
     />

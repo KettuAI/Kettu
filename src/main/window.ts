@@ -1,10 +1,11 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
+import { BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
 import type { AppCommand } from '@shared/ipc'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import type { Theme } from '@shared/themes'
 import { mayOpenWindow } from './artifacts/guards'
+import { currentWindowIcon } from './app-icon'
 import { attachContextMenu } from './context-menu'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
@@ -30,11 +31,6 @@ let chosen: Theme | null = null
 
 const DEFAULT_SIZE = { width: 1280, height: 820 }
 const MIN_SIZE = { width: 960, height: 600 }
-
-// Packaged builds carry the icon in the bundle; a development run would show Electron's own.
-export function devIcon(): string | null {
-  return app.isPackaged ? null : join(app.getAppPath(), 'build/icon.png')
-}
 
 let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
 
@@ -105,7 +101,7 @@ export function isOverlay(contents: WebContents): boolean {
 }
 
 /** The app's own windows, without the menu bar panel. */
-function appWindows(): BrowserWindow[] {
+export function appWindows(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter(
     (window) => !window.isDestroyed() && !panels.has(window),
   )
@@ -222,8 +218,8 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
   if (!options) throw new Error('configureWindows must run before a window is created')
   const isMac = process.platform === 'darwin'
   const placement = options.state.placement()
-  // On macOS the Dock carries the icon, set once in index.ts.
-  const icon = isMac ? null : devIcon()
+  // On macOS the Dock carries the icon, updated by src/main/app-icon.ts.
+  const icon = isMac ? null : currentWindowIcon()
 
   const window = new BrowserWindow({
     ...placement.bounds,

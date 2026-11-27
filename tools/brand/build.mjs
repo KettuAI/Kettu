@@ -10,7 +10,15 @@ import { join, resolve } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { lockupGeometry, WORDMARK } from '../../src/shared/brand.ts'
 import { DMG_LAYOUT } from './dmg-layout.mjs'
-import { foxMarkSvg, foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
+import {
+  APP_ICON_VARIANTS,
+  appIconSvg,
+  foxMarkSvg,
+  foxSvg,
+  GLYPH_CANVAS,
+  glyphSvg,
+  PLAIN_APP_ICONS,
+} from './fox.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const INK = '#1c1b18'
@@ -29,16 +37,16 @@ function svg(width, height, body) {
 }
 
 /** The icon's tile framing, its canvas `size` wide with its top left at x, y. */
-function icon(x, y, size) {
-  const text = foxSvg('tile')
+function icon(x, y, size, variant = 'kettu') {
+  const text = appIconSvg(variant, 'tile')
   const body = text.slice(text.indexOf('>') + 1, text.lastIndexOf('</svg>'))
   return `<svg x="${n(x)}" y="${n(y)}" width="${n(size)}" height="${n(size)}" viewBox="0 0 ${ICON_CANVAS} ${ICON_CANVAS}">${body}</svg>`
 }
 
 /** The icon with its tile `tile` wide and centred on cx, cy. */
-function centredTile(cx, cy, tile) {
+function centredTile(cx, cy, tile, variant = 'kettu') {
   const size = (tile * ICON_CANVAS) / ICON_TILE
-  return icon(cx - size / 2, cy - size / 2, size)
+  return icon(cx - size / 2, cy - size / 2, size, variant)
 }
 
 /** A lockup with the wordmark at `fontSize`, on a transparent ground. */
@@ -57,17 +65,17 @@ function lockupSvg(layout, fontSize, color) {
 }
 
 /** Linux's icon, on Apple's grid before Liquid Glass: an 824 px tile on 1024 px with a soft shadow. */
-function linuxIcon(size) {
+function linuxIcon(size, variant = 'kettu') {
   const k = size / 1024
   const body = `
 <defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="${n(10 * k)}" stdDeviation="${n(12 * k)}" flood-color="#000" flood-opacity="0.3"/></filter></defs>
-<g filter="url(#s)">${centredTile(size / 2, size / 2, 824 * k)}</g>`
+<g filter="url(#s)">${centredTile(size / 2, size / 2, 824 * k, variant)}</g>`
   return svg(size, size, body)
 }
 
 /** The Windows icon: the tile filling the canvas, with its own corners. */
-function windowsIcon(size) {
-  return svg(size, size, centredTile(size / 2, size / 2, size))
+function windowsIcon(size, variant = 'kettu') {
+  return svg(size, size, centredTile(size / 2, size / 2, size, variant))
 }
 
 /**
@@ -208,6 +216,12 @@ async function main() {
   write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
   write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-icon.svg'), foxSvg('tile'))
+  for (const variant of Object.keys(PLAIN_APP_ICONS)) {
+    writeFileSync(
+      join(root, `src/renderer/src/assets/kettu-icon-${variant}.svg`),
+      appIconSvg(variant, 'tile'),
+    )
+  }
   // The fox without its tile, one drawing for light and dark grounds.
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-fox.svg'), foxMarkSvg())
   // The launch cover's fox, masks the renderer fills with the theme's text color.
@@ -228,6 +242,22 @@ async function main() {
     pngs.push({ size, data: await render(windowsIcon(size), size, size) })
   }
   writeFileSync(join(build, 'icon.ico'), ico(pngs))
+
+  // Runtime selectable app icons, read by src/main/app-icon.ts on macOS (Dock), Linux and Windows.
+  const appIconsDir = join(root, 'resources', 'app-icons')
+  rmSync(appIconsDir, { recursive: true, force: true })
+  mkdirSync(appIconsDir, { recursive: true })
+  for (const variant of APP_ICON_VARIANTS) {
+    writeFileSync(
+      join(appIconsDir, `${variant}.png`),
+      await render(linuxIcon(512, variant), 512, 512),
+    )
+    const variantPngs = []
+    for (const size of windowsSizes) {
+      variantPngs.push({ size, data: await render(windowsIcon(size, variant), size, size) })
+    }
+    writeFileSync(join(appIconsDir, `${variant}.ico`), ico(variantPngs))
+  }
 
   // The tray's images, read by src/main/tray.ts: the macOS menu bar's images, shaded for a dark and
   // a light ground, and the glyph filling a square in black and in white for Windows (.ico) and

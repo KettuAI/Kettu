@@ -39,6 +39,7 @@ import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
 import { RemoteArtifacts } from './artifacts/remote'
 import { AppStateStore } from './app-state'
+import { applyAppIcon, initAppIcon } from './app-icon'
 import { accountAvatarRequestUrl, Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { RemoteBrowser } from './browser/remote'
@@ -143,10 +144,10 @@ import {
   applyTheme,
   applyWindowTheme,
   applyZoom,
+  appWindows,
   configureWindows,
   createMainWindow,
   currentWindow,
-  devIcon,
   isOverlayWindow,
   showMainWindow,
   watchTheme,
@@ -214,8 +215,7 @@ async function start(): Promise<void> {
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
   const wasOpenedAtLogin =
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
-  const icon = devIcon()
-  if (icon) app.dock?.setIcon(icon)
+  initAppIcon(appWindows)
   // The session holding the computer, which the overlay draws and the Computer pane shows.
   let computerHold: ComputerHold | null = null
   // The window's page only: the menu bar panel's needs no clipboard.
@@ -238,6 +238,7 @@ async function start(): Promise<void> {
   const localeOf = (file: SettingsFile): Locale =>
     resolveLocale(file.general.language, systemLocale)
   setLocale(localeOf(settings.get()))
+  applyAppIcon(settings.get().appearance.appIcon)
   applyTheme(settings.get().appearance.theme)
   applyZoom(settings.get().appearance.zoom)
   // The catalog's own session, so its requests follow the proxy setting and keep no cookies or
@@ -1308,6 +1309,7 @@ async function start(): Promise<void> {
     }
     if (changed.has('appearance')) {
       tray.motionChanged()
+      applyAppIcon(next.appearance.appIcon)
       applyTheme(next.appearance.theme)
       applyZoom(next.appearance.zoom)
       themes.choose(next.appearance.colorTheme)

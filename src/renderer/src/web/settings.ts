@@ -11,6 +11,7 @@ import {
 } from '@shared/remote/host-admin'
 import {
   DEFAULT_SETTINGS,
+  normalizeAppIcon,
   readSidebarOrder,
   readSidebarPages,
   type SettingsFile,
@@ -210,6 +211,7 @@ function merge(settings: SettingsFile, patch: SettingsPatch): SettingsFile {
   }
   next.appearance = {
     ...next.appearance,
+    appIcon: normalizeAppIcon(next.appearance.appIcon) ?? DEFAULT_SETTINGS.appearance.appIcon,
     sidebarOrder: readSidebarOrder(next.appearance.sidebarOrder),
     sidebarHidden: readSidebarPages(next.appearance.sidebarHidden),
   }

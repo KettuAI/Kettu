@@ -1,7 +1,13 @@
 import foxUrl from '@renderer/assets/kettu-fox.svg'
-import iconUrl from '@renderer/assets/kettu-icon.svg'
 import { lockupGeometry, WORDMARK, type LockupLayout } from '@shared/brand'
+import type { AppIcon } from '@shared/settings'
+import { appIconUrl } from '@renderer/lib/app-icons'
 import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings-store'
+
+function isWebRuntime(): boolean {
+  return typeof window !== 'undefined' && window.kettu?.client === 'web'
+}
 
 /** The icon's shaded fox without its tile; one drawing holds on light and dark grounds. Decorative. */
 export function BrandFox({ className }: { className?: string }) {
@@ -10,12 +16,25 @@ export function BrandFox({ className }: { className?: string }) {
   )
 }
 
-/** The app's icon, `size` px square. Decorative. */
-export function BrandIcon({ size, className }: { size: number; className?: string }) {
+/**
+ * The app's icon, `size` px square. Decorative. Follows the user's selected desktop app icon
+ * unless `icon` pins a specific variant (such as the official publisher mark).
+ */
+export function BrandIcon({
+  size,
+  icon,
+  className,
+}: {
+  size: number
+  icon?: AppIcon
+  className?: string
+}) {
+  const chosen = useSettingsStore((s) => s.settings.appearance.appIcon)
+  const effective = icon ?? (isWebRuntime() ? 'kettu' : chosen)
   return (
     <img
       alt=""
-      src={iconUrl}
+      src={appIconUrl(effective)}
       width={size}
       height={size}
       draggable={false}
@@ -47,7 +66,13 @@ export function BrandLockup({
       fill="currentColor"
       className={cn('shrink-0 text-primary', className)}
     >
-      <image href={iconUrl} x={icon.x} y={icon.y} width={icon.size} height={icon.size} />
+      <image
+        href={appIconUrl('kettu')}
+        x={icon.x}
+        y={icon.y}
+        width={icon.size}
+        height={icon.size}
+      />
       <path transform={`translate(${text.x} ${text.y})`} d={WORDMARK.path} />
     </svg>
   )

@@ -64,6 +64,7 @@ import {
   NoUpdates,
   UpdateRow,
 } from './about-section'
+import { AppIconTiles } from './app-icon-section'
 import { useIdleSessionRows } from './idle-sessions'
 import { IslandSwitch } from './island-row'
 import { usePluginChannelRows } from './plugin-channels'
@@ -367,6 +368,13 @@ export function useAppearanceSection(): SectionDef {
     card: (rows) => <SidebarCard rows={rows} />,
   })
   const sidebarOrder = useHostScope().useSettingsStore((s) => s.settings.appearance.sidebarOrder)
+  const appIconDescription = t(
+    isMac
+      ? 'appearance.appIcon.description'
+      : isWindows
+        ? 'appearance.appIcon.descriptionWindows'
+        : 'appearance.appIcon.descriptionLinux',
+  )
   const zoomKeys = [formatShortcut('Mod+='), formatShortcut('Mod+-')] as const
   const zoomDescription = t('appearance.zoom.description', {
     zoomIn: zoomKeys[0],
@@ -393,6 +401,16 @@ export function useAppearanceSection(): SectionDef {
         setting: 'appearance.color-mode',
         searchOnly: true,
         render: () => null,
+      },
+      {
+        id: 'app-icon',
+        setting: 'appearance.app-icon',
+        group: group('app-icon', t('appearance.groups.appIcon'), {
+          description: appIconDescription,
+          plain: true,
+        }),
+        layout: 'custom',
+        render: () => <AppIconTiles />,
       },
       {
         id: 'zoom',

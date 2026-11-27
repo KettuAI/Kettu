@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
-import { DEFAULT_SETTINGS } from '@shared/settings'
+import { APP_ICONS, DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
 import {
   effectiveDirect,
@@ -1109,6 +1109,45 @@ describe('closing the side panel with its last tab', () => {
       expect(() =>
         validateSettingsPatch({ appearance: { closeSidePanelWithLastTab: bad } }),
       ).toThrow()
+    }
+  })
+})
+
+describe('selectable desktop app icon', () => {
+  it('defaults to kettu, accepts all six icons and legacy default alias, and falls back on invalid values', async () => {
+    expect((await SettingsStore.load(dir)).get().appearance.appIcon).toBe('kettu')
+    for (const icon of APP_ICONS) {
+      await save({ version: 1, appearance: { appIcon: icon } })
+      expect((await SettingsStore.load(dir)).get().appearance.appIcon).toBe(icon)
+    }
+    await save({ version: 1, appearance: { appIcon: 'default' } })
+    expect((await SettingsStore.load(dir)).get().appearance.appIcon).toBe('kettu')
+    for (const bad of ['unknown', '', 42, null, {}]) {
+      await save({ version: 1, appearance: { appIcon: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.appIcon).toBe('kettu')
+    }
+  })
+
+  it('validates, normalizes, merges, persists and keeps the app icon on the client', async () => {
+    const patch = validateSettingsPatch({ appearance: { appIcon: 'ink-sheets' } })
+    expect(patch).toEqual({ appearance: { appIcon: 'ink-sheets' } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.appearance.appIcon).toBe('ink-sheets')
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).appearance.appIcon).toBe(
+      'ink-sheets',
+    )
+
+    const legacyPatch = validateSettingsPatch({ appearance: { appIcon: 'default' } })
+    expect(mergeSettings(next, legacyPatch).appearance.appIcon).toBe('kettu')
+
+    const store = await SettingsStore.load(dir)
+    store.update(patch)
+    await store.flush()
+    expect((await SettingsStore.load(dir)).get().appearance.appIcon).toBe('ink-sheets')
+
+    for (const bad of ['blue', '', 0, null, []]) {
+      expect(() => validateSettingsPatch({ appearance: { appIcon: bad } })).toThrow()
     }
   })
 })

@@ -15,7 +15,7 @@ const LEFT_OUT: Partial<Record<SectionDef['id'], readonly string[] | 'all'>> = {
   ...(isHosted ? {} : { account: 'all' as const }),
   // Kettu's cloud is switched on the computer itself.
   general: ['confirm-quit', 'background', 'open-at-login', 'cloud', 'other-connections'],
-  appearance: ['zoom'],
+  appearance: ['app-icon', 'zoom'],
   notifications: ['badge'],
 }
 
