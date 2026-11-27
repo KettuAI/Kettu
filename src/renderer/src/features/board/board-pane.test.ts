@@ -118,6 +118,8 @@ vi.mock('./artifact-row', () => ({
 vi.mock('./row-parts', () => ({
   Clock: ({ since }: { since: number }) =>
     createElement('span', { 'data-testid': 'clock', 'data-since': String(since) }),
+  Countdown: ({ until }: { until: number }) =>
+    createElement('span', { 'data-testid': 'countdown', 'data-until': String(until) }),
   Ago: () => createElement('span', null, 'now'),
   Fold: ({ open, children }: { open: boolean; children: ReactNode }) =>
     createElement('div', { 'data-testid': 'fold', 'data-open': String(open) }, children),
@@ -324,5 +326,48 @@ describe('BoardPane (#2917, #2918)', () => {
     expect(html).not.toContain('data-testid="pane-empty"')
     expect(html).toContain('sections.artifacts')
     expect(html).toContain('Design Notes')
+  })
+
+  it('renders scheduled timers with countdown, cron jobs, and timeout monitors in Now (#2933)', () => {
+    const state = threadWithArtifact('parent', 'art-1', 'Notes')
+    state.order = []
+    state.byId = {}
+    state.session.background = [
+      {
+        id: 'timer-1',
+        kind: 'monitor',
+        title: 'Check CI build',
+        command: 'Timer: 5m',
+        status: 'running',
+        startedAt: 10_000,
+        endedAt: null,
+        summary: null,
+        entryId: 't:timer-1',
+        schedule: { mode: 'timer', durationSeconds: 300, fireAt: 310_000 },
+      },
+      {
+        id: 'cron-1',
+        kind: 'monitor',
+        title: 'Patrol issues',
+        command: 'Cron: */30 * * * *',
+        status: 'running',
+        startedAt: 20_000,
+        endedAt: null,
+        summary: null,
+        entryId: 't:cron-1',
+        schedule: { mode: 'cron', cron: '*/30 * * * *', daemon: true },
+      },
+    ]
+    mockReplicas.parent = { state }
+
+    const html = renderBoard()
+
+    expect(html).toContain('summary.running(count=2)')
+    expect(html).toContain('Check CI build')
+    expect(html).toContain('Timer: 5m')
+    expect(html).toContain('data-testid="countdown" data-until="310000"')
+    expect(html).toContain('Patrol issues')
+    expect(html).toContain('Cron: */30 * * * *')
+    expect(html).toContain('data-testid="clock" data-since="20000"')
   })
 })

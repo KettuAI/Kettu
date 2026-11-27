@@ -54,6 +54,11 @@
     "lineUnnamedReports": "后台还有任务在运行 · 跑完会接着汇报",
     "subagents_other": "{{count}} 个子智能体",
     "commands_other": "{{count}} 条命令",
+    "monitors_other": "{{count}} 个监控任务",
+    "scheduled_other": "{{count}} 个定时任务",
+    "timerLeft": "定时器（剩余 {{left}}）",
+    "cronExpr": "定时任务（{{cron}}）",
+    "listSeparator": "、",
     "both": "{{subagents}}和 {{commands}}",
     "openBoard": "打开看板"
   },

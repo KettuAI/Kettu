@@ -255,7 +255,7 @@ describe('Antigravity (agy) waiting on background tasks', () => {
 
     // Half A: once the tool-less step settles while session/prompt stays open, streaming stops,
     // phase switches from Writing to waiting_background, the reply segment closes with `turn_end`,
-    // and summary exposes calm background-only `stillRunning` metadata (matching Claude Code).
+    // and summary exposes the scheduled timer instead of falling back to unnamed background work.
     await window.until(() => window.thread(id).session.waitingBackground === true)
     expect(agentReplies(window.entries(id))).toEqual([
       expect.objectContaining({ markdown: 'Timer set for 1 minute.', streaming: false }),
@@ -265,8 +265,18 @@ describe('Antigravity (agy) waiting on background tasks', () => {
       phase: 'waiting_background',
       turnStartedAt: null,
       activity: null,
-      stillRunning: { commands: 0, subagents: 0, reportsBack: true, unnamed: true },
+      stillRunning: { commands: 0, subagents: 0, scheduled: 1, reportsBack: true },
     })
+    expect(window.summary(id)?.stillRunning?.unnamed).toBeUndefined()
+    expect(window.thread(id).session.background).toMatchObject([
+      {
+        id: 'call-sched',
+        kind: 'monitor',
+        title: 'Check status',
+        status: 'running',
+        schedule: { mode: 'timer', durationSeconds: 60 },
+      },
+    ])
     expect(window.thread(id).session.turnStartedAt).toBeNull()
     const firstEnds = window.entries(id).filter((entry) => entry.kind === 'turn_end')
     expect(firstEnds).toHaveLength(1)
@@ -585,5 +595,49 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     agy.finish('end_turn')
     await window.untilStatus(id, 'ready')
     expect(window.entries(id).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
+  })
+
+  it('surfaces unnamed fallback when no command/schedule is listed, and maps update_steps into session plan progress', async () => {
+    const { agy, window, id } = await openAgySession()
+
+    await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Track steps and wait on an internal task' }],
+    })
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(1))
+
+    // Send update_steps directly through ACP -> updates session plan without creating a tool row.
+    await agy.current!.client.notify(methods.client.session.update, {
+      sessionId: agy.current!.sessionId,
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'call-steps',
+        name: 'update_steps',
+        kind: 'other',
+        title: 'Run update_steps',
+        status: 'completed',
+        rawInput: {
+          steps: [
+            { title: 'Prepare build', status: 'done' },
+            { title: 'Wait for external hook', status: 'in_progress' },
+          ],
+        },
+      } as unknown as SessionUpdate,
+    })
+    await agy.sendUsage()
+    await agy.sendText('Waiting for external hook.')
+    await agy.sendUsage()
+
+    await window.until(() => window.thread(id).session.waitingBackground === true)
+    expect(window.summary(id)).toMatchObject({
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 0, subagents: 0, reportsBack: true, unnamed: true },
+      plan: { done: 1, total: 2, current: { index: 1, text: 'Wait for external hook' } },
+    })
+    expect(window.entries(id).some((entry) => entry.kind === 'tool')).toBe(false)
+
+    agy.finish('end_turn')
+    await window.untilStatus(id, 'ready')
   })
 })

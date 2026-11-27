@@ -219,6 +219,8 @@ export interface SubagentHost {
   load(childId: string, parentId: string, quiet: boolean): Promise<void>
   /** The sub-agents under a session all stopped running. */
   settled(sessionId: string): void
+  /** A child sub-agent transitioned from running to idle/cancelled. */
+  childEnded?(parentId: string, childId: string): void
   log(level: 'info' | 'warn', message: string): void
 }
 
@@ -374,6 +376,7 @@ export class AgySubagents {
             }),
           )
           const root = this.rootOf(id)
+          this.host.childEnded?.(known.parentId, id)
           if (!this.running(root)) this.host.settled(root)
         }
       }
@@ -420,7 +423,10 @@ export class AgySubagents {
         .target(known.parentId)
         ?.apply(subagent(row.id, { state: running ? { kind: 'running' } : stopped(row) }))
       if (running && !known.loaded) await this.open(row, known, true)
-      if (!running && !this.running(this.rootOf(row.id))) this.host.settled(this.rootOf(row.id))
+      if (!running) {
+        this.host.childEnded?.(known.parentId, row.id)
+        if (!this.running(this.rootOf(row.id))) this.host.settled(this.rootOf(row.id))
+      }
       return
     }
     // A child agy has not given a status yet is read again.

@@ -2585,6 +2585,210 @@ describe("agy's waiting-on-background detection", () => {
     await turn
     agy.connection.close()
   })
+
+  it('maps agy update_steps tool calls into session plan updates without stacking tool rows', async () => {
+    const agy = waitingAgy('1.5.18')
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    agy.connection.register(sessionId, base.target)
+
+    const turn = agy.connection.prompt(sessionId, text('run multi-step fix'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['run multi-step fix']))
+
+    // First update_steps call creates a single plan entry and suppresses the raw tool row.
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'steps-1',
+      name: 'update_steps',
+      kind: 'other',
+      status: 'in_progress',
+      title: 'Run update_steps',
+      rawInput: {
+        steps: [
+          { title: 'Inspect codebase', status: 'done' },
+          { title: 'Implement fix', status: 'in_progress' },
+          { title: 'Optional check', status: 'skipped' },
+          { title: 'Run verification', status: 'pending' },
+        ],
+      },
+    })
+    // Follow-up completion update without rawInput must stay suppressed and keep the plan intact.
+    await agy.notify({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'steps-1',
+      status: 'completed',
+    })
+
+    const plansAfterFirst = base
+      .entries()
+      .filter((entry): entry is Extract<ThreadEntry, { kind: 'plan' }> => entry.kind === 'plan')
+    expect(plansAfterFirst).toHaveLength(1)
+    expect(plansAfterFirst[0]!.items).toEqual([
+      { content: 'Inspect codebase', priority: 'medium', status: 'completed' },
+      { content: 'Implement fix', priority: 'medium', status: 'in_progress' },
+      { content: 'Optional check', priority: 'medium', status: 'completed' },
+      { content: 'Run verification', priority: 'medium', status: 'pending' },
+    ])
+    expect(base.entries().some((entry) => entry.kind === 'tool')).toBe(false)
+
+    // Subsequent update_steps call updates the same plan entry in place (and maps failed -> pending).
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'steps-2',
+      name: 'update_steps',
+      kind: 'other',
+      status: 'completed',
+      title: 'Run update_steps',
+      rawInput: {
+        steps: [
+          { title: 'Inspect codebase', status: 'done' },
+          { title: 'Implement fix', status: 'done' },
+          { title: 'Run verification', status: 'failed' },
+        ],
+      },
+    })
+    // Malformed or empty update_steps input is safely ignored without clobbering the current plan.
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'steps-bad',
+      name: 'update_steps',
+      kind: 'other',
+      status: 'completed',
+      title: 'Run update_steps',
+      rawInput: { steps: [] },
+    })
+
+    const plansAfterSecond = base
+      .entries()
+      .filter((entry): entry is Extract<ThreadEntry, { kind: 'plan' }> => entry.kind === 'plan')
+    expect(plansAfterSecond).toHaveLength(1)
+    expect(plansAfterSecond[0]!.id).toBe(plansAfterFirst[0]!.id)
+    expect(plansAfterSecond[0]!.items).toEqual([
+      { content: 'Inspect codebase', priority: 'medium', status: 'completed' },
+      { content: 'Implement fix', priority: 'medium', status: 'completed' },
+      { content: 'Run verification', priority: 'medium', status: 'pending' },
+    ])
+    expect(base.entries().some((entry) => entry.kind === 'tool')).toBe(false)
+
+    agy.end()
+    await turn
+    agy.connection.close()
+  })
+
+  it('surfaces agy schedule and NotificationTimeoutSeconds monitors via tasks and scheduled effects, and clears on manage_task kill', async () => {
+    const agy = waitingAgy('1.5.18', { settleMs: 25 })
+    await agy.connection.initialize('1.0.0')
+    const { sessionId } = await agy.connection.newSession('/repo')
+    const base = threadTarget()
+    const scheduledCounts: number[] = []
+    let latestTasks: unknown[] = []
+    agy.connection.register(sessionId, {
+      ...base.target,
+      apply: (output) => {
+        base.target.apply(output)
+        for (const effect of output.effects) {
+          if (effect.kind === 'scheduled') scheduledCounts.push(effect.jobs)
+          if (effect.kind === 'tasks') latestTasks = effect.tasks
+        }
+      },
+    })
+
+    const turn = agy.connection.prompt(sessionId, text('monitor and schedule'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['monitor and schedule']))
+
+    // Start a NotificationTimeoutSeconds command and a daemon cron schedule.
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'mon-1',
+      name: 'run_command',
+      kind: 'execute',
+      status: 'in_progress',
+      title: 'pnpm test',
+      rawInput: {
+        CommandLine: 'pnpm test',
+        toolSummary: 'Run test suite',
+        NotificationTimeoutSeconds: 90,
+      },
+    })
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'cron-1',
+      name: 'schedule',
+      kind: 'other',
+      status: 'in_progress',
+      title: 'Run schedule',
+      rawInput: {
+        CronExpression: '*/15 * * * *',
+        IsDaemon: true,
+        Prompt: 'Check deployment health',
+      },
+      content: [
+        {
+          type: 'content',
+          content: {
+            type: 'text',
+            text: 'Tool is running as a background task with task id: s-bg/task-88',
+          },
+        },
+      ],
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1_200, size: 1_048_576 })
+
+    // Plain reply settles into waitingBackground -> both monitor & cron surface on the board.
+    await agy.notify({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Monitoring tests and polling every 15 minutes.' },
+    })
+    await agy.notify({ sessionUpdate: 'usage_update', used: 1_400, size: 1_048_576 })
+
+    await vi.waitFor(() => expect(latestTasks).toHaveLength(2))
+    expect(scheduledCounts.at(-1)).toBe(1)
+    expect(latestTasks).toMatchObject([
+      {
+        id: 'mon-1',
+        kind: 'monitor',
+        title: 'Run test suite',
+        status: 'running',
+        schedule: { mode: 'timeout', durationSeconds: 90 },
+      },
+      {
+        id: 'cron-1',
+        kind: 'monitor',
+        title: 'Check deployment health',
+        status: 'running',
+        schedule: { mode: 'cron', cron: '*/15 * * * *', daemon: true },
+      },
+    ])
+
+    // Killing the cron via manage_task clears the scheduled count and marks the task stopped.
+    await agy.notify({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'kill-1',
+      name: 'manage_task',
+      kind: 'other',
+      status: 'in_progress',
+      title: 'Run manage_task',
+      rawInput: { Action: 'kill', TaskId: 's-bg/task-88' },
+    })
+    await agy.notify({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'kill-1',
+      status: 'completed',
+      content: [
+        { type: 'content', content: { type: 'text', text: 'Task "s-bg/task-88" cancelled.' } },
+      ],
+    })
+    await vi.waitFor(() => expect(scheduledCounts.at(-1)).toBe(0))
+    expect(latestTasks).toMatchObject([
+      { id: 'mon-1', status: 'running' },
+      { id: 'cron-1', status: 'stopped' },
+    ])
+
+    agy.end()
+    await turn
+    agy.connection.close()
+  })
 })
 
 describe('agy per-session app_data_dir routing', () => {

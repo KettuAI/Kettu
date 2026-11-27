@@ -42,6 +42,8 @@
   "detail": {
     "command": "Command",
     "watching": "Watching",
+    "timer": "Timer",
+    "schedule": "Schedule",
     "output": "Output",
     "noOutput": "No output yet.",
     "readFailed": "Could not read the output: {{error}}",

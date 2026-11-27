@@ -218,6 +218,84 @@ export async function inWholeFile<T extends acp.ToolCallUpdate>(
 /** Calls on agy's own files that show no row, per turn, for their updates that name no file. */
 const ownFileCalls = new WeakMap<TurnScope, Set<string>>()
 
+/** Calls of agy's `update_steps` tool suppressed as rows, per turn, for follow-up updates. */
+const stepCalls = new WeakMap<TurnScope, Set<string>>()
+
+/** Maps agy's `update_steps` step statuses into ACP's standard plan entry statuses. */
+function mapAgyStepStatus(status: unknown): acp.PlanEntryStatus {
+  switch (status) {
+    case 'done':
+    case 'completed':
+    case 'skipped':
+      return 'completed'
+    case 'in_progress':
+      return 'in_progress'
+    case 'pending':
+    case 'failed':
+    default:
+      return 'pending'
+  }
+}
+
+/**
+ * Extracts standard ACP plan entries from an agy `update_steps` tool call payload.
+ * Returns null when the input is missing, empty, or contains no valid titled steps.
+ */
+export function extractAgyPlanEntries(input: unknown): acp.PlanEntry[] | null {
+  const fields = record(input)
+  if (!fields || !Array.isArray(fields.steps) || fields.steps.length === 0) return null
+  const entries: acp.PlanEntry[] = []
+  for (const item of fields.steps) {
+    const step = record(item)
+    if (!step) continue
+    const rawTitle =
+      typeof step.title === 'string'
+        ? step.title
+        : typeof step.content === 'string'
+          ? step.content
+          : ''
+    const content = rawTitle.replace(/\s+/g, ' ').trim()
+    if (content === '') continue
+    entries.push({
+      content,
+      priority: 'medium',
+      status: mapAgyStepStatus(step.status),
+    })
+  }
+  return entries.length > 0 ? entries : null
+}
+
+/** Whether a tool call update belongs to agy's built-in `update_steps` tool. */
+function isUpdateStepsCall(update: acp.ToolCallUpdate): boolean {
+  return toolName(update) === 'update_steps' || update.title === 'Run update_steps'
+}
+
+/**
+ * Translates agy's `update_steps` tool calls into ACP `plan` updates so the top-bar `PlanChip`
+ * displays step progress instead of stacking plain tool rows. Returns:
+ * - an `acp.Plan` payload when valid steps should update the session plan,
+ * - `'suppress'` when the call is a known `update_steps` update with no new valid steps, or
+ * - `null` when the update is not an `update_steps` call.
+ */
+export function agyPlanUpdate(
+  update: acp.ToolCallUpdate,
+  ctx: MapperContext,
+): acp.Plan | 'suppress' | null {
+  let tracked = stepCalls.get(ctx.scope)
+  const known = tracked?.has(update.toolCallId) === true
+  if (!known && !isUpdateStepsCall(update)) return null
+  if (!known) {
+    if (!tracked) {
+      tracked = new Set()
+      stepCalls.set(ctx.scope, tracked)
+    }
+    tracked.add(update.toolCallId)
+  }
+  const entries = extractAgyPlanEntries(update.rawInput)
+  if (!entries) return 'suppress'
+  return { entries }
+}
+
 /**
  * Whether a call works only on files agy keeps for itself, which are agy's, not the project's: it
  * shows no row and changes nothing in the project. A call whose row the thread has keeps it.

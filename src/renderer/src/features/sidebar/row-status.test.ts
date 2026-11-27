@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { TFunction } from 'i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { sessionTree } from '@renderer/stores/sessions'
-import { hasNamedBackground, joinBackground, rowStatus } from './row-status'
+import { backgroundText, hasNamedBackground, joinBackground, rowStatus } from './row-status'
 
 function summary(id: string, overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
@@ -89,5 +90,33 @@ describe('rowStatus and joinBackground for waitingBackground sessions (#2855)', 
       running: false,
       background: { commands: 0, subagents: 0, unnamed: true },
     })
+  })
+
+  it('counts and formats monitors and scheduled jobs as named background work (#2933)', () => {
+    const waitingScheduled = summary('s-sched', {
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 0, subagents: 0, monitors: 1, scheduled: 2, reportsBack: true },
+    })
+    const [node] = sessionTree({ 's-sched': waitingScheduled }, '/proj/a')
+    const status = rowStatus(node!, false)
+    expect(status.running).toBe(false)
+    expect(status.background).toEqual({ commands: 0, subagents: 0, monitors: 1, scheduled: 2 })
+    expect(hasNamedBackground(status.background!)).toBe(true)
+
+    expect(
+      joinBackground([
+        { commands: 1, subagents: 0, monitors: 1 },
+        { commands: 0, subagents: 1, scheduled: 2 },
+      ]),
+    ).toEqual({ commands: 1, subagents: 1, monitors: 1, scheduled: 2 })
+
+    const fakeT = ((key: string, params?: Record<string, unknown>) => {
+      if (key === 'stillRunning.listSeparator') return ', '
+      return `${key}(${String(params?.count ?? '')})`
+    }) as unknown as TFunction<'sidebar'>
+    expect(backgroundText(fakeT, { commands: 0, subagents: 0, monitors: 1, scheduled: 2 })).toBe(
+      'stillRunning.monitors(1), stillRunning.scheduled(2)',
+    )
   })
 })

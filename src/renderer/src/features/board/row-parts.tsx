@@ -1,11 +1,17 @@
 import type { ReactNode } from 'react'
-import { clock, shortAgo } from '@renderer/lib/format'
+import { clock, countdown, shortAgo } from '@renderer/lib/format'
 import { useNow, useSeconds } from '@renderer/lib/use-now'
 
 /** How long something has run as "4:02", counting on the one clock every ticking time shares. */
 export function Clock({ since }: { since: number }) {
   const now = useSeconds()
   return <span className="kb-clock">{clock(Math.max(0, now - since) / 1000)}</span>
+}
+
+/** Remaining time until `until` as "4:58", counting down on the shared one-second clock. */
+export function Countdown({ until }: { until: number }) {
+  const now = useSeconds()
+  return <span className="kb-clock">{countdown(Math.max(0, until - now))}</span>
 }
 
 export function Ago({ at }: { at: number }) {
