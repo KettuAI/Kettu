@@ -259,4 +259,51 @@ describe('buildItems deduplication of redundant turn_end entries', () => {
       { key: 'e3', type: 'entry', id: 'e3', turnStart: false, char: 'E', endId: undefined },
     ])
   })
+
+  it('renders a stopped reply footer with still-running notice and no live TurnStatus when waitingBackground settles (#2855)', () => {
+    const entries = [
+      user('u1', 'Run worker'),
+      tool('t1'),
+      agent('a1', 'Started.'),
+      turnEnd('e1', 12_000),
+    ]
+    // SessionView passes working=false and still=true during waitingBackground.
+    const items = itemsFor(entries, false, true)
+    expect(items.some((item) => item.type === 'status')).toBe(false)
+    expect(items.at(-1)).toEqual({
+      key: 'reply:u1',
+      type: 'reply',
+      agentIds: ['a1'],
+      endId: 'e1',
+      latest: true,
+      toolIds: ['t1'],
+      still: true,
+    })
+  })
+
+  it('keeps prior turn tool changes above a follow-up sent during waitingBackground even if cancelled (#2845)', () => {
+    const entries = [
+      user('u1', 'Edit file and run background task'),
+      tool('t1'),
+      agent('a1', 'Edited file and started background task.'),
+      turnEnd('e1', 14_000, 'end_turn'),
+      user('u2', 'Follow-up during background wait'),
+      turnEnd('e2', 1_500, 'cancelled'),
+    ]
+    const items = itemsFor(entries, false, false)
+    expect(items).toEqual([
+      { key: 'u1', type: 'entry', id: 'u1', turnStart: true, char: 'u', endId: undefined },
+      { key: 'run:t1', type: 'run', ids: ['t1'], signature: 't' },
+      { key: 'a1', type: 'entry', id: 'a1', turnStart: false, char: 'a', endId: undefined },
+      {
+        key: 'reply:u1',
+        type: 'reply',
+        agentIds: ['a1'],
+        endId: 'e1',
+        latest: false,
+        toolIds: ['t1'],
+      },
+      { key: 'u2', type: 'entry', id: 'u2', turnStart: true, char: 'u', endId: 'e2' },
+    ])
+  })
 })

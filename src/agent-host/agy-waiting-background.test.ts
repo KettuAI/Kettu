@@ -253,17 +253,28 @@ describe('Antigravity (agy) waiting on background tasks', () => {
 
     await agy.sendUsage()
 
-    // Half A: once the tool-less step settles while session/prompt stays open, streaming stops and
-    // phase switches from Writing to waiting_background.
+    // Half A: once the tool-less step settles while session/prompt stays open, streaming stops,
+    // phase switches from Writing to waiting_background, the reply segment closes with `turn_end`,
+    // and summary exposes calm background-only `stillRunning` metadata (matching Claude Code).
     await window.until(() => window.thread(id).session.waitingBackground === true)
     expect(agentReplies(window.entries(id))).toEqual([
       expect.objectContaining({ markdown: 'Timer set for 1 minute.', streaming: false }),
     ])
-    expect(window.summary(id)?.phase).toBe('waiting_background')
-    expect(window.summary(id)?.status).toBe('running')
+    expect(window.summary(id)).toMatchObject({
+      status: 'running',
+      phase: 'waiting_background',
+      turnStartedAt: null,
+      activity: null,
+      stillRunning: { commands: 0, subagents: 0, reportsBack: true, unnamed: true },
+    })
+    expect(window.thread(id).session.turnStartedAt).toBeNull()
+    const firstEnds = window.entries(id).filter((entry) => entry.kind === 'turn_end')
+    expect(firstEnds).toHaveLength(1)
+    expect(firstEnds[0]).toMatchObject({ kind: 'turn_end', stopReason: 'end_turn' })
 
-    // Half B: follow-up sent via default `sessions.queue` is delivered straight into agy instead of
-    // getting trapped in the queue.
+    // Half B: follow-up sent via default `sessions.queue` is delivered straight into agy as a
+    // brand-new turn (not `steered: true`) instead of getting trapped in the queue or leaking an
+    // optimistic sending bubble.
     const followUp = await window.request('sessions.queue', {
       sessionId: id,
       content: [{ type: 'text', text: 'While waiting, what is 2 + 2?' }],
@@ -271,6 +282,16 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     expect(followUp).toEqual({ itemId: null })
     await window.until(() => window.thread(id).session.waitingBackground === false)
     expect(window.thread(id).session.queue).toEqual([])
+    expect(window.summary(id)?.stillRunning).toBeNull()
+    expect(window.thread(id).session.turnStartedAt).not.toBeNull()
+    const userEntries = window
+      .entries(id)
+      .filter((entry): entry is Extract<ThreadEntry, { kind: 'user' }> => entry.kind === 'user')
+    expect(userEntries).toHaveLength(2)
+    expect(userEntries[1]?.steered).toBeUndefined()
+    // Prior reply's `turn_end` comes strictly before the new follow-up user message.
+    const order = window.entries(id).map((entry) => entry.id)
+    expect(order.indexOf(firstEnds[0]!.id)).toBeLessThan(order.indexOf(userEntries[1]!.id))
     await vi.waitFor(() => expect(agy.prompts).toHaveLength(2))
     expect(agy.prompts[1]!.text).toContain('While waiting, what is 2 + 2?')
 
@@ -284,11 +305,14 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     await agy.sendUsage()
     await window.until(() => window.thread(id).session.waitingBackground === true)
     expect(agentReplies(window.entries(id))[1]).toMatchObject({ streaming: false })
+    expect(window.entries(id).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
 
-    // Finally the timer fires and agy resolves the open prompt chain.
+    // Finally the timer fires and agy resolves the open prompt chain with no duplicate turn_end.
     agy.finish('end_turn')
     await window.untilStatus(id, 'ready')
     expect(window.thread(id).session.waitingBackground).toBe(false)
+    expect(window.summary(id)?.stillRunning).toBeNull()
+    expect(window.entries(id).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
     expect(window.thread(id).session.usage?.tokens).toMatchObject({ total: 24, output: 4 })
   })
 
@@ -442,12 +466,19 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     expect(agentReplies(window.entries(id))).toEqual([
       expect.objectContaining({ markdown: 'READY', streaming: false }),
     ])
-    expect(window.summary(id)?.phase).toBe('waiting_background')
+    expect(window.summary(id)).toMatchObject({
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 1, subagents: 0, reportsBack: true },
+    })
+    expect(window.thread(id).session.background).toMatchObject([
+      { id: 'call-bg-real', kind: 'shell', status: 'running', entryId: 't:call-bg-real' },
+    ])
     expect(window.entries(id).find((entry) => entry.id === 't:call-bg-real')).toMatchObject({
       status: 'in_progress',
     })
 
-    // Follow-up sent via default sessions.queue delivers straight into agy via steering instead of queueing.
+    // Follow-up sent via default sessions.queue delivers straight into agy as a new turn.
     const followUp = await window.request('sessions.queue', {
       sessionId: id,
       content: [{ type: 'text', text: 'Status check while command runs?' }],
@@ -455,6 +486,7 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     expect(followUp).toEqual({ itemId: null })
     await window.until(() => window.thread(id).session.waitingBackground === false)
     expect(window.thread(id).session.queue).toEqual([])
+    expect(window.summary(id)?.stillRunning).toBeNull()
     await vi.waitFor(() => expect(agy.prompts).toHaveLength(2))
     expect(agy.prompts[1]!.text).toContain('Status check while command runs?')
 
@@ -465,5 +497,93 @@ describe('Antigravity (agy) waiting on background tasks', () => {
     agy.finish('end_turn')
     await window.untilStatus(id, 'ready')
     expect(window.thread(id).session.waitingBackground).toBe(false)
+  })
+
+  it('keeps prior turn boundary intact when cancelling after a follow-up sent during waitingBackground (#2845)', async () => {
+    const { agy, window, id } = await openAgySession()
+
+    await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Start background build' }],
+    })
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(1))
+
+    await agy.sendTool('call-bg-cancel', 'run_command', 'in_progress')
+    await agy.sendUsage()
+    await agy.sendText('Build running in background.')
+    await agy.sendUsage()
+    await window.until(() => window.thread(id).session.waitingBackground === true)
+
+    // Send follow-up during waitingBackground -> emitted as a fresh non-steered turn after the
+    // prior reply's `end_turn`, then cancel before the follow-up replies.
+    const followUp = await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Actually stop that' }],
+    })
+    expect(followUp).toEqual({ itemId: null })
+    await window.until(() => window.thread(id).session.waitingBackground === false)
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(2))
+
+    await window.request('sessions.cancel', { sessionId: id })
+    await window.untilStatus(id, 'ready')
+
+    const entries = window.entries(id)
+    const users = entries.filter(
+      (entry): entry is Extract<ThreadEntry, { kind: 'user' }> => entry.kind === 'user',
+    )
+    const ends = entries.filter(
+      (entry): entry is Extract<ThreadEntry, { kind: 'turn_end' }> => entry.kind === 'turn_end',
+    )
+    expect(users).toHaveLength(2)
+    expect(users[1]?.steered).toBeUndefined()
+    expect(ends).toHaveLength(2)
+    expect(ends[0]?.stopReason).toBe('end_turn')
+    expect(ends[1]?.stopReason).toBe('cancelled')
+
+    const order = entries.map((entry) => entry.id)
+    expect(order.indexOf(ends[0]!.id)).toBeLessThan(order.indexOf(users[1]!.id))
+    expect(order.indexOf(users[1]!.id)).toBeLessThan(order.indexOf(ends[1]!.id))
+  })
+
+  it('auto-drains queued messages when entering waitingBackground as normal non-steered turns', async () => {
+    const { agy, window, id } = await openAgySession()
+
+    await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'First task' }],
+    })
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(1))
+
+    await agy.sendText('Working on it.')
+    await window.until(() => agentReplies(window.entries(id)).some((entry) => entry.streaming))
+
+    const queued = await window.request('sessions.queue', {
+      sessionId: id,
+      content: [{ type: 'text', text: 'Queued next question' }],
+    })
+    expect(queued.itemId).not.toBeNull()
+
+    await agy.sendUsage()
+    await vi.waitFor(() => expect(agy.prompts).toHaveLength(2))
+    await window.until(() => window.thread(id).session.queue.length === 0)
+
+    const entries = window.entries(id)
+    const users = entries.filter(
+      (entry): entry is Extract<ThreadEntry, { kind: 'user' }> => entry.kind === 'user',
+    )
+    const ends = entries.filter(
+      (entry): entry is Extract<ThreadEntry, { kind: 'turn_end' }> => entry.kind === 'turn_end',
+    )
+    expect(users).toHaveLength(2)
+    expect(users[1]?.steered).toBeUndefined()
+    expect(ends).toHaveLength(1)
+    expect(entries.map((e) => e.id).indexOf(ends[0]!.id)).toBeLessThan(
+      entries.map((e) => e.id).indexOf(users[1]!.id),
+    )
+
+    await agy.sendText('Answered next question.')
+    agy.finish('end_turn')
+    await window.untilStatus(id, 'ready')
+    expect(window.entries(id).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
   })
 })

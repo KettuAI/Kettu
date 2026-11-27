@@ -47,8 +47,12 @@ export function PlanChip({ sessionId, status }: { sessionId: string; status: Ses
     }
     return false
   })
+  const waitingBackground = useThreadsStore(
+    (s) => s.replicas[sessionId]?.state?.session.waitingBackground === true,
+  )
   const items = plan && plan.items.length > 0 ? plan.items : null
-  const running = ownTurn && (status === 'running' || status === 'awaiting_permission')
+  const running =
+    ownTurn && ((status === 'running' && !waitingBackground) || status === 'awaiting_permission')
   const allDone = !!items && items.every((item) => item.status === 'completed')
   const tone: Tone = !running ? 'ended' : status === 'awaiting_permission' ? 'waiting' : 'running'
 

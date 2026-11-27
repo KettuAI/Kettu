@@ -13,7 +13,7 @@ import { agentName } from '@renderer/stores/agents'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { hostOfSession, sessionTitle } from '@renderer/stores/sessions'
 import { CardOutputs } from './card-outputs'
-import { backgroundText, type RowStatus } from './row-status'
+import { backgroundText, hasNamedBackground, type RowStatus } from './row-status'
 import type { SessionCache } from './session-cache'
 import { useOutputs } from './use-outputs'
 
@@ -93,12 +93,19 @@ function State({
     )
   }
   if (status.background && !status.running) {
+    const named = hasNamedBackground(status.background)
     return (
       <span className="flex min-w-0 items-center gap-1.5">
         <BackgroundDots />
         <span className="truncate">
-          <span className="font-medium text-secondary">{t('card.background')}</span>{' '}
-          {backgroundText(t, status.background)}
+          {named ? (
+            <>
+              <span className="font-medium text-secondary">{t('card.background')}</span>{' '}
+              {backgroundText(t, status.background)}
+            </>
+          ) : (
+            <span className="font-medium text-secondary">{t('card.backgroundUnnamed')}</span>
+          )}
         </span>
       </span>
     )

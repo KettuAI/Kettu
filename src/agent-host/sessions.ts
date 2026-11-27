@@ -695,6 +695,10 @@ export interface TurnSender {
 
 interface Turn {
   startedAt: number
+  /** Start of the active reply segment, reset on wakeup or follow-up after background wait. */
+  segmentStartedAt: number
+  /** Whether the current reply segment already emitted `turn_end` upon entering background wait. */
+  settledByWait: boolean
   /** As the user wrote it, with the attachments as their records show them. */
   content: UserContent[]
   /** The message as it came in, given back when the turn fails before the agent added anything. */
@@ -1723,9 +1727,14 @@ export class SessionManager {
       archivedAt: record.archivedAt ?? null,
       acpSessionId: record.acpSessionId || null,
       plan: live ? planProgress(live.thread) : null,
-      turnStartedAt: live?.thread.session.turnStartedAt ?? null,
+      turnStartedAt:
+        live && !(status === 'running' && live.thread.session.waitingBackground === true)
+          ? (live.thread.session.turnStartedAt ?? null)
+          : null,
       activity:
-        live && (status === 'running' || status === 'awaiting_permission')
+        live &&
+        !(status === 'running' && live.thread.session.waitingBackground === true) &&
+        (status === 'running' || status === 'awaiting_permission')
           ? live.activity.current(live.thread)
           : null,
       phase: live && status === 'running' ? turnPhase(live.thread).phase : null,
@@ -1887,8 +1896,10 @@ export class SessionManager {
     let running = 0
     let waiting = 0
     for (const live of this.live.values()) {
-      const status = live.thread.session.status
-      if (status === 'running' || status === 'awaiting_permission') running++
+      const { status, waitingBackground } = live.thread.session
+      if (status === 'awaiting_permission' || (status === 'running' && !waitingBackground)) {
+        running++
+      }
       if (waitingCount(live) > 0) waiting++
     }
     if (running === this.busyCounts.running && waiting === this.busyCounts.waiting) return
@@ -3445,12 +3456,29 @@ export class SessionManager {
 
   private update(live: Live, changes: Partial<SessionView>): void {
     if (changes.error) live.errorSeen = this.inFront(live.id)
-    const next =
+    let next = changes
+    if (
       changes.status === 'awaiting_permission' &&
       live.thread.session.waitingBackground &&
       !('waitingBackground' in changes)
-        ? { ...changes, waitingBackground: false }
-        : changes
+    ) {
+      const now = this.now()
+      if (live.turn && !live.turn.ended) {
+        live.turn.segmentStartedAt = now
+        live.turn.settledByWait = false
+        live.turn.hadOutput = false
+      }
+      next = {
+        ...changes,
+        waitingBackground: false,
+        ...(!('turnStartedAt' in changes) && live.turn && !live.turn.ended
+          ? {
+              turnStartedAt: now,
+              turnStartUsed: live.thread.session.usage?.used ?? null,
+            }
+          : {}),
+      }
+    }
     this.emit(live, [{ op: 'session.update', changes: next }])
     if ('status' in next) this.refreshRelease(live)
     // New session shows a prepared session through its summary, not its patches.
@@ -7213,12 +7241,15 @@ export class SessionManager {
   }
 
   /**
-   * What a top-level session runs on between turns, by its agent's reports, for its row and the
-   * end of its thread; null while a turn runs or nothing does.
+   * What a top-level session runs on between turns (or while idle-waiting on background work with
+   * an open prompt), by its agent's reports, for its row and the end of its thread; null while a
+   * turn is actively running or nothing runs in the background.
    */
   private stillRunning(live: Live): StillRunning | null {
-    const { status } = live.thread.session
-    if (live.record.origin === 'subagent' || status !== 'ready' || live.turn || live.agentTurn) {
+    const { status, waitingBackground } = live.thread.session
+    if (live.record.origin === 'subagent') return null
+    const idleWaiting = status === 'running' && waitingBackground === true
+    if (!idleWaiting && (status !== 'ready' || live.turn || live.agentTurn)) {
       return null
     }
     let commands = 0
@@ -7226,8 +7257,14 @@ export class SessionManager {
       if (task.status === 'running') commands++
     }
     const subagents = this.workingSubagents(live).length
-    if (commands + subagents === 0) return null
-    return { commands, subagents, reportsBack: live.connection?.reportsBack === true }
+    if (commands + subagents === 0) {
+      return idleWaiting ? { commands: 0, subagents: 0, reportsBack: true, unnamed: true } : null
+    }
+    return {
+      commands,
+      subagents,
+      reportsBack: idleWaiting || live.connection?.reportsBack === true,
+    }
   }
 
   /** Sends the session's summary again once what it runs on between turns changed. */
@@ -9073,22 +9110,42 @@ export class SessionManager {
     live.autoSteering = true
     try {
       const resolved = await this.resolveAttachments(live, item.content)
+      // Ensure the prior reply segment is closed before starting the new user turn.
+      if (live.turn && !live.turn.ended && !live.turn.settledByWait) {
+        this.emitWaitingTurnEnd(live, live.turn, this.now())
+      }
       const outcome = await live.connection.steer(live.record.acpSessionId, resolved.wire)
       if (outcome === 'promptRequired') return queueAtFront()
-      const steered: ThreadEntry = {
+      const now = this.now()
+      // A follow-up sent while idle waiting on background work begins a new turn rather than
+      // steering mid-reply, so it is emitted as a normal user entry (not `steered: true`).
+      const entry: ThreadEntry = {
         kind: 'user',
         id: this.nextId(live),
         content: resolved.shown,
-        at: this.now(),
-        steered: true,
+        at: now,
         ...(item.device ? { device: item.device } : {}),
       }
-      this.emit(live, [{ op: 'entry.add', entry: steered }])
-      this.keepOrigin(live, steered)
+      this.emit(live, [{ op: 'entry.add', entry }])
+      this.keepOrigin(live, entry)
       this.commitAttachments(live, resolved)
       if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
       live.interruptibleWaits.clear()
-      if (live.thread.session.waitingBackground) this.update(live, { waitingBackground: false })
+      if (live.turn && !live.turn.ended) {
+        live.turn.entryId = entry.id
+        live.turn.content = resolved.shown
+        live.turn.written = resolved.written
+        live.turn.segmentStartedAt = now
+        live.turn.settledByWait = false
+        live.turn.hadOutput = false
+      }
+      live.userTurn = true
+      this.update(live, {
+        waitingBackground: false,
+        turnStartedAt: now,
+        turnStartUsed: live.thread.session.usage?.used ?? null,
+        updatedAt: now,
+      })
       this.persist(live)
       this.touch(live.id)
       this.skipQuestions(live)
@@ -9145,7 +9202,11 @@ export class SessionManager {
     if (!live.turn || live.turn.ended || !live.connection) {
       throw new HostError('busy', t('session.noTurn'))
     }
+    const fromWaiting = live.thread.session.waitingBackground === true
     const resolved = await this.resolveAttachments(live, item.content)
+    if (fromWaiting && live.turn && !live.turn.ended && !live.turn.settledByWait) {
+      this.emitWaitingTurnEnd(live, live.turn, this.now())
+    }
     let outcome
     try {
       outcome = await live.connection.steer(live.record.acpSessionId, resolved.wire)
@@ -9159,12 +9220,13 @@ export class SessionManager {
       if (canSend(live.thread.session.status)) this.drainQueue(live)
       return false
     }
+    const now = this.now()
     const steered: ThreadEntry = {
       kind: 'user',
       id: this.nextId(live),
       content: resolved.shown,
-      at: this.now(),
-      steered: true,
+      at: now,
+      ...(fromWaiting ? {} : { steered: true as const }),
       ...(item.from ? { from: item.from } : {}),
       ...(item.device ? { device: item.device } : {}),
       ...(item.approval ? { approval: item.approval } : {}),
@@ -9178,11 +9240,29 @@ export class SessionManager {
     const deliveredMeta = live.kettuQueued.get(itemId)
     live.kettuQueued.delete(itemId)
     live.interruptibleWaits.clear()
+    if (fromWaiting && live.turn && !live.turn.ended) {
+      live.turn.entryId = steered.id
+      live.turn.content = resolved.shown
+      live.turn.written = resolved.written
+      live.turn.segmentStartedAt = now
+      live.turn.settledByWait = false
+      live.turn.hadOutput = false
+      live.userTurn = !item.approval && !item.kettu && !item.from
+    }
     const rest = queue.filter((i) => i.id !== itemId)
     this.update(live, {
       queue: rest,
       ...(rest.length === 0 ? { queuePaused: false } : {}),
-      ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
+      ...(fromWaiting
+        ? {
+            waitingBackground: false,
+            turnStartedAt: now,
+            turnStartUsed: live.thread.session.usage?.used ?? null,
+            updatedAt: now,
+          }
+        : live.thread.session.waitingBackground
+          ? { waitingBackground: false }
+          : {}),
     })
     deliveredMeta?.onDelivered?.()
     if (item.approval || item.kettu) {
@@ -9330,6 +9410,8 @@ export class SessionManager {
   ): Turn {
     const turn: Turn = {
       startedAt: now,
+      segmentStartedAt: now,
+      settledByWait: false,
       content,
       written: content,
       attachments: [],
@@ -10147,6 +10229,26 @@ export class SessionManager {
     await this.wakeQueuedItem(live, next.id, false)
   }
 
+  /** Closes the active reply segment with an `end_turn` marker before idling on background work. */
+  private emitWaitingTurnEnd(live: Live, turn: Turn, now: number): void {
+    if (turn.settledByWait) return
+    turn.settledByWait = true
+    const used = live.thread.session.usage?.used
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'turn_end',
+          id: this.nextId(live),
+          stopReason: 'end_turn',
+          durationMs: Math.max(0, now - turn.segmentStartedAt),
+          after: agentEntryBefore(live.thread),
+          ...(used ? { used } : {}),
+        },
+      },
+    ])
+  }
+
   /** Updates whether this running turn is idle waiting on background tasks, sub-agents, or timers. */
   private setWaitingBackground(live: Live, waiting: boolean): void {
     if (waiting) {
@@ -10161,9 +10263,37 @@ export class SessionManager {
       this.closeStreamingEntries(live)
     }
     if ((live.thread.session.waitingBackground === true) === waiting) return
-    this.update(live, { waitingBackground: waiting })
+    const now = this.now()
+    if (waiting) {
+      if (live.turn && !live.turn.ended) this.emitWaitingTurnEnd(live, live.turn, now)
+      this.update(live, {
+        waitingBackground: true,
+        turnStartedAt: null,
+        turnStartUsed: null,
+        updatedAt: now,
+      })
+      this.persist(live)
+      this.touch(live.id)
+      void this.drainWaitingQueue(live)
+      return
+    }
+    // While auto-steering a follow-up out of waitingBackground, let `tryAutoSteer` / `steerItem`
+    // emit the new user entry and clear `waitingBackground` in the same patch batch so clients
+    // never see a running frame before the user message arrives.
+    if (live.autoSteering) return
+    const activeTurn = live.turn !== null && !live.turn.ended
+    if (activeTurn && live.turn) {
+      live.turn.segmentStartedAt = now
+      live.turn.settledByWait = false
+      live.turn.hadOutput = false
+    }
+    this.update(live, {
+      waitingBackground: false,
+      turnStartedAt: activeTurn ? now : null,
+      turnStartUsed: activeTurn ? (live.thread.session.usage?.used ?? null) : null,
+      updatedAt: now,
+    })
     this.touch(live.id)
-    if (waiting) void this.drainWaitingQueue(live)
   }
 
   /**
@@ -10279,8 +10409,12 @@ export class SessionManager {
     // Background notifications can wake an agent turn that emits nothing and settles normally;
     // omit the redundant `turn_end` entry so empty durations do not stack between replies.
     if (turn.byAgent && stopReason === 'end_turn' && !turn.hadOutput) return null
+    // When the prompt settled into background wait, its reply segment already recorded `end_turn`;
+    // skip adding a second `end_turn` if the prompt later resolves without new wakeup output.
+    if (turn.settledByWait && stopReason === 'end_turn') return null
     const id = this.nextId(live)
     const used = live.thread.session.usage?.used
+    const durationMs = turn.settledByWait ? 0 : Math.max(0, this.now() - turn.segmentStartedAt)
     this.emit(live, [
       {
         op: 'entry.add',
@@ -10288,7 +10422,7 @@ export class SessionManager {
           kind: 'turn_end',
           id,
           stopReason,
-          durationMs: Math.max(0, this.now() - turn.startedAt),
+          durationMs,
           after: agentEntryBefore(live.thread),
           ...(used ? { used } : {}),
         },

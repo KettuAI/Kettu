@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { threadFromSnapshot, type ThreadEntry, type ThreadState } from '@shared/thread'
+import { isActivelyRunning, isWaitingBackground, type SessionSummary } from './agent-host'
+import { groupSessions } from './session-groups'
+import { threadFromSnapshot, type ThreadEntry, type ThreadState } from './thread'
 import { turnPhase } from './turn-phase'
 
 function thread(
@@ -84,5 +86,66 @@ describe('turnPhase while waiting on background work', () => {
       waitingBackground: true,
     })
     expect(turnPhase(state)).toEqual({ phase: 'approval', count: 1 })
+  })
+})
+
+function summary(id: string, overrides: Partial<SessionSummary> = {}): SessionSummary {
+  return {
+    id,
+    agentId: 'antigravity',
+    projectPath: '/repo',
+    scratch: false,
+    title: id,
+    status: 'ready',
+    attention: 'none',
+    permissionCount: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    parentId: null,
+    origin: 'user',
+    routine: null,
+    description: null,
+    missing: false,
+    branch: null,
+    pr: null,
+    cache: null,
+    model: null,
+    pinnedAt: null,
+    archivedAt: null,
+    acpSessionId: null,
+    ...overrides,
+  }
+}
+
+describe('isWaitingBackground and isActivelyRunning', () => {
+  it('distinguishes idle background wait from active running turns', () => {
+    expect(isWaitingBackground({ status: 'running', phase: 'waiting_background' })).toBe(true)
+    expect(isActivelyRunning({ status: 'running', phase: 'waiting_background' })).toBe(false)
+
+    expect(isWaitingBackground({ status: 'running', phase: 'writing' })).toBe(false)
+    expect(isActivelyRunning({ status: 'running', phase: 'writing' })).toBe(true)
+
+    expect(isWaitingBackground({ status: 'running', phase: null })).toBe(false)
+    expect(isActivelyRunning({ status: 'running', phase: null })).toBe(true)
+
+    expect(isActivelyRunning({ status: 'awaiting_permission', phase: null })).toBe(true)
+    expect(isActivelyRunning({ status: 'ready', phase: null })).toBe(false)
+    expect(isActivelyRunning({ status: 'closed', phase: null })).toBe(false)
+  })
+
+  it('excludes waiting_background sessions from groupSessions.running until they wake up', () => {
+    const waitingBg = summary('s-wait', {
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 0, subagents: 1, reportsBack: true },
+      updatedAt: 100,
+    })
+    const active = summary('s-run', { status: 'running', phase: 'writing', updatedAt: 90 })
+    const groups = groupSessions([waitingBg, active])
+    expect(groups.running.map((s) => s.id)).toEqual(['s-run'])
+
+    // Once background work wakes the session up, it returns to the running group immediately.
+    const woken = { ...waitingBg, phase: 'writing' as const, stillRunning: null }
+    expect(groupSessions([woken, active]).running.map((s) => s.id)).toEqual(['s-wait', 's-run'])
   })
 })

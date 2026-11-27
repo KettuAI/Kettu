@@ -1,7 +1,13 @@
 // What needs the user across sessions, as the menu bar panel and the notch island list it: the
 // groups of sessions, the plan limits worth a line, and the window that holds a session back.
 
-import type { AgentOptions, AgentStatus, PlanLimit, SessionSummary } from './agent-host'
+import {
+  isActivelyRunning,
+  type AgentOptions,
+  type AgentStatus,
+  type PlanLimit,
+  type SessionSummary,
+} from './agent-host'
 import { limitsForModel } from './plan-limits'
 import type { AgentId, ConfigOption } from './thread'
 
@@ -59,9 +65,9 @@ export function groupSessions(
 ): SessionGroups {
   const shown = summaries.filter(listed).sort(newestFirst)
   const waiting = shown.filter(needsYou)
-  const running = shown.filter((s) => !needsYou(s) && s.status === 'running')
+  const running = shown.filter((s) => !needsYou(s) && isActivelyRunning(s))
   const finished = shown
-    .filter((s) => !needsYou(s) && s.status !== 'running')
+    .filter((s) => !needsYou(s) && !isActivelyRunning(s))
     .filter((s) => s.attention === 'unread' || s.attention === 'error')
     .slice(0, rows.finished ?? FINISHED_ROWS)
   const busy = waiting.length + running.length + finished.length > 0

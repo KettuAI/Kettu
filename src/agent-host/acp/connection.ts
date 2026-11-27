@@ -1140,7 +1140,11 @@ export class AcpConnection implements AgentConnection {
             fallbackMs: this.hooks.agyWaitFallbackMs,
             retryDelaysMs: this.hooks.agyWaitRetryDelaysMs,
             onWaitingChange: (sessionId, waiting) => {
-              this.targets.get(sessionId)?.apply({
+              const target = this.targets.get(sessionId)
+              if (!target) return
+              const commands = this.agyCommands.get(sessionId)
+              if (commands?.setWaiting(waiting)) this.showCommands(target, commands)
+              target.apply({
                 patches: [],
                 effects: [{ kind: 'waitingBackground', waiting }],
               })

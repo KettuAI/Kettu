@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { rowSubParts, rowTooltip } from './model'
+import type { SessionSummary } from '@shared/agent-host'
+import { pickupState } from '@renderer/features/session/new-session/picker'
+import { sessionTree } from '@renderer/stores/sessions'
+import { overviewRows, rowSubParts, rowTooltip } from './model'
 
 const OVERVIEW_CSS_PATH = fileURLToPath(new URL('./overview.css', import.meta.url))
 
@@ -83,5 +86,51 @@ describe('overview host visibility layout styles', () => {
       /\.k-ov-sub__project\s*\{[^}]*flex:\s*0 2 auto;[^}]*min-width:\s*0;[^}]*text-overflow:\s*ellipsis;/s,
     )
     expect(css).toMatch(/\.k-ov-sub__project ~ \.k-ov-sub__by\s*\{[^}]*flex:\s*0 0 auto;/s)
+  })
+})
+
+function sessionSummary(id: string, overrides: Partial<SessionSummary> = {}): SessionSummary {
+  return {
+    id,
+    agentId: 'antigravity',
+    projectPath: '/repo',
+    scratch: false,
+    title: id,
+    status: 'ready',
+    attention: 'none',
+    permissionCount: 0,
+    createdAt: 1,
+    updatedAt: 100,
+    parentId: null,
+    origin: 'user',
+    routine: null,
+    description: null,
+    missing: false,
+    branch: null,
+    pr: null,
+    cache: null,
+    model: null,
+    pinnedAt: null,
+    archivedAt: null,
+    acpSessionId: null,
+    ...overrides,
+  }
+}
+
+describe('waiting_background consistency across overview and pickup list (#2855)', () => {
+  it('does not show waiting_background sessions as actively running in overview or pickup', () => {
+    const waiting = sessionSummary('s-wait', {
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 0, subagents: 1, reportsBack: true },
+    })
+    const active = sessionSummary('s-run', { status: 'running', phase: 'working' })
+
+    const nodes = sessionTree({ 's-wait': waiting, 's-run': active }, '/repo')
+    const rows = overviewRows({}, nodes)
+    expect(rows.map((r) => [r.key, r.state])).toEqual([['session:s-run', 'running']])
+
+    expect(pickupState(waiting)).toBe('finished')
+    expect(pickupState(active)).toBe('working')
   })
 })

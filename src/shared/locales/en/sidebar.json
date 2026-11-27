@@ -352,6 +352,7 @@
     "running": "Running",
     "starting": "Starting",
     "background": "Still running in background: {{work}}",
+    "backgroundUnnamed": "Still running in background",
     "unread": "Unread",
     "cacheExpiring_one": "Prompt cache expires in {{count}} minute",
     "cacheExpiring_other": "Prompt cache expires in {{count}} minutes",
@@ -493,7 +494,8 @@
     "moreArtifacts_one": "{{count}} more artifact",
     "moreArtifacts_other": "{{count}} more artifacts",
     "artifactFacts": "v{{version}} · {{time}}",
-    "background": "Background"
+    "background": "Background",
+    "backgroundUnnamed": "Background tasks"
   },
   "stillRunning": {
     "subagents_one": "{{count}} sub-agent",

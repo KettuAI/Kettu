@@ -3,7 +3,7 @@ import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import type { SessionSummary } from '@shared/agent-host'
+import { isActivelyRunning, type SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { SurfaceLight } from '@renderer/components/control/surface-light'
@@ -122,7 +122,12 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const [queueError, setQueueError] = useState<string | null>(null)
   const gutter = useScrollbarGutter()
   const status = session?.status ?? summary.status
-  const running = status === 'running' || status === 'awaiting_permission'
+  // Idle-waiting on background tasks keeps the underlying prompt open, but the thread and
+  // composer present as stopped (matching Claude Code between turns with background work).
+  const waitingBackground =
+    status === 'running' &&
+    (session ? session.waitingBackground === true : summary.phase === 'waiting_background')
+  const running = (status === 'running' && !waitingBackground) || status === 'awaiting_permission'
   // File references in replies link to the project's files once their list is known: read when
   // the session shows, and again after a turn that changed the files.
   useEffect(() => {
@@ -428,8 +433,9 @@ function Announcer({ summary, name }: { summary: SessionSummary; name: string })
     if (summary.permissionCount > before.permissionCount) {
       setEvent(asked ? 'question' : 'approval')
     } else if (
-      (before.status === 'running' || before.status === 'awaiting_permission') &&
-      summary.status === 'ready'
+      isActivelyRunning(before) &&
+      !isActivelyRunning(summary) &&
+      (summary.status === 'ready' || summary.phase === 'waiting_background')
     ) {
       setEvent('finished')
     }

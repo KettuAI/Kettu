@@ -950,13 +950,36 @@ export interface SessionSummary {
 
 /**
  * What a session's agent still runs between turns, by its own reports: the background tasks the
- * session board lists and the subagents at work. Agents that list no tasks count subagents alone.
+ * session board lists and the subagents at work. Agents that list no tasks count subagents alone,
+ * or mark `unnamed` when waiting on background work without listed commands or sub-agents (such
+ * as scheduled timers).
  */
 export interface StillRunning {
   commands: number
   subagents: number
   /** The agent starts a turn of its own to report once that work ends. */
   reportsBack: boolean
+  /** Background work without a listed command or sub-agent (e.g. a timer or internal task). */
+  unnamed?: boolean
+}
+
+/**
+ * Whether a session is idle-waiting on background work while its underlying prompt stays open
+ * (e.g. Antigravity holding `session/prompt` open for sub-agents, background commands, or timers).
+ */
+export function isWaitingBackground(summary: Pick<SessionSummary, 'status' | 'phase'>): boolean {
+  return summary.status === 'running' && summary.phase === 'waiting_background'
+}
+
+/**
+ * Whether a session is actively running a turn (as opposed to idle or only waiting on background
+ * work).
+ */
+export function isActivelyRunning(summary: Pick<SessionSummary, 'status' | 'phase'>): boolean {
+  return (
+    summary.status === 'awaiting_permission' ||
+    (summary.status === 'running' && summary.phase !== 'waiting_background')
+  )
 }
 
 /**

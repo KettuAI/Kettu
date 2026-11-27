@@ -23,23 +23,33 @@ export const StillRunningLine = memo(function StillRunningLine({
     useShallow((s) => {
       const still = s.byId[sessionId]?.stillRunning
       return still
-        ? { commands: still.commands, subagents: still.subagents, reportsBack: still.reportsBack }
+        ? {
+            commands: still.commands,
+            subagents: still.subagents,
+            reportsBack: still.reportsBack,
+            unnamed: still.unnamed === true,
+          }
         : null
     }),
   )
   if (!work) return null
   const { commands, subagents } = work
-  const agents = t('stillRunning.subagents', { count: subagents })
-  const shell = t('stillRunning.commands', { count: commands })
-  const what =
-    commands === 0
-      ? agents
-      : subagents === 0
-        ? shell
-        : t('stillRunning.both', { subagents: agents, commands: shell })
-  const text = work.reportsBack
-    ? t('stillRunning.lineReports', { work: what, count: commands + subagents })
-    : t('stillRunning.line', { work: what })
+  let text: string
+  if (commands + subagents === 0) {
+    text = work.reportsBack ? t('stillRunning.lineUnnamedReports') : t('stillRunning.lineUnnamed')
+  } else {
+    const agents = t('stillRunning.subagents', { count: subagents })
+    const shell = t('stillRunning.commands', { count: commands })
+    const what =
+      commands === 0
+        ? agents
+        : subagents === 0
+          ? shell
+          : t('stillRunning.both', { subagents: agents, commands: shell })
+    text = work.reportsBack
+      ? t('stillRunning.lineReports', { work: what, count: commands + subagents })
+      : t('stillRunning.line', { work: what })
+  }
   const open = () => {
     if (pane && !pane.focused) focusPane(pane.paneId)
     toggleBoard(sessionId, true)
