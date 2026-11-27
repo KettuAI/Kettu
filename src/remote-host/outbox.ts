@@ -36,6 +36,36 @@ export interface OutboxConnection {
   transport: Pick<Transport, 'buffered' | 'drained'>
 }
 
+/** 发件箱追踪上下文：区分请求回答与实时事件更新。 */
+export type OutboxTrace =
+  | {
+      kind: 'answer'
+      method: string
+      /** 请求完成解密的时刻（毫秒）。 */
+      startedAt: number
+      error?: string
+    }
+  | {
+      kind: 'live'
+      eventType: string
+      sessionId?: string
+      /** 实时更新刷出进入发件箱的时刻（毫秒）。 */
+      startedAt: number
+    }
+
+/** 单条消息最后一帧写出完成后的送达计时指标。 */
+export interface OutboxWriteTiming {
+  trace: OutboxTrace
+  enqueuedAt: number
+  sendStartedAt: number
+  writtenAt: number
+  /** 入队时排在该消息前面的待发与在途字节数。 */
+  queuedBytes: number
+  bytes: number
+  /** 若经过补丁合并，为合并的批次数。 */
+  merged: number
+}
+
 export interface OutboxOptions {
   /** Whether the device acknowledges what it applies, as it does from version 2. */
   acks: boolean
@@ -43,6 +73,8 @@ export interface OutboxOptions {
   overflowed(): void
   /** Messages dropped for a device that fell behind, for the log. */
   dropped(count: number): void
+  /** 每条带追踪上下文的消息最后一帧首次写出完成时回调。 */
+  onWritten?: (timing: OutboxWriteTiming) => void
   limits?: Partial<OutboxLimits>
   now?: () => number
 }
@@ -66,6 +98,16 @@ interface Entry {
   /** For a message that says the whole of some state: only the latest of its key is kept. */
   key: string | null
   resync: boolean
+  /** 可选送达计时追踪信息。 */
+  trace: OutboxTrace | null
+  /** 入队时刻（毫秒）。 */
+  enqueuedAt: number
+  /** 入队时排在前面的待发与在途字节数。 */
+  queuedBytes: number
+  /** 合并的批次数（默认为 1）。 */
+  merged: number
+  /** 是否已上报首次写出完成，避免断线重传重复记录。 */
+  recorded: boolean
 }
 
 export class Outbox {
@@ -78,6 +120,10 @@ export class Outbox {
   private queued: Entry[] = []
   /** Entries waiting that are not patches, whose turn ends a wait for the pace. */
   private queuedOther = 0
+  /** 当前排队中尚未开始写出的总字节数。 */
+  private queuedBytes = 0
+  /** 已交给 channel.send 但最后一帧尚未写完的总字节数。 */
+  private writingBytes = 0
   private written = 0
   private acked = 0
   /** Stream bytes waiting or not acknowledged. */
@@ -123,16 +169,14 @@ export class Outbox {
     this.flushed()
   }
 
+  /** 当前排在队列中、正在写帧及底层传输缓冲中的待发字节总数。 */
+  private pendingBytes(): number {
+    return this.queuedBytes + this.writingBytes + (this.connection?.transport.buffered() ?? 0)
+  }
+
   /** Sends a message after every one before it; rejects when it cannot go, as when too long. */
-  push(message: ChannelMessage): Promise<void> {
+  push(message: ChannelMessage, trace?: OutboxTrace): Promise<void> {
     if (this.closed) return Promise.reject(new Error('The device session ended'))
-    if (!this.options.acks) {
-      const connection = this.connection
-      if (!connection) return Promise.reject(new Error('The device is not connected'))
-      const sent = connection.channel.send(message)
-      this.sending = sent.catch(() => {})
-      return sent
-    }
     let size: number
     if (message.kind === 'bytes') {
       size = message.data.length
@@ -145,7 +189,36 @@ export class Outbox {
         return Promise.reject(new RangeError('Channel message is longer than 32 MiB'))
       }
     }
-    this.enqueue(entryOf(message, size))
+    const enqueuedAt = this.now()
+    const aheadBytes = this.pendingBytes()
+    if (!this.options.acks) {
+      const connection = this.connection
+      if (!connection) return Promise.reject(new Error('The device is not connected'))
+      this.writingBytes += size
+      const sent = connection.channel.send(message)
+      sent.then(
+        () => {
+          this.writingBytes = Math.max(0, this.writingBytes - size)
+          if (trace) {
+            this.options.onWritten?.({
+              trace,
+              enqueuedAt,
+              sendStartedAt: enqueuedAt,
+              writtenAt: this.now(),
+              queuedBytes: aheadBytes,
+              bytes: size,
+              merged: 1,
+            })
+          }
+        },
+        () => {
+          this.writingBytes = Math.max(0, this.writingBytes - size)
+        },
+      )
+      this.sending = sent.catch(() => {})
+      return sent
+    }
+    this.enqueue(entryOf(message, size, trace ?? null, enqueuedAt, aheadBytes))
     return Promise.resolve()
   }
 
@@ -221,14 +294,17 @@ export class Outbox {
     this.queued = []
     this.unacked = []
     this.queuedOther = 0
+    this.queuedBytes = 0
+    this.writingBytes = 0
     this.streamBytes = 0
     this.wake()
     this.flushed()
   }
 
   private enqueue(entry: Entry): void {
-    if (entry.batch && this.merge(entry.batch, entry.size)) return this.pump()
+    if (entry.batch && this.merge(entry.batch, entry.size, entry.trace)) return this.pump()
     this.queued.push(entry)
+    this.queuedBytes += entry.size
     if (!entry.batch) this.queuedOther++
     if (entry.stream) this.streamBytes += entry.size
     if (this.queued.length > this.overflowAt) this.overflow()
@@ -242,7 +318,7 @@ export class Outbox {
    * Adds a batch to the waiting one of its session it follows, when only patches wait after that
    * one, so nothing else changes places with it.
    */
-  private merge(batch: Batch, size: number): boolean {
+  private merge(batch: Batch, size: number, trace: OutboxTrace | null): boolean {
     for (let i = this.queued.length - 1; i >= 0; i--) {
       const waiting = this.queued[i]!
       if (!waiting.batch) return false
@@ -252,6 +328,9 @@ export class Outbox {
       waiting.batch.seq = batch.seq
       for (const patch of batch.patches) waiting.batch.patches.push(patch)
       waiting.size += size
+      waiting.merged += 1
+      if (!waiting.trace && trace) waiting.trace = trace
+      this.queuedBytes += size
       return true
     }
     return false
@@ -277,9 +356,13 @@ export class Outbox {
     if (patches > 0 && !kept.some((entry) => entry.resync)) {
       const resync: Resync = { type: 'resync' }
       const size = JSON.stringify(resync).length
-      kept.push({ ...entryOf({ kind: 'json', value: resync }, size), resync: true })
+      kept.push({
+        ...entryOf({ kind: 'json', value: resync }, size, null, this.now(), 0),
+        resync: true,
+      })
     }
     this.queuedOther = kept.length
+    this.queuedBytes = kept.reduce((sum, item) => sum + item.size, 0)
     if (dropped > 0) this.options.dropped(dropped)
     // What is left stays until the device reads it, so the next look waits for twice as much.
     this.overflowAt = Math.max(this.limits.queued, this.queued.length * 2)
@@ -294,6 +377,7 @@ export class Outbox {
         if (due > 0) return this.schedulePace(due)
       }
       const entry = this.queued.shift()!
+      this.queuedBytes = Math.max(0, this.queuedBytes - entry.size)
       if (entry.batch) this.lastPatches = this.now()
       else this.queuedOther--
       entry.message = finished(entry)
@@ -305,8 +389,30 @@ export class Outbox {
   }
 
   private transmit(connection: OutboxConnection, entry: Entry): void {
+    const sendStartedAt = this.now()
+    const bytes = entry.size
+    this.writingBytes += bytes
     // A channel fails only as its connection ends, and the entry waits for the next one.
-    connection.channel.send(entry.message).catch(() => {})
+    connection.channel.send(entry.message).then(
+      () => {
+        this.writingBytes = Math.max(0, this.writingBytes - bytes)
+        if (!entry.recorded && entry.trace) {
+          entry.recorded = true
+          this.options.onWritten?.({
+            trace: entry.trace,
+            enqueuedAt: entry.enqueuedAt,
+            sendStartedAt,
+            writtenAt: this.now(),
+            queuedBytes: entry.queuedBytes,
+            bytes,
+            merged: entry.merged,
+          })
+        }
+      },
+      () => {
+        this.writingBytes = Math.max(0, this.writingBytes - bytes)
+      },
+    )
   }
 
   private schedulePace(due: number): void {
@@ -335,7 +441,13 @@ export class Outbox {
   }
 }
 
-function entryOf(message: ChannelMessage, size: number): Entry {
+function entryOf(
+  message: ChannelMessage,
+  size: number,
+  trace: OutboxTrace | null,
+  enqueuedAt: number,
+  queuedBytes: number,
+): Entry {
   const value = message.kind === 'json' ? message.value : null
   return {
     message,
@@ -345,6 +457,11 @@ function entryOf(message: ChannelMessage, size: number): Entry {
     batch: batchOf(value),
     key: stateKey(value),
     resync: false,
+    trace,
+    enqueuedAt,
+    queuedBytes,
+    merged: 1,
+    recorded: false,
   }
 }
 

@@ -20,6 +20,7 @@ import {
   type PushEvent,
   type PushRefusal,
 } from '@shared/remote/push'
+import { logDevicePush } from '@shared/log/requests'
 import type { RelayKey } from '@shared/remote/relay'
 import type { LogFn } from '../agent-host/storage'
 import { publicKeyBytes } from './devices'
@@ -65,6 +66,8 @@ interface Entry {
   /** What a newer push replaces: the subject's notification, or the Live Activity. */
   key: string
   token: { kind: PushTokenKind; token: string; environment: ApnsEnvironment }
+  /** 推送入队时刻（毫秒），用于统计从入队到网关接收的总耗时。 */
+  queuedAt: number
   cancelled: boolean
 }
 
@@ -122,7 +125,7 @@ export class PushSender {
     const key = job.type === 'activity' ? 'activity' : `tag:${job.subject}`
     const queue = this.queues.get(job.deviceId) ?? []
     for (const entry of queue) if (entry.key === key) entry.cancelled = true
-    queue.push({ job, key, token, cancelled: false })
+    queue.push({ job, key, token, queuedAt: this.now(), cancelled: false })
     this.queues.set(job.deviceId, queue)
     void this.run(job.deviceId)
   }
@@ -154,11 +157,13 @@ export class PushSender {
   private async deliver(deviceId: string, entry: Entry): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       if (entry.cancelled || this.stopped) return
-      const failure = await this.attempt(deviceId, entry).catch((error: unknown): Failure => ({
-        retry: true,
-        afterMs: null,
-        reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
-      }))
+      const failure = await this.attempt(deviceId, entry, attempt).catch(
+        (error: unknown): Failure => ({
+          retry: true,
+          afterMs: null,
+          reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
+        }),
+      )
       if (!failure) return
       if (!failure.retry) return
       if (attempt >= this.retry.attempts) {
@@ -185,7 +190,11 @@ export class PushSender {
   }
 
   /** One try: null once the gateway took it, or why not. */
-  private async attempt(deviceId: string, entry: Entry): Promise<Failure | null> {
+  private async attempt(
+    deviceId: string,
+    entry: Entry,
+    attemptNumber: number,
+  ): Promise<Failure | null> {
     const device = this.options.device(deviceId)
     const accessToken = this.options.token()
     if (!device || !accessToken) return { retry: false }
@@ -204,13 +213,24 @@ export class PushSender {
       push,
     })
     const headers = await pushRequestHeaders(key, url, hostId, body, accessToken)
+    const sentAt = this.now()
     const response = await this.fetch(`${url}${PUSH_PATH}`, {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
-    if (response.ok) return null
+    if (response.ok) {
+      const acceptedAt = this.now()
+      logDevicePush({
+        device: deviceId,
+        kind: entry.job.type,
+        ms: Math.max(0, Math.round(acceptedAt - entry.queuedAt)),
+        gatewayMs: Math.max(0, Math.round(acceptedAt - sentAt)),
+        attempts: attemptNumber,
+      })
+      return null
+    }
     const refusal = await refusalOf(response)
     if (response.status === 410 || refusal === 'unregistered') {
       this.options.log('info', `Apple no longer takes a push token of device ${deviceId}`)
