@@ -12,6 +12,8 @@ export interface FileRef {
   /** Relative to the project's root, with `/`. */
   path: string
   line: number | null
+  /** Inclusive end line when the reference names a range such as `a.ts:10-20` or `a.ts#L10-L20`. */
+  endLine?: number | null
 }
 
 /** A reference as a reply wrote it, and whether it named the file by its full path. */
@@ -24,7 +26,7 @@ const FILE_URI = /^file:/i
 const DRIVE = /^[a-z]:[\\/]/i
 // `/C:/x`, a Windows path as a URL's path writes it.
 const ROOTED_DRIVE = /^\/[a-z]:[\\/]/i
-const LINE_SUFFIX = /^(.*?)(?::(\d+)(?::\d+)?|#L(\d+)(?:-L?\d+)?)$/
+const LINE_SUFFIX = /^(.*?)(?::(\d+)(?:(?::\d+)|(?:[-–](\d+)))?|#L(\d+)(?:-L?(\d+))?)$/
 
 /** The path a `file:` URI names on this computer; null for another host's or a malformed one. */
 function fileUriPath(uri: string): string | null {
@@ -79,10 +81,13 @@ export function parseFileRef(text: string, projectPath: string, link = false): P
     if (ROOTED_DRIVE.test(value)) value = value.slice(1)
   }
   let line: number | null = null
+  let endLine: number | null = null
   const suffix = LINE_SUFFIX.exec(value)
   if (suffix) {
     value = suffix[1]!
-    line = Number(suffix[2] ?? suffix[3])
+    line = Number(suffix[2] ?? suffix[4])
+    const parsedEnd = suffix[3] ?? suffix[5]
+    if (parsedEnd !== undefined) endLine = Number(parsedEnd)
   }
   const absolute = value.startsWith('/') || value.startsWith('\\') || DRIVE.test(value)
   if (absolute) {
@@ -92,7 +97,9 @@ export function parseFileRef(text: string, projectPath: string, link = false): P
   }
   value = value.replace(/\\/g, '/').replace(/^(\.\/)+/, '')
   if (!value || value.endsWith('/') || value.split('/').includes('..')) return null
-  return { path: value, line: line && line > 0 ? line : null, absolute }
+  const validLine = line && line > 0 ? line : null
+  const validEnd = validLine !== null && endLine && endLine > validLine ? endLine : null
+  return { path: value, line: validLine, ...(validEnd !== null && { endLine: validEnd }), absolute }
 }
 
 /** A project file the Files pane shows rendered, whose Markdown images load from the project. */
@@ -158,7 +165,12 @@ export function useFileRef(
     (s) => !!ref && !!projectPath && !!s.byProject[projectPath]?.known.has(ref.path),
   )
   if (!ref || !projectPath || !(known || (link && ref.absolute))) return null
-  return { path: ref.path, line: ref.line, projectPath }
+  return {
+    path: ref.path,
+    line: ref.line,
+    ...(ref.endLine != null && { endLine: ref.endLine }),
+    projectPath,
+  }
 }
 
 /** A file the session's agent keeps in its own folder, outside the project, as a reply links it. */
@@ -166,6 +178,7 @@ export interface AgentFileRef {
   /** Absolute on the agent's host, with `/` between segments. */
   path: string
   line: number | null
+  endLine?: number | null
   projectPath: string
   sessionId: string
   agentId: AgentId
@@ -184,7 +197,13 @@ export function agentFileRef(text: string, folder: string): FileRef | null {
   // With `/` on every host, which Windows takes too, so the name is the part after the last one.
   const root = folder.replace(/\\/g, '/').replace(/\/+$/, '')
   const ref = parseFileRef(uri ? value : value.replace(/\\/g, '/'), root, true)
-  return ref && { path: `${root}/${ref.path}`, line: ref.line }
+  return (
+    ref && {
+      path: `${root}/${ref.path}`,
+      line: ref.line,
+      ...(ref.endLine != null && { endLine: ref.endLine }),
+    }
+  )
 }
 
 /** The reference when it names a file of the shown session's agent's own folder, else null. */

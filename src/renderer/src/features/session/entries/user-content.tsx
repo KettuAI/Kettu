@@ -1,4 +1,4 @@
-import { lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { File01Icon, Link01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -12,9 +12,14 @@ import {
   type UserContent,
 } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { basename, bytes } from '@renderer/lib/format'
+import { basename, bytes, fileUrlPath } from '@renderer/lib/format'
+import type { FilePreviewSource } from '@renderer/features/files/file-hover-cache'
+import { parseLineRangeText, shouldReadAsText } from '@renderer/features/files/file-hover-model'
+import { FileHoverPreview } from '@renderer/features/files/file-hover-preview'
+import { relativeToRoot } from '@renderer/features/files/file-location'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
+import { hostPlatform } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
 import { useBrowserStore } from '@renderer/stores/browser'
@@ -391,6 +396,18 @@ function ChipText({
       )
     }
     const open = opener(chip)
+    if (chip.kind === 'file' || chip.kind === 'folder' || chip.kind === 'image') {
+      const attachment = attachments.find((a) => a.id === chip.attachmentKey)
+      return (
+        <SentFileChip
+          chip={chip}
+          raw={raw}
+          projectPath={projectPath}
+          attachment={attachment}
+          open={open}
+        />
+      )
+    }
     // A selection copies what was typed: the chip's look is left out of it, its text is not.
     return (
       <>
@@ -428,6 +445,99 @@ function ChipText({
       </SessionIdContext>
       {links.dialog}
     </div>
+  )
+}
+
+type SentMentionChip = Exclude<Chip, { kind: 'command' | 'skill' | 'link' }>
+
+/**
+ * A sent user message's file, folder, or image mention chip with desktop hover preview.
+ * Clicking retains the existing open behavior while touch devices render the plain chip only.
+ */
+function SentFileChip({
+  chip,
+  raw,
+  projectPath,
+  attachment,
+  open,
+}: {
+  chip: SentMentionChip
+  raw: string
+  projectPath: string | null
+  attachment: Attachment | undefined
+  open: ((from: HTMLElement) => void) | null
+}) {
+  const [hoverOpen, setHoverOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const range = useMemo(() => parseLineRangeText(chip.lines), [chip.lines])
+  const attachmentFsPath = attachment?.uri ? fileUrlPath(attachment.uri, hostPlatform()) : null
+  const attachmentRelative =
+    attachmentFsPath && projectPath ? relativeToRoot(attachmentFsPath, projectPath) : null
+  const projectRelative = chip.path ?? attachmentRelative
+  const displayPath = projectRelative ?? attachmentFsPath ?? chip.label
+  const previewKind = chip.missing
+    ? 'missing'
+    : chip.kind === 'folder'
+      ? 'folder'
+      : chip.kind === 'image'
+        ? 'image'
+        : 'file'
+  const source = useMemo<FilePreviewSource | null>(() => {
+    if (previewKind === 'folder' || previewKind === 'missing') return null
+    if (!projectPath || !projectRelative) return null
+    return {
+      kind: 'project',
+      projectPath,
+      path: projectRelative,
+      ...(shouldReadAsText(projectRelative, range) && { asText: true }),
+    }
+  }, [previewKind, projectPath, projectRelative, range])
+
+  const openFromCard = open
+    ? () => {
+        const from = triggerRef.current
+        if (from) open(from)
+        else if (projectPath && projectRelative) {
+          openFile(projectPath, projectRelative, range?.start ?? null, { preview: true })
+        }
+      }
+    : null
+
+  const trigger = open ? (
+    <button
+      ref={triggerRef}
+      type="button"
+      aria-label={raw}
+      onClick={(event) => {
+        setHoverOpen(false)
+        open(event.currentTarget)
+      }}
+      className="rounded-[7px] align-middle outline-none select-none focus-visible:focus-ring"
+    />
+  ) : (
+    <span aria-hidden className="inline-block align-middle select-none" />
+  )
+
+  return (
+    <>
+      <FileHoverPreview
+        source={source}
+        path={displayPath}
+        range={range}
+        kind={previewKind}
+        thumb={attachment?.thumb ?? chip.thumb ?? null}
+        size={attachment?.size ?? null}
+        onOpen={openFromCard}
+        open={hoverOpen}
+        onOpenChange={setHoverOpen}
+        trigger={trigger}
+      >
+        <ChipView chip={chip} surface />
+      </FileHoverPreview>
+      <span aria-hidden={open ? true : undefined} className="sr-only">
+        {raw}
+      </span>
+    </>
   )
 }
 

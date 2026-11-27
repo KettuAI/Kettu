@@ -165,12 +165,41 @@ describe('fileLinkActions and fileLinkClickTarget', () => {
     const resolved = links.map((node) => {
       const target = localTarget(node.url)
       const parsed = target ? parseFileRef(target, LOCAL_PROJECT, true) : null
-      return parsed ? { host: hostFilePath(LOCAL_PROJECT, parsed.path), line: parsed.line } : null
+      return parsed
+        ? {
+            host: hostFilePath(LOCAL_PROJECT, parsed.path),
+            line: parsed.line,
+            endLine: parsed.endLine ?? null,
+          }
+        : null
     })
     expect(resolved).toEqual([
-      { host: '/Users/dev/app/db/schema.sql', line: 12 },
-      { host: '/Users/dev/app/reports/2026 财报.xlsx', line: 3 },
+      { host: '/Users/dev/app/db/schema.sql', line: 12, endLine: 20 },
+      { host: '/Users/dev/app/reports/2026 财报.xlsx', line: 3, endLine: null },
     ])
+  })
+
+  it('parses colon and GitHub line ranges without retaining them in the file path', () => {
+    expect(parseFileRef('src/app.ts:10-25', LOCAL_PROJECT)).toMatchObject({
+      path: 'src/app.ts',
+      line: 10,
+      endLine: 25,
+    })
+    expect(parseFileRef('src/app.ts:10\u201325', LOCAL_PROJECT)).toMatchObject({
+      path: 'src/app.ts',
+      line: 10,
+      endLine: 25,
+    })
+    expect(parseFileRef('src/app.ts#L10-L25', LOCAL_PROJECT)).toMatchObject({
+      path: 'src/app.ts',
+      line: 10,
+      endLine: 25,
+    })
+    expect(parseFileRef('src/app.ts:10:4', LOCAL_PROJECT)).toMatchObject({
+      path: 'src/app.ts',
+      line: 10,
+    })
+    expect(parseFileRef('src/app.ts:10:4', LOCAL_PROJECT)?.endLine).toBeUndefined()
   })
 })
 
@@ -183,6 +212,7 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
   async function loadFileLinkModule(options: {
     platform: 'darwin' | 'win32' | 'linux'
     web?: boolean
+    noHover?: boolean
   }) {
     vi.resetModules()
     openFileMock.mockReset()
@@ -194,6 +224,11 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
       configurable: true,
       writable: true,
       value: {
+        matchMedia: () => ({
+          matches: options.noHover ?? false,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }),
         kettu: {
           platform: options.platform,
           client: options.web ? 'web' : 'desktop',
@@ -207,13 +242,18 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
       },
     })
 
-    vi.doMock('@hugeicons/core-free-icons', () => ({
-      BrowserIcon: 'BrowserIcon',
-      File01Icon: 'File01Icon',
-      FolderOpenIcon: 'FolderOpenIcon',
-      Link01Icon: 'Link01Icon',
-      LinkSquare02Icon: 'LinkSquare02Icon',
-    }))
+    vi.doMock(
+      '@hugeicons/core-free-icons',
+      () =>
+        new Proxy(
+          {},
+          {
+            get: (_target, prop) =>
+              prop === '__esModule' ? true : prop === 'then' ? undefined : prop,
+            has: (_target, prop) => prop !== 'then',
+          },
+        ),
+    )
     vi.doMock('@hugeicons/react', () => ({ HugeiconsIcon: () => null }))
     vi.doMock('react-i18next', () => ({
       useTranslation: () => ({
@@ -226,9 +266,53 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
         },
       }),
     }))
+    vi.doMock('@renderer/hooks/use-no-hover', () => ({
+      useNoHover: () => options.noHover ?? false,
+    }))
+    vi.doMock('@renderer/hooks/use-dark', () => ({
+      useDark: () => false,
+    }))
+    vi.doMock('@renderer/components/ui/hover-card', () => ({
+      HoverCard: ({
+        open,
+        onOpenChange,
+        children,
+      }: {
+        open?: boolean
+        onOpenChange?: (next: boolean) => void
+        children?: ReactNode
+      }) => createElement('div', { 'data-mock': 'hover-card', open, onOpenChange }, children),
+      HoverCardTrigger: ({
+        delay,
+        closeDelay,
+        render,
+        children,
+      }: {
+        delay?: number
+        closeDelay?: number
+        render?: ReactElement
+        children?: ReactNode
+      }) =>
+        createElement(
+          'span',
+          { 'data-mock': 'hover-card-trigger', delay, closeDelay },
+          render
+            ? createElement(render.type, render.props, children)
+            : createElement('span', null, children),
+        ),
+      HoverCardContent: ({ children }: { children?: ReactNode }) =>
+        createElement('div', { 'data-mock': 'hover-card-content' }, children),
+    }))
     vi.doMock('@renderer/components/ui/context-menu', () => ({
-      ContextMenu: ({ children }: { children?: ReactNode }) =>
-        createElement('div', { 'data-mock': 'menu' }, children),
+      ContextMenu: ({
+        open,
+        onOpenChange,
+        children,
+      }: {
+        open?: boolean
+        onOpenChange?: (next: boolean) => void
+        children?: ReactNode
+      }) => createElement('div', { 'data-mock': 'menu', open, onOpenChange }, children),
       ContextMenuTrigger: ({
         render,
         children,
@@ -262,6 +346,13 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
         ...actual,
         useContext: () => null,
         useEffect: () => {},
+        useLayoutEffect: () => {},
+        useMemo: <T>(factory: () => T) => factory(),
+        useRef: <T>(initial: T) => ({ current: initial }),
+        useState: <T>(initial: T | (() => T)) => [
+          typeof initial === 'function' ? (initial as () => T)() : initial,
+          vi.fn(),
+        ],
       }
     })
     vi.doMock('@renderer/features/session/markdown/web-link', () => ({ BrowserIcon: () => null }))
@@ -486,6 +577,66 @@ describe('FileLink interactions, context menu, error toast, and platform modifie
     })
     expect(shellOpenFileMock).not.toHaveBeenCalled()
     expect(openFileMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts HoverCard on desktop without native title and keeps ContextMenu free of inline preview', async () => {
+    const { FileLink } = await loadFileLinkModule({ platform: 'darwin', noHover: false })
+    const tree = expandComponents(
+      createElement(FileLink, {
+        file: { projectPath: LOCAL_PROJECT, path: 'src/app.ts', line: 12, endLine: 18 },
+      }),
+    )
+    const elements = collectElements(tree)
+    const hoverCard = elements.find((el) => el.props['data-mock'] === 'hover-card')
+    const hoverTrigger = elements.find((el) => el.props['data-mock'] === 'hover-card-trigger')
+    const button = elements.find((el) => el.props['data-file-ref'] === '')!
+    const menuContent = elements.find((el) => el.props['data-mock'] === 'menu-content')!
+
+    expect(hoverCard).toBeDefined()
+    expect(hoverTrigger?.props.delay).toBe(400)
+    expect(hoverTrigger?.props.closeDelay).toBe(180)
+    expect(button.props.title).toBeUndefined()
+    expect(textOf(button.props.children as ReactNode)).toContain('app.ts:12\u201318')
+    // ContextMenu must never embed the file hover preview.
+    const previewInMenu = collectElements(menuContent).find(
+      (el) => el.props['data-file-hover-preview'] === '',
+    )
+    expect(previewInMenu).toBeUndefined()
+  })
+
+  it('disables HoverCard completely when useNoHover returns true and keeps ContextMenu clean', async () => {
+    const { FileLink, AgentFileLink } = await loadFileLinkModule({
+      platform: 'darwin',
+      noHover: true,
+    })
+
+    for (const element of [
+      createElement(FileLink, {
+        file: { projectPath: LOCAL_PROJECT, path: 'src/app.ts', line: 12 },
+      }),
+      createElement(AgentFileLink, {
+        file: {
+          projectPath: LOCAL_PROJECT,
+          path: '/Users/dev/.claude/plans/plan.md',
+          line: 9,
+          sessionId: 'sess-1',
+          agentId: 'claude-code',
+        },
+      }),
+    ]) {
+      const tree = expandComponents(element)
+      const elements = collectElements(tree)
+      expect(elements.find((el) => el.props['data-mock'] === 'hover-card')).toBeUndefined()
+      expect(elements.find((el) => el.props['data-mock'] === 'hover-card-trigger')).toBeUndefined()
+      expect(elements.find((el) => el.props['data-mock'] === 'hover-card-content')).toBeUndefined()
+      expect(elements.find((el) => el.props['data-file-hover-preview'] === '')).toBeUndefined()
+      const button = elements.find((el) => el.props['data-file-ref'] === '')!
+      expect(typeof button.props.title).toBe('string')
+      const menuContent = elements.find((el) => el.props['data-mock'] === 'menu-content')!
+      expect(
+        collectElements(menuContent).find((el) => el.props['data-file-hover-preview'] === ''),
+      ).toBeUndefined()
+    }
   })
 })
 

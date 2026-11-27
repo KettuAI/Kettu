@@ -90,6 +90,24 @@
   "link": {
     "open": "打开 {{target}}"
   },
+  "hoverPreview": {
+    "openInFiles": "在文件面板打开",
+    "openFullFile": "打开完整文件",
+    "lineBadge": "第 {{lines}} 行",
+    "empty": "空文件。",
+    "truncatedRange": "仅显示第 {{start}}\u2013{{end}} 行（共 {{total, number}} 行）",
+    "truncatedClipped": "过长行已截断以便预览",
+    "folderTitle": "文件夹",
+    "folderDescription": "文件夹引用，点击打开查看。",
+    "externalFileDescription": "该项目外的文件，点击打开。",
+    "imageDimensions": "{{width}} \u00d7 {{height}}",
+    "mediaAudioTitle": "音频文件",
+    "mediaVideoTitle": "视频文件",
+    "mediaDocumentTitle": "文档文件",
+    "mediaDescription": "{{size}}，点击在文件面板中预览。",
+    "loadFailed": "无法加载预览",
+    "retry": "重试"
+  },
   "htmlPreview": {
     "preview": "预览",
     "inKettu": "在 Kettu 浏览器里预览",

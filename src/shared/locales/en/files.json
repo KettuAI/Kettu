@@ -91,6 +91,24 @@
   "link": {
     "open": "Open {{target}}"
   },
+  "hoverPreview": {
+    "openInFiles": "Open in Files",
+    "openFullFile": "Open full file",
+    "lineBadge": "L{{lines}}",
+    "empty": "Empty file.",
+    "truncatedRange": "Showing lines {{start}}\u2013{{end}} of {{total, number}}",
+    "truncatedClipped": "Long lines clipped to fit preview",
+    "folderTitle": "Folder",
+    "folderDescription": "Folder reference. Click to open in the file manager.",
+    "externalFileDescription": "File outside this project. Click to open.",
+    "imageDimensions": "{{width}} \u00d7 {{height}}",
+    "mediaAudioTitle": "Audio file",
+    "mediaVideoTitle": "Video file",
+    "mediaDocumentTitle": "Document",
+    "mediaDescription": "{{size}}. Click to preview in the Files pane.",
+    "loadFailed": "Couldn't load preview",
+    "retry": "Retry"
+  },
   "htmlPreview": {
     "preview": "Preview",
     "inKettu": "Preview in Kettu's browser",

@@ -1,4 +1,4 @@
-import { useContext, useEffect, type MouseEvent } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   BrowserIcon,
   File01Icon,
@@ -18,9 +18,18 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { BrowserIcon as DefaultBrowserIcon } from '@renderer/features/session/markdown/web-link'
+import { useNoHover } from '@renderer/hooks/use-no-hover'
 import { fileManagerName, isMod, isWeb } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
+import type { FilePreviewSource } from './file-hover-cache'
+import {
+  formatFileTarget,
+  formatLineRange,
+  normalizeLineRange,
+  shouldReadAsText,
+} from './file-hover-model'
+import { FileHoverPreview } from './file-hover-preview'
 import { fileLinkActions, fileLinkClickTarget } from './file-link-actions'
 import { FileTypeIcon } from './file-type-icon'
 import type { AgentFileRef, FileRef } from './file-refs'
@@ -41,33 +50,61 @@ interface PagePreview {
 
 /**
  * The chip both kinds of file reference draw, like the thread's links: the file's icon and name
- * over one line, with the path in its tooltip. A plain click opens it in Kettu's Files pane, and a
- * Mod-click (Cmd on macOS, Ctrl elsewhere) opens a local file with the system's default app. A
- * right click offers to open with the default app and show the file in the file manager, which only
- * this computer's files can do, and to copy its path. An HTML file's page can be previewed too:
- * from a small button over the text after the chip while it is hovered or focused, so the line
- * never moves, and from the menu.
+ * over one line, with an interactive scrollable hover preview on hover-capable desktops. A plain
+ * click opens it in Kettu's Files pane, and a Mod-click (Cmd on macOS, Ctrl elsewhere) opens a
+ * local file with the system's default app. A right click offers to open with the default app and
+ * show the file in the file manager, which only this computer's files can do, and to copy its path.
+ * An HTML file's page can be previewed too: from a small button over the text after the chip while
+ * it is hovered or focused, so the line never moves, and from the menu.
  */
 function FileChip({
   path,
   line,
+  endLine = null,
   projectPath,
   hostFile,
+  previewSource,
   onOpen,
   page = null,
 }: {
   path: string
   line: number | null
+  endLine?: number | null
   projectPath: string
   /** The file's path as its host writes it, without any line suffix. */
   hostFile: string
+  previewSource: FilePreviewSource
   onOpen: () => void
   page?: PagePreview | null
 }) {
   const { t } = useTranslation('files')
-  const target = line ? `${path}:${line}` : path
+  const noHover = useNoHover()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [hoverOpen, setHoverOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  // A wrapped inline reference has a box per line; anchor the preview to the first line.
+  const firstLine = useMemo(
+    () => ({
+      getBoundingClientRect: () =>
+        triggerRef.current?.getClientRects()[0] ??
+        triggerRef.current?.getBoundingClientRect() ??
+        new DOMRect(),
+      get contextElement() {
+        return triggerRef.current ?? undefined
+      },
+    }),
+    [],
+  )
+  const range = normalizeLineRange(line, endLine)
+  const lineLabel = formatLineRange(range)
+  const target = formatFileTarget(path, range)
   const { localFile } = fileLinkActions({ projectPath, hostFile, web: isWeb })
+  const handleMenuOpenChange = (next: boolean) => {
+    setMenuOpen(next)
+    if (next) setHoverOpen(false)
+  }
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    setHoverOpen(false)
     if (fileLinkClickTarget({ localFile, mod: isMod(event) }) === 'default-app') {
       event.preventDefault()
       openFileInDefaultApp(localFile!)
@@ -75,31 +112,48 @@ function FileChip({
     }
     onOpen()
   }
+  const trigger = (
+    <ContextMenuTrigger
+      className="select-auto"
+      render={
+        <button
+          ref={triggerRef}
+          type="button"
+          data-file-ref=""
+          title={noHover ? target : undefined}
+          aria-label={t('link.open', { target })}
+          onClick={handleClick}
+        />
+      }
+    />
+  )
+  const label = (
+    /* A button lays out as an inline block, so the line is drawn by an inline span inside it,
+       at the same depth as a link's. */
+    <span className="thread-link">
+      <FileTypeIcon
+        path={path}
+        className="relative -top-[1.5px] mr-1.5 inline-block size-4 align-middle"
+      />
+      {nameOf(path)}
+      {lineLabel && <span className="text-tertiary">:{lineLabel}</span>}
+    </span>
+  )
   const chip = (
-    <ContextMenu>
-      <ContextMenuTrigger
-        className="select-auto"
-        render={
-          <button
-            type="button"
-            data-file-ref=""
-            title={target}
-            aria-label={t('link.open', { target })}
-            onClick={handleClick}
-          />
-        }
+    <ContextMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
+      <FileHoverPreview
+        source={previewSource}
+        path={path}
+        range={range}
+        onOpen={onOpen}
+        open={hoverOpen}
+        onOpenChange={setHoverOpen}
+        suppressed={menuOpen}
+        anchor={firstLine}
+        trigger={trigger}
       >
-        {/* A button lays out as an inline block, so the line is drawn by an inline span inside it,
-            at the same depth as a link's. */}
-        <span className="thread-link">
-          <FileTypeIcon
-            path={path}
-            className="relative -top-[1.5px] mr-1.5 inline-block size-4 align-middle"
-          />
-          {nameOf(path)}
-          {line && <span className="text-tertiary">:{line}</span>}
-        </span>
-      </ContextMenuTrigger>
+        {label}
+      </FileHoverPreview>
       <ContextMenuContent className="min-w-56">
         {page && <PageItems page={page} onOpen={onOpen} />}
         {localFile && (
@@ -174,17 +228,30 @@ function PageItems({ page, onOpen }: { page: PagePreview; onOpen: () => void }) 
 
 /**
  * A file reference in a reply, drawn like the thread's links: the file's icon and name over one
- * line, with the path in its tooltip. It opens the file in the Files pane at its line.
+ * line, with a scrollable preview on hover on desktop. It opens the file in the Files pane at its
+ * line.
  */
 export function FileLink({ file }: { file: FileRef & { projectPath: string } }) {
   const sessionId = useContext(SessionIdContext)
   const previewable = useHtmlPreview(sessionId, file.projectPath) && isHtmlFile(file.path)
+  const range = normalizeLineRange(file.line, file.endLine)
+  const previewSource = useMemo<FilePreviewSource>(
+    () => ({
+      kind: 'project',
+      projectPath: file.projectPath,
+      path: file.path,
+      ...(shouldReadAsText(file.path, range) && { asText: true }),
+    }),
+    [file.projectPath, file.path, range],
+  )
   return (
     <FileChip
       path={file.path}
       line={file.line}
+      endLine={file.endLine ?? null}
       projectPath={file.projectPath}
       hostFile={hostFilePath(file.projectPath, file.path)}
+      previewSource={previewSource}
       onOpen={() => openFile(file.projectPath, file.path, file.line, { preview: true })}
       page={
         previewable && sessionId
@@ -200,12 +267,18 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
 
 /** A link to a file of the session agent's own folder, drawn the same; it opens read-only. */
 export function AgentFileLink({ file }: { file: AgentFileRef }) {
+  const previewSource = useMemo<FilePreviewSource>(
+    () => ({ kind: 'agent', sessionId: file.sessionId, path: file.path }),
+    [file.sessionId, file.path],
+  )
   return (
     <FileChip
       path={file.path}
       line={file.line}
+      endLine={file.endLine ?? null}
       projectPath={file.projectPath}
       hostFile={file.path}
+      previewSource={previewSource}
       onOpen={() =>
         openFile(file.projectPath, file.path, file.line, {
           preview: true,
