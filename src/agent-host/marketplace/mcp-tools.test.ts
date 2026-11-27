@@ -68,6 +68,7 @@ const INSIGHT: McpServerInsight = {
     { name: 'get_me', summary: 'Who you are.', bytes: 10, tags: ['read-only'], off: false },
   ],
   agents: [],
+  changes: null,
 }
 
 const CATALOG: CatalogServer = {
@@ -89,7 +90,7 @@ const CATALOG: CatalogServer = {
   },
 }
 
-function harness(start: MarketServer[] = [github()]) {
+function harness(start: MarketServer[] = [github()], insight: McpServerInsight = INSIGHT) {
   let servers = start
   const puts: MarketServer[][] = []
   const asked: McpAsk[] = []
@@ -98,7 +99,7 @@ function harness(start: MarketServer[] = [github()]) {
   let answer: (given: McpAnswer) => void = () => {}
   const tools = new McpTools({
     servers: () => servers,
-    insight: (id) => (id === INSIGHT.serverId ? INSIGHT : null),
+    insight: (id) => (id === insight.serverId ? insight : null),
     lastCheck: () => null,
     check: async (server) => {
       checks.push(server.id)
@@ -180,6 +181,56 @@ describe('reading the library', () => {
     expect(all).not.toContain('kept-team-value')
     expect(text(result)).toContain('X-Ref: ${TEAM_REF}')
     expect(text(result)).toContain('Authorization: in the key store, not set')
+  })
+})
+
+// A tool held back until the user accepts its change must never read as one an agent can use.
+describe('tools held back until the user accepts their change', () => {
+  const held: McpServerInsight = {
+    ...INSIGHT,
+    serverId: 'manual:notes',
+    tools: [
+      ...INSIGHT.tools!,
+      {
+        name: 'delete_repo',
+        summary: 'Deletes a repository.',
+        bytes: 10,
+        tags: [],
+        off: false,
+        change: 'added',
+        held: true,
+      },
+    ],
+  }
+  const notes = (): MarketServer => github({ id: 'manual:notes', name: 'notes', source: 'manual' })
+
+  it('marks them in what is listed, read and checked', async () => {
+    const h = harness([notes()], held)
+    expect(text(await h.tools.call(CALLER, LIST_MCP_SERVERS, {}))).toContain(
+      "3 tools, 1 held back until the user accepts the change on the server's page",
+    )
+    const read = await h.tools.call(CALLER, READ_MCP_SERVER, { server: 'notes' })
+    expect(text(read)).toContain('- delete_repo (new, held back until the user accepts')
+    expect(read.structuredContent).toMatchObject({
+      toolsHeld: 1,
+      toolList: expect.arrayContaining([
+        expect.objectContaining({ name: 'delete_repo', held: true }),
+      ]),
+    })
+    expect(text(await h.tools.call(CALLER, CHECK_MCP_SERVER, { server: 'notes' }))).toContain(
+      '1 of them held back',
+    )
+  })
+
+  it('refuses to turn one on, which would not hand it to agents', async () => {
+    const h = harness([notes()], held)
+    const result = await h.tools.call(CALLER, SWITCH_MCP_SERVERS, {
+      changes: [{ server: 'notes', tool: 'delete_repo', on: true }],
+    })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('Nothing was done: delete_repo of notes is held back')
+    expect(h.asked).toEqual([])
+    expect(h.puts).toEqual([])
   })
 })
 
