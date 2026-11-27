@@ -1352,6 +1352,7 @@
         "cursor": "Restart Cursor to pick this up.",
         "vscode": "VS Code picks this up by itself and asks you to trust each new server before it starts it.",
         "windsurf": "Refresh the MCP servers in Windsurf to pick this up.",
+        "devin": "Refresh the MCP servers in Devin Desktop to pick this up.",
         "zed": "Zed picks this up by itself."
       }
     }

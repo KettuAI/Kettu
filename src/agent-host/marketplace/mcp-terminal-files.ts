@@ -166,7 +166,9 @@ export function bridgeEntry(
         command,
         args: [...args],
         ...(harness === 'gemini' && toolsOff.length ? { excludeTools: [...toolsOff] } : {}),
-        ...(app === 'windsurf' && toolsOff.length ? { disabledTools: [...toolsOff] } : {}),
+        ...((app === 'windsurf' || app === 'devin') && toolsOff.length
+          ? { disabledTools: [...toolsOff] }
+          : {}),
       }
   }
 }

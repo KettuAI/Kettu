@@ -108,6 +108,7 @@ function useWording(): {
 const APP_SITES: Partial<Record<McpTerminalApp, string>> = {
   vscode: 'https://code.visualstudio.com',
   windsurf: 'https://windsurf.com',
+  devin: 'https://devin.ai',
   zed: 'https://zed.dev',
 }
 

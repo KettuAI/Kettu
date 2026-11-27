@@ -10,6 +10,7 @@ export const MCP_TERMINAL_APPS = {
   cursor: 'Cursor',
   vscode: 'VS Code',
   windsurf: 'Windsurf',
+  devin: 'Devin Desktop',
   zed: 'Zed',
 } as const
 

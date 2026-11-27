@@ -536,15 +536,22 @@ export class McpTerminal {
 
   /**
    * What Kettu's entries should be now: each server for the agent once, under the name its entry
-   * has, an entry of the agent's own that is the same server replaced, and no entry the user kept
-   * or changed outside Kettu touched.
+   * has, an entry of the agent's own that is the same server replaced, the one an entry replaced
+   * put back once its server no longer goes here, and no entry the user kept or changed outside
+   * Kettu touched.
    */
   private compute(
     reading: Reading,
     target: Target,
     launch: BridgeLaunch,
     force: ReadonlySet<string> = new Set(),
-  ): { edits: EntryEdit[]; entries: Record<string, Entry>; replaced: Dictionary } {
+    originals: Dictionary = {},
+  ): {
+    edits: EntryEdit[]
+    entries: Record<string, Entry>
+    replaced: Dictionary
+    restored: string[]
+  } {
     const given = this.deps.library().filter((server) => terminalGets(server, reading.owner.id))
     const byId = new Map(given.map((server) => [server.id, server]))
     const drifted = new Set(
@@ -556,6 +563,7 @@ export class McpTerminal {
     const edits: EntryEdit[] = []
     const entries: Record<string, Entry> = {}
     const replaced: Dictionary = {}
+    const restored: string[] = []
     const placed = new Set<string>()
     const place = (name: string, server: MarketServer, current: unknown): void => {
       const value = this.entryValue(reading, launch, server)
@@ -572,6 +580,12 @@ export class McpTerminal {
     for (const [name, entry] of Object.entries(target.entries)) {
       if (drifted.has(name)) continue
       const server = byId.get(entry.serverId)
+      if (!server && name in originals) {
+        // No longer going here: the entry it replaced comes back, as turning it off would do.
+        edits.push({ name, value: originals[name] })
+        restored.push(name)
+        continue
+      }
       if (!server || placed.has(server.id) || kept.has(name)) {
         if (name in reading.servers) edits.push({ name, value: undefined })
         continue
@@ -610,7 +624,7 @@ export class McpTerminal {
       if (server.name in reading.servers || kept.has(server.name)) continue
       place(server.name, server, undefined)
     }
-    return { edits, entries, replaced }
+    return { edits, entries, replaced, restored }
   }
 
   private toolItems(setting: ToolSetting, entries: Record<string, Entry>): string[] {
@@ -739,12 +753,19 @@ export class McpTerminal {
       return
     }
     const reading = await this.read(targetId, target)
-    const { edits, entries, replaced } = this.compute(reading, target, launch, force)
+    const stored = await this.originals(target)
+    const { edits, entries, replaced, restored } = this.compute(
+      reading,
+      target,
+      launch,
+      force,
+      stored,
+    )
     let originals = target.originals
-    if (Object.keys(replaced).length > 0) {
-      originals = await this.sealText(
-        JSON.stringify({ ...(await this.originals(target)), ...replaced }),
-      )
+    if (Object.keys(replaced).length > 0 || restored.length > 0) {
+      const kept: Dictionary = { ...stored, ...replaced }
+      for (const name of restored) delete kept[name]
+      originals = Object.keys(kept).length > 0 ? await this.sealText(JSON.stringify(kept)) : null
     }
     const writes: Parameters<McpTerminal['write']>[3] = []
     let text = reading.text
