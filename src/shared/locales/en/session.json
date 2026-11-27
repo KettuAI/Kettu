@@ -61,6 +61,8 @@
     "line": "Still running: {{work}}",
     "lineReports_one": "Still running: {{work}} · reports back when it finishes",
     "lineReports_other": "Still running: {{work}} · reports back when they finish",
+    "lineUnnamed": "Still running background tasks",
+    "lineUnnamedReports": "Still running background tasks · reports back when they finish",
     "subagents_one": "{{count}} sub-agent",
     "subagents_other": "{{count}} sub-agents",
     "commands_one": "{{count}} command",

@@ -54,6 +54,7 @@ import { TrayStyles } from './affect-styles'
 import { formatAttachedArtifactsPrompt } from './artifact-attachments'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
+import { composerRunState } from './composer-state'
 import { mentionSurfacesOf } from './mention-surfaces'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
@@ -205,15 +206,21 @@ export function Composer({
   const selection = beside ? picked : null
 
   const status = session.status
-  const starting = status === 'starting'
-  const running = status === 'running' || status === 'awaiting_permission'
-  const awaiting = status === 'awaiting_permission'
-  // Agent finished replying and is only waiting on background work; follow-ups go straight in.
-  const waitingBackground = status === 'running' && session.waitingBackground === true && steering
   // A terminal that has the session open writes to it, so nothing is sent until it lets go.
   const heldOutside = session.heldOutside === true
-  // A closed session attaches to its agent as the message goes.
-  const idle = (status === 'ready' || status === 'closed') && !heldOutside
+  const {
+    starting,
+    waitingBackground,
+    activeRunning,
+    awaiting,
+    idle,
+    escapeCancels,
+    showStopWhenEmpty,
+  } = composerRunState({
+    status,
+    waitingBackground: session.waitingBackground,
+    heldOutside,
+  })
   const folder = useSessionFolder(sessionId) ?? session.projectPath
   const isScratch = useSessionsStore((s) => !!s.byId[sessionId]?.scratch)
   const box = usePromptBox({
@@ -229,8 +236,14 @@ export function Composer({
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
     canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
-    // During a turn the primary shortcut queues or steers by setting, and the secondary flips it.
-    canQueue: running && holds && !blocked && pending === null && !mustSwitch,
+    // During an active turn the primary shortcut queues or steers by setting; while idle-waiting
+    // on background work, follow-ups go straight into the session via `sessions.queue`.
+    canQueue:
+      (activeRunning || (waitingBackground && !heldOutside)) &&
+      holds &&
+      !blocked &&
+      pending === null &&
+      !mustSwitch,
   })
   // Comments on passages go with the message, so with one, Send works on an empty box.
   const commented = useReplyComments(sessionId).length > 0
@@ -558,7 +571,7 @@ export function Composer({
       useSuggestionsStore.getState().stopEditing(sessionId, editingSuggestion.card.id)
       return
     }
-    if (event.key === 'Escape' && running) {
+    if (event.key === 'Escape' && escapeCancels) {
       event.preventDefault()
       // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on;
       // with a message being written, Esc answers nothing, as Enter and the number keys do.
@@ -591,7 +604,7 @@ export function Composer({
       event.preventDefault()
       return
     }
-    if (running && steering && !waitingBackground && secondary) {
+    if (activeRunning && steering && secondary) {
       event.preventDefault()
       if (now.canQueue) queue(!steerDefault)
       return
@@ -610,7 +623,7 @@ export function Composer({
       ? t('prompt.placeholder.pickAgent')
       : awaiting
         ? t(asked ? 'prompt.placeholder.awaitingAnswer' : 'prompt.placeholder.awaiting')
-        : !running && reached?.resetsAt
+        : !activeRunning && reached?.resetsAt
           ? t(
               reached.extraUsage
                 ? 'prompt.placeholder.limitExtraUsage'
@@ -622,29 +635,23 @@ export function Composer({
                 time: resetTime(typeof continuesAt === 'number' ? continuesAt : reached.resetsAt),
               },
             )
-          : !running && editingSuggestion
+          : !activeRunning && editingSuggestion
             ? t('prompt.placeholder.editWorkflow', { agent: agentName })
-            : !running && rejected
+            : !activeRunning && rejected
               ? t('prompt.placeholder.denied')
-              : waitingBackground
+              : activeRunning
                 ? t(
-                    phone
-                      ? 'prompt.placeholder.waitingBackgroundTouch'
-                      : 'prompt.placeholder.waitingBackground',
+                    steerDefault
+                      ? phone
+                        ? 'prompt.placeholder.runningSteerTouch'
+                        : 'prompt.placeholder.runningSteer'
+                      : phone
+                        ? 'prompt.placeholder.runningTouch'
+                        : 'prompt.placeholder.runningQueue',
                   )
-                : running
-                  ? t(
-                      steerDefault
-                        ? phone
-                          ? 'prompt.placeholder.runningSteerTouch'
-                          : 'prompt.placeholder.runningSteer'
-                        : phone
-                          ? 'prompt.placeholder.runningTouch'
-                          : 'prompt.placeholder.runningQueue',
-                    )
-                  : taskRunning
-                    ? t('prompt.placeholder.taskRunning')
-                    : idleLine
+                : taskRunning
+                  ? t('prompt.placeholder.taskRunning')
+                  : idleLine
   // A phone has no Tab to take it with.
   const suggestion =
     placeholder === idleLine && idle && !phone ? (session.suggestion ?? null) : null
@@ -659,7 +666,7 @@ export function Composer({
     timed !== null &&
     cachePhase === 'expired' &&
     holdsMessage &&
-    !running &&
+    !activeRunning &&
     !starting &&
     pending === null &&
     !mustSwitch &&
@@ -668,13 +675,12 @@ export function Composer({
   const modelName = model
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  // While a turn runs, Stop shows with nothing written and Send once a message is.
+  // While a turn actively runs, Stop shows with nothing written and Queue/Steer once a message is;
+  // while idle-waiting on background work, the composer matches the idle Send button.
   const sendControl =
-    running && !holdsMessage ? (
+    showStopWhenEmpty && !holdsMessage ? (
       <StopButton onStop={cancel} />
-    ) : waitingBackground && canQueue ? (
-      <SendButton key="send" disabled={false} label={t('prompt.send')} onClick={() => send()} />
-    ) : running && canQueue ? (
+    ) : activeRunning && canQueue ? (
       <QueueButton
         steering={steering}
         steerDefault={steerDefault}
@@ -692,7 +698,12 @@ export function Composer({
         <TooltipContent>{blocked.message}</TooltipContent>
       </Tooltip>
     ) : (
-      <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={() => send()} />
+      <SendButton
+        key="send"
+        disabled={!(canSend || (waitingBackground && canQueue))}
+        label={t('prompt.send')}
+        onClick={() => send()}
+      />
     )
   const shownError =
     error ??
@@ -845,7 +856,7 @@ export function Composer({
               hostId={hostId}
               harness={agent?.harnessName ?? agentName}
               config={config}
-              running={running}
+              running={activeRunning}
               onSelect={set}
               open={modelMenuOpen}
               onOpenChange={setModelMenuOpen}
@@ -883,7 +894,7 @@ export function Composer({
               <CacheButton
                 cache={timed}
                 lastRequest={session.lastRequest}
-                running={running}
+                running={activeRunning}
                 used={session.usage?.used ?? 0}
               />
               <AgentMarkHost.Provider value={hostId}>
@@ -891,11 +902,11 @@ export function Composer({
                   sessionId={sessionId}
                   agentId={session.agentId}
                   agentName={ownName}
-                  idle={!running && !starting}
+                  idle={!activeRunning && !starting}
                   closed={status === 'closed'}
                   reports={agent?.capabilities.context ?? false}
                   direct={agent?.capabilities.liveContext ?? false}
-                  live={running && (agent?.capabilities.liveContext ?? false)}
+                  live={activeRunning && (agent?.capabilities.liveContext ?? false)}
                   estimates={agent?.capabilities.contextEstimates}
                   usage={session.usage}
                   context={session.context}

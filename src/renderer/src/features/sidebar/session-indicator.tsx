@@ -6,7 +6,7 @@ import { BackgroundDots, TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
 import { CacheRing } from './cache-status'
-import { backgroundText, type RowStatus } from './row-status'
+import { backgroundText, hasNamedBackground, type RowStatus } from './row-status'
 
 /**
  * One status per row, by priority: waiting for you, error, running (the turn's nine dots), running
@@ -47,7 +47,9 @@ export function SessionIndicator({
       </span>
     )
   } else if (status.background) {
-    const label = t('indicator.background', { work: backgroundText(t, status.background) })
+    const label = hasNamedBackground(status.background)
+      ? t('indicator.background', { work: backgroundText(t, status.background) })
+      : t('indicator.backgroundUnnamed')
     mark = (
       <span role="img" aria-label={label} title={label} className="grid">
         <BackgroundDots />

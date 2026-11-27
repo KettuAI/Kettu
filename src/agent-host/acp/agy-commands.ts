@@ -21,6 +21,8 @@ interface Command {
   summary: string | null
   /** It outlived the turn that started it. */
   carried: boolean
+  /** Surfaced on the board while the open prompt idles waiting on background work. */
+  shownInWait: boolean
 }
 
 function commandLine(
@@ -48,6 +50,7 @@ function taskStatus(call: acp.ToolCallStatus): BackgroundTaskView['status'] {
 /** One session's commands: this turn's, and those that outlived their turn. */
 export class AgyCommands {
   private readonly calls = new Map<string, Command>()
+  private waiting = false
 
   /**
    * Follows one of agy's tool call updates: in a turn every command's, between turns only those
@@ -67,6 +70,7 @@ export class AgyCommands {
         endedAt: null,
         summary: null,
         carried: false,
+        shownInWait: false,
       }
       this.calls.set(update.toolCallId, known)
     }
@@ -75,42 +79,70 @@ export class AgyCommands {
     const ended = status === 'completed' || status === 'failed'
     if (status === 'in_progress' && known.call === 'pending') known.startedAt = now
     known.call = status
+    if (this.waiting && status === 'in_progress') known.shownInWait = true
     if (ended) {
       known.endedAt = now
       known.summary = commandEnding(update) ?? known.summary
     }
-    return known.carried
+    return known.carried || known.shownInWait
   }
 
   /**
-   * 回合结束：保留仍在运行的跨回合命令；若回合异常中止，不再把未标 IsDaemon 的普通命令误留为运行中后台任务。
+   * Exposes still-running commands on the session board when the open prompt settles into
+   * idle background wait so they are visible before the prompt resolves.
+   */
+  setWaiting(waiting: boolean): boolean {
+    this.waiting = waiting
+    if (!waiting) return false
+    let changed = false
+    for (const command of this.calls.values()) {
+      if (command.carried || command.shownInWait) continue
+      if (command.call === 'in_progress') {
+        command.shownInWait = true
+        changed = true
+      }
+    }
+    return changed
+  }
+
+  /**
+   * Keeps commands still running past the turn; on an aborted turn, non-daemon commands are not
+   * carried forward as running background tasks.
    */
   turnEnded(aborted = false): boolean {
+    this.waiting = false
     let changed = false
     for (const [id, command] of this.calls) {
       if (command.carried) continue
       if (command.call === 'in_progress' && (!aborted || command.daemon)) {
         command.carried = true
+        command.shownInWait = false
         changed = true
       } else {
+        if (command.shownInWait) changed = true
         this.calls.delete(id)
       }
     }
     return changed
   }
 
-  /** Whether one that outlived its turn still runs. */
+  /** Whether a carried or background-wait command still runs. */
   get running(): boolean {
     for (const command of this.calls.values()) {
-      if (command.carried && command.call === 'in_progress') return true
+      if (
+        (command.carried || (this.waiting && command.shownInWait)) &&
+        command.call === 'in_progress'
+      ) {
+        return true
+      }
     }
     return false
   }
 
-  /** What the session board lists: the commands that outlived their turn, oldest first. */
+  /** What the session board lists: carried commands and commands running during background wait. */
   tasks(): BackgroundTaskView[] {
     return [...this.calls]
-      .filter(([, command]) => command.carried)
+      .filter(([, command]) => command.carried || command.shownInWait)
       .map(([toolCallId, command]) => ({
         id: toolCallId,
         kind: 'shell',

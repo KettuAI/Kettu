@@ -2,8 +2,13 @@ import type { TFunction } from 'i18next'
 import type { StillRunning } from '@shared/agent-host'
 import type { SessionNode } from '@renderer/stores/sessions'
 
-/** What runs on after a turn: background commands and sub-agents at work. */
-export type Background = Pick<StillRunning, 'commands' | 'subagents'>
+/** What runs on after a turn: background commands, sub-agents, or unnamed background tasks. */
+export type Background = Pick<StillRunning, 'commands' | 'subagents' | 'unnamed'>
+
+/** Whether `background` has named commands or sub-agents to enumerate. */
+export function hasNamedBackground(background: Background): boolean {
+  return background.commands + background.subagents > 0
+}
 
 /** What a row's status slot can show. */
 export interface RowStatus {
@@ -26,11 +31,14 @@ export function joinBackground(
 ): Background | null {
   let commands = 0
   let subagents = 0
+  let unnamed = false
   for (const item of items) {
     commands += item?.commands ?? 0
     subagents += item?.subagents ?? 0
+    if (item?.unnamed) unnamed = true
   }
-  return commands + subagents > 0 ? { commands, subagents } : null
+  if (commands + subagents > 0) return { commands, subagents }
+  return unnamed ? { commands: 0, subagents: 0, unnamed: true } : null
 }
 
 const sumBackground = (nodes: readonly SessionNode[]): Background | null =>

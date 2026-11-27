@@ -561,10 +561,11 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
 
 /**
  * A message a person sent, which a send's entry is: from a window, or carrying this client's device
- * when the session's host is another computer or this is the web client.
+ * when the session's host is another computer or this is the web client. Includes steered echoes
+ * so an optimistic sending entry never leaks if a host delivers a follow-up as steered.
  */
 function isOwnMessage(entry: ThreadEntry): entry is UserEntry {
-  return entry.kind === 'user' && !entry.steered && !entry.from && !entry.approval && !entry.kettu
+  return entry.kind === 'user' && !entry.from && !entry.approval && !entry.kettu
 }
 
 /** The batch's new messages that take the place of messages sending, oldest first. */
@@ -585,6 +586,9 @@ function settleSending(sessionId: string, state: ThreadState, echoes: readonly U
   for (const echo of echoes) {
     const text = textOf(echo.content)
     const at = list.findIndex((item) => item.text === text)
+    // Only match a steered user message when its text matches a pending optimistic send so an
+    // unrelated steered message from another device never clears a different local send.
+    if (at < 0 && echo.steered) continue
     const [gone] = list.splice(at >= 0 ? at : 0, 1)
     if (gone) state = withoutEntry(state, gone.entry.id)
   }

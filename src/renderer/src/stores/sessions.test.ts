@@ -165,4 +165,26 @@ describe('sessions store indexing and deduplication', () => {
       ),
     ).toEqual({ kind: 'group', key: '/proj/a' })
   })
+
+  it('treats waiting_background sessions as not actively running in sidebar trees while preserving process running counts', () => {
+    const waiting = makeSummary('agy-1', {
+      agentId: 'antigravity',
+      projectPath: '/proj/a',
+      status: 'running',
+      phase: 'waiting_background',
+      stillRunning: { commands: 0, subagents: 1, reportsBack: true },
+    })
+    const byId = { 'agy-1': waiting }
+    const [node] = sessionTree(byId, '/proj/a')
+    expect(node?.own.running).toBe(false)
+    expect(node?.running).toBe(false)
+    // Underlying agy prompt is still alive for harness-update guards.
+    expect(localHarnessCounts(byId)).toEqual([{ harnessId: 'antigravity', total: 1, running: 1 }])
+
+    // Waking back up into writing restores active running immediately.
+    const woken = { ...waiting, phase: 'writing' as const, stillRunning: null }
+    const [activeNode] = sessionTree({ 'agy-1': woken }, '/proj/a')
+    expect(activeNode?.own.running).toBe(true)
+    expect(activeNode?.running).toBe(true)
+  })
 })

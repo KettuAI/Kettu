@@ -205,4 +205,105 @@ describe('threads store performance and digests', () => {
     rewatchAll((id) => id === 's2')
     expect(getCachedOutline('s2')).toBeNull()
   })
+
+  it('clears optimistic sending entries on normal, steered matching, and snapshot echoes (#2845)', async () => {
+    const sent: ThreadEntry[] = []
+    hostMock.mockImplementation((method: string) => {
+      if (method === 'sessions.watch') return Promise.resolve()
+      if (method === 'sessions.open') return Promise.resolve(snapshot('s1', sent, 1))
+      if (method === 'sessions.snapshot') {
+        return Promise.resolve(
+          snapshot(
+            's1',
+            [
+              {
+                kind: 'user',
+                id: 'e:snap',
+                content: [{ type: 'text', text: 'Via snapshot' }],
+                steered: true,
+                at: Date.now(),
+              },
+            ],
+            10,
+          ),
+        )
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, receiveBatch, rewatchAll, showSending, useThreadsStore } =
+      await import('./threads')
+    await focusSession('s1')
+
+    // 1. Normal non-steered echo clears the optimistic sending entry with no duplicate.
+    showSending('s1', [{ type: 'text', text: 'Follow up' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['sending-1'])
+
+    receiveBatch({
+      sessionId: 's1',
+      seq: 2,
+      patches: [
+        {
+          op: 'entry.add',
+          entry: { kind: 'user', id: 'e:1', content: [{ type: 'text', text: 'Follow up' }] },
+        },
+      ],
+    })
+    for (const cb of rafQueue.splice(0)) cb(performance.now())
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['e:1'])
+
+    // 2. Defensive: even if a legacy host echoes the message with `steered: true`, matching text
+    // clears `sending-N` instead of leaving it pinned at the bottom forever.
+    showSending('s1', [{ type: 'text', text: 'Legacy steered echo' }])
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['e:1', 'sending-2'])
+
+    // An unrelated steered message from another device must not prematurely clear the local send.
+    receiveBatch({
+      sessionId: 's1',
+      seq: 3,
+      patches: [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'user',
+            id: 'e:other',
+            content: [{ type: 'text', text: 'Other device steer' }],
+            steered: true,
+          },
+        },
+      ],
+    })
+    for (const cb of rafQueue.splice(0)) cb(performance.now())
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual([
+      'e:1',
+      'e:other',
+      'sending-2',
+    ])
+
+    // Once the matching steered echo arrives, `sending-2` is removed cleanly.
+    receiveBatch({
+      sessionId: 's1',
+      seq: 4,
+      patches: [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'user',
+            id: 'e:2',
+            content: [{ type: 'text', text: 'Legacy steered echo' }],
+            steered: true,
+          },
+        },
+      ],
+    })
+    for (const cb of rafQueue.splice(0)) cb(performance.now())
+    expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['e:1', 'e:other', 'e:2'])
+
+    // 3. Snapshot reconciliation also settles matching steered echoes.
+    showSending('s1', [{ type: 'text', text: 'Via snapshot' }])
+    rewatchAll()
+    await vi.waitFor(() =>
+      expect(useThreadsStore.getState().replicas.s1?.state?.order).toEqual(['e:snap']),
+    )
+  })
 })

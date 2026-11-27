@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import type { NoProject, Project, SessionSummary } from '@shared/agent-host'
+import {
+  isActivelyRunning,
+  type NoProject,
+  type Project,
+  type SessionSummary,
+} from '@shared/agent-host'
 import { harnessOf, type HarnessId } from '@shared/thread'
 import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -749,7 +754,7 @@ function buildTree(
 }
 
 function isActive(summary: SessionSummary): boolean {
-  return summary.status === 'running' || summary.status === 'awaiting_permission'
+  return isActivelyRunning(summary)
 }
 
 /**

@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import { ALREADY_ANSWERED, type AgentStatus, type SessionSummary } from '@shared/agent-host'
+import {
+  ALREADY_ANSWERED,
+  isActivelyRunning,
+  type AgentStatus,
+  type SessionSummary,
+} from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import { isPortError, type PortConnectionState } from '@shared/port-rpc'
@@ -84,7 +89,7 @@ async function readDetail(summary: SessionSummary): Promise<SessionDetail> {
     const requests = pendingRequests(entries).filter(trayRequest)
     return { ...read, requests, files: before?.files ?? null }
   }
-  if (summary.status === 'running') return { ...read, requests: [], files: null }
+  if (isActivelyRunning(summary)) return { ...read, requests: [], files: null }
   const snapshot = await trayApi().agents.request('sessions.snapshot', { sessionId: summary.id })
   return { ...read, requests: [], files: changedFiles(snapshot.entries) }
 }

@@ -325,6 +325,7 @@
     "running": "运行中",
     "starting": "正在启动",
     "background": "后台还在跑：{{work}}",
+    "backgroundUnnamed": "后台还有任务在运行",
     "unread": "未读",
     "cacheExpiring_other": "提示词缓存 {{count}} 分钟后过期",
     "cacheExpiringAbout_other": "提示词缓存约 {{count}} 分钟后过期",
@@ -454,7 +455,8 @@
     "moreReferences_other": "还有 {{count}} 个 issue 和 PR",
     "moreArtifacts_other": "还有 {{count}} 个产物",
     "artifactFacts": "v{{version}} · {{time}}",
-    "background": "后台在跑"
+    "background": "后台在跑",
+    "backgroundUnnamed": "后台任务运行中"
   },
   "stillRunning": {
     "subagents_other": "{{count}} 个子智能体",
