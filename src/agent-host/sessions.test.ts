@@ -2,10 +2,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { StopReason } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import type { AgentManager } from './agents'
 import { CLAUDE_CODE } from './catalog'
 import { claudeSdkDriver } from './claude/driver'
+import type { SdkMessage } from './claude/sdk'
 import type { OwnTitles, SessionOptions, SessionTarget } from './connection'
 import { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
@@ -1985,5 +1987,366 @@ describe('agent-given session titles', () => {
     } finally {
       connection.close()
     }
+  })
+})
+
+describe('agent-started turns and empty turn_end deduplication', () => {
+  async function claudeSetup() {
+    const sdkDir = await mkdtemp(path.join(dir, 'claude-sdk-turn-end-'))
+    const entry = path.join(sdkDir, 'sdk.mjs')
+    await writeFile(path.join(sdkDir, 'package.json'), JSON.stringify({ version: '0.3.314' }))
+    const sdk = new FakeClaudeSdk()
+    const connection = claudeSdkDriver(async () => sdk).connect({
+      def: CLAUDE_CODE,
+      hooks: {
+        traffic: () => {},
+        account: () => {},
+        ignored: () => {},
+        log: () => {},
+      },
+      spec: {
+        command: entry,
+        args: [],
+        env: { CLAUDE_CODE_EXECUTABLE: '/opt/claude/bin/claude' },
+        shell: false,
+        display: { command: entry, args: [], env: {} },
+      },
+      env: { PATH: '/usr/bin', HOME: dir },
+      claudeSettingsDir: path.join(sdkDir, 'settings'),
+      spawn: () => new FakeChild() as never,
+    })
+    const init = await connection.initialize('1.0.0')
+    const runtime = { agentId: 'claude-code' as const, kettu: false, init, connection }
+    const agents = {
+      name: () => 'Claude Code',
+      isDisabled: () => false,
+      signedIn: () => {},
+      status: () => ({ capabilities: init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    const { sessions } = manager({}, { agents })
+    await sessions.load()
+    return { sdk, connection, sessions }
+  }
+
+  function fakeAgentHarness() {
+    const targets = new Map<string, SessionTarget>()
+    let nextId = 0
+    const connection = {
+      isClosed: false,
+      closed: new Promise<void>(() => {}),
+      close: () => {},
+      register: (id: string, target: SessionTarget) => {
+        targets.set(id, target)
+      },
+      unregister: (id: string) => {
+        targets.delete(id)
+      },
+      reopen: () => {},
+      newSession: async () => ({ sessionId: `acp-${++nextId}`, config: [] }),
+      setConfigOption: async () => [],
+      loadSession: async () => ({ config: [] }),
+      resumeSession: async () => ({ config: [] }),
+      listSessions: async () => ({ sessions: [], nextCursor: null }),
+      cancel: async () => {},
+      prompt: async () => ({ stopReason: 'end_turn' as StopReason, tokens: null, models: [] }),
+    }
+    const runtime = {
+      agentId: 'claude-code' as const,
+      kettu: false,
+      init: {
+        name: 'Agent',
+        version: '1.0.0',
+        capabilities: {
+          loadSession: true,
+          listSessions: true,
+          resumeSession: true,
+          closeSession: false,
+          deleteSession: false,
+          forkSession: false,
+          forkAtMessage: false,
+          ownTitles: null,
+          logout: false,
+          steering: false,
+          mcpHttp: true,
+          mcpSse: false,
+          mcpStdio: true,
+          prompt: { image: false, audio: false, embeddedContext: false },
+        },
+        authMethods: [],
+        raw: null,
+      },
+      connection,
+    }
+    const agents = {
+      name: () => 'Agent',
+      isDisabled: () => false,
+      signedIn: () => {},
+      status: () => ({ capabilities: runtime.init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: () => runtime,
+      ensureReady: async () => runtime,
+    }
+    return { agents, targets }
+  }
+
+  it('omits turn_end for empty background Claude Code agentTurns while settling state, draining queue, and reporting real turns', async () => {
+    const { sdk, connection, sessions } = await claudeSetup()
+    const taskId = 'bg-subagent-1'
+    const system = (sessionId: string, fields: Record<string, unknown>): SdkMessage =>
+      ({ type: 'system', session_id: sessionId, ...fields }) as SdkMessage
+    const assistant = (sessionId: string, id: string, text: string): SdkMessage =>
+      ({
+        type: 'assistant',
+        uuid: `uuid-${id}`,
+        parent_tool_use_id: null,
+        session_id: sessionId,
+        message: { id, role: 'assistant', content: [{ type: 'text', text }] },
+      }) as SdkMessage
+    const result = (sessionId: string): SdkMessage =>
+      ({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: '',
+        stop_reason: 'end_turn',
+        terminal_reason: 'completed',
+        total_cost_usd: 0,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        modelUsage: {},
+        session_id: sessionId,
+      }) as SdkMessage
+    const taskNotificationUser = (sessionId: string): SdkMessage =>
+      ({
+        type: 'user',
+        message: { role: 'user', content: '<task-notification>waiting</task-notification>' },
+        parent_tool_use_id: null,
+        origin: { kind: 'task-notification' },
+        isReplay: true,
+        session_id: sessionId,
+      }) as SdkMessage
+
+    let promptCount = 0
+    sdk.script = (q) => {
+      promptCount++
+      if (promptCount === 1) {
+        q.running()
+        q.emit(
+          system(q.sessionId, { subtype: 'init' }),
+          system(q.sessionId, {
+            subtype: 'task_started',
+            task_id: taskId,
+            tool_use_id: 'toolu_bg',
+            description: 'Inspect code',
+            subagent_type: 'general-purpose',
+            is_backgrounded: true,
+            task_type: 'local_agent',
+          }),
+          assistant(q.sessionId, 'msg_1', 'Started background work.'),
+          result(q.sessionId),
+        )
+        return
+      }
+      q.emit(
+        system(q.sessionId, { subtype: 'init' }),
+        assistant(q.sessionId, `msg_q_${promptCount}`, 'Handled queued follow-up.'),
+        result(q.sessionId),
+      )
+    }
+
+    try {
+      const created = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+      await sessions.prompt(created.id, [{ type: 'text', text: 'Investigate in background' }])
+      await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('ready'))
+
+      const turnEnds = async () =>
+        (await sessions.open(created.id)).entries.filter((entry) => entry.kind === 'turn_end')
+
+      expect(await turnEnds()).toHaveLength(1)
+      expect(sessions.summary(created.id).stillRunning).toEqual({
+        commands: 0,
+        subagents: 1,
+        reportsBack: true,
+      })
+
+      // Two empty background <task-notification> agentTurns settle cleanly with no stacked turn_end.
+      const query = sdk.last
+      for (let i = 0; i < 2; i++) {
+        query.emit(
+          system(query.sessionId, { subtype: 'init' }),
+          taskNotificationUser(query.sessionId),
+        )
+        await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('running'))
+        query.emit(result(query.sessionId))
+        await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('ready'))
+      }
+
+      expect(await turnEnds()).toHaveLength(1)
+      expect(sessions.summary(created.id).stillRunning).toEqual({
+        commands: 0,
+        subagents: 1,
+        reportsBack: true,
+      })
+
+      // A user prompt queued during an empty agentTurn drains once the empty turn finishes.
+      query.emit(
+        system(query.sessionId, { subtype: 'init' }),
+        taskNotificationUser(query.sessionId),
+      )
+      await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('running'))
+      await sessions.queue(created.id, [{ type: 'text', text: 'Queued question' }])
+      query.emit(result(query.sessionId))
+      await vi.waitFor(() => expect(promptCount).toBe(2))
+      await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('ready'))
+      expect(await turnEnds()).toHaveLength(2)
+
+      // When the background subagent finishes and Claude Code reports back with text, turn_end is written.
+      query.emit(
+        system(query.sessionId, {
+          subtype: 'task_notification',
+          task_id: taskId,
+          status: 'completed',
+        }),
+        system(query.sessionId, { subtype: 'init' }),
+        assistant(query.sessionId, 'msg_done', 'Background work finished.'),
+      )
+      await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('running'))
+      query.finish()
+      await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('ready'))
+
+      expect(await turnEnds()).toHaveLength(3)
+      expect(sessions.summary(created.id).stillRunning).toBeNull()
+      await sessions.flush()
+    } finally {
+      connection.close()
+    }
+  })
+
+  it('writes turn_end for agentTurns with thought/tool output, non-end_turn stop reasons, and user-initiated empty turns', async () => {
+    const harness = fakeAgentHarness()
+    const { sessions } = manager({}, { agents: harness.agents })
+    await sessions.load()
+
+    const created = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const turnEnds = async () =>
+      (await sessions.open(created.id)).entries.filter((entry) => entry.kind === 'turn_end')
+
+    // 1. User-initiated turn with zero agent output still records turn_end.
+    await sessions.prompt(created.id, [{ type: 'text', text: 'Ping' }])
+    await vi.waitFor(() => expect(sessions.summary(created.id).status).toBe('ready'))
+    expect(await turnEnds()).toHaveLength(1)
+
+    const target = harness.targets.get('acp-1')!
+
+    // 2. Empty agentTurn ending normally produces no turn_end.
+    target.apply({ patches: [], effects: [{ kind: 'agentTurn', phase: 'started' }] })
+    expect(sessions.summary(created.id).status).toBe('running')
+    target.apply({
+      patches: [],
+      effects: [
+        {
+          kind: 'agentTurn',
+          phase: 'ended',
+          result: { stopReason: 'end_turn', tokens: null, models: [] },
+        },
+      ],
+    })
+    expect(sessions.summary(created.id).status).toBe('ready')
+    expect(await turnEnds()).toHaveLength(1)
+
+    // 3. agentTurn with a thought still records turn_end.
+    target.apply({ patches: [], effects: [{ kind: 'agentTurn', phase: 'started' }] })
+    target.apply({
+      patches: [
+        {
+          op: 'entry.add',
+          entry: { kind: 'thought', id: 'th-1', markdown: 'Checking status', streaming: false },
+        },
+      ],
+      effects: [],
+    })
+    target.apply({
+      patches: [],
+      effects: [
+        {
+          kind: 'agentTurn',
+          phase: 'ended',
+          result: { stopReason: 'end_turn', tokens: null, models: [] },
+        },
+      ],
+    })
+    expect(await turnEnds()).toHaveLength(2)
+
+    // 4. agentTurn with a tool call still records turn_end.
+    target.apply({ patches: [], effects: [{ kind: 'agentTurn', phase: 'started' }] })
+    target.apply({
+      patches: [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'tool',
+            id: 'tool-1',
+            title: 'Read file',
+            toolKind: 'read',
+            status: 'completed',
+            content: [],
+            locations: [],
+            permission: null,
+            permissionResult: null,
+          },
+        },
+      ],
+      effects: [],
+    })
+    target.apply({
+      patches: [],
+      effects: [
+        {
+          kind: 'agentTurn',
+          phase: 'ended',
+          result: { stopReason: 'end_turn', tokens: null, models: [] },
+        },
+      ],
+    })
+    expect(await turnEnds()).toHaveLength(3)
+
+    // 5. Empty agentTurn with non-end_turn stop reasons still records turn_end.
+    for (const reason of ['cancelled', 'max_tokens', 'refusal'] as const) {
+      target.apply({ patches: [], effects: [{ kind: 'agentTurn', phase: 'started' }] })
+      target.apply({
+        patches: [],
+        effects: [
+          {
+            kind: 'agentTurn',
+            phase: 'ended',
+            result: { stopReason: reason, tokens: null, models: [] },
+          },
+        ],
+      })
+    }
+    const ends = await turnEnds()
+    expect(ends).toHaveLength(6)
+    expect(ends.slice(3).map((entry) => entry.stopReason)).toEqual([
+      'cancelled',
+      'max_tokens',
+      'refusal',
+    ])
+
+    // 6. Empty agentTurn that fails still records an error notice and settles cleanly.
+    target.apply({ patches: [], effects: [{ kind: 'agentTurn', phase: 'started' }] })
+    target.apply({
+      patches: [],
+      effects: [{ kind: 'agentTurn', phase: 'failed', error: new Error('boom') }],
+    })
+    expect(sessions.summary(created.id).status).toBe('ready')
+    const notices = (await sessions.open(created.id)).entries.filter(
+      (entry) => entry.kind === 'notice' && entry.severity === 'error',
+    )
+    expect(notices).toHaveLength(1)
+    await sessions.flush()
   })
 })
