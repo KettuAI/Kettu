@@ -181,6 +181,11 @@ export interface AgentInit {
     mcpSse: boolean
     /** MCP servers the agent starts as programs and talks to over stdio. */
     mcpStdio: boolean
+    /**
+     * Merges a server it is handed key by key into a server of the same name in its own
+     * configuration instead of replacing it, so a library server must not take that name.
+     */
+    mcpMergesSameName?: boolean
     prompt: PromptCapabilities
   }
   authMethods: AuthMethodInfo[]
@@ -301,6 +306,8 @@ export type McpServer =
       prompt?: string
       /** Holds a token or a value from the key store, so it must never reach a command line. */
       secret?: boolean
+      /** Servers of the agent's own configuration this one stands in for, off for the session. */
+      replaces?: string[]
     }
   | {
       type: 'stdio'
@@ -309,6 +316,7 @@ export type McpServer =
       args: string[]
       env: { name: string; value: string }[]
       secret?: boolean
+      replaces?: string[]
     }
 
 /** A content block of a prompt, as Kettu sends it; each protocol converts it for its wire. */

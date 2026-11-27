@@ -287,10 +287,13 @@ function sessionConfig(cwd: string, options: SessionOptions): Record<string, Jso
     // lets go of it, so the user's own Codex cannot open it for that minute.
     thread_unload_delay_secs: 0,
   }
-  const entries = (options.mcpServers ?? []).flatMap((server) => {
+  const entries: [string, JsonValue][] = (options.mcpServers ?? []).flatMap((server) => {
     const entry = codexServer(server)
-    return entry ? [[server.name.replace(/\s+/g, '_'), entry] as const] : []
+    return entry ? [[server.name.replace(/\s+/g, '_'), entry] as [string, JsonValue]] : []
   })
+  // Codex merges an entry into its own one of the same name, so its own copy is only turned off.
+  const off = (options.mcpServers ?? []).flatMap((server) => server.replaces ?? [])
+  for (const name of off) entries.push([name, { enabled: false }])
   if (entries.length > 0) config.mcp_servers = Object.fromEntries(entries)
   if (options.memory) {
     features.memories = false
@@ -588,6 +591,7 @@ export class CodexConnection implements AgentConnection {
         // Codex speaks streamable HTTP and stdio to MCP servers; it has no SSE client.
         mcpSse: false,
         mcpStdio: true,
+        mcpMergesSameName: true,
         prompt: { image: true, audio: false, embeddedContext: true },
       },
       authMethods: this.authMethods(),

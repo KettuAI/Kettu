@@ -26,7 +26,10 @@ import { getEnv, type Env } from '../find-command'
 export type MarketKeys = ReadonlyMap<string, ReadonlyMap<string, string>>
 
 /** The MCP transports an agent speaks. */
-export type McpTransports = Pick<AgentInit['capabilities'], 'mcpHttp' | 'mcpSse' | 'mcpStdio'>
+export type McpTransports = Pick<
+  AgentInit['capabilities'],
+  'mcpHttp' | 'mcpSse' | 'mcpStdio' | 'mcpMergesSameName'
+>
 
 export const ALL_TRANSPORTS: McpTransports = { mcpHttp: true, mcpSse: true, mcpStdio: true }
 
@@ -193,10 +196,16 @@ export function serverCommand(
     : { command: spec.command, args: [...spec.args], env: out }
 }
 
+/** The name a server is handed under, and the agent's own servers it stands in for. */
+interface Handed {
+  name: string
+  replaces?: string[]
+}
+
 /** A command as the agent runs it, for a server handed straight to it. */
 function direct(
   server: MarketServer,
-  name: string,
+  handed: Handed,
   keys: MarketKeys,
   platform: Platform,
   node: NodeRuntime | undefined,
@@ -216,7 +225,7 @@ function direct(
   }))
   return {
     type: 'stdio',
-    name,
+    ...handed,
     command,
     args,
     env: [...runtimeEnv, ...values.values],
@@ -250,7 +259,9 @@ export function endpointOf(spec: McpSpec): McpEndpoint {
  * stdio. A command set to run by each agent goes to it directly, as does any command when there
  * is no bridge for a stdio-only agent, which `fellBack` hears of. A server whose required input
  * has no value is left out, as is one that signs in while it is not connected; one whose name
- * another server already has, such as Kettu's own, gets a number after it.
+ * another server already has, such as Kettu's own, gets a number after it. For an agent that
+ * merges same-name servers, the agent's own copy of a server, or its server of the same name, is
+ * turned off for the session instead, and Kettu's goes under a name its configuration lacks.
  */
 export function libraryServers(
   servers: readonly MarketServer[],
@@ -288,17 +299,33 @@ export function libraryServers(
   const out: McpServer[] = []
   const allowed: string[] = []
   const own = options.own ?? []
-  const nameOf = (server: MarketServer): string => {
+  const ownNames = new Set(own.map((item) => item.name))
+  const nameOf = (server: MarketServer): Handed => {
+    const print = mcpFingerprint(endpointOf(server.spec))
+    if (transports.mcpMergesSameName) {
+      const replaces = own
+        .filter((item) => item.name === server.name || mcpFingerprint(item.endpoint) === print)
+        .map((item) => item.name)
+      const taken = (name: string) => used.has(name) || ownNames.has(name)
+      let name = server.name
+      if (taken(name)) name = `${server.name}-kettu`
+      for (let n = 2; taken(name); n++) name = `${server.name}-kettu-${n}`
+      used.add(name)
+      const clash = own.find(
+        (item) => item.name === server.name && mcpFingerprint(item.endpoint) !== print,
+      )
+      if (clash) options.conflict?.(server, clash.name)
+      return replaces.length > 0 ? { name, replaces } : { name }
+    }
     // The same server under another name in the agent's own file is handed under that name, so
     // the agent runs it once, as Kettu's.
-    const print = mcpFingerprint(endpointOf(server.spec))
     const same = own.find((item) => mcpFingerprint(item.endpoint) === print && !used.has(item.name))
     let name = same?.name ?? server.name
     for (let n = 2; used.has(name); n++) name = `${server.name}-${n}`
     used.add(name)
     const clash = own.find((item) => item.name === name && mcpFingerprint(item.endpoint) !== print)
     if (clash) options.conflict?.(server, clash.name)
-    return name
+    return { name }
   }
   const router = options.router ?? null
   const gated: string[] = []
@@ -335,7 +362,7 @@ export function libraryServers(
     if (transports.mcpHttp) {
       out.push({
         type: 'http',
-        name: nameOf(server),
+        ...nameOf(server),
         url: `${router.origin}${serverPath(server.id)}`,
         headers: [{ name: 'Authorization', value: `Bearer ${router.token}` }],
         secret: true,
@@ -364,10 +391,9 @@ export function libraryServers(
       }
       continue
     }
-    const name = nameOf(server)
     out.push({
       type: 'stdio',
-      name,
+      ...nameOf(server),
       command: options.bridge,
       args: ['mcp', 'connect', server.name, '--agent', agentId],
       env: [

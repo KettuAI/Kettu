@@ -5,6 +5,7 @@
 import os from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAccount } from '@shared/agent-host'
+import type { MarketServer } from '@shared/marketplace'
 import {
   applyPatches,
   threadEntries,
@@ -22,6 +23,7 @@ import {
   type PermissionRequest,
   type SessionTarget,
 } from '../connection'
+import { libraryServers, parseMarketKeys, type OwnServer } from '../marketplace/servers'
 import { TextRing } from '../ring'
 import { newTurnScope, type MapperEffect } from '../session-updates'
 import {
@@ -554,6 +556,61 @@ describe('sessions', () => {
       },
     })
     expect(sent).not.toHaveProperty('developerInstructions')
+  })
+
+  it("turns off the agent's own copy of a library server and hands Kettu's under a free name", async () => {
+    const { server, connection, init } = await connect()
+    const library = (name: string, spec: MarketServer['spec']): MarketServer => ({
+      id: `manual:${name}`,
+      name,
+      title: name,
+      source: 'manual',
+      version: null,
+      spec,
+      agents: 'all',
+      on: true,
+    })
+    const stdio = (...args: string[]) => ({ type: 'stdio' as const, command: 'node', args })
+    const own: OwnServer[] = [
+      { name: 'probe', endpoint: stdio('probe.js', 'own') },
+      { name: 'remote', endpoint: { type: 'http', url: 'https://own.example.com/mcp' } },
+      { name: 'remote-kettu', endpoint: { type: 'http', url: 'https://else.example.com/mcp' } },
+      { name: 'mydocs', endpoint: stdio('docs.js') },
+    ]
+    const servers = libraryServers(
+      [
+        library('probe', { ...stdio('probe.js', 'kettu'), env: [] }),
+        library('remote', {
+          type: 'http',
+          transport: 'streamable-http',
+          url: 'https://kettu.example.com/mcp',
+          headers: [],
+        }),
+        library('docs', { ...stdio('docs.js'), env: [] }),
+      ],
+      parseMarketKeys({})!,
+      'codex',
+      init.capabilities,
+      {
+        platform: 'darwin',
+        own,
+        router: { origin: 'http://127.0.0.1:4567', token: 'session-token', allow: () => {} },
+      },
+    )
+    await connection.newSession('/project', { mcpServers: servers })
+    const sent = server.sent('thread/start')[0] as {
+      config: { mcp_servers: Record<string, Record<string, unknown>> }
+    }
+    const entries = sent.config.mcp_servers
+    for (const name of ['probe', 'remote', 'mydocs'])
+      expect(entries[name]).toEqual({ enabled: false })
+    expect(entries).not.toHaveProperty('remote-kettu')
+    const live = Object.entries(entries).filter(([, entry]) => entry.enabled !== false)
+    expect(live.map(([name]) => name).sort()).toEqual(['docs', 'probe-kettu', 'remote-kettu-2'])
+    for (const [name, entry] of live) {
+      expect(own.map((item) => item.name)).not.toContain(name)
+      expect(entry.url).toMatch(/^http:\/\/127\.0\.0\.1:4567\//)
+    }
   })
 
   it('needs a sign-in before a session opens on an install that has none', async () => {
