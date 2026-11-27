@@ -22,7 +22,7 @@ import type { Attachment } from '@shared/thread'
 import type { PromptBlock } from './connection'
 import { invalidParams, notFound } from './errors'
 import { t } from './i18n'
-import { JsonFile, type LogFn } from './storage'
+import { JsonFile, notifyStorageWrite, type LogFn } from './storage'
 import type { StoredBlob } from './threads/model'
 
 /**
@@ -535,8 +535,14 @@ export class Attachments {
    */
   async sentLink(record: AttachmentRecord, data: Uint8Array): Promise<string> {
     const file = path.join(this.sentDir, fileName(record))
-    await mkdir(this.sentDir, { recursive: true, mode: 0o700 })
-    await writeFile(file, data, { mode: 0o600 })
+    try {
+      await mkdir(this.sentDir, { recursive: true, mode: 0o700 })
+      await writeFile(file, data, { mode: 0o600 })
+      notifyStorageWrite(file, true)
+    } catch (error) {
+      notifyStorageWrite(file, false, error)
+      throw error
+    }
     const at = new Date(this.now())
     await utimes(file, at, at)
     return pathToFileURL(file).href
@@ -575,8 +581,15 @@ export class Attachments {
 
   private async saveBytes(data: Uint8Array, named: Omit<Named, 'hash'>): Promise<string> {
     const hash = createHash('sha256').update(data).digest('hex')
-    await mkdir(this.dir, { recursive: true, mode: 0o700 })
-    await writeFile(this.bytesPath({ ...named, hash }), data, { mode: 0o600 })
+    const file = this.bytesPath({ ...named, hash })
+    try {
+      await mkdir(this.dir, { recursive: true, mode: 0o700 })
+      await writeFile(file, data, { mode: 0o600 })
+      notifyStorageWrite(file, true)
+    } catch (error) {
+      notifyStorageWrite(file, false, error)
+      throw error
+    }
     return hash
   }
 

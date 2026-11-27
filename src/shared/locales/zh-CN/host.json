@@ -183,7 +183,15 @@
       "description": "请在这台电脑上腾出空间。在此之前对话保留在内存中，有空间后 Kettu 会自动保存。"
     },
     "stopped": {
-      "title": "{{agent}} 在本轮对话完成前退出了"
+      "title": "{{agent}} 在本轮对话完成前退出了",
+      "diskFull": "磁盘空间不足。请在这台电脑上腾出空间后再继续。",
+      "diskFullWithDetail": "磁盘空间不足。请在这台电脑上腾出空间后再继续。\n{{detail}}",
+      "code": "进程已退出，退出码 {{code}}。",
+      "codeWithDetail": "进程已退出，退出码 {{code}}：{{detail}}",
+      "signal": "进程被 {{signal}} 信号终止。",
+      "signalWithDetail": "进程被 {{signal}} 信号终止：{{detail}}",
+      "closed": "连接意外中断。",
+      "closedWithDetail": "连接意外中断：{{detail}}"
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} 没有确认取消",

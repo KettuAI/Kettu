@@ -1,10 +1,10 @@
 // A plugin's own storage: a small key-value file in the plugin's folder on the host, which goes
 // when the plugin does. Each write replaces the file whole, so a crash leaves the file as it was.
 
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PLUGIN_STORAGE_LIMITS } from '@shared/plugins'
-import type { LogFn } from '../storage'
+import { notifyStorageWrite, type LogFn } from '../storage'
 
 type Entries = Record<string, unknown>
 
@@ -96,9 +96,17 @@ export class PluginStorage {
     const run = async (): Promise<null> => {
       const next = change(await this.read(pluginId))
       const file = this.file(pluginId)
+      const tmp = `${file}.tmp`
       // The folder is the plugin's own: a write after it was removed fails instead of making it.
-      await writeFile(`${file}.tmp`, JSON.stringify(next))
-      await rename(`${file}.tmp`, file)
+      try {
+        await writeFile(tmp, JSON.stringify(next))
+        await rename(tmp, file)
+        notifyStorageWrite(file, true)
+      } catch (error) {
+        await rm(tmp, { force: true }).catch(() => {})
+        notifyStorageWrite(file, false, error)
+        throw error
+      }
       this.loaded.set(pluginId, Promise.resolve(next))
       return null
     }

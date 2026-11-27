@@ -36,6 +36,7 @@ import {
   type RoutineRef,
 } from '@shared/routines'
 import type { AgentInit, RewindPoint } from './connection'
+import type { StorageWriteOutcome } from './disk-full'
 import { isVersion } from './versions'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
@@ -73,26 +74,71 @@ export function migrate(
 
 const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
+interface StorageWriteObserver {
+  root: string
+  listener: (outcome: StorageWriteOutcome) => void
+}
+
+const storageWriteObservers = new Set<StorageWriteObserver>()
+
+function isWithinRoot(file: string, root: string): boolean {
+  const resolved = path.resolve(file)
+  const rel = path.relative(root, resolved)
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+/**
+ * Observes atomic and state-file writes under `rootDir` (typically a host's `userDataPath`),
+ * returning an unsubscribe callback. Scoped by root so concurrent test hosts never cross-talk.
+ */
+export function observeStorageWrites(
+  rootDir: string,
+  listener: (outcome: StorageWriteOutcome) => void,
+): () => void {
+  const observer: StorageWriteObserver = { root: path.resolve(rootDir), listener }
+  storageWriteObservers.add(observer)
+  return () => {
+    storageWriteObservers.delete(observer)
+  }
+}
+
+/** Reports a state-file write outcome to observers registered for its root folder. */
+export function notifyStorageWrite(file: string, ok: boolean, error?: unknown): void {
+  if (storageWriteObservers.size === 0) return
+  const outcome: StorageWriteOutcome = ok ? { file, ok: true } : { file, ok: false, error }
+  for (const observer of [...storageWriteObservers]) {
+    if (isWithinRoot(file, observer.root)) observer.listener(outcome)
+  }
+}
+
 /** Writes to `<file>.tmp`, flushes it to disk and renames it over the file. */
 export async function writeFileAtomic(file: string, contents: string): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true })
   const tmp = `${file}.tmp`
-  const handle = await open(tmp, 'w')
   try {
-    await handle.writeFile(contents, 'utf8')
-    await handle.sync()
-  } finally {
-    await handle.close()
+    await mkdir(path.dirname(file), { recursive: true })
+    const handle = await open(tmp, 'w')
+    try {
+      await handle.writeFile(contents, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => {})
+    notifyStorageWrite(file, false, error)
+    throw error
   }
   // On Windows a scanner or indexer can hold the target open for a moment.
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(tmp, file)
+      notifyStorageWrite(file, true)
       return
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code ?? ''
       if (attempt >= 4 || !RETRYABLE.has(code)) {
-        await rm(tmp, { force: true })
+        await rm(tmp, { force: true }).catch(() => {})
+        notifyStorageWrite(file, false, error)
         throw error
       }
       await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)))
@@ -118,6 +164,10 @@ export interface JsonFileOptions<T> {
   /** The first wait before a failed write is tried again; each failure after it doubles it. */
   retryMs?: number
   now?: () => number
+  /** Overrides `writeFileAtomic` for tests that inject filesystem failures such as ENOSPC. */
+  writeFile?: (file: string, contents: string) => Promise<void>
+  /** Called after every write attempt with whether it reached disk or failed. */
+  onWrite?: (outcome: StorageWriteOutcome) => void
 }
 
 /** The longest a failed write waits before it is tried again. */
@@ -137,15 +187,30 @@ export class JsonFile<T> {
   private failures = 0
   /** The writes in turn; each settles to whether it reached the disk. */
   private writing: Promise<boolean> = Promise.resolve(true)
+  private readonly writeListeners = new Set<(outcome: StorageWriteOutcome) => void>()
   /** A file from a newer version of the app is never overwritten. */
   readOnly = false
   status: LoadStatus = 'missing'
   backupPath: string | null = null
 
-  constructor(private readonly options: JsonFileOptions<T>) {}
+  constructor(private readonly options: JsonFileOptions<T>) {
+    if (options.onWrite) this.writeListeners.add(options.onWrite)
+  }
 
   get file(): string {
     return this.options.file
+  }
+
+  /** Subscribes to write completions and failures for this file. */
+  onWrite(listener: (outcome: StorageWriteOutcome) => void): () => void {
+    this.writeListeners.add(listener)
+    return () => {
+      this.writeListeners.delete(listener)
+    }
+  }
+
+  private emitWrite(outcome: StorageWriteOutcome): void {
+    for (const listener of [...this.writeListeners]) listener(outcome)
   }
 
   async load(): Promise<T> {
@@ -221,11 +286,15 @@ export class JsonFile<T> {
     const { serialize, compact } = this.options
     const json = JSON.stringify(serialize ? serialize(data) : data, null, compact ? undefined : 2)
     const contents = `${json}\n`
+    const writer = this.options.writeFile ?? writeFileAtomic
+    const customWriter = this.options.writeFile !== undefined
     this.writing = this.writing
-      .then(() => writeFileAtomic(this.options.file, contents))
+      .then(() => writer(this.options.file, contents))
       .then(
         () => {
           this.failures = 0
+          if (customWriter) notifyStorageWrite(this.options.file, true)
+          this.emitWrite({ file: this.options.file, ok: true })
           return true
         },
         (error: unknown) => {
@@ -233,6 +302,8 @@ export class JsonFile<T> {
             'error',
             `Could not write ${this.options.file}: ${(error as Error).message}`,
           )
+          if (customWriter) notifyStorageWrite(this.options.file, false, error)
+          this.emitWrite({ file: this.options.file, ok: false, error })
           // Kept for the next try, unless a later save has replaced it.
           this.pending ??= data
           this.retryLater()

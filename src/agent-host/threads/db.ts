@@ -38,6 +38,7 @@ import type {
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
 import type { IndexedMessage } from '../search/messages'
+import { isDiskFullError } from '../disk-full'
 import { transaction } from '../sqlite'
 import { taskRecordOf, type TaskCall, type TaskCalls } from '../workflow/model'
 import {
@@ -390,8 +391,9 @@ const isCorrupt = (error: unknown): boolean => {
 // Less free space than this makes an I/O error a full disk's.
 const LOW_SPACE_BYTES = 64 * 1024 * 1024
 
-/** Whether the failure is for want of room: SQLite's own, or an I/O error on a disk nearly full. */
+/** Whether the failure is for want of room: SQLite's own, ENOSPC, or an I/O error on a disk nearly full. */
 function isFull(error: unknown, folder: string): boolean {
+  if (isDiskFullError(error)) return true
   const code = resultCode(error)
   if (code === SQLITE_FULL) return true
   if (code !== SQLITE_IOERR) return false

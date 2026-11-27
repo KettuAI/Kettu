@@ -13,7 +13,7 @@ import {
   type McpCallRecord,
   type McpCallResult,
 } from '@shared/mcp-insight'
-import type { LogFn } from '../storage'
+import { notifyStorageWrite, type LogFn } from '../storage'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/
@@ -97,13 +97,16 @@ export class McpCalls {
     const dir = this.dir
     if (!dir) return Promise.resolve()
     this.writing = this.writing.then(async () => {
+      const file = path.join(dir, `${dayOf(record.at)}.jsonl`)
       try {
         await mkdir(dir, { recursive: true })
         await this.prune()
-        await appendFile(path.join(dir, `${dayOf(record.at)}.jsonl`), callLine(record), {
+        await appendFile(file, callLine(record), {
           mode: 0o600,
         })
+        notifyStorageWrite(file, true)
       } catch (error) {
+        notifyStorageWrite(file, false, error)
         this.log('warn', `Could not record an MCP call: ${(error as Error).message}`)
       }
     })

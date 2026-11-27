@@ -163,6 +163,7 @@ import { writePullRequestDraft } from './pull-request-draft'
 import { lightTarget } from './light-model'
 import { reportDraftPrompt, writeReportDraft } from './report-draft'
 import { Diagnostics } from './diagnostics'
+import { isDiskFullError } from './disk-full'
 import { HostError, invalidParams, notFound } from './errors'
 import { setLocale, t, tSettings, tSettingsEnglish } from './i18n'
 import { FilesService } from './files'
@@ -292,6 +293,7 @@ import {
   agentProcessesFile,
   agentsFile,
   agentUpdatesFile,
+  observeStorageWrites,
   projectsFile,
   projectHooksFile,
   projectMcpFile,
@@ -825,6 +827,7 @@ export class AgentHost {
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
+  private readonly stopStorageWatch: () => void
   private readonly catalog: readonly AgentDefinition[]
 
   private constructor(private readonly options: HostOptions) {
@@ -1982,6 +1985,12 @@ export class AgentHost {
         busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
         completed: () => void this.star.turnCompleted(),
       },
+    })
+    // Watch every state file under userDataPath so ENOSPC on sessions.json, agent-processes.json,
+    // and other host files surfaces the same disk-full warning as threads.db.
+    this.stopStorageWatch = observeStorageWrites(options.userDataPath, (outcome) => {
+      if (outcome.ok) this.sessions.noteDiskWriteSucceeded(outcome.file)
+      else if (isDiskFullError(outcome.error)) this.sessions.reportDiskFull(outcome.file)
     })
     this.routines = new RoutinesManager({
       userDataPath: options.userDataPath,
@@ -4403,6 +4412,7 @@ export class AgentHost {
         this.threads?.close(),
         this.usage.close(),
       ])
+      this.stopStorageWatch()
       this.hub.closeAll()
       this.failBrowserCalls()
       this.options.send({ type: 'host:stopped' })

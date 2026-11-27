@@ -580,6 +580,12 @@ class Slot {
   /** The removal of the hidden session that read the options, once its `session/new` answered. */
   optionsRemoval: Promise<void> | null = null
   progress = new TextRing(8 * 1024)
+  /** Stderr written during the agent's current or most recent run, reset on each launch. */
+  runStderr = new TextRing(16 * 1024)
+  /** Snapshot of the last unexpected agent exit, cleared on the next launch. */
+  lastExit: { at: number; info: ExitInfo } | null = null
+  /** Snapshot of the last unexpected hosted child exit (for per-session hosted drivers). */
+  lastChildExit: { at: number; info: ExitInfo } | null = null
   /** Stops the sign-in in progress; the agent is not stopped for being idle while it runs. */
   signInAbort: AbortController | null = null
   /** The process whose refused sign-in was checked against the Google sign-in agy holds. */
@@ -1540,6 +1546,9 @@ export class AgentManager {
     slot.state = 'starting'
     slot.detail = null
     slot.progress.clear()
+    slot.runStderr.clear()
+    slot.lastExit = null
+    slot.lastChildExit = null
     slot.intentionalStop = false
     slot.launchSpec = spec
     slot.launchConfig = this.configIn(slot, env)
@@ -1744,7 +1753,13 @@ export class AgentManager {
         }
         this.emitProcesses()
       },
-      exited: (child) => {
+      exited: (child, info) => {
+        if (
+          !slot.intentionalStop &&
+          (info.code !== 0 || info.signal !== null || info.error !== undefined)
+        ) {
+          slot.lastChildExit = { at: Date.now(), info }
+        }
         void this.reapTree(slot, child)
         this.givenUp.delete(child)
         this.emitProcesses()
@@ -1803,6 +1818,7 @@ export class AgentManager {
       return
     }
     // Nothing restarts it: its sessions go back to closed, and the next one used starts it.
+    slot.lastExit = { at: Date.now(), info }
     this.hooks.agentExited(agentId, info)
     if (this.recordFailure(slot)) {
       slot.state = 'failed'
@@ -6346,8 +6362,20 @@ export class AgentManager {
     return locations.find((location) => location.id === 'folder')?.candidates[0] ?? null
   }
 
+  /** Recent exit status and stderr from this agent's current or just-ended run. */
+  exitContext(agentId: AgentId): { info: ExitInfo | null; stderr: string } {
+    const slot = this.slots.get(agentId)
+    if (!slot) return { info: null, stderr: '' }
+    const stderr = slot.runStderr.toString()
+    if (slot.lastExit) return { info: slot.lastExit.info, stderr }
+    const child =
+      slot.lastChildExit && Date.now() - slot.lastChildExit.at < 10_000 ? slot.lastChildExit : null
+    return { info: child?.info ?? null, stderr }
+  }
+
   private onStderr(slot: Slot, text: string): void {
     this.deps.diagnostics.stderr(slot.id, text)
+    slot.runStderr.push(text)
     if (slot.state === 'starting') this.onProgress(slot, text)
   }
 

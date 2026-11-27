@@ -16,7 +16,7 @@ export interface HostedRunHooks {
   event(event: string, detail?: string): void
   /** A child started, or exited: what the process record and main hold changes. */
   spawned(child: SpawnedAgent): void
-  exited(child: SpawnedAgent): void
+  exited(child: SpawnedAgent, info: ExitInfo): void
   /** Stops a child as a stop of the agent stops its process. */
   stop(child: SpawnedAgent, tools: ToolOptions): Promise<void>
 }
@@ -31,6 +31,8 @@ const CLOSED: ExitInfo = {
 }
 const KILLED: ExitInfo = { code: null, signal: 'SIGKILL' }
 
+const CHILD_EXIT_WINDOW_MS = 5_000
+
 export class HostedRun implements AgentRun {
   readonly pid = null
   readonly startedAt = Date.now()
@@ -42,6 +44,7 @@ export class HostedRun implements AgentRun {
   private ending: Promise<ExitInfo> | null = null
   private connection: AgentConnection | null = null
   private readonly running = new Set<SpawnedAgent>()
+  private lastAbnormalExit: { at: number; info: ExitInfo } | null = null
 
   constructor(
     private readonly platform: Platform,
@@ -62,7 +65,13 @@ export class HostedRun implements AgentRun {
   /** The connection that runs in it, closed as it stops; once it closes by itself the run ends. */
   attach(connection: AgentConnection): void {
     this.connection = connection
-    const closed = (): void => void this.end(CLOSED, {})
+    const closed = (): void => {
+      const recent =
+        this.lastAbnormalExit && Date.now() - this.lastAbnormalExit.at < CHILD_EXIT_WINDOW_MS
+          ? this.lastAbnormalExit.info
+          : CLOSED
+      void this.end(recent, {})
+    }
     void connection.closed.then(closed, closed)
   }
 
@@ -89,10 +98,17 @@ export class HostedRun implements AgentRun {
     this.hooks.spawned(child)
     const { signal } = options
     const abort = (): void => void this.hooks.stop(child, {})
-    void child.exited.then(() => {
+    void child.exited.then((info) => {
       signal?.removeEventListener('abort', abort)
       this.running.delete(child)
-      this.hooks.exited(child)
+      if (
+        !this.closing &&
+        !signal?.aborted &&
+        (info.code !== 0 || info.signal !== null || info.error !== undefined)
+      ) {
+        this.lastAbnormalExit = { at: Date.now(), info }
+      }
+      this.hooks.exited(child, info)
     })
     if (signal?.aborted) abort()
     else signal?.addEventListener('abort', abort, { once: true })
