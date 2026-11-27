@@ -138,28 +138,36 @@ export function mcpConfigPaths(
   app('Windsurf', p.join(home, '.codeium', 'windsurf', 'mcp_config.json'))
   app('Zed', p.join(platform === 'win32' ? appData : config, 'zed', 'settings.json'), 'zed')
 
-  const projectFiles: [string, McpConfigFile['layout'], string?][] = [
-    ['.mcp.json', 'standard'],
-    ['.codex/config.toml', 'codex'],
-    ['opencode.json', 'opencode'],
-    ['opencode.jsonc', 'opencode'],
-    ['.gemini/settings.json', 'standard'],
-    ['.agents/mcp_config.json', 'standard'],
-    ['.pi/mcp.json', 'standard'],
-    ['.qwen/settings.json', 'standard'],
-    ['.cursor/mcp.json', 'standard', 'Cursor'],
-    ['.vscode/mcp.json', 'vscode', 'VS Code'],
-    ['.factory/mcp.json', 'standard'],
-    ['.qoder/settings.json', 'standard'],
-    ['mcp.json', 'standard'],
-    ['.zed/settings.json', 'zed', 'Zed'],
-  ]
-  for (const project of projects) {
-    for (const [file, layout, name] of projectFiles) {
-      files.push({ path: p.join(project, file), layout, project, app: name })
-    }
-  }
+  for (const project of projects) files.push(...projectMcpConfigPaths(project, platform))
   return files
+}
+
+const PROJECT_FILES: [string, McpConfigFile['layout'], string?][] = [
+  ['.mcp.json', 'standard'],
+  ['.codex/config.toml', 'codex'],
+  ['opencode.json', 'opencode'],
+  ['opencode.jsonc', 'opencode'],
+  ['.gemini/settings.json', 'standard'],
+  ['.agents/mcp_config.json', 'standard'],
+  ['.pi/mcp.json', 'standard'],
+  ['.qwen/settings.json', 'standard'],
+  ['.cursor/mcp.json', 'standard', 'Cursor'],
+  ['.vscode/mcp.json', 'vscode', 'VS Code'],
+  ['.factory/mcp.json', 'standard'],
+  ['.qoder/settings.json', 'standard'],
+  ['mcp.json', 'standard'],
+  ['.zed/settings.json', 'zed', 'Zed'],
+]
+
+/** The MCP config files a project folder itself may hold, for each harness and app that reads one. */
+export function projectMcpConfigPaths(project: string, platform: Platform): McpConfigFile[] {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  return PROJECT_FILES.map(([file, layout, name]) => ({
+    path: p.join(project, file),
+    layout,
+    project,
+    ...(name ? { app: name } : {}),
+  }))
 }
 
 /**
@@ -177,4 +185,31 @@ export function claudeProjectMcpPaths(cwd: string, platform: Platform): McpConfi
     dir = parent
   }
   return files.reverse()
+}
+
+/**
+ * The project MCP files `harness` itself starts servers from for a session in `cwd`, which it must
+ * not start once Kettu runs them; none for a harness Kettu does not hold them for this way.
+ */
+export function harnessProjectMcpPaths(
+  harness: HarnessId,
+  cwd: string,
+  platform: Platform,
+): McpConfigFile[] {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const own = (file: string, layout: McpConfigFile['layout']): McpConfigFile => ({
+    path: p.join(cwd, file),
+    layout,
+    project: cwd,
+  })
+  switch (harness) {
+    case 'claude-code':
+      return claudeProjectMcpPaths(cwd, platform)
+    case 'codex':
+      return [own('.codex/config.toml', 'codex')]
+    case 'opencode':
+      return [own('opencode.json', 'opencode'), own('opencode.jsonc', 'opencode')]
+    default:
+      return []
+  }
 }

@@ -35,7 +35,7 @@ import {
   type StartNotice,
   type StillRunning,
 } from '@shared/agent-host'
-import { isFullAccessMode } from '@shared/agents'
+import { isFullAccessMode, type HarnessId } from '@shared/agents'
 import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
@@ -138,9 +138,9 @@ import {
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
-  type DeclaredMcpServer,
+  type DeclaredHook,
+  type DeclaredItem,
   type ProjectHooksDecision,
-  type ProjectHooksEntry,
   type ProjectMcpDecision,
   type ProjectMcpEntry,
   type QueuedPrompt,
@@ -213,9 +213,7 @@ import {
   type ModelTokens,
   type PermissionAnswer,
   type PermissionRequest,
-  type FolderHooks,
   type ProjectHooksGate,
-  type ProjectMcpGate,
   type PromptBlock,
   type ListedSession,
   type SessionMemory,
@@ -247,7 +245,9 @@ import {
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { canonicalizePath, isInside, pathKey, samePath } from './paths'
 import type { ProjectHooksAnswers } from './project-hooks'
-import type { ProjectMcpAnswers } from './project-mcp'
+import type { AnsweredServer, ProjectMcpAnswers } from './project-mcp'
+import type { FolderServer, FolderSettings } from './project-settings'
+import { HELPER_SETTINGS } from './claude/project-hooks'
 import { REPORTS_PER_DAY, type ReportDraft } from './report-tool'
 import { isOutOfCredit } from './out-of-credit'
 import { planRevision } from './plan-revision'
@@ -492,6 +492,8 @@ export interface SessionMcp {
     connection: AgentConnection,
     transports: McpTransports,
     taken: readonly string[],
+    /** The servers of the session's folder the user let start, which Kettu runs as well. */
+    project?: readonly FolderServer[],
   ): McpServer[] | Promise<McpServer[]>
   /**
    * What the library hands the record's agent now, each server by name with a digest of how it
@@ -594,8 +596,13 @@ export interface SessionManagerDeps {
   returned: JsonFile<ReturnedFile>
   /** The user's answers about each folder's own MCP servers; without them none start. */
   projectMcp?: ProjectMcpAnswers
-  /** The user's answers about each folder's own Claude Code hooks; without them none run. */
+  /**
+   * The user's answers about each folder's own settings, Claude Code's hooks among them; without
+   * them none apply.
+   */
   projectHooks?: ProjectHooksAnswers
+  /** Reads what a folder declares for an agent; without it Kettu runs none of its servers. */
+  folderDeclared?(cwd: string, agentId: AgentId): Promise<FolderDeclared>
   /** Whether a port is still open, so a failed start knows whether its window can take its message. */
   portOpen(portId: string): boolean
   /** The paired device an open port serves, null for a window's; without it every port is one. */
@@ -983,6 +990,50 @@ interface KettuQueuedMeta {
 const TITLE_LENGTH = 60
 /** Release reason logged when an agent's sign-in or account changes. */
 const ACCOUNT_CHANGED_REASON = 'account changed'
+const PROJECT_ALLOWED_REASON = "the folder's own settings allowed"
+
+/** What a folder's own files declare, as the host reads it for a session's agent. */
+export interface FolderDeclared {
+  /** The servers of every harness's project files, which Kettu runs once allowed. */
+  servers: FolderServer[]
+  /** The agent's harness's other project settings, where Kettu holds them behind a switch. */
+  settings: FolderSettings | null
+  /** The names of the servers the agent's harness itself would start from those files. */
+  harnessServers: string[]
+}
+
+/** What an attach hands on of what the session's folder declares. */
+interface ProjectState {
+  servers: FolderServer[]
+  trusted: boolean
+  declared: string[]
+}
+
+/** What a card for a folder asks about: servers by digest, and one harness's settings. */
+interface ProjectAsk {
+  servers: FolderServer[]
+  settings: FolderSettings | null
+  files: string[]
+}
+
+/** A session's open card for its folder, with what its answer is kept for. */
+interface ProjectCard {
+  entryId: string
+  folder: string
+  servers: AnsweredServer[]
+  settings: { harness: HarnessId; digest: string } | null
+}
+
+const CLAUDE_HELPERS: ReadonlySet<string> = new Set(HELPER_SETTINGS)
+
+/** A Claude Code hook, helper command or variable as the folder's card lists it. */
+function hookItem(hook: DeclaredHook): DeclaredItem {
+  if (hook.event === 'env') return { kind: 'env', target: hook.target }
+  if (CLAUDE_HELPERS.has(hook.event)) {
+    return { kind: 'command', target: `${hook.event}: ${hook.target}` }
+  }
+  return { kind: 'hook', target: hook.target ? `${hook.event}: ${hook.target}` : hook.event }
+}
 // Titles from `session/list`, kept for an import that follows; bounded like every cache here.
 const LISTED_SESSIONS = 1_000
 // The sessions a search of the conversations returns, the most recently changed first.
@@ -1396,13 +1447,8 @@ export class SessionManager {
   private readonly mcpWaits = new Map<string, (answer: McpAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
-  /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
-  private readonly projectMcpCards = new Map<string, { entryId: string; folder: string }>()
-  /** Each session's card holding its folder's own hooks while it waits, with what it holds. */
-  private readonly projectHooksCards = new Map<
-    string,
-    { entryId: string; folder: string; digest: string }
-  >()
+  /** Each session's card holding its folder's own servers and settings while it waits. */
+  private readonly projectCards = new Map<string, ProjectCard>()
   /** Memory proposals and writes being answered or taken back, by session and entry, with who. */
   private readonly memoryAnswers = new Map<string, FromDevice | null>()
   /** Each setup that waits, by the computer use service's request id, with who said Not now. */
@@ -4363,7 +4409,7 @@ export class SessionManager {
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): Promise<SessionOptions> {
-    const projectMcp = this.projectMcpGate(sessionId)
+    const project = await this.projectState(record)
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
     const reached = own.length > 0
@@ -4380,9 +4426,13 @@ export class SessionManager {
         )
       : null
     return {
-      mcpServers: [...own, ...(await this.libraryServers(sessionId, record, runtime, own))],
+      mcpServers: [
+        ...own,
+        ...(await this.libraryServers(sessionId, record, runtime, own, project.servers)),
+      ],
       ...skills,
-      ...(projectMcp ? { projectMcp } : {}),
+      ...(project.trusted ? { projectTrusted: true } : {}),
+      ...(project.declared.length > 0 ? { projectServers: project.declared } : {}),
       ...(projectHooks ? { projectHooks } : {}),
       ...(memory ? { memory } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
@@ -4419,21 +4469,46 @@ export class SessionManager {
     }
   }
 
-  /** Lets the user answer, in the session's thread, for the MCP servers its folder declares. */
-  private projectMcpGate(sessionId: string): ProjectMcpGate | undefined {
+  /**
+   * What the session's folder declares for itself as this attach hands it on: the servers of its
+   * files the user let start, which Kettu runs; whether the harness may load the folder's own
+   * settings; and the names its files declare that the harness must not start itself. Whatever
+   * nobody answered for waits for the user in the session's thread and stays held meanwhile.
+   */
+  private async projectState(record: SessionRecord): Promise<ProjectState> {
+    const none: ProjectState = { servers: [], trusted: false, declared: [] }
+    const read = this.deps.folderDeclared
     const answers = this.deps.projectMcp
-    if (!answers) return undefined
+    if (!read || !answers) return none
+    const cwd = workDir(record)
+    let declared: FolderDeclared
+    try {
+      declared = await read(cwd, record.agentId)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read what ${cwd} declares: ${(error as Error).message}`,
+      )
+      return none
+    }
+    const folder = await this.folderKey(cwd)
+    const { settings } = declared
+    const hooks = this.deps.projectHooks
+    const settingsAllowed =
+      settings && hooks ? hooks.allowed(folder, settings.digest, settings.harness) : null
+    const unanswered = declared.servers.filter((server) => answers.allowed(folder, server) === null)
+    const askSettings = settings && settingsAllowed === null ? settings : null
+    if (unanswered.length > 0 || askSettings) {
+      this.askProject(record.id, folder, {
+        servers: unanswered,
+        settings: askSettings,
+        files: [...unanswered.flatMap((server) => server.files), ...(askSettings?.files ?? [])],
+      })
+    }
     return {
-      hold: async (cwd, servers) => {
-        const folder = await this.folderKey(cwd)
-        const unanswered = servers.filter((server) => answers.allowed(folder, server.name) === null)
-        if (unanswered.length > 0) this.askProjectMcp(sessionId, folder, unanswered)
-        return answers.held(
-          folder,
-          servers.map((server) => server.name),
-        )
-      },
-      held: async (cwd, names) => answers.held(await this.folderKey(cwd), names),
+      servers: declared.servers.filter((server) => answers.allowed(folder, server) === true),
+      trusted: settingsAllowed === true,
+      declared: declared.harnessServers,
     }
   }
 
@@ -4445,7 +4520,18 @@ export class SessionManager {
       hold: async (cwd, hooks) => {
         const folder = await this.folderKey(cwd)
         const allowed = answers.allowed(folder, hooks.digest)
-        if (allowed === null) this.askProjectHooks(sessionId, folder, hooks)
+        if (allowed === null) {
+          this.askProject(sessionId, folder, {
+            servers: [],
+            settings: {
+              harness: 'claude-code',
+              digest: hooks.digest,
+              items: hooks.hooks.map(hookItem),
+              files: [],
+            },
+            files: ['.claude/settings.json'],
+          })
+        }
         return allowed !== true
       },
       held: async (cwd, hooks) => answers.allowed(await this.folderKey(cwd), hooks.digest) !== true,
@@ -4468,37 +4554,55 @@ export class SessionManager {
   }
 
   /**
-   * The session's folder declares MCP servers nobody answered for: one card asks the user, taking
-   * up the servers a later start of the session finds too.
+   * The session's folder declares servers or settings nobody answered for: one card asks the user
+   * for the folder, taking up what a later start of the session finds too.
    */
-  private askProjectMcp(sessionId: string, folder: string, servers: DeclaredMcpServer[]): void {
+  private askProject(sessionId: string, folder: string, ask: ProjectAsk): void {
     const live = this.live.get(sessionId)
     if (!live) return
-    const card = this.projectMcpCards.get(sessionId)
+    const card = this.projectCards.get(sessionId)
     const open = card ? live.thread.byId[card.entryId] : undefined
     if (card?.folder === folder && open?.kind === 'project_mcp' && open.decision === null) {
-      const known = new Set(open.servers.map((server) => server.name))
-      const added = servers.filter((server) => !known.has(server.name))
-      if (added.length > 0) {
-        const changes = { servers: [...open.servers, ...added] }
-        this.emit(live, [{ op: 'entry.update', id: card.entryId, changes }])
+      const known = new Set(card.servers.map((server) => server.digest))
+      const added = ask.servers.filter((server) => !known.has(server.digest))
+      const settings =
+        ask.settings && ask.settings.digest !== card.settings?.digest ? ask.settings : null
+      if (added.length === 0 && !settings) return
+      card.servers.push(...added.map(({ name, digest }) => ({ name, digest })))
+      if (settings) card.settings = { harness: settings.harness, digest: settings.digest }
+      const changes = {
+        servers: [...open.servers, ...added.map(({ name, target }) => ({ name, target }))],
+        items: settings ? settings.items : (open.items ?? []),
+        files: [...new Set([...(open.files ?? []), ...ask.files])],
       }
+      this.emit(live, [{ op: 'entry.update', id: card.entryId, changes }])
       return
     }
     const entry: ProjectMcpEntry = {
       kind: 'project_mcp',
       id: this.nextId(live),
-      servers,
+      servers: ask.servers.map(({ name, target }) => ({ name, target })),
+      items: ask.settings?.items ?? [],
+      files: [...new Set(ask.files)],
       decision: null,
       after: agentEntryBefore(live.thread),
     }
-    this.projectMcpCards.set(sessionId, { entryId: entry.id, folder })
+    this.projectCards.set(sessionId, {
+      entryId: entry.id,
+      folder,
+      servers: ask.servers.map(({ name, digest }) => ({ name, digest })),
+      settings: ask.settings
+        ? { harness: ask.settings.harness, digest: ask.settings.digest }
+        : null,
+    })
     this.emit(live, [{ op: 'entry.add', entry }])
   }
 
   /**
-   * A window's or a device's answer to a card holding its folder's own MCP servers. The first one
-   * counts: it is kept for the folder and settles every card of the folder it answers in full.
+   * A window's or a device's answer to a card holding its folder's own servers and settings. The
+   * first one counts: it is kept for the folder, settles every card of the folder it answers in
+   * full, and every session of the folder lets go of its agent once idle, so its next attach
+   * takes up what the user allowed.
    */
   answerProjectMcp(
     sessionId: string,
@@ -4516,94 +4620,77 @@ export class SessionManager {
         device: entry.device ?? null,
       })
     }
-    const card = this.projectMcpCards.get(sessionId)
+    const card = this.projectCards.get(sessionId)
     const answers = this.deps.projectMcp
     if (card?.entryId !== entryId || !answers) throw notFound(t('session.waiting.mcp.gone'))
-    answers.answer(
-      card.folder,
-      entry.servers.map((server) => server.name),
-      decision,
-    )
-    for (const [id, other] of [...this.projectMcpCards]) {
+    answers.answer(card.folder, card.servers, decision)
+    if (card.settings) {
+      this.deps.projectHooks?.answer(
+        card.folder,
+        card.settings.digest,
+        decision,
+        card.settings.harness,
+      )
+    }
+    const settled = (other: ProjectCard): boolean =>
+      other.servers.every((server) => answers.allowed(other.folder, server) !== null) &&
+      (!other.settings ||
+        this.deps.projectHooks?.allowed(
+          other.folder,
+          other.settings.digest,
+          other.settings.harness,
+        ) !== null)
+    for (const [id, other] of [...this.projectCards]) {
       if (other.folder !== card.folder) continue
       const otherLive = this.live.get(id)
       const waiting = otherLive?.thread.byId[other.entryId]
       if (!otherLive || waiting?.kind !== 'project_mcp' || waiting.decision !== null) {
-        this.projectMcpCards.delete(id)
+        this.projectCards.delete(id)
         continue
       }
-      if (waiting.servers.some((server) => answers.allowed(card.folder, server.name) === null)) {
-        continue
-      }
-      this.projectMcpCards.delete(id)
+      if (!settled(other)) continue
+      this.projectCards.delete(id)
       const changes = { decision, ...(device ? { device } : {}) }
       this.emit(otherLive, [{ op: 'entry.update', id: other.entryId, changes }])
     }
+    if (decision !== 'skip') void this.reattachFolder(card.folder)
+  }
+
+  /** Every attached session of the folder lets go of its agent once idle, to attach again. */
+  private async reattachFolder(folder: string): Promise<void> {
+    for (const live of [...this.live.values()]) {
+      if (live.prepared || !live.connection || !this.canReopen(live)) continue
+      let key: string
+      try {
+        key = await this.folderKey(workDir(live.record))
+      } catch {
+        continue
+      }
+      if (key !== folder || !this.live.has(live.id)) continue
+      live.releaseAfterIdle = PROJECT_ALLOWED_REASON
+      this.refreshRelease(live)
+    }
   }
 
   /**
-   * The session's folder declares hooks nobody answered for: one card asks the user, taking up the
-   * hooks a later start of the session finds instead.
-   */
-  private askProjectHooks(sessionId: string, folder: string, hooks: FolderHooks): void {
-    const live = this.live.get(sessionId)
-    if (!live) return
-    const card = this.projectHooksCards.get(sessionId)
-    const open = card ? live.thread.byId[card.entryId] : undefined
-    if (card?.folder === folder && open?.kind === 'project_hooks' && open.decision === null) {
-      if (card.digest === hooks.digest) return
-      card.digest = hooks.digest
-      this.emit(live, [{ op: 'entry.update', id: card.entryId, changes: { hooks: hooks.hooks } }])
-      return
-    }
-    const entry: ProjectHooksEntry = {
-      kind: 'project_hooks',
-      id: this.nextId(live),
-      hooks: hooks.hooks,
-      decision: null,
-      after: agentEntryBefore(live.thread),
-    }
-    this.projectHooksCards.set(sessionId, { entryId: entry.id, folder, digest: hooks.digest })
-    this.emit(live, [{ op: 'entry.add', entry }])
-  }
-
-  /**
-   * A window's or a device's answer to a card holding its folder's own hooks. The first one counts:
-   * it is kept for the folder and settles every card of the folder it answers.
+   * An answer to a card of an older version that held a folder's hooks alone; none is open any
+   * more, since such a card is no longer made and an open one ended with its session.
    */
   answerProjectHooks(
     sessionId: string,
     entryId: string,
-    decision: ProjectHooksDecision,
-    device?: FromDevice,
+    _decision: ProjectHooksDecision,
+    _device?: FromDevice,
   ): void {
     this.recordOf(sessionId)
-    const live = this.live.get(sessionId)
-    const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'project_hooks') throw notFound(t('session.waiting.hooks.gone'))
-    if (entry.decision !== null) {
+    const entry = this.live.get(sessionId)?.thread.byId[entryId]
+    if (entry?.kind === 'project_hooks' && entry.decision !== null) {
       throw new HostError('not_found', t('session.waiting.hooks.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
     }
-    const card = this.projectHooksCards.get(sessionId)
-    const answers = this.deps.projectHooks
-    if (card?.entryId !== entryId || !answers) throw notFound(t('session.waiting.hooks.gone'))
-    answers.answer(card.folder, card.digest, decision)
-    for (const [id, other] of [...this.projectHooksCards]) {
-      if (other.folder !== card.folder) continue
-      const otherLive = this.live.get(id)
-      const waiting = otherLive?.thread.byId[other.entryId]
-      if (!otherLive || waiting?.kind !== 'project_hooks' || waiting.decision !== null) {
-        this.projectHooksCards.delete(id)
-        continue
-      }
-      if (answers.allowed(card.folder, other.digest) === null) continue
-      this.projectHooksCards.delete(id)
-      const changes = { decision, ...(device ? { device } : {}) }
-      this.emit(otherLive, [{ op: 'entry.update', id: other.entryId, changes }])
-    }
+    throw notFound(t('session.waiting.hooks.gone'))
   }
 
   /** The artifacts service, for an agent that takes MCP over HTTP while Kettu's server is on for it. */
@@ -4648,6 +4735,7 @@ export class SessionManager {
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
     own: McpServer[],
+    project: readonly FolderServer[],
   ): Promise<McpServer[]> {
     if (!this.deps.mcp || !runtime) return []
     const live = this.live.get(sessionId)
@@ -4661,25 +4749,19 @@ export class SessionManager {
       runtime.connection,
       runtime.init.capabilities,
       own.map((server) => server.name),
+      project,
     )
   }
 
   private dropLive(live: Live): void {
     this.stopSuggesting(live.id)
     // A card still waiting goes unanswered; the session's next start asks again.
-    const card = this.projectMcpCards.get(live.id)
+    const card = this.projectCards.get(live.id)
     const waiting = card ? live.thread.byId[card.entryId] : undefined
     if (card && waiting?.kind === 'project_mcp' && waiting.decision === null) {
       this.emit(live, [{ op: 'entry.update', id: card.entryId, changes: { decision: 'timeout' } }])
     }
-    this.projectMcpCards.delete(live.id)
-    const hooksCard = this.projectHooksCards.get(live.id)
-    const hooksWaiting = hooksCard ? live.thread.byId[hooksCard.entryId] : undefined
-    if (hooksCard && hooksWaiting?.kind === 'project_hooks' && hooksWaiting.decision === null) {
-      const changes = { decision: 'timeout' as const }
-      this.emit(live, [{ op: 'entry.update', id: hooksCard.entryId, changes }])
-    }
-    this.projectHooksCards.delete(live.id)
+    this.projectCards.delete(live.id)
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)

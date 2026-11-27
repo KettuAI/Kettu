@@ -215,7 +215,7 @@ import {
   seenMcpFile,
   type PreparedMcpImport,
 } from './marketplace/mcp-discovery'
-import { claudeProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
+import { harnessProjectMcpPaths, mcpConfigPaths } from './marketplace/mcp-config-paths'
 import { parseMcpPaste } from './marketplace/mcp-paste'
 import { importedServer, type ConfiguredMcp } from './marketplace/mcp-config'
 import { findCommand, isExecutableFile, type Env } from './find-command'
@@ -238,6 +238,7 @@ import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
+import { folderServers, folderSettings, type FolderServer } from './project-settings'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
@@ -619,6 +620,12 @@ export class AgentHost {
   private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
+  /**
+   * Servers of a folder's own files the user let start, which Kettu runs as it does the library's,
+   * by id, with the values their files give; kept in memory only, and read again at each attach.
+   */
+  private readonly projectServers = new Map<string, MarketServer>()
+  private readonly projectKeys = new Map<string, ReadonlyMap<string, string>>()
   private readonly mcpDiscovery: McpDiscoveryService
   private readonly mcpDrafts = new Map<string, Map<string, ConfiguredMcp>>()
   private readonly mcpCheckStates = new Map<string, McpCheck>()
@@ -1022,11 +1029,17 @@ export class AgentHost {
       log,
     })
     this.mcpRouter = new McpRouter({
-      servers: () => this.settings.marketplace.mcp,
+      servers: () => this.routedServers(),
       command: (server) =>
-        serverCommand(server, this.marketKeys, this.env.agentEnv(), options.nodeRuntime, platform),
+        serverCommand(
+          server,
+          this.routedKeys(),
+          this.env.agentEnv(),
+          options.nodeRuntime,
+          platform,
+        ),
       headers: (server) =>
-        serverHeaders(server, this.marketKeys, { env: this.env.agentEnv(), platform }),
+        serverHeaders(server, this.routedKeys(), { env: this.env.agentEnv(), platform }),
       signsIn,
       token: (serverId) => this.marketConnections.token(serverId),
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
@@ -1545,6 +1558,15 @@ export class AgentHost {
       returned: returnedFile(options.userDataPath, log),
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
+      folderDeclared: async (cwd, agentId) => {
+        const harness = harnessOf(agentId)
+        const [servers, settings, own] = await Promise.all([
+          folderServers(cwd, platform),
+          folderSettings(harness, cwd, platform),
+          readOwnMcpServers(harnessProjectMcpPaths(harness, cwd, platform)),
+        ])
+        return { servers, settings, harnessServers: own.map((server) => server.name) }
+      },
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
@@ -1576,10 +1598,13 @@ export class AgentHost {
               )
             : this.artifactService.servers(sessionId, record.projectPath, gateway, suggests)
         },
-        library: async (sessionId, record, connection, transports, taken) => {
+        library: async (sessionId, record, connection, transports, taken, project = []) => {
           const handed = new Map<string, McpHanded>()
           this.sessionMcp.set(sessionId, handed)
-          const library = this.settings.marketplace.mcp
+          const library = [
+            ...this.settings.marketplace.mcp,
+            ...project.map((server) => this.projectServer(server)),
+          ]
           if (library.length === 0) return []
           const folder =
             record.worktree && record.worktree.removed !== 'branch'
@@ -1597,11 +1622,12 @@ export class AgentHost {
               true,
             ),
           )
-          const projectOwn =
-            folder && harnessOf(record.agentId) === 'claude-code'
-              ? await readOwnMcpServers(claudeProjectMcpPaths(folder, platform))
-              : []
-          return libraryServers(library, this.marketKeys, record.agentId, transports, {
+          const projectOwn = folder
+            ? await readOwnMcpServers(
+                harnessProjectMcpPaths(harnessOf(record.agentId), folder, platform),
+              )
+            : []
+          return libraryServers(library, this.routedKeys(), record.agentId, transports, {
             platform,
             taken,
             project: record.projectPath,
@@ -3084,10 +3110,47 @@ export class AgentHost {
    * The Marketplace's servers or keys may have changed from `servers` and `keys`: each agent whose
    * servers differ now has its prepared sessions replaced.
    */
+  /** The servers the router runs: the library's, then the folders' own the user let start. */
+  private routedServers(): MarketServer[] {
+    const library = this.settings.marketplace.mcp
+    return this.projectServers.size > 0 ? [...library, ...this.projectServers.values()] : library
+  }
+
+  private routedKeys(): MarketKeys {
+    return this.projectKeys.size > 0
+      ? new Map([...this.marketKeys, ...this.projectKeys])
+      : this.marketKeys
+  }
+
+  /**
+   * A folder's own server as the router runs it: by an id from its folder and content, so the
+   * same server of two folders, whose values may differ, runs as two. Its tool changes are held
+   * like those of a server added by hand.
+   */
+  private projectServer(server: FolderServer): MarketServer {
+    const id = `project:${createHash('sha256')
+      .update(JSON.stringify([server.files, server.digest, server.secrets]))
+      .digest('hex')
+      .slice(0, 24)}`
+    const entry: MarketServer = {
+      id,
+      name: server.name,
+      title: server.name,
+      source: 'manual',
+      version: null,
+      spec: server.spec,
+      agents: 'all',
+      on: true,
+    }
+    this.projectServers.set(id, entry)
+    this.projectKeys.set(id, new Map(Object.entries(server.secrets)))
+    return entry
+  }
+
   /** Masks a server's keys and fixed values, the host's own secrets and the home folder. */
   private mcpMask(serverId: string): (text: string) => string {
-    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
-    return serverMasker(server, this.marketKeys, redactLogText, {
+    const server = this.routedServers().find((item) => item.id === serverId)
+    return serverMasker(server, this.routedKeys(), redactLogText, {
       env: this.env.agentEnv(),
       platform: this.options.platform,
     })

@@ -28,7 +28,7 @@ const SHOWN = {
   timeout: 'timeout',
 } as const satisfies Record<ProjectMcpAnswer, string>
 
-/** The session's folder declares MCP servers of its own, which wait for the user to start. */
+/** The session's folder declares MCP servers or settings of its own, which wait for the user. */
 export const ProjectMcpEntry = memo(function ProjectMcpEntry({
   sessionId,
   entryId,
@@ -42,21 +42,40 @@ export const ProjectMcpEntry = memo(function ProjectMcpEntry({
   const entry = useEntry(sessionId, entryId, 'project_mcp')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  // A card for the folder's settings as a whole names its files and lists every kind.
+  const whole = entry.files !== undefined
+  const rows = [
+    ...entry.servers.map((server, index) => ({
+      id: `server:${index}`,
+      label: server.target ? `${server.name} · ${server.target}` : server.name,
+      ...(whole ? { meta: t('projectMcp.kind.server') } : {}),
+    })),
+    ...(entry.items ?? []).map((item, index) => ({
+      id: `item:${index}`,
+      label: item.target,
+      meta: t(`projectMcp.kind.${item.kind}`),
+    })),
+  ]
+  const named = [
+    ...entry.servers.map((server) => server.name),
+    ...(entry.items ?? []).map((item) => item.target),
+  ]
   return (
     <AccessCard
       sessionId={sessionId}
       entryId={entryId}
       agentName={agentName}
       className={animation}
-      action={t('access.action.projectMcp')}
-      target={entry.servers.map((server) => server.name).join(', ')}
+      action={t(whole ? 'access.action.projectSettings' : 'access.action.projectMcp')}
+      target={named.join(', ')}
       glyph={PlugSocketIcon}
-      reason={t('projectMcp.where')}
-      preview={entry.servers.map((server) => ({
-        id: server.name,
-        label: server.target ? `${server.name} · ${server.target}` : server.name,
-      }))}
-      previewTitle={t('projectMcp.servers')}
+      reason={
+        whole
+          ? t('projectMcp.whereFiles', { files: (entry.files ?? []).join(', ') })
+          : t('projectMcp.where')
+      }
+      preview={rows}
+      previewTitle={t(whole ? 'projectMcp.everything' : 'projectMcp.servers')}
       answer={entry.decision === null ? null : SHOWN[entry.decision]}
       device={entry.device}
       words={{

@@ -12,7 +12,6 @@ import type { ContextEstimates } from '@shared/context'
 import type {
   ConfigOption,
   DeclaredHook,
-  DeclaredMcpServer,
   FormValues,
   PendingElicitation,
   PendingPermission,
@@ -417,8 +416,16 @@ export interface SessionOptions {
   localPlugins?: readonly string[]
   /** Set for a session Kettu opens for itself, which no thread shows and nobody sees. */
   hidden?: HiddenPurpose
-  /** The user's answers about the MCP servers the folder declares itself; without it none start. */
-  projectMcp?: ProjectMcpGate
+  /**
+   * The user let the folder's own settings for this agent's harness apply, which the harness then
+   * loads; without it, a harness Kettu can hold them for starts the session without them.
+   */
+  projectTrusted?: true
+  /**
+   * The names of the MCP servers the folder's own files declare for this harness, which it must
+   * not start itself: Kettu runs those the user let start and hands them in `mcpServers`.
+   */
+  projectServers?: readonly string[]
   /** The user's answers about the hooks the folder declares itself; without it none run. */
   projectHooks?: ProjectHooksGate
   /**
@@ -457,17 +464,6 @@ export interface SessionOptions {
 export interface SessionMemory {
   /** The index of both layers and how to use them, marked as reference data. */
   text: string
-}
-
-/** Decides which of the MCP servers a session's folder declares itself may start. */
-export interface ProjectMcpGate {
-  /**
-   * Of `servers`, the names that may not start in `cwd`; those nobody answered for yet wait for
-   * the user in the session's thread.
-   */
-  hold(cwd: string, servers: readonly DeclaredMcpServer[]): Promise<string[]>
-  /** Of `names`, those that still may not start in `cwd`, without asking. */
-  held(cwd: string, names: readonly string[]): Promise<string[]>
 }
 
 /** The hooks a folder's own settings declare, and a digest of them that any change changes. */

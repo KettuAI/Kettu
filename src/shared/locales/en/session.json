@@ -343,6 +343,17 @@
   },
   "projectMcp": {
     "where": "Declared in the project’s .mcp.json. Once used, they run on this computer as you.",
+    "whereFiles": "From the project’s {{files}}. Once used, they run on this computer as you; until then this session works without them.",
+    "everything": "What this project runs or changes",
+    "kind": {
+      "server": "MCP server",
+      "hook": "Hook",
+      "plugin": "Plugin",
+      "command": "Command",
+      "env": "Environment variable",
+      "provider": "Address",
+      "setting": "Setting"
+    },
     "servers": "Servers",
     "decision": {
       "use": "Use",
@@ -1315,6 +1326,7 @@
       "terminalRename": "rename your terminal",
       "app": "use an app",
       "projectMcp": "start MCP servers",
+      "projectSettings": "use this project’s own settings",
       "projectHooks": "run commands this project sets to run automatically",
       "projectEnv": "use environment variables this project sets",
       "projectHooksEnv": "run commands and use environment variables this project sets"

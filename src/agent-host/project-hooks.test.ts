@@ -4,7 +4,12 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { folderHooks } from './claude/project-hooks'
 import { ProjectHooksAnswers } from './project-hooks'
-import { parseProjectHooksFile, projectHooksFile } from './storage'
+import {
+  migrate,
+  parseProjectHooksFile,
+  PROJECT_HOOKS_MIGRATIONS,
+  projectHooksFile,
+} from './storage'
 
 let dir: string
 const stores: ProjectHooksAnswers[] = []
@@ -35,40 +40,74 @@ describe("a folder's own hooks", () => {
     expect(store.allowed('/other', 'a')).toBeNull()
   })
 
-  it('ask again once they change after a Run, but not after Always run or Don’t run', async () => {
+  it('ask again once they change after a Run or a Don’t run, but not after Always run', async () => {
     const store = await answers()
     store.answer('/repo', 'a', 'use')
     expect(store.allowed('/repo', 'b')).toBeNull()
-    store.answer('/repo', 'b', 'all')
-    expect(store.allowed('/repo', 'c')).toBe(true)
-    store.answer('/repo', 'c', 'skip')
-    expect(store.allowed('/repo', 'd')).toBe(false)
+    store.answer('/repo', 'b', 'skip')
+    expect(store.allowed('/repo', 'b')).toBe(false)
+    expect(store.allowed('/repo', 'c')).toBeNull()
+    store.answer('/repo', 'c', 'all')
+    expect(store.allowed('/repo', 'd')).toBe(true)
+  })
+
+  it('keep each harness’s answer apart, Claude Code’s by default', async () => {
+    const store = await answers()
+    store.answer('/repo', 'a', 'all')
+    expect(store.allowed('/repo', 'a', 'codex')).toBeNull()
+    store.answer('/repo', 'x', 'use', 'codex')
+    expect(store.allowed('/repo', 'x', 'codex')).toBe(true)
+    expect(store.allowed('/repo', 'x', 'opencode')).toBeNull()
+    expect(store.allowed('/repo', 'anything')).toBe(true)
   })
 
   it('keep the answers in a file of their own across launches', async () => {
     const first = await answers()
     first.answer('/repo', 'a', 'use')
-    first.answer('/skipped', 'b', 'skip')
+    first.answer('/skipped', 'b', 'skip', 'opencode')
     await first.flush()
     const second = await answers()
     expect(second.allowed('/repo', 'a')).toBe(true)
-    expect(second.allowed('/skipped', 'x')).toBe(false)
+    expect(second.allowed('/skipped', 'b', 'opencode')).toBe(false)
+  })
+
+  it('carry over Claude Code’s answers an older version kept, a refusal still refusing all', () => {
+    const migrated = migrate(
+      {
+        version: 1,
+        folders: { '/a': { decision: 'use', digest: 'x' }, '/b': { decision: 'skip' } },
+      },
+      2,
+      PROJECT_HOOKS_MIGRATIONS,
+    )
+    expect(migrated.kind === 'ok' && migrated.data).toEqual({
+      version: 2,
+      folders: {
+        '/a': { 'claude-code': { decision: 'use', digest: 'x' } },
+        '/b': { 'claude-code': { decision: 'skip' } },
+      },
+    })
+    const parsed = parseProjectHooksFile(migrated.kind === 'ok' ? migrated.data : {})
+    expect(typeof parsed !== 'string' && parsed.folders['/b']).toEqual({
+      'claude-code': { decision: 'skip' },
+    })
   })
 
   it('drop an answer the file holds in a shape it does not know', () => {
     expect(
       parseProjectHooksFile({
         folders: {
-          '/a': { decision: 'use', digest: 'x' },
-          '/b': { decision: 'use' },
-          '/c': { decision: 'all' },
-          '/d': { decision: 'maybe' },
+          '/a': { 'claude-code': { decision: 'use', digest: 'x' }, codex: { decision: 'use' } },
+          '/c': { opencode: { decision: 'all' }, other: { decision: 'maybe' } },
           '/e': 'skip',
         },
       }),
     ).toEqual({
-      version: 1,
-      folders: { '/a': { decision: 'use', digest: 'x' }, '/c': { decision: 'all' } },
+      version: 2,
+      folders: {
+        '/a': { 'claude-code': { decision: 'use', digest: 'x' } },
+        '/c': { opencode: { decision: 'all' } },
+      },
     })
     expect(parseProjectHooksFile({})).toBe('folders is not an object')
   })

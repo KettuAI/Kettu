@@ -10,7 +10,7 @@ const FOLDER_SOURCES = new Set(['project', 'local'])
  * The settings whose command Claude Code runs by itself outside hooks, to get credentials or
  * telemetry headers, from the moment a session starts.
  */
-const HELPER_SETTINGS = [
+export const HELPER_SETTINGS = [
   'apiKeyHelper',
   'awsAuthRefresh',
   'awsCredentialExport',
