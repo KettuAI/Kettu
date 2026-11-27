@@ -7,15 +7,15 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { fadeExit } from '@renderer/lib/motion'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { splitName, type SelectOption } from './levels'
-import { shownChoice } from './model-list'
+import { type SelectOption } from './levels'
+import { shownChoice, splitChoiceName } from './model-list'
 import { isSelect } from './options'
 
 function shown(config: readonly ConfigOption[], category: ConfigOption['category']): string | null {
   const option = config.find((o): o is SelectOption => o.category === category && isSelect(o))
   if (!option) return null
   const choice = shownChoice(option.choices, String(option.value))
-  return choice ? splitName(choice.name)[1] : String(option.value)
+  return choice ? splitChoiceName(choice)[1] : String(option.value)
 }
 
 /**

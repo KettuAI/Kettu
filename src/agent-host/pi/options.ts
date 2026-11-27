@@ -73,6 +73,17 @@ export interface Choices {
   scope: ReadonlySet<string> | null
 }
 
+/** Groups models by provider while preserving first-seen provider and per-provider order. */
+function groupByProvider(models: readonly PiModel[]): PiModel[] {
+  const byProvider = new Map<string, PiModel[]>()
+  for (const model of models) {
+    const group = byProvider.get(model.provider)
+    if (group) group.push(model)
+    else byProvider.set(model.provider, [model])
+  }
+  return [...byProvider.values()].flat()
+}
+
 export function configOptions(choices: Choices): ConfigOption[] {
   const options: ConfigOption[] = []
   const current = choices.model ? modelValue(choices.model) : null
@@ -84,7 +95,9 @@ export function configOptions(choices: Choices): ConfigOption[] {
     })
     // A model pi runs but no longer lists stays the session's, so the menu still names it.
     const known = current === null || shown.some((model) => modelValue(model) === current)
-    const models = known || !choices.model ? shown : [choices.model, ...shown]
+    const ordered = known || !choices.model ? shown : [choices.model, ...shown]
+    const models = groupByProvider(ordered)
+    const grouped = new Set(models.map((model) => model.provider).filter(Boolean)).size > 1
     options.push({
       id: CONFIG.model,
       name: 'Model',
@@ -94,7 +107,9 @@ export function configOptions(choices: Choices): ConfigOption[] {
       value: current ?? modelValue(models[0]!),
       choices: models.map((model) => ({
         value: modelValue(model),
-        name: `${model.provider}/${model.name ?? model.id}`,
+        name: `${model.provider}/${model.name?.trim() || model.id}`,
+        modelId: model.id,
+        ...(grouped && model.provider ? { group: model.provider } : {}),
       })),
     })
   }

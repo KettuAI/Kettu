@@ -1344,7 +1344,7 @@ export function ModelPicker({
               {shownMore.map((m, i) => (
                 <Fragment key={m.id}>
                   {m.group && m.group !== shownMore[i - 1]?.group && (
-                    <div className="ui-mdpc__fly-group" role="presentation">
+                    <div className="ui-mdpc__fly-group" role="presentation" title={m.group}>
                       {m.group}
                     </div>
                   )}

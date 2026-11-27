@@ -62,6 +62,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { harnessReason, shortLabel } from '@renderer/features/agents/harness-problem'
+import { splitChoiceName } from '@renderer/features/session/composer/model-list'
 import { forgetSite } from '@renderer/features/session/link-open'
 import { terminalFontStack } from '@renderer/features/terminal/font-stack'
 import { errorMessage } from '@renderer/lib/host'
@@ -368,7 +369,11 @@ export function LightModelChoice({ label }: { label: string }) {
                                   key={model.value}
                                   value={pinnedValue(agent.agentId, model.value)}
                                 >
-                                  <span className="min-w-0 truncate">{model.name}</span>
+                                  <span className="min-w-0 truncate">
+                                    {group !== null && groups.length > 1
+                                      ? splitChoiceName(model)[1]
+                                      : model.name}
+                                  </span>
                                 </DropdownMenuRadioItem>
                               ))}
                             </DropdownMenuGroup>

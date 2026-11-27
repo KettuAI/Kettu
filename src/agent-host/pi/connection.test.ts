@@ -430,10 +430,30 @@ describe('starting a session', () => {
         pi.models = [...MODELS, { provider: 'deepseek', id: 'deepseek-v4', name: 'V4' }]
       },
     })
-    await connection.newSession(cwd)
+    const { config } = await connection.newSession(cwd)
     expect(providers.at(-1)).toEqual([
       { id: 'example', models: 2 },
       { id: 'deepseek', models: 1 },
+    ])
+    expect(config[0]?.choices).toEqual([
+      {
+        value: 'example/small-model',
+        name: 'example/Small',
+        modelId: 'small-model',
+        group: 'example',
+      },
+      {
+        value: 'example/big/model',
+        name: 'example/Big',
+        modelId: 'big/model',
+        group: 'example',
+      },
+      {
+        value: 'deepseek/deepseek-v4',
+        name: 'deepseek/V4',
+        modelId: 'deepseek-v4',
+        group: 'deepseek',
+      },
     ])
   })
 
