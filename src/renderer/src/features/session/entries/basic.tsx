@@ -45,6 +45,7 @@ import { ConfigWarningEntry } from './config-warning'
 import { CutTurnEnd } from './cut-turn'
 import { FailedTurnActions, LimitContinueLine } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
+import { UpdateResumeBlockedNotice } from './update-resume-notice'
 import { splitLinks } from './text-links'
 import { AttachedNote } from './attached-note'
 import { UserActions } from './message-actions'
@@ -317,6 +318,17 @@ export const NoticeEntry = memo(function NoticeEntry({
       <OutOfCreditEnd title={entry.title} description={entry.description} className={animation} />
     )
   }
+  if (entry.cause === 'update_resume_blocked') {
+    return (
+      <UpdateResumeBlockedNotice
+        sessionId={sessionId}
+        entryId={entryId}
+        title={entry.title}
+        description={entry.description}
+        className={animation}
+      />
+    )
+  }
   if (entry.configWarning) {
     return (
       <ConfigWarningEntry
@@ -333,7 +345,13 @@ export const NoticeEntry = memo(function NoticeEntry({
   return (
     <Alert
       variant={
-        entry.severity === 'error' ? 'error' : entry.severity === 'warning' ? 'warning' : 'default'
+        entry.severity === 'error'
+          ? 'error'
+          : entry.severity === 'warning'
+            ? 'warning'
+            : entry.cause === 'update_resumed'
+              ? 'info'
+              : 'default'
       }
       className={cn('ks-notice', animation)}
     >

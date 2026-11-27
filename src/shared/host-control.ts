@@ -47,6 +47,7 @@ import type {
 } from './settings'
 import type { LiveQuickOptions } from './remote/push'
 import type { AgentId, HarnessId } from './thread'
+import type { UpdateResumeSession } from './update-resume'
 
 export type { ReportBuildResult }
 
@@ -148,6 +149,8 @@ export type MainToHost =
   | { type: 'mcp-install-result'; callId: number; error: string | null }
   | { type: 'mcp-backup-key-result'; callId: number; error: string | null }
   | { type: 'host:busy-request'; requestId: number }
+  // User sessions currently interrupted by an immediate update restart; answered by host:update-resume.
+  | { type: 'host:update-resume-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
   // reads the logs, its agents and sessions, and writes the zip under its data folder.
   | {
@@ -451,6 +454,7 @@ export type HostToMain =
   // Whether any routine run is starting or running, for keeping the computer from idle sleep.
   | { type: 'host:routines-working'; working: boolean }
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
+  | { type: 'host:update-resume'; requestId: number; sessions: UpdateResumeSession[] }
   | { type: 'host:report'; requestId: number; result: ReportBuildResult }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }

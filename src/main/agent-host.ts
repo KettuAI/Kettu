@@ -56,6 +56,7 @@ import { electronNodeRuntime } from '@shared/node-runtime'
 import type { PortDevice } from '@shared/remote/device'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { HostSettings } from '@shared/settings'
+import { isUpdateResumeSession, type UpdateResumeSession } from '@shared/update-resume'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
 import clineHostPath from '../agent-host/cline/cline-host?modulePath'
@@ -364,6 +365,11 @@ export class AgentHost {
   private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
+  private readonly updateResumeRequests = new Map<
+    number,
+    (sessions: UpdateResumeSession[]) => void
+  >()
+  private nextUpdateResumeId = 1
   private readonly frameRequests = new Map<number, (frame: ComputerFrame | null) => void>()
   private nextFrameId = 1
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
@@ -537,6 +543,30 @@ export class AgentHost {
       if (!this.host.post({ type: 'host:busy-request', requestId })) {
         this.busyRequests.get(requestId)?.([])
         this.busyRequests.delete(requestId)
+      }
+    })
+  }
+
+  /**
+   * Running user sessions that would be interrupted by an immediate update restart, or none if the
+   * host is unavailable or does not answer within `timeoutMs`.
+   */
+  updateResumeSessions(timeoutMs: number): Promise<UpdateResumeSession[]> {
+    if (this.host.state !== 'ready') return Promise.resolve([])
+    const requestId = this.nextUpdateResumeId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.updateResumeRequests.delete(requestId)
+        log.warn(`No update-resume answer within ${timeoutMs} ms`)
+        resolve([])
+      }, timeoutMs)
+      this.updateResumeRequests.set(requestId, (sessions) => {
+        clearTimeout(timer)
+        resolve(sessions)
+      })
+      if (!this.host.post({ type: 'host:update-resume-request', requestId })) {
+        this.updateResumeRequests.get(requestId)?.([])
+        this.updateResumeRequests.delete(requestId)
       }
     })
   }
@@ -979,6 +1009,15 @@ export class AgentHost {
         resolve(Array.isArray(message.sessions) ? message.sessions.filter(isBusySession) : [])
         break
       }
+      case 'host:update-resume': {
+        const resolve = this.updateResumeRequests.get(message.requestId)
+        if (!resolve) break
+        this.updateResumeRequests.delete(message.requestId)
+        resolve(
+          Array.isArray(message.sessions) ? message.sessions.filter(isUpdateResumeSession) : [],
+        )
+        break
+      }
       case 'host:granted':
         this.grants.answered(message.requestId)
         break
@@ -1126,6 +1165,8 @@ export class AgentHost {
     this.deps.pluginHost?.(false)
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
+    for (const resolve of this.updateResumeRequests.values()) resolve([])
+    this.updateResumeRequests.clear()
     this.grants.failAll()
     for (const resolve of this.contentRequests.values()) resolve({ kind: 'failed' })
     this.contentRequests.clear()
