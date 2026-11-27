@@ -132,6 +132,11 @@
       "description": "打开大纲时，由小模型撰写大纲。",
       "keywords": "大纲 标题 总结 模型 额度 outline titles summary"
     },
+    "promptCacheDropNotice": {
+      "name": "Prompt Cache 命中下降提醒",
+      "description": "回合结束后，若实测提示词缓存命中率明显下降，则显示提醒。",
+      "keywords": "提示词 缓存 命中 下降 提醒 警告 费用 prompt cache hit miss drop notice"
+    },
     "cloud": {
       "name": "使用 Kettu 云服务",
       "note": "Kettu 运行的服务，用一个免费的 Kettu 账号：在任何地方连回这台电脑的中继、iPhone 通知、网页版、发布到 Kettu 和问题报告。",

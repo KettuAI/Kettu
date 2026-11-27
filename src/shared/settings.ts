@@ -66,6 +66,7 @@ export interface SettingsFile {
   }
   thread: {
     outlineSummaries: boolean // a small model titles the outline's messages
+    promptCacheDropNotice: boolean // warn after a turn when measured prompt cache hits drop sharply
     confirmLinks: boolean // ask before opening a site that has no `alwaysOpenIn` entry
     openLinksIn: OpenLinksIn // where a click on a link in a reply opens it
     // By site: its registrable domain, or the whole host when that is the domain. Replaced whole.
@@ -336,7 +337,13 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     agentPasswords: false,
     lightModel: { mode: 'small' },
   },
-  thread: { outlineSummaries: true, confirmLinks: true, openLinksIn: 'browser', alwaysOpenIn: {} },
+  thread: {
+    outlineSummaries: true,
+    promptCacheDropNotice: false,
+    confirmLinks: true,
+    openLinksIn: 'browser',
+    alwaysOpenIn: {},
+  },
   appearance: {
     theme: 'system',
     colorTheme: BUILTIN_THEME_ID,

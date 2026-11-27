@@ -199,7 +199,17 @@
       "uncachedInput": "未缓存输入",
       "dynamicNote": "该模型的缓存生命周期由服务端动态管理，没有固定倒计时。",
       "lastRequest": "上次请求 {{time}}",
-      "dynamicLifetime": "动态时长"
+      "dynamicLifetime": "动态时长",
+      "dropNotice": {
+        "title": "提示词缓存命中下降",
+        "change": "{{before}}% → {{after}}%（{{total}} 输入中仅缓存命中 {{cached}}）。",
+        "extraCost": "按 API 价约多花 {{cost}}",
+        "reasons": {
+          "model_changed": "切换了模型",
+          "compacted": "已压缩上下文",
+          "expired": "回合中缓存过期"
+        }
+      }
     },
     "speed": {
       "title": "输出速度",

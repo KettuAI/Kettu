@@ -400,10 +400,19 @@ import {
   type ThreadPage,
   type ThreadWrite,
 } from './threads/model'
+import {
+  CACHE_NOTICE_MIN_TOKENS,
+  cacheExpiry,
+  cacheHitOf,
+  cacheSampleOf,
+  detectCacheDrop,
+  knownExpiry,
+  type CacheSample,
+} from '@shared/prompt-cache'
 import { turnPhase } from '@shared/turn-phase'
 import { originOf, originText, restoredOrigins, type StoredOrigin } from './threads/origins'
 import { ThreadStoreError, type ThreadStore } from './threads/store'
-import type { UsageRow } from './usage/model'
+import { normalizeModel, priceFor, type UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
 
 /** What a step may do without asking until it reports: edit and run commands in its folder. */
@@ -720,6 +729,23 @@ export interface TurnSender {
   device: PortDevice | null
 }
 
+interface TurnCacheCheck {
+  /** Whether the existing pre-send cache expiry notice already covered this turn's expiry. */
+  knownExpiredBeforeSend: boolean
+  /** Known cache TTL before the turn started, if any (from `expiryOf` / `knownExpiry`). */
+  knownTtlBeforeSend: number | null
+  /** Timestamp of the last request before this turn started, if any. */
+  lastRequestAtBeforeSend: number | null
+  /** Most recent request timestamp observed during this turn, for mid-turn TTL expiry checks. */
+  lastObservedRequestAt: number | null
+  /** Confirmed TTL expiry observed when cache was not already covered by the pre-send notice. */
+  expiredMidTurn: boolean
+  /** Confirmed compaction completed between the baseline turn and the end of this turn. */
+  compacted: boolean
+  /** Number of model requests observed during this turn. */
+  requestCount: number
+}
+
 interface Turn {
   startedAt: number
   /** Start of the active reply segment, reset on wakeup or follow-up after background wait. */
@@ -749,6 +775,8 @@ interface Turn {
   ends: (() => void)[]
   /** The next message the agent's tool suggested in the turn, shown once it ends normally. */
   suggestion: string | null
+  /** Snapshot and observed events for post-turn prompt cache hit-drop evaluation. */
+  cacheCheck: TurnCacheCheck
 }
 
 /** What `sessions.prepare` asks for: the agent and where the session will work. */
@@ -975,6 +1003,10 @@ interface Live {
    * of the cache it read: the context it had before, in tokens.
    */
   resumeRead: { before: number; lastRequestAt: number; expiresAt: number } | null
+  /** Most recent completed turn's measured prompt cache sample, used as baseline for the next turn. */
+  lastCacheSample: CacheSample | null
+  /** Whether a compaction completed after the latest baseline turn. */
+  compactedSinceBaseline: boolean
   /** When its model list was last read again, and the read running now. */
   modelsReadAt: number | null
   modelsRead: Promise<void> | null
@@ -4488,6 +4520,8 @@ export class SessionManager {
       releaseAfterIdle: null,
       harnessVersion: null,
       resumeRead: null,
+      lastCacheSample: null,
+      compactedSinceBaseline: false,
       modelsReadAt: null,
       modelsRead: null,
       refreshedModels: new Set(),
@@ -5050,13 +5084,13 @@ export class SessionManager {
       )
     }
     // A compacted context lost what went ahead of a prompt, so the next prompt sends it again.
-    if (
-      !live.replaying &&
-      live.record.memorySentTo !== undefined &&
-      output.patches.some((patch) => compacted(live.thread, patch))
-    ) {
-      delete live.record.memorySentTo
-      this.persist(live)
+    if (!live.replaying && output.patches.some((patch) => compacted(live.thread, patch))) {
+      live.compactedSinceBaseline = true
+      if (live.turn) live.turn.cacheCheck.compacted = true
+      if (live.record.memorySentTo !== undefined) {
+        delete live.record.memorySentTo
+        this.persist(live)
+      }
     }
     for (const effect of output.effects) this.applyEffect(live, effect)
     if (!live.replaying && this.hasQueuedWake(live) && this.canWakeInterruptible(live)) {
@@ -5194,8 +5228,19 @@ export class SessionManager {
         if (live.resumeRead) this.checkResumeRead(live, effect.cache)
         this.refreshContext(live, this.timings.contextDebounceMs)
         // A turn's transcript is read as it ends; a request between turns has a read of its own.
-        if (live.turn) live.turn.requested = true
-        else {
+        if (live.turn) {
+          live.turn.requested = true
+          const check = live.turn.cacheCheck
+          check.requestCount++
+          const reqNow = this.now()
+          if (!check.knownExpiredBeforeSend && check.knownTtlBeforeSend !== null) {
+            const prevAt = check.lastObservedRequestAt ?? check.lastRequestAtBeforeSend
+            if (prevAt !== null && reqNow - prevAt >= check.knownTtlBeforeSend) {
+              check.expiredMidTurn = true
+            }
+          }
+          check.lastObservedRequestAt = reqNow
+        } else {
           this.persist(live)
           this.scheduleCacheRead(live)
         }
@@ -8981,6 +9026,8 @@ export class SessionManager {
           },
     ])
     this.stopSuggesting(live.id)
+    live.lastCacheSample = null
+    live.compactedSinceBaseline = false
     this.update(live, {
       agentId,
       acpSessionId: record.acpSessionId,
@@ -8995,6 +9042,7 @@ export class SessionManager {
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
       lastRequest: undefined,
+      cacheDrop: null,
       suggestion: null,
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
@@ -9793,6 +9841,15 @@ export class SessionManager {
     portId: string | null,
     byAgent: boolean,
   ): Turn {
+    const account = this.deps.agents.has(live.record.agentId)
+      ? (this.deps.agents.status(live.record.agentId).account ?? null)
+      : null
+    const prevExpiry = knownExpiry(cacheExpiry(live.thread.session, account))
+    const prevUsed = live.thread.session.usage?.used ?? 0
+    const expiredBeforeSend = prevExpiry !== null && now >= prevExpiry.expiresAt
+    const knownExpiredBeforeSend = expiredBeforeSend && prevUsed >= CACHE_NOTICE_MIN_TOKENS
+    const compactedBeforeTurn = live.compactedSinceBaseline
+    live.compactedSinceBaseline = false
     const turn: Turn = {
       startedAt: now,
       segmentStartedAt: now,
@@ -9810,6 +9867,15 @@ export class SessionManager {
       hadOutput: false,
       ends: [],
       suggestion: null,
+      cacheCheck: {
+        knownExpiredBeforeSend,
+        knownTtlBeforeSend: prevExpiry?.ttl ?? null,
+        lastRequestAtBeforeSend: live.thread.session.usage?.cache?.lastRequestAt ?? null,
+        lastObservedRequestAt: null,
+        expiredMidTurn: expiredBeforeSend && !knownExpiredBeforeSend,
+        compacted: compactedBeforeTurn,
+        requestCount: 0,
+      },
     }
     live.turn = turn
     live.cutNoticeId = null
@@ -9835,8 +9901,9 @@ export class SessionManager {
       turnStartUsed: live.thread.session.usage?.used ?? null,
       error: null,
       updatedAt: now,
-      // Always clear explicitly so replicas that held a suggestion across release/revive drop it.
+      // Always clear explicitly so replicas that held a suggestion or drop notice drop it.
       suggestion: null,
+      cacheDrop: null,
       ...(live.thread.session.waitingBackground ? { waitingBackground: false } : {}),
     })
     this.persist(live)
@@ -11059,6 +11126,34 @@ export class SessionManager {
         }),
       )
     }
+    if (stopReason !== 'cancelled') {
+      const currentSample = turnCacheSample(turn, live.thread.session, tokens, models, now)
+      if (currentSample) {
+        const account = this.deps.agents.has(live.record.agentId)
+          ? (this.deps.agents.status(live.record.agentId).account ?? null)
+          : null
+        const effectiveUsage = changes.usage ?? live.thread.session.usage
+        const known = knownExpiry(
+          cacheExpiry({ ...live.thread.session, usage: effectiveUsage }, account),
+        )
+        const cacheTtlMs = known?.ttl ?? effectiveUsage?.cache?.ttl ?? null
+        const drop = detectCacheDrop({
+          baseline: live.lastCacheSample,
+          current: currentSample,
+          knownExpiredBeforeSend: turn.cacheCheck.knownExpiredBeforeSend,
+          compacted: turn.cacheCheck.compacted,
+          expiredMidTurn: turn.cacheCheck.expiredMidTurn,
+          requestCount: turn.cacheCheck.requestCount,
+          price: currentSample.model ? priceFor(currentSample.model) : null,
+          cacheTtlMs,
+        })
+        live.lastCacheSample = currentSample
+        live.compactedSinceBaseline = false
+        changes.cacheDrop = drop
+      } else {
+        changes.cacheDrop = null
+      }
+    }
     this.update(live, changes)
     if (live.thread.session.usage?.cache) this.scheduleCacheRead(live)
     const git = this.deps.git()
@@ -11823,7 +11918,9 @@ export class SessionManager {
     delete record.rewound
     live.setAside = null
     live.setAsideDirty = true
-    this.update(live, { rewound: null })
+    live.lastCacheSample = null
+    live.compactedSinceBaseline = false
+    this.update(live, { rewound: null, cacheDrop: null })
     this.save(live)
     // A session cut to nothing gets its new one as the turn attaches, which writes it whole.
     if (record.acpSessionId) this.checkpoint(live)
@@ -15503,6 +15600,89 @@ function sumModelTokens(models: ModelTokens[], usage: TokenTotals | null): Token
 function modelOf(config: readonly ConfigOption[]): string | null {
   const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
   return typeof option?.value === 'string' ? option.value : null
+}
+
+/**
+ * Resolves the normalized main-thread model name for a completed turn, preferring the model
+ * reported in `models` when unambiguous, else the selected config option's `modelId` or value.
+ */
+function resolvedTurnModel(
+  config: readonly ConfigOption[],
+  models: readonly ModelTokens[],
+): string | null {
+  const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
+  const configValue = typeof option?.value === 'string' ? option.value : null
+  const choiceModelId =
+    configValue !== null
+      ? (option?.choices?.find((choice) => choice.value === configValue)?.modelId ?? null)
+      : null
+  const normalizedConfig = normalizeModel(choiceModelId ?? configValue)
+  if (models.length === 1) {
+    const reported = normalizeModel(models[0]!.model)
+    if (reported !== '') return reported
+  } else if (models.length > 1) {
+    if (normalizedConfig !== '') {
+      const matched = models.find((item) => normalizeModel(item.model) === normalizedConfig)
+      if (matched) return normalizeModel(matched.model)
+    }
+    let best: { model: string; input: number } | null = null
+    for (const item of models) {
+      const name = normalizeModel(item.model)
+      if (name === '') continue
+      const input = item.tokens.input + (item.tokens.cacheRead ?? 0) + (item.tokens.cacheWrite ?? 0)
+      if (!best || input > best.input) best = { model: name, input }
+    }
+    if (best) return best.model
+  }
+  return normalizedConfig !== '' ? normalizedConfig : null
+}
+
+/**
+ * Extracts a reliable measured cache sample for a completed turn from main-thread turn tokens,
+ * single-model usage, or a completed in-turn `lastRequest`; returns null when no reliable
+ * cache-read reporting is available.
+ */
+function turnCacheSample(
+  turn: Turn,
+  session: SessionView,
+  tokens: TokenTotals | null,
+  models: readonly ModelTokens[],
+  now: number,
+): CacheSample | null {
+  const model = resolvedTurnModel(session.config, models)
+  if (tokens && tokens.cacheRead !== null) {
+    return cacheSampleOf({
+      input: tokens.input,
+      cacheRead: tokens.cacheRead,
+      cacheWrite: tokens.cacheWrite,
+      model,
+      at: now,
+    })
+  }
+  if (models.length === 1 && models[0]!.tokens.cacheRead !== null) {
+    const single = models[0]!
+    return cacheSampleOf({
+      input: single.tokens.input,
+      cacheRead: single.tokens.cacheRead,
+      cacheWrite: single.tokens.cacheWrite,
+      model: normalizeModel(single.model) || model,
+      at: now,
+    })
+  }
+  const last = session.lastRequest
+  if (last && last.at >= turn.startedAt) {
+    const hit = cacheHitOf(last)
+    if (hit) {
+      return cacheSampleOf({
+        input: hit.uncachedInput,
+        cacheRead: hit.cacheRead,
+        cacheWrite: hit.cacheWrite,
+        model,
+        at: now,
+      })
+    }
+  }
+  return null
 }
 
 /** Which prepared session a request asks for: the agent, the folder and the parent. */

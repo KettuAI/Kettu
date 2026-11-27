@@ -204,7 +204,17 @@
       "uncachedInput": "Uncached input",
       "dynamicNote": "This model’s cache lifetime is managed dynamically by the server, with no fixed countdown.",
       "lastRequest": "Last request {{time}}",
-      "dynamicLifetime": "Dynamic lifetime"
+      "dynamicLifetime": "Dynamic lifetime",
+      "dropNotice": {
+        "title": "Prompt cache hit dropped",
+        "change": "{{before}}% → {{after}}% ({{cached}} of {{total}} input tokens cached).",
+        "extraCost": "~{{cost}} extra at API prices",
+        "reasons": {
+          "model_changed": "Model changed",
+          "compacted": "Context compacted",
+          "expired": "Cache expired mid-turn"
+        }
+      }
     },
     "speed": {
       "title": "Output speed",

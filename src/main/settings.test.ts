@@ -1151,3 +1151,37 @@ describe('selectable desktop app icon', () => {
     }
   })
 })
+
+describe('prompt cache drop notice setting', () => {
+  it('defaults to false, loads stored booleans, and falls back to false on invalid values', async () => {
+    expect((await SettingsStore.load(dir)).get().thread.promptCacheDropNotice).toBe(false)
+    await save({ version: 1, thread: { promptCacheDropNotice: true } })
+    expect((await SettingsStore.load(dir)).get().thread.promptCacheDropNotice).toBe(true)
+    await save({ version: 1, thread: { promptCacheDropNotice: false } })
+    expect((await SettingsStore.load(dir)).get().thread.promptCacheDropNotice).toBe(false)
+    for (const bad of ['yes', 1, null, {}]) {
+      await save({ version: 1, thread: { promptCacheDropNotice: bad } })
+      expect((await SettingsStore.load(dir)).get().thread.promptCacheDropNotice).toBe(false)
+    }
+  })
+
+  it('validates, merges, persists and keeps the setting on the client', async () => {
+    const patch = validateSettingsPatch({ thread: { promptCacheDropNotice: true } })
+    expect(patch).toEqual({ thread: { promptCacheDropNotice: true } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.thread.promptCacheDropNotice).toBe(true)
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(
+      withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).thread.promptCacheDropNotice,
+    ).toBe(true)
+
+    const store = await SettingsStore.load(dir)
+    store.update(patch)
+    await store.flush()
+    expect((await SettingsStore.load(dir)).get().thread.promptCacheDropNotice).toBe(true)
+
+    for (const bad of ['true', 1, null, []]) {
+      expect(() => validateSettingsPatch({ thread: { promptCacheDropNotice: bad } })).toThrow()
+    }
+  })
+})

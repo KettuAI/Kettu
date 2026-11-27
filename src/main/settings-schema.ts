@@ -253,6 +253,7 @@ const SECTION_FIELDS = {
   },
   thread: {
     outlineSummaries: isBoolean,
+    promptCacheDropNotice: isBoolean,
     confirmLinks: isBoolean,
     openLinksIn: oneOf('browser', 'session', 'ask'),
     alwaysOpenIn: isLinkSites,

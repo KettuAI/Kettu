@@ -1,7 +1,8 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { cacheExpiry, knownExpiry } from '@shared/prompt-cache'
+import { cacheExpiry, knownExpiry, shouldShowCacheDropNotice } from '@shared/prompt-cache'
+import { DEFAULT_SETTINGS } from '@shared/settings'
 import {
   QUEUED_COMMENTS_TEXT,
   type AgentId,
@@ -72,7 +73,7 @@ import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
 import { builtinCommands } from './builtin-commands'
 import { PromptBox } from './prompt-box'
-import { CACHE_NOTICE_MIN_TOKENS, CacheNotice } from './cache-notice'
+import { CACHE_NOTICE_MIN_TOKENS, CacheDropNotice, CacheNotice } from './cache-notice'
 import { QueueButton, SendButton, StopButton } from './send-button'
 import { SessionPlace } from './session-place'
 import { SwitchConfirm } from './switch-confirm'
@@ -667,6 +668,10 @@ export function Composer({
   const cachePhase = useCachePhase(knownExpiry(cache))
   // The cache write the notice was closed for, so it stays closed until the next one expires.
   const [noticeClosedFor, setNoticeClosedFor] = useState<number | null>(null)
+  const [dropClosedFor, setDropClosedFor] = useState<string | null>(null)
+  const cacheDropNoticeEnabled = useSettingsStore(
+    (s) => s.settings.thread.promptCacheDropNotice ?? DEFAULT_SETTINGS.thread.promptCacheDropNotice,
+  )
   const reread = session.usage?.used ?? 0
   const cacheNoticeShown =
     timed !== null &&
@@ -678,6 +683,19 @@ export function Composer({
     !mustSwitch &&
     reread >= CACHE_NOTICE_MIN_TOKENS &&
     noticeClosedFor !== timed.lastRequestAt
+  const cacheDrop = session.cacheDrop ?? null
+  const cacheDropKey = cacheDrop ? `${sessionId}:${cacheDrop.at}` : null
+  const cacheDropNoticeShown = shouldShowCacheDropNotice({
+    enabled: cacheDropNoticeEnabled,
+    drop: cacheDrop,
+    cacheNoticeShown,
+    activeRunning,
+    starting,
+    pendingSwitch: pending !== null,
+    mustSwitch,
+    dismissedKey: dropClosedFor,
+    noticeKey: cacheDropKey,
+  })
   const modelName = model
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
@@ -726,14 +744,20 @@ export function Composer({
       data-editing-workflow={editingSuggestion ? '' : undefined}
     >
       <AnimatePresence initial={false}>
-        {cacheNoticeShown && (
+        {cacheNoticeShown ? (
           <CacheNotice
             key="cache-notice"
             estimate={timed.estimate}
             used={reread}
             onDismiss={() => setNoticeClosedFor(timed.lastRequestAt)}
           />
-        )}
+        ) : cacheDropNoticeShown && cacheDrop && cacheDropKey ? (
+          <CacheDropNotice
+            key={cacheDropKey}
+            drop={cacheDrop}
+            onDismiss={() => setDropClosedFor(cacheDropKey)}
+          />
+        ) : null}
       </AnimatePresence>
       <ChatComposer
         field={

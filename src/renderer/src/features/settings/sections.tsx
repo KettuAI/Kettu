@@ -445,6 +445,22 @@ export function OutlineSummaries({ label }: { label: string }) {
   )
 }
 
+export function PromptCacheDropNotice({ label }: { label: string }) {
+  const checked =
+    useSettings().thread.promptCacheDropNotice ?? DEFAULT_SETTINGS.thread.promptCacheDropNotice
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ thread: { promptCacheDropNotice: v } })}
+      />
+    </>
+  )
+}
+
 export function OpenAtLogin({ label, disabled }: { label: string; disabled: boolean }) {
   const checked = useSettings().general.openAtLogin
   const [apply, error] = useApply()
