@@ -278,6 +278,24 @@ export interface PushActions {
   deny?: { optionId: string; label: string }
 }
 
+/** 移动端灵动岛与锁屏实时活动快捷选项的视觉语义（与桌面刘海岛对齐）。 */
+export type LiveQuickOptionStyle = 'normal' | 'recommended' | 'allow' | 'deny'
+
+export interface LiveQuickOption {
+  id: string
+  label: string
+  style: LiveQuickOptionStyle
+}
+
+/** 灵动岛与锁屏实时活动卡片的快捷选项载荷（最多 3 项直选，超出由客户端引导进 App）。 */
+export interface LiveQuickOptions {
+  target: 'question' | 'permission'
+  total: number
+  questionCount: number
+  multiSelect: boolean
+  items: LiveQuickOption[]
+}
+
 /** 实时活动运行中携带的 Plan 步数进度摘要。 */
 export interface LiveActivityPlan {
   done: number
@@ -326,9 +344,10 @@ export type PushEvent =
       requestId?: string
       actions?: PushActions
       since?: number
-      actionKind?: 'execute' | 'edit' | 'review'
+      actionKind?: 'execute' | 'edit' | 'review' | 'question'
       diffAdded?: number
       diffRemoved?: number
+      quickOptions?: LiveQuickOptions
     }
   /** 实时活动运行中态：当前焦点会话、启动时刻与可选 Plan 进度。 */
   | {

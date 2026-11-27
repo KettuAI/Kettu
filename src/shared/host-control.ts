@@ -45,6 +45,7 @@ import type {
   SettingsPatch,
   TerminalSettings,
 } from './settings'
+import type { LiveQuickOptions } from './remote/push'
 import type { AgentId, HarnessId } from './thread'
 
 export type { ReportBuildResult }
@@ -318,6 +319,9 @@ export interface AttentionRequest {
   id: string
   allow?: AttentionAnswer
   deny?: AttentionAnswer
+  /** 移动端实时活动的请求语义分类与 2–3 项快捷选项集合。 */
+  actionKind?: 'execute' | 'edit' | 'review' | 'question'
+  quickOptions?: LiveQuickOptions
 }
 
 /** 主机上报给 remote-host 驱动移动端灵动岛的实时会话与限额轻量快照。 */

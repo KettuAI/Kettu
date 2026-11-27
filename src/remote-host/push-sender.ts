@@ -312,6 +312,7 @@ export class PushSender {
                 ...(details && !compact && p.actions ? { actions: p.actions } : {}),
                 ...(details && p.since !== undefined ? { since: p.since } : {}),
                 ...(details && !compact && p.actionKind ? { actionKind: p.actionKind } : {}),
+                ...(details && !compact && p.quickOptions ? { quickOptions: p.quickOptions } : {}),
               }
             case 'running':
               return {

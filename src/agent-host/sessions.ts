@@ -161,7 +161,13 @@ import {
   writePatch,
   type ArtifactWrite,
 } from './artifacts/entries'
-import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
+import {
+  allowOnceOption,
+  changedFiles,
+  liveQuickOptions,
+  replySummary,
+  requestText,
+} from './attention'
 import { riskyRequest } from './command-safety'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
@@ -12703,15 +12709,22 @@ export class SessionManager {
         const optionId = allowOnceOption(tool, request.options)
         const allow = request.options.find((option) => option.id === optionId)
         const deny = request.options.find((option) => option.kind === 'reject_once')
+        const quick = liveQuickOptions(tool, request.options, request.questions, risky)
+        const body =
+          request.questions && request.questions.length > 0 && request.questions[0]!.question
+            ? request.questions[0]!.question
+            : requestText(tool, workDir(live.record))
         this.deps.events.attention(
           live.id,
           'permission',
           this.titleOf(live),
-          requestText(tool, workDir(live.record)),
+          body,
           {
             id: requestId,
             ...(allow ? { allow: { optionId: allow.id, name: allow.name } } : {}),
             ...(allow && deny ? { deny: { optionId: deny.id, name: deny.name } } : {}),
+            ...(quick.actionKind ? { actionKind: quick.actionKind } : {}),
+            ...(quick.quickOptions ? { quickOptions: quick.quickOptions } : {}),
           },
           requestFacts(tool),
         )

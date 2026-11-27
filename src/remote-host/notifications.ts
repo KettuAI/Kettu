@@ -19,6 +19,9 @@ import {
   encodeSealed,
   pushTag,
   type DevicePush,
+  type LiveQuickOption,
+  type LiveQuickOptions,
+  type LiveQuickOptionStyle,
   type NotificationsState,
   type NotificationsUpdate,
   type PushActions,
@@ -83,6 +86,43 @@ function parseAnswer(value: unknown): { optionId: string; label: string } | null
     : null
 }
 
+const ACTION_KINDS = new Set(['execute', 'edit', 'review', 'question'])
+const OPTION_STYLES = new Set<LiveQuickOptionStyle>(['normal', 'recommended', 'allow', 'deny'])
+
+/** 校验跨进程传入的灵动岛快捷选项，严格限制最多 3 项并防御超长字符串。 */
+function parseQuickOptions(value: unknown): LiveQuickOptions | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.target !== 'question' && raw.target !== 'permission') return null
+  const rawItems = Array.isArray(raw.items) ? raw.items : []
+  const items: LiveQuickOption[] = []
+  for (const entry of rawItems.slice(0, 3)) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const item = entry as Record<string, unknown>
+    if (!isId(item.id) || typeof item.label !== 'string') continue
+    const label = item.label.trim().slice(0, 80)
+    if (!label) continue
+    const style =
+      typeof item.style === 'string' && OPTION_STYLES.has(item.style as LiveQuickOptionStyle)
+        ? (item.style as LiveQuickOptionStyle)
+        : 'normal'
+    items.push({ id: item.id, label, style })
+  }
+  const total =
+    typeof raw.total === 'number' && Number.isInteger(raw.total) && raw.total >= items.length
+      ? raw.total
+      : items.length
+  const questionCount =
+    typeof raw.questionCount === 'number' &&
+    Number.isInteger(raw.questionCount) &&
+    raw.questionCount >= 1
+      ? raw.questionCount
+      : 1
+  const multiSelect = raw.multiSelect === true
+  if (items.length === 0 && total === 0 && questionCount <= 1) return null
+  return { target: raw.target, total, questionCount, multiSelect, items }
+}
+
 /**
  * An attention message from the host's parent, as the remote host reads it; null when it is not
  * one. The parent passes on the agent host's, so it is checked like any message across processes.
@@ -108,7 +148,7 @@ export function parseAttention(value: unknown): Attention | null {
     attention.sessionId = sessionId
   }
   if (kind === 'permission' && typeof request === 'object' && request !== null) {
-    const { id, allow, deny } = request as Record<string, unknown>
+    const { id, allow, deny, actionKind, quickOptions } = request as Record<string, unknown>
     if (isId(id)) {
       attention.requestId = id
       const allowed = parseAnswer(allow)
@@ -117,6 +157,11 @@ export function parseAttention(value: unknown): Attention | null {
         const actions: PushActions = { allow: allowed, ...(denied ? { deny: denied } : {}) }
         attention.actions = actions
       }
+      if (typeof actionKind === 'string' && ACTION_KINDS.has(actionKind)) {
+        attention.actionKind = actionKind as 'execute' | 'edit' | 'review' | 'question'
+      }
+      const parsedQuick = parseQuickOptions(quickOptions)
+      if (parsedQuick) attention.quickOptions = parsedQuick
     }
   }
   if (typeof front === 'object' && front !== null) {
