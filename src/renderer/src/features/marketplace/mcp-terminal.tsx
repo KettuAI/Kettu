@@ -104,11 +104,11 @@ function useWording(): {
   }
 }
 
-/** The site an app's icon comes from, for apps with no mark of their own here. */
+/** The site whose icon an app shows, for apps with no mark of their own here. */
 const APP_SITES: Partial<Record<McpTerminalApp, string>> = {
-  vscode: 'code.visualstudio.com',
-  windsurf: 'windsurf.com',
-  zed: 'zed.dev',
+  vscode: 'https://code.visualstudio.com',
+  windsurf: 'https://windsurf.com',
+  zed: 'https://zed.dev',
 }
 
 const APP_MARKS: Partial<Record<McpTerminalApp, AgentId>> = {
