@@ -210,6 +210,39 @@ describe('threads store performance and digests', () => {
     expect(getCachedOutline('s2')).toBeNull()
   })
 
+  it('preserves reading positions across unwatched eviction and rewatchAll, clearing only on forgetSession', async () => {
+    vi.stubGlobal('window', { kettu: { client: 'web' } })
+    hostMock.mockImplementation((method: string, params: { sessionId?: string }) => {
+      if (method === 'sessions.open' || method === 'sessions.snapshot') {
+        return Promise.resolve(snapshot(params.sessionId ?? 's', []))
+      }
+      return Promise.resolve()
+    })
+
+    const { focusSession, forgetSession, rewatchAll } = await import('./threads')
+    const { clearReadingPositions, leaveThread, readingPosition } =
+      await import('@renderer/features/session/reading-position')
+    clearReadingPositions()
+
+    await focusSession('s1')
+    leaveThread('s1', { item: 'm-10', entry: 'e-10', offset: -12, from: 'e-0', older: 0 })
+
+    // Web client evicts s1's replica when switching to s2, but its saved reading position survives.
+    await focusSession('s2')
+    leaveThread('s2', { item: 'm-20', entry: 'e-20', offset: -8, from: 'e-10', older: null })
+    expect(readingPosition('s1')?.item).toBe('m-10')
+
+    // Host reconnect resync does not discard saved reading positions either.
+    rewatchAll()
+    expect(readingPosition('s1')?.item).toBe('m-10')
+    expect(readingPosition('s2')?.item).toBe('m-20')
+
+    // Explicitly forgetting a deleted/archived session drops its saved reading position.
+    forgetSession('s1')
+    expect(readingPosition('s1')).toBeNull()
+    expect(readingPosition('s2')?.item).toBe('m-20')
+  })
+
   it('clears optimistic sending entries on normal, steered matching, and snapshot echoes (#2845)', async () => {
     const sent: ThreadEntry[] = []
     hostMock.mockImplementation((method: string) => {

@@ -81,9 +81,11 @@ function turnEnding(state: ThreadState | null | undefined): Ending {
 export const JumpToLatest = memo(function JumpToLatest({
   sessionId,
   working,
+  onJump,
 }: {
   sessionId: string
   working: boolean
+  onJump?: () => void
 }) {
   const { t } = useTranslation('session')
   const { end: below } = useMessageScrollerScrollable()
@@ -121,6 +123,7 @@ export const JumpToLatest = memo(function JumpToLatest({
             variant="ghost"
             data-jump=""
             data-mark={mark}
+            onClick={onJump}
             aria-label={state ? t('thread.jump.labelWith', { state }) : t('thread.jump.label')}
             className="ks-jump size-[34px] rounded-full data-[direction=end]:bottom-3"
           />

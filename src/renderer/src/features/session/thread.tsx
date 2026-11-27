@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
@@ -24,9 +25,9 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+import { REVEAL_TTL_MS, useRevealStore } from '@renderer/stores/reveal'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { loadOlder, loadThrough, useThreadsStore } from '@renderer/stores/threads'
-import { returnedTo } from '@renderer/stores/view'
 import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
@@ -39,7 +40,16 @@ import { hoverReply } from './reply-hover'
 import { ReplyMarks } from './reply-marks'
 import { ReplyToSelection } from './reply-selection'
 import { SubSessionStart } from './subagent/sub-session-start'
-import { itemAtTop, leaveThread, readingPosition, type ReadingPosition } from './reading-position'
+import {
+  attachReturnAnchor,
+  distanceFromEnd,
+  itemAtTop,
+  leaveThread,
+  readingPosition,
+  SCROLL_INTENT_KEYS,
+  STICK_TO_BOTTOM_THRESHOLD,
+  type ReadingPosition,
+} from './reading-position'
 import { playEntrance } from './thread-entrance'
 import { StillRunningLine } from './still-running-line'
 import { TurnStatus } from './turn-status'
@@ -358,6 +368,25 @@ function windowEnd(
   return end
 }
 
+/** Placeholder gap between the restored viewport window and the pinned tail of a long thread. */
+function computeReturnGap(
+  items: readonly Item[],
+  at: number,
+  byId: Parameters<typeof estimateOf>[1],
+): { start: string; end: string } | null {
+  const tailAnchor = items.length - FIRST_ITEMS
+  if (at < 0 || tailAnchor <= at + FIRST_ITEMS) return null
+  const start = windowEnd(items, at, tailAnchor, byId)
+  return start < tailAnchor ? { start: items[start]!.key, end: items[tailAnchor]!.key } : null
+}
+
+function hasPendingReveal(sessionId: string): boolean {
+  const target = useRevealStore.getState().target
+  return (
+    target !== null && target.sessionId === sessionId && Date.now() - target.at <= REVEAL_TTL_MS
+  )
+}
+
 /** What a jump in the outline needs of the thread. */
 export interface ThreadJumps {
   /** Resolves once the item `key` is rendered. */
@@ -374,75 +403,73 @@ export interface ThreadJumps {
  * its end. No message is a scroll anchor: MessageScroller pads the end with a spacer so an anchor
  * can sit at the top, and after a short reply that padding stayed as room to scroll into.
  */
-function ScrollOnSend({ sent }: { sent: string | null }) {
+function ScrollOnSend({ sent, onSend }: { sent: string | null; onSend: () => void }) {
   const { scrollToEnd } = useMessageScroller()
   const seen = useRef(sent)
   useEffect(() => {
     if (sent === seen.current) return
     seen.current = sent
-    if (sent) scrollToEnd({ behavior: 'auto' })
-  }, [sent, scrollToEnd])
+    if (sent) {
+      onSend()
+      scrollToEnd({ behavior: 'auto' })
+    }
+  }, [sent, onSend, scrollToEnd])
   return null
 }
 
-/** Frames a returning thread may take to settle its item in place as the items near it render. */
-const SETTLE_FRAMES = 10
-
 /**
- * Puts a thread reached by Back or Forward where it was read: the item it was read at, at the same
- * height, or without the item, at its end. It starts a frame after the scroller's own first scroll
- * and corrects as the items near the item render at their real height, unseen, since the thread
- * stays hidden until it is done.
+ * Restores a returning thread to the item it was read at synchronously before the first paint,
+ * then holds that item in place against asynchronous height changes or snapshot refreshes until
+ * layout quiets down or the reader takes over. Falls back to the end when the item is gone.
  */
 function ReturnTo({
   item,
   offset,
   viewport,
   content,
+  isSettling,
+  onPositioned,
+  onFallbackEnd,
   onDone,
 }: {
   item: string | null
   offset: number
   viewport: RefObject<HTMLDivElement | null>
   content: RefObject<HTMLDivElement | null>
+  isSettling: () => boolean
+  onPositioned: () => void
+  onFallbackEnd: () => void
   onDone: () => void
 }) {
   const { scrollToEnd } = useMessageScroller()
-  useEffect(() => {
+  useLayoutEffect(() => {
     const view = viewport.current
     const column = content.current
     if (!view || !column) return
-    const element =
-      item === null
-        ? null
-        : column.querySelector<HTMLElement>(`:scope > [data-message-id="${CSS.escape(item)}"]`)
-    // Skipped while it lies above the view, a long item would keep its estimated height there.
-    element?.style.setProperty('content-visibility', 'visible')
-    // Whether the item was off its place, so the thread moved.
-    const place = (): boolean => {
-      if (!element) {
-        if (item === null) scrollToEnd({ behavior: 'auto' })
-        return false
-      }
-      const off = element.getBoundingClientRect().top - view.getBoundingClientRect().top - offset
-      if (Math.abs(off) <= 1) return false
-      view.scrollTo({ top: view.scrollTop + off, behavior: 'instant' })
-      return true
-    }
-    let frames = 0
-    const settle = (): void => {
-      if (place() && ++frames < SETTLE_FRAMES) {
-        frame = requestAnimationFrame(settle)
-        return
-      }
-      onDone()
-    }
-    let frame = requestAnimationFrame(settle)
-    return () => {
-      cancelAnimationFrame(frame)
-      element?.style.removeProperty('content-visibility')
-    }
-  }, [item, offset, viewport, content, scrollToEnd, onDone])
+    return attachReturnAnchor({
+      viewport: view,
+      content: column,
+      itemKey: item,
+      offset,
+      isSettling,
+      onPositioned,
+      onFallbackEnd: () => {
+        onFallbackEnd()
+        scrollToEnd({ behavior: 'auto' })
+      },
+      onDone,
+    })
+  }, [
+    item,
+    offset,
+    viewport,
+    content,
+    isSettling,
+    onPositioned,
+    onFallbackEnd,
+    onDone,
+    scrollToEnd,
+  ])
   return null
 }
 
@@ -563,11 +590,15 @@ export const Thread = memo(function Thread({
   useEffect(() => () => hoverReply(null), [sessionId])
   const sent = lastSent(order, signature)
   const [held, setHeld] = useState(false)
-  // Reached by Back or Forward, it returns to where it was read instead of opening at its end.
+  // Reopening a session restores its saved reading position unless Search asked to reveal a message.
   const [returning] = useState(() =>
-    returnedTo({ kind: 'session', sessionId, projectPath }) ? readingPosition(sessionId) : null,
+    hasPendingReveal(sessionId) ? null : readingPosition(sessionId),
   )
   const [returnTo, setReturnTo] = useState(returning)
+  const [returnPositioned, setReturnPositioned] = useState(() => returning === null)
+  const [followBottom, setFollowBottom] = useState(() => returning === null)
+  const detachedRef = useRef(returning !== null)
+  const userScrolledRef = useRef(false)
   const returnAt = useMemo(() => (returnTo ? itemOf(items, returnTo) : -1), [items, returnTo])
   const { shownFrom, showFrom } = useShownFrom(
     items,
@@ -576,17 +607,14 @@ export const Thread = memo(function Thread({
   )
   const revealing = useRef<{ key: string; resolve: () => void } | null>(null)
   const [, setRevealTick] = useState(0)
-  // A jump far back (or Back/Forward returning mid-thread) renders a window's worth from its
-  // target; the items past that window, from `start` up to `end`, hold their estimated height and
-  // render a window's worth at a time in transitions, nearest the target first.
+  // A jump far back (or returning mid-thread) renders a window's worth from its target; the items
+  // past that window, from `start` up to `end`, hold their estimated height and render a window's
+  // worth at a time in transitions, nearest the target first.
   const [gap, setGap] = useState<{ start: string; end: string } | null>(() => {
     if (!returning) return null
     const at = itemOf(items, returning)
-    const tailAnchor = items.length - FIRST_ITEMS
-    if (at < 0 || tailAnchor <= at + FIRST_ITEMS) return null
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
-    const start = windowEnd(items, at, tailAnchor, byId)
-    return start < tailAnchor ? { start: items[start]!.key, end: items[tailAnchor]!.key } : null
+    return computeReturnGap(items, at, byId)
   })
   const revealFrom = useCallback(
     (index: number) => {
@@ -612,17 +640,29 @@ export const Thread = memo(function Thread({
   const gapStart = gap ? items.findIndex((item) => item.key === gap.start) : -1
   const gapEnd = gap ? items.findIndex((item) => item.key === gap.end) : -1
   const gapOpen = gapStart >= 0 && gapStart < gapEnd
+  const gapOpenRef = useRef(false)
+  const returnToRef = useRef(returnTo)
+  const followBottomRef = useRef(followBottom)
+  useLayoutEffect(() => {
+    gapOpenRef.current = gapOpen
+    returnToRef.current = returnTo
+    followBottomRef.current = followBottom
+  }, [gapOpen, returnTo, followBottom])
   useEffect(() => {
-    if (!gap || !gapOpen || returnTo !== null) return
+    if (!gap || !gapOpen || !returnPositioned) return
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
     const next = windowEnd(items, gapStart, gapEnd, byId)
     startTransition(() => setGap(next < gapEnd ? { start: items[next]!.key, end: gap.end } : null))
-  }, [sessionId, gap, gapOpen, gapStart, gapEnd, items, returnTo])
+  }, [sessionId, gap, gapOpen, gapStart, gapEnd, items, returnPositioned])
   const [pinnedKey, setPinnedKey] = useState<string | null>(null)
   const jumps = useMemo<ThreadJumps>(
     () => ({
       reveal: (key) =>
         new Promise((resolve) => {
+          detachedRef.current = true
+          returnToRef.current = null
+          setReturnTo(null)
+          setReturnPositioned(true)
           setPinnedKey(key)
           revealing.current = { key, resolve }
           setRevealTick((tick) => tick + 1)
@@ -648,16 +688,37 @@ export const Thread = memo(function Thread({
       live = false
     }
   }, [needsPages, sessionId, loadTo])
+  const prepareReturnWindow = useCallback(
+    (position: ReadingPosition, at: number) => {
+      const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+      setGap(computeReturnGap(items, at, byId))
+      showFrom(returnStart(items, position, at))
+    },
+    [sessionId, items, showFrom],
+  )
   useEffect(() => {
     if (returnTo && returnAt >= 0 && returnAt < shownFrom) {
-      showFrom(returnStart(items, returnTo, returnAt))
+      startTransition(() => prepareReturnWindow(returnTo, returnAt))
     }
-  }, [returnTo, returnAt, shownFrom, showFrom, items])
+  }, [returnTo, returnAt, shownFrom, prepareReturnWindow])
   const returnShown = returnTo !== null && returnAt >= shownFrom
   const returnLost = returnTo !== null && returnAt < 0 && !needsPages
-  // Hidden until it shows where it was read, so it never flashes its start, its end or a jump.
   const returnPending = returnTo !== null
-  const returned = useCallback(() => setReturnTo(null), [])
+  const isGapSettling = useCallback(() => gapOpenRef.current, [])
+  const markReturnPositioned = useCallback(() => setReturnPositioned(true), [])
+  const finishReturn = useCallback(() => {
+    returnToRef.current = null
+    setReturnTo(null)
+  }, [])
+  const resumeFollowBottom = useCallback(() => {
+    detachedRef.current = false
+    userScrolledRef.current = false
+    returnToRef.current = null
+    followBottomRef.current = true
+    setReturnTo(null)
+    setReturnPositioned(true)
+    setFollowBottom(true)
+  }, [])
   const viewport = useRef<HTMLDivElement | null>(null)
   const content = useRef<HTMLDivElement | null>(null)
   const selected = useSelectedText(viewport)
@@ -828,6 +889,47 @@ export const Thread = memo(function Thread({
     })
   }, [syncWindowActive, checkNearStart])
 
+  const markUserScroll = useCallback(() => {
+    userScrolledRef.current = true
+  }, [])
+
+  const onViewportPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button === 0 && event.target === event.currentTarget) {
+      userScrolledRef.current = true
+    }
+  }, [])
+
+  const onViewportKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (SCROLL_INTENT_KEYS.has(event.key)) userScrolledRef.current = true
+  }, [])
+
+  const onViewportScroll = useCallback(() => {
+    const view = viewport.current
+    const column = content.current
+    if (view && column) {
+      const distance = distanceFromEnd(view, column)
+      if (distance !== null) {
+        if (distance <= STICK_TO_BOTTOM_THRESHOLD) {
+          if (
+            !returnToRef.current &&
+            !gapOpenRef.current &&
+            (followBottomRef.current || userScrolledRef.current)
+          ) {
+            detachedRef.current = false
+            userScrolledRef.current = false
+            if (!followBottomRef.current) {
+              followBottomRef.current = true
+              setFollowBottom(true)
+            }
+          }
+        } else if (userScrolledRef.current) {
+          detachedRef.current = true
+        }
+      }
+    }
+    scheduleScrollSync()
+  }, [scheduleScrollSync])
+
   useEffect(() => {
     scheduleScrollSync()
   }, [scheduleScrollSync, items.length, shownFrom])
@@ -852,21 +954,24 @@ export const Thread = memo(function Thread({
   // From the first paint of its items, so the thread never shows before it enters.
   const entrance = useRef<(() => void) | null>(null)
   useLayoutEffect(() => {
-    if (entrance.current || items.length === 0 || returnPending) return
+    if (entrance.current || items.length === 0 || !returnPositioned) return
     if (!viewport.current || !content.current) return
     entrance.current = playEntrance(viewport.current, content.current)
-  }, [items.length, returnPending])
-  // Where it was read when it is left, for Back to return there.
-  const latest = useRef({ items, shownFrom, returnPending })
+  }, [items.length, returnPositioned])
+  // Where it was read when it is left, so returning to the session restores that position.
+  const latest = useRef({ items, shownFrom, returnPositioned })
   useLayoutEffect(() => {
-    latest.current = { items, shownFrom, returnPending }
+    latest.current = { items, shownFrom, returnPositioned }
   })
   useLayoutEffect(() => {
     const view = viewport.current
     const column = content.current
     return () => {
-      if (!view || !column || latest.current.returnPending) return
-      const top = itemAtTop(view, column)
+      if (!view || !column || !latest.current.returnPositioned) return
+      const top = itemAtTop(view, column, {
+        edgeThreshold: STICK_TO_BOTTOM_THRESHOLD,
+        detached: detachedRef.current,
+      })
       const { items, shownFrom } = latest.current
       const item = top && items.find((each) => each.key === top.item)
       const from = entryFrom(items, shownFrom)
@@ -901,22 +1006,26 @@ export const Thread = memo(function Thread({
   const tailCutoff = items.length - windowConfig.pinTail
 
   return (
-    // While it returns it follows no end, which the estimated heights of items not yet laid out
-    // would make it seem to reach.
+    // Restored threads keep autoScroll off until the reader scrolls back to the bottom, jumps to
+    // latest, or sends a message, so async layout changes or snapshots never yank them to the end.
     <MessageScrollerProvider
-      autoScroll={!returnPending && !selected}
+      autoScroll={followBottom && returnPositioned && !returnPending && !selected}
       defaultScrollPosition={returning ? 'start' : 'end'}
-      scrollEdgeThreshold={40}
+      scrollEdgeThreshold={STICK_TO_BOTTOM_THRESHOLD}
     >
-      <ScrollOnSend sent={sent} />
+      <ScrollOnSend sent={sent} onSend={resumeFollowBottom} />
       <MessageScroller className="ks-thread min-h-0 flex-1 scroll-fade-y-overlay">
         <MessageScrollerViewport
           ref={viewport}
-          onScroll={scheduleScrollSync}
+          onScroll={onViewportScroll}
+          onWheel={markUserScroll}
+          onTouchMove={markUserScroll}
+          onPointerDown={onViewportPointerDown}
+          onKeyDown={onViewportKeyDown}
           aria-label={t('thread.label')}
           className={cn(
             'outline-none [scroll-timeline:--scroll-fade-y_y]',
-            returnPending && 'invisible',
+            !returnPositioned && 'invisible',
           )}
         >
           <MessageScrollerContent
@@ -973,7 +1082,7 @@ export const Thread = memo(function Thread({
           viewport={viewport}
           commenting={commenting}
         />
-        <JumpToLatest sessionId={sessionId} working={working} />
+        <JumpToLatest sessionId={sessionId} working={working} onJump={resumeFollowBottom} />
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
         <RevealTarget sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
@@ -991,7 +1100,10 @@ export const Thread = memo(function Thread({
           offset={returnTo.offset}
           viewport={viewport}
           content={content}
-          onDone={returned}
+          isSettling={isGapSettling}
+          onPositioned={markReturnPositioned}
+          onFallbackEnd={resumeFollowBottom}
+          onDone={finishReturn}
         />
       )}
     </MessageScrollerProvider>

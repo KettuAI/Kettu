@@ -18,6 +18,7 @@ import {
 import { errorMessage, host, sessionHost } from '@renderer/lib/host'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { forgetOutline, invalidateOutlines } from '@renderer/features/session/outline/outline-cache'
+import { forgetReadingPosition } from '@renderer/features/session/reading-position'
 
 // The renderer's replicas of the sessions it shows. Each starts from a snapshot of the latest
 // page of the thread, takes older pages as the thread scrolls back, and applies patch batches in
@@ -518,6 +519,7 @@ export function forgetSession(sessionId: string): void {
   if (at >= 0) watched.splice(at, 1)
   clearSessionBuffers(sessionId)
   forgetOutline(sessionId)
+  forgetReadingPosition(sessionId)
   useThreadsStore.setState((s) => {
     if (!(sessionId in s.replicas)) return s
     const replicas = { ...s.replicas }

@@ -41,4 +41,12 @@ describe('long-session scroll performance contracts', () => {
     expect(entrance).not.toContain('requestAnimationFrame')
     expect(entrance).not.toContain('blur(')
   })
+
+  it('restores saved session reading positions across normal session switches without Back/Forward gating', () => {
+    const thread = read('src/features/session/thread.tsx')
+    expect(thread).not.toContain('returnedTo(')
+    expect(thread).toContain('readingPosition(sessionId)')
+    expect(thread).toContain('attachReturnAnchor(')
+    expect(thread).toContain('computeReturnGap(')
+  })
 })
