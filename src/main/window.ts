@@ -5,6 +5,7 @@ import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import type { Theme } from '@shared/themes'
 import { mayOpenWindow } from './artifacts/guards'
+import { attachContextMenu } from './context-menu'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import type { StartMode } from './login-item'
@@ -274,6 +275,8 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
     event.preventDefault()
     openIfExternal(url)
   })
+
+  attachContextMenu(window.webContents)
 
   void loadRenderer(window).catch((error: unknown) =>
     log.error('Could not load the renderer', error),

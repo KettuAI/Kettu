@@ -23,6 +23,7 @@ import {
 import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view'
 import { MAX_HEIGHT_SHARE, useComposerHeight } from '@renderer/stores/composer-height'
 import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
+import { focusOnContextMenu } from './editor-context-menu'
 import { markdownPreview } from './markdown-preview'
 import { clampTriggerRect, type BoxRect } from './popover-position'
 
@@ -142,6 +143,9 @@ const theme = EditorView.theme({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     color: 'var(--text-placeholder)',
+    // Let right-clicks on the placeholder hit the editable `.cm-content` underneath so an empty
+    // composer stays editable for the native context menu.
+    pointerEvents: 'none',
   },
   // The key stays whole at the end of the line, its edge too; the suggestion before it is cut.
   '.cm-placeholder:has(.cm-suggestion)': { overflow: 'visible' },
@@ -443,6 +447,7 @@ export function ComposerEditor({
     <div
       ref={host}
       className="min-w-0"
+      onContextMenuCapture={() => focusOnContextMenu(view.current)}
       style={
         {
           '--box-padding': size.padding,

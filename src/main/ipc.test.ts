@@ -13,6 +13,9 @@ vi.mock('electron', () => ({
     fromWebContents: (contents: object) => windows.get(contents) ?? {},
     getAllWindows: () => [],
   },
+  clipboard: {
+    read: vi.fn(async () => []),
+  },
   dialog: {},
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -21,6 +24,9 @@ vi.mock('electron', () => ({
     on: (channel: string, listener: (...args: unknown[]) => unknown) => {
       ipcListeners.set(channel, listener)
     },
+  },
+  Menu: {
+    buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })),
   },
   nativeTheme: {},
   Notification: class {},
