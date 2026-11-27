@@ -23,6 +23,7 @@ import {
   TitleBand,
 } from '@renderer/features/shell/top-bar'
 import { useSidebarPeek } from '@renderer/features/shell/sidebar-peek'
+import { useMobilePanelSwipe } from '@renderer/features/shell/use-mobile-swipe'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { CommandConfirmDialog } from '@renderer/features/updates/command-confirm'
 import { useInstallWindow } from '@renderer/features/settings/harness-install'
@@ -182,6 +183,7 @@ function Workbench() {
   const peek = useViewStore((s) => s.sidebarPeek)
   const frame = useRef<HTMLDivElement>(null)
   useSidebarPeek(frame)
+  useMobilePanelSwipe(frame)
   const [initial] = useState(() => readJson(SIDEBAR_WIDTH, 0) || undefined)
   const save = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(save.current), [])
