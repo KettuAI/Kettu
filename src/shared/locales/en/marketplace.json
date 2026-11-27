@@ -1383,7 +1383,8 @@
       "projectsExcept": "All but these",
       "noProjects": "No projects on this computer yet.",
       "namesOnly": "Looks tools up when it needs them, so it carries their names only.",
-      "gateway": "Goes through Kettu's gateway, so large servers cost it no context.",
+      "gateway": "Goes through Kettu's gateway, so this server costs it no context.",
+      "gatewayLarge": "Carries this one in full; larger servers go through Kettu's gateway.",
       "perTurn": "~{{tokens}} tokens / turn",
       "agentSwitch": "Give it to {{name}}",
       "toolsUnknown": "Its tools show here once a session or a check has listed them.",
@@ -1432,6 +1433,10 @@
         "error": "The call failed.",
         "refused": "Kettu refused the call.",
         "cancelled": "The agent cancelled the call."
+      },
+      "next": {
+        "error": "Kettu checks the server after a failed call; see Status on Overview, and Logs for a command server.",
+        "refused": "Kettu refuses a tool or server turned off in it; turn it back on to allow the call."
       },
       "openInSession": "Open in session",
       "callsKept": "Calls are kept for 30 days. What was sent and returned stays in the session.",

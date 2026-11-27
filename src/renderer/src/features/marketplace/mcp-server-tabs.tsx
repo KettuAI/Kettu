@@ -44,27 +44,6 @@ import { homeShort } from './model'
 
 const REFRESH_MS = 5_000
 
-/** The server's insight from its host, read again while the page shows it and when it changes. */
-export function useMcpInsight(server: MarketServer): McpServerInsight | null {
-  const { request } = useHostScope()
-  const [insight, setInsight] = useState<McpServerInsight | null>(null)
-  const changed = JSON.stringify([server.toolsOff, server.agents, server.spec, server.run])
-  useEffect(() => {
-    let live = true
-    const read = () =>
-      request('market.mcpInsight', { serverId: server.id })
-        .then((found) => live && setInsight(found[0] ?? null))
-        .catch(() => undefined)
-    void read()
-    const timer = setInterval(() => void read(), REFRESH_MS)
-    return () => {
-      live = false
-      clearInterval(timer)
-    }
-  }, [request, server.id, changed])
-  return insight
-}
-
 /** Overview's processes or connections of a command server, with Stop. */
 export function McpRunning({ server }: { server: MarketServer }) {
   const { t } = useTranslation('marketplace')
@@ -165,13 +144,14 @@ export function McpWhoGets({
       <McpProjectsChoice server={server} />
       <ul className="k-mcp-rows">
         {agents.map((agent) => {
-          const harness = harnessOf(agent.agentId)
           const note =
-            harness === 'claude-code'
+            agent.carry === 'names'
               ? t('mcp.page.namesOnly')
-              : harness === 'antigravity'
+              : agent.carry === 'gateway'
                 ? t('mcp.page.gateway')
-                : null
+                : harnessOf(agent.agentId) === 'antigravity'
+                  ? t('mcp.page.gatewayLarge')
+                  : null
           return (
             <li key={agent.agentId} className="k-mcp-row">
               <AgentMark agent={agent.agentId} size={18} hostId={scope.hostId} dot={null} />
@@ -211,7 +191,8 @@ function McpProjectsChoice({ server }: { server: MarketServer }) {
   const paths = server.projects?.paths ?? []
   const save = (next: McpProjects | null) =>
     void changeServer(scope, server.id, (current) => {
-      const { projects: _drop, ...rest } = current
+      const rest = { ...current }
+      delete rest.projects
       return next ? { ...rest, projects: next } : rest
     })
   return (
@@ -292,7 +273,8 @@ export function McpToolsTab({
       const off = new Set(current.toolsOff ?? [])
       if (on) off.delete(tool.name)
       else off.add(tool.name)
-      const { toolsOff: _drop, ...rest } = current
+      const rest = { ...current }
+      delete rest.toolsOff
       return off.size > 0 ? { ...rest, toolsOff: [...off] } : rest
     })
   return (
@@ -536,6 +518,9 @@ function CallRow({
         <tr className="k-mcp-call-detail">
           <td colSpan={6}>
             <p>{call.error ?? t(`mcp.page.why.${call.result as Exclude<McpCallResult, 'ok'>}`)}</p>
+            {(call.result === 'error' || call.result === 'refused') && (
+              <p className="k-mcp-call-next">{t(`mcp.page.next.${call.result}`)}</p>
+            )}
             <div className="k-mcp-call-actions">
               {signIn && <McpSignIn server={server} />}
               {goTo && (

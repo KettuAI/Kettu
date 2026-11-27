@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { MarketConnection, MarketServer, McpSpec } from '@shared/marketplace'
+import type { McpServerInsight } from '@shared/mcp-insight'
 import type { AgentId } from '@shared/thread'
 import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
@@ -153,4 +154,27 @@ export function useMcpState(server: MarketServer) {
 export function useTransportName(spec: McpSpec): string {
   const { t } = useTranslation('marketplace')
   return spec.type === 'stdio' ? t('mcp.command') : t(`listing.transport.${spec.transport}`)
+}
+
+const INSIGHT_MS = 5_000
+
+/** The server's insight from its host, read again while the page shows it and when it changes. */
+export function useMcpInsight(server: MarketServer): McpServerInsight | null {
+  const { request } = useHostScope()
+  const [insight, setInsight] = useState<McpServerInsight | null>(null)
+  const changed = JSON.stringify([server.toolsOff, server.agents, server.spec, server.run])
+  useEffect(() => {
+    let live = true
+    const read = () =>
+      request('market.mcpInsight', { serverId: server.id })
+        .then((found) => live && setInsight(found[0] ?? null))
+        .catch(() => undefined)
+    void read()
+    const timer = setInterval(() => void read(), INSIGHT_MS)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [request, server.id, changed])
+  return insight
 }

@@ -8,19 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { useHostScope } from '@renderer/stores/host-scope'
 import { changeServer, disconnectServer } from './actions'
 import { KeysDialog, UninstallDialog } from './dialogs'
-import { useAgentName, useConnection, useMcpState, useTransportName } from './hooks'
+import { useAgentName, useConnection, useMcpInsight, useMcpState, useTransportName } from './hooks'
 import { McpCheckButton, McpSignIn, McpState } from './mcp-library'
 import { homeShort, type Listing } from './model'
 import { ExternalLink } from './parts'
 import { RunSettings } from './run-settings'
-import {
-  McpCallsTab,
-  McpLogsTab,
-  McpRunning,
-  McpToolsTab,
-  McpWhoGets,
-  useMcpInsight,
-} from './mcp-server-tabs'
+import { McpCallsTab, McpLogsTab, McpRunning, McpToolsTab, McpWhoGets } from './mcp-server-tabs'
 
 export function McpServerPageBody({
   server,

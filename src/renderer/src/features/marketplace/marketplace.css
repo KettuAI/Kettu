@@ -2581,3 +2581,8 @@
 .k-mcp-log [data-level='error'] {
   color: var(--danger);
 }
+
+.k-mcp-call-detail p + .k-mcp-call-next {
+  margin-block-start: 0.25rem;
+  color: var(--text-tertiary);
+}

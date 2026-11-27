@@ -246,7 +246,7 @@
         "idle": "空闲",
         "starting": "启动中…",
         "signIn": "需要登录",
-        "byAgent": "由 Agent 运行"
+        "byAgent": "由智能体运行"
       },
       "tools_one": "{{count}} 个工具",
       "tools_other": "{{count}} 个工具",

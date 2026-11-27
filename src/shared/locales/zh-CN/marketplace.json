@@ -1356,7 +1356,8 @@
       "projectsExcept": "除了这几个",
       "noProjects": "这台电脑上还没有项目。",
       "namesOnly": "用到时才找工具，所以只带工具名。",
-      "gateway": "经 Kettu 的网关，大的服务器不占它的上下文。",
+      "gateway": "经由 Kettu 的网关，这个服务器不占它的上下文。",
+      "gatewayLarge": "这个服务器完整交给它；更大的经由 Kettu 的网关。",
       "perTurn": "每轮约 {{tokens}} token",
       "agentSwitch": "给 {{name}}",
       "toolsUnknown": "会话或检查列出过它的工具以后，这里才有。",
@@ -1366,7 +1367,7 @@
       "on": "开着",
       "off": "关了",
       "noTools": "没有匹配的工具。",
-      "toolSwitch": "对所有 Agent 打开 {{name}}",
+      "toolSwitch": "对所有智能体打开 {{name}}",
       "tag": {
         "read-only": "只读",
         "changes": "会改东西",
@@ -1404,7 +1405,11 @@
         "tool-error": "工具报告了错误，它说了什么在会话里。",
         "error": "调用失败了。",
         "refused": "Kettu 拒绝了这次调用。",
-        "cancelled": "Agent 取消了这次调用。"
+        "cancelled": "智能体取消了这次调用。"
+      },
+      "next": {
+        "error": "调用失败后 Kettu 会检查一遍这个服务器，结果在概览的状态里；命令型的服务器还可以看日志。",
+        "refused": "在 Kettu 里关掉的工具或服务器会被拒绝；要用它，重新打开即可。"
       },
       "openInSession": "在会话里打开",
       "callsKept": "调用记录留 30 天。发了什么、回了什么留在会话里。",
