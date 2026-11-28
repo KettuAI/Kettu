@@ -715,6 +715,27 @@
     "label": "Reply actions",
     "durationTitleWithTime": "{{duration}} · Completed {{time}}"
   },
+  "turnUsage": {
+    "title": "Turn usage",
+    "triggerLabel": "Turn usage: {{summary}}",
+    "tokensShort": "{{tokens}} tokens",
+    "totalTokens": "Total tokens",
+    "cacheHit": "Cache hit",
+    "models_one": "{{count}} model",
+    "models_other": "{{count}} models",
+    "unknownModel": "Unknown model",
+    "noPrice": "No price",
+    "unavailable": "—",
+    "input": "Input",
+    "output": "Output",
+    "reasoning": "Reasoning",
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "cacheHitRate": "Cache hit rate",
+    "subscriptionNote": "Estimate at API prices, not a charge on your subscription.",
+    "partialCostNote": "Excludes models without API pricing.",
+    "unpricedNote": "No API pricing is available for the model used in this turn."
+  },
   "changes": {
     "label": "Changes",
     "files_one": "{{count}} file changed",

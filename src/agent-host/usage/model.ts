@@ -120,8 +120,9 @@ export const PRICES: PriceList = prices
 const TRAILING_VARIANT = /-(?:extra-high|minimal|low|medium|high|xhigh|max|thinking|tiered|[a-z])$/
 
 /**
- * 查找模型对应的公开 API 价格：先精确匹配、去末尾日期，再剥离推理档位/思考/路由后缀，
- * 最后尝试 `-preview` 公开条目；未收录的模型严格返回 null。
+ * Finds the public API pricing for a normalized model name: tries exact match, strips trailing
+ * date, strips reasoning effort / thinking / routing suffixes, and finally falls back to `-preview`.
+ * Returns null for any model not listed in `PRICES`.
  */
 export function priceFor(model: string): ModelPrice | null {
   if (!model) return null
@@ -131,7 +132,7 @@ export function priceFor(model: string): ModelPrice | null {
   const dated = model.replace(/-\d{8}$/, '')
   if (dated !== model && PRICES.models[dated]) return PRICES.models[dated]!
 
-  // 逐层剥离尾部推理档位、thinking 与内部路由后缀（如 gemini-4-argon-high、gemini-3.8-flash-n）。
+  // Strip trailing reasoning effort, thinking, or internal routing suffixes (e.g. -high, -n).
   let base = dated
   for (let i = 0; i < 3; i++) {
     const next = base.replace(TRAILING_VARIANT, '')
@@ -142,4 +143,41 @@ export function priceFor(model: string): ModelPrice | null {
 
   if (PRICES.models[`${base}-preview`]) return PRICES.models[`${base}-preview`]!
   return null
+}
+
+/**
+ * Estimates a single usage row's USD cost using reported log cost when present, otherwise API list
+ * prices from `PRICES`. Returns null when the model is unpriced (never fabricates $0.00).
+ */
+export function estimateRowCost(
+  row: Pick<
+    UsageRow,
+    | 'model'
+    | 'input'
+    | 'output'
+    | 'reasoning'
+    | 'cacheRead'
+    | 'cacheWrite'
+    | 'cacheWrite1h'
+    | 'cost'
+  >,
+): { costUsd: number | null; fromPriceList: boolean } {
+  if (typeof row.cost === 'number' && Number.isFinite(row.cost) && row.cost >= 0) {
+    return { costUsd: row.cost, fromPriceList: false }
+  }
+  const price = priceFor(row.model)
+  if (!price) return { costUsd: null, fromPriceList: false }
+  const reasoning = row.reasoning ?? 0
+  const write1h = Math.min(Math.max(0, row.cacheWrite1h), Math.max(0, row.cacheWrite))
+  const write5m = Math.max(0, row.cacheWrite - write1h)
+  const hourPrice = price.cacheWrite1h ?? price.cacheWrite
+  const cost =
+    row.input * price.input +
+    (row.output + reasoning) * price.output +
+    row.cacheRead * price.cacheRead +
+    write5m * price.cacheWrite +
+    write1h * hourPrice
+  return Number.isFinite(cost) && cost >= 0
+    ? { costUsd: cost, fromPriceList: true }
+    : { costUsd: null, fromPriceList: false }
 }

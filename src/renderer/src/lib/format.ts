@@ -39,6 +39,24 @@ function makeFormatters(locale: string) {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }),
+    usdTurn: new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    }),
+    usdMicro: new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }),
+    usdExact: new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 5,
+    }),
     usdWhole: new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: 'USD',
@@ -294,6 +312,27 @@ export function tokens(n: number): string {
 /** US dollars, with cents under $100: "$4.20", "$1,234". */
 export function usd(amount: number): string {
   return (amount < 100 ? format().usdCents : format().usdWhole).format(amount)
+}
+
+/**
+ * Single-turn USD cost with adaptive precision so sub-cent turns never round misleadingly to "$0.00":
+ * "$123", "$1.25", "$0.042", "$0.0042", "<$0.0001", or "$0.00" when genuinely zero.
+ */
+export function turnCost(amount: number): string {
+  if (amount === 0) return format().usdCents.format(0)
+  if (amount > 0 && amount < 0.0001) return `<${format().usdMicro.format(0.0001)}`
+  if (amount < 0.01) return format().usdMicro.format(amount)
+  if (amount < 1) return format().usdTurn.format(amount)
+  if (amount < 100) return format().usdCents.format(amount)
+  return format().usdWhole.format(amount)
+}
+
+/** High-precision USD cost for hover tooltips ("$0.04238", "<$0.00001"). */
+export function exactTurnCost(amount: number): string {
+  if (amount === 0) return format().usdCents.format(0)
+  if (amount > 0 && amount < 0.00001) return `<${format().usdExact.format(0.00001)}`
+  if (amount < 1) return format().usdExact.format(amount)
+  return format().usdCents.format(amount)
 }
 
 /** A rate or a time, whole from 10 up and to a tenth below: "82", "7.8". */

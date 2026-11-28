@@ -184,6 +184,9 @@ export function startUsageService(
       case 'totals':
         answer(() => store.totals(request.from, request.to, request.sources))
         return
+      case 'sessionTurnUsage':
+        answer(() => store.sessionTurnUsage(request.sessionId))
+        return
       case 'stats':
         answer(() => store.stats())
         return

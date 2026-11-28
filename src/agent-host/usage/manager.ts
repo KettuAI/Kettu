@@ -2,7 +2,7 @@
 // computer is on, picks the source each agent counts from, and answers the page.
 
 import type { Platform } from '@shared/platform'
-import { sortAgentIds, type AgentId } from '@shared/thread'
+import { sortAgentIds, type AgentId, type TurnUsage } from '@shared/thread'
 import {
   partsTotal,
   type ClockRequest,
@@ -137,6 +137,24 @@ export class UsageManager {
       .catch((error: unknown) =>
         this.deps.log('warn', `Could not record a turn's usage: ${(error as Error).message}`),
       )
+  }
+
+  /**
+   * Returns Kettu-recorded per-turn usage breakdowns for a session, keyed by `turnEntryId`.
+   * Resolves to an empty map when the usage database is unavailable or fails.
+   */
+  async sessionTurnUsage(sessionId: string): Promise<Record<string, TurnUsage>> {
+    const { store } = this.deps
+    if (!store || this.unavailable) return {}
+    try {
+      return await store.sessionTurnUsage(sessionId)
+    } catch (error) {
+      this.deps.log(
+        'warn',
+        `Could not read per-turn usage for session ${sessionId}: ${(error as Error).message}`,
+      )
+      return {}
+    }
   }
 
   /** Reads what is new in the logs; one scan at a time, and nothing while the setting is off. */

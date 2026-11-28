@@ -24,6 +24,7 @@ import { useEditable, useEditFrom } from './edit-from-here'
 import { forkBlocked, forkEntry } from './helpers'
 import { completedTurnDuration } from './turn-end'
 import { TurnEndTag } from './turn-end-tag'
+import { TurnUsageTrigger } from './turn-usage'
 
 function Ago({ at }: { at: number }) {
   useTranslation()
@@ -196,6 +197,7 @@ export const ReplyFooter = memo(
         : null,
     )
     const [forking, setForking] = useState(false)
+    const [costOpen, setCostOpen] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const hovered = useReplyHover((s) => s.key === replyKey)
     const labels = useCopyLabels(t('replyFooter.copyReply'))
@@ -232,17 +234,41 @@ export const ReplyFooter = memo(
 
     const completedDuration = completedTurnDuration(end, at)
     const metaTitle = completedDuration?.title ?? (at !== undefined ? fullTime(at) : undefined)
-    const meta =
-      at !== undefined || completedDuration ? (
-        <span className="ks-reply-foot__meta tabular" title={metaTitle}>
-          {at !== undefined && <Came at={at} />}
-          {at !== undefined && completedDuration && (
-            <span className="ks-reply-foot__sep" aria-hidden>
-              {' · '}
-            </span>
-          )}
-          {completedDuration && <span>{completedDuration.label}</span>}
-        </span>
+    const hasMeta = at !== undefined || completedDuration !== null
+    const turnUsage = end?.usage && end.usage.models.length > 0 ? end.usage : null
+    const hostId = session ? hostOfSession(session) : null
+    const metaNode = hasMeta ? (
+      <span className="ks-reply-foot__meta tabular" title={metaTitle}>
+        {at !== undefined && <Came at={at} />}
+        {at !== undefined && completedDuration && (
+          <span className="ks-reply-foot__sep" aria-hidden>
+            {' · '}
+          </span>
+        )}
+        {completedDuration && <span>{completedDuration.label}</span>}
+      </span>
+    ) : null
+    const after =
+      metaNode || turnUsage ? (
+        turnUsage ? (
+          <span className="ks-reply-foot__tail">
+            {metaNode}
+            {metaNode && (
+              <span className="ks-reply-foot__sep" aria-hidden>
+                {' · '}
+              </span>
+            )}
+            <TurnUsageTrigger
+              usage={turnUsage}
+              agentId={session?.agentId ?? null}
+              hostId={hostId}
+              open={costOpen}
+              onOpenChange={setCostOpen}
+            />
+          </span>
+        ) : (
+          metaNode
+        )
       ) : undefined
     return (
       <>
@@ -256,7 +282,7 @@ export const ReplyFooter = memo(
         )}
         <div
           className={cn('ks-reply-foot', animation)}
-          data-shown={hovered || forking ? '' : undefined}
+          data-shown={hovered || forking || costOpen ? '' : undefined}
         >
           <div className="ks-reply-foot__actions">
             <MessageActions
@@ -279,7 +305,7 @@ export const ReplyFooter = memo(
                     ]
                   : []
               }
-              after={meta}
+              after={after}
             />
           </div>
           {error && (

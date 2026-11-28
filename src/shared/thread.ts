@@ -4,6 +4,7 @@
 import { isAgentId, type AgentId } from './agents'
 import type { LastRequest } from './model-requests'
 import type { PromptCacheDrop } from './prompt-cache'
+import { isTurnUsage, type TurnModelUsage, type TurnUsage } from './turn-usage'
 import type { BrowserOriginAnswer } from './browser'
 import {
   isControlOutcome,
@@ -65,6 +66,7 @@ export {
   type AgentId,
   type HarnessId,
 } from './agents'
+export type { TurnModelUsage, TurnUsage }
 
 export type SessionStatus =
   | 'starting' // agent starting, or session/new, load or resume in flight
@@ -599,6 +601,7 @@ export type ThreadEntry =
       durationMs: number
       after?: string | null // the agent's entry before it, to put it back after a replay
       used?: number // the context in tokens as the turn ended, which an edit after it goes back to
+      usage?: TurnUsage // per-model token and cost breakdown for this turn
     }
   | TakeoverEntry // Kettu's own record of another agent taking the session over
   | GitEntry // Kettu's own observation of the repository, see the git design
@@ -2107,7 +2110,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         typeof value.stopReason === 'string' &&
         typeof value.durationMs === 'number' &&
         (value.after === undefined || value.after === null || typeof value.after === 'string') &&
-        (value.used === undefined || typeof value.used === 'number')
+        (value.used === undefined || typeof value.used === 'number') &&
+        (value.usage === undefined || isTurnUsage(value.usage))
       )
     case 'takeover':
       return (

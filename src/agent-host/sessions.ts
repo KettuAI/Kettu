@@ -423,10 +423,11 @@ import {
   type CacheSample,
 } from '@shared/prompt-cache'
 import { turnPhase } from '@shared/turn-phase'
+import { isSubscriptionAccount, type TurnUsage } from '@shared/turn-usage'
 import { originOf, originText, restoredOrigins, type StoredOrigin } from './threads/origins'
 import { ThreadStoreError, type ThreadStore } from './threads/store'
 import { normalizeModel, priceFor, type UsageRow } from './usage/model'
-import { recordRows } from './usage/record'
+import { buildTurnUsage, recordRows } from './usage/record'
 
 /** What a step may do without asking until it reports: edit and run commands in its folder. */
 const STEP_SCOPE: PermissionScope = { level: 'commands', web: false }
@@ -677,6 +678,8 @@ export interface SessionManagerDeps {
     record(rows: UsageRow[]): void
     /** Reads what is new in these agents' logs, when Usage on this computer is on. */
     syncAgents(agentIds: AgentId[]): Promise<void>
+    /** Reads Kettu-recorded per-turn usage breakdowns for legacy threads lacking `turn_end.usage`. */
+    sessionTurnUsage?(sessionId: string): Promise<Record<string, TurnUsage>>
   }
   /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
   cacheTtl?: CacheTtlReader
@@ -769,6 +772,8 @@ interface Turn {
   segmentStartedAt: number
   /** Whether the current reply segment already emitted `turn_end` upon entering background wait. */
   settledByWait: boolean
+  /** Entry id of the `turn_end` emitted on background wait so `endTurn` can attach usage to it. */
+  waitingTurnEndId: string | null
   /** As the user wrote it, with the attachments as their records show them. */
   content: UserContent[]
   /** The message as it came in, given back when the turn fails before the agent added anything. */
@@ -3748,6 +3753,7 @@ export class SessionManager {
       if (live.turn && !live.turn.ended) {
         live.turn.segmentStartedAt = now
         live.turn.settledByWait = false
+        live.turn.waitingTurnEndId = null
         live.turn.hadOutput = false
       }
       next = {
@@ -4074,7 +4080,67 @@ export class SessionManager {
       )
       return null
     }
-    return thread && this.isCurrent(record, thread.head) ? thread : null
+    if (!thread || !this.isCurrent(record, thread.head)) return null
+    return await this.hydrateStoredThread(record.id, thread)
+  }
+
+  /**
+   * Fills missing `turn_end.usage` on legacy stored entries using one prefix query against the
+   * usage database; returns the input unchanged with zero I/O when all turns already carry usage.
+   */
+  private async hydrateTurnEntries(
+    sessionId: string,
+    entries: ThreadEntry[],
+  ): Promise<ThreadEntry[]> {
+    const reader = this.deps.usage?.sessionTurnUsage
+    if (!reader) return entries
+    const hasLegacy = entries.some(
+      (entry) => entry.kind === 'turn_end' && entry.usage === undefined,
+    )
+    if (!hasLegacy) return entries
+    const byTurn = await reader(sessionId).catch(() => ({}) as Record<string, TurnUsage>)
+    if (Object.keys(byTurn).length === 0) return entries
+    let changed = false
+    const next = entries.map((entry) => {
+      if (entry.kind !== 'turn_end' || entry.usage !== undefined) return entry
+      const usage = byTurn[entry.id]
+      if (!usage) return entry
+      changed = true
+      return { ...entry, usage }
+    })
+    return changed ? next : entries
+  }
+
+  private async hydrateStoredThread(
+    sessionId: string,
+    thread: StoredThread,
+  ): Promise<StoredThread> {
+    const reader = this.deps.usage?.sessionTurnUsage
+    if (!reader) return thread
+    const hasLegacy = thread.entries.some(
+      (item) => item.entry.kind === 'turn_end' && item.entry.usage === undefined,
+    )
+    if (!hasLegacy) return thread
+    const byTurn = await reader(sessionId).catch(() => ({}) as Record<string, TurnUsage>)
+    if (Object.keys(byTurn).length === 0) return thread
+    let changed = false
+    const entries = thread.entries.map((item) => {
+      if (item.entry.kind !== 'turn_end' || item.entry.usage !== undefined) return item
+      const usage = byTurn[item.entry.id]
+      if (!usage) return item
+      changed = true
+      return { ...item, entry: { ...item.entry, usage } }
+    })
+    return changed ? { ...thread, entries } : thread
+  }
+
+  private async hydratePage(
+    sessionId: string,
+    page: ThreadPage | null,
+  ): Promise<ThreadPage | null> {
+    if (!page) return null
+    const entries = await this.hydrateTurnEntries(sessionId, page.entries)
+    return entries === page.entries ? page : { ...page, entries }
   }
 
   /** A thread stored for another ACP session is out of date: the agent's history replaces it. */
@@ -4100,7 +4166,7 @@ export class SessionManager {
     if (this.live.has(sessionId) || !this.has(sessionId)) {
       return this.snapshot(sessionId, from, images)
     }
-    return this.storedSnapshot(record, page)
+    return this.storedSnapshot(record, await this.hydratePage(sessionId, page))
   }
 
   /**
@@ -4226,8 +4292,9 @@ export class SessionManager {
     if (this.live.has(sessionId) || !this.has(sessionId)) {
       return this.page(sessionId, before, from, images)
     }
-    return page
-      ? { entries: page.entries.map(settled), older: page.older }
+    const hydrated = await this.hydratePage(sessionId, page)
+    return hydrated
+      ? { entries: hydrated.entries.map(settled), older: hydrated.older }
       : { entries: [], older: null }
   }
 
@@ -7226,7 +7293,7 @@ export class SessionManager {
       if (!isEmptyStoredThread(record, page.entries.length, page.from, page.older)) {
         // A program outside Kettu holds the session or wrote to it: it comes back through its revive.
         if ((await this.outsideState(record)) === 'current')
-          return this.storedSnapshot(record, page)
+          return this.storedSnapshot(record, await this.hydratePage(sessionId, page))
         await this.revive(sessionId)
         return this.snapshot(sessionId, undefined, images)
       }
@@ -9860,6 +9927,7 @@ export class SessionManager {
         live.turn.written = resolved.written
         live.turn.segmentStartedAt = now
         live.turn.settledByWait = false
+        live.turn.waitingTurnEndId = null
         live.turn.hadOutput = false
       }
       live.userTurn = true
@@ -9971,6 +10039,7 @@ export class SessionManager {
       live.turn.written = resolved.written
       live.turn.segmentStartedAt = now
       live.turn.settledByWait = false
+      live.turn.waitingTurnEndId = null
       live.turn.hadOutput = false
       live.userTurn = !item.approval && !item.kettu && !item.from
     }
@@ -10148,6 +10217,7 @@ export class SessionManager {
       startedAt: now,
       segmentStartedAt: now,
       settledByWait: false,
+      waitingTurnEndId: null,
       content,
       written: content,
       attachments: [],
@@ -10981,13 +11051,15 @@ export class SessionManager {
   private emitWaitingTurnEnd(live: Live, turn: Turn, now: number): void {
     if (turn.settledByWait) return
     turn.settledByWait = true
+    const id = this.nextId(live)
+    turn.waitingTurnEndId = id
     const used = live.thread.session.usage?.used
     this.emit(live, [
       {
         op: 'entry.add',
         entry: {
           kind: 'turn_end',
-          id: this.nextId(live),
+          id,
           stopReason: 'end_turn',
           durationMs: Math.max(0, now - turn.segmentStartedAt),
           after: agentEntryBefore(live.thread),
@@ -11033,6 +11105,7 @@ export class SessionManager {
     if (activeTurn && live.turn) {
       live.turn.segmentStartedAt = now
       live.turn.settledByWait = false
+      live.turn.waitingTurnEndId = null
       live.turn.hadOutput = false
     }
     this.update(live, {
@@ -11103,7 +11176,12 @@ export class SessionManager {
   }
 
   /** Settles the turn; returns its `turn_end` entry's id when one is appended. */
-  private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
+  private finishTurn(
+    live: Live,
+    turn: Turn,
+    stopReason: StopReason | null,
+    usage: TurnUsage | null = null,
+  ): string | null {
     const first = !turn.ended
     turn.ended = true
     // After the caller sets the session's status, which the plugins read with the summary.
@@ -11173,6 +11251,7 @@ export class SessionManager {
           durationMs,
           after: agentEntryBefore(live.thread),
           ...(used ? { used } : {}),
+          ...(usage ? { usage } : {}),
         },
       },
     ])
@@ -11380,8 +11459,33 @@ export class SessionManager {
   ): void {
     // The prompt Send now chose goes next, whether the stop landed or the turn finished first.
     const chosen = live.sendNext && (stopReason === 'cancelled' || stopReason === 'end_turn')
-    const turnEntryId = this.finishTurn(live, turn, stopReason)
     const now = this.now()
+    const usageModel = usageModelOf(live.thread.session.config)
+    const agentStatus = this.deps.agents.has(live.record.agentId)
+      ? this.deps.agents.status(live.record.agentId)
+      : null
+    const subscription = isSubscriptionAccount(
+      live.record.agentId,
+      agentStatus?.account ?? null,
+      agentStatus?.limits ?? null,
+    )
+    const previewRows = recordRows({
+      sessionId: live.id,
+      acpSessionId: live.record.acpSessionId,
+      agentId: live.record.agentId,
+      project: live.record.projectPath,
+      turnEntryId: '_',
+      at: now,
+      tokens,
+      models,
+      model: usageModel,
+    })
+    const turnUsage = buildTurnUsage(previewRows, { subscription })
+    const turnEntryId = this.finishTurn(live, turn, stopReason, turnUsage)
+    const waitingTurnEndId = !turnEntryId ? turn.waitingTurnEndId : null
+    if (waitingTurnEndId && turnUsage && live.thread.byId[waitingTurnEndId]?.kind === 'turn_end') {
+      this.emit(live, [{ op: 'entry.update', id: waitingTurnEndId, changes: { usage: turnUsage } }])
+    }
     const changes: Partial<SessionView> = {
       status: 'ready',
       turnStartedAt: null,
@@ -11405,18 +11509,19 @@ export class SessionManager {
         ...(cache ? { cache } : {}),
       }
     }
-    if (this.deps.usage && (turnEntryId || (turnTokens && turnTokens.total > 0))) {
+    const recordedTurnId = turnEntryId ?? waitingTurnEndId
+    if (this.deps.usage && (recordedTurnId || (turnTokens && turnTokens.total > 0))) {
       this.deps.usage.record(
         recordRows({
           sessionId: live.id,
           acpSessionId: live.record.acpSessionId,
           agentId: live.record.agentId,
           project: live.record.projectPath,
-          turnEntryId: turnEntryId ?? `agent-${randomUUID()}`,
+          turnEntryId: recordedTurnId ?? `agent-${randomUUID()}`,
           at: now,
           tokens,
           models,
-          model: modelOf(live.thread.session.config),
+          model: usageModel,
         }),
       )
     }
@@ -16372,6 +16477,13 @@ function sumModelTokens(models: ModelTokens[], usage: TokenTotals | null): Token
 function modelOf(config: readonly ConfigOption[]): string | null {
   const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
   return typeof option?.value === 'string' ? option.value : null
+}
+
+/** Resolves the session's model id for usage pricing, preferring a choice's explicit `modelId`. */
+function usageModelOf(config: readonly ConfigOption[]): string | null {
+  const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
+  if (!option || typeof option.value !== 'string') return null
+  return option.choices?.find((choice) => choice.value === option.value)?.modelId ?? option.value
 }
 
 /**

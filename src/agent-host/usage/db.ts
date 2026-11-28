@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, TurnUsage } from '@shared/thread'
 import type {
   ClockRequest,
   DayUsage,
@@ -15,6 +15,7 @@ import type {
 } from '@shared/usage'
 import { transaction } from '../sqlite'
 import { PRICES, type FileCursor, type UsageRow } from './model'
+import { buildTurnUsage, parseTurnEntryId } from './record'
 import { keepsNewer } from './rows'
 
 export const SCHEMA_VERSION = 4
@@ -337,6 +338,10 @@ function prepareAll(db: DatabaseSync) {
     stats: sql(`
       SELECT agent_id, source, SUM(rows) AS rows, MIN(quarter) AS first, MAX(quarter) AS last
       FROM buckets GROUP BY agent_id, source`),
+    sessionKettuRows: sql(`
+      SELECT key, model, input, output, reasoning, cache_read, cache_write, cache_write_1h, cost
+      FROM usage
+      WHERE key >= ? AND key < ? AND source = 'kettu'`),
     deleteRows: sql('DELETE FROM usage WHERE source = ? AND agent_id = ?'),
     deleteBuckets: sql('DELETE FROM buckets WHERE source = ? AND agent_id = ?'),
     deleteCursors: sql('DELETE FROM cursors WHERE agent_id = ?'),
@@ -688,6 +693,56 @@ export class UsageDb {
         })),
       [],
     )
+  }
+
+  /**
+   * Returns per-turn usage breakdowns recorded by Kettu for one session, keyed by `turnEntryId`.
+   * Uses a primary-key prefix range scan (`ob:<sessionId>:`) for fast hydration of legacy threads.
+   */
+  sessionTurnUsage(sessionId: string): Record<string, TurnUsage> {
+    if (!sessionId) return {}
+    return this.guard((sql) => {
+      const from = `ob:${sessionId}:`
+      const to = `ob:${sessionId};`
+      const byTurn = new Map<
+        string,
+        Pick<
+          UsageRow,
+          | 'model'
+          | 'input'
+          | 'output'
+          | 'reasoning'
+          | 'cacheRead'
+          | 'cacheWrite'
+          | 'cacheWrite1h'
+          | 'cost'
+        >[]
+      >()
+      for (const row of sql.sessionKettuRows.all(from, to)) {
+        const key = String(row.key)
+        const model = String(row.model)
+        const turnEntryId = parseTurnEntryId(key, sessionId, model)
+        if (!turnEntryId) continue
+        const list = byTurn.get(turnEntryId) ?? []
+        list.push({
+          model,
+          input: num(row.input),
+          output: num(row.output),
+          reasoning: row.reasoning === null ? null : num(row.reasoning),
+          cacheRead: num(row.cache_read),
+          cacheWrite: num(row.cache_write),
+          cacheWrite1h: num(row.cache_write_1h),
+          cost: row.cost === null || row.cost === undefined ? null : num(row.cost),
+        })
+        byTurn.set(turnEntryId, list)
+      }
+      const result: Record<string, TurnUsage> = {}
+      for (const [turnEntryId, rows] of byTurn) {
+        const built = buildTurnUsage(rows)
+        if (built) result[turnEntryId] = built
+      }
+      return result
+    }, {})
   }
 
   /** Forgets an agent's imported rows and cursors, so the next scan reads its logs afresh. */
