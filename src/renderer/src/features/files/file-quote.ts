@@ -33,14 +33,31 @@ export function fileQuote(path: string, { lines, text }: FilePassage): string {
   const where = `${path}#L${start}${end > start ? `-${end}` : ''}`
   // Code keeps its lines and indentation only in a fence; a quote reads it as prose. The thread
   // numbers the fence's lines from `startLine`, as the file does, which needs a language before it.
-  const body = clip(text)
+  const body = clipPassageText(text)
   const fence = ticks(body, 3)
   const info = `${fenceLanguage(path) || 'text'} startLine=${start}`
   return `${inlineCode(where)}\n${fence}${info}\n${body}\n${fence}`
 }
 
+/** Formats a 1-based line range as `L12` or `L12–L18`; null for rendered Markdown passages. */
+export function formatPassageLines(lines: [number, number] | null): string | null {
+  if (!lines) return null
+  const [start, end] = lines
+  return end > start ? `L${start}\u2013L${end}` : `L${start}`
+}
+
+/**
+ * Formats a selection-anchored note using the same file quote representation, so only the
+ * selected passage and the user's note are sent to the active agent.
+ */
+export function fileNoteMessage(path: string, passage: FilePassage, note: string): string {
+  const quote = fileQuote(path, passage)
+  const trimmed = note.trim()
+  return trimmed ? `${quote}\n\n${trimmed}` : quote
+}
+
 /** A passage over the quote limit, cut at the end of a line where it can be. */
-function clip(text: string): string {
+export function clipPassageText(text: string): string {
   if (text.length <= QUOTE_LIMIT) return text
   const cut = text.lastIndexOf('\n', QUOTE_LIMIT)
   return cut > 0 ? `${text.slice(0, cut)}\n…` : `${text.slice(0, QUOTE_LIMIT)}…`

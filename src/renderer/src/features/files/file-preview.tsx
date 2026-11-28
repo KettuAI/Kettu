@@ -14,6 +14,7 @@ import {
 import {
   BrowserIcon,
   CodeIcon,
+  Comment01Icon,
   FileNotFoundIcon,
   FloppyDiskIcon,
   FolderOpenIcon,
@@ -91,6 +92,7 @@ import { PreviewFileContext } from './file-refs'
 import { PathCopy, PreviewEditToggle } from './file-header'
 import { isHtmlFile, previewHtml, useHtmlPreview } from './html-preview'
 import { fileQuote, selectedPassage, type FilePassage } from './file-quote'
+import { FileSelectionNote } from './file-selection-note'
 import { mentionPaths, quoteInComposer } from './mention-lines'
 import { resolveFilePath } from './file-location'
 import { copyPaths, isLocalProject } from './operations'
@@ -147,7 +149,9 @@ export function FilePreview({
   const sessionId = panelSession(panel)
   const page = useHtmlPreview(sessionId, projectPath) && !file.agent && isHtmlFile(file.path)
   const root = useRef<HTMLDivElement>(null)
+  const openNoteRef = useRef<(() => void) | null>(null)
   const selected = useSelectedLines(root, projectPath, file, source)
+  const isRenderedMarkdown = rendered(file, source)
   // With a passage selected, only that passage goes, not the whole file.
   const mention = (): void => {
     if (!sessionId) return
@@ -227,6 +231,11 @@ export function FilePreview({
                 <PaneIcon icon={GitCompareIcon} />
               </PanelButton>
             )}
+            {selected !== null && !file.agent && file.content?.kind === 'text' && (
+              <PanelButton label={t('preview.addNote')} onClick={() => openNoteRef.current?.()}>
+                <PaneIcon icon={Comment01Icon} />
+              </PanelButton>
+            )}
             {sessionId && !file.agent && (
               <PanelButton label={referenceLabel} onClick={mention}>
                 <PaneIcon icon={MessageAdd01Icon} />
@@ -289,6 +298,17 @@ export function FilePreview({
       <Notes projectPath={projectPath} file={file} />
       <div className="kp-doc__body">
         <Body projectPath={projectPath} panel={panel} file={file} onPicture={onPicture} />
+        {!file.agent && file.content?.kind === 'text' && (
+          <FileSelectionNote
+            key={`${projectPath}\0${file.path}\0${isRenderedMarkdown ? 'md' : 'code'}`}
+            root={root}
+            projectPath={projectPath}
+            file={file}
+            isRenderedMarkdown={isRenderedMarkdown}
+            sessionId={sessionId}
+            openNoteRef={openNoteRef}
+          />
+        )}
       </div>
     </div>
   )

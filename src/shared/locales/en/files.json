@@ -46,6 +46,8 @@
     "quoteLine": "Quote line {{line}} in conversation",
     "quoteLines": "Quote lines {{start}}–{{end}} in conversation",
     "quoteSelection": "Quote the selection in conversation",
+    "addNote": "Add note",
+    "quoteShort": "Quote",
     "openFailed": "Couldn't open this file",
     "missing": "This file is no longer on disk.",
     "readFailed": "Couldn't read this file again: {{message}}",
@@ -87,6 +89,26 @@
   },
   "tabs": {
     "agentFile": "{{agent}}'s file, read-only"
+  },
+  "note": {
+    "title": "Add note for selection",
+    "selection": "Selection",
+    "excerptLabel": "Selected text",
+    "placeholder": "Write a note for the agent…",
+    "send": "Send",
+    "sending": "Sending…",
+    "toComposer": "To composer",
+    "toComposerTitle": "Insert this selection and note into the composer",
+    "queuedHint": "Session is busy — this note will be queued.",
+    "queuedToast": "Note added to the session queue",
+    "failed": "Couldn't send note: {{error}}",
+    "disabled": {
+      "noSession": "Open an active session to send this note.",
+      "subagent": "Sub-agent sessions can't receive direct notes.",
+      "starting": "Wait for the session to finish starting.",
+      "heldOutside": "This session is open in an external terminal.",
+      "unavailable": "This session can't receive messages right now."
+    }
   },
   "link": {
     "open": "Open {{target}}"

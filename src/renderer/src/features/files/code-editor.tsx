@@ -25,6 +25,7 @@ import { useDark } from '@renderer/hooks/use-dark'
 import { i18n } from '@renderer/lib/i18n'
 import { getBuffer, putBuffer, setDirty, type Buffer, type OpenFile } from '@renderer/stores/files'
 import { editorTheme } from './code-theme'
+import { noteRange } from './code-note-mark'
 import { lineBreakOf, lineChange } from './editor-text'
 import { nameOf } from './paths'
 
@@ -77,6 +78,11 @@ const chrome = EditorView.theme({
   // An image, so the mark shows over the active line's background: the cursor sits on it.
   '.cm-marked-line': {
     backgroundImage: 'linear-gradient(var(--marked-line), var(--marked-line))',
+  },
+  // Keeps the anchored passage visible while focus moves into the selection note popover.
+  '.cm-note-anchor': {
+    backgroundColor: 'var(--comment-mark)',
+    borderRadius: '2px',
   },
   '.cm-gutterElement.cm-marked-line': { color: 'var(--text-secondary)' },
   '.cm-panels': { backgroundColor: 'var(--background)', color: 'var(--foreground)' },
@@ -264,6 +270,7 @@ function createBuffer(
     loadLanguage(LanguageDescription.matchFilename(LANGUAGES, nameOf(path))),
     readOnly.of(EditorState.readOnly.of(!content.editable)),
     marked,
+    noteRange,
     chrome,
     EditorView.updateListener.of((update) => {
       buffer.state = update.state
