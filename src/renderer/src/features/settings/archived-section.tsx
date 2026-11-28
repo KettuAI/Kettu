@@ -6,7 +6,6 @@ import {
   ArrowRight01Icon,
   Cancel01Icon,
   Delete02Icon,
-  Folder01Icon,
   FolderMinusIcon,
   GitBranchIcon,
   Search01Icon,
@@ -35,6 +34,7 @@ import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { toast } from '@renderer/components/ui/toast'
 import { useNearView } from '@renderer/features/session/media/near-view'
+import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { RemoveProjectDialog } from '@renderer/features/sidebar/remove-project'
 import { offerWorktreeRemoval } from '@renderer/features/worktrees/remove-worktree-model'
 import { fullTime, mediumAgo } from '@renderer/lib/format'
@@ -559,7 +559,11 @@ export function ArchivedSection() {
                                 size={12}
                               />
                             </span>
-                            <Icon icon={Folder01Icon} size={14} />
+                            <ProjectMark
+                              icon={group.projectIcon}
+                              size={14}
+                              fallback="folder-glyph"
+                            />
                             <span className="k-ar-gh__title">{title}</span>
                             <span className="k-ar-gh__count k-num">{group.entries.length}</span>
                           </button>
@@ -750,7 +754,7 @@ function ArchivedProjectCard({
           <span className="k-ar-gh__fold" aria-hidden="true">
             <Icon icon={expanded ? ArrowDown01Icon : ArrowRight01Icon} size={12} />
           </span>
-          <Icon icon={Folder01Icon} size={16} />
+          <ProjectMark icon={project.icon} size={16} fallback="folder-glyph" />
           <span className="k-ar-proj__meta">
             <span className="k-ar-proj__name-line">
               <span className="k-ar-proj__name">{project.name}</span>
@@ -958,7 +962,7 @@ function ProjectFilterMenu({
                 {value === opt.id && <Icon icon={Tick02Icon} size={14} />}
               </span>
               <span className="k-ar-mi__ico" aria-hidden="true">
-                <Icon icon={Folder01Icon} size={14} />
+                <ProjectMark icon={opt.icon} size={14} fallback="folder-glyph" />
               </span>
               <span className="k-ar-mi__t">{opt.label}</span>
               <span className="k-ar-mi__k k-num">{opt.count}</span>

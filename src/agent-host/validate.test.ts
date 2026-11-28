@@ -639,6 +639,21 @@ describe('createValidators', () => {
     })
     expect(update({ path: '/a', name: null })).toEqual({ path: '/a', name: null })
     expect(update({ path: '/a', name: '' })).toEqual({ path: '/a', name: '' })
+    expect(update({ path: '/a', icon: null })).toEqual({ path: '/a', icon: null })
+    expect(
+      update({ path: '/a', icon: { kind: 'icon', value: 'terminal', color: 'blue' } }),
+    ).toEqual({
+      path: '/a',
+      icon: { kind: 'icon', value: 'terminal', color: 'blue' },
+    })
+    expect(update({ path: '/a', icon: { kind: 'icon', value: 'code' } })).toEqual({
+      path: '/a',
+      icon: { kind: 'icon', value: 'code' },
+    })
+    expect(update({ path: '/a', icon: { kind: 'emoji', value: ' 🚀 ' } })).toEqual({
+      path: '/a',
+      icon: { kind: 'emoji', value: '🚀' },
+    })
     expect(windows['projects.update']({ path: 'C:\\a', folders: ['C:\\a', 'D:\\b'] })).toEqual({
       path: 'C:\\a',
       folders: ['C:\\a', 'D:\\b'],
@@ -647,6 +662,12 @@ describe('createValidators', () => {
     rejects(() => update({ path: '/a', name: 123 }))
     rejects(() => update({ path: '/a', name: 'a\0b' }))
     rejects(() => update({ path: '/a', name: 'x'.repeat(201) }))
+    rejects(() => update({ path: '/a', icon: 'rocket' }))
+    rejects(() => update({ path: '/a', icon: { kind: 'icon', value: 'not-supported' } }))
+    rejects(() => update({ path: '/a', icon: { kind: 'icon', value: 'code', color: '#ff0000' } }))
+    rejects(() => update({ path: '/a', icon: { kind: 'emoji', value: 'abc' } }))
+    rejects(() => update({ path: '/a', icon: { kind: 'emoji', value: '🚀🔥' } }))
+    rejects(() => update({ path: '/a', icon: { kind: 'emoji', value: '🚀', color: 'red' } }))
     rejects(() => update({ path: '/a', folders: [] }))
     rejects(() => update({ path: '/a', folders: 'not-an-array' }))
     rejects(() => update({ path: '/a', folders: ['/a', 'relative'] }))

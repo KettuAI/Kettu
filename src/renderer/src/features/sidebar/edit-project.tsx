@@ -6,7 +6,7 @@ import {
   FolderMinusIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { Project } from '@shared/agent-host'
+import type { Project, ProjectIcon } from '@shared/agent-host'
 import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -32,6 +32,7 @@ import {
   validateAdditionalFolder,
   type FolderValidationError,
 } from './edit-project-model'
+import { ProjectIconPicker } from './project-icon-picker'
 
 /**
  * Edits a sidebar project's display name and its associated local source folders in one dialog.
@@ -82,6 +83,7 @@ function EditProjectForm({
   const local = hostId === null
   const defaultName = basename(hostPath(project.path))
   const [name, setName] = useState(project.name)
+  const [icon, setIcon] = useState<ProjectIcon | null>(() => project.icon ?? null)
   const [folders, setFolders] = useState<string[]>(() => projectFolders(project))
   const [typingPath, setTypingPath] = useState(false)
   const [pathDraft, setPathDraft] = useState('')
@@ -160,6 +162,7 @@ function EditProjectForm({
       const updated = await useProjectsStore.getState().update(project.path, {
         name: trimmedName === '' ? null : trimmedName,
         folders,
+        icon,
       })
       // If New session currently targets a secondary folder that was just removed, fall back
       // to the project's primary folder so the composer stays pointing at this project.
@@ -211,8 +214,15 @@ function EditProjectForm({
             {t('project.edit.nameLabel')}
           </label>
           <InputGroup className="h-9.5 rounded-[10px]">
-            <InputGroupAddon className="self-stretch border-r border-input/70 pr-2.5 pl-3 text-secondary">
-              <FolderClosedMark />
+            <InputGroupAddon className="self-stretch cursor-default p-0 has-[>button]:ml-0">
+              <ProjectIconPicker
+                value={icon}
+                disabled={saving}
+                onChange={(next) => {
+                  setIcon(next)
+                  setSubmitError(null)
+                }}
+              />
             </InputGroupAddon>
             <InputGroupInput
               id={`${id}-name`}
@@ -222,7 +232,7 @@ function EditProjectForm({
               placeholder={defaultName}
               spellCheck={false}
               autoComplete="off"
-              className="text-control"
+              className="pl-2.5 text-control"
               onChange={(event) => {
                 setName(event.target.value)
                 setSubmitError(null)

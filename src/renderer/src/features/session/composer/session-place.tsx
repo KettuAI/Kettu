@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next'
-import { FolderMark } from '@renderer/components/affect/assistant-home'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { basename } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { findProjectForSession, projectFolders, useProjectsStore } from '@renderer/stores/projects'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
+import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { WORKTREE_ICON } from '../worktree/worktree-icon'
 import { WorktreeHint } from '../worktree/worktree-tag'
@@ -54,7 +54,7 @@ export function SessionPlace({
           ) : scratch ? (
             <Glyph icon={NO_PROJECT_ICON} size={14} />
           ) : (
-            <FolderMark />
+            <ProjectMark icon={project?.icon} open />
           )}
           <span className="kettu-tray-link__text">{label}</span>
         </TooltipTrigger>

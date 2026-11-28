@@ -9,7 +9,6 @@ import { usableWorkflow, type Workflow, type WireWorkflowEntry } from '@shared/w
 import { limitsForModel } from '@shared/plan-limits'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { FolderMark } from '@renderer/components/affect/assistant-home'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -21,6 +20,7 @@ import { useModeControl } from '@renderer/features/session/composer/mode-control
 import { isSelect } from '@renderer/features/session/composer/options'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
+import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { ModelMenu, ModelMenuLoading } from '@renderer/features/session/composer/model-menu'
 import { SendButton } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
@@ -1015,7 +1015,11 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="ui-as-tray-link" data-static="" />}>
-        {scratch ? <Glyph icon={NO_PROJECT_ICON} size={14} /> : <FolderMark />}
+        {scratch ? (
+          <Glyph icon={NO_PROJECT_ICON} size={14} />
+        ) : (
+          <ProjectMark icon={project?.icon} open />
+        )}
         <span className="kettu-tray-link__text">
           {scratch ? t('newSession.noProject') : project?.name}
         </span>

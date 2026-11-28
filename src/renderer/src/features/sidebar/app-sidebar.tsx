@@ -6,8 +6,6 @@ import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
 import { retryHostState } from '@renderer/app/bootstrap'
-import { FolderClosedMark } from '@renderer/components/affect/app-shell'
-import { FolderMark } from '@renderer/components/affect/assistant-home'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
+import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { UpdateCardView } from '@renderer/features/updates/update-card'
 import { NoticeCard } from '@renderer/features/updates/update-notice'
 import { useUpdates } from '@renderer/features/updates/use-updates'
@@ -562,7 +561,11 @@ function ProjectGroup({
         (project?.missing || away) && 'text-(--faint)!',
       )}
     >
-      {!project ? <Glyph icon={NO_PROJECT_ICON} /> : open ? <FolderMark /> : <FolderClosedMark />}
+      {!project ? (
+        <Glyph icon={NO_PROJECT_ICON} />
+      ) : (
+        <ProjectMark icon={project.icon} open={open} />
+      )}
       <span className="ui-as-side__text">
         {name}
         {hint && <span className="ml-1.5 text-(--faint)">{hint}</span>}

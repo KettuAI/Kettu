@@ -5162,10 +5162,11 @@ export class AgentHost {
         return projects.list()
       },
       'projects.add': ({ path }) => projects.add(path),
-      'projects.update': ({ path, name, folders }) =>
+      'projects.update': ({ path, name, folders, icon }) =>
         projects.update(projects.matchPrimary(path), {
           ...(name !== undefined ? { name } : {}),
           ...(folders !== undefined ? { folders } : {}),
+          ...(icon !== undefined ? { icon } : {}),
         }),
       'projects.remove': async ({ path }) => {
         const record = projects.matchPrimary(path)

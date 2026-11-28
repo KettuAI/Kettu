@@ -1,6 +1,7 @@
 // What Search can find and how a query narrows it: entries, matching, groups and limits.
 
 import { fold, foldText, queryWords } from '@shared/search-fold'
+import type { ProjectIcon } from '@shared/agent-host'
 import type { PluginViewIcon } from '@shared/plugin-views'
 import type { AgentId } from '@shared/thread'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
@@ -124,7 +125,7 @@ export type SearchEntry = EntryBase &
       }
     | { kind: 'artifact'; artifactId: string; artifactKind: ArtifactKind }
     | { kind: 'routine'; routineId: string }
-    | { kind: 'project'; path: string }
+    | { kind: 'project'; path: string; icon?: ProjectIcon }
     | { kind: 'section'; section: SettingsSection }
     | {
         /** A plugin's setting, listed with Settings but on the plugin's page in the Marketplace. */

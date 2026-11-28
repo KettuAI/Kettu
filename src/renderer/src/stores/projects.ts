@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import type { NoProject, Project, SessionSummary } from '@shared/agent-host'
+import type { NoProject, Project, ProjectIcon, SessionSummary } from '@shared/agent-host'
 import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 
 export interface ProjectUpdatePatch {
   name?: string | null
   folders?: string[]
+  icon?: ProjectIcon | null
 }
 
 /** All source folders associated with a project, primary folder first. */

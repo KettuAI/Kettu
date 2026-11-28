@@ -103,18 +103,21 @@ describe('project update and multi-folder host path qualification', () => {
       path: onHost(HOST_A, '/work/app'),
       name: 'Client Portal',
       folders: [onHost(HOST_A, '/work/app'), onHost(HOST_A, '/work/docs')],
+      icon: { kind: 'icon', value: 'globe', color: 'green' },
     }
     expect(routeOf('projects.update', params)).toBe(HOST_A)
     expect(toHost('projects.update', params, 0)).toEqual({
       path: '/work/app',
       name: 'Client Portal',
       folders: ['/work/app', '/work/docs'],
+      icon: { kind: 'icon', value: 'globe', color: 'green' },
     })
 
     const updated = fromHost(HOST_A, 'projects.update', {
       path: '/work/app',
       name: 'Client Portal',
       customName: true,
+      icon: { kind: 'icon', value: 'globe', color: 'green' },
       folders: ['/work/app', '/work/docs'],
       missingFolders: ['/work/docs'],
       missing: false,
@@ -124,6 +127,7 @@ describe('project update and multi-folder host path qualification', () => {
       path: onHost(HOST_A, '/work/app'),
       name: 'Client Portal',
       customName: true,
+      icon: { kind: 'icon', value: 'globe', color: 'green' },
       folders: [onHost(HOST_A, '/work/app'), onHost(HOST_A, '/work/docs')],
       missingFolders: [onHost(HOST_A, '/work/docs')],
       missing: false,
