@@ -667,11 +667,33 @@
     "groups": {
       "use": "Computer use",
       "permissions": "这台电脑",
+      "permissions_web": "{{host}}",
+      "permissionsRemote": "主机",
       "allowedApps": "始终允许"
+    },
+    "state": {
+      "on": "已开启",
+      "off": "已关闭"
+    },
+    "readOnly": {
+      "note": "Computer use 的设置和权限只能在 {{host}} 上更改。",
+      "noteGeneric": "Computer use 的设置和权限只能在那台电脑上更改。"
+    },
+    "none": {
+      "title": "Computer use 需要桌面应用",
+      "body": "操作桌面应用由 Kettu 桌面应用来做，而 {{host}} 上运行的 Kettu 不带桌面应用。",
+      "bodyGeneric": "操作桌面应用由 Kettu 桌面应用来做，而这台主机上运行的 Kettu 不带桌面应用。"
+    },
+    "older": {
+      "title": "无法查看 Computer use 状态",
+      "body": "更新 {{host}} 上的 Kettu 后，就可以在这里查看它的 Computer use 状态、权限和始终允许的应用。",
+      "bodyGeneric": "更新这台主机上的 Kettu 后，就可以在这里查看它的 Computer use 状态、权限和始终允许的应用。"
     },
     "enabled": {
       "name": "允许智能体使用这台电脑",
+      "name_web": "允许智能体使用 {{host}}",
       "description": "在你从这台电脑发出的回合里，智能体可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
+      "description_web": "在从 {{host}} 发出的回合里，智能体可以读取 {{host}} 上应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先询问。",
       "keywords": "computer use 电脑 桌面 应用 屏幕 鼠标 键盘 辅助功能 自动化"
     },
     "pauseOnUse": {
@@ -701,9 +723,14 @@
     },
     "permission": {
       "granted": "已允许",
+      "denied": "已拒绝",
+      "notAllowed": "未允许",
+      "unknown": "未知",
       "ask": "允许…",
       "open": "打开系统设置",
       "none": "无需授权",
+      "unavailable": "未能读取 {{host}} 的权限状态。",
+      "unavailableGeneric": "未能读取这台主机的权限状态。",
       "note": "这两项权限由 macOS 授予 Kettu。允许屏幕录制后如果截图仍然失败，请退出并重新打开 Kettu。"
     },
     "windows": {
@@ -1471,7 +1498,8 @@
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和智能体都在那台电脑上，这里只管这个浏览器怎么连它。",
     "devices": "智能体不用先问就能使用的模拟器和手机。",
-    "computer-use": "让智能体读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。"
+    "computer-use": "让智能体读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。",
+    "computer-use_web": "让智能体读取并操作 {{host}} 上的桌面应用，同一时间只用一个应用、只给一个会话。"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",

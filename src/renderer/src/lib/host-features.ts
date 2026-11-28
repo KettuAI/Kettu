@@ -16,6 +16,7 @@ export type HostFeature = keyof Pick<
   | 'pinnedModels'
   | 'drives'
   | 'ownRelay'
+  | 'computerUse'
 >
 
 /**

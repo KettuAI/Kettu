@@ -202,6 +202,7 @@
     "notFolder": "“{{path}}”不是这台电脑上的文件夹",
     "noPublish": "这台电脑不支持发布",
     "noUpdates": "这台电脑不能在设置里更新",
+    "noComputerUse": "这台电脑不支持 Computer use",
     "updateNotAllowed": "这台设备已没有更新此主机的权限",
     "updateConfirmationStale": "这条更新确认请求已失效或已处理",
     "updateConfirmationWrongCaller": "只有发起本次更新的设备才能选择更新时机",

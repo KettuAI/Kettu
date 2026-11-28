@@ -669,11 +669,33 @@
     "groups": {
       "use": "Computer use",
       "permissions": "This computer",
+      "permissions_web": "{{host}}",
+      "permissionsRemote": "Host",
       "allowedApps": "Always allowed"
+    },
+    "state": {
+      "on": "On",
+      "off": "Off"
+    },
+    "readOnly": {
+      "note": "Computer use settings and permissions can only be changed on {{host}}.",
+      "noteGeneric": "Computer use settings and permissions can only be changed on that computer."
+    },
+    "none": {
+      "title": "Computer use needs the desktop app",
+      "body": "Kettu’s desktop app drives desktop apps, and {{host}} runs Kettu without it.",
+      "bodyGeneric": "Kettu’s desktop app drives desktop apps, and this host runs Kettu without it."
+    },
+    "older": {
+      "title": "Computer use state is not available",
+      "body": "Update Kettu on {{host}} to view its Computer use status, permissions and allowed apps here.",
+      "bodyGeneric": "Update Kettu on this host to view its Computer use status, permissions and allowed apps here."
     },
     "enabled": {
       "name": "Let agents use this computer",
+      "name_web": "Let agents use {{host}}",
       "description": "Agents read the windows of your apps and click and type in them, in the background, for turns you send from this computer. Each app asks you before its first use in a session.",
+      "description_web": "Agents read the windows of apps on {{host}} and click and type in them, in the background, for turns sent from {{host}}. Each app asks before its first use in a session.",
       "keywords": "computer use desktop apps screen mouse keyboard accessibility automation"
     },
     "pauseOnUse": {
@@ -703,9 +725,14 @@
     },
     "permission": {
       "granted": "Allowed",
+      "denied": "Denied",
+      "notAllowed": "Not allowed",
+      "unknown": "Unknown",
       "ask": "Allow…",
       "open": "Open System Settings",
       "none": "Nothing to allow",
+      "unavailable": "Could not read permissions from {{host}}.",
+      "unavailableGeneric": "Could not read permissions from this host.",
       "note": "macOS asks for these for Kettu. If screenshots still fail after allowing Screen Recording, quit and reopen Kettu."
     },
     "windows": {
@@ -1483,7 +1510,8 @@
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
     "devices": "Simulators and phones agents may use without asking.",
-    "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time."
+    "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time.",
+    "computer-use_web": "Lets agents read and drive the desktop apps on {{host}}, one app and one session at a time."
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",

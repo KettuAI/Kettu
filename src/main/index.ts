@@ -110,7 +110,7 @@ import { installDiscoveredMcp } from './mcp-install'
 import { MarketUnauthorized, runMarketCall } from './market-api'
 import { computerModelForRun } from './system-model'
 import { ComputerOverlay } from './computer-overlay'
-import { computerAppIcon, serveComputerCapture } from './computer-use'
+import { computerAppIcon, computerUseStatus, serveComputerCapture } from './computer-use'
 import { systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
@@ -1255,11 +1255,13 @@ async function start(): Promise<void> {
       partThumbnails: true,
       pinnedModels: true,
       drives: true,
+      computerUse: true,
       artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),
     sharing,
     updates: updater,
+    computerStatus: computerUseStatus,
     themes,
     marketKeys,
     thumbnail: (id, version, layout) => artifacts.thumbnail(ownArtifact(id), version, layout),

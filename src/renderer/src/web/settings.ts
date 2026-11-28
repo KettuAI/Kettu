@@ -5,6 +5,7 @@
 import {
   HOST_SETTING_KEYS,
   READ_ONLY_HOST_SETTING_KEYS,
+  readOnlyHostKeys,
   splitSettingsPatch,
   withHostSettings,
   type HostAdminEvent,
@@ -122,6 +123,10 @@ export class WebSettings {
    * browser's part, so a refused change leaves nothing half done.
    */
   async update(patch: SettingsPatch): Promise<SettingsFile> {
+    const readOnly = readOnlyHostKeys(patch as Record<string, unknown>)
+    if (readOnly.length > 0) {
+      throw new Error(`Only the host itself can change these settings: ${readOnly.join(', ')}`)
+    }
     const { host, client } = splitSettingsPatch(patch)
     if (host) {
       if (!this.link) throw new Error('This page is not connected to the host')

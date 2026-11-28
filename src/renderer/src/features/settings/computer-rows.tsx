@@ -9,16 +9,19 @@ import {
   type ComputerPermission,
   type ComputerPermissionKind,
 } from '@shared/computer-use'
+import type { Platform } from '@shared/platform'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import { platform } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { ControlError, Pill, SetButton, SettingSwitch } from './controls'
-import { ItemLine, Thing } from './rows'
+import { ControlError, Pill, SetButton, SettingSwitch, Skel } from './controls'
+import { EmptyCard, ItemLine, Thing } from './rows'
 
-/** The switch, on this computer's own settings whichever host the page shows. */
+/** The switch, on this computer's own settings when edited locally. */
 export function ComputerSwitch({
   label,
   setting = 'enabled',
@@ -44,6 +47,27 @@ export function ComputerSwitch({
       />
     </>
   )
+}
+
+/** Read-only on/off state of a host computer use boolean setting. */
+export function ComputerBooleanPill({ value }: { value: boolean }) {
+  const { t } = useTranslation('settings')
+  return (
+    <Pill tone={value ? 'success' : 'neutral'}>
+      {t(value ? 'computer.state.on' : 'computer.state.off')}
+    </Pill>
+  )
+}
+
+/** Read-only macOS permission badge shown on paired devices. */
+export function PermissionStatus({ state }: { state: ComputerPermission }) {
+  const { t } = useTranslation('settings')
+  if (state === 'granted') return <Pill tone="success">{t('computer.permission.granted')}</Pill>
+  if (state === 'denied') return <Pill tone="warning">{t('computer.permission.denied')}</Pill>
+  if (state === 'not-determined') {
+    return <Pill tone="warning">{t('computer.permission.notAllowed')}</Pill>
+  }
+  return <Pill tone="neutral">{t('computer.permission.unknown')}</Pill>
 }
 
 export function PermissionRow({
@@ -81,15 +105,41 @@ export function PermissionRow({
   )
 }
 
-export function AllowedAppRow({ app, onRemove }: { app: ComputerApp; onRemove: () => void }) {
+export function AllowedAppRow({ app, onRemove }: { app: ComputerApp; onRemove?: () => void }) {
   const { t } = useTranslation('settings')
   return (
     <div className="ui-sg-row">
       <Thing mark={<Icon icon={BrowserIcon} size={20} />} name={app.name}>
         <ItemLine>{app.id}</ItemLine>
       </Thing>
-      <SetButton onClick={onRemove}>{t('computer.allowedApps.remove')}</SetButton>
+      {onRemove && <SetButton onClick={onRemove}>{t('computer.allowedApps.remove')}</SetButton>}
     </div>
+  )
+}
+
+/** Loading placeholder while waiting for host capabilities. */
+export function ComputerPending() {
+  return (
+    <div className="ui-sg-card k-pending">
+      <div className="ui-sg-row">
+        <Thing mark={<Skel width={24} className="k-skel--mark" />} name={<Skel width={160} />}>
+          <Skel width={220} />
+        </Thing>
+      </div>
+    </div>
+  )
+}
+
+/** Shown on paired devices when a host lacks computer use (daemon) or is an older version. */
+export function ComputerUnavailable({ reason }: { reason: 'unsupported' | 'older' }) {
+  const { t } = useTranslation('settings')
+  const host = useHostContext().host ?? ''
+  const key = reason === 'unsupported' ? 'computer.none' : 'computer.older'
+  return (
+    <EmptyCard
+      title={t(`${key}.title`)}
+      hint={t(host ? `${key}.body` : `${key}.bodyGeneric`, { host })}
+    />
   )
 }
 
@@ -139,15 +189,31 @@ function acceleratorOf(event: KeyboardEvent): string | null {
   return [...parts, key].join('+')
 }
 
-/** Stop from anywhere: the shortcut's keys, which a click lets the user press anew. */
-export function StopShortcut() {
+/** Stop from anywhere: the shortcut's keys, read-only on paired devices or clickable locally. */
+export function StopShortcut({
+  readOnly = false,
+  targetPlatform = platform,
+}: {
+  readOnly?: boolean
+  targetPlatform?: Platform
+}) {
   const { t } = useTranslation('settings')
-  const saved = useSettingsStore((s) => s.settings.computerUse.stopShortcut)
-  const fallback = defaultStopShortcut(platform)
+  const { useSettingsStore: useScopedSettings } = useHostScope()
+  const saved = useScopedSettings((s) => s.settings.computerUse.stopShortcut)
+  const fallback = defaultStopShortcut(targetPlatform)
   const shortcut = saved || fallback
   const [recording, setRecording] = useState(false)
   const [hint, setHint] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  if (readOnly) {
+    return (
+      <KbdGroup>
+        {acceleratorKeys(shortcut, targetPlatform).map((key, index) => (
+          <Kbd key={index}>{key}</Kbd>
+        ))}
+      </KbdGroup>
+    )
+  }
   const save = (next: string) => {
     setError(null)
     useSettingsStore

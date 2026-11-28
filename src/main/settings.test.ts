@@ -1327,3 +1327,57 @@ describe('host cloud setting exposure to paired devices', () => {
     expect(readOnlyHostKeys({ git: { backgroundFetch: true } })).toEqual([])
   })
 })
+
+describe('host computerUse setting exposure to paired devices', () => {
+  it('includes computerUse in hostSettingsPart as read-only and defaults missing older parts safely', () => {
+    const enabled = structuredClone(DEFAULT_SETTINGS)
+    enabled.computerUse = {
+      enabled: true,
+      allowedApps: [{ id: 'com.apple.Safari', name: 'Safari' }],
+      pauseOnUse: false,
+      stopShortcut: 'Control+Alt+Command+K',
+    }
+    const disabled = structuredClone(DEFAULT_SETTINGS)
+
+    const onPart = hostSettingsPart(enabled)
+    const offPart = hostSettingsPart(disabled)
+    expect(onPart.computerUse).toEqual(enabled.computerUse)
+    expect(offPart.computerUse).toEqual(disabled.computerUse)
+
+    // Remote host computerUse overrides the viewer's local setting in either direction.
+    expect(withHostSettings(disabled, onPart).computerUse).toEqual(enabled.computerUse)
+    expect(withHostSettings(enabled, offPart).computerUse).toEqual(disabled.computerUse)
+
+    // An older host omits computerUse from settings.get; fall back to defaults instead of local state.
+    const olderPart = structuredClone(onPart)
+    delete olderPart.computerUse
+    expect(withHostSettings(enabled, olderPart).computerUse).toEqual(DEFAULT_SETTINGS.computerUse)
+
+    // Malformed entries from a partial payload are sanitized safely.
+    const partialPart = structuredClone(offPart)
+    partialPart.computerUse = {
+      enabled: true,
+      allowedApps: [
+        { id: 'com.apple.Finder', name: 'Finder' },
+        { id: '', name: 'Bad' },
+      ],
+      pauseOnUse: 'yes' as unknown as boolean,
+      stopShortcut: 'not-a-shortcut',
+    }
+    expect(withHostSettings(disabled, partialPart).computerUse).toEqual({
+      enabled: true,
+      allowedApps: [{ id: 'com.apple.Finder', name: 'Finder' }],
+      pauseOnUse: DEFAULT_SETTINGS.computerUse.pauseOnUse,
+      stopShortcut: DEFAULT_SETTINGS.computerUse.stopShortcut,
+    })
+
+    // Paired devices never treat computerUse as a writable host setting.
+    expect(splitSettingsPatch({ computerUse: { enabled: true } })).toEqual({
+      host: null,
+      client: { computerUse: { enabled: true } },
+    })
+    expect(readOnlyHostKeys({ computerUse: { enabled: true } })).toEqual(['computerUse'])
+    expect(readOnlyHostKeys({ computerUse: { allowedApps: [] } })).toEqual(['computerUse'])
+    expect(readOnlyHostKeys({ computerUse: {} })).toEqual(['computerUse'])
+  })
+})

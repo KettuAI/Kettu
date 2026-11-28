@@ -6,6 +6,7 @@
 import { createContext, useContext } from 'react'
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { HostEvent } from '@shared/agent-host'
+import type { ComputerUseStatus } from '@shared/computer-use'
 import type { GitTools } from '@shared/git'
 import type { AppInfo, KettuApi } from '@shared/ipc'
 import type { Platform } from '@shared/platform'
@@ -13,6 +14,7 @@ import {
   hostSettingsPart,
   isHostAdminEvent,
   parseJoined,
+  readOnlyHostKeys,
   splitSettingsPatch,
   withHostSettings,
   type HostAdminEvent,
@@ -66,6 +68,8 @@ export interface ScopeApi {
   showItem(path: string): Promise<void>
   getInfo(): Promise<AppInfo>
   restart(process: 'agent' | 'terminal'): Promise<void>
+  /** Read-only computer use status of the host (driver and system permissions). */
+  computerStatus(): Promise<ComputerUseStatus>
   /** Sets or clears a variable an agent of the host starts with; the value is never read back. */
   setAgentEnv: KettuApi['marketplace']['setAgentEnv']
 }
@@ -125,6 +129,7 @@ export const LOCAL_SCOPE: HostScope = {
     getInfo: () => window.kettu.app.getInfo(),
     restart: (process) =>
       process === 'agent' ? window.kettu.agents.restart() : window.kettu.terminals.restart(),
+    computerStatus: () => window.kettu.computer.status(),
     setAgentEnv: (agentId, variable, value) =>
       window.kettu.marketplace.setAgentEnv(agentId, variable, value),
   },
@@ -353,6 +358,10 @@ function createScope(hostId: string): OtherScope {
     settings: merged(),
     loaded: false,
     async update(patch) {
+      const readOnly = readOnlyHostKeys(patch as Record<string, unknown>)
+      if (readOnly.length > 0) {
+        throw new Error(`Only the host itself can change these settings: ${readOnly.join(', ')}`)
+      }
       const split = splitSettingsPatch(patch)
       if (split.host) {
         const sent = split.host
@@ -484,6 +493,7 @@ function createScope(hostId: string): OtherScope {
         return read
       },
       restart: (process) => done(admin('host.restart', { process })),
+      computerStatus: () => admin('computer.status'),
       setAgentEnv: (agentId, variable, value) =>
         admin('marketplace.setAgentEnv', { agentId, variable, value }),
     },

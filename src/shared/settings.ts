@@ -163,7 +163,7 @@ export interface SettingsFile {
     // Devices of the same Kettu account find this computer on the relay and ask to be added.
     discoverable: boolean
   }
-  // Agents using this computer's desktop apps; a paired device can neither see nor change it.
+  // Agents using this computer's desktop apps; paired devices can read it, only this computer changes it.
   computerUse: ComputerUseSettings
   // Kettu's own services: the account, relay, push, sharing to Kettu and problem reports. Off is
   // the self-hosted mode, in which no process of this computer reaches them.

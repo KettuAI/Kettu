@@ -134,7 +134,6 @@ export function SettingsContent({ titleId }: { titleId?: string }) {
     useHostsSection(),
     useBrowserSection(),
     useDevicesSection(),
-    useComputerUseSection(),
   ]
   const about = useAboutSection()
   const hostId = useShownHost()
@@ -185,7 +184,13 @@ function SettingsLayout({
       useUsageSection(),
       useGitSection(),
     ],
-    [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
+    [
+      useArchivedSection(),
+      useArtifactsSection(),
+      useSharingSection(),
+      useTerminalSection(),
+      useComputerUseSection(),
+    ],
     [useRemoteSection(), useAdvancedSection()],
     [about],
   ]
