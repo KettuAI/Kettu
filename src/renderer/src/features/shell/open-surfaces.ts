@@ -9,8 +9,13 @@ import {
   isDocKind,
   panelSession,
   selectDoc,
+  setTerminalPlacement,
   toggleSidePane,
+  toggleTerminal,
   useViewStore,
+  type SidePane,
+  type SidePanelFallback,
+  type TerminalPlacement,
 } from '@renderer/stores/view'
 
 /**
@@ -23,7 +28,9 @@ export function reopenSidePanel(panel: string, projectPath: string): boolean {
   const sessionId = panelSession(panel)
   const order = (view.sideOrder[panel] ?? []).map(kindOfKey)
   const has: Record<SurfaceKind, boolean> = {
-    terminal: terminalsOf(useTerminalsStore.getState().byId, panel).length > 0,
+    terminal:
+      view.terminalPlacement === 'side' &&
+      terminalsOf(useTerminalsStore.getState().byId, panel).length > 0,
     // The row keeps the place of pages a restart is about to open again.
     browser:
       !isWeb &&
@@ -41,7 +48,10 @@ export function reopenSidePanel(panel: string, projectPath: string): boolean {
     if (isDocKind(kind)) return docs.includes(key)
     return isSurfaceKind(kind) ? has[kind] : tabs.some((tab) => tab === kind)
   }
-  const last = view.sideLast[panel]
+  const last =
+    view.terminalPlacement === 'bottom' && view.sideLast[panel] === 'terminal'
+      ? undefined
+      : view.sideLast[panel]
   const lastKey = last && (isDocKind(last) ? view.sideDoc[panel] : `${last}:`)
   const key =
     lastKey && kindOfKey(lastKey) === last && held(lastKey)
@@ -62,7 +72,7 @@ export function revealSurface(
 ): void {
   const sessionId = panelSession(panel)
   if (kind === 'terminal') {
-    toggleSidePane(panel, 'terminal', true)
+    toggleTerminal(panel, true)
     showTerminal(panel, id)
   } else if (kind === 'page') {
     if (!sessionId || isWeb) return
@@ -72,4 +82,55 @@ export function revealSurface(
     toggleSidePane(panel, 'devices', true)
     selectDevice(sessionId, id)
   }
+}
+
+/**
+ * Picks the nearest live non-terminal tab in `panel` across single tabs, docs, browser pages and
+ * devices so moving the terminal to the bottom keeps other previews open or closes an empty panel.
+ */
+function liveNonTerminalFallback(panel: string): SidePanelFallback {
+  const view = useViewStore.getState()
+  const sessionId = panelSession(panel)
+  const hasBrowser =
+    !isWeb && !!sessionId && (useBrowserStore.getState().bySession[sessionId]?.tabs.length ?? 0) > 0
+  const hasDevices =
+    !!sessionId && devicesOf(useDevicesStore.getState().devices, sessionId).length > 0
+  const singleTabs = new Set<string>(view.sideTabs[panel] ?? [])
+  const docKeys = new Set((view.sideDocs[panel] ?? []).map(docKey))
+  const order = view.sideOrder[panel] ?? []
+  const lastTerminal = order.findLastIndex((key) => kindOfKey(key) === 'terminal')
+  const others = order
+    .map((key, index) => ({ key, kind: kindOfKey(key), index }))
+    .filter((other) => {
+      if (other.kind === 'terminal') return false
+      if (isDocKind(other.kind)) return docKeys.has(other.key)
+      if (other.kind === 'browser') return hasBrowser
+      if (other.kind === 'devices') return hasDevices
+      return singleTabs.has(other.kind)
+    })
+  const next = others.find((other) => other.index > lastTerminal) ?? others.at(-1)
+  if (next) return isDocKind(next.kind) ? { docKey: next.key } : (next.kind as SidePane)
+  if (view.sideDocs[panel]?.[0]) return { docKey: docKey(view.sideDocs[panel][0]) }
+  if (view.sideTabs[panel]?.[0]) return view.sideTabs[panel][0]
+  if (hasBrowser) return 'browser'
+  if (hasDevices) return 'devices'
+  return null
+}
+
+/**
+ * Moves the terminal between the side panel and the bottom dock while preserving every live PTY
+ * process, buffer and tab order, and focuses the active terminal in the target dock.
+ */
+export function moveTerminalPlacement(placement: TerminalPlacement, panel?: string | null): void {
+  setTerminalPlacement(placement, {
+    panel,
+    fallbackPane: liveNonTerminalFallback,
+  })
+  if (!panel) return
+  const terminals = useTerminalsStore.getState()
+  const focusedId =
+    (terminals.focusedSide[panel] === 'right' ? terminals.split[panel] : terminals.active[panel]) ??
+    terminalsOf(terminals.byId, panel, terminals.order[panel]).at(-1)?.id ??
+    null
+  if (focusedId) useTerminalsStore.setState({ focusing: focusedId })
 }

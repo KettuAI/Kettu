@@ -13,13 +13,15 @@ function paneOf(target: Element | null): UsedPane | null {
   return null
 }
 
-// Whether the side panel was used last, whatever its tab shows.
+// Whether the side panel or bottom terminal dock was used last, whatever tab it shows.
 let panelUsed = false
+let bottomUsed = false
 
 function track(event: Event): void {
   const target = event.target instanceof Element ? event.target : null
   used = paneOf(target)
-  panelUsed = !!target?.closest('[data-side-panel]')
+  bottomUsed = !!target?.closest('[data-bottom-terminal]')
+  panelUsed = !bottomUsed && !!target?.closest('[data-side-panel]')
 }
 
 document.addEventListener('pointerdown', track, true)
@@ -44,4 +46,9 @@ export function usedPane(browserFocused = false): UsedPane | null {
 /** Whether the side panel is what the user used last, while it is on screen. */
 export function sidePanelUsed(browserFocused = false): boolean {
   return (browserFocused || panelUsed) && !!document.querySelector('[data-side-panel]')
+}
+
+/** Whether the bottom terminal dock is what the user used last, while it is on screen. */
+export function bottomTerminalUsed(browserFocused = false): boolean {
+  return !browserFocused && bottomUsed && !!document.querySelector('[data-bottom-terminal]')
 }

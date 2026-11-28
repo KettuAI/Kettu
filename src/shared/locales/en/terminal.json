@@ -8,7 +8,12 @@
     "empty": "No terminal in this project.",
     "split": "Split",
     "unsplit": "Unsplit",
-    "close": "Close panel"
+    "close": "Close panel",
+    "hide": "Hide terminal",
+    "moveToBottom": "Move to bottom",
+    "moveToSide": "Move to side",
+    "resize": "Resize terminal height",
+    "resizeHint": "Drag to resize. Double-click to reset."
   },
   "tab": {
     "rename": "Rename",

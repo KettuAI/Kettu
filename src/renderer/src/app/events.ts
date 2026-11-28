@@ -6,6 +6,7 @@ export type AppEvent =
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
   | { kind: 'close-side-tab' } // Mod+W with the side panel used last
+  | { kind: 'close-bottom-terminal-tab' } // Mod+W with the bottom terminal dock used last
   | { kind: 'new-browser-tab' } // Mod+T with the browser used last
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
   // A mention, such as a terminal's, put after the text of the composer of `draft`.

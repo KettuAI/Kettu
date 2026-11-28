@@ -20,6 +20,7 @@ import {
   CancelCircleIcon,
   GitCompareIcon,
   Layout2ColumnIcon,
+  LayoutBottomIcon,
   MessageAdd01Icon,
   PencilEdit02Icon,
   PinIcon,
@@ -141,6 +142,7 @@ import {
   type DocTab,
 } from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
+import { moveTerminalPlacement } from './open-surfaces'
 import { SurfaceList, SurfaceMenuItems } from './surface-list'
 import {
   focusSurfaceList,
@@ -422,7 +424,12 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
 }
 
 /** The panel's tabs in the row's order, with what each shows and who uses it. */
-function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds): SurfaceItem[] {
+function useSurfaceItems(
+  panel: string,
+  projectPath: string,
+  kinds: SurfaceKinds,
+  includeTerminals: boolean,
+): SurfaceItem[] {
   const { t } = useTranslation(['terminal', 'browser', 'devices', 'shell'])
   const { t: td } = useTranslation('devices')
   const { t: tb } = useTranslation('browser')
@@ -430,7 +437,9 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   const hostId = hostOfPath(projectPath)
   const shown = useViewStore((s) => s.sidePane[panel])
   const terminals = useTerminalsStore(
-    useShallow((s) => (kinds.terminal ? terminalsOf(s.byId, panel, s.order[panel]) : [])),
+    useShallow((s) =>
+      includeTerminals && kinds.terminal ? terminalsOf(s.byId, panel, s.order[panel]) : [],
+    ),
   )
   const activeId = useTerminalsStore((s) => s.active[panel])
   const rightId = useTerminalsStore((s) => s.split[panel] ?? null)
@@ -729,8 +738,11 @@ export function SurfaceTabs({
 }) {
   const { t } = useTranslation(['shell', 'terminal', 'browser', 'devices', 'common'])
   const sessionId = panelSession(panel)
+  const phone = usePhoneWindow()
+  const terminalPlacement = useViewStore((s) => s.terminalPlacement)
+  const terminalInBottom = terminalPlacement === 'bottom' && !phone
   const kinds = useSurfaceKinds(panel, projectPath)
-  const items = useSurfaceItems(panel, projectPath, kinds)
+  const items = useSurfaceItems(panel, projectPath, kinds, !terminalInBottom)
   useGonePluginPanes(panel, hostOfPath(projectPath))
   const browserTabs = useBrowserStore((s) => (sessionId ? s.bySession[sessionId]?.tabs.length : 0))
   // Tabs whose close waits for the user's answer, the first one asked about.
@@ -750,7 +762,6 @@ export function SurfaceTabs({
   const before = useRef({ pages, devices })
   // On macOS, maximized with the sidebar collapsed, the head is the window's top left corner; on a
   // phone the panel always covers the area and the corner always holds the sidebar's toggle.
-  const phone = usePhoneWindow()
   const cornered = (useViewStore((s) => s.sidebarCollapsed) || phone) && maximized && !hasBand
 
   // Files are read and kept by project; the row says which project its panel's tabs are of.
@@ -867,6 +878,10 @@ export function SurfaceTabs({
 
   const newTerminal = () => {
     toggleTerminal(panel, true)
+    if (terminalInBottom) {
+      void createTerminal(projectPath, panel)
+      return
+    }
     const slow = window.setTimeout(() => setStarting(true), SLOW_START_MS)
     void createTerminal(projectPath, panel).finally(() => {
       window.clearTimeout(slow)
@@ -935,6 +950,11 @@ export function SurfaceTabs({
                 onCloseAllTerminals={
                   item.kind === 'terminal' ? () => void requestCloseAllTerminals(panel) : null
                 }
+                onMoveTerminalToBottom={
+                  item.kind === 'terminal' && !phone
+                    ? () => moveTerminalPlacement('bottom', panel)
+                    : null
+                }
               />
             ))}
             {starting && (
@@ -958,6 +978,14 @@ export function SurfaceTabs({
       </div>
       <div className="kp-head__tools app-region-no-drag">
         {tight && <CountMenu items={items} onSelect={(item) => selectSurface(panel, item)} />}
+        {!phone && !terminalInBottom && shown === 'terminal' && (
+          <PanelButton
+            label={t('terminal:panel.moveToBottom')}
+            onClick={() => moveTerminalPlacement('bottom', panel)}
+          >
+            <PaneIcon icon={LayoutBottomIcon} size={16} />
+          </PanelButton>
+        )}
         {!phone && (
           <PanelButton
             label={maximized ? t('common:pane.restore') : t('common:pane.maximize')}
@@ -1011,6 +1039,7 @@ function SurfaceTab({
   onCloseOthers,
   onCloseRight,
   onCloseAllTerminals,
+  onMoveTerminalToBottom,
 }: {
   panel: string
   projectPath: string
@@ -1023,6 +1052,8 @@ function SurfaceTab({
   onCloseRight: (() => void) | null
   /** Present on terminal tabs to close every terminal belonging to this panel. */
   onCloseAllTerminals: (() => void) | null
+  /** Present on terminal tabs on non-phone viewports to move terminals to the bottom dock. */
+  onMoveTerminalToBottom: (() => void) | null
 }) {
   const { t } = useTranslation(['terminal', 'browser', 'devices', 'common', 'shell'])
   const [editing, setEditing] = useState(false)
@@ -1165,6 +1196,12 @@ function SurfaceTab({
               <PaneIcon icon={Layout2ColumnIcon} size={16} />
               {split ? t('terminal:panel.unsplit') : t('terminal:panel.split')}
             </ContextMenuItem>
+            {onMoveTerminalToBottom && (
+              <ContextMenuItem onClick={onMoveTerminalToBottom}>
+                <PaneIcon icon={LayoutBottomIcon} size={16} />
+                {t('terminal:panel.moveToBottom')}
+              </ContextMenuItem>
+            )}
           </>
         )}
         {mention && (
