@@ -3,7 +3,7 @@ import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { cn } from '@renderer/lib/utils'
-import { addressText, isLocalHost, normalizeAddress } from './address'
+import { addressText, copiedAddress, isLocalHost, normalizeAddress } from './address'
 
 /**
  * The address the page shows, after a lock for a page served over https or from this computer;
@@ -78,6 +78,14 @@ export function AddressField({
           setText(shown)
           // The address starts at its beginning, not where the field was scrolled to.
           event.currentTarget.scrollLeft = 0
+        }}
+        onCopy={(event) => {
+          const input = event.currentTarget
+          if (input.selectionStart === null || input.selectionEnd === null) return
+          const full = copiedAddress(input.value, input.selectionStart, input.selectionEnd, url)
+          if (!full || !event.clipboardData) return
+          event.clipboardData.setData('text/plain', full)
+          event.preventDefault()
         }}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.keyCode === 229) return
