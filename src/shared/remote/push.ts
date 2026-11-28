@@ -304,6 +304,8 @@ export interface LiveActivityPlan {
   done: number
   total: number
   current?: string
+  /** 最近完成的步骤标题，用于 4/4 收尾或推进中的迷你步骤轨迹展示。 */
+  lastCompleted?: string
 }
 
 /** What the host notifies about, as the sealed content says it. */

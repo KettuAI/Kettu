@@ -166,7 +166,7 @@ describe('sending a push', () => {
         title: 'Fix the login form',
         turnStartedAt: 1_762_560_000_000,
         project: 'Kettu',
-        plan: { done: 2, total: 5, current: 'Run tests' },
+        plan: { done: 2, total: 5, current: 'Run tests', lastCompleted: 'Refactor layout' },
       },
     })
     await t.finished
@@ -177,7 +177,7 @@ describe('sending a push', () => {
       agentId: 'claude-code',
       title: 'Fix the login form',
       project: 'Kettu',
-      plan: { done: 2, total: 5, current: 'Run tests' },
+      plan: { done: 2, total: 5, current: 'Run tests', lastCompleted: 'Refactor layout' },
     })
 
     const tPrivate = await setup([200], {

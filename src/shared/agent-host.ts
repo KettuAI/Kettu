@@ -1190,6 +1190,8 @@ export interface PlanProgress {
   total: number
   /** The step in progress, by its index from 0, and the first line of its text; null for none. */
   current: { index: number; text: string } | null
+  /** 最近一个已完成步骤的序号与首行摘要，用于全部完成或推进中呈现步骤轨迹。 */
+  lastCompleted?: { index: number; text: string } | null
 }
 
 /** What a session made, read from its stored thread for its card in the sidebar. */

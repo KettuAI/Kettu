@@ -233,6 +233,9 @@ export function parseHostActivity(value: unknown): HostActivitySnapshot | null {
             ...(typeof planRaw.current === 'string' && planRaw.current
               ? { current: planRaw.current.slice(0, 200) }
               : {}),
+            ...(typeof planRaw.lastCompleted === 'string' && planRaw.lastCompleted
+              ? { lastCompleted: planRaw.lastCompleted.slice(0, 200) }
+              : {}),
           }
         : undefined
     running.push({
