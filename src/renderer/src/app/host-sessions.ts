@@ -22,6 +22,7 @@ import { forgetHostAgents, readHostAgents, useAgentsStore } from '@renderer/stor
 import { forgetHostGit } from '@renderer/stores/git'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { clearHostSessionBrowserTabs } from '@renderer/stores/session-browser-tabs'
 import { listedOrigin, useSessionsStore } from '@renderer/stores/sessions'
 import { endTerminals, reattachTerminals, takeTerminalEvent } from '@renderer/stores/terminals'
 
@@ -93,6 +94,7 @@ function forget(hostId: string): void {
   forgetHostAgents(hostId)
   forgetHostAgentOptions(hostId)
   forgetHostGit(hostId)
+  clearHostSessionBrowserTabs(hostId)
 }
 
 async function readLists(hostId: string): Promise<void> {

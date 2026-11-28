@@ -76,6 +76,10 @@ export function revealSurface(
     showTerminal(panel, id)
   } else if (kind === 'page') {
     if (!sessionId || isWeb) return
+    const hasLocal = useBrowserStore
+      .getState()
+      .bySession[sessionId]?.tabs.some((tab) => tab.id === id)
+    if (!hasLocal) return
     toggleSidePane(panel, 'browser', true)
     void window.kettu.browser.selectTab(sessionId, id)
   } else if (sessionId) {

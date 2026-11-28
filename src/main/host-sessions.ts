@@ -47,6 +47,7 @@ interface Asker {
 
 interface InFlight {
   hostId: string
+  method: string
   asker: Asker
 }
 
@@ -112,6 +113,10 @@ export class HostSessions {
   private readonly inFlight = new Map<number, InFlight>()
   /** Main's own requests, by id, with their host and method, whose answers go nowhere. */
   private readonly own = new Map<number, { hostId: string; method: string }>()
+  /** Remote session ids learned from trusted host responses and events, mapped to their host. */
+  private readonly remoteSessions = new Map<string, string>()
+  /** Methods an older host refused with `unknown_method` on the current connection. */
+  private readonly unsupportedMethods = new Map<string, Set<string>>()
   private readonly held = new Map<string, Held[]>()
   /** The hosts whose first try is under way, where requests wait rather than fail. */
   private connecting = new Set<string>()
@@ -143,6 +148,7 @@ export class HostSessions {
   opened(hostId: string, port: RelayPort): void {
     const previous = this.hosts.get(hostId)
     if (previous) this.ended(hostId, previous)
+    this.unsupportedMethods.delete(hostId)
     this.hosts.set(hostId, port)
     port.on('message', ({ data }) => this.fromHost(hostId, port, data))
     port.start()
@@ -158,6 +164,11 @@ export class HostSessions {
   /** The hosts whose session is open now. */
   openHosts(): string[] {
     return [...this.hosts.keys()]
+  }
+
+  /** The remote host that owns `sessionId`, as learned from trusted host replies, or null. */
+  hostOfSession(sessionId: string): string | null {
+    return this.remoteSessions.get(sessionId) ?? null
   }
 
   /** The session ended: its requests fail, and the windows hear of it. */
@@ -182,6 +193,7 @@ export class HostSessions {
   request(hostId: string, method: string, params: unknown): boolean {
     const port = this.hosts.get(hostId)
     if (!port) return false
+    if (this.unsupportedMethods.get(hostId)?.has(method)) return false
     const mainId = this.nextId++
     try {
       port.postMessage({ type: 'request', id: mainId, method, params })
@@ -225,6 +237,7 @@ export class HostSessions {
 
   private ended(hostId: string, port: RelayPort): void {
     this.hosts.delete(hostId)
+    this.unsupportedMethods.delete(hostId)
     port.close()
     for (const [mainId, request] of [...this.own]) {
       if (request.hostId === hostId) this.own.delete(mainId)
@@ -377,7 +390,7 @@ export class HostSessions {
     const port = this.hosts.get(hostId)
     if (!port) return asker.answer({ type: 'error', error: offline() })
     const mainId = this.nextId++
-    this.inFlight.set(mainId, { hostId, asker })
+    this.inFlight.set(mainId, { hostId, method, asker })
     try {
       port.postMessage({ type: 'request', id: mainId, method, params })
     } catch (error) {
@@ -397,7 +410,16 @@ export class HostSessions {
       if (own?.hostId === hostId) {
         this.own.delete(message.id as number)
         if (message.type === 'error') {
-          const error = message.error as { message?: unknown } | undefined
+          const error = message.error as { code?: unknown; message?: unknown } | undefined
+          if (error?.code === 'unknown_method') {
+            let unsupported = this.unsupportedMethods.get(hostId)
+            if (!unsupported) {
+              unsupported = new Set()
+              this.unsupportedMethods.set(hostId, unsupported)
+            }
+            unsupported.add(own.method)
+            return
+          }
           log.warn(`Host ${hostId} refused ${own.method}: ${String(error?.message)}`)
         }
         return
@@ -405,6 +427,9 @@ export class HostSessions {
       const request = typeof message.id === 'number' ? this.inFlight.get(message.id) : undefined
       if (!request || request.hostId !== hostId) return
       this.inFlight.delete(message.id as number)
+      if (message.type === 'response') {
+        this.learnSessionsFromResponse(hostId, request.method, message.result)
+      }
       return request.asker.answer(
         message.type === 'response'
           ? { type: 'response', result: message.result }
@@ -418,6 +443,9 @@ export class HostSessions {
     if (!passed) return
     const event = message.event as
       { type?: unknown; call?: unknown; attention?: unknown } | undefined
+    if (message.type === 'event' && typeof event === 'object' && event !== null) {
+      this.learnSessionsFromEvent(hostId, event as Record<string, unknown>)
+    }
     if (message.type === 'event' && event?.type === 'attention') {
       this.options.attention?.(hostId, event.attention)
       return
@@ -459,6 +487,60 @@ export class HostSessions {
       window.port.postMessage(message)
     } catch (error) {
       log.warn(`A message for a window could not be sent: ${(error as Error).message}`)
+    }
+  }
+
+  private learnSessionsFromResponse(hostId: string, method: string, result: unknown): void {
+    if (method === 'sessions.list') {
+      const items = Array.isArray(result)
+        ? result
+        : Array.isArray((result as { changed?: unknown } | null)?.changed)
+          ? (result as { changed: unknown[] }).changed
+          : []
+      for (const item of items) {
+        const id = (item as { id?: unknown } | null)?.id
+        if (typeof id === 'string' && id.length > 0) this.remoteSessions.set(id, hostId)
+      }
+      const removed = (result as { removed?: unknown } | null)?.removed
+      if (Array.isArray(removed)) {
+        for (const id of removed) {
+          if (typeof id === 'string' && this.remoteSessions.get(id) === hostId) {
+            this.remoteSessions.delete(id)
+          }
+        }
+      }
+      return
+    }
+    if (
+      method === 'sessions.create' ||
+      method === 'sessions.fork' ||
+      method === 'sessions.import' ||
+      method === 'sessions.prepare'
+    ) {
+      const id = (result as { id?: unknown } | null)?.id
+      if (typeof id === 'string' && id.length > 0) this.remoteSessions.set(id, hostId)
+      return
+    }
+    if (method === 'sessions.open' || method === 'sessions.snapshot') {
+      const id = (result as { session?: { id?: unknown } } | null)?.session?.id
+      if (typeof id === 'string' && id.length > 0) this.remoteSessions.set(id, hostId)
+    }
+  }
+
+  private learnSessionsFromEvent(hostId: string, event: Record<string, unknown>): void {
+    if (event.type === 'session.summary') {
+      const id = (event.summary as { id?: unknown } | undefined)?.id
+      if (typeof id === 'string' && id.length > 0) this.remoteSessions.set(id, hostId)
+    } else if (event.type === 'session.patches') {
+      const sessionId = (event.batch as { sessionId?: unknown } | undefined)?.sessionId
+      if (typeof sessionId === 'string' && sessionId.length > 0) {
+        this.remoteSessions.set(sessionId, hostId)
+      }
+    } else if (event.type === 'session.removed') {
+      const sessionId = event.sessionId
+      if (typeof sessionId === 'string' && this.remoteSessions.get(sessionId) === hostId) {
+        this.remoteSessions.delete(sessionId)
+      }
     }
   }
 }

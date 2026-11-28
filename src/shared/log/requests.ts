@@ -70,6 +70,7 @@ const READS = new Set([
   'suggestionFile',
   'suggestions',
   'summary',
+  'tabs',
   'taskOutput',
   'tools',
   'total',

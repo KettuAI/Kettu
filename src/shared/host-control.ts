@@ -7,7 +7,12 @@ import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
-import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
+import type {
+  BrowserForward,
+  BrowserOriginAnswer,
+  BrowserOriginDecision,
+  SessionBrowserTab,
+} from './browser'
 import type { ComputerApp, ComputerFrame, ComputerHold } from './computer-use'
 import type { ControlOutcome } from './control'
 import type { Locale } from './locale'
@@ -229,6 +234,10 @@ export type MainToHost =
   | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
   // The user handed the session's page back after taking it over: the thread says for how long.
   | { type: 'host:browser-handed-back'; sessionId: string; durationMs: number }
+  // The host's own desktop window's browser tabs for one session; empty clears what main reported.
+  | { type: 'host:browser-tabs'; sessionId: string; tabs: SessionBrowserTab[] }
+  // Replaces every session's browser tabs reported by main (on host start/restart or window close).
+  | { type: 'host:browser-tabs-sync'; sessions: Record<string, SessionBrowserTab[]> }
   // The floating label's buttons and the stop shortcut, for the session holding the computer.
   | { type: 'host:computer-control'; sessionId: string; action: ComputerControlAction }
   // Where the window the holding session uses is now; answered by host:computer-frame.

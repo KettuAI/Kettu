@@ -351,6 +351,7 @@
     "loading": "正在列出项目文件…",
     "chooseProject": "选择一个项目后才能提及其中的文件",
     "files": "文件",
+    "browserTabs": "浏览器标签页",
     "folder": "文件夹",
     "keysMove": "↑↓ 移动",
     "keysInsert": "↵ 插入",

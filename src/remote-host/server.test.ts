@@ -1743,6 +1743,107 @@ describe("a desktop app's browser", () => {
         answer: { result: { text: 'no', value: {} } },
       }),
     ).rejects.toMatchObject({ code: 'forbidden' })
+    await expect(
+      phone.port.request('browser.reportTabs', {
+        sessionId: created.id,
+        tabs: [],
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
+  })
+
+  it('lists and streams session browser tabs to paired devices with strict isolation and cleanup', async () => {
+    const t = await setup()
+    const phone = await t.connect()
+    await phone.first
+    const app = await t.connect(undefined, {
+      client: { kind: 'desktop', version: '1.0.0', platform: 'macOS 26.1' },
+      features: ['browser'],
+    })
+    await app.first
+
+    const s1 = await phone.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+      prompt: [{ type: 'text', text: 'First session' }],
+    })
+    const s2 = await phone.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+      prompt: [{ type: 'text', text: 'Second session' }],
+    })
+    await phone.port.untilStatus(s1.id, 'ready')
+    await phone.port.untilStatus(s2.id, 'ready')
+
+    // Unknown sessions and sessions with no open tabs return an empty list.
+    expect(await phone.port.request('browser.tabs', { sessionId: 'missing-session' })).toEqual({
+      tabs: [],
+    })
+    expect(await phone.port.request('browser.tabs', { sessionId: s1.id })).toEqual({ tabs: [] })
+
+    // Host's desktop window reports tabs for s1; phone can query them and receives them on watch.
+    const hostTab = {
+      id: 't1',
+      url: 'https://example.com/docs',
+      title: 'Docs',
+      active: true,
+      by: 'user' as const,
+      allowed: false,
+    }
+    t.agent.host.browserTabsChanged(s1.id, [hostTab])
+    expect(await phone.port.request('browser.tabs', { sessionId: s1.id })).toEqual({
+      tabs: [hostTab],
+    })
+    // Strict session isolation: s2 has no tabs.
+    expect(await phone.port.request('browser.tabs', { sessionId: s2.id })).toEqual({ tabs: [] })
+
+    await phone.port.request('sessions.watch', { sessionId: s1.id })
+    await phone.port.until(() =>
+      phone.port.events.some((event) => event.type === 'browser.tabs' && event.sessionId === s1.id),
+    )
+
+    // Subsequent updates from main push to watchers of s1; s2 updates never leak to s1 watchers.
+    const hostTabUpdated = { ...hostTab, title: 'API Reference', allowed: true }
+    t.agent.host.browserTabsChanged(s1.id, [hostTabUpdated])
+    t.agent.host.browserTabsChanged(s2.id, [{ ...hostTab, id: 't-other', title: 'Secret' }])
+    await phone.port.until(() =>
+      phone.port.events.some(
+        (event) =>
+          event.type === 'browser.tabs' &&
+          event.sessionId === s1.id &&
+          event.tabs[0]?.title === 'API Reference',
+      ),
+    )
+    expect(
+      phone.port.events.some((event) => event.type === 'browser.tabs' && event.sessionId === s2.id),
+    ).toBe(false)
+
+    // Closing the host's tabs clears s1 and notifies watchers with an empty list.
+    t.agent.host.browserTabsChanged(s1.id, [])
+    await phone.port.until(() =>
+      phone.port.events.some(
+        (event) =>
+          event.type === 'browser.tabs' && event.sessionId === s1.id && event.tabs.length === 0,
+      ),
+    )
+    expect(await phone.port.request('browser.tabs', { sessionId: s1.id })).toEqual({ tabs: [] })
+
+    // A paired desktop app can report tabs for s1; disconnecting clears them automatically.
+    const remoteTab = {
+      id: 't9',
+      url: 'http://localhost:5173/',
+      title: 'Local Dev',
+      active: true,
+      by: 'agent' as const,
+      allowed: true,
+    }
+    await app.port.request('browser.reportTabs', { sessionId: s1.id, tabs: [remoteTab] })
+    expect(await phone.port.request('browser.tabs', { sessionId: s1.id })).toEqual({
+      tabs: [remoteTab],
+    })
+    await app.close()
+    await expect
+      .poll(() => phone.port.request('browser.tabs', { sessionId: s1.id }))
+      .toEqual({ tabs: [] })
   })
 })
 

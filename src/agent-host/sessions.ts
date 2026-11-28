@@ -5912,6 +5912,11 @@ export class SessionManager {
     return ports
   }
 
+  /** The ports that watch or show the session now, each listed once. */
+  audience(sessionId: string): string[] {
+    return [...new Set([...(this.watchers.get(sessionId) ?? []), ...this.showing(sessionId)])]
+  }
+
   /** Tells the ports that watch a session, or `to`, who has it in front. */
   private tellViewers(sessionId: string, to?: readonly string[]): void {
     const showing = this.showing(sessionId)

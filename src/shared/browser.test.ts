@@ -7,8 +7,11 @@ import {
   isFixedFrameViewport,
   PAGE_SIZES,
   pageSizeOf,
+  parseSessionBrowserTabs,
   sameBrowserUrl,
   samePageSize,
+  sameSessionBrowserTabs,
+  sessionBrowserTabsOf,
   SIZE_LINE_ROOM,
   type BrowserBounds,
   type PageSize,
@@ -217,5 +220,99 @@ describe('canonicalBrowserUrl & sameBrowserUrl (#2858)', () => {
     expect(canonicalBrowserUrl('file:///tmp/index.html')).toBeNull()
     expect(sameBrowserUrl('about:blank', 'about:blank')).toBe(false)
     expect(sameBrowserUrl(null, 'https://example.com')).toBe(false)
+  })
+})
+
+describe('session browser tab projection and validation (#2260)', () => {
+  it('projects BrowserState tabs and normalizes URLs, titles and active selection', () => {
+    const projected = sessionBrowserTabsOf({
+      selected: 't2',
+      tabs: [
+        {
+          id: 't1',
+          url: 'https://example.com/docs',
+          title: 'Docs',
+          loading: true,
+          released: false,
+          opener: null,
+          by: 'user',
+          allowed: false,
+        },
+        {
+          id: 't2',
+          url: 'file:///etc/passwd',
+          title: '',
+          loading: false,
+          released: true,
+          opener: 't1',
+          by: 'agent',
+          allowed: true,
+        },
+      ],
+    })
+    expect(projected).toEqual([
+      {
+        id: 't1',
+        url: 'https://example.com/docs',
+        title: 'Docs',
+        active: false,
+        by: 'user',
+        allowed: false,
+      },
+      {
+        id: 't2',
+        url: null,
+        title: null,
+        active: true,
+        by: 'agent',
+        allowed: true,
+      },
+    ])
+    expect(sameSessionBrowserTabs(projected, [...projected])).toBe(true)
+    expect(
+      sameSessionBrowserTabs(projected, [{ ...projected[0]!, active: true }, projected[1]!]),
+    ).toBe(false)
+  })
+
+  it('validates reported tab payloads and rejects non-http URLs or duplicate ids', () => {
+    expect(
+      parseSessionBrowserTabs([
+        {
+          id: 't1',
+          url: 'http://localhost:3000/',
+          title: 'App',
+          active: true,
+          by: 'user',
+          allowed: false,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: 't1',
+        url: 'http://localhost:3000/',
+        title: 'App',
+        active: true,
+        by: 'user',
+        allowed: false,
+      },
+    ])
+    expect(
+      parseSessionBrowserTabs([
+        {
+          id: 't1',
+          url: 'javascript:alert(1)',
+          title: null,
+          active: true,
+          by: 'user',
+          allowed: false,
+        },
+      ]),
+    ).toBeNull()
+    expect(
+      parseSessionBrowserTabs([
+        { id: 't1', url: null, title: null, active: true, by: 'user', allowed: false },
+        { id: 't1', url: null, title: null, active: false, by: 'agent', allowed: true },
+      ]),
+    ).toBeNull()
   })
 })
