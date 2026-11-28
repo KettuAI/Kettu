@@ -209,7 +209,7 @@ function EditProjectForm({
           <DialogTitle>{t('project.edit.title')}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-col px-5.5 pb-4">
+        <div data-slot="edit-project-body" className="flex min-h-0 min-w-0 flex-col px-5.5 pb-4">
           <label htmlFor={`${id}-name`} className="mb-1.5 text-control font-medium text-primary">
             {t('project.edit.nameLabel')}
           </label>
@@ -239,7 +239,7 @@ function EditProjectForm({
               }}
             />
           </InputGroup>
-          <p className="mt-1.5 text-small leading-normal text-tertiary">
+          <p className="mt-1.5 text-small leading-normal wrap-anywhere text-tertiary">
             {t('project.edit.nameHint', { name: defaultName })}
           </p>
 
@@ -380,13 +380,13 @@ function EditProjectForm({
           </p>
 
           {(folderError || submitError) && (
-            <p role="alert" className="mt-2 text-small leading-normal text-danger">
+            <p role="alert" className="mt-2 text-small leading-normal wrap-anywhere text-danger">
               {folderError ?? submitError}
             </p>
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-5.5 py-4 *:data-[slot=button]:h-7.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5.5 py-4 *:data-[slot=button]:h-7.5">
           <Button
             type="button"
             variant="ghost"
