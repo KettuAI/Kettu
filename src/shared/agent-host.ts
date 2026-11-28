@@ -180,6 +180,7 @@ import type {
   MarketPublishAsk,
   SessionSnapshot,
   SessionStatus,
+  SessionUsage,
   SlashCommand,
   CommandOrigin,
   StopReason,
@@ -1049,6 +1050,12 @@ export interface RunningWork extends BackgroundWork {
   waiting: number
 }
 
+/** Live or stored usage of one session, for rolling up a session family. */
+export interface SessionUsageItem {
+  sessionId: string
+  usage: SessionUsage | null
+}
+
 /** An agent that can answer side questions for a session whose own agent cannot. */
 export interface SideChatAgent {
   agentId: AgentId
@@ -1830,6 +1837,8 @@ export interface HostContract {
   'sessions.cancel': { params: { sessionId: string }; result: void }
   // What ending these sessions and their sub-sessions would stop, for the ones with any.
   'sessions.runningWork': { params: { sessionIds: string[] }; result: { sessions: RunningWork[] } }
+  // Live or stored usage for these sessions, for rolling up a session family's tokens and cost.
+  'sessions.usages': { params: { sessionIds: string[] }; result: { sessions: SessionUsageItem[] } }
   // The memory state, the rule idle Claude Code sessions follow and any version in fallback.
   'sessions.idleRelease': { params: void; result: IdleReleaseState }
   // The host's load now, then `host.load` every LOAD_READ_MS to this port until the watch's lease
@@ -2610,6 +2619,7 @@ export const HOST_METHODS = [
   'sessions.attachEarly',
   'sessions.cancel',
   'sessions.runningWork',
+  'sessions.usages',
   'sessions.idleRelease',
   'host.load.watch',
   'host.load.unwatch',

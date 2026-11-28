@@ -108,6 +108,8 @@ function run(
       return db.mentions(request.sessionId, request.text)
     case 'outline':
       return db.outline(request.sessionId)
+    case 'usages':
+      return db.usages(request.sessionIds)
     case 'search':
       if (!reads)
         throw new ThreadDbError('The search index is not open', 'unavailable', undefined, {

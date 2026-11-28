@@ -30,6 +30,7 @@ import {
   type SearchIndexing,
   type SessionFindMatch,
   type SessionSummary,
+  type SessionUsageItem,
   type SideChatAgent,
   type LightAgent,
   type StartNotice,
@@ -8014,6 +8015,35 @@ export class SessionManager {
       }
     }
     return out
+  }
+
+  /**
+   * Live or stored usage for each known session in `sessionIds`, in request order with duplicates
+   * collapsed. Unknown sessions are omitted; known sessions with no recorded usage return `null`.
+   */
+  async usages(sessionIds: readonly string[]): Promise<SessionUsageItem[]> {
+    const unique: string[] = []
+    const seen = new Set<string>()
+    const storedIds: string[] = []
+    for (const id of sessionIds) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      if (this.live.has(id)) {
+        unique.push(id)
+      } else if (this.records.has(id)) {
+        unique.push(id)
+        storedIds.push(id)
+      }
+    }
+    const stored =
+      storedIds.length > 0 && this.deps.threads ? await this.deps.threads.usages(storedIds) : {}
+    return unique.map((sessionId) => {
+      const live = this.live.get(sessionId)
+      return {
+        sessionId,
+        usage: live ? live.thread.session.usage : (stored[sessionId] ?? null),
+      }
+    })
   }
 
   /** The session a subagent's work belongs to, which is released with its subagents. */

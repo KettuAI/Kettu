@@ -135,3 +135,38 @@ it('searches what was written through the reader, and reads the text around a ma
   const [snippet] = await store.snippets(['find'], [{ sessionId: 's1', pos: 0 }])
   expect(snippet).toMatchObject({ entryId: 'find me', role: 'user', snippet: 'find me' })
 })
+
+it('reads stored usages after pending writes for those sessions settle', async () => {
+  const store = open((data) => inThreadWorker(data))
+  await store.ready
+  const usage = {
+    used: 5_000,
+    size: 128_000,
+    cost: { amount: 0.15, currency: 'USD' },
+    tokens: {
+      total: 10_000,
+      input: 8_000,
+      output: 2_000,
+      thought: null,
+      cacheRead: null,
+      cacheWrite: null,
+    },
+  }
+  void store.write('s1', {
+    ...change('u0'),
+    session: {
+      title: null,
+      config: [],
+      commands: [],
+      usage,
+      subagent: null,
+      context: null,
+      sideChat: null,
+    },
+  })
+  expect(await store.usages(['s1', 's-missing'])).toEqual({
+    s1: usage,
+    's-missing': null,
+  })
+  expect(await store.usages([])).toEqual({})
+})

@@ -21,7 +21,7 @@ import type { ArtifactBrief } from '@shared/host-control'
 import { githubReferenceFromLink, schemelessGitHubLinks } from '@shared/git'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
-import { isThreadEntry, type ThreadEntry } from '@shared/thread'
+import { isThreadEntry, type SessionUsage, type ThreadEntry } from '@shared/thread'
 import {
   contentHash,
   moveContent,
@@ -1121,6 +1121,18 @@ export class ThreadDb {
         ? { head: { agentId: head.agentId, acpSessionId: head.acpSessionId }, entry }
         : null
     }, null)
+  }
+
+  /** The stored usage of each requested session, null when absent or unparseable. */
+  usages(sessionIds: readonly string[]): Record<string, SessionUsage | null> {
+    return this.guard((sql) => {
+      const out: Record<string, SessionUsage | null> = {}
+      for (const sessionId of sessionIds) {
+        if (Object.hasOwn(out, sessionId)) continue
+        out[sessionId] = this.headOf(sql, sessionId)?.session.usage ?? null
+      }
+      return out
+    }, {})
   }
 
   /** The session's user messages with their titles, oldest first; null without a stored thread. */

@@ -520,6 +520,55 @@
     "back": "返回 {{title}}",
     "startedFrom": "从 <parent>{{title}}</parent> 开始"
   },
+  "sessionFamily": {
+    "title": "同组会话",
+    "listLabel": "同组会话列表",
+    "triggerChild": "{{title}}（同组共 {{count}} 个会话）",
+    "triggerParent_other": "同组含 {{count}} 个子会话",
+    "subSessionCount_other": "{{count}} 个子会话",
+    "memberCount_other": "共 {{count}} 个",
+    "parentBadge": "父会话",
+    "currentBadge": "当前",
+    "activity": {
+      "waiting": "{{count}} 个待确认",
+      "running": "{{count}} 个运行中",
+      "background": "{{count}} 个后台运行",
+      "error": "{{count}} 个出错"
+    },
+    "status": {
+      "waiting": "待确认",
+      "error": "出错",
+      "auth": "需登录",
+      "running": "运行中",
+      "background": "后台运行",
+      "starting": "启动中",
+      "unread": "有更新",
+      "idle": "空闲"
+    },
+    "usage": {
+      "totalTokens": "同组 Token",
+      "totalCost": "同组费用",
+      "ioSummary": "输入 {{input}} · 输出 {{output}}",
+      "partial": "部分汇总",
+      "unavailable": "无数据",
+      "unavailableShort": "无数据",
+      "noTokensShort": "无 Token",
+      "noCostShort": "无费用",
+      "tokensUnavailable": "缺失 Token 数据",
+      "costUnavailable": "缺失费用数据",
+      "rowUnavailable": "该会话暂无可用用量数据",
+      "rowLoadFailed": "无法加载该会话的用量数据",
+      "loadingRow": "正在加载用量数据…",
+      "rowTokensDetail": "{{total}} tokens（输入 {{input}} · 输出 {{output}}）",
+      "loading_other": "正在加载 {{count}} 个会话的用量…",
+      "loadFailed": "无法加载同组用量数据。",
+      "allUnavailable": "同组会话暂无已上报的用量数据。",
+      "missingBoth_other": "不含 {{count}} 个缺失用量数据的会话。",
+      "missingTokens_other": "Token 汇总不含 {{count}} 个缺失 Token 数据的会话。",
+      "missingCost_other": "费用汇总不含 {{count}} 个缺失费用数据的会话。",
+      "missingMixed": "不含 {{tokensCount}} 个缺失 Token 数据和 {{costCount}} 个缺失费用数据的会话。"
+    }
+  },
   "sessionMessage": {
     "from": "来自 {{title}}",
     "fromParent": "来自父会话"

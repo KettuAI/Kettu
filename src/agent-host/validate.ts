@@ -2227,6 +2227,16 @@ export function createValidators(platform: Platform): Validators {
         sessionIds: o.sessionIds.map((value) => sessionId({ sessionId: value })),
       }
     },
+    'sessions.usages': (params) => {
+      const o = fields(params)
+      if (!Array.isArray(o.sessionIds)) throw invalidParams('sessionIds must be a list')
+      if (o.sessionIds.length > STAKED_SESSIONS) {
+        throw invalidParams(`sessionIds holds more than ${STAKED_SESSIONS}`)
+      }
+      return {
+        sessionIds: o.sessionIds.map((value) => sessionId({ sessionId: value })),
+      }
+    },
     'sessions.idleRelease': none,
     'host.load.watch': none,
     'host.load.unwatch': none,

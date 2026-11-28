@@ -5264,6 +5264,8 @@ export class AgentHost {
       'sessions.attachEarly': ({ sessionId }) => sessions.attachEarly(sessionId),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
+      'sessions.usages': ({ sessionIds }) =>
+        sessions.usages(sessionIds).then((list) => ({ sessions: list })),
       'sessions.idleRelease': () => this.idleRelease.state(),
       'host.load.watch': (_, { portId }) => this.load.watch(portId),
       'host.load.unwatch': (_, { portId }) => this.load.unwatch(portId),

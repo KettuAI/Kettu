@@ -63,6 +63,7 @@ export type ThreadRequest =
   | { id: number; op: 'blob'; sessionId: string; hash: string }
   | { id: number; op: 'mentions'; sessionId: string; text: string }
   | { id: number; op: 'outline'; sessionId: string }
+  | { id: number; op: 'usages'; sessionIds: string[] }
   | { id: number; op: 'search'; words: string[] }
   | { id: number; op: 'find'; sessionId: string; words: string[]; limit: number }
   | { id: number; op: 'snippets'; words: string[]; picks: { sessionId: string; pos: number }[] }
