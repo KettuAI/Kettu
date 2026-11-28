@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { isFullAccessMode } from '@shared/agents'
 import { cacheExpiry, knownExpiry, shouldShowCacheDropNotice } from '@shared/prompt-cache'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import {
@@ -18,10 +19,11 @@ import { limitPhrase, resetTime } from '@renderer/lib/format'
 import { onAppEvent } from '@renderer/app/events'
 import { errorMessage, host } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
-import { isMod } from '@renderer/lib/platform'
+import { isMac, isMod, isWeb } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
+import { useAccountStore } from '@renderer/stores/account'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import {
   setPendingSwitch,
@@ -29,6 +31,8 @@ import {
   useAgentSwitchStore,
 } from '@renderer/stores/agent-switch'
 import { agentsOn, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
+import { useHostsStore } from '@renderer/stores/hosts'
+import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
 import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
@@ -57,6 +61,12 @@ import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './at
 import { formatBrowserAnnotationsPrompt } from './browser-annotations'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { composerRunState } from './composer-state'
+import { CrossHostDelegateDialog } from './cross-host-delegate-dialog'
+import {
+  buildOriginContextPreview,
+  crossHostMenuState,
+  pairedHostTargets,
+} from './cross-host-delegation'
 import { canOfferDelegation, isDelegatableAgentStatus, setDraftDelegateTarget } from './delegation'
 import { mentionSurfacesOf } from './mention-surfaces'
 import { OptionMenu } from './control-row'
@@ -261,6 +271,55 @@ export function Composer({
   const delegateDisabled =
     agentsLoaded && delegatableCount === 0 ? t('delegation.noAgents') : undefined
   const [delegating, setDelegating] = useState(false)
+  const accountStatus = useAccountStore((s) => s.status)
+  const hostsStatus = useHostsStore((s) => s.status)
+  const selfName = t('place.thisComputer', isMac ? { context: 'mac' } : {})
+  const crossHostTargets = useMemo(
+    () =>
+      pairedHostTargets({
+        accountStatus,
+        hostsStatus,
+        originHostId: hostId,
+        isWebClient: isWeb,
+        selfName,
+        selfPlatform: isMac ? 'darwin' : 'linux',
+      }),
+    [accountStatus, hostsStatus, hostId, selfName],
+  )
+  const crossHostMenu = useMemo(
+    () => crossHostMenuState({ canDelegate, targets: crossHostTargets }),
+    [canDelegate, crossHostTargets],
+  )
+  const [crossHostOpen, setCrossHostOpen] = useState(false)
+  const [crossHostInitialTask, setCrossHostInitialTask] = useState('')
+  const originThread = useThreadsStore((s) =>
+    crossHostOpen ? (s.replicas[sessionId]?.state ?? null) : null,
+  )
+  const originProjectName = useProjectsStore((s) =>
+    crossHostOpen && !isScratch
+      ? (s.projects.find((project) => project.path === session.projectPath)?.name ?? null)
+      : null,
+  )
+  const originHostName = useMemo(() => {
+    if (hostId === null) return hostsStatus?.self.name?.trim() || selfName
+    return hostsStatus?.hosts?.find((item) => item.id === hostId)?.name ?? t('place.unknownHost')
+  }, [hostId, hostsStatus, selfName, t])
+  const originSessionTitle = session.title?.trim() || t('session:sessionReport.agent')
+  const originContextPreview = useMemo(
+    () =>
+      crossHostOpen
+        ? buildOriginContextPreview(originThread, {
+            sessionTitle: originSessionTitle,
+            projectName: originProjectName,
+          })
+        : '',
+    [crossHostOpen, originThread, originSessionTitle, originProjectName],
+  )
+  const openCrossHostDialog = () => {
+    if (starting) return
+    setCrossHostInitialTask(box.editor.current?.text() ?? box.source.text)
+    setCrossHostOpen(true)
+  }
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
     canDelegateSend:
@@ -343,6 +402,14 @@ export function Composer({
     agentName,
     commands,
     ...(canDelegate ? { onDelegate: box.openDelegatePicker, delegateDisabled } : {}),
+    ...(crossHostMenu.visible
+      ? {
+          onCrossHostDelegate: openCrossHostDialog,
+          crossHostDelegateDisabled: crossHostMenu.disabled
+            ? t('crossHostDelegation.allOffline')
+            : undefined,
+        }
+      : {}),
     ...(sideOn ? { onSideChat: () => openSideChat(sessionId) } : {}),
   })
 
@@ -1071,6 +1138,28 @@ export function Composer({
           if (go) switchNow()
         }}
       />
+      {crossHostOpen && (
+        <CrossHostDelegateDialog
+          open={crossHostOpen}
+          onOpenChange={setCrossHostOpen}
+          originSessionId={sessionId}
+          originHostId={hostId}
+          originHostName={originHostName}
+          originSessionTitle={originSessionTitle}
+          originAgentId={session.agentId}
+          originFullAccess={typeof mode?.value === 'string' && isFullAccessMode(mode.value)}
+          initialTask={crossHostInitialTask}
+          originContextPreview={originContextPreview}
+          targets={crossHostTargets}
+          onDelegated={() => {
+            // Clear the origin draft only if it was prefilled and has not been modified since.
+            const currentDraft = box.editor.current?.text() ?? box.source.text
+            if (crossHostInitialTask.trim() !== '' && currentDraft === crossHostInitialTask) {
+              box.update('', 0)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

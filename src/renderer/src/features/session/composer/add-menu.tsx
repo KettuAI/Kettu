@@ -5,6 +5,7 @@ import {
   BubbleChatQuestionIcon,
   Camera01Icon,
   CommandLineIcon,
+  ComputerIcon,
   DashboardSquare02Icon,
   FolderAddIcon,
 } from '@hugeicons/core-free-icons'
@@ -30,6 +31,8 @@ export function useAddMenu({
   commands,
   onDelegate,
   delegateDisabled,
+  onCrossHostDelegate,
+  crossHostDelegateDisabled,
   onSideChat,
 }: {
   box: PromptBoxState
@@ -39,6 +42,10 @@ export function useAddMenu({
   onDelegate?: () => void
   /** Why delegation cannot be used right now (e.g. no agents available). */
   delegateDisabled?: string
+  /** Opens the cross-host manual delegation dialog; absent when no paired same-account hosts exist. */
+  onCrossHostDelegate?: () => void
+  /** Why cross-host delegation cannot be used right now (e.g. all paired computers offline). */
+  crossHostDelegateDisabled?: string
   /** Opens the session's side chat; absent where there is none. */
   onSideChat?: () => void
 }): { sections: ComposerAddSection[]; onAttach: (id: string) => void; disabled?: string } {
@@ -125,7 +132,7 @@ export function useAddMenu({
           : []),
       ],
     },
-    ...(onDelegate || onSideChat
+    ...(onDelegate || onCrossHostDelegate || onSideChat
       ? [
           {
             rows: [
@@ -137,6 +144,17 @@ export function useAddMenu({
                       icon: <Glyph icon={ArrowMoveDownRightIcon} />,
                       description: delegateDisabled,
                       disabled: !!delegateDisabled,
+                    },
+                  ]
+                : []),
+              ...(onCrossHostDelegate
+                ? [
+                    {
+                      id: 'cross-host-delegate',
+                      label: t('crossHostDelegation.menuItem'),
+                      icon: <Glyph icon={ComputerIcon} />,
+                      description: crossHostDelegateDisabled,
+                      disabled: !!crossHostDelegateDisabled,
                     },
                   ]
                 : []),
@@ -169,6 +187,7 @@ export function useAddMenu({
     else if (id === 'mention') startWord('@')
     else if (id === 'commands') startWord('/')
     else if (id === 'delegate') onDelegate?.()
+    else if (id === 'cross-host-delegate') onCrossHostDelegate?.()
     else if (id === 'side-chat') onSideChat?.()
     // The menu hands the focus back to its button; the text takes it after that.
     if (id === 'mention' || id === 'commands') requestAnimationFrame(() => box.focus())

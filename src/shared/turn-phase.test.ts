@@ -264,6 +264,25 @@ describe('turnPhase and writingEntryId boundary parity', () => {
         after: 'a:1',
       },
     },
+    {
+      label: 'remote_delegation',
+      entry: {
+        kind: 'remote_delegation',
+        id: 'rd:1',
+        delegationId: 'del-1',
+        phase: 'started',
+        targetHostId: '0123456789abcdef0123456789abcdef',
+        targetHostName: 'Work PC',
+        targetSessionId: 'remote-session-1',
+        targetProjectPath: '/repo',
+        targetProjectName: 'repo',
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Run build',
+        at: 1_700_000_000_000,
+        after: 'a:1',
+      },
+    },
   ]
 
   it('keeps writing phase and writingEntryId aligned when quiet/card entries follow a streaming reply', () => {

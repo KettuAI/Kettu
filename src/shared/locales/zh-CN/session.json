@@ -617,6 +617,19 @@
     "label": "已启动 <title>{{title}}</title>",
     "missing": "已启动一个会话"
   },
+  "remoteDelegation": {
+    "delegatedTo": "已派发到 {{host}}",
+    "statusStopped": "已停止",
+    "hostOffline": "已离线",
+    "reportFinished": "{{host}} 上的 {{agent}} 做完了",
+    "reportStopped": "{{host}} 上的 {{agent}} 已停止",
+    "reportFailed": "{{host}} 上的 {{agent}} 出错了",
+    "openSession": "打开 {{host}} 上的 {{title}}",
+    "authRequired": "目标电脑上的 {{agent}} 需要登录",
+    "failedGeneric": "目标电脑上的派发会话执行失败",
+    "sessionRemoved": "目标会话在完成前已被移除",
+    "hostDisconnected": "与 {{host}} 的配对在任务完成前已移除"
+  },
   "compaction": {
     "inProgress": "正在压缩上下文…",
     "completed": "上下文已压缩",

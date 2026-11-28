@@ -2087,4 +2087,154 @@ describe('worktree requests', () => {
       }),
     )
   })
+
+  it('validates sessions.recordRemoteDelegation payloads strictly', () => {
+    const valid = posix['sessions.recordRemoteDelegation']
+    expect(
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'started',
+        targetHostId: '0123456789abcdef0123456789abcdef',
+        targetHostName: 'Work PC',
+        targetHostPlatform: 'win32',
+        targetSessionId: 'remote-1',
+        targetProjectPath: 'C:\\repo',
+        targetProjectName: 'repo',
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Build app',
+        promptPreview: 'Run Windows build',
+        at: 1_700_000_000_000,
+        extra: true,
+      }),
+    ).toEqual({
+      sessionId: 's1',
+      delegationId: 'del-1',
+      phase: 'started',
+      targetHostId: '0123456789abcdef0123456789abcdef',
+      targetHostName: 'Work PC',
+      targetHostPlatform: 'win32',
+      targetSessionId: 'remote-1',
+      targetProjectPath: 'C:\\repo',
+      targetProjectName: 'repo',
+      targetAgentId: 'codex',
+      targetAgentName: 'Codex',
+      targetTitle: 'Build app',
+      promptPreview: 'Run Windows build',
+      at: 1_700_000_000_000,
+    })
+
+    expect(
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'report',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'claude-code',
+        targetAgentName: 'Claude Code',
+        targetTitle: 'Check logs',
+        outcome: 'failed',
+        error: 'Command exited with status 1',
+      }),
+    ).toEqual({
+      sessionId: 's1',
+      delegationId: 'del-1',
+      phase: 'report',
+      targetHostId: null,
+      targetHostName: 'This Mac',
+      targetSessionId: 'local-1',
+      targetProjectPath: null,
+      targetProjectName: null,
+      targetAgentId: 'claude-code',
+      targetAgentName: 'Claude Code',
+      targetTitle: 'Check logs',
+      outcome: 'failed',
+      error: 'Command exited with status 1',
+    })
+
+    // Report phase requires a valid outcome.
+    rejects(() =>
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'report',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Check logs',
+      }),
+    )
+    // Invalid phase, outcome, agentId, or timestamp.
+    rejects(() =>
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'invalid',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Check logs',
+      }),
+    )
+    rejects(() =>
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'report',
+        outcome: 'running',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Check logs',
+      }),
+    )
+    rejects(() =>
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'started',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'not-a-valid-agent!',
+        targetAgentName: 'Bad',
+        targetTitle: 'Check logs',
+      }),
+    )
+    rejects(() =>
+      valid({
+        sessionId: 's1',
+        delegationId: 'del-1',
+        phase: 'started',
+        targetHostId: null,
+        targetHostName: 'This Mac',
+        targetSessionId: 'local-1',
+        targetProjectPath: null,
+        targetProjectName: null,
+        targetAgentId: 'codex',
+        targetAgentName: 'Codex',
+        targetTitle: 'Check logs',
+        at: -1,
+      }),
+    )
+  })
 })

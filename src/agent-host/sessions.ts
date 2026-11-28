@@ -25,6 +25,7 @@ import {
   type OutlineTitle,
   type PlanLimit,
   type PlanProgress,
+  type RemoteDelegationRecordParams,
   type ReturnedMessage,
   type RunningWork,
   type SessionAttention,
@@ -135,6 +136,7 @@ import {
   type SettingChangeItem,
   type SettingsChangeEntry,
   type TaskDeliveryEntry,
+  type RemoteDelegationEntry,
   type SettingsChangeOutcome,
   type RoutineAction,
   type RoutineChangeEntry,
@@ -1323,6 +1325,7 @@ const NON_TURN_OUTPUT_KINDS: ReadonlySet<ThreadEntry['kind']> = new Set([
   'turn_end',
   'git',
   'task_delivery',
+  'remote_delegation',
   'takeover',
   'session_message',
 ])
@@ -14516,6 +14519,59 @@ export class SessionManager {
     this.persist(parentLive)
     this.touch(parentLive.id)
     return summary
+  }
+
+  /**
+   * Records a user-initiated cross-host delegation notice (`phase: 'started'`) or its completion
+   * or failure report (`phase: 'report'`) in the origin session's thread. Idempotent by
+   * `delegationId` and `phase` so reconnects or duplicate events never append duplicate entries.
+   */
+  async recordRemoteDelegation(params: RemoteDelegationRecordParams): Promise<{ entryId: string }> {
+    this.recordOf(params.sessionId)
+    if (this.live.get(params.sessionId)?.prepared) throw notFound(t('session.notFound'))
+    const live = this.live.get(params.sessionId) ?? (await this.revive(params.sessionId))
+    for (let i = live.thread.order.length - 1; i >= 0; i--) {
+      const existing = live.thread.byId[live.thread.order[i]!]
+      if (
+        existing?.kind === 'remote_delegation' &&
+        existing.delegationId === params.delegationId &&
+        existing.phase === params.phase
+      ) {
+        return { entryId: existing.id }
+      }
+    }
+    const entry: RemoteDelegationEntry = {
+      kind: 'remote_delegation',
+      id: this.nextId(live),
+      delegationId: params.delegationId,
+      phase: params.phase,
+      targetHostId: params.targetHostId,
+      targetHostName: params.targetHostName,
+      ...(params.targetHostPlatform !== undefined
+        ? { targetHostPlatform: params.targetHostPlatform }
+        : {}),
+      targetSessionId: params.targetSessionId,
+      targetProjectPath: params.targetProjectPath,
+      targetProjectName: params.targetProjectName,
+      targetAgentId: params.targetAgentId,
+      targetAgentName: params.targetAgentName,
+      targetTitle: params.targetTitle,
+      ...(params.promptPreview !== undefined ? { promptPreview: params.promptPreview } : {}),
+      ...(params.outcome !== undefined ? { outcome: params.outcome } : {}),
+      ...(params.summary !== undefined ? { summary: params.summary } : {}),
+      ...(params.error !== undefined ? { error: params.error } : {}),
+      at: params.at ?? this.now(),
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    live.used = true
+    if (params.phase === 'report' && !this.inFront(live.id)) {
+      live.unread = true
+    }
+    this.persist(live)
+    this.touch(live.id)
+    if (params.phase === 'report') this.updateBadge()
+    return { entryId: entry.id }
   }
 
   /**

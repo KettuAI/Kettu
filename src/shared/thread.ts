@@ -620,6 +620,7 @@ export type ThreadEntry =
   | McpChangeEntry // Kettu's own record of an agent adding or switching an MCP server, and its answer
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
+  | RemoteDelegationEntry // Kettu's own record of a manual cross-host delegation and its outcome
 
 /** Source location of a configuration warning reported by an agent (e.g. Codex `config.toml`). */
 export interface ConfigWarningSource {
@@ -1099,6 +1100,50 @@ export interface TaskDeliveryEntry {
   deliverables: TaskDeliverable[]
   written: { agentId: AgentId } | null
   publishAsked?: number
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** Phase of a manual cross-host delegation record stored in the origin session's thread. */
+export type RemoteDelegationPhase = 'started' | 'report'
+
+/** Outcome reported back from a delegated session running on another paired computer. */
+export type RemoteDelegationOutcome = 'completed' | 'stopped' | 'failed'
+
+/**
+ * Kettu's own record of a user-initiated cross-host delegation from this session to another
+ * paired computer: written once when the target session starts (`phase: 'started'`) and once when
+ * its delegated run finishes or fails (`phase: 'report'`).
+ */
+export interface RemoteDelegationEntry {
+  kind: 'remote_delegation'
+  id: string
+  /** Shared id linking the `'started'` notice and its `'report'` outcome in this thread. */
+  delegationId: string
+  phase: RemoteDelegationPhase
+  /** Target computer id, or null when targeting the local host from a remote origin session. */
+  targetHostId: string | null
+  targetHostName: string
+  targetHostPlatform?: string
+  targetSessionId: string
+  /** Unqualified project path on the target computer, or null for No project (scratch). */
+  targetProjectPath: string | null
+  /** Project display name at delegation time, or null for No project. */
+  targetProjectName: string | null
+  targetAgentId: AgentId
+  targetAgentName: string
+  /** Target session title as known when recorded. */
+  targetTitle: string
+  /** Short preview of the confirmed task text (set on `'started'`). */
+  promptPreview?: string
+  /** Final outcome of the remote run (set on `'report'`). */
+  outcome?: RemoteDelegationOutcome
+  /** Concise summary extracted from the remote reply when available (set on `'report'`). */
+  summary?: string
+  /** Error or cancellation detail when the remote run failed or stopped (set on `'report'`). */
+  error?: string
+  /** Epoch ms when the delegation started or settled. */
+  at: number
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
 }
@@ -2282,6 +2327,29 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         typeof value.plugin === 'string' &&
         typeof value.request === 'string' &&
         typeof value.reason === 'string' &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'remote_delegation':
+      return (
+        typeof value.delegationId === 'string' &&
+        (value.phase === 'started' || value.phase === 'report') &&
+        (value.targetHostId === null || typeof value.targetHostId === 'string') &&
+        typeof value.targetHostName === 'string' &&
+        (value.targetHostPlatform === undefined || typeof value.targetHostPlatform === 'string') &&
+        typeof value.targetSessionId === 'string' &&
+        (value.targetProjectPath === null || typeof value.targetProjectPath === 'string') &&
+        (value.targetProjectName === null || typeof value.targetProjectName === 'string') &&
+        isAgentId(value.targetAgentId) &&
+        typeof value.targetAgentName === 'string' &&
+        typeof value.targetTitle === 'string' &&
+        (value.promptPreview === undefined || typeof value.promptPreview === 'string') &&
+        (value.outcome === undefined ||
+          value.outcome === 'completed' ||
+          value.outcome === 'stopped' ||
+          value.outcome === 'failed') &&
+        (value.summary === undefined || typeof value.summary === 'string') &&
+        (value.error === undefined || typeof value.error === 'string') &&
+        typeof value.at === 'number' &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'task_delivery':

@@ -346,6 +346,17 @@ function assistantLine(
     case 'session_started':
     case 'subagent':
       return '[started a sub-session]'
+    case 'remote_delegation': {
+      const place = entry.targetProjectName
+        ? `${entry.targetHostName} / ${entry.targetProjectName}`
+        : entry.targetHostName
+      if (entry.phase === 'started') {
+        return `[delegated a task to ${entry.targetAgentName} on ${place}: ${entry.targetTitle}]`
+      }
+      const outcome = entry.outcome ?? 'completed'
+      const detail = entry.error ? `: ${entry.error}` : entry.summary ? `: ${entry.summary}` : ''
+      return `[delegated task on ${place} (${entry.targetTitle}) ${outcome}${detail}]`
+    }
     case 'turn_end':
       return entry.stopReason === 'end_turn' ? null : `[the turn ended: ${entry.stopReason}]`
     case 'takeover':

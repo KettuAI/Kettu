@@ -170,6 +170,33 @@ export function exportItems(entries: readonly ThreadEntry[], context: ExportCont
           text: words.startedSession(context.sessionTitle(entry.sessionId)),
         })
         break
+      case 'remote_delegation': {
+        const title = context.sessionTitle(entry.targetSessionId) ?? entry.targetTitle
+        const place = entry.targetProjectName
+          ? `${entry.targetHostName} / ${entry.targetProjectName}`
+          : entry.targetHostName
+        if (entry.phase === 'started') {
+          items.push({
+            kind: 'step',
+            text: `${words.startedSession(title)} (${place})`,
+          })
+        } else {
+          const status =
+            entry.outcome === 'failed'
+              ? ` (${words.failed})`
+              : entry.outcome === 'stopped'
+                ? ` (${words.cancelled})`
+                : ''
+          const detail = entry.error ?? entry.summary
+          items.push({
+            kind: 'step',
+            text: detail
+              ? `${title} (${place})${status}: ${oneLine(detail)}`
+              : `${title} (${place})${status}`,
+          })
+        }
+        break
+      }
     }
   }
   return items

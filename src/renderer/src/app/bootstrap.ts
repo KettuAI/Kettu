@@ -132,6 +132,12 @@ import {
 } from '@renderer/features/settings/host-requests'
 import { goneHosts, hostListed, initHostSessions } from './host-sessions'
 import { followWindowTitle } from './window-title'
+import {
+  handleCrossHostGone,
+  handleCrossHostOpened,
+  handleCrossHostSessionRemoved,
+  initCrossHostDelegationTracker,
+} from '@renderer/features/session/cross-host-delegation-tracker'
 
 /** An event of this computer's agent host, or with `hostId` of another host's. */
 export function onHostEvent(event: HostEvent, hostId: string | null = null): void {
@@ -149,6 +155,7 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
     case 'session.removed':
       forgetViewers(event.sessionId)
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
+      handleCrossHostSessionRemoved(event.sessionId)
       if (hostId !== null) forgetSessionHost(event.sessionId)
       return
     case 'session.returned':
@@ -495,6 +502,7 @@ export function bootstrap(): Promise<unknown> {
     initDebug().catch((error: unknown) => console.error('Could not read debug mode', error))
     initHosts()
     void loadHosts()
+    initCrossHostDelegationTracker()
     initHostSessions({
       event: (hostId, event) => onHostEvent(event, hostId),
       opened: (hostId) => {
@@ -512,6 +520,7 @@ export function bootstrap(): Promise<unknown> {
         void loadGitTools(hostId)
         rewatchFiles(hostId)
         if (waitingSessions.size > 0) closeUnlistedPanes(waitingSessions)
+        handleCrossHostOpened(hostId)
       },
       closed: (hostId) => {
         hostRequestsClosed(hostId)
@@ -520,6 +529,10 @@ export function bootstrap(): Promise<unknown> {
         tasksHostClosed(hostId)
         hostLoadClosed(hostId)
         gitHostClosed(hostId)
+        const hosts = useHostsStore.getState().status?.hosts ?? null
+        if (goneHosts([hostId], hosts).length > 0) {
+          handleCrossHostGone(hostId)
+        }
       },
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })

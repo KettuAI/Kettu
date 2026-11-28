@@ -5387,6 +5387,7 @@ export class AgentHost {
         this.shareSurfaces(summary.id, params.content)
         return summary
       },
+      'sessions.recordRemoteDelegation': (params) => sessions.recordRemoteDelegation(params),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
       'sessions.queue': ({ sessionId, content, comments }, { portId, device }) => {

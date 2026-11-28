@@ -31,6 +31,7 @@ type OwnEntry = Extract<
       | 'mcp_change'
       | 'task_delivery'
       | 'plugin_denial'
+      | 'remote_delegation'
       | 'takeover'
   }
 >
@@ -168,6 +169,7 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
     case 'mcp_change':
     case 'task_delivery':
     case 'plugin_denial':
+    case 'remote_delegation':
     case 'session_started':
     case 'git':
     case 'turn_end':

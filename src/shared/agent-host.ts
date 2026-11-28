@@ -177,6 +177,8 @@ import type {
   ProjectMcpDecision,
   ProblemReportOutcome,
   QuestionAnswer,
+  RemoteDelegationOutcome,
+  RemoteDelegationPhase,
   FormValues,
   MarketPublishAsk,
   SessionSnapshot,
@@ -1146,6 +1148,27 @@ export interface DelegateAgentsResult {
   agents: DelegateTargetAgent[]
 }
 
+/** Parameters for recording a user-initiated cross-host delegation or its outcome in an origin session. */
+export interface RemoteDelegationRecordParams {
+  sessionId: string
+  delegationId: string
+  phase: RemoteDelegationPhase
+  targetHostId: string | null
+  targetHostName: string
+  targetHostPlatform?: string
+  targetSessionId: string
+  targetProjectPath: string | null
+  targetProjectName: string | null
+  targetAgentId: AgentId
+  targetAgentName: string
+  targetTitle: string
+  promptPreview?: string
+  outcome?: RemoteDelegationOutcome
+  summary?: string
+  error?: string
+  at?: number
+}
+
 /**
  * The tool call a session's main thread runs now, as its summary carries it: the latest one to
  * start of those still running. It changes when a call starts or ends, not with its output.
@@ -2042,6 +2065,12 @@ export interface HostContract {
     }
     result: SessionSummary
   }
+  // Records a user-initiated cross-host delegation notice or completion/failure report in the
+  // origin session's thread (idempotent by delegationId + phase).
+  'sessions.recordRemoteDelegation': {
+    params: RemoteDelegationRecordParams
+    result: { entryId: string }
+  }
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.contextEstimates': { params: { sessionId: string }; result: ContextEstimates | null }
   'sessions.queue': {
@@ -2769,6 +2798,7 @@ export const HOST_METHODS = [
   'sessions.switchAgent',
   'sessions.delegateAgents',
   'sessions.delegate',
+  'sessions.recordRemoteDelegation',
   'sessions.context',
   'sessions.contextEstimates',
   'sessions.queue',

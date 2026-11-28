@@ -28,6 +28,7 @@ import { ProjectHooksEntry } from './project-hooks-entry'
 import { ProjectMcpEntry } from './project-mcp-entry'
 import { ComputerSetupEntry } from './computer-setup-entry'
 import { SessionStartedEntry } from './session-started-entry'
+import { RemoteDelegationEntry } from './remote-delegation-entry'
 import { SubagentCard } from './subagent-card'
 import { TakeoverEntry } from './takeover-entry'
 import { TaskDeliveryEntry } from './task-delivery-entry'
@@ -113,6 +114,8 @@ export const Entry = memo(function Entry({
       return <TaskDeliveryEntry {...props} />
     case 'plugin_denial':
       return <PluginDenialEntry {...props} />
+    case 'remote_delegation':
+      return <RemoteDelegationEntry {...props} />
     default:
       return null
   }

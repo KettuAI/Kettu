@@ -860,6 +860,25 @@ describe('isThreadEntry', () => {
       decision: 'all',
       after: 'm:1',
     },
+    {
+      kind: 'remote_delegation',
+      id: 'rd:1',
+      delegationId: 'del-1',
+      phase: 'report',
+      targetHostId: '0123456789abcdef0123456789abcdef',
+      targetHostName: 'Work PC',
+      targetHostPlatform: 'win32',
+      targetSessionId: 'remote-1',
+      targetProjectPath: 'C:\\work\\repo',
+      targetProjectName: 'repo',
+      targetAgentId: 'codex',
+      targetAgentName: 'Codex',
+      targetTitle: 'Build Windows bundle',
+      outcome: 'completed',
+      summary: 'Build passed.',
+      at: 1_700_000_000_000,
+      after: 'm:1',
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -886,6 +905,11 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...delivery, status: 'running' })).toBe(false)
     expect(isThreadEntry({ ...delivery, deliverables: [{ kind: 'link', title: 'x' }] })).toBe(false)
     expect(isThreadEntry({ ...delivery, written: { agentId: 1 } })).toBe(false)
+    const remoteDelegation = valid.find((entry) => entry.kind === 'remote_delegation')!
+    expect(isThreadEntry({ ...remoteDelegation, phase: 'unknown' })).toBe(false)
+    expect(isThreadEntry({ ...remoteDelegation, outcome: 'running' })).toBe(false)
+    expect(isThreadEntry({ ...remoteDelegation, targetAgentId: 'not-a-valid-agent!' })).toBe(false)
+    expect(isThreadEntry({ ...remoteDelegation, at: 'now' })).toBe(false)
     const artifact = valid.find((entry) => entry.kind === 'artifact')!
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
     const mcpSwitch = valid.find(

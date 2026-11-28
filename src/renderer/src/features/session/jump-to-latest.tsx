@@ -37,6 +37,7 @@ const AFTER_END = new Set([
   'mcp_change',
   'task_delivery',
   'plugin_denial',
+  'remote_delegation',
   'session_started',
 ])
 
