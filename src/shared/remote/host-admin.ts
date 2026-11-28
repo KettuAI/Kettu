@@ -65,6 +65,14 @@ export const HOST_SETTING_KEYS = {
   remote: 'all',
 } as const satisfies Partial<Record<keyof SettingsFile, 'all' | readonly string[]>>
 
+/**
+ * Host settings a paired device reads through `settings.get` and `settings.changed`, but cannot
+ * change over the channel; only the host itself switches them.
+ */
+export const READ_ONLY_HOST_SETTING_KEYS = {
+  cloud: ['enabled'],
+} as const satisfies Partial<Record<keyof SettingsFile, 'all' | readonly string[]>>
+
 /** The host's part of the settings file. */
 export interface HostSettingsPart {
   general: Pick<
@@ -94,6 +102,11 @@ export interface HostSettingsPart {
     relayChoice?: RelayChoice
     ownRelay?: SettingsFile['remote']['ownRelay']
   }
+  /**
+   * Whether Kettu's cloud services are on for the host; absent from older hosts, which are treated
+   * as on. Read-only for paired devices.
+   */
+  cloud?: Pick<SettingsFile['cloud'], 'enabled'>
 }
 
 type Keys = 'all' | readonly string[]
@@ -109,7 +122,10 @@ function pick(value: object, keys: readonly string[], kept: boolean): Record<str
 /** The host's part of a settings file. */
 export function hostSettingsPart(file: SettingsFile): HostSettingsPart {
   const part: Record<string, unknown> = {}
-  for (const [section, keys] of Object.entries(HOST_SETTING_KEYS) as [keyof SettingsFile, Keys][]) {
+  for (const [section, keys] of [
+    ...Object.entries(HOST_SETTING_KEYS),
+    ...Object.entries(READ_ONLY_HOST_SETTING_KEYS),
+  ] as [keyof SettingsFile, Keys][]) {
     const value = file[section]
     part[section] = keys === 'all' ? structuredClone(value) : pick(value as object, keys, true)
   }
@@ -131,6 +147,13 @@ function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['r
   return { ...structuredClone(rest), relay: choice, ownRelay: ownRelay ?? null }
 }
 
+/** The host's cloud section as a client keeps it, from a host of any version. */
+function cloudOf(part: HostSettingsPart['cloud'] | undefined): SettingsFile['cloud'] {
+  return typeof part?.enabled === 'boolean'
+    ? { enabled: part.enabled }
+    : structuredClone(DEFAULT_SETTINGS.cloud)
+}
+
 /** A client's settings file with the host's part in place of its own. */
 export function withHostSettings(file: SettingsFile, part: HostSettingsPart): SettingsFile {
   const next = structuredClone(file) as unknown as Record<string, unknown>
@@ -150,7 +173,28 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
     const own = pick(next[section] as object, keys, false)
     next[section] = { ...own, ...(value as object) }
   }
+  next.cloud = cloudOf(part.cloud)
   return next as unknown as SettingsFile
+}
+
+/** Read-only host setting sections touched by `patch`, which paired devices may not change. */
+export function readOnlyHostKeys(patch: Record<string, unknown>): string[] {
+  const touched: string[] = []
+  for (const [section, keys] of Object.entries(READ_ONLY_HOST_SETTING_KEYS) as [string, Keys][]) {
+    const value = patch[section]
+    if (value === undefined) continue
+    if (keys === 'all' || typeof value !== 'object' || value === null || Array.isArray(value)) {
+      touched.push(section)
+      continue
+    }
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, v]) => v !== undefined,
+    )
+    if (entries.length === 0 || entries.some(([key]) => keys.includes(key))) {
+      touched.push(section)
+    }
+  }
+  return touched
 }
 
 /** A patch split into what the host keeps and what the client keeps; null for an empty side. */

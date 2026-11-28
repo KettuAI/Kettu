@@ -181,6 +181,7 @@ export async function startDaemonAdmin({
     thumbnail: null,
     png: null,
     remoteAlwaysOn: true,
+    cloudAlwaysOn: true,
     report,
     submitReport,
     send: (event, deviceId, except) => hosts.adminEvent(event, deviceId, except),

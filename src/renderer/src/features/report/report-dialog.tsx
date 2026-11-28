@@ -27,12 +27,12 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
 import { recordAction } from '@renderer/lib/action-log'
-import { useCloudOff } from '@renderer/lib/cloud'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { agentName } from '@renderer/stores/agents'
+import { useHostCloudOff } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { closeReport, useReportStore, type ReportDialog as Opened } from '@renderer/stores/report'
 import { answerReportEntry, NOT_SUBMITTED, prepare, submit, type Bundle } from './report-flow'
@@ -126,8 +126,8 @@ function ReportForm({ dialog }: { dialog: Opened }) {
   const local = dialog.hostId === null && !isWeb
   const signedIn = useAccountStore((s) => s.status?.state === 'signed-in')
   const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
-  // Self-hosted, reports are only saved here: nothing goes to Kettu.
-  const cloudOff = useCloudOff()
+  // When the target host turned Kettu cloud off, reports are only saved: nothing goes to Kettu.
+  const cloudOff = useHostCloudOff(dialog.hostId)
   const mustSignIn = local && !signedIn && !cloudOff
   const latest = useRef<PreparedReport | null>(null)
   useEffect(() => {
