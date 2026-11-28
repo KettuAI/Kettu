@@ -6747,10 +6747,11 @@ button.kettu-ctx__part-row:focus-visible {
     height: 26px;
   }
 }
-/* Notice shown only when library MCP servers changed after the session attached. */
+/* The session's MCP servers (collapsed by default); library change notice is blue-tinted. */
 .kettu-ctx__mcp {
   display: flex;
   flex-direction: column;
+  gap: 6px;
   padding: 10px 14px;
   border-top: 0.5px solid var(--composer-line);
 }
@@ -6784,6 +6785,153 @@ button.kettu-ctx__part-row:focus-visible {
 .kettu-ctx__mcp-use:disabled {
   opacity: 0.5;
 }
+/* Collapsible header with count, optional attention dot and Manage link, then one row per server. */
+.kettu-ctx__mcp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+.kettu-ctx__mcp-toggle {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 22px;
+  margin: -1px 0 -1px -6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-fast);
+}
+.kettu-ctx__mcp-toggle:hover {
+  background: var(--bg-hover);
+}
+.kettu-ctx__mcp-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+.kettu-ctx__mcp-dot[data-tone='error'] {
+  background: var(--danger);
+}
+.kettu-ctx__mcp-dot[data-tone='warn'] {
+  background: var(--warning);
+}
+.kettu-ctx__mcp-chevron {
+  flex: none;
+  color: var(--composer-muted);
+  transition: transform var(--duration-fast);
+}
+.kettu-ctx__mcp-manage,
+.kettu-ctx__mcp-act {
+  flex: none;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--primary-foreground);
+}
+.kettu-ctx__mcp-manage:hover,
+.kettu-ctx__mcp-act:hover {
+  text-decoration: underline;
+}
+.kettu-ctx__mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: calc(5 * 36px + 8px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.kettu-ctx__mcp-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.kettu-ctx__mcp-row[data-off] > :not(.kettu-ctx__mcp-act) {
+  opacity: 0.5;
+}
+.kettu-ctx__mcp-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.kettu-ctx__mcp-title,
+.kettu-ctx__mcp-facts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kettu-ctx__mcp-title {
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--composer-strong);
+}
+.kettu-ctx__mcp-project {
+  margin-inline-start: 6px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-held {
+  display: flex;
+  margin-block-start: 2px;
+}
+.kettu-ctx__mcp-held .k-mcp-held-tag {
+  font-size: 11px;
+}
+.kettu-ctx__mcp-facts {
+  font-size: 11.5px;
+  line-height: 15px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-facts[data-tone='error'] {
+  color: var(--danger);
+}
+.kettu-ctx__mcp-facts[data-tone='warn'] {
+  color: var(--warning);
+}
+.kettu-ctx__mcp-tokens {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--composer-muted);
+}
+.kettu-ctx__mcp-more:hover,
+.kettu-ctx__mcp-more[data-popup-open] {
+  background: var(--bg-hover);
+  color: var(--composer-strong);
+}
+.kettu-ctx__mcp-toggle:focus-visible,
+.kettu-ctx__mcp-more:focus-visible,
+.kettu-ctx__mcp-manage:focus-visible,
+.kettu-ctx__mcp-act:focus-visible,
 .kettu-ctx__mcp-use:focus-visible {
   outline: 1.5px solid var(--focus-ring-color);
   outline-offset: 1px;
