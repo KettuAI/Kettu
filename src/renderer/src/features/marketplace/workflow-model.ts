@@ -210,7 +210,7 @@ export function isWorkflowFileUrl(text: string): boolean {
 export const WORKFLOW_FILE_KB = WORKFLOW_FILE_BYTES / 1024
 
 // Only these harnesses run steps; the host refuses a pin of any other when the step starts.
-const STEP_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex'])
+const STEP_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex', 'pi'])
 
 export function runsSteps(agentId: AgentId): boolean {
   return STEP_HARNESSES.has(harnessOf(agentId))

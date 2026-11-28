@@ -1046,7 +1046,7 @@
       "worktreeHint": "需求在自己的工作树和分支上进行。",
       "worktreeNote": "需求在自己的工作树里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
       "textOnly": "需求只能是文字：去掉附件后再发出。",
-      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的智能体来做：请选其中一个。",
+      "stepAgents": "工作流的步骤只能由 Claude Code、Codex 和 Pi 的智能体来做：请选其中一个。",
       "previewFoot": "Pace：{{pace}} · Auto 的步骤开始时才选人"
     }
   },
@@ -1732,7 +1732,7 @@
       "codex": "Codex"
     },
     "everyAgent": "所有智能体",
-    "stepAgents": "Claude Code 和 Codex",
+    "stepAgents": "Claude Code、Codex 和 Pi",
     "visibleTo": "谁能看到",
     "asBefore": "和之前一样",
     "adds": "会加",

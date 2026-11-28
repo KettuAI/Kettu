@@ -2,7 +2,7 @@
 // runs on, and creates, changes, deletes or runs one for the user. Listing never asks; the other
 // four always wait for the user's answer in a card, in Full access too, since a Routine later runs
 // on its own while nobody watches and spends the user's plan. They keep the rules of the Routines
-// page: only Claude Code and Codex agents, a schedule that runs, and its defaults where none is
+// page: only Claude Code, Codex and Pi agents, a schedule that runs, and its defaults where none is
 // named.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
@@ -60,7 +60,7 @@ export const ROUTINE_ASKING_TOOLS = [CREATE_ROUTINE, UPDATE_ROUTINE, DELETE_ROUT
 /** How long a card waits before nothing happens. */
 export const ROUTINE_WAIT_MS = 10 * 60_000
 /** The harnesses Kettu can hold to a Routine's permissions, and so the only ones that run one. */
-export const ROUTINE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex']
+export const ROUTINE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex', 'pi']
 
 const AGENT_CHARS = 120
 const OPTION_CHARS = 200
@@ -119,8 +119,8 @@ const SETTINGS: Record<string, object> = {
     type: 'string',
     maxLength: AGENT_CHARS,
     description:
-      'The agent its runs start, an id list_agents gives; only Claude Code and Codex agents run ' +
-      'Routines. Without it on create, your own agent.',
+      'The agent its runs start, an id list_agents gives; only Claude Code, Codex and Pi agents ' +
+      'run Routines. Without it on create, your own agent.',
   },
   model: {
     type: 'string',
@@ -650,8 +650,14 @@ export class RoutineTools {
     }
     if (!ROUTINE_HARNESSES.includes(harnessOf(status.id))) {
       throw new Refusal(
-        `Nothing was done: ${status.name} cannot run Routines. Only Claude Code and Codex agents ` +
-          `do, since Kettu can hold only theirs to a Routine's permissions. ${this.eligibleText()}`,
+        `Nothing was done: ${status.name} cannot run Routines. Only Claude Code, Codex and Pi ` +
+          `agents do, since Kettu can hold only theirs to a Routine's permissions. ${this.eligibleText()}`,
+      )
+    }
+    if (harnessOf(status.id) === 'pi' && status.capabilities?.mcpHttp === false) {
+      throw new Refusal(
+        `Nothing was done: ${status.name} requires Pi 1.0.0 or later so Kettu can enforce a ` +
+          `Routine's permissions. ${this.eligibleText()}`,
       )
     }
     if (status.disabled) {
@@ -670,10 +676,11 @@ export class RoutineTools {
           s.registered !== false &&
           !s.uninstalled &&
           !s.disabled &&
-          ROUTINE_HARNESSES.includes(harnessOf(s.id)),
+          ROUTINE_HARNESSES.includes(harnessOf(s.id)) &&
+          !(harnessOf(s.id) === 'pi' && s.capabilities?.mcpHttp === false),
       )
     return eligible.length === 0
-      ? 'This computer has no Claude Code or Codex agent turned on.'
+      ? 'This computer has no Claude Code, Codex or Pi agent turned on.'
       : `Agents that run Routines here: ${eligible.map((s) => `${s.id} (${s.name})`).join(', ')}.`
   }
 

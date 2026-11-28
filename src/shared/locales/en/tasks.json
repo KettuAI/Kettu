@@ -134,7 +134,7 @@
     "limitAtHeld": "{{agent}} has reached its plan limit. The step carries on at {{time}} unless you pin someone else.",
     "disabled": "{{agent}} is turned off.",
     "removed": "{{agent}} was removed.",
-    "harness": "{{agent}} can’t do steps; only Claude Code and Codex can.",
+    "harness": "{{agent}} can’t do steps; only Claude Code, Codex and Pi can.",
     "model": "{{agent}} no longer lists the model it was pinned with.",
     "effort": "{{agent}} no longer offers the effort it was pinned with.",
     "no_kettu": "{{agent}} doesn’t have Kettu’s tools, which a step reports with.",
@@ -169,7 +169,7 @@
     "change": "Change the pin…",
     "confirm": "Pin for this task",
     "auto": "Back to Auto",
-    "onlySteps": "Only Claude Code and Codex agents can do steps.",
+    "onlySteps": "Only Claude Code, Codex and Pi agents can do steps.",
     "notYet": "Pinned, but {{agent}} can’t take the step yet."
   },
   "flow": {

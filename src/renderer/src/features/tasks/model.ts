@@ -27,7 +27,7 @@ import { useShallow } from 'zustand/react/shallow'
 const t = i18n.getFixedT(null, 'tasks')
 
 /** Only these harnesses can do a step. */
-export const STEP_HARNESSES: readonly string[] = ['claude-code', 'codex']
+export const STEP_HARNESSES: readonly string[] = ['claude-code', 'codex', 'pi']
 
 export function canDoSteps(agentId: AgentId): boolean {
   return STEP_HARNESSES.includes(harnessOf(agentId))

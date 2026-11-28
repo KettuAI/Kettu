@@ -4980,6 +4980,9 @@ export class SessionManager {
         ? { titled: true }
         : {}),
       ...(record.branchLeafId !== undefined ? { branchLeafId: record.branchLeafId } : {}),
+      ...(record.origin === 'routine' || record.origin === 'task'
+        ? { enforcePermissions: true }
+        : {}),
     }
   }
 

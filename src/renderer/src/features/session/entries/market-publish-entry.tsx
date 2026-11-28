@@ -46,7 +46,7 @@ import { useAnswering } from './use-answering'
 const MAX_LIST_HEIGHT = 140
 const EVERY_AGENT = ['claude-code', 'codex', 'opencode', 'pi'] as const
 // The agents that do a workflow's steps.
-const STEP_AGENTS = ['claude-code', 'codex'] as const
+const STEP_AGENTS = ['claude-code', 'codex', 'pi'] as const
 const VISIBILITY_ICON = {
   public: Globe02Icon,
   private: SquareLock02Icon,

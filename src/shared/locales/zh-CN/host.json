@@ -1238,6 +1238,9 @@
     "changelog": {
       "missing": "找不到更新日志：无法定位 pi 的安装包。"
     },
+    "permissions": {
+      "requiresExtension": "需要 Pi {{version}} 或更高版本，Kettu 才能强制执行工具权限。"
+    },
     "noAnswer": "pi 没有在 {{seconds}} 秒内响应 {{command}}",
     "refused": "pi 拒绝了这个请求"
   },

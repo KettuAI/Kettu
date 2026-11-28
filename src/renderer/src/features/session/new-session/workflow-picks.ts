@@ -17,8 +17,8 @@ import { i18n } from '@renderer/lib/i18n'
 /** The mark of a workflow wherever one is chosen or named. */
 export const WORKFLOW_ICON = FlowIcon
 
-/** Only Claude Code and Codex agents work on a workflow's steps. */
-const STEP_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex'])
+/** Only Claude Code, Codex and Pi agents work on a workflow's steps. */
+const STEP_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex', 'pi'])
 
 export function runsSteps(status: { harnessId: string }): boolean {
   return STEP_HARNESSES.has(status.harnessId)

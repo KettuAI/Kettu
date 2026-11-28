@@ -767,6 +767,7 @@
     },
     "facts": {
       "runBy": "Steps run by",
+      "stepAgents": "Claude Code, Codex and Pi",
       "added": "Added",
       "steps": "Steps",
       "stepsWait_one": "{{steps}} · {{count}} waits for you",
@@ -807,7 +808,7 @@
     },
     "pin": {
       "afterApproval": "Pin once it’s approved",
-      "notStepAgent": "Only Claude Code and Codex agents can do a step.",
+      "notStepAgent": "Only Claude Code, Codex and Pi agents can do a step.",
       "failed": "Couldn’t pin it: {{error}}",
       "autoLabel": "Who does {{step}}: Auto",
       "backToAuto": "Back to Auto",

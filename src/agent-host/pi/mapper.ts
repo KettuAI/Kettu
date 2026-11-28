@@ -1,8 +1,11 @@
 // Turns what `pi --mode rpc` sends into the patches and effects every protocol's mapper produces:
 // the events of a running turn, and the entries of a session's tree when its history is replayed.
 
+import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
+import type { Platform } from '@shared/platform'
 import {
   cutToolOutput,
   trimToolOutputDelta,
@@ -48,6 +51,7 @@ import type {
 
 /** A running command's output reaches the thread at most this often. */
 const OUTPUT_EVERY_MS = 150
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 const SHELL_TOOLS: ReadonlySet<string> = new Set(['bash', 'powershell'])
 const FILE_WRITES: ReadonlySet<string> = new Set(['edit', 'write'])
 
@@ -67,8 +71,60 @@ function str(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
-function absolute(cwd: string, file: string): string {
-  return path.isAbsolute(file) ? file : path.resolve(cwd, file)
+function normalizeWindowsShellPath(filePath: string): string {
+  if (!filePath.startsWith('/') || filePath.startsWith('//') || filePath.includes('\\')) {
+    return filePath
+  }
+  const match = /^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i.exec(filePath)
+  if (!match) return filePath
+  const suffix = match[2]?.replaceAll('/', '\\')
+  return `${match[1]!.toUpperCase()}:\\${suffix ?? ''}`
+}
+
+/**
+ * Resolves a path the exact same way Pi's built-in file and search tools do (`resolveToCwd` /
+ * `normalizePath` in `@earendil-works/pi-coding-agent`):
+ * - normalizes Unicode whitespace to ASCII spaces
+ * - strips a leading `@` prefix
+ * - converts Git Bash / MSYS / Cygwin / WSL drive paths on Windows
+ * - expands `~` and `~/` (and `~\` on Windows) against `homeDir`
+ * - decodes `file://` URLs via `fileURLToPath`
+ * - resolves relative paths against `cwd`
+ *
+ * Returns `null` when the input is empty or contains an invalid `file://` URL (fail-closed).
+ */
+export function resolvePiPath(
+  raw: string,
+  cwd: string,
+  options: { homeDir?: string; platform?: Platform } = {},
+): string | null {
+  if (raw === '') return null
+  const platform = options.platform ?? (process.platform as Platform)
+  const pathApi = platform === 'win32' ? path.win32 : path.posix
+  let normalized = raw.replace(UNICODE_SPACES, ' ')
+  if (normalized.startsWith('@')) normalized = normalized.slice(1)
+  if (normalized === '') return null
+  if (platform === 'win32') normalized = normalizeWindowsShellPath(normalized)
+
+  const home = options.homeDir ?? os.homedir()
+  if (normalized === '~') {
+    normalized = home
+  } else if (
+    normalized.startsWith('~/') ||
+    (platform === 'win32' && normalized.startsWith('~\\'))
+  ) {
+    normalized = pathApi.join(home, normalized.slice(2))
+  } else if (/^file:\/\//i.test(normalized)) {
+    try {
+      normalized = fileURLToPath(normalized)
+    } catch {
+      return null
+    }
+  }
+
+  return pathApi.isAbsolute(normalized)
+    ? pathApi.resolve(normalized)
+    : pathApi.resolve(cwd, normalized)
 }
 
 /** Whether a tool call changes the file its `path` names. */
@@ -80,7 +136,7 @@ export function writesFile(name: string): boolean {
 export function toolPath(args: unknown, cwd: string): string | null {
   const input = record(args)
   const file = str(input.path) ?? str(input.file_path)
-  return file ? absolute(cwd, file) : null
+  return file ? resolvePiPath(file, cwd) : null
 }
 
 /** A tool's MCP name `mcp__<server>__<tool>` as its parts, or null for one of pi's own. */

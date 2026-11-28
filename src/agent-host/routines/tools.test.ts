@@ -35,7 +35,9 @@ function agent(id: AgentId, name: string, more: Partial<AgentStatus> = {}): Agen
 const AGENTS = [
   agent('claude-code', 'Claude Code'),
   agent('codex', 'Codex'),
+  agent('pi', 'Pi'),
   agent('opencode', 'OpenCode'),
+  agent('cline', 'Cline'),
   agent('codex~off', 'Codex (work)', { disabled: true }),
 ]
 
@@ -225,9 +227,10 @@ describe('the Routine tools that change something', () => {
 })
 
 describe('what a Routine may run', () => {
-  it('takes only Claude Code and Codex agents on this computer that are turned on', async () => {
+  it('takes only Claude Code, Codex and Pi agents on this computer that are turned on', async () => {
     for (const args of [
       { agent: 'opencode' },
+      { agent: 'cline' },
       { agent: 'claude-code~gone' },
       { agent: 'codex~off' },
     ]) {
@@ -240,7 +243,56 @@ describe('what a Routine may run', () => {
     const result = await create(own.tools)
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('codex (Codex)')
+    expect(text(result)).toContain('pi (Pi)')
     expect(own.asked).toEqual([])
+
+    const forPi = harness()
+    const pending = create(forPi.tools, { agent: 'pi' })
+    await vi.waitFor(() => expect(forPi.asked).toHaveLength(1))
+    expect(forPi.asked[0]!.routine.agentId).toBe('pi')
+    forPi.answer({ decision: 'decline' })
+    await pending
+  })
+
+  it('rejects Pi builds older than 1.0.0 that cannot run Kettu permission enforcement', async () => {
+    const oldPi = new RoutineTools({
+      list: async () => ({ routines: [], problem: null }),
+      create: async () => routine(),
+      update: async () => routine(),
+      delete: async () => {},
+      runNow: async () =>
+        ({ id: 'run-1', routineId: 'r-0123456789ab', status: 'starting' }) as RoutineRun,
+      agents: () => [
+        agent('pi', 'Pi', {
+          capabilities: {
+            loadSession: true,
+            listSessions: true,
+            resumeSession: true,
+            closeSession: true,
+            deleteSession: true,
+            forkSession: true,
+            forkAtMessage: true,
+            steering: false,
+            reports: false,
+            context: false,
+            liveContext: false,
+            account: false,
+            mcpHttp: false,
+            prompt: { image: true, audio: false, embeddedContext: true },
+          },
+        }),
+      ],
+      agentOptions: () => null,
+      readOptions: async () => {},
+      sessionAgent: () => 'pi',
+      sessionProject: () => '/p',
+      project: async (p) => (p === '/p' ? p : null),
+      ask: () => null,
+      settle: () => {},
+    })
+    const result = await create(oldPi, { agent: 'pi' })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('Pi 1.0.0 or later')
   })
 
   it('takes a project of Kettu’s only, or null for its own folder', async () => {

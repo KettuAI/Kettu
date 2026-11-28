@@ -1201,7 +1201,8 @@ export function resetTime(at: number, now: number): string {
   return resetTimeText(at, now, currentLocale())
 }
 
-// Pi has no mode to set; its caption says it does not ask before it acts.
+// Pi has no mode menu to switch; Kettu enforces its routine scope via Kettu's Pi extension
+// `tool_call` hook (`SessionOptions.enforcePermissions`).
 const ASKING_MODES: Partial<Record<AgentId, Record<PermissionScope['level'], string>>> = {
   'claude-code': { read: 'default', edit: 'default', commands: 'default' },
   codex: { read: 'read-only', edit: 'workspace-write', commands: 'workspace-write' },

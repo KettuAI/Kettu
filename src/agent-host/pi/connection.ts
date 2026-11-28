@@ -1,10 +1,12 @@
 // Pi through its RPC mode: one `pi --mode rpc` process per open session, the user's own pi, spoken
 // to over JSON lines on its stdio. A process holds one session, so a session that is closed loses
 // its process and the next use starts another on the session's file; a fork starts one from a copy
-// pi makes. Pi asks no permission for its tools: only its extensions' dialogs wait for the user.
+// pi makes. In ordinary sessions Pi asks no permission for its tools (only extension dialogs wait);
+// when `SessionOptions.enforcePermissions` is set (Routines and workflow steps), Kettu's extension
+// intercepts every `tool_call` and routes it through Kettu's permission rules.
 
 import type { ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { SessionBranchesResult } from '@shared/agent-host'
@@ -49,12 +51,18 @@ import {
   NAVIGATE_READY_STATUS,
   NAVIGATE_STATUS,
   NAVIGATE_VARIABLE,
+  PERMISSION_AUTO_ALLOW_VARIABLE,
+  PERMISSION_GATE_VARIABLE,
+  PERMISSION_NONCE_VARIABLE,
+  PERMISSION_TITLE,
+  piAutoAllowTools,
   piExtension,
   piServers,
   SCOPE_STATUS,
   SCOPE_VARIABLE,
   SERVERS_VARIABLE,
 } from './extension'
+import { buildPiPermission, parsePermissionGatePayload, PI_PERMISSION_ALLOW } from './permissions'
 import {
   activeBranch,
   blockText,
@@ -181,6 +189,8 @@ interface Session {
   queued: number
   /** Dialogs waiting for the user, by pi's id for the request. */
   dialogs: Map<string, AbortController>
+  /** Per-process nonce authenticating Kettu's extension permission gate; null when not enforced. */
+  permissionNonce: string | null
   /** Ephemeral status entries and text widgets published by native Pi extensions. */
   extensionUi: PiExtensionUi
   /** What the files of `write` calls held, by call. */
@@ -337,6 +347,11 @@ export class PiConnection implements AgentConnection {
     return true
   }
 
+  /** Kettu's own `autoAllow` tools run without asking once Kettu's extension is active. */
+  get allowsKettuTools(): boolean {
+    return this.extension !== null
+  }
+
   private get hooks(): ConnectionHooks {
     return this.context.hooks
   }
@@ -445,6 +460,7 @@ export class PiConnection implements AgentConnection {
       navigations: new Map(),
       queued: 0,
       dialogs: new Map(),
+      permissionNonce: null,
       extensionUi: new PiExtensionUi(),
       befores: new Map(),
       events: Promise.resolve(),
@@ -1001,12 +1017,46 @@ export class PiConnection implements AgentConnection {
     const command = (await this.context.currentCli?.(this.cli)) ?? this.cli
     const args = [...spec.args, '--no-themes']
     const extra: Record<string, string> = {}
-    if (this.extension) {
-      args.push('-e', this.extension)
+    if (session.options.enforcePermissions) {
+      if (!this.extension || !this.since(EXTENSION_SINCE)) {
+        throw new AgentRequestError(
+          'agent_error',
+          t('pi.permissions.requiresExtension', { version: EXTENSION_SINCE }),
+        )
+      }
+      // Disable all user and project extensions and omit `builtin:codemode`, keeping only Kettu's
+      // gate extension and safe built-ins so no third-party code can bypass or mutate tool calls.
+      args.push(
+        '--no-extensions',
+        '-e',
+        this.extension,
+        '-e',
+        'builtin:mcp',
+        '-e',
+        'builtin:tool-search',
+        '-e',
+        'builtin:llama.cpp',
+      )
+      const nonce = randomBytes(32).toString('hex')
+      session.permissionNonce = nonce
+      extra[PERMISSION_GATE_VARIABLE] = '1'
+      extra[PERMISSION_NONCE_VARIABLE] = nonce
+      extra[PERMISSION_AUTO_ALLOW_VARIABLE] = JSON.stringify(
+        piAutoAllowTools(session.options.mcpServers ?? []),
+      )
       extra[SCOPE_VARIABLE] = '1'
       extra[NAVIGATE_VARIABLE] = '1'
       const servers = piServers(session.options.mcpServers ?? [])
       if (servers.length > 0) extra[SERVERS_VARIABLE] = JSON.stringify(servers)
+    } else {
+      session.permissionNonce = null
+      if (this.extension) {
+        args.push('-e', this.extension)
+        extra[SCOPE_VARIABLE] = '1'
+        extra[NAVIGATE_VARIABLE] = '1'
+        const servers = piServers(session.options.mcpServers ?? [])
+        if (servers.length > 0) extra[SERVERS_VARIABLE] = JSON.stringify(servers)
+      }
     }
     for (const root of session.options.skillRoots ?? []) args.push('--skill', root)
     if (session.hidden && start.kind !== 'fork') args.push('--no-session')
@@ -1169,6 +1219,7 @@ export class PiConnection implements AgentConnection {
     if (!proc) return
     if (session.proc === proc) {
       session.proc = null
+      session.permissionNonce = null
       this.clearExtensionUi(session)
     }
     if (proc.stopping) return
@@ -1181,6 +1232,7 @@ export class PiConnection implements AgentConnection {
   private exited(session: Session, proc: Proc): void {
     if (session.proc === proc) {
       session.proc = null
+      session.permissionNonce = null
       this.clearExtensionUi(session)
     }
     session.treeNavReady = false
@@ -1469,7 +1521,7 @@ export class PiConnection implements AgentConnection {
         const noted = session.befores.get(event.toolCallId)
         before = await noted?.text
         session.befores.delete(event.toolCallId)
-        this.fileChanged(session, event.toolCallId, event.toolName)
+        if (!event.isError) this.fileChanged(session, event.toolCallId, event.toolName)
         break
       }
     }
@@ -1661,6 +1713,10 @@ export class PiConnection implements AgentConnection {
       case 'confirm':
       case 'input':
       case 'editor':
+        if (request.method === 'confirm' && request.title === PERMISSION_TITLE) {
+          void this.handlePermissionGate(session, proc, request)
+          return true
+        }
         void this.ask(session, proc, request)
         return true
       default:
@@ -1765,6 +1821,132 @@ export class PiConnection implements AgentConnection {
       ],
       effects: [],
     }))
+  }
+
+  /**
+   * Handles a tool permission gate request from Kettu's Pi extension (`tool_call` hook).
+   * Validates the per-process nonce, resolves canonical tool locations, and routes the call
+   * through Kettu's standard `SessionTarget.requestPermission` pipeline (fail-closed on any
+   * mismatch, missing target, cancellation, or error).
+   */
+  private async handlePermissionGate(
+    session: Session,
+    proc: Proc,
+    request: PiUiRequest,
+  ): Promise<void> {
+    const payload = parsePermissionGatePayload(request.message)
+    const target = this.targets.get(session.id)
+    if (
+      !session.options.enforcePermissions ||
+      session.permissionNonce === null ||
+      session.hidden ||
+      session.collected !== null ||
+      session.proc !== proc ||
+      proc.stopping ||
+      !payload ||
+      !sameNonce(session.permissionNonce, payload.nonce) ||
+      !target
+    ) {
+      proc.rpc.answer(request.id, { confirmed: false })
+      return
+    }
+    const abort = new AbortController()
+    session.dialogs.set(request.id, abort)
+    let answer: PermissionAnswer = 'cancelled'
+    let withdrawn = false
+    try {
+      const permission = await buildPiPermission(payload, session.cwd, {
+        homeDir: this.homeDir(),
+        platform: this.platform,
+      })
+      if (abort.signal.aborted || session.proc !== proc || proc.stopping) {
+        withdrawn = true
+      } else {
+        const toolCallId = payload.toolCallId || `pi-gate-${request.id}`
+        const toolEntryId = `t:${toolCallId}`
+        const existing = target.context().thread.byId[toolEntryId]
+        const output: MapperOutput =
+          existing?.kind === 'tool'
+            ? {
+                patches: [
+                  {
+                    op: 'entry.update',
+                    id: toolEntryId,
+                    changes: {
+                      title: permission.title,
+                      toolKind: permission.toolKind,
+                      locations: permission.locations,
+                      ...(existing.content.length === 0 && permission.content.length > 0
+                        ? { content: permission.content }
+                        : {}),
+                      ...(permission.rawInput !== undefined
+                        ? { rawInput: permission.rawInput }
+                        : {}),
+                      ...(permission.description !== undefined
+                        ? { description: permission.description }
+                        : {}),
+                    },
+                  },
+                ],
+                effects: [],
+              }
+            : {
+                patches: [
+                  {
+                    op: 'entry.add',
+                    entry: {
+                      kind: 'tool',
+                      id: toolEntryId,
+                      status: 'pending',
+                      permission: null,
+                      permissionResult: null,
+                      title: permission.title,
+                      toolKind: permission.toolKind,
+                      locations: permission.locations,
+                      content: permission.content,
+                      ...(permission.rawInput !== undefined
+                        ? { rawInput: permission.rawInput }
+                        : {}),
+                      ...(permission.description !== undefined
+                        ? { description: permission.description }
+                        : {}),
+                    },
+                  },
+                ],
+                effects: [],
+              }
+        answer = await target.requestPermission(
+          {
+            toolCallId,
+            toolEntryId,
+            output,
+            options: permission.options,
+            ...(permission.shell ? { shell: permission.shell } : {}),
+          },
+          abort.signal,
+        )
+      }
+    } catch {
+      withdrawn = true
+    } finally {
+      session.dialogs.delete(request.id)
+    }
+    if (withdrawn && abort.signal.aborted) {
+      proc.rpc.answer(request.id, { cancelled: true })
+      return
+    }
+    const allowed =
+      !withdrawn &&
+      answer !== 'cancelled' &&
+      'optionId' in answer &&
+      answer.optionId === PI_PERMISSION_ALLOW
+    proc.rpc.answer(request.id, { confirmed: allowed })
+  }
+
+  private homeDir(): string | undefined {
+    const merged = { ...this.context.env, ...this.context.spec.env }
+    const home = this.platform === 'win32' ? (merged.USERPROFILE ?? merged.HOME) : merged.HOME
+    return typeof home === 'string' && home !== '' ? home : undefined
   }
 
   private endDialogs(session: Session): void {
@@ -1991,6 +2173,12 @@ const QUIET: ReadonlySet<string> = new Set([
 
 async function isFile(file: string): Promise<boolean> {
   return (await stat(file).catch(() => null))?.isFile() ?? false
+}
+
+function sameNonce(expected: string, actual: string): boolean {
+  const a = Buffer.from(expected, 'utf8')
+  const b = Buffer.from(actual, 'utf8')
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 async function readBefore(file: string): Promise<Before> {

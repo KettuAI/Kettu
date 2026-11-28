@@ -40,7 +40,6 @@ import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
-import { AGENT_NAMES } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
@@ -100,7 +99,7 @@ const KIND = {
 } as const satisfies Record<PublishKind, ItemKind>
 
 // The agents that do a workflow's steps.
-const STEP_AGENTS = ['claude-code', 'codex'] as const satisfies readonly AgentId[]
+const STEP_AGENTS = ['claude-code', 'codex', 'pi'] as const satisfies readonly AgentId[]
 
 export function CommunityRow({
   item,
@@ -740,9 +739,7 @@ function Facts({ listing }: { listing: MarketListing }) {
             <AgentMark key={agent} agent={agent} size={15} dot={steps ? null : undefined} />
           ))}
           <span className="k-mkt-facts__text">
-            {steps
-              ? t('more.two', { first: AGENT_NAMES['claude-code'], second: AGENT_NAMES.codex })
-              : t('listing.everyAgent')}
+            {steps ? t('workflow.facts.stepAgents') : t('listing.everyAgent')}
           </span>
         </b>
       </span>
