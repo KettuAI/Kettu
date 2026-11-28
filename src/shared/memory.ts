@@ -3,11 +3,12 @@
 
 import type { AgentId } from './agents'
 
-/** Global memory is about the user and used in every session; project memory in its project's. */
-export type MemoryLayer = 'global' | 'project'
+/** Global memory applies everywhere, project memory belongs to a repo, and bot memory belongs to a single Bot (priority: project > bot > global). */
+export type MemoryLayer = 'global' | 'project' | 'bot'
 
-/** Where an entry lives: the global layer, or a project's by the project's folder path. */
-export type MemoryScope = { layer: 'global' } | { layer: 'project'; project: string }
+/** Memory scope: global, per-project path, or per-Bot ID. */
+export type MemoryScope =
+  { layer: 'global' } | { layer: 'project'; project: string } | { layer: 'bot'; botId: string }
 
 /** Who last wrote an entry: an agent in a session, or the user when both are null. */
 export interface MemorySource {
@@ -106,6 +107,14 @@ export function isMemoryScope(value: unknown): value is MemoryScope {
   if (typeof value !== 'object' || value === null) return false
   const scope = value as Record<string, unknown>
   if (scope.layer === 'global') return Object.keys(scope).length === 1
+  if (scope.layer === 'bot') {
+    return (
+      typeof scope.botId === 'string' &&
+      scope.botId.length > 0 &&
+      scope.botId.length <= 80 &&
+      Object.keys(scope).length === 2
+    )
+  }
   return (
     scope.layer === 'project' &&
     typeof scope.project === 'string' &&

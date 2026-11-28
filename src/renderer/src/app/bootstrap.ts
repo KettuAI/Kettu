@@ -85,7 +85,10 @@ import { loadKettuRoles } from '@renderer/stores/kettu-roles'
 import { loadPluginRefs } from '@renderer/stores/plugin-refs'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { useBotsStore } from '@renderer/stores/bots'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
+import { toast } from '@renderer/components/ui/toast'
+import { i18n } from '@renderer/lib/i18n'
 import { useIdleReleaseStore } from '@renderer/stores/idle-release'
 import { hostLoadClosed, hostLoadOpened, receiveLoad } from '@renderer/stores/host-load'
 import { useWorkflowsStore } from '@renderer/stores/workflows'
@@ -125,6 +128,7 @@ import {
   lastSessionId,
   layoutSessions,
   openArtifact,
+  openBot,
   openSession,
   resetLayout,
   restoreLayout,
@@ -220,6 +224,33 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
     case 'routine.run':
       useRoutinesStore.getState().receiveRun(event.run, hostId)
       return
+    case 'bot.changed':
+      if (hostId === null) useBotsStore.getState().receiveBot(event.bot)
+      return
+    case 'bot.removed':
+      if (hostId === null) useBotsStore.getState().receiveRemoved(event.botId)
+      return
+    case 'bot.request':
+      if (hostId === null) useBotsStore.getState().receiveRequest(event.request)
+      return
+    case 'bot.channelsChanged':
+      if (hostId === null) useBotsStore.getState().receiveChannels(event.channels)
+      return
+    case 'bot.hostOnline':
+      if (hostId === null) {
+        const firstBotId = event.botIds[0]
+        toast(
+          i18n.t('bots:work.hostBackOnline', {
+            host: event.hostName,
+            count: event.pendingCount,
+          }),
+          firstBotId
+            ? { label: i18n.t('bots:handoff.openBot'), onClick: () => openBot(firstBotId) }
+            : undefined,
+          { tone: 'info' },
+        )
+      }
+      return
     case 'task.changed':
       useTasksStore.getState().receive(event.task, hostId)
       return
@@ -311,6 +342,7 @@ function loadSessionState(): Promise<unknown> {
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
     useRoutinesStore.getState().load(),
+    useBotsStore.getState().load(),
     useTasksStore.getState().load(),
     loadAgentOptions(),
   ])

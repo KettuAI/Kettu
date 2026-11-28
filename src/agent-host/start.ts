@@ -242,6 +242,16 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.terminalResult(message.callId, message.answer))
         }
         break
+      case 'bot-remote-result':
+        if (Number.isSafeInteger(message.callId) && typeof message.answer === 'object') {
+          withHost((h) => h.botRemoteResult(message.callId, message.answer))
+        }
+        break
+      case 'host:bot-remote-event':
+        if (typeof message.event === 'object' && message.event !== null) {
+          withHost((h) => h.botRemoteEvent(message.event))
+        }
+        break
       case 'host:browser-waiting':
         if (Number.isSafeInteger(message.callId) && typeof message.waiting === 'boolean') {
           withHost((h) => h.browserWaiting(message.callId, message.waiting))

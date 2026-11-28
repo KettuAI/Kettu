@@ -69,7 +69,13 @@ export function useMemoryOverview(): MemoryRead<MemoryOverview> {
 export function useMemoryEntries(scope: MemoryScope | null): MemoryRead<MemoryEntry[]> {
   const { request } = useHostScope()
   return useMemoryRead(
-    scope === null ? null : scope.layer === 'global' ? 'global' : `project\n${scope.project}`,
+    scope === null
+      ? null
+      : scope.layer === 'global'
+        ? 'global'
+        : scope.layer === 'bot'
+          ? `bot\n${scope.botId}`
+          : `project\n${scope.project}`,
     scope === null ? null : () => request('memory.list', { scope }),
   )
 }

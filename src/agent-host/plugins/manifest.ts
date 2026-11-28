@@ -43,6 +43,14 @@ import {
   PLUGIN_CHANNEL_LIMITS,
   type PluginChannelDecl,
 } from '@shared/plugin-channels'
+import {
+  isBotChannelReplyMode,
+  PLUGIN_BOT_CHANNEL_ID,
+  PLUGIN_BOT_CHANNEL_LIMITS,
+  type BotChannelReplyMode,
+  type PluginBotChannelCapabilities,
+  type PluginBotChannelDecl,
+} from '@shared/plugin-bot-channels'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 
@@ -80,11 +88,12 @@ const KETTU_FIELDS = new Set([
   'mentions',
   'links',
   'channels',
+  'botChannels',
 ])
 const MAX_TEXT = 2_000
 const MAX_LIST = 64
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
-const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
+const SETTING_TYPES = ['boolean', 'string', 'select', 'secret', 'url'] as const
 const SETTING_FIELDS = new Set([
   'key',
   'type',
@@ -99,6 +108,14 @@ const ACTION_FIELDS = new Set(['id', 'title', 'description', 'icon'])
 const MENTION_FIELDS = new Set(['id', 'title', 'icon'])
 const LINK_FIELDS = new Set(['id', 'patterns', 'icon'])
 const CHANNEL_FIELDS = new Set(['id', 'title', 'description'])
+const BOT_CHANNEL_FIELDS = new Set([
+  'id',
+  'title',
+  'description',
+  'shortLabel',
+  'capabilities',
+  'howToAsk',
+])
 
 /** Kettu's entry of the manifest, at format 1. */
 export interface KettuEntry {
@@ -123,6 +140,8 @@ export interface KettuEntry {
   events: string[]
   /** The notification channels it declares; its script is told the notices the user sends to one. */
   channels: PluginChannelDecl[]
+  /** Bidirectional Bot channels it declares; requires the `bots.bridge` permission. */
+  botChannels: PluginBotChannelDecl[]
 }
 
 export interface PluginManifest {
@@ -245,7 +264,9 @@ function settings(value: unknown, field: string, warnings: string[]): PluginSett
     if (raw.required !== undefined) {
       if (typeof raw.required !== 'boolean') throw badField(`${at}.required`)
       if (raw.required) {
-        if (type !== 'string' && type !== 'secret') throw badField(`${at}.required`)
+        if (type !== 'string' && type !== 'secret' && type !== 'url') {
+          throw badField(`${at}.required`)
+        }
         setting.required = true
       }
     }
@@ -479,6 +500,83 @@ export function parseChannels(
   })
 }
 
+/** Bidirectional Bot channels declared by a plugin manifest (`extensions["sh.kettu"].botChannels`). */
+export function parseBotChannels(
+  value: unknown,
+  where: string,
+  warnings: string[],
+): PluginBotChannelDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_BOT_CHANNEL_LIMITS.channels) {
+    throw badField(where)
+  }
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginBotChannelDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id } = raw
+    if (typeof id !== 'string' || !PLUGIN_BOT_CHANNEL_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    for (const key of Object.keys(raw)) {
+      if (!BOT_CHANNEL_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.channelField', { channel: id, field: key.slice(0, 100) }))
+      }
+    }
+    const title = shortTexts(raw.title, `${at}.title`, PLUGIN_BOT_CHANNEL_LIMITS.title)
+    if (Object.values(title).every((text) => text.trim() === '')) throw badField(`${at}.title`)
+    const decl: PluginBotChannelDecl = { id, title }
+    const description = shortTexts(
+      raw.description,
+      `${at}.description`,
+      PLUGIN_BOT_CHANNEL_LIMITS.description,
+    )
+    if (Object.keys(description).length > 0) decl.description = description
+    if (raw.shortLabel !== undefined) {
+      if (
+        typeof raw.shortLabel !== 'string' ||
+        raw.shortLabel.trim() === '' ||
+        raw.shortLabel.length > PLUGIN_BOT_CHANNEL_LIMITS.shortLabel
+      ) {
+        throw badField(`${at}.shortLabel`)
+      }
+      decl.shortLabel = raw.shortLabel.trim()
+    }
+    if (raw.howToAsk !== undefined) {
+      if (
+        typeof raw.howToAsk !== 'string' ||
+        raw.howToAsk.trim() === '' ||
+        raw.howToAsk.length > PLUGIN_BOT_CHANNEL_LIMITS.howToAsk
+      ) {
+        throw badField(`${at}.howToAsk`)
+      }
+      decl.howToAsk = raw.howToAsk.trim()
+    }
+    if (raw.capabilities !== undefined) {
+      if (!isRecord(raw.capabilities)) throw badField(`${at}.capabilities`)
+      const caps: PluginBotChannelCapabilities = {}
+      for (const flag of ['direct', 'group', 'pairing', 'scopes'] as const) {
+        if (raw.capabilities[flag] !== undefined) {
+          if (typeof raw.capabilities[flag] !== 'boolean') {
+            throw badField(`${at}.capabilities.${flag}`)
+          }
+          caps[flag] = raw.capabilities[flag] as boolean
+        }
+      }
+      if (raw.capabilities.replyModes !== undefined) {
+        const modes = raw.capabilities.replyModes
+        if (!Array.isArray(modes) || !modes.every(isBotChannelReplyMode)) {
+          throw badField(`${at}.capabilities.replyModes`)
+        }
+        caps.replyModes = [...new Set(modes as BotChannelReplyMode[])]
+      }
+      decl.capabilities = caps
+    }
+    return decl
+  })
+}
+
 const TOOL_ARGUMENT_TYPES = ['string', 'number', 'integer', 'boolean'] as const
 
 function toolArgument(raw: unknown, at: string): PluginToolArgument {
@@ -690,6 +788,16 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
   if (channels.length > 0 && script === null) {
     throw refusal(t('plugins.channelsNeedScript', { channel: channels[0]!.id }))
   }
+  let botChannels = parseBotChannels(raw.botChannels, `${where}.botChannels`, warnings)
+  if (botChannels.length > 0 && !permissions.includes('bots.bridge')) {
+    warnings.push(
+      `botChannels ignored because plugin does not declare the "bots.bridge" permission`,
+    )
+    botChannels = []
+  }
+  if (botChannels.length > 0 && script === null) {
+    throw refusal(t('plugins.channelsNeedScript', { channel: botChannels[0]!.id }))
+  }
   const entry: KettuEntry = {
     kettu: range,
     titles: texts(raw.title, `${where}.title`),
@@ -705,6 +813,7 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     permissions,
     events,
     channels,
+    botChannels,
   }
   return entry
 }

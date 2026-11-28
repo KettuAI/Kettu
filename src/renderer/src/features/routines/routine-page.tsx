@@ -65,6 +65,7 @@ import {
   type OptionValues,
 } from '@renderer/stores/agent-options'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { sortedBots, useBotsStore } from '@renderer/stores/bots'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { loadRoutinePage, routinesRead, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -399,6 +400,8 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
             onKept={saveKept}
             scope={routine.scope}
             onScope={(scope) => save({ scope })}
+            botId={routine.botId ?? null}
+            onBotId={(botId) => save({ botId })}
             schedule={routine.trigger.schedule}
             savedSchedule={routine.trigger.schedule}
             done={routine.state === 'done'}
@@ -496,6 +499,7 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(DEFAULT_TIME_LIMIT)
   const [kept, setKept] = useState<KeptRunSessions>(DEFAULT_KEPT_RUN_SESSIONS)
   const [scope, setScope] = useState<PermissionScope>(seed?.scope ?? DEFAULT_SCOPE)
+  const [botId, setBotId] = useState<string | null>(null)
   const [schedule, setSchedule] = useState<Schedule>(seed?.schedule ?? DEFAULT_SCHEDULE)
   const [scheduleProblem, setScheduleProblem] = useState<ScheduleProblem | null>(null)
   const now = useNow()
@@ -535,6 +539,7 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
           options: entry ? routineOptions(entry, values) : optionsFrom(values),
           trigger: { kind: 'schedule', schedule },
           scope,
+          ...(hostId === null && botId ? { botId } : {}),
           timeLimitMinutes: timeLimit,
           keptRunSessions: kept,
         },
@@ -642,6 +647,8 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
             onKept={setKept}
             scope={scope}
             onScope={setScope}
+            botId={hostId === null ? botId : null}
+            onBotId={setBotId}
             schedule={schedule}
             savedSchedule={null}
             onSchedule={setSchedule}
@@ -709,6 +716,8 @@ function RoutineFields({
   onKept,
   scope,
   onScope,
+  botId,
+  onBotId,
   schedule,
   savedSchedule,
   done = false,
@@ -738,6 +747,8 @@ function RoutineFields({
   onKept: (kept: KeptRunSessions) => void
   scope: PermissionScope
   onScope: (scope: PermissionScope) => void
+  botId: string | null
+  onBotId: (botId: string | null) => void
   schedule: Schedule
   savedSchedule: Schedule | null
   /** A one-time routine that has run. */
@@ -745,8 +756,10 @@ function RoutineFields({
   onSchedule: (schedule: Schedule) => void
   onScheduleProblem?: (problem: ScheduleProblem | null) => void
 }) {
-  const { t } = useTranslation('routines')
+  const { t } = useTranslation(['routines', 'bots'])
   const projects = useProjectsStore((s) => s.projects)
+  const botsById = useBotsStore((s) => s.byId)
+  const localBots = hostId === null ? sortedBots(botsById) : []
   const project: Project | null =
     projectPath === null
       ? null
@@ -805,6 +818,25 @@ function RoutineFields({
             />
           </span>
         </Row>
+        {localBots.length > 0 && (
+          <Row
+            title={t('bots:channels.routineAssignTitle')}
+            note={t('bots:channels.routineAssignHint')}
+          >
+            <Select
+              label={t('bots:channels.routineAssignTitle')}
+              value={botId ?? ''}
+              options={[
+                { value: '', label: t('bots:channels.routineAssignNone') },
+                ...localBots.map((bot) => ({
+                  value: bot.id,
+                  label: `${bot.name} (@${bot.handle})`,
+                })),
+              ]}
+              onChange={(value) => onBotId(value ? value : null)}
+            />
+          </Row>
+        )}
       </div>
       <Head title={t('routine.schedule')} note={t('routine.scheduleHint')} />
       <ScheduleField

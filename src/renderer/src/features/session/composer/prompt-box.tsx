@@ -18,6 +18,9 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { menuCollisionPadding } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
+import type { BotView } from '@shared/bots'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
+import { sortedBots, useBotsStore } from '@renderer/stores/bots'
 import { rememberReferenceSummary, useGitStore } from '@renderer/stores/git'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { useOverlayPresence } from '@renderer/stores/overlays'
@@ -83,10 +86,18 @@ import { useBoxText, type PromptBoxState } from './use-prompt-box'
 // and `#` popovers and the attachments, kept in a draft, inside the Chat Composer's writing area.
 // What sends, and how, is each one's own.
 
-type PopoverItem = SlashCommand | MentionRow | BrowserTabMentionRow | PluginRow | GitHubRefRow
+type BotMentionRow = { kind: 'bot'; bot: BotView }
+type PopoverItem =
+  | SlashCommand
+  | BotMentionRow
+  | MentionRow
+  | BrowserTabMentionRow
+  | PluginRow
+  | GitHubRefRow
 
-/** What the mention list shows: the project's files, session browser tabs, and plugin offers. */
+/** What the mention list shows: matching Bots, the project's files, session browser tabs, and plugin offers. */
 interface MentionView extends MentionList {
+  bots: BotMentionRow[]
   browserTabs: BrowserTabMentionRow[]
   plugins: PluginMentions
 }
@@ -97,6 +108,7 @@ type PopoverView =
 /** Why there are no commands to list yet: none reported so far, or no project chosen. */
 export type SlashNote = 'loading' | 'chooseProject'
 
+const isBotRow = (item: PopoverItem): item is BotMentionRow => 'kind' in item && item.kind === 'bot'
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 const isBrowserTabRow = (item: PopoverItem): item is BrowserTabMentionRow => 'browserTab' in item
 const isPluginRow = (item: PopoverItem): item is PluginRow => 'plugin' in item
@@ -228,12 +240,21 @@ export function PromptBox({
   }, [mentionKey])
   if (mentionDismissed !== null && mention?.start !== mentionDismissed) setMentionDismissed(null)
   const shown = mentionShown(mention, mentionDismissed, composition)
+  const botsById = useBotsStore((s) => s.byId)
+  const botRows = useMemo<BotMentionRow[]>(() => {
+    if (!shown || !mention) return []
+    const q = mention.query.trim().toLowerCase()
+    return sortedBots(botsById)
+      .filter((b) => !q || b.handle.includes(q) || b.name.toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((bot) => ({ kind: 'bot', bot }))
+  }, [shown, mention, botsById])
   const files = useMentionList(draft, projectPath, shown ? mention!.query : null)
   const browserTabs = useMentionBrowserTabs(box.sessionId, shown ? mention!.query : null)
   const plugins = usePluginMentions(hostId, shown ? mention!.query : null)
   const mentions = useMemo<MentionView>(
-    () => ({ ...files, browserTabs, plugins }),
-    [files, browserTabs, plugins],
+    () => ({ ...files, bots: botRows, browserTabs, plugins }),
+    [files, botRows, browserTabs, plugins],
   )
   const filesReady = !!files.files && !(files.files.error && !files.files.paths.length)
   // With nothing typed it shows the files the session used and how many there are to search;
@@ -241,7 +262,8 @@ export function PromptBox({
   // what a plugin offers open it too, but a plugin still searching never does.
   const mentionOpen =
     shown &&
-    (files.noProject ||
+    (botRows.length > 0 ||
+      files.noProject ||
       files.used ||
       files.rows.length > 0 ||
       browserTabs.length > 0 ||
@@ -294,7 +316,7 @@ export function PromptBox({
     showing === 'slash'
       ? slashMatches
       : listing
-        ? [...listing.rows, ...listing.browserTabs, ...listing.plugins.rows]
+        ? [...listing.bots, ...listing.rows, ...listing.browserTabs, ...listing.plugins.rows]
         : hashListing
           ? hashListing.rows
           : []
@@ -416,9 +438,15 @@ export function PromptBox({
     const next = replaceHashRef(current, hash, row.item.url)
     update(next.text, next.caret)
   }
+  const chooseBot = (row: BotMentionRow) => {
+    if (!mention) return
+    const next = replaceMention(source.text, mention, row.bot.handle)
+    update(next.text, next.caret)
+  }
   const chooseItem = (item: PopoverItem | undefined) => {
     if (!item) return
     if (isGitHubRefRow(item)) chooseGitHubRef(item)
+    else if (isBotRow(item)) chooseBot(item)
     else if (isBrowserTabRow(item)) chooseBrowserTab(item)
     else if (isPluginRow(item)) choosePlugin(item)
     else if (isMentionRow(item)) choose(item)
@@ -470,7 +498,11 @@ export function PromptBox({
       modified,
       slashOpen,
       mentionOpen,
-      mentionRows: files.rows.length > 0 || browserTabs.length > 0 || plugins.rows.length > 0,
+      mentionRows:
+        botRows.length > 0 ||
+        files.rows.length > 0 ||
+        browserTabs.length > 0 ||
+        plugins.rows.length > 0,
       hashOpen,
       hashRows: githubRefs.rows.length > 0,
     })
@@ -649,8 +681,50 @@ export function PromptBox({
                   rows.length === 0 && !listing?.plugins.groups.some(shownNote) && 'hidden',
                 )}
               >
+                {listing && listing.bots.length > 0 && (
+                  <div
+                    role="group"
+                    className={cn(
+                      (listing.rows.length > 0 ||
+                        listing.browserTabs.length > 0 ||
+                        listing.plugins.rows.length > 0) &&
+                        'mb-1 border-b border-subtle pb-1',
+                    )}
+                  >
+                    <div className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary">
+                      Bots
+                    </div>
+                    {listing.bots.map((row, index) => (
+                      <div
+                        key={row.bot.id}
+                        role="option"
+                        id={optionId(index)}
+                        aria-selected={index === active}
+                        data-highlighted={index === active ? '' : undefined}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onMouseMove={() => highlightRow(index)}
+                        onClick={() => chooseBot(row)}
+                        className="flex min-h-7.5 cursor-default items-center gap-2 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
+                      >
+                        <BotAvatar
+                          avatar={row.bot.avatar}
+                          name={row.bot.name}
+                          botId={row.bot.id}
+                          size={20}
+                          status={row.bot.status}
+                        />
+                        <span className="truncate font-medium text-primary">{row.bot.name}</span>
+                        <span className="shrink-0 font-mono text-hint text-tertiary">
+                          @{row.bot.handle}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {rows.map((item, index) =>
-                  isPluginRow(item) || isBrowserTabRow(item) ? null : isGitHubRefRow(item) ? (
+                  isBotRow(item) || isPluginRow(item) || isBrowserTabRow(item) ? null : isGitHubRefRow(
+                      item,
+                    ) ? (
                     <GitHubRefItem
                       key={`${item.item.kind}:${item.item.number}`}
                       id={optionId(index)}
@@ -693,7 +767,7 @@ export function PromptBox({
                       {t('mentions.browserTabs')}
                     </div>
                     {listing.browserTabs.map((row, i) => {
-                      const index = listing.rows.length + i
+                      const index = listing.bots.length + listing.rows.length + i
                       return (
                         <BrowserTabMentionItem
                           key={row.id}
@@ -709,7 +783,10 @@ export function PromptBox({
                 )}
                 {listing?.plugins.groups.map((group, g) => {
                   const start =
-                    listing.rows.length + listing.browserTabs.length + listing.plugins.starts[g]!
+                    listing.bots.length +
+                    listing.rows.length +
+                    listing.browserTabs.length +
+                    listing.plugins.starts[g]!
                   if (group.items.length === 0 && !shownNote(group)) return null
                   return (
                     <div
@@ -746,7 +823,7 @@ export function PromptBox({
               {listing && (
                 <MentionFooter
                   list={listing}
-                  more={listing.browserTabs.length + listing.plugins.rows.length}
+                  more={listing.bots.length + listing.browserTabs.length + listing.plugins.rows.length}
                 />
               )}
               {hashListing && <GitHubRefFooter picker={hashListing} />}

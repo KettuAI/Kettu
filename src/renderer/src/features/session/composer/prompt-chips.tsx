@@ -15,17 +15,18 @@ import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { useBotsStore } from '@renderer/stores/bots'
 import { useGitStore } from '@renderer/stores/git'
 import { useOverlayPresence } from '@renderer/stores/overlays'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
-import { newSessionPanel } from '@renderer/stores/view'
+import { newSessionPanel, openBot } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
 import { openAttachmentPath } from '../attachments/open-attachment'
 import { draftKey } from '../media/viewer-items'
 import { ChipPreview } from './chip-preview'
 import { removeAttachment } from './attachments'
 import { ChipView } from './chip-view'
-import { isSurfaceMention, mentionResolver, type Chip } from './chips'
+import { isSurfaceMention, mentionResolver, type BotMentionRef, type Chip } from './chips'
 import { useMentionSurfaces } from './mention-surfaces'
 import { useDraftMentions } from './plugin-mentions'
 import type { ComposerEditorHandle } from './editor'
@@ -113,9 +114,21 @@ export function usePromptChips({
   const panel = sessionId ?? (projectPath ? newSessionPanel(projectPath) : null)
   const surfaces = useMentionSurfaces(panel)
   const plugins = useDraftMentions(draft)
+  const botsById = useBotsStore((s) => s.byId)
+  const bots = useMemo<BotMentionRef[]>(
+    () =>
+      Object.values(botsById).map((bot) => ({
+        id: bot.id,
+        handle: bot.handle,
+        name: bot.name,
+        avatar: bot.avatar,
+        description: bot.description,
+      })),
+    [botsById],
+  )
   const resolve = useMemo(
-    () => mentionResolver(attachments, project, surfaces, plugins),
-    [attachments, project, surfaces, plugins],
+    () => mentionResolver(attachments, project, surfaces, plugins, bots),
+    [attachments, project, surfaces, plugins, bots],
   )
   const exclusiveNames = useMemo(
     () => commands.filter((c) => !isSkillCommand(c)).map((c) => c.name),
@@ -175,6 +188,10 @@ export function usePromptChips({
   const open = (chip: Chip) => {
     setHover(null)
     if (chip.kind === 'command' || chip.kind === 'skill') return
+    if (chip.kind === 'bot') {
+      if (chip.bot) openBot(chip.bot.id)
+      return
+    }
     if (chip.kind === 'link') {
       links.open(chip.url)
       return

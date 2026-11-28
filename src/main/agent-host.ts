@@ -17,6 +17,7 @@ import {
   type ArtifactImportResult,
 } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import type { BotRemoteAnswer, BotRemoteCall, BotRemoteEvent } from '@shared/bots'
 import {
   isOriginDecision,
   type BrowserCallAnswer,
@@ -157,6 +158,8 @@ export interface AgentHostDeps {
   pluginHost?: (run: boolean) => void
   /** Runs an agent's terminal call on the terminal host. */
   terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
+  /** Cross-computer Bot bridge: calls paired remote hosts via main's HostSessions. */
+  botRemote?: (call: BotRemoteCall) => Promise<BotRemoteAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** The last running turn that used a page of main's ended. */
@@ -903,6 +906,27 @@ export class AgentHost {
         ).then((answer) => this.host.post({ type: 'device-result', callId, answer }))
         break
       }
+      case 'host:bot-remote-call': {
+        const { callId, call } = message
+        if (!Number.isSafeInteger(callId) || typeof call !== 'object' || call === null) break
+        const run = this.deps.botRemote
+        void (
+          run
+            ? run(call)
+            : Promise.resolve<BotRemoteAnswer>({
+                ok: false,
+                code: 'offline',
+                message: 'Remote host bridge is not available.',
+              })
+        )
+          .catch<BotRemoteAnswer>((error: unknown) => ({
+            ok: false,
+            code: 'failed',
+            message: error instanceof Error ? error.message : String(error),
+          }))
+          .then((answer) => this.host.post({ type: 'bot-remote-result', callId, answer }))
+        break
+      }
       case 'host:trash-call': {
         const { callId, paths } = message
         if (!Number.isSafeInteger(callId)) break
@@ -1209,6 +1233,11 @@ export class AgentHost {
         })
       },
     )
+  }
+
+  /** Pushes remote host online/offline and session state updates into local agent-host. */
+  pushBotRemoteEvent(event: BotRemoteEvent): void {
+    this.host.post({ type: 'host:bot-remote-event', event })
   }
 
   private exited(clean: boolean): void {

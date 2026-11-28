@@ -8,6 +8,7 @@ import { listingTitle } from '@renderer/features/marketplace/model'
 import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useRoutinesStore } from '@renderer/stores/routines'
+import { useBotsStore } from '@renderer/stores/bots'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import type { HistoryPlace, SettingsPlace } from '@renderer/stores/view'
@@ -36,6 +37,12 @@ export function placeTitle(place: HistoryPlace): string {
     case 'routine':
       if (place.routineId === null) return t('history.places.newRoutine')
       return useRoutinesStore.getState().byId[place.routineId]?.name ?? t('history.places.routines')
+    case 'bot':
+      return useBotsStore.getState().byId[place.botId]?.name ?? i18n.t('bots:title')
+    case 'bot-edit':
+      return place.botId
+        ? (useBotsStore.getState().byId[place.botId]?.name ?? i18n.t('bots:editBot'))
+        : i18n.t('bots:newBot')
     case 'artifacts':
       return place.deleted ? t('history.places.recentlyDeleted') : t('history.places.artifacts')
     case 'marketplace': {
@@ -70,6 +77,11 @@ export function usePlaceTitle(place: HistoryPlace): string {
   useSessionsStore((s) => (place.kind === 'session' ? s.byId[place.sessionId]?.title : null))
   useRoutinesStore((s) =>
     place.kind === 'routine' && place.routineId ? s.byId[place.routineId]?.name : null,
+  )
+  useBotsStore((s) =>
+    place.kind === 'bot' || (place.kind === 'bot-edit' && place.botId)
+      ? s.byId[place.botId!]?.name
+      : null,
   )
   useArtifactsStore((s) => (place.kind === 'artifact' ? s.list : null))
   useTasksStore((s) => (place.kind === 'task' ? s.summaries[place.taskId]?.title : null))

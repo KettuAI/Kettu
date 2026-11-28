@@ -137,6 +137,16 @@ function sameChip(a: Chip, b: Chip): boolean {
   if (a.kind === 'link' || b.kind === 'link') {
     return a.kind === 'link' && b.kind === 'link' && a.url === b.url
   }
+  if (a.kind === 'bot' || b.kind === 'bot') {
+    return (
+      a.kind === 'bot' &&
+      b.kind === 'bot' &&
+      a.bot?.id === b.bot?.id &&
+      a.bot?.handle === b.bot?.handle &&
+      a.bot?.name === b.bot?.name &&
+      JSON.stringify(a.bot?.avatar) === JSON.stringify(b.bot?.avatar)
+    )
+  }
   return (
     a.kind === b.kind &&
     a.label === b.label &&

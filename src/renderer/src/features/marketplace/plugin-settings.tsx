@@ -92,6 +92,7 @@ export function PluginSettingRow({
         </RowFrame>
       )
     case 'string':
+    case 'url':
       return (
         <RowFrame id={id} text={text}>
           <ControlError error={error} />

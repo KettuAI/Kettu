@@ -27,7 +27,9 @@ export function missingPermission(
 ): string | null {
   if (permission === null) return null
   if (permission === 'network') {
-    return granted.some((item) => networkDomain(item) !== null) ? null : 'network:<domain>'
+    return granted.some((item) => item === 'network.custom' || networkDomain(item) !== null)
+      ? null
+      : 'network:<domain>'
   }
   return granted.includes(permission) ? null : permission
 }

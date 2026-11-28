@@ -10,6 +10,7 @@ import type {
   VersionMoveReason,
 } from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
+import type { BotSessionRef } from '@shared/bots'
 import { parseProjectIcon, type ProjectIcon } from '@shared/project-icon'
 import type { SessionTaskRef } from '@shared/workflow'
 import {
@@ -402,9 +403,10 @@ export interface SessionRecord {
   updatedAt: number
   lastViewedAt: number | null
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine' | 'task'
+  origin: 'user' | 'subagent' | 'routine' | 'task' | 'bot_main' | 'bot_work'
   routine?: RoutineRef // a routine's run, when origin is 'routine'
   task?: SessionTaskRef // a workflow step's session, when origin is 'task'
+  bot?: BotSessionRef // Owning Bot metadata for bot_main and bot_work sessions
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
@@ -689,6 +691,7 @@ function routineOf(value: unknown): Routine | null {
     prompt,
     agentId: agentId as Routine['agentId'],
     projectPath: value.projectPath as string | null,
+    ...(typeof value.botId === 'string' && value.botId.length > 0 ? { botId: value.botId } : {}),
     options,
     trigger: { kind: 'schedule', schedule: value.trigger.schedule },
     scope: value.scope,
@@ -1001,6 +1004,28 @@ function routineRefOf(value: unknown): { routine?: RoutineRef } {
   }
 }
 
+function botRefOf(value: unknown): { bot?: BotSessionRef } {
+  if (
+    !isRecord(value) ||
+    !isString(value.botId) ||
+    (value.role !== 'main' && value.role !== 'work')
+  ) {
+    return {}
+  }
+  return {
+    bot: {
+      botId: value.botId,
+      role: value.role,
+      ...(isString(value.requestId) ? { requestId: value.requestId } : {}),
+      ...(value.homeHostId === null || isString(value.homeHostId)
+        ? { homeHostId: value.homeHostId }
+        : {}),
+      ...(isString(value.botName) ? { botName: value.botName } : {}),
+      ...(isString(value.botHandle) ? { botHandle: value.botHandle } : {}),
+    },
+  }
+}
+
 /** The earlier agents a session lists; one that does not read is dropped, not the session. */
 function earlierOf(value: unknown): { earlier?: EarlierAgent[] } {
   if (!Array.isArray(value)) return {}
@@ -1202,7 +1227,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       (item.origin !== 'user' &&
         item.origin !== 'subagent' &&
         item.origin !== 'routine' &&
-        item.origin !== 'task') ||
+        item.origin !== 'task' &&
+        item.origin !== 'bot_main' &&
+        item.origin !== 'bot_work') ||
       !nullableString(item.description) ||
       !nullableString(item.branch)
     ) {
@@ -1229,6 +1256,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       origin: item.origin,
       ...routineRefOf(item.routine),
       ...taskRefOf(item.task),
+      ...botRefOf(item.bot),
       description: item.description,
       branch: item.branch,
       ...queueOf(item.queue),

@@ -45,9 +45,9 @@ export function isMemoryToolName(name: string): boolean {
 
 const LAYER = {
   type: 'string',
-  enum: ['project', 'global'],
+  enum: ['project', 'bot', 'global'],
   description:
-    "project: this project's memory. global: memory about the user, used in every project.",
+    "project: this project's memory. bot: this Bot's memory. global: user memory for all projects.",
 }
 const ID = {
   type: 'string',
@@ -179,11 +179,15 @@ export interface MemoryToolsDeps {
   service: MemoryService
   /** The project of the caller's session, null for a session without one. */
   projectOf(caller: Caller): string | null
-  /** A project write happened: the host adds the thread row. */
+  /** Returns the owning Bot ID when the caller runs in a Bot main or work session. */
+  botOf?(caller: Caller): string | null
+  /** When true (e.g. external IM, GitHub, or Routine trigger), bot memory writes require user confirmation. */
+  requiresConfirmation?(caller: Caller): boolean
+  /** A project or bot write happened: the host adds the thread row. */
   written(
     sessionId: string,
     write: {
-      layer: 'project'
+      layer: 'project' | 'bot'
       action: MemoryAction
       memoryId: string
       title: string
@@ -191,12 +195,13 @@ export interface MemoryToolsDeps {
     },
   ): void
   /**
-   * A global write is proposed: the host adds the card, unless the session has no thread
-   * (`closed`) or enough proposals already wait in it (`full`).
+   * A global or external bot memory write is proposed: the host adds the card, unless the session
+   * has no thread (`closed`) or enough proposals already wait in it (`full`).
    */
   proposed(
     sessionId: string,
     proposal: {
+      layer?: 'global' | 'bot'
       action: MemoryAction
       memoryId: string | null
       title: string
@@ -232,8 +237,8 @@ function args(name: string, input: unknown): Args {
 
 function layerOf(o: Args, fallback: MemoryLayer | null): MemoryLayer | null {
   if (o.layer === undefined || o.layer === null) return fallback
-  if (o.layer !== 'project' && o.layer !== 'global') {
-    throw invalid('layer must be project or global.')
+  if (o.layer !== 'project' && o.layer !== 'bot' && o.layer !== 'global') {
+    throw invalid('layer must be project, bot or global.')
   }
   return o.layer
 }
@@ -354,12 +359,15 @@ export class MemoryTools {
           return await this.list(caller, layerOf(o, null), offsetOf(o))
         case READ_MEMORY_TOOL:
           return await this.read(caller, layerOf(o, null), idOf(o))
-        case REMEMBER_TOOL:
-          return await this.remember(caller, layerOf(o, 'project')!, {
+        case REMEMBER_TOOL: {
+          const defaultLayer: MemoryLayer =
+            this.deps.projectOf(caller) === null && this.deps.botOf?.(caller) ? 'bot' : 'project'
+          return await this.remember(caller, layerOf(o, defaultLayer)!, {
             title: field(o, 'title', true)!,
             description: field(o, 'description', true)!,
             body: field(o, 'body', true)!,
           })
+        }
         case UPDATE_MEMORY_TOOL:
           return await this.update(caller, layerOf(o, null), idOf(o), {
             title: field(o, 'title', false),
@@ -379,10 +387,16 @@ export class MemoryTools {
     }
   }
 
-  /** The scope of a layer for the caller: its own project's memory, or global memory. */
+  /** The scope of a layer for the caller: its project, its Bot, or global memory. */
   private scope(caller: Caller, layer: MemoryLayer | null): MemoryScope {
-    if (layer === null) throw invalid('layer must be project or global.')
+    if (layer === null) throw invalid('layer must be project, bot or global.')
     if (layer === 'global') return { layer: 'global' }
+    if (layer === 'bot') {
+      const botId = this.deps.botOf?.(caller) ?? null
+      if (botId === null)
+        throw invalid('This session does not belong to a Bot, so it has no bot memory.')
+      return { layer: 'bot', botId }
+    }
     const project = this.deps.projectOf(caller)
     if (project === null) throw invalid(NO_PROJECT)
     return { layer: 'project', project }
@@ -394,13 +408,21 @@ export class MemoryTools {
     offset: number,
   ): Promise<CallToolResult> {
     const project = this.deps.projectOf(caller)
+    const botId = this.deps.botOf?.(caller) ?? null
     if (layer === 'project' && project === null) throw invalid(NO_PROJECT)
+    if (layer === 'bot' && botId === null) {
+      throw invalid('This session does not belong to a Bot, so it has no bot memory.')
+    }
     const lines: string[] = []
-    if (layer !== 'global' && project !== null) {
+    if ((layer === null || layer === 'project') && project !== null) {
       const entries = await this.deps.service.list({ layer: 'project', project })
       lines.push(...listed('Project memory:', 'project', entries, offset))
     }
-    if (layer !== 'project') {
+    if ((layer === null || layer === 'bot') && botId !== null) {
+      const entries = await this.deps.service.list({ layer: 'bot', botId })
+      lines.push(...listed('Bot memory:', 'bot', entries, offset))
+    }
+    if (layer === null || layer === 'global') {
       const entries = await this.deps.service.list({ layer: 'global' })
       lines.push(...listed('Global memory (about the user):', 'global', entries, offset))
     }
@@ -436,6 +458,7 @@ export class MemoryTools {
   private propose(
     caller: Caller,
     proposal: {
+      layer?: 'global' | 'bot'
       action: MemoryAction
       memoryId: string | null
       title: string
@@ -453,7 +476,10 @@ export class MemoryTools {
           'more only after they answer.',
       )
     }
-    return done(`Proposed to the user for global memory. They decide in the thread; ${PROPOSED}`)
+    const targetLayer = proposal.layer ?? 'global'
+    return done(
+      `Proposed to the user for ${targetLayer} memory. They decide in the thread; ${PROPOSED}`,
+    )
   }
 
   private async remember(
@@ -471,18 +497,30 @@ export class MemoryTools {
         draft: checked,
       })
     }
+    if (scope.layer === 'bot' && this.deps.requiresConfirmation?.(caller)) {
+      const checked = await withRoom(scope.layer, this.deps.service.check(scope, null, draft))
+      return this.propose(caller, {
+        layer: 'bot',
+        action: 'remember',
+        memoryId: null,
+        title: checked.title,
+        draft: checked,
+      })
+    }
     const { entry, undo } = await withRoom(
       scope.layer,
       this.deps.service.save(scope, null, draft, this.by(caller)),
     )
     this.deps.written(caller.sessionId, {
-      layer: 'project',
+      layer: scope.layer,
       action: 'remember',
       memoryId: entry.id,
       title: entry.title,
       undo,
     })
-    return done(`Saved to project memory as ${entry.id}. The user can undo it from the thread.`)
+    return done(
+      `Saved to ${scope.layer} memory as ${entry.id}. The user can undo it from the thread.`,
+    )
   }
 
   private async update(
@@ -514,15 +552,25 @@ export class MemoryTools {
         draft: checked,
       })
     }
+    if (scope.layer === 'bot' && this.deps.requiresConfirmation?.(caller)) {
+      const checked = await this.deps.service.check(scope, id, draft)
+      return this.propose(caller, {
+        layer: 'bot',
+        action: 'update',
+        memoryId: id,
+        title: checked.title,
+        draft: checked,
+      })
+    }
     const saved = await this.deps.service.save(scope, id, draft, this.by(caller))
     this.deps.written(caller.sessionId, {
-      layer: 'project',
+      layer: scope.layer,
       action: 'update',
       memoryId: id,
       title: saved.entry.title,
       undo: saved.undo,
     })
-    return done(`Updated ${id} in project memory. The user can undo it from the thread.`)
+    return done(`Updated ${id} in ${scope.layer} memory. The user can undo it from the thread.`)
   }
 
   private async forget(
@@ -540,14 +588,24 @@ export class MemoryTools {
         draft: null,
       })
     }
+    if (scope.layer === 'bot' && this.deps.requiresConfirmation?.(caller)) {
+      const entry = await this.existing(scope, id)
+      return this.propose(caller, {
+        layer: 'bot',
+        action: 'forget',
+        memoryId: id,
+        title: entry.title,
+        draft: null,
+      })
+    }
     const { undo, title } = await this.deps.service.remove(scope, id, this.by(caller))
     this.deps.written(caller.sessionId, {
-      layer: 'project',
+      layer: scope.layer,
       action: 'forget',
       memoryId: id,
       title,
       undo,
     })
-    return done(`Removed ${id} from project memory. The user can undo it from the thread.`)
+    return done(`Removed ${id} from ${scope.layer} memory. The user can undo it from the thread.`)
   }
 }

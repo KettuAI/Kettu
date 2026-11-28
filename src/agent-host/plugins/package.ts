@@ -292,6 +292,7 @@ export function readPackage(files: readonly PackageFile[], appVersion: string): 
     mentions: kettu?.mentions ?? [],
     links: kettu?.links ?? [],
     channels: kettu?.channels ?? [],
+    botChannels: kettu?.botChannels ?? [],
     hooks,
     warnings,
   }

@@ -1314,6 +1314,24 @@
         "readFailed": "无法读取工作流设置"
       }
     },
+    "bots": {
+      "group": "Bots",
+      "note": "限额对这台电脑上所有 Bot 共同生效。",
+      "keywords": "bot bots 协调 派发 并发 交接",
+      "invalid": "填 {{min}} 到 {{max}} 之间的整数。",
+      "manage": {
+        "name": "管理 Bots",
+        "description": "创建常驻 Bot 统筹项目，并接入 Telegram、飞书、GitHub 与定时任务。"
+      },
+      "maxConcurrent": {
+        "name": "同时工作的 Bot 会话",
+        "description": "这台电脑上所有 Bot 合起来最多同时运行多少个工作会话。"
+      },
+      "allowHandoff": {
+        "name": "智能体能把活交接给 Bot",
+        "description": "允许普通会话里的智能体调用 handoff_to_bot 把任务委派给你的 Bot。"
+      }
+    },
     "signOutShared": {
       "title": "退出 {{name}} 的登录？",
       "body": "{{name}} 和 Antigravity 应用、CLI 共用一份登录，它们也会一起退出。",

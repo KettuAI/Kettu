@@ -10,6 +10,7 @@ import { relayCall, type PluginChannels } from './channels'
 import { httpsTransport, networkFetch, type HttpTransport } from './network'
 import { ownCalls, type PluginOwnDeps } from './own-api'
 import { sessionCalls, type PluginSessionsDeps } from './sessions-api'
+import { wsCalls, type PluginWebSockets } from './ws'
 
 /** The events delivered to the plugins that are loaded, each as its call's value changes. */
 export const PLUGIN_EVENTS = ['app.locale', 'app.colorMode', 'settings.changed'] as const
@@ -31,6 +32,21 @@ function randomHex([length]: unknown[]): string {
   return randomBytes(length as number).toString('hex')
 }
 
+export interface PluginBotBridgeDeps {
+  list(pluginId: string, rawOptions: unknown): unknown
+  inbound(pluginId: string, rawMessage: unknown): Promise<unknown>
+  channelStatus(pluginId: string, rawOptions: unknown): unknown
+}
+
+export interface PluginConnectorDeps {
+  session(pluginId: string): Promise<{
+    signedIn: boolean
+    connectorUrl: string
+    hostId: string
+    accessToken: string | null
+  }>
+}
+
 export interface PluginApiDeps {
   locale(): Locale
   /** The window's color mode; null where there is no window, as under the daemon. */
@@ -40,17 +56,66 @@ export interface PluginApiDeps {
   /** Where a relayed answer goes. */
   channels: Pick<PluginChannels, 'answer'>
   transport?: HttpTransport
+  customOrigins?: (pluginId: string) => readonly string[]
+  customTransport?: HttpTransport
+  ws?: PluginWebSockets
+  bots?: PluginBotBridgeDeps
+  connector?: PluginConnectorDeps
 }
 
 export function createPluginApi(deps: PluginApiDeps): Readonly<Record<string, PluginApiCall>> {
+  const unavailable = (name: string) => () => {
+    throw new Error(`${name} is unavailable in this host`)
+  }
+  const botCalls: Record<string, PluginApiCall> = {
+    'bots.list': {
+      permission: 'bots.bridge',
+      run: deps.bots
+        ? ({ pluginId }, [options]) => deps.bots!.list(pluginId, options)
+        : unavailable('bots.list'),
+    },
+    'bots.inbound': {
+      permission: 'bots.bridge',
+      run: deps.bots
+        ? ({ pluginId }, [message]) => deps.bots!.inbound(pluginId, message)
+        : unavailable('bots.inbound'),
+    },
+    'bots.channelStatus': {
+      permission: 'bots.bridge',
+      run: deps.bots
+        ? ({ pluginId }, [options]) => deps.bots!.channelStatus(pluginId, options)
+        : unavailable('bots.channelStatus'),
+    },
+  }
+  const connectorCalls: Record<string, PluginApiCall> = {
+    'connector.session': {
+      permission: 'kettu.connector',
+      run: deps.connector
+        ? ({ pluginId }) => deps.connector!.session(pluginId)
+        : unavailable('connector.session'),
+    },
+  }
+  const socketCalls: Record<string, PluginApiCall> = deps.ws
+    ? wsCalls(deps.ws)
+    : {
+        'network.ws.open': { permission: 'network', run: unavailable('network.ws.open') },
+        'network.ws.send': { permission: 'network', run: unavailable('network.ws.send') },
+        'network.ws.close': { permission: 'network', run: unavailable('network.ws.close') },
+      }
   return Object.freeze({
     'api.version': { permission: null, run: () => PLUGIN_API_VERSIONS.at(-1) },
     'app.locale': { permission: null, run: () => deps.locale() },
     'app.colorMode': { permission: null, run: () => deps.colorMode() },
     'random.bytes': { permission: null, run: (_, args) => randomHex(args) },
-    'network.fetch': networkFetch(deps.transport ?? httpsTransport),
+    'network.fetch': networkFetch(deps.transport ?? httpsTransport, {
+      customOrigins: deps.customOrigins,
+      customTransport: deps.customTransport,
+    }),
+    ...socketCalls,
     ...ownCalls(deps.own),
     'requests.answer': relayCall(deps.channels),
     ...sessionCalls(deps.sessions),
+    ...botCalls,
+    ...connectorCalls,
   })
 }

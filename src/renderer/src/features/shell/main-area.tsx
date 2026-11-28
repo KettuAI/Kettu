@@ -23,6 +23,8 @@ const OverviewPage = lazy(() => import('@renderer/features/overview/overview-pag
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-page'))
 const RoutinePage = lazy(() => import('@renderer/features/routines/routine-page'))
+const BotWorkbench = lazy(() => import('@renderer/features/bots/bot-workbench'))
+const BotEditorPage = lazy(() => import('@renderer/features/bots/bot-editor'))
 const ArtifactsPage = lazy(() => import('@renderer/features/artifacts/artifacts-page'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const MarketplacePage = lazy(() => import('@renderer/features/marketplace/marketplace-page'))
@@ -98,6 +100,28 @@ export function MainArea() {
           <RoutinePage
             key={main.routineId ?? `new:${main.example ?? ''}`}
             routineId={main.routineId}
+            example={main.example ?? null}
+          />
+        </Suspense>
+      </PageSheet>
+    )
+  }
+  if (main.kind === 'bot') {
+    return (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <BotWorkbench key={main.botId} botId={main.botId} />
+        </Suspense>
+      </PageSheet>
+    )
+  }
+  if (main.kind === 'bot-edit') {
+    return (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <BotEditorPage
+            key={main.botId ?? `new:${main.example ?? ''}`}
+            botId={main.botId}
             example={main.example ?? null}
           />
         </Suspense>

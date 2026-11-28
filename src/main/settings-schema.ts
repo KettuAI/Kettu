@@ -65,6 +65,11 @@ import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shar
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { isRelayPin, ownRelayProblem } from '@shared/remote/own-relay'
+import {
+  BOT_GLOBAL_CONCURRENT_MAX,
+  BOT_GLOBAL_CONCURRENT_MIN,
+  DEFAULT_BOT_GLOBAL_SETTINGS,
+} from '@shared/bots'
 import { MAX_REGIONS } from '@shared/remote/relay'
 import {
   isRegionId,
@@ -317,6 +322,16 @@ const SECTION_FIELDS = {
     working: isStartedLimitValue,
     daily: isStartedLimitValue,
     reports: isStartedLimitValue,
+  },
+  bots: {
+    maxConcurrent: (value: unknown, path: string): string | null =>
+      typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= BOT_GLOBAL_CONCURRENT_MIN &&
+      value <= BOT_GLOBAL_CONCURRENT_MAX
+        ? null
+        : `${path} must be an integer between ${BOT_GLOBAL_CONCURRENT_MIN} and ${BOT_GLOBAL_CONCURRENT_MAX}`,
+    allowAgentHandoff: isBoolean,
   },
   computerUse: {
     enabled: isBoolean,
@@ -2068,6 +2083,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     idleSessions: { ...settings.idleSessions },
     workflow: { ...settings.workflow },
     startedSessions: { ...settings.startedSessions },
+    bots: { ...(settings.bots ?? DEFAULT_BOT_GLOBAL_SETTINGS) },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     promptSuggestions: settings.general.promptSuggestions,
@@ -2106,6 +2122,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'idleSessions',
   'workflow',
   'startedSessions',
+  'bots',
   'usage',
   'computerUse',
   'cloud',

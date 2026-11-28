@@ -5,6 +5,7 @@ import type agents from './locales/en/agents.json'
 import type app from './locales/en/app.json'
 import type artifacts from './locales/en/artifacts.json'
 import type board from './locales/en/board.json'
+import type bots from './locales/en/bots.json'
 import type browser from './locales/en/browser.json'
 import type common from './locales/en/common.json'
 import type composer from './locales/en/composer.json'
@@ -45,6 +46,7 @@ declare module 'i18next' {
       app: typeof app
       artifacts: typeof artifacts
       board: typeof board
+      bots: typeof bots
       browser: typeof browser
       common: typeof common
       composer: typeof composer

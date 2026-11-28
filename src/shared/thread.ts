@@ -2,6 +2,15 @@
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
 import { isAgentId, type AgentId } from './agents'
+import {
+  isBotCardFields,
+  type BotCardFields,
+  type BotChangeAction,
+  type BotChangeOutcome,
+  type BotRequestStatus,
+  type BotSessionRef,
+} from './bots'
+import type { Platform } from './platform'
 import type { LastRequest } from './model-requests'
 import type { PromptCacheDrop } from './prompt-cache'
 import { isTurnUsage, type TurnModelUsage, type TurnUsage } from './turn-usage'
@@ -95,9 +104,11 @@ export interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent' | 'routine' | 'task'
+  origin: 'user' | 'subagent' | 'routine' | 'task' | 'bot_main' | 'bot_work'
   subagent: SubagentInfo | null // set when origin is 'subagent'
   routine: RoutineRef | null // set when origin is 'routine'
+  /** Owning Bot metadata when this session is a Bot main or work session. */
+  bot?: BotSessionRef | null
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
   /**
@@ -648,6 +659,9 @@ export type ThreadEntry =
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
   | RoutineChangeEntry // Kettu's own record of an agent's change to a Routine, and its answer
   | McpChangeEntry // Kettu's own record of an agent adding or switching an MCP server, and its answer
+  | BotChangeEntry // Confirmation card for an agent proposing to create, update or delete a Bot
+  | BotDispatchEntry // Status card for a local or cross-computer session dispatched by a Bot
+  | BotHandoffEntry // Inline event row for a normal session handing work off to a Bot via @handle
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
   | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
   | RemoteDelegationEntry // Kettu's own record of a manual cross-host delegation and its outcome
@@ -1353,6 +1367,71 @@ export interface McpChangeEntry {
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** Confirmation card proposed by an agent to create, update, or delete a Bot or edit ROLE.md. */
+export interface BotChangeEntry {
+  kind: 'bot_change'
+  id: string
+  action: BotChangeAction
+  /** Target Bot ID; null when proposing a new Bot. */
+  botId: string | null
+  /** Snapshot of the proposed Bot fields. */
+  bot: BotCardFields
+  /** Snapshot prior to modification or deletion for diff display. */
+  before: BotCardFields | null
+  /** Number of historical work sessions owned by the Bot (delete action only). */
+  sessions: number | null
+  /** Expiry timestamp (ms) after which an unanswered card auto-declines. */
+  expiresAt: number
+  outcome: BotChangeOutcome | null
+  device?: FromDevice
+  after: string | null
+}
+
+export type { BotChangeAction, BotChangeOutcome, BotCardFields, BotSessionRef } from './bots'
+
+/** Dispatch card inside a Bot's main conversation tracking a local or cross-computer session. */
+export interface BotDispatchEntry {
+  kind: 'bot_dispatch'
+  id: string
+  requestId: string
+  botId: string
+  title: string
+  targetHostId: string | null
+  targetHostName: string
+  targetPlatform: Platform
+  projectPath: string
+  projectName: string
+  agentId: AgentId
+  model: string | null
+  branch: string | null
+  scope: PermissionScope
+  sessionId: string | null
+  status: BotRequestStatus
+  /** Trigger source kind (e.g. main, telegram, feishu, github, routine). */
+  sourceKind?: import('./bots').BotRequestSourceKind
+  /** Human-readable external source label (e.g. repo/issue or chat title). */
+  sourceLabel?: string | null
+  /** Timestamp when the result was posted back to the external channel. */
+  repliedAt?: number | null
+  summary: string | null
+  error: string | null
+  after: string | null
+}
+
+/** Lightweight inline row inside a normal session showing an @Bot handoff and its summary. */
+export interface BotHandoffEntry {
+  kind: 'bot_handoff'
+  id: string
+  botId: string
+  botName: string
+  botHandle: string
+  botSessionId: string | null
+  prompt: string
+  status: 'sent' | 'completed' | 'failed'
+  summary: string | null
   after: string | null
 }
 
@@ -2382,7 +2461,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       )
     case 'memory':
       return (
-        (value.layer === 'global' || value.layer === 'project') &&
+        (value.layer === 'global' || value.layer === 'project' || value.layer === 'bot') &&
         (value.action === 'remember' || value.action === 'update' || value.action === 'forget') &&
         (value.memoryId === null || typeof value.memoryId === 'string') &&
         typeof value.title === 'string' &&
@@ -2457,6 +2536,53 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.restore === null || isListOf(value.restore, isMcpRestore)) &&
         typeof value.expiresAt === 'number' &&
         (value.outcome === null || isMcpChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_change':
+      return (
+        (value.action === 'create' ||
+          value.action === 'update' ||
+          value.action === 'delete' ||
+          value.action === 'role_edit') &&
+        (value.botId === null || typeof value.botId === 'string') &&
+        isBotCardFields(value.bot) &&
+        (value.before === null || isBotCardFields(value.before)) &&
+        (value.sessions === null || typeof value.sessions === 'number') &&
+        typeof value.expiresAt === 'number' &&
+        (value.outcome === null || isBotChangeOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_dispatch':
+      return (
+        typeof value.requestId === 'string' &&
+        typeof value.botId === 'string' &&
+        typeof value.title === 'string' &&
+        (value.targetHostId === null || typeof value.targetHostId === 'string') &&
+        typeof value.targetHostName === 'string' &&
+        (value.targetPlatform === 'darwin' ||
+          value.targetPlatform === 'win32' ||
+          value.targetPlatform === 'linux') &&
+        typeof value.projectPath === 'string' &&
+        typeof value.projectName === 'string' &&
+        isAgentId(value.agentId) &&
+        (value.model === null || typeof value.model === 'string') &&
+        (value.branch === null || typeof value.branch === 'string') &&
+        isPermissionScope(value.scope) &&
+        (value.sessionId === null || typeof value.sessionId === 'string') &&
+        typeof value.status === 'string' &&
+        (value.summary === null || typeof value.summary === 'string') &&
+        (value.error === null || typeof value.error === 'string') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'bot_handoff':
+      return (
+        typeof value.botId === 'string' &&
+        typeof value.botName === 'string' &&
+        typeof value.botHandle === 'string' &&
+        (value.botSessionId === null || typeof value.botSessionId === 'string') &&
+        typeof value.prompt === 'string' &&
+        (value.status === 'sent' || value.status === 'completed' || value.status === 'failed') &&
+        (value.summary === null || typeof value.summary === 'string') &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'plugin_denial':
@@ -2691,6 +2817,22 @@ function isRoutineChangeOutcome(value: unknown): value is RoutineChangeOutcome {
   switch (value.kind) {
     case 'done':
       return typeof value.routineId === 'string'
+    case 'declined':
+    case 'expired':
+    case 'ended':
+      return true
+    case 'failed':
+      return typeof value.message === 'string'
+    default:
+      return false
+  }
+}
+
+function isBotChangeOutcome(value: unknown): value is BotChangeOutcome {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'done':
+      return typeof value.botId === 'string'
     case 'declined':
     case 'expired':
     case 'ended':

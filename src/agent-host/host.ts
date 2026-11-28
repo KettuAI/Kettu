@@ -52,6 +52,7 @@ import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import type { BotRemoteAnswer, BotRemoteCall, BotRemoteEvent } from '@shared/bots'
 import {
   siteOf,
   type BrowserCallAnswer,
@@ -211,6 +212,8 @@ import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import { ROUTINE_WAIT_MS, RoutineTools } from './routines/tools'
 import { MCP_WAIT_MS, McpStaleUndo, McpTools } from './marketplace/mcp-tools'
+import { BotManager } from './bots/manager'
+import { BotTools } from './bots/tools'
 import {
   SETTINGS_WAIT_MS,
   SettingsTools,
@@ -252,9 +255,14 @@ import { InstalledScripts } from './plugin-runtime/installed'
 import { PluginRefs } from './plugin-runtime/refs'
 import { PluginViews } from './plugin-runtime/views'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
-import { createHttpsTransport, type HttpTransport } from './plugin-runtime/network'
+import {
+  createCustomHttpTransport,
+  createHttpsTransport,
+  type HttpTransport,
+} from './plugin-runtime/network'
 import { PluginStorage } from './plugin-runtime/storage'
 import { PluginTools } from './plugin-runtime/tools'
+import { PluginWebSockets } from './plugin-runtime/ws'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
@@ -662,6 +670,8 @@ export class AgentHost {
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
   private readonly terminalCalls = new Map<number, (answer: TerminalCallAnswer) => void>()
+  private readonly botRemoteCalls = new Map<number, (answer: BotRemoteAnswer) => void>()
+  private nextBotRemoteCall = 1
   private nextTerminalCall = 1
   // Sessions whose running turn used a terminal, told to the terminal host when the turn ends.
   private readonly terminalTurns = new Set<string>()
@@ -763,6 +773,9 @@ export class AgentHost {
   private readonly routineTools: RoutineTools
   /** The MCP library tools of Kettu's MCP service. */
   private readonly mcpTools: McpTools
+  /** Long-lived cross-computer Bot coordinator and MCP tool group. */
+  readonly bots: BotManager
+  private readonly botTools: BotTools
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -777,6 +790,10 @@ export class AgentHost {
   private readonly pluginThemes: PluginThemeIndex
   /** The transport behind plugin scripts' `network.fetch`, through the agents' current proxy. */
   private readonly pluginTransport: HttpTransport
+  /** The transport behind `network.custom` origins explicitly entered in a plugin's URL settings. */
+  private readonly pluginCustomTransport: HttpTransport
+  /** Host-managed WebSockets opened by plugins via `network.ws.*`. */
+  private readonly pluginWebSockets: PluginWebSockets
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
@@ -814,8 +831,46 @@ export class AgentHost {
           this.pluginChannels.answer(pluginId, request, decision, from),
       },
       transport: (request) => this.pluginTransport(request),
+      customOrigins: (pluginId) => this.plugins.customOrigins(pluginId),
+      customTransport: (request) => this.pluginCustomTransport(request),
+      ws: new Proxy({} as PluginWebSockets, {
+        get: (_, prop) => {
+          const target = this.pluginWebSockets as unknown as Record<PropertyKey, unknown>
+          const val = target[prop]
+          return typeof val === 'function' ? val.bind(this.pluginWebSockets) : val
+        },
+      }),
+      bots: {
+        list: (pluginId, options) => this.bots.channels.handlePluginList(pluginId, options),
+        inbound: (pluginId, message) => this.bots.channels.handlePluginInbound(pluginId, message),
+        channelStatus: (pluginId, options) =>
+          this.bots.channels.handlePluginStatus(pluginId, options),
+      },
+      connector: {
+        session: async () => {
+          const res = await this.botRemoteCall({ kind: 'account_context' })
+          const token =
+            res.ok && res.data && typeof res.data === 'object'
+              ? (res.data as { accessToken?: unknown }).accessToken
+              : null
+          const accessToken = typeof token === 'string' && token.length > 0 ? token : null
+          return {
+            signedIn: accessToken !== null,
+            connectorUrl:
+              process.env.KETTU_CONNECTORS_URL?.trim().replace(/\/+$/, '') ||
+              'https://connectors.kettu.sh',
+            hostId: os.hostname(),
+            accessToken,
+          }
+        },
+      },
     }),
-    onStatus: () => this.hub.broadcast({ type: 'plugins.changed' }),
+    onStatus: (statuses) => {
+      for (const st of statuses) {
+        if (st.state !== 'active') this.pluginWebSockets.closeAll(st.id)
+      }
+      this.hub.broadcast({ type: 'plugins.changed' })
+    },
     log: (level, message) => writeLog(level, 'plugins', message),
   })
   /** The tools of the plugins that are on, which Kettu's MCP service lists. */
@@ -899,6 +954,26 @@ export class AgentHost {
     this.pluginTransport = createHttpsTransport({
       env: () => this.env.agentEnv(),
       platform,
+    })
+    this.pluginCustomTransport = createCustomHttpTransport({
+      env: () => this.env.agentEnv(),
+      platform,
+    })
+    this.pluginWebSockets = new PluginWebSockets({
+      deliver: (pluginId, event, payload) => {
+        if (this.pluginHost.status().find((p) => p.id === pluginId)?.state !== 'active') return
+        this.pluginHost.deliverEvent(pluginId, event, payload).catch((error: unknown) => {
+          writeLog(
+            'warn',
+            'plugins',
+            `Could not deliver ${event} to ${pluginId}: ${(error as Error).message}`,
+          )
+        })
+      },
+      customOrigins: (pluginId) => this.plugins.customOrigins(pluginId),
+      env: () => this.env.agentEnv(),
+      platform,
+      log: (level, message) => writeLog(level, 'plugins', message),
     })
     this.media = new MediaService({
       platform,
@@ -1061,6 +1136,43 @@ export class AgentHost {
       ask: (sessionId, ask) => this.sessions.mcpAsked(sessionId, ask, MCP_WAIT_MS),
       settle: (sessionId, entryId, outcome, restore) =>
         this.sessions.mcpSettled(sessionId, entryId, outcome, restore),
+    })
+    this.botTools = new BotTools({
+      list: () => this.bots.list(),
+      get: (botId) => this.bots.get(botId),
+      findByHandle: (handle) => {
+        const found = this.bots.findByHandle(handle)
+        return found
+          ? {
+              ...found,
+              roleMarkdown: this.bots.roleOf(found.id),
+              status: 'idle',
+              activeCount: 0,
+              needsYouCount: 0,
+              pendingHostCount: 0,
+              todayCount: 0,
+              memoryCount: 0,
+              lastActivityAt: null,
+            }
+          : null
+      },
+      create: (draft) => this.bots.create(draft),
+      update: (botId, changes) => this.bots.update(botId, changes),
+      delete: (botId, keepSessions) => this.bots.delete(botId, keepSessions),
+      listTargets: () => this.bots.listTargets(),
+      dispatch: (params) => this.bots.dispatch(params),
+      workOf: (botId) => this.bots.workOf(botId),
+      sendToWorkSession: (requestId, text) => this.bots.sendToWorkSession(requestId, text),
+      archiveRequest: (requestId) => this.bots.archiveRequest(requestId),
+      handoff: (params) => this.bots.handoff(params),
+      countSessions: (botId) => this.bots.countSessions(botId),
+      allowAgentHandoff: () => this.settings.bots?.allowAgentHandoff !== false,
+      botIdOfSession: (sessionId) => this.bots.botIdOfMainSession(sessionId),
+      sessionAgent: (sessionId) => this.sessions.sessionAgent(sessionId),
+      agents: () => this.agents.statuses(),
+      ask: (sessionId, ask, waitMs) => this.sessions.botAsked(sessionId, ask, waitMs),
+      settle: (sessionId, entryId, outcome) =>
+        this.sessions.botSettled(sessionId, entryId, outcome),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -1426,11 +1538,15 @@ export class AgentHost {
         this.pluginHost.status().find((plugin) => plugin.id === pluginId)?.state ?? 'idle',
       secretsSet: (pluginId) => Object.keys(this.pluginSecrets[pluginId] ?? {}),
       removed: (pluginId) => this.pluginRemoved(pluginId),
-      settingChanged: (pluginId, key) => this.pluginSettingEvent(pluginId, key, false),
+      settingChanged: (pluginId, key) => {
+        this.pluginSettingEvent(pluginId, key, false)
+        void this.bots.syncChannels()
+      },
       changed: () => {
         this.pluginScripts.sync(this.plugins.scripts())
         this.hub.broadcast({ type: 'plugins.changed' })
         void this.pluginThemes.sync()
+        void this.bots.syncChannels()
       },
       fetch: net,
     })
@@ -1480,6 +1596,10 @@ export class AgentHost {
       memory: {
         service: this.memory,
         projectOf: (caller) => this.projects.find(caller.project)?.path ?? null,
+        botOf: (caller) =>
+          this.bots.botIdOfMainSession(caller.sessionId) ??
+          this.sessions.botIdOfSession(caller.sessionId),
+        requiresConfirmation: (caller) => this.sessions.isExternalBotSession(caller.sessionId),
         written: (sessionId, write) => this.sessions.memoryWritten(sessionId, write),
         proposed: (sessionId, proposal) => this.sessions.memoryProposed(sessionId, proposal),
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
@@ -1533,6 +1653,7 @@ export class AgentHost {
       settings: this.settingsTools,
       routines: this.routineTools,
       mcp: this.mcpTools,
+      bots: this.botTools,
       plugins: this.pluginTools,
       skills: {
         of: (sessionId) => {
@@ -2120,6 +2241,13 @@ export class AgentHost {
           this.hub.broadcast(event)
           if (summary.scratch || summary.worktree) this.sendFolders()
           this.scheduleActivity()
+          void this.bots.onLocalSessionUpdate({
+            sessionId: summary.id,
+            status: summary.status,
+            permissionCount: summary.permissionCount,
+            branch: summary.branch,
+            archivedAt: summary.archivedAt,
+          })
         },
         removed: (sessionId, portIds, rev) => {
           const event: HostEvent =
@@ -2216,6 +2344,12 @@ export class AgentHost {
         readLimits: (agentId) => this.agents.refreshLimits(agentId),
         name: (agentId) => this.agents.name(agentId),
       },
+      bots: {
+        prepareRun: (botId, routine) => this.bots.prepareRoutineRun(botId, routine),
+        recordRun: (params) => this.bots.recordRoutineRun(params),
+        notifyRunEnded: (botId, routine, run) =>
+          this.bots.notifyRoutineRunEnded(botId, routine, run),
+      },
       log,
       resolveProject: (value) => this.projects.resolveDirectory(value),
       timings: options.routineTimings,
@@ -2237,6 +2371,51 @@ export class AgentHost {
         paused: (agentId, title, body) =>
           this.attend({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
+    })
+    this.bots = new BotManager({
+      userDataPath: options.userDataPath,
+      platform,
+      hostName: () => os.hostname(),
+      locale: () => this.settings.locale,
+      settings: () => this.settings,
+      projects: () => this.projects.list(),
+      agents: () => this.agents.statuses(),
+      sessions: {
+        createMainSession: (params) => this.sessions.createBotMainSession(params),
+        createWorkSession: (params) => this.sessions.createBotWorkSession(params),
+        sendMessage: async (sessionId, content) => {
+          await this.sessions.queue(sessionId, content)
+        },
+        readLatestReply: (sessionId) => this.sessions.lastReply(sessionId),
+        archiveSession: (sessionId) => this.sessions.archive(sessionId, true),
+        deleteSession: (sessionId) => this.sessions.delete(sessionId),
+        cancelSession: (sessionId) => this.sessions.cancel(sessionId),
+        detachBotSessions: async (botId) => this.sessions.detachBotSessions(botId),
+        detachSession: (sessionId) => this.sessions.detachSession(sessionId),
+        countBotWorkSessions: (botId) => this.sessions.countBotWorkSessions(botId),
+        isSessionRunning: (sessionId) => this.sessions.isSessionWorking(sessionId),
+        upsertDispatchEntry: (sessionId, entry) =>
+          this.sessions.upsertBotDispatchEntry(sessionId, entry),
+        addHandoffEntry: (sessionId, params) => this.sessions.addBotHandoffEntry(sessionId, params),
+        updateHandoffEntry: (sessionId, entryId, changes) =>
+          this.sessions.updateBotHandoffEntry(sessionId, entryId, changes),
+      },
+      channelPlugins: {
+        installedChannels: () => this.plugins.botChannels(),
+        deliver: async (pluginId, trigger, event, payload) => {
+          await this.pluginHost.activate(pluginId, trigger)
+          await this.pluginHost.deliverEvent(pluginId, event, payload)
+        },
+        hook: async (pluginId, trigger, event, payload) => {
+          await this.pluginHost.activate(pluginId, trigger)
+          return this.pluginHost.hook(pluginId, event, payload, 'call')
+        },
+      },
+      remote: (call) => this.botRemoteCall(call),
+      memoryCount: async (botId) => (await this.memory.list({ layer: 'bot', botId })).length,
+      memoryIndex: (botId) => this.memory.botIndex(botId),
+      emit: (event) => this.broadcast(event),
+      log,
     })
     routineHooks.current = this.routines.hooks
     const threads = this.threads
@@ -2457,6 +2636,7 @@ export class AgentHost {
       ,
       ,
       ,
+      ,
       pendingUpdateResume,
     ] = await Promise.all([
       host.scratch.ready(),
@@ -2475,6 +2655,7 @@ export class AgentHost {
       host.attachments.load(),
       host.artifactService.start(),
       host.routines.load(),
+      host.bots.load(),
       host.memory.load(),
       host.workflowLibrary.load(),
       host.plugins.load(),
@@ -2880,6 +3061,7 @@ export class AgentHost {
         : null
     if (JSON.stringify(before) !== JSON.stringify(this.marketAccount)) {
       this.hub.broadcast({ type: 'market.publishedChanged' })
+      void this.bots.syncChannels()
     }
     if ((before === null) !== (this.marketAccount === null)) void this.ownSkillsChanged()
   }
@@ -3987,6 +4169,7 @@ export class AgentHost {
     }
     await this.askPluginSecret(pluginId, key, value)
     this.pluginSettingEvent(pluginId, key, true)
+    void this.bots.syncChannels()
     return this.plugins.view(pluginId)
   }
 
@@ -3994,6 +4177,7 @@ export class AgentHost {
   private pluginRemoved(pluginId: string): void {
     this.pluginStorage.forget(pluginId)
     this.pluginChannels.forget(pluginId)
+    this.pluginWebSockets.closeAll(pluginId)
     if (this.pluginSecrets[pluginId] === undefined) return
     this.askPluginSecret(pluginId, null, null).catch((error: unknown) =>
       writeLog(
@@ -4732,6 +4916,28 @@ export class AgentHost {
     resolve(answer)
   }
 
+  /** Forwards a cross-computer Bot bridge call to main. */
+  botRemoteCall(call: BotRemoteCall): Promise<BotRemoteAnswer> {
+    const callId = this.nextBotRemoteCall++
+    return new Promise<BotRemoteAnswer>((resolve) => {
+      this.botRemoteCalls.set(callId, resolve)
+      this.options.send({ type: 'host:bot-remote-call', callId, call })
+    })
+  }
+
+  /** `bot-remote-result`: delivers main's answer to a pending Bot bridge call. */
+  botRemoteResult(callId: number, answer: BotRemoteAnswer): void {
+    const resolve = this.botRemoteCalls.get(callId)
+    if (!resolve) return
+    this.botRemoteCalls.delete(callId)
+    resolve(answer)
+  }
+
+  /** `host:bot-remote-event`: delivers remote host online/offline and session state updates. */
+  botRemoteEvent(event: BotRemoteEvent): void {
+    void this.bots.onRemoteEvent(event)
+  }
+
   /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
   terminalHandedBack(sessionId: string, durationMs: number): void {
     this.sessions.controlHandedBack(sessionId, 'terminal', durationMs)
@@ -4778,6 +4984,14 @@ export class AgentHost {
       })
     }
     this.terminalCalls.clear()
+    for (const resolve of this.botRemoteCalls.values()) {
+      resolve({
+        ok: false,
+        code: 'offline',
+        message: 'Kettu stopped before the remote host answered.',
+      })
+    }
+    this.botRemoteCalls.clear()
     for (const resolve of this.marketCalls.values()) {
       resolve({
         error: { code: 'network', status: null, message: 'Kettu stopped before it answered.' },
@@ -4952,6 +5166,8 @@ export class AgentHost {
     }
     this.stopping ??= (async () => {
       await this.routines.shutdown()
+      await this.bots.dispose()
+      this.pluginWebSockets.dispose()
       this.sessions.shutdown()
       this.idleRelease.stop()
       this.plugins.stop()
@@ -5524,6 +5740,49 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'bots.list': () => this.bots.list(),
+      'bots.get': ({ botId }) => this.bots.get(botId),
+      'bots.create': (draft) => this.bots.create(draft),
+      'bots.update': ({ botId, changes }) => this.bots.update(botId, changes),
+      'bots.delete': ({ botId, keepSessions }) => this.bots.delete(botId, keepSessions ?? true),
+      'bots.setPaused': ({ botId, paused }) => this.bots.setPaused(botId, paused),
+      'bots.sendMain': (params) => this.bots.sendMain(params),
+      'bots.resetMain': ({ botId }) => this.bots.resetMain(botId),
+      'bots.dispatch': (params) =>
+        this.bots.dispatch({
+          ...params,
+          source: params.sourceSessionId
+            ? {
+                kind: 'mention',
+                sessionId: params.sourceSessionId,
+                hostId: params.sourceHostId ?? null,
+              }
+            : { kind: 'main' },
+        }),
+      'bots.retryPending': ({ requestId }) => this.bots.retryPending(requestId),
+      'bots.cancelRequest': ({ requestId }) => this.bots.cancelRequest(requestId),
+      'bots.archiveDone': ({ botId }) => this.bots.archiveDone(botId),
+      'bots.answerChange': ({ sessionId, entryId, decision, keepSessions }, { device }) =>
+        this.sessions.answerBotChange(
+          sessionId,
+          entryId,
+          decision,
+          keepSessions,
+          fromDevice(device),
+        ),
+      'bots.uploadAvatar': ({ botId, mimeType, dataBase64, crop }) =>
+        this.bots.uploadAvatar(botId, mimeType, dataBase64, crop),
+      'bots.readAvatar': ({ botId }) => this.bots.readAvatar(botId),
+      'bots.listTargets': async () => ({ targets: await this.bots.listTargets() }),
+      'bots.handoff': (params) => this.bots.handoff(params),
+      'bots.detachSession': ({ sessionId }) => this.bots.detachSession(sessionId),
+      'bots.channelsList': () => this.bots.listChannels(),
+      'bots.channelConfigure': ({ channelKey, config }) =>
+        this.bots.configureChannel(channelKey, config),
+      'bots.channelBind': ({ botId, channelKey, binding }) =>
+        this.bots.bindChannel(botId, channelKey, binding),
+      'bots.channelTest': ({ channelKey }) => this.bots.testChannel(channelKey),
+      'bots.channelPairStart': ({ channelKey }) => this.bots.startChannelPairing(channelKey),
       'plugins.list': async () => ({ plugins: await this.plugins.list() }),
       'plugins.inspect': ({ source }) => this.plugins.inspect(source),
       'plugins.install': ({ token }) => this.plugins.install(token),
