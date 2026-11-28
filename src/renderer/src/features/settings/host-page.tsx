@@ -328,6 +328,16 @@ function ConfiguredRelayText({ host }: { host: HostStatus }) {
   const configured = configuredRelay(host)
   if (configured.kind === 'none') return t('hosts.via.noRelay')
   if (configured.kind === 'kettu') return t('hosts.via.relay')
+  if (configured.kind === 'both') {
+    return (
+      <>
+        {t('hosts.via.bothRelays')} ·{' '}
+        <span data-selectable="" className="k-mono">
+          {configured.host}
+        </span>
+      </>
+    )
+  }
   return (
     <>
       {t('hosts.via.ownRelay')} ·{' '}

@@ -167,6 +167,7 @@ export async function startDaemonAdmin({
       remoteSwitch: false,
       remoteReset: true,
       ownRelay: true,
+      dualRelay: true,
       thumbnails: false,
       partThumbnails: false,
       pinnedModels: true,

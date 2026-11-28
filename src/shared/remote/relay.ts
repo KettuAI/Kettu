@@ -524,35 +524,80 @@ export function newRelayToken(): string {
 }
 
 /**
- * Where a host is on the relay: its id and its relays' origins in order. A host on a relay its
- * owner runs names that one alone, with the pin of its certificate when it is at an address.
+ * The owner's own relay advertised on a host alongside official relays, or alone.
+ */
+export interface OwnRelayEndpoint {
+  url: string
+  pin?: string
+}
+
+/**
+ * Where a host is on the relay: its id and its relays' origins in order. A legacy pure-own host
+ * carries the own relay as `urls: [origin]` with optional `pin`; when running alongside official
+ * relays, `own` carries the own relay endpoint separately so account tokens never leak to it.
  */
 export interface HostRelay {
   id: string
   urls: string[]
   /** The pin of the first relay's certificate, which alone vouches for it. */
   pin?: string
+  /** The host's enabled own relay, independent of the official relay list in `urls`. */
+  own?: OwnRelayEndpoint
+}
+
+function parseOwnRelayEndpoint(value: unknown): OwnRelayEndpoint | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const { url, pin } = value as Record<string, unknown>
+  if (typeof url !== 'string' || relayOrigin(url) !== url) return undefined
+  const pinned =
+    typeof pin === 'string' && decodeRelayBytes(pin)?.length === 32 && url.startsWith('https:')
+  return pinned ? { url, pin } : { url }
 }
 
 /** A host's relay as a welcome or a stored host carries it, or null when it is not one. */
 export function parseHostRelay(value: unknown): HostRelay | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, urls, pin } = value as Record<string, unknown>
+  const { id, urls, pin, own } = value as Record<string, unknown>
   if (typeof id !== 'string' || !RELAY_HOST_ID.test(id) || !Array.isArray(urls)) return null
   const kept = urls
     .slice(0, MAX_REGIONS)
     .filter((url): url is string => typeof url === 'string' && relayOrigin(url) === url)
   const pinned =
     typeof pin === 'string' && decodeRelayBytes(pin)?.length === 32 && kept[0]?.startsWith('https:')
-  return pinned ? { id, urls: kept, pin: pin as string } : { id, urls: kept }
+  const ownEndpoint = parseOwnRelayEndpoint(own)
+  return {
+    id,
+    urls: kept,
+    ...(pinned ? { pin: pin as string } : {}),
+    ...(ownEndpoint ? { own: ownEndpoint } : {}),
+  }
 }
 
 /**
- * Whether a host's relay is one its owner runs rather than the Kettu relay: none of the relays it
- * names is under the main relay's domain. Such a relay is dialed with no token.
+ * Whether a host's relay uses ONLY the owner's own relay rather than the Kettu relay: none of
+ * the relays it names is under the main relay's domain, or only `own` is set.
  */
 export function isOwnRelay(relay: HostRelay, main: string): boolean {
-  return relay.urls.length > 0 && !relay.urls.some((url) => trustedRelay(url, main))
+  if (relay.urls.length === 0) return relay.own !== undefined
+  return !relay.urls.some((url) => trustedRelay(url, main))
+}
+
+/**
+ * Returns the host's own relay endpoint from either `relay.own` or legacy own-only `relay.urls`.
+ */
+export function hostOwnRelay(relay: HostRelay, main: string): OwnRelayEndpoint | null {
+  if (relay.own) return relay.own
+  if (isOwnRelay(relay, main) && relay.urls[0]) {
+    return relay.pin ? { url: relay.urls[0], pin: relay.pin } : { url: relay.urls[0] }
+  }
+  return null
+}
+
+/**
+ * Returns all official Kettu relay URLs declared by the host (trusted under `main`).
+ */
+export function officialRelayUrls(relay: HostRelay, main: string): string[] {
+  return relay.urls.filter((url) => trustedRelay(url, main))
 }
 
 export const isRelayHostId = (value: unknown): value is string =>

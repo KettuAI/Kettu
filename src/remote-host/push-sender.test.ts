@@ -520,7 +520,10 @@ describe('sending a push', () => {
     sender.stop()
 
     expect(sent).toHaveLength(2)
-    expect(parsePushRequest(sent[0]!)!.push).toMatchObject({ type: 'liveactivity', event: 'update' })
+    expect(parsePushRequest(sent[0]!)!.push).toMatchObject({
+      type: 'liveactivity',
+      event: 'update',
+    })
     expect(parsePushRequest(sent[1]!)!.push).toMatchObject({ type: 'liveactivity', event: 'end' })
   })
 

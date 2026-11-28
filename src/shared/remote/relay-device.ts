@@ -33,6 +33,8 @@ export type RelayDialResult =
 export interface RelayEndpoint {
   url: string
   pin?: string
+  /** Overrides `options.token` for this endpoint (e.g. `null` for an own relay). */
+  token?: string | null
 }
 
 /** How one relay's try ended, for the day's report. */
@@ -129,7 +131,8 @@ export function dialRelay(options: RelayDialOptions): Promise<RelayDialResult> {
       }
       const onOpen = (): void => {
         opened = true
-        socket.send(JSON.stringify(connectMessage(token)))
+        const endpointToken = endpoint.token !== undefined ? endpoint.token : token
+        socket.send(JSON.stringify(connectMessage(endpointToken)))
       }
       const onClose = (event: CloseEvent): void => {
         cleanup()

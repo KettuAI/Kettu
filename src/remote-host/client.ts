@@ -66,6 +66,7 @@ import type { PairingPayload } from '@shared/remote/pairing'
 import {
   HOSTS_FEATURE,
   decodeRelayBytes,
+  hostOwnRelay,
   hostsPath,
   parseRelayHosts,
   parseRelayInfo,
@@ -78,6 +79,7 @@ import {
 import { dialRelay, type RelayAttempt, type RelayEndpoint } from '@shared/remote/relay-device'
 import {
   REGIONS_CHANNEL_FEATURE,
+  parseRelayOwn,
   type RankedRegion,
   type RelayPreferMessage,
 } from '@shared/remote/relay-regions'
@@ -492,6 +494,7 @@ const OWN: ReadonlySet<unknown> = new Set([
   'host.renamed',
   'terminal',
   'relay.regions',
+  'relay.own',
 ])
 
 /** The connection to one known host, tried again with backoff until it is forgotten. */
@@ -1272,6 +1275,10 @@ class HostLink {
     if (type === 'relay') {
       const moved = parseRelayMoved(value)
       if (moved === undefined || !this.host || this.host.ssh) return
+      const main = this.client.options.relay?.main
+      if (!moved || (main && !hostOwnRelay(moved, main))) {
+        this.client.setOwnRelay(this.id, null)
+      }
       this.client.options.hosts.update(this.id, { relay: moved ?? undefined })
       this.client.options.changed()
       this.client.options.log(
@@ -1288,6 +1295,25 @@ class HostLink {
           this.client.options.regionsChanged?.(this.id)
         })
       }
+      return
+    }
+    if (type === 'relay.own') {
+      const main = this.client.options.relay?.main
+      if (!main) return
+      const parsed = parseRelayOwn(value, main)
+      if (!parsed) return
+      this.client.setOwnRelay(
+        this.id,
+        parsed.own
+          ? {
+              url: parsed.own.url,
+              ...(parsed.own.pin ? { pin: parsed.own.pin } : {}),
+              hostRtt: parsed.own.rtt,
+            }
+          : null,
+      )
+      this.regionsChanged()
+      this.client.options.regionsChanged?.(this.id)
       return
     }
     // The owner allowed devices the terminal, or stopped allowing it.
@@ -2244,6 +2270,11 @@ export class HostClient {
   private readonly pairings = new Map<number, Pairing | SshAdding | DiscoveryPairing>()
   /** The hosts an action of their page runs on, which stopping the client aborts. */
   private readonly managing = new Map<string, AbortController>()
+  /** Latest host-reported own relay endpoint and RTT per paired host. */
+  private readonly ownRelays = new Map<
+    string,
+    { url: string; pin?: string; hostRtt: number | null }
+  >()
   private stopped = false
   private networkTimer: ReturnType<typeof setInterval> | null = null
   private network = ''
@@ -2268,10 +2299,19 @@ export class HostClient {
     this.retryDelay = options.retryDelay ?? retryDelay
   }
 
+  /** Records or clears the own-relay metadata pushed by `relay.own` for a host. */
+  setOwnRelay(
+    hostId: string,
+    own: { url: string; pin?: string; hostRtt: number | null } | null,
+  ): void {
+    if (own) this.ownRelays.set(hostId, own)
+    else this.ownRelays.delete(hostId)
+  }
+
   /**
-   * How to reach a host through the relay: a route over its relays, the one that joined last
-   * first; why there is none, as while this computer is signed in to no account; or null for a
-   * host not on the relay.
+   * How to reach a host through its relays (official and/or own): prefers the route that joined
+   * last, tries own relays strictly with no token, and returns `signed_out` when only official
+   * relays exist while signed out.
    */
   relayRoute(
     relay: HostRelay | undefined,
@@ -2281,53 +2321,80 @@ export class HostClient {
   ): RelayRoute | RelayProblem | null {
     const client = this.options.relay
     if (!relay || !client) return null
-    // A relay the host's owner runs takes no token and no account: it is dialed as it is, through
-    // its pin, and never gets the account's token.
-    if (isOwnRelay(relay, client.main)) {
-      const url = relay.urls[0]!
-      return this.relayVia(relay.id, null, [relay.pin ? { url, pin: relay.pin } : { url }], drained)
-    }
+    const own = hostOwnRelay(relay, client.main)
     const token = client.token()
-    if (!token) return 'signed_out'
-    // The account's token goes only to the project's relays, whatever a code or a host names.
-    const named = [...new Set([...relay.urls, client.main])].filter((url) =>
-      trustedRelay(url, client.main),
-    )
-    const urls = client.regions ? client.regions.allowed(named) : named
-    if (last && urls.includes(last)) urls.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
-    // The host's regions by the whole path first, then those a welcome or a code named.
-    const ranked = hostId ? (this.relayRegions(hostId) ?? []) : []
-    const relays: RelayEndpoint[] = [
-      ...ranked.map((region) =>
-        region.pin ? { url: region.url, pin: region.pin } : { url: region.url },
-      ),
-      ...urls.filter((url) => !ranked.some((region) => region.url === url)).map((url) => ({ url })),
-    ]
-    return this.relayVia(relay.id, token, relays, drained)
+    const hasOfficial = relay.urls.some((url) => trustedRelay(url, client.main))
+    const officialEndpoints: RelayEndpoint[] = []
+    if (token && hasOfficial) {
+      // The account's token goes only to the project's relays, whatever a code or a host names.
+      const named = [...new Set([...relay.urls, client.main])].filter((url) =>
+        trustedRelay(url, client.main),
+      )
+      const urls = client.regions ? client.regions.allowed(named) : named
+      if (last && urls.includes(last)) urls.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
+      const ranked = hostId ? (this.relayRegions(hostId) ?? []) : []
+      officialEndpoints.push(
+        ...ranked.map((region) =>
+          region.pin ? { url: region.url, pin: region.pin, token } : { url: region.url, token },
+        ),
+        ...urls
+          .filter((url) => !ranked.some((region) => region.url === url))
+          .map((url) => ({ url, token })),
+      )
+    }
+    const ownEndpoint: RelayEndpoint | null = own
+      ? { url: own.url, ...(own.pin ? { pin: own.pin } : {}), token: null }
+      : null
+    if (!ownEndpoint && officialEndpoints.length === 0) {
+      return !token && hasOfficial ? 'signed_out' : null
+    }
+    const endpoints: RelayEndpoint[] = ownEndpoint
+      ? last === ownEndpoint.url
+        ? [ownEndpoint, ...officialEndpoints]
+        : [...officialEndpoints, ownEndpoint]
+      : officialEndpoints
+    return this.relayVia(relay.id, null, endpoints, drained)
   }
 
   /**
-   * A route through each of a host's ranked regions, best first, with the whole path's round trip
-   * when known; none before the host said its regions, or while signed in to no account.
+   * A route through each of a host's ranked official regions plus its own relay (when configured),
+   * best first, for background path comparison.
    */
   regionRoutes(
     relay: HostRelay | undefined,
     hostId: string,
     drained?: RegionDrained,
   ): { url: string; rtt: number | null; route: RelayRoute }[] {
-    const token = this.options.relay?.token()
-    const ranked = this.relayRegions(hostId)
-    if (!relay || !token || !ranked || this.isOwnRelay(relay)) return []
-    return ranked.map((region) => ({
-      url: region.url,
-      rtt: region.rtt,
-      route: this.relayVia(
-        relay.id,
-        token,
-        [region.pin ? { url: region.url, pin: region.pin } : { url: region.url }],
-        drained,
-      ),
-    }))
+    const client = this.options.relay
+    if (!relay || !client) return []
+    const token = client.token()
+    const ranked = token ? (this.relayRegions(hostId) ?? []) : []
+    const routes: { url: string; rtt: number | null; route: RelayRoute }[] = ranked.map(
+      (region) => ({
+        url: region.url,
+        rtt: region.rtt,
+        route: this.relayVia(
+          relay.id,
+          null,
+          [region.pin ? { url: region.url, pin: region.pin, token } : { url: region.url, token }],
+          drained,
+        ),
+      }),
+    )
+    const own = hostOwnRelay(relay, client.main)
+    if (own && !routes.some((entry) => entry.url === own.url)) {
+      const ownEndpoint: RelayEndpoint = {
+        url: own.url,
+        ...(own.pin ? { pin: own.pin } : {}),
+        token: null,
+      }
+      routes.push({
+        url: own.url,
+        rtt: null,
+        route: this.relayVia(relay.id, null, [ownEndpoint], drained),
+      })
+    }
+    return routes
   }
 
   /**
@@ -2362,8 +2429,7 @@ export class HostClient {
     drained: RegionDrained = (_url, leave) => leave(),
   ): RelayRoute {
     const client = this.options.relay!
-    // The owner's relay is not Kettu's: it is never counted in the day's report.
-    const regions = token === null ? undefined : client.regions
+    const regions = client.regions
     return async (signal) => {
       let joined: { close(): void } | null = null
       const result = await dialRelay({
@@ -2373,9 +2439,11 @@ export class HostClient {
         openSocket: client.openSocket,
         timeoutMs: this.timeoutMs,
         signal,
-        attempted: (url, outcome) => regions?.dialed(url, outcome),
+        attempted: (url, outcome) => {
+          if (!this.ownRelayUrl(url)) regions?.dialed(url, outcome)
+        },
         drained: (url) => {
-          regions?.drained(url)
+          if (!this.ownRelayUrl(url)) regions?.drained(url)
           drained(url, () => joined?.close())
         },
       })
@@ -2397,19 +2465,25 @@ export class HostClient {
     }
   }
 
-  /** Whether a host's relay is one its owner runs rather than the Kettu relay. */
+  /** Whether a host's relay uses ONLY the owner's own relay rather than the Kettu relay. */
   isOwnRelay(relay: HostRelay): boolean {
     const main = this.options.relay?.main
     return main !== undefined && isOwnRelay(relay, main)
   }
 
   /**
-   * Whether a relay a session joined through is the owner's: neither under the Kettu relay's
-   * domain nor a region its signed list names, as one reached by its IP address.
+   * Whether a relay a session joined through is the owner's: declared as `own` by a host, or
+   * neither under the Kettu relay's domain nor a region its signed list names.
    */
   ownRelayUrl(url: string): boolean {
     const relay = this.options.relay
     if (!relay || trustedRelay(url, relay.main)) return false
+    for (const entry of this.ownRelays.values()) {
+      if (entry.url === url) return true
+    }
+    for (const host of this.options.hosts.list()) {
+      if (host.relay && hostOwnRelay(host.relay, relay.main)?.url === url) return true
+    }
     return !relay.regions?.regionName?.(url)
   }
 

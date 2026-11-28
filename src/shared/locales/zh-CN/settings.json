@@ -1687,14 +1687,16 @@
     "via": {
       "direct": "直连",
       "directAt": "直连 · {{address}}",
-      "lan": "同一网络",
-      "lanAt": "同一网络 · {{address}}",
+      "lan": "内网",
+      "lanAt": "内网 · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
       "relay": "Kettu 中继",
       "relayAt": "Kettu 中继 · {{region}}",
-      "ownRelay": "自己的中继",
-      "ownRelayAt": "自己的中继 · {{host}}",
+      "ownRelay": "自建中继",
+      "ownRelayAt": "自建中继 · {{host}}",
+      "bothRelays": "Kettu 中继与自建中继",
+      "bothRelaysAt": "Kettu 中继与 {{host}}",
       "noRelay": "无中继 · 仅直连"
     },
     "failed": {
@@ -2100,9 +2102,10 @@
       "serviceKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
       "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
       "offLine": "已关闭",
-      "firewall": "同一网络里的设备会直接连到这台电脑，所以系统可能会问一次是否允许 Kettu 接受传入连接。",
+      "firewall": "内网里的设备会直接连到这台电脑，所以系统可能会问一次是否允许 Kettu 接受传入连接。",
       "relay": "在哪都连得上",
-      "ownRelay": "经 {{host}}"
+      "ownRelay": "经 {{host}}",
+      "relaysBoth": "经 Kettu 中继与 {{host}}"
     },
     "hostName": {
       "name": "这台电脑的名字",
@@ -2360,9 +2363,15 @@
       "signInHint": "登录 Kettu 账号后，在哪都连得上这台电脑。直连照样能用。",
       "signInHint_web": "在 {{host}} 上登录 Kettu 账号后，在哪都连得上它。直连照样能用。",
       "group": "中继",
-      "groupDescription": "设备在别的网络里怎么连到这台电脑：Kettu 中继、你自己运行的中继，或者不用中继。",
-      "groupDescription_web": "设备在别的网络里怎么连到 {{host}}：Kettu 中继、你自己运行的中继，或者不用中继。",
-      "onlyKettu": "只在用 Kettu 中继时可用。",
+      "groupDescription": "设备在别的网络怎么连到这台电脑：Kettu 官方中继、自建中继，或者两个同时开启自动择优。",
+      "groupDescription_web": "设备在别的网络怎么连到 {{host}}：Kettu 官方中继、自建中继，或者两个同时开启自动择优。",
+      "onlyKettu": "只在开启官方 Kettu 中继时可用。",
+      "official": {
+        "name": "使用官方 Kettu 中继",
+        "description": "由 Kettu 运行，使用你的 Kettu 账号；与自建中继同时开启时会自动择优切换。",
+        "description_web": "由 Kettu 运行，使用 {{host}} 登录的 Kettu 账号；可与自建中继同时开启自动择优。",
+        "descriptionLocal": "本地模式下不可用。在“通用”里开启 Kettu 云服务后才能使用官方中继。"
+      },
       "choice": {
         "kettu": {
           "name": "Kettu 中继",
@@ -2384,12 +2393,12 @@
         }
       },
       "note": {
-        "switch": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到这台电脑时跟过去，或在设备上粘贴新的配对链接更新。",
-        "own": "一次只用一个中继。你的 Kettu 账号照旧把这台电脑的通知发到 iPhone。",
-        "pinned": "电脑、iPhone、iPad 和 Android 手机上的 Kettu 应用连得上它。浏览器没法按指纹认证书，要用有域名的中继。",
+        "switch": "Kettu 先检查中继和密钥，过了才启用。现在在线的设备马上同步过去；不在线的设备下次在内网连到这台电脑时更新，或在设备上粘贴新的配对链接更新。",
+        "own": "自建中继可以单独使用，也可以与官方中继同时开启。你的 Kettu 账号照旧把这台电脑的通知发到 iPhone。",
+        "pinned": "电脑、iPhone、iPad 和 Android 手机上的 Kettu 应用都能连。浏览器没法按指纹认证书，要用有域名的中继。",
         "local": "本地模式下 Kettu 不向自己的服务发送任何东西。中继是你自己的，所以照用。",
-        "switch_web": "Kettu 先检查中继和密钥，过了才切换。现在在线的设备马上跟过去；不在线的设备下次在同一网络连到 {{host}} 时跟过去，或在设备上粘贴新的配对链接更新。",
-        "own_web": "一次只用一个中继。你的 Kettu 账号照旧把 {{host}} 的通知发到 iPhone。"
+        "switch_web": "Kettu 先检查中继和密钥，过了才启用。现在在线的设备马上同步过去；不在线的设备下次在内网连到 {{host}} 时更新，或在设备上粘贴新的配对链接更新。",
+        "own_web": "自建中继可以单独使用，也可以与官方中继同时开启。你的 Kettu 账号照旧把 {{host}} 的通知发到 iPhone。"
       },
       "confirm": {
         "offTitle": "切换到不用中继？",
@@ -2405,6 +2414,10 @@
         "offlineBody_web_other": "只有现在在线的设备会马上收到新中继。不在线的设备之后需要在同一网络直连 {{host}}，或在设备上粘贴新的配对链接来更新中继。"
       },
       "own": {
+        "toggleName": "使用自建中继",
+        "toggleDescription": "运行在你自己服务器上的中继。无需 Kettu 账号，可与官方中继同时开启。",
+        "toggleDescriptionLocal": "运行在你自己服务器上的中继，什么都不发给 Kettu。",
+        "savedAt": "已保存：{{host}}，打开开关即可启用。",
         "address": "地址",
         "addressHint": "粘贴中继启动时打印的链接，密钥会一起填上。",
         "pinnedHint": "按链接里的指纹认它的证书，用于只有 IP 地址的中继。",

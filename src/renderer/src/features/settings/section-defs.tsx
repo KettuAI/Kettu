@@ -1445,7 +1445,8 @@ export function useRemoteSection(): SectionDef {
   const onHost = useHostContext()
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
-  const relayChoice = useSettingsStore((s) => s.settings.remote.relay)
+  const officialRelay = useSettingsStore((s) => s.settings.remote.relay)
+  const ownRelayEnabled = useSettingsStore((s) => s.settings.remote.ownRelayEnabled)
   const status = useRemoteStore((s) => s.status)
   const resettable = useHostHas('remoteReset')
   // Finding this computer and the relay are the account's, so self-hosted it shows neither.
@@ -1529,13 +1530,20 @@ export function useRemoteSection(): SectionDef {
       group: relayGroup,
       render: () => null,
     },
-    ...(relayChoice === 'kettu' && !cloudOff
+    {
+      id: 'own-relay',
+      setting: 'remote.own-relay',
+      params: onHost,
+      group: relayGroup,
+      render: () => null,
+    },
+    ...(officialRelay && !cloudOff
       ? [
           {
             id: 'relay-regions',
             setting: 'remote.relay-regions',
             group: relayGroup,
-            // Drawn by the relay's card, under the Relay row.
+            // Drawn by the relay's card, under the official relay row.
             searchOnly: true,
             render: () => null,
           } satisfies RowDef,
@@ -1545,7 +1553,7 @@ export function useRemoteSection(): SectionDef {
       id: 'direct',
       setting: 'remote.direct',
       description: t(
-        relayInUse(status) && (!cloudOff || relayChoice === 'own')
+        relayInUse(status) && (!cloudOff || ownRelayEnabled)
           ? 'remote.direct.descriptionFree'
           : 'remote.direct.description',
       ),
@@ -1587,8 +1595,8 @@ export function useRemoteSection(): SectionDef {
             id: 'discoverable',
             setting: 'remote.discoverable',
             params: onHost,
-            // Only the Kettu relay names this computer to the account; dimmed, it says so.
-            description: relayChoice === 'own' ? t('remote.relay.onlyKettu') : undefined,
+            // Only the Kettu relay names this computer to the account; dimmed when off.
+            description: !officialRelay ? t('remote.relay.onlyKettu') : undefined,
             group: permissions,
             render: () => <DiscoverableSwitch label={t('remote.discoverable.name')} />,
           } satisfies RowDef,

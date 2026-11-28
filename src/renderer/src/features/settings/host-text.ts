@@ -3,7 +3,7 @@ import type { Platform } from '@shared/platform'
 import { addressText, isLocalHost } from '@shared/remote/address'
 import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
-import { isOwnRelay, RELAY_URL } from '@shared/remote/relay'
+import { hostOwnRelay, RELAY_URL, trustedRelay } from '@shared/remote/relay'
 import { localizedRegionName } from '@shared/remote/relay-regions'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -33,29 +33,37 @@ function directAt(t: TFunction<'settings'>, address: DirectAddress): string {
     : t('hosts.via.directAt', { address: text })
 }
 
-export type ConfiguredRelay = { kind: 'kettu' } | { kind: 'own'; host: string } | { kind: 'none' }
+export type ConfiguredRelay =
+  | { kind: 'kettu' }
+  | { kind: 'own'; host: string }
+  | { kind: 'both'; host: string }
+  | { kind: 'none' }
 
 /**
- * The relay configured for a non-SSH host, whether it is online or offline: the Kettu relay,
- * the hostname of the owner's own relay, or none (direct only).
+ * The relays configured for a non-SSH host, whether it is online or offline: the Kettu relay,
+ * the owner's own relay, both alongside each other, or none (direct only).
  */
 export function configuredRelay(host: Pick<HostStatus, 'relay' | 'connection'>): ConfiguredRelay {
   const { connection, relay } = host
+  if (relay) {
+    const own = hostOwnRelay(relay, RELAY_URL)
+    const hasOfficial = relay.urls.some((url) => trustedRelay(url, RELAY_URL))
+    if (own && hasOfficial) return { kind: 'both', host: relayHostName(own.url) }
+    if (own) return { kind: 'own', host: relayHostName(own.url) }
+    if (hasOfficial) return { kind: 'kettu' }
+  }
   if (connection.state === 'online' && 'relay' in connection) {
     return connection.own
       ? { kind: 'own', host: relayHostName(connection.relay) }
       : { kind: 'kettu' }
   }
-  if (!relay || relay.urls.length === 0) return { kind: 'none' }
-  return isOwnRelay(relay, RELAY_URL)
-    ? { kind: 'own', host: relayHostName(relay.urls[0]!) }
-    : { kind: 'kettu' }
+  return { kind: 'none' }
 }
 
 /**
  * How a host is reached: over SSH at the address the user typed, through the relay with its
  * region, or direct, with the address that answered while it is online. When offline, reflects
- * the host's configured relay instead of assuming direct only.
+ * the host's configured relays instead of assuming direct only.
  */
 export function routeText(
   t: TFunction<'settings'>,
@@ -65,6 +73,7 @@ export function routeText(
   const { connection } = host
   if (connection.state !== 'online') {
     const configured = configuredRelay(host)
+    if (configured.kind === 'both') return t('hosts.via.bothRelaysAt', { host: configured.host })
     if (configured.kind === 'own') return t('hosts.via.ownRelayAt', { host: configured.host })
     if (configured.kind === 'kettu') return t('hosts.via.relay')
     return t('hosts.via.noRelay')

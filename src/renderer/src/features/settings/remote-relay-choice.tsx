@@ -7,7 +7,6 @@ import { BookOpen01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { parseRelayLink, type OwnRelayCheck, type OwnRelayProblem } from '@shared/remote/own-relay'
 import type { OwnRelayReport } from '@shared/remote/status'
-import type { RelayChoice } from '@shared/settings'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +23,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { CONFIRM, ControlError, Segmented, SetButton } from './controls'
+import { CONFIRM, ControlError, SetButton, SettingSwitch } from './controls'
 import { RelayRegions, RetryRelay } from './remote-relay'
 import { BlockLine, GroupNote, Notice, RowGroup, RowLine, RowShell, RowText } from './rows'
 import { errorGroup, relayHostName } from './relay-text'
@@ -37,12 +36,10 @@ type FormMode = 'new' | 'change' | 'replace'
 /** The problems the access key causes; the others are the address's. */
 const KEY_PROBLEMS: ReadonlySet<OwnRelayProblem> = new Set(['key', 'key_refused'])
 
-/** The own relay is in use, as the host reports it; null on another relay or before it says. */
+/** The own relay report from the host, regardless of whether the official relay is active. */
 function useOwnReport(): OwnRelayReport | null {
   const { useRemoteStore } = useHostScope()
-  return useRemoteStore((s) =>
-    s.status?.relay?.state === 'on' ? (s.status.relay.own ?? null) : null,
-  )
+  return useRemoteStore((s) => s.status?.relay?.own ?? null)
 }
 
 /**
@@ -57,18 +54,22 @@ function useKeptKeyEnd(): string | null {
 }
 
 /**
- * The group's card: the Relay row with its choices, then what the choice brings, the own relay's
- * form or rows, or the Kettu relay's regions. In Local mode the Kettu relay is left out.
+ * Independent switches for the official Kettu relay and the owner's own relay, along with live
+ * region states or own-relay status and inline setup form.
  */
 export function RelayCard() {
   const { t } = useTranslation(['settings', 'common'])
   const { useSettingsStore, useRemoteStore } = useHostScope()
-  const choice = useSettingsStore((s) => s.settings.remote.relay)
+  const officialSetting = useSettingsStore((s) => s.settings.remote.relay)
+  const ownSetting = useSettingsStore((s) => s.settings.remote.ownRelayEnabled)
+  const savedOwn = useSettingsStore((s) => s.settings.remote.ownRelay)
   const cloudOff = useCloudOffHere()
   const onHost = useHostContext()
   const canOwn = useHostHas('ownRelay') !== false
+  const dualRelay = useHostHas('dualRelay') !== false
+  const keptKeyEnd = useKeptKeyEnd()
   const [editing, setEditing] = useState<FormMode | null>(null)
-  const [confirm, setConfirm] = useState<'off' | 'kettu' | null>(null)
+  const [confirm, setConfirm] = useState<{ target: 'official' | 'own' } | null>(null)
   const [apply, error] = useApply()
   const deviceCount = useRemoteStore((s) => s.status?.devices.length ?? 0)
   const offlineCount = useRemoteStore((s) => {
@@ -76,52 +77,84 @@ export function RelayCard() {
     if (!status) return 0
     return status.devices.filter((device) => !status.online.includes(device.id)).length
   })
-  // The regions show once the host signed in to them; before, the status line says why not.
+  // Official regions show once the host signed in to them.
   const regions = useRemoteStore(
-    (s) =>
-      s.status?.relay?.state === 'on' && !s.status.relay.own && s.status.relay.relays.length > 0,
+    (s) => s.status?.relay?.state === 'on' && s.status.relay.relays.length > 0,
   )
-  // The Kettu relay is not used in Local mode, so it reads as no relay there.
-  const current: RelayChoice = cloudOff && choice === 'kettu' ? 'off' : choice
-  const value: RelayChoice = editing ? 'own' : current
-  const options: RelayChoice[] = cloudOff ? ['own', 'off'] : ['kettu', 'own', 'off']
+  const officialChecked = !cloudOff && officialSetting
+  const ownChecked = ownSetting || editing !== null
 
-  const pick = (next: RelayChoice): void => {
-    if (next === 'own') {
-      if (current !== 'own') setEditing('new')
+  const applyOfficial = (next: boolean): void => {
+    if (dualRelay) apply({ remote: { relay: next } })
+    else apply({ remote: { relay: next ? 'kettu' : 'off' } })
+  }
+
+  const applyOwn = (next: boolean): void => {
+    if (dualRelay) apply({ remote: { ownRelayEnabled: next } })
+    else apply({ remote: { relay: next ? 'own' : 'off' } })
+  }
+
+  const toggleOfficial = (next: boolean): void => {
+    if (cloudOff) return
+    if (next) {
+      applyOfficial(true)
       return
     }
-    if (next === current) {
+    const willLeaveNone = dualRelay ? !ownSetting : true
+    if (willLeaveNone && deviceCount > 0) {
+      setConfirm({ target: 'official' })
+      return
+    }
+    applyOfficial(false)
+  }
+
+  const toggleOwn = (next: boolean): void => {
+    if (!canOwn) return
+    if (next) {
+      if (!savedOwn || !keptKeyEnd) {
+        setEditing('new')
+        return
+      }
+      applyOwn(true)
+      return
+    }
+    if (editing !== null && !ownSetting) {
       setEditing(null)
       return
     }
-    if (next === 'off' && deviceCount > 0) {
-      setConfirm('off')
-      return
-    }
-    if (next === 'kettu' && offlineCount > 0) {
-      setConfirm('kettu')
+    const willLeaveNone = dualRelay ? !officialChecked : true
+    if (willLeaveNone && deviceCount > 0) {
+      setConfirm({ target: 'own' })
       return
     }
     setEditing(null)
-    // A boolean, which every host takes: true is the Kettu relay, false none.
-    apply({ remote: { relay: next === 'kettu' } })
+    applyOwn(false)
   }
 
   const settle = (proceed: boolean): void => {
     const pending = confirm
     setConfirm(null)
     if (!proceed || !pending) return
-    setEditing(null)
-    apply({ remote: { relay: pending === 'kettu' } })
+    if (pending.target === 'official') applyOfficial(false)
+    else {
+      setEditing(null)
+      applyOwn(false)
+    }
   }
 
-  const description = t(
-    value === 'own' && cloudOff
-      ? 'remote.relay.choice.own.descriptionLocal'
-      : `remote.relay.choice.${value}.description`,
+  const officialDescription = t(
+    cloudOff ? 'remote.relay.official.descriptionLocal' : 'remote.relay.official.description',
     onHost,
   )
+  const ownBaseDescription = t(
+    cloudOff ? 'remote.relay.own.toggleDescriptionLocal' : 'remote.relay.own.toggleDescription',
+    onHost,
+  )
+  const ownDescription = !canOwn
+    ? `${ownBaseDescription} ${t('remote.relay.choice.own.older')}`
+    : !ownChecked && savedOwn
+      ? `${ownBaseDescription} ${t('remote.relay.own.savedAt', { host: relayHostName(savedOwn.url) })}`
+      : ownBaseDescription
 
   return (
     <>
@@ -129,24 +162,42 @@ export function RelayCard() {
         <RowShell id="relay">
           <RowLine
             text={
-              <RowText
-                name={t('remote.relay.group')}
-                description={
-                  canOwn ? description : `${description} ${t('remote.relay.choice.own.older')}`
-                }
-              />
+              <RowText name={t('remote.relay.official.name')} description={officialDescription} />
             }
           >
             <ControlError error={error} />
-            <Segmented
-              label={t('remote.relay.group')}
-              value={value}
-              options={options.map((option) => ({
-                value: option,
-                label: t(`remote.relay.choice.${option}.short`),
-                disabled: option === 'own' && !canOwn,
-              }))}
-              onChange={pick}
+            <SettingSwitch
+              label={t('remote.relay.official.name')}
+              checked={officialChecked}
+              disabled={cloudOff}
+              onChange={toggleOfficial}
+            />
+          </RowLine>
+        </RowShell>
+        {officialChecked && regions && (
+          <RowShell id="relay-regions">
+            <div className="k-block">
+              <BlockLine
+                text={
+                  <RowText
+                    name={t('remote.relay.regions')}
+                    description={t('remote.relay.regionsDescription')}
+                  />
+                }
+              />
+              <RelayRegions />
+            </div>
+          </RowShell>
+        )}
+        <RowShell id="own-relay">
+          <RowLine
+            text={<RowText name={t('remote.relay.own.toggleName')} description={ownDescription} />}
+          >
+            <SettingSwitch
+              label={t('remote.relay.own.toggleName')}
+              checked={ownChecked}
+              disabled={!canOwn}
+              onChange={toggleOwn}
             />
           </RowLine>
         </RowShell>
@@ -154,52 +205,27 @@ export function RelayCard() {
           <RowShell>
             <OwnRelayForm
               mode={editing}
-              offlineCount={offlineCount}
+              offlineCount={officialChecked ? 0 : offlineCount}
               onCancel={() => setEditing(null)}
               onDone={() => setEditing(null)}
             />
           </RowShell>
-        ) : current === 'own' ? (
-          <OwnRelayInUse onEdit={setEditing} />
         ) : (
-          current === 'kettu' &&
-          regions && (
-            <RowShell id="relay-regions">
-              <div className="k-block">
-                <BlockLine
-                  text={
-                    <RowText
-                      name={t('remote.relay.regions')}
-                      description={t('remote.relay.regionsDescription')}
-                    />
-                  }
-                />
-                <RelayRegions />
-              </div>
-            </RowShell>
-          )
+          ownSetting && <OwnRelayInUse onEdit={setEditing} />
         )}
       </RowGroup>
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && settle(false)}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirm === 'kettu'
-                ? t('remote.relay.confirm.kettuTitle')
-                : t('remote.relay.confirm.offTitle')}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t('remote.relay.confirm.offTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirm === 'kettu'
-                ? t('remote.relay.confirm.kettuBody', { count: offlineCount, ...onHost })
-                : t('remote.relay.confirm.offBody', { count: deviceCount, ...onHost })}
+              {t('remote.relay.confirm.offBody', { count: deviceCount, ...onHost })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => settle(true)}>
-              {confirm === 'kettu'
-                ? t('remote.relay.confirm.kettuConfirm')
-                : t('remote.relay.confirm.offConfirm')}
+              {t('remote.relay.confirm.offConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -216,12 +242,12 @@ export function RelayNote() {
 function useRelayNote(): string {
   const { t } = useTranslation('settings')
   const { useSettingsStore } = useHostScope()
-  const choice = useSettingsStore((s) => s.settings.remote.relay)
+  const ownEnabled = useSettingsStore((s) => s.settings.remote.ownRelayEnabled)
   const own = useOwnReport()
   const cloudOff = useCloudOffHere()
   const onHost = useHostContext()
   if (cloudOff) return t('remote.relay.note.local')
-  if (choice === 'own') {
+  if (ownEnabled) {
     return own?.pinned
       ? `${t('remote.relay.note.own', onHost)} ${t('remote.relay.note.pinned')}`
       : t('remote.relay.note.own', onHost)
@@ -276,9 +302,10 @@ function OwnRelayInUse({ onEdit }: { onEdit: (mode: FormMode) => void }) {
 function OwnRelayState({ own }: { own: OwnRelayReport | null }) {
   const { t } = useTranslation('settings')
   const { useRemoteStore } = useHostScope()
-  const connection = useRemoteStore((s) =>
+  const fallback = useRemoteStore((s) =>
     s.status?.relay?.state === 'on' ? s.status.relay.relays[0]?.connection : undefined,
   )
+  const connection = own?.connection ?? fallback
   if (!own) {
     return (
       <>
@@ -329,9 +356,10 @@ function OwnRelayAction({
 }) {
   const { t } = useTranslation('settings')
   const { useRemoteStore } = useHostScope()
-  const connection = useRemoteStore((s) =>
+  const fallback = useRemoteStore((s) =>
     s.status?.relay?.state === 'on' ? s.status.relay.relays[0]?.connection : undefined,
   )
+  const connection = own?.connection ?? fallback
   const refused =
     !own ||
     ((connection?.state === 'refused' || connection?.state === 'retrying') &&

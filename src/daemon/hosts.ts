@@ -481,11 +481,12 @@ export class Hosts {
     }
   }
 
-  /** The relay as Settings and `kettu status` show it. */
+  /** The relays as Settings and `kettu status` show them. */
   relayReport(): RelayReport {
-    const { relay, ownRelay } = this.settings().remote
+    const { relay, ownRelayEnabled, ownRelay } = this.settings().remote
     return relayReport({
-      choice: relay,
+      official: relay,
+      ownEnabled: ownRelayEnabled,
       // The daemon has no switch for Kettu's services.
       cloud: true,
       signedIn: this.options.signedIn(),
@@ -865,10 +866,10 @@ export class Hosts {
     return this.remoteStatus?.direct ?? null
   }
 
-  /** The direct connections as the remote host applies them, held on while the relay is not used. */
+  /** The direct connections as the remote host applies them, held on while no relay is used. */
   private direct(): DirectSettings {
-    const { direct, relay } = this.settings().remote
-    const relayUsed = (relay === 'kettu' && this.options.signedIn()) || relay === 'own'
+    const { direct, relay, ownRelayEnabled, ownRelay } = this.settings().remote
+    const relayUsed = (relay && this.options.signedIn()) || (ownRelayEnabled && ownRelay !== null)
     return relayUsed ? direct : { ...direct, enabled: true }
   }
 

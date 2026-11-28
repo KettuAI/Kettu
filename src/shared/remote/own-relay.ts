@@ -238,19 +238,23 @@ async function trySignIn(
 }
 
 /**
- * What a host's relay is told from its settings: the Kettu relay while it is chosen and Kettu's
- * services are on, or the owner's own relay, which needs its access key.
+ * What a host's relays are told from its settings: the official Kettu relay while enabled and
+ * Kettu's services are on, and independently the owner's own relay when enabled with a key.
  */
 export function relayChoiceInit(
-  remote: { relay: 'kettu' | 'own' | 'off'; ownRelay: { url: string; pin: string | null } | null },
+  remote: {
+    relay: boolean
+    ownRelayEnabled: boolean
+    ownRelay: { url: string; pin: string | null } | null
+  },
   cloud: boolean,
   key: string | null,
 ): { enabled: boolean; own: { url: string; pin: string | null; key: string } | null } {
   const own =
-    remote.relay === 'own' && remote.ownRelay && key
+    remote.ownRelayEnabled && remote.ownRelay && key
       ? { url: remote.ownRelay.url, pin: remote.ownRelay.pin, key }
       : null
-  return { enabled: remote.relay === 'kettu' && cloud, own }
+  return { enabled: remote.relay && cloud, own }
 }
 
 /** The last four characters of an access key, which tell keys apart without showing one. */

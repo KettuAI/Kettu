@@ -151,16 +151,18 @@ export interface SettingsFile {
   remote: {
     enabled: boolean // paired devices may connect to this computer; keeps Kettu in the background
     name: string | null // the name devices show for this computer; null for the system's
-    // Held on while remote access is and the relay is off, when devices have no other way.
+    // Held on while remote access is on and no relay can carry connections, when devices have no
+    // other way.
     direct: DirectSettings
     terminal: boolean // devices may use this computer's terminals, which run any command
-    // Which relay devices reach this computer through: the Kettu relay while it is signed in to a
-    // Kettu account, the owner's own relay, or none.
-    relay: RelayChoice
-    // The owner's own relay, kept while another is chosen; its access key is kept apart, like the
-    // host's private key, and never in this file.
+    // Whether the official Kettu relay is enabled while signed in to a Kettu account.
+    relay: boolean
+    // Whether the owner's own relay is enabled alongside or instead of the Kettu relay.
+    ownRelayEnabled: boolean
+    // The owner's own relay, kept while turned off; its access key is kept apart, like the host's
+    // private key, and never in this file.
     ownRelay: OwnRelaySettings | null
-    // Devices of the same Kettu account find this computer on the relay and ask to be added.
+    // Devices of the same Kettu account find this computer on the official relay and ask to be added.
     discoverable: boolean
   }
   // Agents using this computer's desktop apps; paired devices can read it, only this computer changes it.
@@ -171,7 +173,7 @@ export interface SettingsFile {
   onboarding: OnboardingState
 }
 
-/** The relay a host uses: Kettu's, the owner's own, or none. */
+/** Legacy single relay selector preserved for patch/file migration from older hosts or clients. */
 export type RelayChoice = 'kettu' | 'own' | 'off'
 
 export const RELAY_CHOICES: readonly RelayChoice[] = ['kettu', 'own', 'off']
@@ -422,7 +424,8 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     name: null,
     direct: { enabled: true, port: null, addresses: [] },
     terminal: false,
-    relay: 'kettu',
+    relay: true,
+    ownRelayEnabled: false,
     ownRelay: null,
     discoverable: true,
   },
@@ -519,9 +522,10 @@ export interface SettingsPatch {
     // `port` from 1024: below it a port may need privileges; the list is replaced whole.
     direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
     terminal?: boolean
-    // A boolean from older clients: true is the Kettu relay, false none. `own` needs a relay that
-    // passed its check before, since only that check sets its address.
+    // Boolean switches the official relay independently; legacy choice strings remain accepted.
     relay?: RelayChoice | boolean
+    // Enables or disables the saved own relay without touching the official relay toggle.
+    ownRelayEnabled?: boolean
     discoverable?: boolean
   }
 }

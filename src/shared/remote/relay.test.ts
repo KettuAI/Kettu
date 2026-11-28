@@ -188,6 +188,12 @@ describe('the relay in welcomes and stored hosts', () => {
     }
     expect(parseKnownHost(host)).toEqual(host)
     expect(parseKnownHost({ ...host, relay })).toEqual({ ...host, relay })
+    const mixed = {
+      ...relay,
+      own: { url: 'https://203.0.113.7:7443', pin: vectors.ownRelay.pin },
+    }
+    expect(parseWelcome({ ...welcome, relay: mixed })?.relay).toEqual(mixed)
+    expect(parseKnownHost({ ...host, relay: mixed })).toEqual({ ...host, relay: mixed })
     expect(parseKnownHost({ ...host, relay: { id: 'x' } })).toBeNull()
   })
 })

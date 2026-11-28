@@ -1139,12 +1139,12 @@ const isOwnRelaySettings: Check = (value, path) => {
     : `"${path}" has unknown fields`
 }
 
-/** The own relay a check passed, now the one in use. */
+/** The own relay a check passed; saved and enabled without changing the official relay toggle. */
 export function withOwnRelay(current: SettingsFile, own: OwnRelaySettings): SettingsFile {
   if (isOwnRelaySettings(own, 'ownRelay')) throw new SettingsError(t('settings.ownRelayUnset'))
   const next = structuredClone(current)
   next.remote.ownRelay = { url: own.url, pin: own.pin }
-  next.remote.relay = 'own'
+  next.remote.ownRelayEnabled = true
   holdForRemote(next)
   return next
 }
@@ -1158,12 +1158,13 @@ function checkRemote(value: unknown, problems: string[]): void {
   for (const [key, fieldValue] of Object.entries(value)) {
     if (key === 'relay') {
       if (typeof fieldValue !== 'boolean' && !RELAY_CHOICES.includes(fieldValue as RelayChoice)) {
-        problems.push('"remote.relay" must be "kettu", "own", "off" or a boolean')
+        problems.push('"remote.relay" must be a boolean or "kettu", "own", "off"')
       }
     } else if (
       key === 'enabled' ||
       key === 'name' ||
       key === 'terminal' ||
+      key === 'ownRelayEnabled' ||
       key === 'discoverable'
     ) {
       const problem = (key === 'name' ? isHostName : isBoolean)(fieldValue, `remote.${key}`)
@@ -1307,13 +1308,16 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
 function holdForRemote(settings: SettingsFile): void {
   if (!settings.remote.enabled) return
   settings.general.background = true
-  if (settings.remote.relay === 'off') settings.remote.direct.enabled = true
+  const hasOwn = settings.remote.ownRelayEnabled && settings.remote.ownRelay !== null
+  if (!settings.remote.relay && !hasOwn) settings.remote.direct.enabled = true
 }
 
-/** The direct connections as the remote host applies them: on as well while the relay is not in use. */
+/** The direct connections as the remote host applies them: on as well while no relay is active. */
 export function effectiveDirect(settings: SettingsFile, signedIn: boolean): DirectSettings {
-  const { enabled, relay, direct } = settings.remote
-  const held = enabled && !((relay === 'kettu' && signedIn) || relay === 'own')
+  const { enabled, relay, ownRelayEnabled, ownRelay, direct } = settings.remote
+  const hasOfficial = relay && signedIn
+  const hasOwn = ownRelayEnabled && ownRelay !== null
+  const held = enabled && !hasOfficial && !hasOwn
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
@@ -1451,17 +1455,28 @@ export function mergeSettings(
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct, terminal, relay, discoverable } = patch.remote
+    const { enabled, name, direct, terminal, relay, ownRelayEnabled, discoverable } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
     if (relay !== undefined) {
-      const choice = relay === true ? 'kettu' : relay === false ? 'off' : relay
-      // Only a relay that passed its check has an address to sign in to.
-      if (choice === 'own' && !next.remote.ownRelay) {
+      if (typeof relay === 'boolean') {
+        next.remote.relay = relay
+      } else {
+        // Legacy choice patches from older clients switch between the three modes.
+        if (relay === 'own' && !next.remote.ownRelay) {
+          throw new SettingsError(t('settings.ownRelayUnset'))
+        }
+        next.remote.relay = relay === 'kettu'
+        next.remote.ownRelayEnabled = relay === 'own'
+      }
+    }
+    if (ownRelayEnabled !== undefined) {
+      // Only an own relay that passed its check has an address to turn on.
+      if (ownRelayEnabled && !next.remote.ownRelay) {
         throw new SettingsError(t('settings.ownRelayUnset'))
       }
-      next.remote.relay = choice
+      next.remote.ownRelayEnabled = ownRelayEnabled
     }
     if (discoverable !== undefined) next.remote.discoverable = discoverable
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
@@ -1843,17 +1858,25 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   read(raw.terminal, 'remote.terminal', isBoolean, () => {
     remote.terminal = raw.terminal as boolean
   })
-  // A file from before the own relay keeps Use the Kettu relay as a boolean.
-  if (typeof raw.relay === 'boolean') remote.relay = raw.relay ? 'kettu' : 'off'
+  let legacyChoice: RelayChoice | null = null
+  if (typeof raw.relay === 'boolean') remote.relay = raw.relay
   else
     read(raw.relay, 'remote.relay', oneOf(...RELAY_CHOICES), () => {
-      remote.relay = raw.relay as RelayChoice
+      legacyChoice = raw.relay as RelayChoice
+      remote.relay = legacyChoice === 'kettu'
     })
   read(raw.ownRelay, 'remote.ownRelay', isOwnRelaySettings, () => {
     remote.ownRelay = raw.ownRelay as OwnRelaySettings | null
   })
-  // Without an address the own relay cannot be used, so the host is reached without a relay.
-  if (remote.relay === 'own' && !remote.ownRelay) remote.relay = 'off'
+  if (raw.ownRelayEnabled !== undefined) {
+    read(raw.ownRelayEnabled, 'remote.ownRelayEnabled', isBoolean, () => {
+      remote.ownRelayEnabled = raw.ownRelayEnabled as boolean
+    })
+  } else if (legacyChoice === 'own') {
+    remote.ownRelayEnabled = true
+  }
+  // Without an address the own relay cannot be used.
+  if (remote.ownRelayEnabled && !remote.ownRelay) remote.ownRelayEnabled = false
   read(
     raw.discoverable,
     'remote.discoverable',

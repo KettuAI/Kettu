@@ -224,9 +224,7 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
   const [target, setTarget] = useState<'app' | 'browser'>('app')
   const [chosen, setChosen] = useState<string | null>(null)
   const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
-  const ownRelay = useRemoteStore((s) =>
-    s.status?.relay?.state === 'on' ? (s.status.relay.own ?? null) : null,
-  )
+  const ownRelay = useRemoteStore((s) => s.status?.relay?.own ?? null)
   const cloudOff = useCloudOffHere()
   const browsers = browserLinks(appLink, own, !cloudOff, ownRelay)
   const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null

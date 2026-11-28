@@ -127,7 +127,7 @@ async function pair(socket: string): Promise<number> {
   try {
     const { status } = await client.call('direct.get', undefined)
     const relay = await client.call('relay.get', undefined)
-    const own = relay.state === 'on' ? relay.own : undefined
+    const own = relay.own
     const ssh =
       status?.state === 'listening'
         ? {
@@ -233,28 +233,34 @@ const RELAY_PROBLEMS: Record<OwnRelayProblem, string> = {
     'The relay refused this key. On the relay, kettu-relay link prints the link with its current key.',
 }
 
-/** The relay as `kettu relay` says it. */
+/** The relays as `kettu relay` says them. */
 function relayLine(report: RelayReport): string {
-  if (report.state === 'off') return 'No relay: devices connect directly, over a VPN or over SSH.\n'
+  const lines: string[] = []
   if (report.state === 'signed_out') {
-    return 'The Kettu relay, once this computer is signed in: run kettu login.\n'
+    lines.push('The Kettu relay, once this computer is signed in: run kettu login.')
+  } else if (report.state === 'on') {
+    const state = report.relays[0]?.connection.state ?? 'connecting'
+    const connected = report.relays.some(({ connection }) => connection.state === 'connected')
+    lines.push(`The Kettu relay: ${connected ? 'connected' : state}.`)
   }
-  const state = report.relays[0]?.connection.state ?? 'connecting'
   if (report.own) {
-    const { url, rtt, version, pinned } = report.own
+    const { url, rtt, version, pinned, connection } = report.own
+    const ownState = connection?.state ?? (rtt !== null ? 'connected' : 'connecting')
     const facts = [
-      state === 'connected' ? 'connected' : state,
+      ownState,
       ...(rtt === null ? [] : [`${rtt} ms`]),
       ...(version ? [`relay ${version}`] : []),
       ...(pinned ? ['certificate pinned'] : []),
     ]
-    return `Your own relay at ${url}: ${facts.join(', ')}.\n`
+    lines.push(`Your own relay at ${url}: ${facts.join(', ')}.`)
   }
-  const connected = report.relays.some(({ connection }) => connection.state === 'connected')
-  return `The Kettu relay: ${connected ? 'connected' : state}.\n`
+  if (lines.length === 0) {
+    return 'No relay: devices connect directly, over a VPN or over SSH.\n'
+  }
+  return `${lines.join('\n')}\n`
 }
 
-/** `kettu relay`, with `use`, `kettu` or `off` to change it, through the running daemon. */
+/** `kettu relay`, with `use`, `kettu`, `own` or `off` to change it, through the running daemon. */
 async function relay(
   socket: string,
   command: Extract<Command, { kind: 'relay' | 'relay-use' | 'relay-set' }>,
@@ -274,7 +280,10 @@ async function relay(
     const report =
       command.kind === 'relay'
         ? await callControl(socket, 'relay.get', undefined)
-        : await callControl(socket, 'relay.set', { choice: command.choice })
+        : await callControl(socket, 'relay.set', {
+            ...(command.official !== undefined ? { official: command.official } : {}),
+            ...(command.own !== undefined ? { own: command.own } : {}),
+          })
     out(relayLine(report))
     return 0
   } catch (error) {

@@ -96,11 +96,12 @@ export interface HostSettingsPart {
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   /**
-   * `relay` as the boolean clients before the own relay read, true for the Kettu relay alone, and
-   * the whole choice in `relayChoice`; absent from older hosts, whose `relay` is the choice.
+   * `relay` holds the official Kettu relay boolean; `ownRelayEnabled` holds the independent own-relay
+   * boolean (absent from older hosts, which encoded both in `relayChoice`).
    */
-  remote: Omit<SettingsFile['remote'], 'relay' | 'ownRelay'> & {
+  remote: Omit<SettingsFile['remote'], 'relay' | 'ownRelay' | 'ownRelayEnabled'> & {
     relay: boolean
+    ownRelayEnabled?: boolean
     relayChoice?: RelayChoice
     ownRelay?: SettingsFile['remote']['ownRelay']
   }
@@ -137,21 +138,36 @@ export function hostSettingsPart(file: SettingsFile): HostSettingsPart {
     part[section] = keys === 'all' ? structuredClone(value) : pick(value as object, keys, true)
   }
   const remote = part.remote as SettingsFile['remote']
-  part.remote = { ...remote, relay: remote.relay === 'kettu', relayChoice: remote.relay }
+  part.remote = {
+    ...remote,
+    relay: remote.relay,
+    ownRelayEnabled: remote.ownRelayEnabled,
+    relayChoice: remote.relay ? 'kettu' : remote.ownRelayEnabled ? 'own' : 'off',
+  }
   return part as unknown as HostSettingsPart
 }
 
 /** The host's remote section as a client keeps it, from a host of any version. */
 function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['remote'] {
   if (!part) return structuredClone(DEFAULT_SETTINGS.remote)
-  const { relayChoice, relay, ownRelay, ...rest } = part
-  const choice =
-    relayChoice === 'kettu' || relayChoice === 'own' || relayChoice === 'off'
-      ? relayChoice
-      : relay
-        ? 'kettu'
-        : 'off'
-  return { ...structuredClone(rest), relay: choice, ownRelay: ownRelay ?? null }
+  const { relayChoice, relay, ownRelay, ownRelayEnabled, ...rest } = part
+  const hasDual = ownRelayEnabled !== undefined
+  const official = hasDual
+    ? Boolean(relay)
+    : relayChoice === 'kettu'
+      ? true
+      : relayChoice === 'own' || relayChoice === 'off'
+        ? false
+        : Boolean(relay)
+  const ownOn = hasDual
+    ? ownRelayEnabled && Boolean(ownRelay)
+    : relayChoice === 'own' && Boolean(ownRelay)
+  return {
+    ...structuredClone(rest),
+    relay: official,
+    ownRelayEnabled: ownOn,
+    ownRelay: ownRelay ?? null,
+  }
 }
 
 /** The host's cloud section as a client keeps it, from a host of any version. */
@@ -281,6 +297,8 @@ export interface HostInfo extends AppInfo {
   thumbnails: boolean
   /** Choosing the owner's own relay, with `remote.useOwnRelay`; absent from hosts before it. */
   ownRelay?: boolean
+  /** Supporting independent official and own relay toggles; absent from older hosts. */
+  dualRelay?: boolean
   /**
    * Capturing a preview of one frame, one slide, or a document in one theme, as
    * `artifacts.partThumbnail`; absent from hosts before it.

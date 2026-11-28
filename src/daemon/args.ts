@@ -32,7 +32,7 @@ export type Command =
   | { kind: 'terminal-set'; allowed: boolean }
   | { kind: 'relay' }
   | { kind: 'relay-use'; link: string }
-  | { kind: 'relay-set'; choice: 'kettu' | 'off' }
+  | { kind: 'relay-set'; official?: boolean; own?: boolean }
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
   | { kind: 'update' }
@@ -89,10 +89,11 @@ Commands:
   terminal                     Say whether devices may use this computer's terminal
   terminal on                  Let devices use the terminal, which runs any command
   terminal off                 Stop it; devices' terminals close but keep running here
-  relay status                 Say which relay devices reach this computer through
-  relay use <link>             Check your own relay from the link it printed, then use it
-  relay kettu                  Use the Kettu relay, with the Kettu account kettu login signed in
-  relay off                    Use no relay; devices connect directly, over a VPN or over SSH
+  relay status                 Say which relays devices reach this computer through
+  relay use <link>             Check your own relay from the link it printed, then enable it
+  relay kettu [on|off]         Enable or disable the official Kettu relay
+  relay own [on|off]           Enable or disable your own saved relay
+  relay off                    Turn off both the Kettu relay and your own relay
   service install              Run the daemon as a service that starts with the computer
   service uninstall            Stop the service and remove it
   update                       Update to the latest release, and the service with it
@@ -381,8 +382,22 @@ function parseWords(words: string[], yes: boolean): Command {
           return { kind: 'usage', message: 'Name the link the relay printed' }
         return extra(2) ?? { kind: 'relay-use', link: rest[1] }
       }
-      if (rest[0] === 'kettu' || rest[0] === 'off') {
-        return extra(1) ?? { kind: 'relay-set', choice: rest[0] }
+      if (rest[0] === 'kettu') {
+        if (rest[1] === undefined || rest[1] === 'on') {
+          return extra(rest[1] ? 2 : 1) ?? { kind: 'relay-set', official: true }
+        }
+        if (rest[1] === 'off') return extra(2) ?? { kind: 'relay-set', official: false }
+        return { kind: 'usage', message: `Unknown relay command ${quote(rest[1])}` }
+      }
+      if (rest[0] === 'own') {
+        if (rest[1] === undefined || rest[1] === 'on') {
+          return extra(rest[1] ? 2 : 1) ?? { kind: 'relay-set', own: true }
+        }
+        if (rest[1] === 'off') return extra(2) ?? { kind: 'relay-set', own: false }
+        return { kind: 'usage', message: `Unknown relay command ${quote(rest[1])}` }
+      }
+      if (rest[0] === 'off') {
+        return extra(1) ?? { kind: 'relay-set', official: false, own: false }
       }
       return { kind: 'usage', message: `Unknown relay command ${quote(rest[0])}` }
     case 'service':

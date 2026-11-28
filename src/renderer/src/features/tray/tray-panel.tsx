@@ -645,7 +645,11 @@ function Limits() {
 function remoteLine(remote: RemoteStatus | null, cloudOff: boolean): { text: string; dot: string } {
   switch (remote?.state ?? 'off') {
     case 'on': {
-      const relay = cloudOff ? null : relaySummary(remote!.relay)
+      const relay = cloudOff
+        ? remote?.relay?.own
+          ? relaySummary({ state: 'off', own: remote.relay.own })
+          : null
+        : relaySummary(remote!.relay)
       if (relay === 'failed' || relay === 'conflict') {
         const key = relay === 'failed' ? 'tray:remote.relayFailed' : 'tray:remote.relayConflict'
         return { text: i18n.t(key), dot: 'bg-warning' }
