@@ -59,7 +59,7 @@ export function useEditable(sessionId: string, entryId: string): boolean {
 
 const FILE_KINDS = new Set<ToolEntry['toolKind']>(['edit', 'delete', 'move'])
 
-function editFacts(state: ThreadState, entryId: string): EditFacts | null {
+export function editFacts(state: ThreadState, entryId: string): EditFacts | null {
   const { session } = state
   const agent = agentsOn(useAgentsStore.getState(), hostOfSession(session)).byId[session.agentId]
   const at = state.order.indexOf(entryId)

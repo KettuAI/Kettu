@@ -140,6 +140,27 @@ function fakeHost(options: { hello?: 'fail' | 'ok'; signedOut?: boolean } = {}) 
         settings = { ...settings, ...(params.settings as object) }
         reply({ settings, models: recorded.opened.models })
         break
+      case METHOD.rewind: {
+        const ref = params.ref as string | null
+        if (ref === 'missing') {
+          post({
+            jsonrpc: '2.0',
+            id: message.id,
+            error: { code: ERROR.failed, message: 'missing', data: { reason: 'noPoint' } },
+          })
+        } else if (ref === 'compacted') {
+          post({
+            jsonrpc: '2.0',
+            id: message.id,
+            error: { code: ERROR.failed, message: 'compacted', data: { reason: 'compacted' } },
+          })
+        } else if (ref === '1') {
+          reply({ sessionId: '' })
+        } else {
+          reply({ sessionId: 'rewound_cline_session' })
+        }
+        break
+      }
       default:
         reply({})
     }
@@ -271,10 +292,12 @@ describe('Cline connection', () => {
       resumeSession: true,
       loadSession: false,
       steering: true,
+      rewind: true,
       mcpHttp: true,
       mcpStdio: true,
       prompt: { image: true, embeddedContext: false },
     })
+    expect(init.capabilities.rewindFiles).toBeUndefined()
     // The providers Cline signs in to with a page are the sign-in methods.
     expect(init.authMethods.map((method) => method.id)).toEqual([
       'cline',
@@ -433,6 +456,37 @@ describe('Cline connection', () => {
     ])
     expect(host.requests.filter((request) => request.method === METHOD.prompt)).toHaveLength(1)
     expect(host.requests.filter((request) => request.method === METHOD.compact)).toHaveLength(2)
+  })
+
+  it('rewinds through the SDK host process and maps rewind refusal reasons', async () => {
+    const { connection, host } = await started()
+    const cut = await connection.rewindSession('s1', '/work/app', {
+      ref: '2',
+      text: 'second',
+      occurrence: 1,
+    })
+    expect(cut).toEqual({ sessionId: 'rewound_cline_session' })
+    expect(host.requests.at(-1)).toMatchObject({
+      method: METHOD.rewind,
+      params: { sessionId: 's1', cwd: '/work/app', ref: '2', text: 'second', occurrence: 1 },
+    })
+    expect(
+      await connection.rewindSession('s1', '/work/app', { ref: '1', text: 'first', occurrence: 1 }),
+    ).toEqual({ sessionId: '' })
+    await expect(
+      connection.rewindSession('s1', '/work/app', {
+        ref: 'missing',
+        text: 'gone',
+        occurrence: 1,
+      }),
+    ).rejects.toMatchObject({ kind: 'agent_error' })
+    await expect(
+      connection.rewindSession('s1', '/work/app', {
+        ref: 'compacted',
+        text: 'folded',
+        occurrence: 1,
+      }),
+    ).rejects.toMatchObject({ kind: 'agent_error' })
   })
 
   it('closes when its process ends, failing the turn that ran', async () => {

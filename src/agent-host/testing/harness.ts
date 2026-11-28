@@ -306,6 +306,8 @@ export interface TestHostOptions {
   fakeThroughRouter?: { agentIds: AgentId[]; oneSession?: boolean; router?: boolean }
   /** A scripted `codex app-server` that Codex runs against, with Codex enabled and found. */
   fakeAppServer?: FakeAppServer
+  /** Protocols over the fake agent's default ACP, by agent id. */
+  protocols?: HostOptions['protocols']
   /** Drivers over the built-in ones, by protocol. */
   drivers?: HostOptions['drivers']
   /** The version detection reads from the program of an agent that runs the fake agent. */
@@ -347,13 +349,16 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     : null
   let started: AgentHost | null = null
   const pluginSecrets: Record<string, Record<string, string>> = {}
-  // The fake agent speaks ACP under every id it runs as.
-  const protocols: HostOptions['protocols'] = Object.fromEntries(
-    [...(options.fakeAs ?? []), ...(options.fakeThroughRouter?.agentIds ?? [])].map((id) => [
-      id,
-      'acp',
-    ]),
-  )
+  // The fake agent speaks ACP under every id it runs as, unless a test overrides its protocol.
+  const protocols: HostOptions['protocols'] = {
+    ...Object.fromEntries(
+      [...(options.fakeAs ?? []), ...(options.fakeThroughRouter?.agentIds ?? [])].map((id) => [
+        id,
+        'acp',
+      ]),
+    ),
+    ...options.protocols,
+  }
   const host = await AgentHost.start({
     userDataPath: dir,
     appVersion: '0.0.0-test',

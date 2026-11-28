@@ -12,6 +12,7 @@ import type {
   UserContent,
 } from '@shared/thread'
 import { diffHunks, fenced } from '../codex/mapper'
+import type { RewindPoint } from '../connection'
 import { t } from '../i18n'
 import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import {
@@ -880,7 +881,7 @@ export class SessionMapper {
     const out = output()
     switch (entry.type) {
       case 'message':
-        if (!entry.message || !this.stored(ctx, out, entry.message)) return null
+        if (!entry.message || !this.stored(ctx, out, entry.message, entry.id)) return null
         break
       case 'compaction':
         addEntry(ctx, out, {
@@ -905,10 +906,15 @@ export class SessionMapper {
     return out
   }
 
-  private stored(ctx: MapperContext, out: MapperOutput, message: PiMessage): boolean {
+  private stored(
+    ctx: MapperContext,
+    out: MapperOutput,
+    message: PiMessage,
+    entryId: string,
+  ): boolean {
     switch (message.role) {
       case 'user':
-        this.storedPrompt(ctx, out, message)
+        this.storedPrompt(ctx, out, message, entryId)
         return true
       case 'assistant': {
         this.blocks(ctx, out, String(message.timestamp ?? ctx.nextId()), message, true)
@@ -945,7 +951,12 @@ export class SessionMapper {
     }
   }
 
-  private storedPrompt(ctx: MapperContext, out: MapperOutput, message: PiMessage): void {
+  private storedPrompt(
+    ctx: MapperContext,
+    out: MapperOutput,
+    message: PiMessage,
+    entryId: string,
+  ): void {
     // Each stored prompt starts a turn, which scopes "current" plans.
     ctx.scope.planId = null
     const id = ctx.nextId()
@@ -980,7 +991,12 @@ export class SessionMapper {
       }
     }
     if (content.length === 0) return
-    const entry: ThreadEntry = { kind: 'user', id, content }
+    const entry: ThreadEntry = {
+      kind: 'user',
+      id,
+      content,
+      ...(entryId ? { agentRef: entryId } : {}),
+    }
     addEntry(ctx, out, entry)
   }
 
@@ -1100,4 +1116,58 @@ export function forkEntry(
     .slice(at + 1)
     .find((entry) => entry.type === 'message' && entry.message?.role === 'user')
   return { found: true, entryId: next?.id ?? null }
+}
+
+/** Prefix for user message references recorded from live stream timestamps. */
+export const TIMESTAMP_REF_PREFIX = 'ts:'
+
+const CONVERSATION_ENTRY_TYPES: ReadonlySet<string> = new Set([
+  'message',
+  'compaction',
+  'branch_summary',
+  'custom_message',
+])
+
+/**
+ * The user entry an edit from a message cuts before on the active branch: found by its entry id
+ * (from history replay) or live message timestamp (`ts:<ms>`), else as the `occurrence`-th user
+ * message matching the prompt's first line. `hasPriorHistory` is false when no conversation entry
+ * precedes it on the branch (only metadata such as model or thinking level changes).
+ */
+export function rewindEntry(
+  branch: readonly PiEntry[],
+  point: RewindPoint,
+): { entry: PiEntry; hasPriorHistory: boolean } | null {
+  const isUser = (entry: PiEntry): boolean =>
+    entry.type === 'message' && entry.message?.role === 'user'
+
+  let at = -1
+  if (point.ref !== null) {
+    if (point.ref.startsWith(TIMESTAMP_REF_PREFIX)) {
+      const ts = point.ref.slice(TIMESTAMP_REF_PREFIX.length)
+      if (ts !== '') {
+        at = branch.findIndex((entry) => isUser(entry) && String(entry.message?.timestamp) === ts)
+      }
+    } else {
+      at = branch.findIndex((entry) => isUser(entry) && entry.id === point.ref)
+    }
+  }
+  if (at === -1) {
+    const line = point.text.trim()
+    let seen = 0
+    at = branch.findIndex((entry) => {
+      if (!isUser(entry)) return false
+      if (line !== '') {
+        const raw = blockText(entry.message?.content)
+        const shown = typedText(withoutAhead(raw))
+        if (!raw.includes(line) && !shown.includes(line)) return false
+      }
+      return ++seen === point.occurrence
+    })
+  }
+  if (at === -1) return null
+  const hasPriorHistory = branch
+    .slice(0, at)
+    .some((entry) => CONVERSATION_ENTRY_TYPES.has(entry.type))
+  return { entry: branch[at]!, hasPriorHistory }
 }

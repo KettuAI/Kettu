@@ -1,11 +1,22 @@
-import { rm } from 'node:fs/promises'
+import type { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { createInterface } from 'node:readline'
+import { PassThrough } from 'node:stream'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
-import type { HostedDriver } from './driver'
+import { ClineConnection } from './cline/connection'
+import { METHOD as CLINE_METHOD } from './cline/protocol'
+import type { HostedDriver, HostedSpawnOptions } from './driver'
 import { OpenCodeConnection } from './opencode/connection'
 import type { ServerEvent } from './opencode/protocol'
 import { ServerError } from './opencode/server'
 import { FakeServer, recorded, rootOf } from './opencode/testing'
+import { PiConnection } from './pi/connection'
+import { readJsonLines } from './pi/jsonl'
+import type { PiEntry } from './pi/protocol'
+import { folderName } from './pi/session-files'
 import { FakeAppServer, FakeRpcError, threadResponse, turn } from './testing/fake-app-server'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 import { tempFolder } from './testing/temp'
@@ -341,4 +352,481 @@ it('keeps an OpenCode session as it was when its revert cannot be staged', async
   ).rejects.toMatchObject({ message: 'Session is busy' })
   expect(said(window.entries(id))).toEqual(['one'])
   expect(window.thread(id).session.rewound ?? null).toBeNull()
+})
+
+/** Scripted Pi RPC driver backing real JSONL session files and native `fork` rewinds. */
+function scriptedPi(options: { failFork?: boolean } = {}) {
+  const sessions = new Map<string, { file: string; entries: PiEntry[]; leafId: string | null }>()
+  let nextSession = 1
+  let nextEntry = 1
+  let nextTs = 1_795_200_000_000
+  const forked: { from: string; entryId: string; into: string }[] = []
+
+  const writeSessionFile = async (file: string, id: string, cwd: string): Promise<void> => {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(
+      file,
+      `${JSON.stringify({ type: 'session', version: 3, id, cwd, timestamp: new Date().toISOString() })}\n`,
+    )
+  }
+
+  const spawn = (spawnOptions: HostedSpawnOptions): ChildProcess => {
+    const stdin = new PassThrough()
+    const stdout = new PassThrough()
+    const stderr = new PassThrough()
+    const child = Object.assign(new EventEmitter(), {
+      stdin,
+      stdout,
+      stderr,
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      kill: () => {
+        if (child.exitCode === null) {
+          child.exitCode = 0
+          stdout.end()
+          child.emit('exit', 0, null)
+        }
+        return true
+      },
+    })
+    const { args } = spawnOptions
+    const cwd = spawnOptions.cwd ?? ''
+    const sessionDir = args.includes('--session-dir')
+      ? args[args.indexOf('--session-dir') + 1]!
+      : path.join(cwd, '.pi-sessions', folderName(cwd))
+    const sessionArg = args.includes('--session') ? args[args.indexOf('--session') + 1]! : null
+    const idArg = args.includes('--session-id') ? args[args.indexOf('--session-id') + 1]! : null
+
+    let currentId =
+      idArg ??
+      (sessionArg ? path.basename(sessionArg, '.jsonl').split('_').pop()! : `pi-s-${nextSession++}`)
+    let currentFile =
+      sessionArg ?? path.join(sessionDir, `2026-11-27T00-00-00-000Z_${currentId}.jsonl`)
+    if (!sessions.has(currentId)) {
+      const modelEntry: PiEntry = {
+        type: 'model_change',
+        id: `m${nextEntry++}`,
+        parentId: null,
+      }
+      sessions.set(currentId, { file: currentFile, entries: [modelEntry], leafId: modelEntry.id })
+    }
+
+    const send = (record: unknown): void => void stdout.write(`${JSON.stringify(record)}\n`)
+    const model = { provider: 'example', id: 'small', name: 'Small', contextWindow: 128_000 }
+
+    void readJsonLines(stdin, {
+      record: (raw) => {
+        const cmd = raw as Record<string, unknown> & { id?: string; type: string }
+        const ok = (data?: unknown) =>
+          send({
+            id: cmd.id,
+            type: 'response',
+            command: cmd.type,
+            success: true,
+            ...(data === undefined ? {} : { data }),
+          })
+        const fail = (error: string) =>
+          send({ id: cmd.id, type: 'response', command: cmd.type, success: false, error })
+        const cur = sessions.get(currentId)!
+        switch (cmd.type) {
+          case 'get_state':
+            ok({
+              model,
+              thinkingLevel: 'high',
+              isStreaming: false,
+              sessionId: currentId,
+              sessionFile: currentFile,
+              autoCompactionEnabled: true,
+              messageCount: cur.entries.length,
+            })
+            break
+          case 'get_available_models':
+            ok({ models: [model] })
+            break
+          case 'get_available_thinking_levels':
+            ok({ levels: ['low', 'high'] })
+            break
+          case 'get_commands':
+            ok({ commands: [] })
+            break
+          case 'get_session_stats':
+            ok({ contextUsage: { tokens: 100, contextWindow: 128_000, percent: 0.1 } })
+            break
+          case 'get_entries':
+            ok({ entries: [...cur.entries], leafId: cur.leafId })
+            break
+          case 'set_session_name':
+            ok()
+            break
+          case 'fork': {
+            if (options.failFork) {
+              fail('fork rejected by hook')
+              break
+            }
+            const entryId = String(cmd.entryId)
+            const idx = cur.entries.findIndex((entry) => entry.id === entryId)
+            if (idx < 0) {
+              fail(`Unknown entry ${entryId}`)
+              break
+            }
+            const kept = cur.entries.slice(0, idx)
+            const newId = `pi-s-${nextSession++}`
+            const newFile = path.join(sessionDir, `2026-11-27T00-00-00-000Z_${newId}.jsonl`)
+            sessions.set(newId, { file: newFile, entries: kept, leafId: kept.at(-1)?.id ?? null })
+            forked.push({ from: currentId, entryId, into: newId })
+            currentId = newId
+            currentFile = newFile
+            void writeSessionFile(newFile, newId, cwd).then(() =>
+              ok({ text: '', cancelled: false }),
+            )
+            break
+          }
+          case 'prompt': {
+            const text = String(cmd.message ?? '')
+            const ts = nextTs++
+            const userEntry: PiEntry = {
+              type: 'message',
+              id: `u${nextEntry++}`,
+              parentId: cur.leafId,
+              message: { role: 'user', content: [{ type: 'text', text }], timestamp: ts },
+            }
+            const replyTs = nextTs++
+            const replyEntry: PiEntry = {
+              type: 'message',
+              id: `a${nextEntry++}`,
+              parentId: userEntry.id,
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: `echo:${text.split('\n').at(-1)}` }],
+                timestamp: replyTs,
+                stopReason: 'stop',
+              },
+            }
+            cur.entries.push(userEntry, replyEntry)
+            cur.leafId = replyEntry.id
+            void writeSessionFile(currentFile, currentId, cwd).then(() => {
+              ok({ disposition: 'started' })
+              send({ type: 'agent_start' })
+              send({ type: 'message_start', message: userEntry.message })
+              send({ type: 'message_end', message: userEntry.message })
+              send({ type: 'message_start', message: replyEntry.message })
+              send({ type: 'message_end', message: replyEntry.message })
+              send({ type: 'agent_settled', aborted: false })
+            })
+            break
+          }
+          default:
+            ok()
+        }
+      },
+      garbage: () => {},
+    }).then(() => child.kill())
+    spawnOptions.signal?.addEventListener('abort', () => child.kill())
+    return child as unknown as ChildProcess
+  }
+
+  const driver: HostedDriver = {
+    kind: 'hosted',
+    connect: (context) =>
+      new PiConnection({
+        ...context,
+        cliVersion: '1.5.2',
+        spawn,
+      }),
+  }
+  return { driver, sessions, forked }
+}
+
+it('rewinds a Pi session via native fork, supports putBack and first-message reset, and leaves files untouched', async () => {
+  const pi = scriptedPi()
+  const host = await startTestHost({
+    fakeAs: ['pi'],
+    protocols: { pi: 'pi-rpc' },
+    programVersions: { pi: '1.5.2' },
+    drivers: { 'pi-rpc': pi.driver },
+    sessionTimings: { checkpointMs: 10 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'pi',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  const [status] = (await window.request('agents.list', undefined)).filter(
+    (agent) => agent.id === 'pi',
+  )
+  expect(status?.capabilities.rewind).toBe(true)
+  expect(status?.capabilities.rewindFiles).toBeUndefined()
+
+  const send = async (text: string) => {
+    await window.request('sessions.queue', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.until(
+      () => said(window.entries(id)).includes(text) && window.summary(id)?.status === 'ready',
+    )
+  }
+  await send('first')
+  await send('second')
+  const originalSessionId = window.thread(id).session.acpSessionId!
+  const two = entryOf(window, id, 'second')
+  expect(two).toMatchObject({ agentRef: expect.stringMatching(/^ts:\d+$/) })
+
+  // Rewind sets turns aside without touching Pi yet; putBack restores them cleanly.
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  expect(said(window.entries(id))).toEqual(['first'])
+  expect(pi.forked).toEqual([])
+  await window.request('sessions.putBack', { sessionId: id })
+  await window.until(() => said(window.entries(id)).includes('second'))
+  expect(pi.forked).toEqual([])
+
+  // Rewind again and send the edited prompt: Pi forks before 'second' into a new native session.
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  await send('second edited')
+  expect(pi.forked).toHaveLength(1)
+  expect(pi.forked[0]!.from).toBe(originalSessionId)
+  const forkedSessionId = window.thread(id).session.acpSessionId!
+  expect(forkedSessionId).toBe(pi.forked[0]!.into)
+  expect(forkedSessionId).not.toBe(originalSessionId)
+  // The forked Pi branch kept 'first' and its reply, dropped 'second', and appended 'second edited'.
+  const forkedUsers = pi.sessions
+    .get(forkedSessionId)!
+    .entries.filter((entry) => entry.message?.role === 'user')
+    .map((entry) =>
+      Array.isArray(entry.message?.content) && entry.message.content[0]?.type === 'text'
+        ? entry.message.content[0].text.split('\n').at(-1)
+        : '',
+    )
+  expect(forkedUsers).toEqual(['first', 'second edited'])
+  expect(said(window.entries(id))).toEqual(['first', 'second edited'])
+
+  // Editing the first message resets to an empty native session without creating an empty fork.
+  const first = entryOf(window, id, 'first')
+  await window.request('sessions.rewind', { sessionId: id, entryId: first.id, draft: [] })
+  await send('brand new first')
+  expect(pi.forked).toHaveLength(1)
+  expect(window.thread(id).session.acpSessionId).not.toBe(forkedSessionId)
+  expect(said(window.entries(id))).toEqual(['brand new first'])
+})
+
+it('preserves set-aside turns for putBack when Pi native fork fails', async () => {
+  const pi = scriptedPi({ failFork: true })
+  const host = await startTestHost({
+    fakeAs: ['pi'],
+    protocols: { pi: 'pi-rpc' },
+    programVersions: { pi: '1.5.2' },
+    drivers: { 'pi-rpc': pi.driver },
+    sessionTimings: { checkpointMs: 10 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'pi',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  const send = async (text: string) => {
+    await window.request('sessions.queue', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.until(
+      () => said(window.entries(id)).includes(text) && window.summary(id)?.status === 'ready',
+    )
+  }
+  await send('one')
+  await send('two')
+  const two = entryOf(window, id, 'two')
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  await window.request('sessions.queue', {
+    sessionId: id,
+    content: [{ type: 'text', text: 'two retry' }],
+  })
+  await window.untilEntry(id, (entry) => entry.kind === 'notice' && entry.severity === 'error')
+  expect(window.thread(id).session.rewound).toEqual({ turns: 1 })
+  await window.request('sessions.putBack', { sessionId: id })
+  await window.until(() => said(window.entries(id)).includes('two'))
+})
+
+/** Scripted Cline SDK host process for end-to-end SessionManager rewind verification. */
+function scriptedCline() {
+  const history = new Map<string, string[]>()
+  const rewinds: { sessionId: string; ref: string | null; text: string; into: string }[] = []
+  let nextFork = 1
+
+  const spawn = (): ChildProcess => {
+    const stdin = new PassThrough()
+    const stdout = new PassThrough()
+    const child = Object.assign(new EventEmitter(), {
+      stdin,
+      stdout,
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      kill: () => {
+        if (child.exitCode === null) {
+          child.exitCode = 0
+          stdout.end()
+          child.emit('exit', 0, null)
+        }
+        return true
+      },
+    })
+    const send = (msg: unknown) => void stdout.write(`${JSON.stringify(msg)}\n`)
+    const settings = {
+      provider: 'anthropic',
+      model: 'model-a',
+      mode: 'act',
+      thinking: false,
+      autoApprove: true,
+    }
+    const providers = [{ id: 'anthropic', name: 'Anthropic', ready: true, oauth: false }]
+    const models = [{ id: 'model-a', name: 'Model A', reasoning: false, images: true }]
+    createInterface({ input: stdin }).on('line', (line) => {
+      const msg = JSON.parse(line) as {
+        id?: number
+        method?: string
+        params?: Record<string, unknown>
+      }
+      if (!msg.method) return
+      const reply = (result: unknown) => send({ jsonrpc: '2.0', id: msg.id, result })
+      const params = msg.params ?? {}
+      switch (msg.method) {
+        case CLINE_METHOD.hello:
+          reply({ core: '0.2.0', providers, provider: 'anthropic' })
+          break
+        case CLINE_METHOD.open:
+          reply({ stored: params.resume === true, settings, providers, models })
+          break
+        case CLINE_METHOD.prompt: {
+          const sid = String(params.sessionId)
+          const text = String(params.text ?? '')
+          const list = history.get(sid) ?? []
+          list.push(text)
+          history.set(sid, list)
+          send({
+            jsonrpc: '2.0',
+            method: CLINE_METHOD.event,
+            params: {
+              sessionId: sid,
+              event: { type: 'content_end', contentType: 'text', text: `reply:${text}` },
+            },
+          })
+          reply({
+            finishReason: 'completed',
+            model: 'model-a',
+            userRef: String(list.length),
+            usage: null,
+          })
+          break
+        }
+        case CLINE_METHOD.rewind: {
+          const sid = String(params.sessionId)
+          const list = history.get(sid) ?? []
+          const ref = (params.ref as string | null) ?? null
+          const idx = ref
+            ? Number.parseInt(ref, 10) - 1
+            : list.findIndex((t) => t.includes(String(params.text)))
+          if (idx <= 0) {
+            rewinds.push({ sessionId: sid, ref, text: String(params.text), into: '' })
+            reply({ sessionId: '' })
+          } else {
+            const newId = `cline_fork_${nextFork++}`
+            history.set(newId, list.slice(0, idx))
+            rewinds.push({ sessionId: sid, ref, text: String(params.text), into: newId })
+            reply({ sessionId: newId })
+          }
+          break
+        }
+        default:
+          reply({})
+      }
+    })
+    return child as unknown as ChildProcess
+  }
+
+  const driver: HostedDriver = {
+    kind: 'hosted',
+    connect: (context) =>
+      new ClineConnection({
+        ...context,
+        clineHostPath: '/fake/cline-host.js',
+        spec: {
+          ...context.spec,
+          args: ['/fake/cline/bin/cline', '--acp'],
+        },
+        spawn,
+      }),
+  }
+  return { driver, history, rewinds }
+}
+
+it('rewinds a Cline SDK session into a trimmed fork without reverting files', async () => {
+  const cline = scriptedCline()
+  const host = await startTestHost({
+    fakeAs: ['cline'],
+    protocols: { cline: 'cline-sdk' },
+    installedVersions: { cline: '3.0.74' },
+    drivers: { 'cline-sdk': cline.driver },
+    sessionTimings: { checkpointMs: 10 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'cline',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  const [status] = (await window.request('agents.list', undefined)).filter(
+    (agent) => agent.id === 'cline',
+  )
+  expect(status?.capabilities.rewind).toBe(true)
+  expect(status?.capabilities.rewindFiles).toBeUndefined()
+
+  const send = async (text: string) => {
+    await window.request('sessions.queue', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.until(
+      () => said(window.entries(id)).includes(text) && window.summary(id)?.status === 'ready',
+    )
+  }
+  await send('first')
+  await send('second')
+  const two = entryOf(window, id, 'second')
+  expect(two).toMatchObject({ agentRef: '2' })
+
+  await window.request('sessions.rewind', { sessionId: id, entryId: two.id, draft: [] })
+  await send('second revised')
+  expect(cline.rewinds).toHaveLength(1)
+  expect(cline.rewinds[0]!.into).toBe('cline_fork_1')
+  expect(cline.history.get('cline_fork_1')).toEqual(['first', 'second revised'])
+  expect(said(window.entries(id))).toEqual(['first', 'second revised'])
+})
+
+it('keeps rewind hidden and restricted for drivers without native rewind support', async () => {
+  const host = await startTestHost({ sessionTimings: { checkpointMs: 10 } })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  const [status] = (await window.request('agents.list', undefined)).filter(
+    (agent) => agent.id === 'fake-agent',
+  )
+  expect(status?.capabilities.rewind).toBeUndefined()
+
+  await window.request('sessions.queue', {
+    sessionId: id,
+    content: [{ type: 'text', text: 'hello' }],
+  })
+  await window.until(
+    () => said(window.entries(id)).includes('hello') && window.summary(id)?.status === 'ready',
+  )
+  const hello = entryOf(window, id, 'hello')
+  await expect(
+    window.request('sessions.rewind', { sessionId: id, entryId: hello.id, draft: [] }),
+  ).rejects.toMatchObject({ code: 'restricted' })
 })

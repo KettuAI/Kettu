@@ -20,6 +20,8 @@ import {
   type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
+  type RewindPoint,
+  type RewoundSession,
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
@@ -47,6 +49,8 @@ import {
   type PromptParams,
   type QuestionParams,
   type QuestionResult,
+  type RewindParams,
+  type RewindResult,
   type SetResult,
   type SteerResult,
   type TurnResult,
@@ -72,6 +76,8 @@ function refusalText(data: unknown): string | null {
   if (reason === 'signIn') return t('cline.signInFirst')
   if (reason === 'betweenTurns') return t('agentRun.betweenTurns')
   if (reason === 'compactionOff') return t('cline.compact.off')
+  if (reason === 'noPoint') return t('rewind.noPoint')
+  if (reason === 'compacted') return t('cline.rewind.compacted')
   return null
 }
 
@@ -393,6 +399,8 @@ export class ClineConnection implements AgentConnection {
         deleteSession: false,
         forkSession: false,
         forkAtMessage: false,
+        // Cline SDK cuts conversation history into a trimmed fork via initialMessages; disk files stay as they are.
+        rewind: true,
         ownTitles: null,
         logout: false,
         steering: true,
@@ -525,6 +533,23 @@ export class ClineConnection implements AgentConnection {
     return Promise.reject(new AgentRequestError('agent_error', 'Cline has no forks'))
   }
 
+  /**
+   * Cuts the session before the user message `point` names by creating a trimmed fork in Cline's
+   * store; the original session stays intact and disk files are untouched.
+   */
+  async rewindSession(sessionId: string, cwd: string, point: RewindPoint): Promise<RewoundSession> {
+    this.assertOpen()
+    const params: RewindParams = {
+      sessionId,
+      cwd,
+      ref: point.ref,
+      text: point.text,
+      occurrence: point.occurrence,
+    }
+    const result = await this.call<RewindResult>(METHOD.rewind, params)
+    return { sessionId: result.sessionId }
+  }
+
   async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (!session) return
@@ -576,7 +601,11 @@ export class ClineConnection implements AgentConnection {
 
   // Turns.
 
-  async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
+  async prompt(
+    sessionId: string,
+    prompt: readonly PromptBlock[],
+    sent?: (ref: string) => void,
+  ): Promise<PromptResult> {
     const session = this.requireSession(sessionId)
     if (session.running) throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
     session.running = true
@@ -585,6 +614,7 @@ export class ClineConnection implements AgentConnection {
       const params: PromptParams = { sessionId, ...promptParts(prompt) }
       if (isCompact(params)) return await this.compact(session)
       const result = await this.call<TurnResult>(METHOD.prompt, params)
+      if (result.userRef) sent?.(result.userRef)
       const tokens = result.usage ? tokenTotals(result.usage) : null
       return {
         stopReason: stopReason(result.finishReason),

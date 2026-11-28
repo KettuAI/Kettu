@@ -637,6 +637,7 @@
     "body_other": "This message and everything after it leave the conversation, {{count}} turns in all. The message goes back to the composer.",
     "files_one": "{{count}} file changed since stays as it is",
     "files_other": "{{count}} files changed since stay as they are",
+    "filesStay": "File changes since stay as they are",
     "filesBack": "Files changed since go back as they were; Put back restores them",
     "stopsTurn": "Stops the running turn",
     "stopsTasks_one": "Stops {{count}} background task",

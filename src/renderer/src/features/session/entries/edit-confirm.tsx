@@ -53,13 +53,15 @@ export function EditConfirm({
             {t('editFrom.stopsTasks', { count: facts.tasks })}
           </Fact>
         )}
-        {facts.filesBack
-          ? (facts.files > 0 || facts.commands) && (
-              <Fact icon={File01Icon}>{t('editFrom.filesBack')}</Fact>
-            )
-          : facts.files > 0 && (
-              <Fact icon={File01Icon}>{t('editFrom.files', { count: facts.files })}</Fact>
-            )}
+        {facts.filesBack ? (
+          (facts.files > 0 || facts.commands) && (
+            <Fact icon={File01Icon}>{t('editFrom.filesBack')}</Fact>
+          )
+        ) : facts.files > 0 ? (
+          <Fact icon={File01Icon}>{t('editFrom.files', { count: facts.files })}</Fact>
+        ) : (
+          facts.commands && <Fact icon={File01Icon}>{t('editFrom.filesStay')}</Fact>
+        )}
         <CacheFact sessionId={sessionId} kept={facts.kept} />
       </ul>
       <div className="kettu-edit__actions">
