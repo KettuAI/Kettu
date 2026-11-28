@@ -189,6 +189,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.switchAgent': AGENT_MS,
   'sessions.delegateAgents': HOST_MS,
   'sessions.delegate': AGENT_MS,
+  'sessions.recordRemoteDelegation': HOST_MS,
   'sessions.context': AGENT_MS,
   'sessions.contextEstimates': AGENT_MS,
   'sessions.queue': HOST_MS,

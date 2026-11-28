@@ -2434,6 +2434,58 @@ export function createValidators(platform: Platform): Validators {
         ...(title !== undefined ? { title } : {}),
       }
     },
+    'sessions.recordRemoteDelegation': (params) => {
+      const o = fields(params)
+      const phase = o.phase
+      if (phase !== 'started' && phase !== 'report') {
+        throw invalidParams('phase must be started or report')
+      }
+      const targetHostId = o.targetHostId === null ? null : string(o, 'targetHostId', ID_CHARS)
+      const targetHostPlatform = optionalString(o, 'targetHostPlatform', 64)
+      const targetProjectPath =
+        o.targetProjectPath === null ? null : string(o, 'targetProjectPath', PATH_CHARS)
+      const targetProjectName =
+        o.targetProjectName === null ? null : string(o, 'targetProjectName', 512)
+      const promptPreview = optionalString(o, 'promptPreview', 512)
+      const summary = optionalString(o, 'summary', TEXT_CHARS)
+      const error = optionalString(o, 'error', TEXT_CHARS)
+      let outcome: 'completed' | 'stopped' | 'failed' | undefined
+      if (o.outcome !== undefined) {
+        if (o.outcome !== 'completed' && o.outcome !== 'stopped' && o.outcome !== 'failed') {
+          throw invalidParams('outcome must be completed, stopped, or failed')
+        }
+        outcome = o.outcome
+      }
+      if (phase === 'report' && outcome === undefined) {
+        throw invalidParams('outcome is required when phase is report')
+      }
+      let at: number | undefined
+      if (o.at !== undefined) {
+        if (typeof o.at !== 'number' || !Number.isFinite(o.at) || o.at <= 0) {
+          throw invalidParams('at must be a positive finite timestamp')
+        }
+        at = o.at
+      }
+      return {
+        sessionId: sessionId(o),
+        delegationId: string(o, 'delegationId', ID_CHARS),
+        phase,
+        targetHostId,
+        targetHostName: string(o, 'targetHostName', 256),
+        ...(targetHostPlatform !== undefined ? { targetHostPlatform } : {}),
+        targetSessionId: string(o, 'targetSessionId', ID_CHARS),
+        targetProjectPath,
+        targetProjectName,
+        targetAgentId: agentId(o, 'targetAgentId'),
+        targetAgentName: string(o, 'targetAgentName', 256),
+        targetTitle: string(o, 'targetTitle', 512),
+        ...(promptPreview !== undefined ? { promptPreview } : {}),
+        ...(outcome !== undefined ? { outcome } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(error !== undefined ? { error } : {}),
+        ...(at !== undefined ? { at } : {}),
+      }
+    },
     'sessions.context': session,
     'sessions.contextEstimates': session,
     'sessions.queue': (params) => {

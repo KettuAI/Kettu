@@ -640,6 +640,19 @@
     "label": "Started <title>{{title}}</title>",
     "missing": "Started a session"
   },
+  "remoteDelegation": {
+    "delegatedTo": "Delegated to {{host}}",
+    "statusStopped": "Stopped",
+    "hostOffline": "Offline",
+    "reportFinished": "{{agent}} on {{host}} finished",
+    "reportStopped": "{{agent}} on {{host}} was stopped",
+    "reportFailed": "{{agent}} on {{host}} failed",
+    "openSession": "Open {{title}} on {{host}}",
+    "authRequired": "{{agent}} on the target computer requires sign-in",
+    "failedGeneric": "The delegated session failed on the target computer",
+    "sessionRemoved": "The delegated session was removed before it finished",
+    "hostDisconnected": "Lost pairing with {{host}} before the delegated session finished"
+  },
   "compaction": {
     "inProgress": "Compacting context…",
     "completed": "Context compacted",
