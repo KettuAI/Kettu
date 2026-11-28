@@ -5,6 +5,7 @@ import {
   PAGE_SIZES,
   SIZE_LINE_ROOM,
   type BrowserBounds,
+  type BrowserElementAnnotatedEvent,
   type BrowserState,
 } from '@shared/browser'
 import { IDLE_CONTROL, type SurfaceControl } from '@shared/control'
@@ -30,6 +31,7 @@ class FakeDebugger extends EventEmitter {
     this.commands.push({ method, params })
     if (method === 'Accessibility.getFullAXTree') return { nodes: [] }
     if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'f1' } } }
+    if (method === 'Page.createIsolatedWorld') return { executionContextId: 42 }
     return {}
   }
 }
@@ -933,5 +935,210 @@ describe('Browser takeover cleanup when closing tabs or the browser panel (#2927
     expect(preventDefault).toHaveBeenCalled()
     expect(overlayDismissCalls).toHaveLength(1)
     expect(overlaySentEvents).toEqual([])
+  })
+})
+
+describe('BrowserViews element annotation mode (#1812)', () => {
+  function makeAnnotateHarness() {
+    const states: BrowserState[] = []
+    const annotatedEvents: BrowserElementAnnotatedEvent[] = []
+    let currentControl: SurfaceControl = IDLE_CONTROL
+    const focus = vi.fn()
+    const fakeWindow = {
+      isDestroyed: () => false,
+      contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
+      webContents: { focus },
+    }
+    const views = new BrowserViews({
+      window: () => fakeWindow as never,
+      send: (state) => states.push(state),
+      annotated: (event) => annotatedEvents.push(event),
+      control: () => currentControl,
+      settings: () => ({ appearance: { zoom: 1 } }) as never,
+      themes: () => ({}) as never,
+      origins: { read: () => ({}), write: async () => {} } as never,
+    })
+    const setControl = (next: SurfaceControl) => {
+      currentControl = next
+      views.controlChanged('s1')
+    }
+    const latestState = () => states.at(-1)
+    return { views, states, annotatedEvents, latestState, setControl, focus }
+  }
+
+  function extractToken(view: FakeWebContentsView): string {
+    const evalCmd = view.webContents.debugger.commands
+      .filter((c) => c.method === 'Runtime.evaluate')
+      .find(
+        (c) =>
+          typeof c.params.expression === 'string' && c.params.expression.includes('const TOKEN = '),
+      )
+    const match = /const TOKEN = ("[^"]+")/.exec(String(evalCmd?.params.expression ?? ''))
+    if (!match) throw new Error('Could not find injected annotation token')
+    return JSON.parse(match[1]!) as string
+  }
+
+  function teardownCommands(view: FakeWebContentsView): SentCommand[] {
+    return view.webContents.debugger.commands.filter(
+      (c) =>
+        c.method === 'Runtime.evaluate' &&
+        typeof c.params.expression === 'string' &&
+        c.params.expression.includes('[data-kettu-annotate-host], [data-kettu-annotate-cursor]'),
+    )
+  }
+
+  it('enables annotation in an isolated world, forwards sanitized element picks, and exits cleanly', async () => {
+    const { views, annotatedEvents, latestState, focus } = makeAnnotateHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+    views.navigate('s1', 'https://example.com/app')
+
+    const view = createdViews.at(-1)!
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    expect(latestState()?.annotating).toBe(true)
+
+    const methods = view.webContents.debugger.commands.map((c) => c.method)
+    expect(methods).toContain('Runtime.enable')
+    expect(methods).toContain('Page.createIsolatedWorld')
+    expect(methods).toContain('Runtime.addBinding')
+    expect(methods).toContain('Runtime.evaluate')
+
+    const token = extractToken(view)
+
+    // Wrong token is ignored.
+    view.webContents.debugger.emit('message', {}, 'Runtime.bindingCalled', {
+      name: '__kettuAnnotateReport',
+      payload: JSON.stringify({
+        token: 'wrong-token',
+        type: 'pick',
+        element: { tag: 'button', selector: '#save', url: 'https://example.com/app' },
+      }),
+    })
+    expect(annotatedEvents).toHaveLength(0)
+
+    // Valid pick is sanitized (including password value redaction) and focuses host window.
+    view.webContents.debugger.emit('message', {}, 'Runtime.bindingCalled', {
+      name: '__kettuAnnotateReport',
+      payload: JSON.stringify({
+        token,
+        type: 'pick',
+        element: {
+          url: 'https://example.com/app',
+          pageTitle: 'App',
+          selector: '#pwd',
+          tag: 'input',
+          domId: 'pwd',
+          role: 'textbox',
+          accessibleName: 'Password',
+          text: null,
+          attributes: { type: 'password', value: 'top-secret', placeholder: 'Password' },
+          rect: { x: 10, y: 20, width: 180, height: 32 },
+          viewport: { width: 1440, height: 900 },
+        },
+      }),
+    })
+    expect(annotatedEvents).toHaveLength(1)
+    expect(annotatedEvents[0]!.annotation.attributes.value).toBeUndefined()
+    expect(annotatedEvents[0]!.annotation.attributes.placeholder).toBe('Password')
+    expect(focus).toHaveBeenCalledTimes(1)
+
+    // Disabling tears down injected overlay DOM and listeners.
+    expect(await views.setAnnotate('s1', false)).toBe(false)
+    expect(latestState()?.annotating).toBe(false)
+    expect(teardownCommands(view)).toHaveLength(1)
+    expect(teardownCommands(view)[0]!.params.contextId).toBe(42)
+  })
+
+  it('exits annotation mode on Escape key, binding exit, navigation, tab switch, and panel hide', async () => {
+    const { views, latestState } = makeAnnotateHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+    views.navigate('s1', 'https://example.com/one')
+    const view = createdViews.at(-1)!
+
+    // Escape via before-input-event exits and runs teardown.
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    const preventDefault = vi.fn()
+    view.webContents.emit(
+      'before-input-event',
+      { preventDefault },
+      {
+        type: 'keyDown',
+        key: 'Escape',
+        code: 'Escape',
+        isAutoRepeat: false,
+        control: false,
+        meta: false,
+        alt: false,
+        shift: false,
+      },
+    )
+    expect(preventDefault).toHaveBeenCalled()
+    expect(latestState()?.annotating).toBe(false)
+    expect(teardownCommands(view).length).toBeGreaterThanOrEqual(1)
+
+    // Same-document SPA navigation exits and tears down listeners.
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    const beforeSpa = teardownCommands(view).length
+    view.webContents.emit('did-navigate-in-page', {}, 'https://example.com/one#section', true)
+    expect(latestState()?.annotating).toBe(false)
+    expect(teardownCommands(view).length).toBeGreaterThan(beforeSpa)
+
+    // Cross-document navigation exits cleanly.
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    view.webContents.emit('did-navigate', {}, 'https://example.com/two', 200)
+    expect(latestState()?.annotating).toBe(false)
+
+    // Tab switch exits cleanly.
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    const secondTab = views.newTab('s1')!
+    expect(latestState()?.annotating).toBe(false)
+    views.selectTab('s1', latestState()!.tabs[0]!.id)
+    expect(latestState()?.annotating).toBe(false)
+
+    // Panel hide exits cleanly.
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    views.hide('s1')
+    expect(latestState()?.annotating).toBe(false)
+    expect(secondTab).toBeTruthy()
+  })
+
+  it('blocks annotation on blank/error pages and when an agent owns the tab', async () => {
+    const { views, latestState, setControl } = makeAnnotateHarness()
+    views.show('s1')
+    views.setBounds('s1', WIDE_PANE)
+
+    // Blank tab cannot be annotated.
+    views.newTab('s1')
+    expect(await views.setAnnotate('s1', true)).toBe(false)
+    expect(latestState()?.annotating).toBe(false)
+
+    // Load a page in agent tab and give control to the agent (localhost needs no origin prompt).
+    await views.load('s1', 'http://localhost:3000/agent-page')
+    const view = createdViews.at(-1)!
+    setControl({ kind: 'agent', acting: false })
+    expect(await views.setAnnotate('s1', true)).toBe(false)
+    expect(latestState()?.annotating).toBe(false)
+
+    // Once user takes over (control.kind === 'you'), annotation is allowed.
+    setControl({ kind: 'you', since: 200 })
+    expect(await views.setAnnotate('s1', true)).toBe(true)
+    expect(latestState()?.annotating).toBe(true)
+
+    // If agent regains control mid-annotation, annotation mode exits automatically.
+    setControl({ kind: 'agent', acting: false })
+    expect(latestState()?.annotating).toBe(false)
+
+    // Load failure also blocks annotation.
+    setControl(IDLE_CONTROL)
+    view.webContents.emit(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      'https://bad.test/',
+      true,
+    )
+    expect(await views.setAnnotate('s1', true)).toBe(false)
   })
 })

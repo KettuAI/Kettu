@@ -292,6 +292,146 @@ export interface BrowserState {
   control: SurfaceControl
   /** A new site that waits for the user, or the answer just given, for the pane's bar. */
   originRequest: BrowserOriginRequest | null
+  /** Whether element annotation mode is active on the selected tab. */
+  annotating: boolean
+}
+
+/** Bounding box of an annotated page element in page viewport CSS pixels. */
+export interface BrowserElementRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Page viewport size in CSS pixels when an element was annotated. */
+export interface BrowserElementViewport {
+  width: number
+  height: number
+}
+
+/** Visible, non-sensitive attributes extracted from an annotated page element. */
+export interface BrowserElementAttributes {
+  href?: string
+  alt?: string
+  placeholder?: string
+  title?: string
+  type?: string
+  value?: string
+}
+
+/**
+ * Structured reference to an element picked from the built-in browser in annotation mode.
+ * Carried over IPC, stored with a composer draft, previewed on hover, and serialized into prompts.
+ */
+export interface BrowserElementAnnotation {
+  id: string
+  url: string
+  pageTitle: string | null
+  selector: string
+  tag: string
+  domId: string | null
+  role: string | null
+  accessibleName: string | null
+  text: string | null
+  attributes: BrowserElementAttributes
+  rect: BrowserElementRect
+  viewport: BrowserElementViewport
+  tabId?: string
+}
+
+/** Event sent from main when the user picks an element in a session's browser annotation mode. */
+export interface BrowserElementAnnotatedEvent {
+  sessionId: string
+  tabId: string
+  annotation: BrowserElementAnnotation
+}
+
+/** Maximum browser element references attached to a single composer message. */
+export const MAX_BROWSER_ANNOTATIONS = 10
+
+/** Character limits for fields extracted from external web pages. */
+export const BROWSER_ANNOTATION_LIMITS = {
+  url: 2_048,
+  pageTitle: 200,
+  selector: 320,
+  tag: 64,
+  domId: 120,
+  role: 64,
+  accessibleName: 160,
+  text: 240,
+  attribute: 200,
+  value: 120,
+} as const
+
+/** Whether a URL points to an annotatable http(s) web page (excludes about:blank and internal URLs). */
+export function isAnnotatableBrowserUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  const parsed = URL.parse(url)
+  return parsed !== null && (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+}
+
+/** Stable deduplication key for a picked element: canonical page URL plus CSS selector. */
+export function browserAnnotationKey(
+  annotation: Pick<BrowserElementAnnotation, 'url' | 'selector'>,
+): string {
+  const normalizedUrl = canonicalBrowserUrl(annotation.url) ?? annotation.url.trim()
+  return `${normalizedUrl}\0${annotation.selector.trim()}`
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
+
+const isNullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === 'string'
+
+const isOptionalString = (value: unknown): value is string | undefined =>
+  value === undefined || typeof value === 'string'
+
+/** Runtime type guard for persisted or IPC-transferred browser element annotations. */
+export function isBrowserElementAnnotation(value: unknown): value is BrowserElementAnnotation {
+  if (!isRecord(value)) return false
+  if (
+    typeof value.id !== 'string' ||
+    value.id.length === 0 ||
+    typeof value.url !== 'string' ||
+    !isAnnotatableBrowserUrl(value.url) ||
+    !isNullableString(value.pageTitle) ||
+    typeof value.selector !== 'string' ||
+    value.selector.trim().length === 0 ||
+    typeof value.tag !== 'string' ||
+    value.tag.trim().length === 0 ||
+    !isNullableString(value.domId) ||
+    !isNullableString(value.role) ||
+    !isNullableString(value.accessibleName) ||
+    !isNullableString(value.text) ||
+    !isOptionalString(value.tabId)
+  ) {
+    return false
+  }
+  const { attributes, rect, viewport } = value
+  if (!isRecord(attributes) || !isRecord(rect) || !isRecord(viewport)) return false
+  if (
+    !isOptionalString(attributes.href) ||
+    !isOptionalString(attributes.alt) ||
+    !isOptionalString(attributes.placeholder) ||
+    !isOptionalString(attributes.title) ||
+    !isOptionalString(attributes.type) ||
+    !isOptionalString(attributes.value)
+  ) {
+    return false
+  }
+  return (
+    isFiniteNumber(rect.x) &&
+    isFiniteNumber(rect.y) &&
+    isFiniteNumber(rect.width) &&
+    isFiniteNumber(rect.height) &&
+    isFiniteNumber(viewport.width) &&
+    isFiniteNumber(viewport.height)
+  )
 }
 
 /**

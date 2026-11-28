@@ -1,13 +1,19 @@
+import {
+  browserAnnotationKey,
+  isBrowserElementAnnotation,
+  MAX_BROWSER_ANNOTATIONS,
+  type BrowserElementAnnotation,
+} from '@shared/browser'
 import { PLUGIN_REF_LIMITS, type PluginMentionRef } from '@shared/plugin-refs'
 import { isAttachment, type Attachment } from '@shared/thread'
 import { removeKey } from '@renderer/lib/storage'
 
-// Unsent composer text, attachments, attached artifact references, passage comments and the items
-// mentioned from plugins per session, in localStorage under `draft:<sessionId>` as JSON
-// `{ text, attachments, comments, mentions, artifacts }`, written 300 ms after the last change.
-// One stored as plain text, before drafts had attachments, reads as text alone, and one stored
-// before comments, mentions or artifacts as one without them. A draft that is too large or fails
-// to save stays in memory.
+// Unsent composer text, attachments, attached artifact references, browser element references,
+// passage comments and the items mentioned from plugins per session, in localStorage under
+// `draft:<sessionId>` as JSON `{ text, attachments, comments, mentions, artifacts, browserAnnotations }`,
+// written 300 ms after the last change. One stored as plain text, before drafts had attachments,
+// reads as text alone, and older drafts default missing arrays to empty. A draft that is too large
+// or fails to save stays in memory.
 
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
@@ -54,6 +60,7 @@ interface Draft {
   comments: DraftComment[]
   mentions: PluginMentionRef[]
   artifacts: AttachedArtifact[]
+  browserAnnotations: BrowserElementAnnotation[]
 }
 
 const WRITE_DELAY_MS = 300
@@ -64,7 +71,14 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const PREFIX = 'draft:'
 const key = (sessionId: string) => `${PREFIX}${sessionId}`
-const EMPTY: Draft = { text: '', attachments: [], comments: [], mentions: [], artifacts: [] }
+const EMPTY: Draft = {
+  text: '',
+  attachments: [],
+  comments: [],
+  mentions: [],
+  artifacts: [],
+  browserAnnotations: [],
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -138,19 +152,39 @@ export function parseDraft(raw: string): Draft {
               return true
             })
           : []
+        const seenAnnotations = new Set<string>()
+        const browserAnnotations = Array.isArray(value.browserAnnotations)
+          ? value.browserAnnotations
+              .filter((item): item is BrowserElementAnnotation => {
+                if (!isBrowserElementAnnotation(item)) return false
+                const dedupeKey = browserAnnotationKey(item)
+                if (seenAnnotations.has(dedupeKey)) return false
+                seenAnnotations.add(dedupeKey)
+                return true
+              })
+              .slice(0, MAX_BROWSER_ANNOTATIONS)
+          : []
         return {
           text: value.text,
           attachments: value.attachments.filter(isSaved),
           comments,
           mentions,
           artifacts,
+          browserAnnotations,
         }
       }
     } catch {
       // Text that only starts like JSON.
     }
   }
-  return { text: raw, attachments: [], comments: [], mentions: [], artifacts: [] }
+  return {
+    text: raw,
+    attachments: [],
+    comments: [],
+    mentions: [],
+    artifacts: [],
+    browserAnnotations: [],
+  }
 }
 
 function read(sessionId: string): Draft {
@@ -184,13 +218,26 @@ export function readDraftArtifacts(sessionId: string): AttachedArtifact[] {
   return read(sessionId).artifacts
 }
 
-/** Whether a draft holds what Send takes: text other than white space, an attachment, or an artifact. */
+export function readDraftBrowserAnnotations(sessionId: string): BrowserElementAnnotation[] {
+  return read(sessionId).browserAnnotations
+}
+
+/**
+ * Whether a draft holds what Send takes: text other than white space, an attachment, an artifact,
+ * or a browser element reference.
+ */
 export function hasMessage(
   text: string,
   attachments: readonly unknown[],
   artifacts: readonly unknown[] = [],
+  browserAnnotations: readonly unknown[] = [],
 ): boolean {
-  return text.trim().length > 0 || attachments.length > 0 || artifacts.length > 0
+  return (
+    text.trim().length > 0 ||
+    attachments.length > 0 ||
+    artifacts.length > 0 ||
+    browserAnnotations.length > 0
+  )
 }
 
 function write(sessionId: string, draft: Draft): void {
@@ -223,6 +270,13 @@ export function writeDraftArtifacts(sessionId: string, artifacts: AttachedArtifa
   write(sessionId, { ...read(sessionId), artifacts })
 }
 
+export function writeDraftBrowserAnnotations(
+  sessionId: string,
+  browserAnnotations: BrowserElementAnnotation[],
+): void {
+  write(sessionId, { ...read(sessionId), browserAnnotations })
+}
+
 /** Writes a pending draft now, for example when the composer unmounts. */
 export function flushDraft(sessionId: string): void {
   const timer = timers.get(sessionId)
@@ -234,7 +288,8 @@ export function flushDraft(sessionId: string): void {
     !draft.text &&
     draft.attachments.length === 0 &&
     draft.comments.length === 0 &&
-    draft.artifacts.length === 0
+    draft.artifacts.length === 0 &&
+    draft.browserAnnotations.length === 0
   ) {
     removeKey(key(sessionId))
     memory.delete(sessionId)
@@ -267,7 +322,10 @@ export function draftIds(): string[] {
   return [...ids].sort()
 }
 
-/** The sessions whose draft, saved or in memory, holds text, an attachment, a comment or an artifact. */
+/**
+ * The sessions whose draft, saved or in memory, holds text, an attachment, a comment, an artifact,
+ * or a browser element reference.
+ */
 export function draftedSessions(): string[] {
   return draftIds().filter((id) => {
     if (id === NEW_SESSION_DRAFT) return false
@@ -276,7 +334,8 @@ export function draftedSessions(): string[] {
       draft.text.trim() !== '' ||
       draft.attachments.length > 0 ||
       draft.comments.length > 0 ||
-      draft.artifacts.length > 0
+      draft.artifacts.length > 0 ||
+      draft.browserAnnotations.length > 0
     )
   })
 }

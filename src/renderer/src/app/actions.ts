@@ -21,6 +21,13 @@ import {
   type AttachedArtifact,
 } from '@renderer/features/session/composer/artifact-attachments'
 import {
+  draftBrowserAnnotations,
+  formatBrowserAnnotationsPrompt,
+  restoreDraftBrowserAnnotations,
+  setDraftBrowserAnnotations,
+  splitBrowserAnnotationsPrompt,
+} from '@renderer/features/session/composer/browser-annotations'
+import {
   attachmentContent,
   contentAttachments,
   dropAttachments,
@@ -179,7 +186,8 @@ function draftIsPrompt(prompt: readonly UserContent[]): boolean {
 const draftIsEmpty = (draft = NEW_SESSION_DRAFT) =>
   !readDraft(draft).trim() &&
   draftAttachments(draft).length === 0 &&
-  draftArtifactAttachments(draft).length === 0
+  draftArtifactAttachments(draft).length === 0 &&
+  draftBrowserAnnotations(draft).length === 0
 
 /**
  * Puts a message whose send failed back in its draft: its text above what was written since,
@@ -324,22 +332,28 @@ export async function createSession(
  */
 export async function editFromMessage(sessionId: string, entryId: string): Promise<void> {
   const held = draftAttachments(sessionId).filter((item) => item.status === 'ready')
-  const text = formatAttachedArtifactsPrompt(
+  const withBrowser = formatBrowserAnnotationsPrompt(
     readDraft(sessionId),
-    draftArtifactAttachments(sessionId),
+    draftBrowserAnnotations(sessionId),
   )
+  const text = formatAttachedArtifactsPrompt(withBrowser, draftArtifactAttachments(sessionId))
   const draft: UserContent[] = [
     ...(text.trim() ? [{ type: 'text' as const, text }] : []),
     ...attachmentContent(held),
   ]
   const { content } = await host('sessions.rewind', { sessionId, entryId, draft })
   const rawMessage = promptText(content)
-  const parsed = splitAttachedArtifactsPrompt(rawMessage)
-  const message = parsed ? parsed.text : rawMessage
+  const parsedArtifacts = splitAttachedArtifactsPrompt(rawMessage)
+  const afterArtifacts = parsedArtifacts ? parsedArtifacts.text : rawMessage
+  const parsedBrowser = splitBrowserAnnotationsPrompt(afterArtifacts)
+  const message = parsedBrowser ? parsedBrowser.text : afterArtifacts
   const written = readDraft(sessionId)
   writeDraft(sessionId, !message ? written : written.trim() ? `${message}\n\n${written}` : message)
-  if (parsed && parsed.artifacts.length > 0) {
-    restoreDraftArtifactAttachments(sessionId, parsed.artifacts)
+  if (parsedArtifacts && parsedArtifacts.artifacts.length > 0) {
+    restoreDraftArtifactAttachments(sessionId, parsedArtifacts.artifacts)
+  }
+  if (parsedBrowser && parsedBrowser.annotations.length > 0) {
+    restoreDraftBrowserAnnotations(sessionId, parsedBrowser.annotations)
   }
   const items = draftAttachments(sessionId)
   restoreAttachments(sessionId, content)
@@ -354,9 +368,12 @@ export async function editFromMessage(sessionId: string, entryId: string): Promi
 export async function putBackRewound(sessionId: string): Promise<void> {
   const { draft } = await host('sessions.putBack', { sessionId })
   const raw = promptText(draft)
-  const parsed = splitAttachedArtifactsPrompt(raw)
-  writeDraft(sessionId, parsed ? parsed.text : raw)
-  setDraftArtifactAttachments(sessionId, parsed ? parsed.artifacts : [])
+  const parsedArtifacts = splitAttachedArtifactsPrompt(raw)
+  const afterArtifacts = parsedArtifacts ? parsedArtifacts.text : raw
+  const parsedBrowser = splitBrowserAnnotationsPrompt(afterArtifacts)
+  writeDraft(sessionId, parsedBrowser ? parsedBrowser.text : afterArtifacts)
+  setDraftArtifactAttachments(sessionId, parsedArtifacts ? parsedArtifacts.artifacts : [])
+  setDraftBrowserAnnotations(sessionId, parsedBrowser ? parsedBrowser.annotations : [])
   resetAttachments(sessionId, draft)
   flushDraft(sessionId)
   emitAppEvent({ kind: 'draft-written', draft: sessionId })
@@ -371,13 +388,14 @@ export async function retryTurn(sessionId: string, content: readonly UserContent
   const ids = new Set(contentAttachments(content).map((a) => a.id))
   const items = draftAttachments(sessionId)
   const composed = formatAttachedArtifactsPrompt(
-    readDraft(sessionId),
+    formatBrowserAnnotationsPrompt(readDraft(sessionId), draftBrowserAnnotations(sessionId)),
     draftArtifactAttachments(sessionId),
   )
   if (draftIsEmpty(sessionId) || composed.trim() !== promptText(content).trim()) return
   if (!items.every((item) => item.attachment && ids.has(item.attachment.id))) return
   clearDraft(sessionId)
   setDraftArtifactAttachments(sessionId, [])
+  setDraftBrowserAnnotations(sessionId, [])
   releaseResent(sessionId, content)
   emitAppEvent({ kind: 'draft-written', draft: sessionId })
 }
@@ -404,13 +422,18 @@ export async function takeReturnedMessages(
   for (const { sessionId, content } of messages) {
     const draft = sessionId ?? NEW_SESSION_DRAFT
     const raw = promptText(content)
-    const parsed = splitAttachedArtifactsPrompt(raw)
-    const text = parsed ? parsed.text : raw
+    const parsedArtifacts = splitAttachedArtifactsPrompt(raw)
+    const afterArtifacts = parsedArtifacts ? parsedArtifacts.text : raw
+    const parsedBrowser = splitBrowserAnnotationsPrompt(afterArtifacts)
+    const text = parsedBrowser ? parsedBrowser.text : afterArtifacts
     const written = readDraft(draft)
     const next = draftIsEmpty(draft) || !written ? text : text ? `${written}\n\n${text}` : written
     writeDraft(draft, next)
-    if (parsed && parsed.artifacts.length > 0) {
-      restoreDraftArtifactAttachments(draft, parsed.artifacts)
+    if (parsedArtifacts && parsedArtifacts.artifacts.length > 0) {
+      restoreDraftArtifactAttachments(draft, parsedArtifacts.artifacts)
+    }
+    if (parsedBrowser && parsedBrowser.annotations.length > 0) {
+      restoreDraftBrowserAnnotations(draft, parsedBrowser.annotations)
     }
     restoreAttachments(draft, content)
     flushDraft(draft)
@@ -609,6 +632,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   forgetSession(sessionId)
   clearDraft(sessionId)
   setDraftArtifactAttachments(sessionId, [])
+  setDraftBrowserAnnotations(sessionId, [])
   dropAttachments(sessionId)
   useSessionsStore.getState().remove(sessionId)
   closeSessionInSplit(sessionId)
@@ -620,6 +644,7 @@ export function sessionRemoved(sessionId: string): void {
   forgetSession(sessionId)
   clearDraft(sessionId)
   setDraftArtifactAttachments(sessionId, [])
+  setDraftBrowserAnnotations(sessionId, [])
   dropAttachments(sessionId)
   closeSessionInSplit(sessionId)
 }

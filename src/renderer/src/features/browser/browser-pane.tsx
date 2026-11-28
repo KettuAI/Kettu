@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   ComputerIcon,
+  CursorRectangleSelection01Icon,
   Globe02Icon,
   LinkSquare02Icon,
   MaximizeScreenIcon,
@@ -14,6 +22,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import {
   fitPageViewport,
+  isAnnotatableBrowserUrl,
   PANE_PAGE_SIZE_MODES,
   PAGE_SIZES,
   SIZE_LINE_ROOM,
@@ -33,6 +42,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PaneBody, PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -247,6 +257,43 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   }, [sessionId])
 
   const url = state?.url ?? null
+  const annotating = state?.annotating === true
+  const agentOwnsSelected =
+    state?.control.kind === 'agent' && state.selected !== null && state.selected === state.agentTab
+  const noticeBlocksAnnotate =
+    state?.notice?.kind === 'load-failed' ||
+    state?.notice?.kind === 'crashed' ||
+    state?.notice?.kind === 'unresponsive'
+  const canAnnotate =
+    !!sessionId && !agentOwnsSelected && !noticeBlocksAnnotate && isAnnotatableBrowserUrl(url)
+  const toggleAnnotate = useCallback(() => {
+    if (!sessionId) return
+    const next = !annotating
+    if (next && !canAnnotate) return
+    void window.kettu.browser
+      .setAnnotate(sessionId, next)
+      .catch((error: unknown) => console.error('Could not toggle page annotation', error))
+  }, [sessionId, annotating, canAnnotate])
+  const onPaneKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (annotating && sessionId && event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        void window.kettu.browser
+          .setAnnotate(sessionId, false)
+          .catch((error: unknown) => console.error('Could not exit page annotation', error))
+      }
+    },
+    [annotating, sessionId],
+  )
+  const annotateLabel = annotating ? t('annotate.exit') : t('annotate.start')
+  const annotateHint = annotating
+    ? t('annotate.exit')
+    : agentOwnsSelected
+      ? t('annotate.disabledAgent', { agent: name })
+      : !canAnnotate
+        ? t('annotate.disabledNoPage')
+        : t('annotate.startHint')
   const fitted =
     frameSize && state?.viewport
       ? fitPageViewport(
@@ -264,7 +311,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
       fitted.bounds.height < frameSize.height)
 
   return (
-    <PaneBody data-browser-panel="">
+    <PaneBody data-browser-panel="" onKeyDown={onPaneKeyDown}>
       <div className="kp-body">
         {/* A page without an address, such as a popup still at about:blank, is on screen too. */}
         {state && (url || state.page) ? (
@@ -315,6 +362,13 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   />
                 }
               />
+              <AnnotateToggleButton
+                label={annotateLabel}
+                tooltip={annotateHint}
+                active={annotating}
+                disabled={!annotating && !canAnnotate}
+                onToggle={toggleAnnotate}
+              />
               {sessionId && (
                 <PageSizeMenu
                   sessionId={sessionId}
@@ -333,6 +387,31 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                 <span role="progressbar" aria-label={t('loading')} className="kp-load" />
               )}
             </div>
+            {annotating && sessionId && (
+              <div role="status" className="kp-annotate-bar" data-browser-annotate-bar="">
+                <span className="kp-annotate-bar__text">
+                  <PaneIcon
+                    icon={CursorRectangleSelection01Icon}
+                    size={14}
+                    className="kp-annotate-bar__icon"
+                  />
+                  <span className="truncate">{t('annotate.activeHint')}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void window.kettu.browser
+                      .setAnnotate(sessionId, false)
+                      .catch((error: unknown) =>
+                        console.error('Could not exit page annotation', error),
+                      )
+                  }
+                  className="kp-link"
+                >
+                  {t('annotate.done')}
+                </button>
+              </div>
+            )}
             {sessionId && state.originRequest && (
               <OriginBar
                 request={state.originRequest}
@@ -398,6 +477,51 @@ const SIZE_ICONS: Record<PanePageSizeMode, typeof ComputerIcon> = {
   desktop: ComputerIcon,
   tablet: Tablet01Icon,
   phone: SmartPhone01Icon,
+}
+
+/**
+ * Toolbar toggle for element annotation mode. Wraps the disabled button in a span trigger so
+ * hovering still explains why annotation is unavailable (e.g. blank page or agent control).
+ */
+function AnnotateToggleButton({
+  label,
+  tooltip,
+  active,
+  disabled,
+  onToggle,
+}: {
+  label: string
+  tooltip: string
+  active: boolean
+  disabled: boolean
+  onToggle: () => void
+}) {
+  const button = (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onToggle}
+      data-browser-annotate-toggle=""
+      className="kp-tool kp-tool--annotate app-region-no-drag"
+    >
+      <PaneIcon icon={CursorRectangleSelection01Icon} />
+    </button>
+  )
+  return (
+    <Tooltip>
+      {disabled ? (
+        <TooltipTrigger render={<span className="inline-flex" />}>{button}</TooltipTrigger>
+      ) : (
+        <TooltipTrigger render={button} />
+      )}
+      <TooltipContent>
+        {tooltip}
+        {active && <Kbd>Esc</Kbd>}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 /**

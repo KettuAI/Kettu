@@ -422,5 +422,19 @@
     "remove": "移除 {{title}}",
     "open": "打开 {{title}}",
     "sentLabel": "引用的产物"
+  },
+  "browserAnnotations": {
+    "label": "引用的页面元素",
+    "sentLabel": "引用的页面元素",
+    "inspect": "查看 {{label}}",
+    "remove": "移除 {{label}}",
+    "locator": "定位选择器",
+    "accessibleName": "无障碍名称",
+    "visibleText": "可见内容",
+    "attributes": "元素属性",
+    "limit": "一条消息最多引用 {{count}} 个页面元素",
+    "noActiveSession": "当前没有可接收页面元素引用的活跃会话",
+    "sessionStarting": "请等待会话启动完成后再添加页面元素引用",
+    "sessionHeldOutside": "该会话正在外部终端中运行，暂时无法添加到输入框"
   }
 }

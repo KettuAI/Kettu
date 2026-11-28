@@ -1050,6 +1050,14 @@ export function registerIpcHandlers({
       await browserViews.setPageSize(page, size as PanePageSizeMode)
     }
   })
+  handle('browser:set-annotate', 2, async (_, id, enabled) => {
+    if (typeof enabled !== 'boolean') {
+      throw new Error('"browser:set-annotate" takes whether annotation mode is enabled')
+    }
+    const page = sessionId(id)
+    if (enabled && !browserViews.paneControl(page)) return false
+    return browserViews.setAnnotate(page, enabled)
+  })
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
   handle('browser:capture', 1, (_, id) => browserViews.capture(sessionId(id)))

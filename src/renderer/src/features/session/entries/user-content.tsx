@@ -38,6 +38,8 @@ import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
 import { splitAttachedArtifactsPrompt } from '../composer/artifact-attachments'
+import { SentBrowserAnnotationChips } from '../composer/browser-annotation-chips'
+import { splitBrowserAnnotationsPrompt } from '../composer/browser-annotations'
 import { ChipView } from '../composer/chip-view'
 import {
   isSurfaceMention,
@@ -85,8 +87,11 @@ export function UserContentView({
   const { t } = useTranslation('composer')
   const rawText = textOf(content)
   const parsedArtifacts = splitAttachedArtifactsPrompt(rawText)
-  const text = parsedArtifacts ? parsedArtifacts.text : rawText
+  const afterArtifacts = parsedArtifacts ? parsedArtifacts.text : rawText
+  const parsedBrowser = splitBrowserAnnotationsPrompt(afterArtifacts)
+  const text = parsedBrowser ? parsedBrowser.text : afterArtifacts
   const attachedArtifacts = parsedArtifacts?.artifacts ?? []
+  const browserAnnotations = parsedBrowser?.annotations ?? []
   const hasAttachedArtifacts = attachedArtifacts.length > 0
   const hiddenArtifacts = useArtifactsStore((s) => s.hidden)
   useEffect(() => {
@@ -141,6 +146,9 @@ export function UserContentView({
             ))}
           </div>
         </SessionIdContext>
+      )}
+      {browserAnnotations.length > 0 && (
+        <SentBrowserAnnotationChips annotations={browserAnnotations} />
       )}
       {refs.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

@@ -406,6 +406,7 @@ async function start(): Promise<void> {
       if (favicons) void siteIcons.favicons(pageUrl, favicons)
       else siteIcons.visited(pageUrl)
     },
+    annotated: (event) => broadcast('browser:annotated', event),
   })
   browserViewsRef.current = browserViews
   browserTools = new BrowserTools({

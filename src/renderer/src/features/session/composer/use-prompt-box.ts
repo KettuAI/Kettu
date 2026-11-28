@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import type { BrowserElementAnnotation } from '@shared/browser'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import { mentionedSkills } from '@shared/slash'
 import { putBackDraft } from '@renderer/app/actions'
@@ -29,6 +30,13 @@ import {
   useDraftArtifactAttachments,
   type AttachedArtifact,
 } from './artifact-attachments'
+import {
+  draftBrowserAnnotations,
+  hydrateDraftBrowserAnnotations,
+  restoreDraftBrowserAnnotations,
+  setDraftBrowserAnnotations,
+  useDraftBrowserAnnotations,
+} from './browser-annotations'
 import {
   attachBrowserPage,
   attachFiles,
@@ -58,6 +66,7 @@ export interface Taken {
   held: DraftAttachment[]
   mentions: readonly PluginMentionRef[]
   artifacts: readonly AttachedArtifact[]
+  browserAnnotations: readonly BrowserElementAnnotation[]
 }
 
 export type PromptBoxState = ReturnType<typeof usePromptBox>
@@ -152,6 +161,7 @@ export function usePromptBox({
   const [source] = useState(() => {
     hydrateDraftMentions(draft)
     hydrateDraftArtifactAttachments(draft)
+    hydrateDraftBrowserAnnotations(draft)
     return new BoxText(readDraft(draft))
   })
   const [error, setError] = useState<string | null>(null)
@@ -186,6 +196,7 @@ export function usePromptBox({
   }, [paneFocused])
   const attachments = useAttachmentsStore(selectDraft(draft))
   const artifacts = useDraftArtifactAttachments(draft)
+  const browserAnnotations = useDraftBrowserAnnotations(draft)
 
   useEffect(() => () => flushDraft(draft), [draft])
 
@@ -358,6 +369,7 @@ export function usePromptBox({
     const held = attachments
     const mentions = draftMentions(draft)
     const attachedArtifacts = draftArtifactAttachments(draft)
+    const annotations = draftBrowserAnnotations(draft)
     editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
     source.set('', null)
@@ -365,17 +377,31 @@ export function usePromptBox({
     setDraftAttachments(draft, [])
     setDraftMentions(draft, [])
     setDraftArtifactAttachments(draft, [])
+    setDraftBrowserAnnotations(draft, [])
     setError(null)
-    return { prompt, held, mentions, artifacts: attachedArtifacts }
+    return {
+      prompt,
+      held,
+      mentions,
+      artifacts: attachedArtifacts,
+      browserAnnotations: annotations,
+    }
   }
   /** A failed send's handler: its error, and its message back in the draft above what is there. */
   const restore =
-    ({ prompt, held, mentions, artifacts: attachedArtifacts }: Taken) =>
+    ({
+      prompt,
+      held,
+      mentions,
+      artifacts: attachedArtifacts,
+      browserAnnotations: annotations,
+    }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
       putBackDraft(draft, prompt, held)
       restoreDraftMentions(draft, mentions)
       restoreDraftArtifactAttachments(draft, attachedArtifacts)
+      restoreDraftBrowserAnnotations(draft, annotations)
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {
@@ -421,6 +447,7 @@ export function usePromptBox({
     source,
     attachments,
     artifacts,
+    browserAnnotations,
     artifactPickerOpen,
     setArtifactPickerOpen,
     openArtifactPicker,
