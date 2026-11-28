@@ -1,5 +1,5 @@
-// A host's load: totals of the whole computer, CPU, memory, disk, network and battery. Read only
-// while a client watches, sent only to the owner's clients, and never kept.
+// A host's load: totals of the whole computer, CPU, memory, disk, network, power and battery.
+// Read only while a client watches, sent only to the owner's clients, and never kept.
 
 import type { MemoryState } from './idle-release'
 
@@ -25,6 +25,98 @@ export interface HostBattery {
   onBattery: boolean
   /** Until empty on battery, until full while charging; absent when the system has no estimate. */
   minutesLeft?: number
+}
+
+/** Direction of battery power flow when a battery power reading is available. */
+export type HostBatteryPowerState = 'charging' | 'discharging' | 'idle'
+
+/**
+ * Reliable power consumption readings the host can obtain without elevated privileges, in watts.
+ * Absent on `HostLoad` when no field has a reliable reading.
+ */
+export interface HostPowerLoad {
+  /** Whole-system power draw in watts; null when the OS/hardware does not reliably report it. */
+  systemWatts: number | null
+  /** CPU package power draw in watts (e.g. Linux RAPL); null when unavailable. */
+  cpuWatts: number | null
+  /** Battery charge or discharge power magnitude in watts; null when unavailable. */
+  batteryWatts: number | null
+  /** Direction of `batteryWatts` when a battery power reading is present. */
+  batteryState?: HostBatteryPowerState
+}
+
+/** The headline power reading for compact load headers: whole system first, else CPU only. */
+export interface PrimaryPowerReading {
+  kind: 'system' | 'cpu'
+  watts: number
+}
+
+const BATTERY_POWER_STATES = new Set<HostBatteryPowerState>(['charging', 'discharging', 'idle'])
+
+function validWatts(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  return value === 0 ? 0 : value
+}
+
+/**
+ * Validates and normalizes an untrusted `HostPowerLoad` wire payload.
+ * Returns null when invalid or when no reliable wattage reading is present.
+ */
+export function parseHostPowerLoad(value: unknown): HostPowerLoad | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const systemWatts =
+    record.systemWatts === undefined || record.systemWatts === null
+      ? null
+      : validWatts(record.systemWatts)
+  const cpuWatts =
+    record.cpuWatts === undefined || record.cpuWatts === null ? null : validWatts(record.cpuWatts)
+  const batteryWatts =
+    record.batteryWatts === undefined || record.batteryWatts === null
+      ? null
+      : validWatts(record.batteryWatts)
+  if (
+    (record.systemWatts !== undefined && record.systemWatts !== null && systemWatts === null) ||
+    (record.cpuWatts !== undefined && record.cpuWatts !== null && cpuWatts === null) ||
+    (record.batteryWatts !== undefined && record.batteryWatts !== null && batteryWatts === null)
+  ) {
+    return null
+  }
+  if (systemWatts === null && cpuWatts === null && batteryWatts === null) return null
+  const rawState = record.batteryState
+  let batteryState: HostBatteryPowerState | undefined
+  if (rawState !== undefined && rawState !== null) {
+    if (
+      typeof rawState !== 'string' ||
+      !BATTERY_POWER_STATES.has(rawState as HostBatteryPowerState)
+    ) {
+      return null
+    }
+    if (batteryWatts !== null) batteryState = rawState as HostBatteryPowerState
+  }
+  return {
+    systemWatts,
+    cpuWatts,
+    batteryWatts,
+    ...(batteryState ? { batteryState } : {}),
+  }
+}
+
+/**
+ * Picks the single overview power reading for a load header: whole-system power when available,
+ * otherwise CPU package power explicitly tagged as `cpu`. Never promotes battery power alone.
+ */
+export function primaryPowerReading(
+  power: HostPowerLoad | null | undefined,
+): PrimaryPowerReading | null {
+  if (!power) return null
+  if (typeof power.systemWatts === 'number' && Number.isFinite(power.systemWatts)) {
+    return { kind: 'system', watts: power.systemWatts }
+  }
+  if (typeof power.cpuWatts === 'number' && Number.isFinite(power.cpuWatts)) {
+    return { kind: 'cpu', watts: power.cpuWatts }
+  }
+  return null
 }
 
 export interface HostLoad {
@@ -57,6 +149,11 @@ export interface HostLoad {
   network?: { receivePerSecond: number; sendPerSecond: number }
   /** Absent without a battery, and on Windows while it runs on mains. */
   battery?: HostBattery
+  /**
+   * Unprivileged power consumption readings in watts (whole system, CPU package, and/or battery).
+   * Absent when the host has no reliable sensor reading.
+   */
+  power?: HostPowerLoad
   /** A daemon in a container: CPU and memory are its limits, disk activity and network its own. */
   container?: true
 }

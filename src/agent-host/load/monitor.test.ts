@@ -138,4 +138,60 @@ describe('LoadMonitor', () => {
     ])
     monitor.stop()
   })
+
+  it('passes host power readings through watch answers and periodic host.load events', async () => {
+    const sampleLoad = (systemWatts: number): HostLoad => ({
+      at: Date.now(),
+      cpu: { percent: 20, cores: 10 },
+      memory: { used: 8 * GB, total: 32 * GB, state: 'plenty' },
+      power: {
+        systemWatts,
+        cpuWatts: null,
+        batteryWatts: 0,
+        batteryState: 'idle',
+      },
+    })
+    let readingIndex = 0
+    const readings = [10.3, 14.7]
+    const source: LoadSource = {
+      sample: () =>
+        Promise.resolve({
+          cpu: { at: Date.now(), busy: 100, total: 500 },
+          io: null,
+          network: null,
+        }),
+      read: () => Promise.resolve(sampleLoad(readings[readingIndex++] ?? 14.7)),
+      forget: () => {},
+    }
+    const sent: HostEvent[] = []
+    const monitor = new LoadMonitor({
+      source,
+      send: (_, event) => sent.push(event),
+      log: () => {},
+      delay: () => Promise.resolve(),
+    })
+
+    const initial = await monitor.watch('phone')
+    expect(initial.load.power).toEqual({
+      systemWatts: 10.3,
+      cpuWatts: null,
+      batteryWatts: 0,
+      batteryState: 'idle',
+    })
+
+    await vi.advanceTimersByTimeAsync(LOAD_READ_MS)
+    const pushed = sent.find((event) => event.type === 'host.load')
+    expect(pushed).toEqual({
+      type: 'host.load',
+      load: expect.objectContaining({
+        power: {
+          systemWatts: 14.7,
+          cpuWatts: null,
+          batteryWatts: 0,
+          batteryState: 'idle',
+        },
+      }),
+    })
+    monitor.stop()
+  })
 })

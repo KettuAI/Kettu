@@ -63,3 +63,9 @@ export function batteryLevel(battery: HostBattery): LimitLevel {
   if (battery.percent <= BATTERY_CRITICAL_PERCENT) return 'bad'
   return battery.percent <= BATTERY_WARN_PERCENT ? 'warn' : 'ok'
 }
+
+/** Power in watts, rounded to one decimal place without a trailing ".0": "10.3 W", "30 W". */
+export function wattsText(watts: number): string {
+  const rounded = Math.round(watts * 10) / 10
+  return `${(rounded === 0 ? 0 : rounded).toFixed(1).replace(/\.0$/, '')} W`
+}

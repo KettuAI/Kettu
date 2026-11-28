@@ -2038,8 +2038,16 @@
       "left": "{{time}} left",
       "minutes": "{{m}} min",
       "hoursMinutes": "{{h}} h {{m}} min",
+      "powerLabel": "Power {{watts}}",
+      "cpuPower": "CPU {{watts}}",
+      "cpuPowerLabel": "CPU power {{watts}}",
+      "systemPowerDetail": "System {{watts}}",
+      "cpuPowerDetail": "CPU {{watts}}",
+      "batteryPowerCharging": "Battery charging {{watts}}",
+      "batteryPowerDischarging": "Battery discharging {{watts}}",
+      "batteryPowerIdle": "Battery {{watts}}",
       "old": "Update Kettu on {{name}} to see its load here.",
-      "note": "Only these totals are read: CPU, memory, disk, network and battery, and only while you look. They travel only between {{name}} and your own devices, end-to-end encrypted; nothing is kept, and Kettu’s servers never receive them."
+      "note": "Only these totals are read: CPU, memory, disk, network, power and battery, and only while you look. They travel only between {{name}} and your own devices, end-to-end encrypted; nothing is kept, and Kettu’s servers never receive them."
     }
   },
   "remote": {

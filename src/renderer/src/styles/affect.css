@@ -9208,6 +9208,19 @@ button.kettu-ctx__part-row:focus-visible {
   width: 14px;
   height: 14px;
 }
+.k-load-power {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.k-load-power :is(svg, .hgi) {
+  width: 14px;
+  height: 14px;
+}
 
 /* New session's host menu: a host's CPU and memory at the end of its row while the menu is open. */
 .k-load-menu {

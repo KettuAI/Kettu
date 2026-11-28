@@ -12,6 +12,7 @@ import {
   BatteryLowIcon,
   Chip02Icon,
   CpuIcon,
+  FlashIcon,
   HardDriveIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -19,8 +20,10 @@ import type { TFunction } from 'i18next'
 import {
   BATTERY_CRITICAL_PERCENT,
   BATTERY_WARN_PERCENT,
+  primaryPowerReading,
   type HostBattery,
   type HostLoad,
+  type HostPowerLoad,
 } from '@shared/host-load'
 import type { HostStatus } from '@shared/remote/hosts'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -42,6 +45,7 @@ import {
   memoryLevel,
   memoryShare,
   rateText,
+  wattsText,
   wholePercent,
 } from './host-load-text'
 import { GroupLabel, GroupNote, Notice } from './rows'
@@ -174,6 +178,47 @@ function BatteryItem({ battery }: { battery: HostBattery }) {
     <span className="k-load-battery k-load-battery--head" data-level={batteryLevel(battery)}>
       <Icon icon={batteryIcon(battery)} size={14} />
       <span className="k-num">{parts.filter(Boolean).join(' · ')}</span>
+    </span>
+  )
+}
+
+/** Current power draw in the Load header: whole-system first, else CPU clearly labeled. */
+function PowerItem({ power }: { power: HostPowerLoad }) {
+  const { t } = useTranslation('settings')
+  const primary = primaryPowerReading(power)
+  if (!primary) return null
+  const primaryWatts = wattsText(primary.watts)
+  const text =
+    primary.kind === 'cpu' ? t('hosts.load.cpuPower', { watts: primaryWatts }) : primaryWatts
+  const label =
+    primary.kind === 'cpu'
+      ? t('hosts.load.cpuPowerLabel', { watts: primaryWatts })
+      : t('hosts.load.powerLabel', { watts: primaryWatts })
+  const details: string[] = []
+  if (power.systemWatts !== null) {
+    details.push(t('hosts.load.systemPowerDetail', { watts: wattsText(power.systemWatts) }))
+  }
+  if (power.cpuWatts !== null) {
+    details.push(t('hosts.load.cpuPowerDetail', { watts: wattsText(power.cpuWatts) }))
+  }
+  if (power.batteryWatts !== null) {
+    const bw = wattsText(power.batteryWatts)
+    const key =
+      power.batteryState === 'charging'
+        ? 'hosts.load.batteryPowerCharging'
+        : power.batteryState === 'discharging'
+          ? 'hosts.load.batteryPowerDischarging'
+          : 'hosts.load.batteryPowerIdle'
+    details.push(t(key, { watts: bw }))
+  }
+  return (
+    <span
+      className="k-load-power k-num"
+      aria-label={label}
+      title={details.length > 0 ? details.join(' · ') : undefined}
+    >
+      <Icon icon={FlashIcon} size={14} />
+      <span>{text}</span>
     </span>
   )
 }
@@ -349,6 +394,7 @@ export function HostLoadGroup({ host }: { host: HostStatus }) {
     )
   }
   const battery = live?.load.battery
+  const power = live?.load.power
   return (
     <section aria-label={label} className="k-group">
       <GroupLabel
@@ -357,6 +403,7 @@ export function HostLoadGroup({ host }: { host: HostStatus }) {
           label,
           actions: (
             <span className="k-load-head">
+              {power && <PowerItem power={power} />}
               {battery && <BatteryItem battery={battery} />}
               <span className="k-load-live">
                 <span aria-hidden className="k-load-live__dot" />
