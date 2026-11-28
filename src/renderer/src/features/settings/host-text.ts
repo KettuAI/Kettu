@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import type { Platform } from '@shared/platform'
+import { platformName } from '@shared/platform'
 import { addressText, isLocalHost } from '@shared/remote/address'
 import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -13,17 +13,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import type { WebHost } from '@renderer/stores/web-host'
 import { relayHostName } from './relay-text'
 
-/** "iOS", "Android", "macOS", "Windows": what a host or device runs, by the platform it sent. */
-export function platformName(platform: Platform | string): string {
-  if (platform === 'ios') return 'iOS'
-  if (platform === 'ipados') return 'iPadOS'
-  if (platform === 'android') return 'Android'
-  if (/^android\s+/i.test(platform)) return platform.replace(/^android/i, 'Android')
-  if (platform === 'darwin') return 'macOS'
-  if (platform === 'win32') return 'Windows'
-  if (platform === 'linux') return 'Linux'
-  return platform
-}
+export { platformName }
 
 /** A direct address as its path: the same network for a private one, direct for the rest. */
 function directAt(t: TFunction<'settings'>, address: DirectAddress): string {

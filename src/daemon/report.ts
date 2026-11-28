@@ -1,5 +1,6 @@
 // What `kettu status`, `kettu devices` and `kettu terminal` print.
 
+import { platformName } from '@shared/platform'
 import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import type { RelayStatus } from '@shared/remote/relay-host'
 import type { RelayReport } from '@shared/remote/status'
@@ -128,7 +129,7 @@ export function devicesReport(devices: DeviceSummary[], now: number): string {
       device.id,
       device.name,
       device.kind,
-      device.platform,
+      platformName(device.platform),
       device.otherAccount
         ? 'another account'
         : device.connected
@@ -161,7 +162,9 @@ export function requestReport(
     return 'No device of your Kettu account asks to be added.\n'
   }
   const { device, code, expiresAt, deviceConfirmed } = request
-  const about = [device.model, device.platform].filter((part) => part !== '').join(', ')
+  const about = [device.model, platformName(device.platform)]
+    .filter((part) => part !== '')
+    .join(', ')
   const seconds = Math.max(0, Math.ceil((expiresAt - now) / 1000))
   const left = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
   return [

@@ -133,7 +133,7 @@ export async function startHosted(base: HostedBase): Promise<void> {
     accountUrl,
     client: {
       name: deviceName(base.browser),
-      os: base.browser.system || 'Web',
+      os: base.browser.platform,
       version: __KETTU_VERSION__,
     },
     locale: () => (document.documentElement.lang.startsWith('zh') ? 'zh-CN' : 'en'),

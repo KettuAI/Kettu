@@ -58,4 +58,27 @@ describe("a paired device's account", () => {
     expect((await store.add({ ...base, account: 'acc_a' }))?.account).toBe('acc_a')
     expect((await store.add(base))?.account).toBeNull()
   })
+
+  it('updates a paired device platform when a later hello names a newer value', async () => {
+    const dir = await folder()
+    const store = await DeviceStore.load(dir, log)
+    const key = await generateKeyPair()
+    const added = await store.add({
+      publicKey: Buffer.from(key.publicKey).toString('base64'),
+      name: 'Phone',
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+    })
+    expect(added?.platform).toBe('ios')
+
+    expect(store.notePlatform(added!.id, 'ios')).toBe(false)
+    expect(store.notePlatform(added!.id, '')).toBe(false)
+    expect(store.notePlatform(added!.id, 'x'.repeat(65))).toBe(false)
+    expect(store.notePlatform(added!.id, 'iOS 26.1')).toBe(true)
+    expect(store.get(added!.id)?.platform).toBe('iOS 26.1')
+
+    await store.flush()
+    expect((await DeviceStore.load(dir, log)).get(added!.id)?.platform).toBe('iOS 26.1')
+  })
 })

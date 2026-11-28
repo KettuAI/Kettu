@@ -3,6 +3,7 @@
 // to edit.
 
 import { renderUnicodeCompact } from 'uqr'
+import { platformName } from '@shared/platform'
 import {
   browserPairingLink,
   ownRelayPairingLink,
@@ -48,7 +49,12 @@ export interface PairOptions {
   ownRelayWeb?: string | null
 }
 
-const KINDS: Record<string, string> = { ios: 'iOS app', desktop: 'Desktop app', web: 'Web' }
+const KINDS: Record<string, string> = {
+  ios: 'iOS app',
+  android: 'Android app',
+  desktop: 'Desktop app',
+  web: 'Web',
+}
 
 /** The QR code black on white whatever the terminal's colors, so a camera reads it. */
 export function terminalQr(text: string): string {
@@ -113,8 +119,8 @@ export function browserText(
   return text
 }
 
-function deviceLine(device: PairingDevice): string {
-  return [KINDS[device.kind] ?? device.kind, device.model, device.platform]
+export function deviceLine(device: PairingDevice): string {
+  return [KINDS[device.kind] ?? device.kind, device.model, platformName(device.platform)]
     .filter(Boolean)
     .join(' · ')
 }
