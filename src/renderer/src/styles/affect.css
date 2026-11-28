@@ -9962,3 +9962,81 @@ button.kettu-ctx__part-row:focus-visible {
 :root[data-reduce-motion='always'] :is(.k-ar-search, .k-ar-fb, .k-ar-row, .k-ar-proj__head) {
   transition: none;
 }
+
+/* Agent integration capability checklist (Settings > Agents) */
+:is(.kettu-settings, .kettu-sd) .k-cap-head {
+  justify-content: space-between;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-head__title {
+  flex: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-head__summary {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-row {
+  gap: 12px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-meta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-reason {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-status {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-status[data-status='supported'] {
+  background: var(--success-tint);
+  color: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-status[data-status='partial'] {
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+:is(.kettu-settings, .kettu-sd) .k-cap-status[data-status='unavailable'] {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+@container ui-as-main (max-width: 600px) {
+  :is(.kettu-settings, .kettu-sd) .k-cap-head {
+    flex-wrap: wrap;
+  }
+  :is(.kettu-settings, .kettu-sd) .k-cap-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  :is(.kettu-settings, .kettu-sd) .k-cap-meta {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}

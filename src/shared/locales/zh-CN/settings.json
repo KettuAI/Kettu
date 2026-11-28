@@ -1281,6 +1281,55 @@
       "models_other": "{{count}} 个模型",
       "unread": "{{name}} 启动过一次后显示。",
       "hint": "{{name}} 自己登录每个厂商：点添加厂商会在终端里打开 {{name}}，在里面用 /login 登录订阅或设好 API key。Kettu 看不到这些凭据。"
+    },
+    "capabilities": {
+      "title": "接入能力",
+      "summary": "{{supported}} 项支持 · {{partial}} 项部分支持 · {{unavailable}} 项不可用",
+      "status": {
+        "supported": "支持",
+        "partial": "部分支持",
+        "unavailable": "不可用"
+      },
+      "reason": {
+        "upstream": "上游限制",
+        "kettu": "Kettu 尚未接入"
+      },
+      "items": {
+        "steering": "运行中插入消息",
+        "rewind": "从此处编辑回退",
+        "fileRewind": "编辑回退时恢复文件",
+        "fork": "会话分叉",
+        "imageInput": "图片输入",
+        "mcp": "MCP 服务器",
+        "contextBreakdown": "上下文构成拆解",
+        "usageHistory": "用量与费用统计",
+        "planLimits": "套餐限额与账号",
+        "sideChat": "侧边提问",
+        "workflowsAndRoutines": "工作流与定时任务"
+      },
+      "notes": {
+        "acpNoForkAtMessage": "仅支持整会话分叉；ACP 协议不支持指定消息分叉点",
+        "acpNoRewind": "ACP 协议未提供会话回退接口",
+        "acpStdioAlwaysHttpDepends": "始终支持 stdio；HTTP MCP 取决于适配器声明",
+        "acpStdioOnlyNoHttp": "仅支持 stdio；适配器未声明 HTTP MCP",
+        "agyNoSilentDelete": "Antigravity 关闭已提问会话后仍会保留在历史记录中",
+        "clineModelRequestsOnly": "支持单会话模型请求记录；用量页历史统计尚未接入",
+        "clineSdkOnly": "仅在 Cline SDK 模式下可用（ACP 回退或已压缩会话不支持）",
+        "codexEstimatesOnly": "仅估算 Skills 与 MCP 定义占用，无完整分类构成",
+        "codexPaginatedThreadsOnly": "仅支持分页线程，旧版 rollout 线程无法回退",
+        "deepseekBalanceOnly": "支持读取登录方式与余额；按量计费无周期限额",
+        "dependsOnAcpAdapter": "取决于 ACP 适配器启动时声明的能力",
+        "limitsAdministratorManaged": "套餐用量由管理员统一管理",
+        "limitsHarnessDoesNotOffer": "上游未提供套餐用量读取接口",
+        "limitsModelProviderManaged": "套餐用量由各模型服务商自行管理",
+        "limitsNotYetSupported": "Kettu 尚未接入该智能体的套餐用量读取",
+        "limitsVendorDisallows": "厂商不允许第三方应用读取套餐用量",
+        "noSilentSessionDelete": "上游不支持静默删除临时侧边会话",
+        "piExtensionRequired": "通过 Kettu 的 Pi 扩展接入（需 Pi 1.0 及以上）",
+        "piNoPermissionPrompts": "Pi 不发起工具权限询问，无法强制执行作用域边界",
+        "routinesOnlyNoWorkflows": "已支持定时任务权限模式，工作流步骤尚未开放",
+        "sideChatHiddenCopyOnly": "通过隐藏会话携带对话摘要副本回答"
+      }
     }
   },
   "about": {
