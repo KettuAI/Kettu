@@ -2190,5 +2190,9 @@
       "summary": "Branch summary",
       "system": "Session node"
     }
+  },
+  "extensionUi": {
+    "statusLabel": "Extension status",
+    "widgetsLabel": "Extension widgets"
   }
 }

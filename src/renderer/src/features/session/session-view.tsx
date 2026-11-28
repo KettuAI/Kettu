@@ -41,6 +41,7 @@ import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
+import { ExtensionStatusBar, ExtensionWidgets } from './extension-ui'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { LinkSessionContext } from './open-link'
 import { QueueStack } from './queue-stack'
@@ -356,6 +357,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     showBackground={!!session && !archived && !away && !running}
                     onError={setQueueError}
                   />
+                  <ExtensionWidgets
+                    sessionId={sessionId}
+                    placement="aboveEditor"
+                    enabled={!!session && !archived && !away}
+                  />
                   <div className="flex flex-col">
                     {/* Mounted only while something waits; its cards sit behind the composer. */}
                     {session &&
@@ -390,6 +396,15 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                       <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
                     )}
                   </div>
+                  <ExtensionWidgets
+                    sessionId={sessionId}
+                    placement="belowEditor"
+                    enabled={!!session && !archived && !away}
+                  />
+                  <ExtensionStatusBar
+                    sessionId={sessionId}
+                    enabled={!!session && !archived && !away}
+                  />
                 </div>
               </div>
             </div>

@@ -139,6 +139,33 @@ export interface SessionView {
   rewound?: RewoundView | null
   /** The agent said this conversation cannot be cut, as a Codex thread of the older format. */
   noRewind?: boolean
+  /**
+   * Ephemeral: live extension status entries and text widgets for this session (such as Pi
+   * `setStatus` and `setWidget`). Absent or null when none are active.
+   */
+  extensionUi?: ExtensionUiView | null
+}
+
+/** Placement of an agent extension text widget relative to the session composer. */
+export type ExtensionWidgetPlacement = 'aboveEditor' | 'belowEditor'
+
+/** A live status entry published by a native agent extension (for example Pi `setStatus`). */
+export interface ExtensionStatusView {
+  key: string
+  text: string
+}
+
+/** A live text widget published by a native agent extension (for example Pi `setWidget`). */
+export interface ExtensionWidgetView {
+  key: string
+  lines: string[]
+  placement: ExtensionWidgetPlacement
+}
+
+/** Ephemeral per-session UI state published by native agent extensions. */
+export interface ExtensionUiView {
+  statuses: ExtensionStatusView[]
+  widgets: ExtensionWidgetView[]
 }
 
 export interface RewoundView {
