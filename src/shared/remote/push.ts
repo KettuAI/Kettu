@@ -91,14 +91,22 @@ export const MAX_PUSH_BODY_TEXT = 400
 
 export type ApnsEnvironment = 'production' | 'sandbox'
 
+/** Legacy Live Activity payload version: waiting-only (`kind: 'waiting'` with `count`) and `end`. */
+export const LIVE_ACTIVITY_V1 = 1
+/** Multi-state Live Activity payload version (`waiting`, `error`, `running`, `limit`, `turn-ended`). */
+export const LIVE_ACTIVITY_V2 = 2
+
+const MAX_ACTIVITY_VERSION = 100
+
 /** Where the host sends a device's notifications. */
 export interface PushTarget {
   apns: { token: string; environment: ApnsEnvironment }
   /**
    * The Live Activity tokens: `start` starts one by push, `update` reaches the one running now,
-   * which the device sends once the activity has it.
+   * which the device sends once the activity has it. `version` declares the highest Live Activity
+   * payload version the device supports (omitted or 1 = legacy waiting-only; 2 = multi-state v2).
    */
-  activity?: { start?: string; update?: string }
+  activity?: { start?: string; update?: string; version?: number }
 }
 
 /** What a device wants to hear of this host. */
@@ -115,6 +123,12 @@ export interface NotificationChoices {
   device: boolean
   /** 套餐额度预警（90%）、触顶或重置推送开关（可选，默认关闭以兼容旧设备）。 */
   planLimits?: boolean
+  /**
+   * Opt in to non-waiting Live Activity updates (running progress, errors, turn-ended, plan limits)
+   * on devices advertising Live Activity v2 (`target.activity.version >= 2`). Defaults to enabled
+   * for v2 devices unless explicitly set to false.
+   */
+  liveActivityProgress?: boolean
   /** Only while the user is not at the host, when the host can tell: the desktop app can. */
   onlyAway: boolean
   /** Titles and text; without them a notification says only which host needs the user. */
@@ -158,8 +172,13 @@ export interface NotificationsUpdate {
 /** What `notifications.get` and `notifications.set` answer. */
 export interface NotificationsState {
   choices: NotificationChoices
-  /** Whether a target is set, and which Live Activity tokens. */
-  target: { apns: boolean; activityStart: boolean; activityUpdate: boolean }
+  /** Whether a target is set, and which Live Activity tokens and version. */
+  target: {
+    apns: boolean
+    activityStart: boolean
+    activityUpdate: boolean
+    activityVersion?: number
+  }
   /**
    * From a host with the `web-push` feature, the endpoint of the browser's subscription it keeps
    * and the tags of the notifications it withdrew since it last sent one of the same, which the
@@ -182,6 +201,23 @@ const isId = (value: unknown): value is string =>
 const isApnsToken = (value: unknown): value is string =>
   typeof value === 'string' && APNS_TOKEN.test(value)
 
+const isActivityVersion = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isSafeInteger(value) &&
+  value >= LIVE_ACTIVITY_V1 &&
+  value <= MAX_ACTIVITY_VERSION
+
+/**
+ * Whether a device advertises Live Activity v2 support and accepts non-waiting updates
+ * (`running`, `error`, `turn-ended`, `limit`). Legacy devices (omitted or v1 `activity.version`)
+ * only receive legacy-compatible `waiting` payloads (with `count`) and `end`.
+ */
+export function supportsRichLiveActivity(push: DevicePush): boolean {
+  const version = push.target?.activity?.version ?? LIVE_ACTIVITY_V1
+  if (version < LIVE_ACTIVITY_V2) return false
+  return push.choices.liveActivityProgress !== false
+}
+
 /** A target as a device sends it, or null when it is not one. */
 export function parsePushTarget(value: unknown): PushTarget | null {
   if (typeof value !== 'object' || value === null) return null
@@ -193,13 +229,15 @@ export function parsePushTarget(value: unknown): PushTarget | null {
   const target: PushTarget = { apns: { token, environment } }
   if (activity === undefined) return target
   if (typeof activity !== 'object' || activity === null) return null
-  const { start, update } = activity as Record<string, unknown>
+  const { start, update, version } = activity as Record<string, unknown>
   if (start !== undefined && !isApnsToken(start)) return null
   if (update !== undefined && !isApnsToken(update)) return null
-  if (start === undefined && update === undefined) return target
+  if (version !== undefined && !isActivityVersion(version)) return null
+  if (start === undefined && update === undefined && version === undefined) return target
   target.activity = {
     ...(start === undefined ? {} : { start }),
     ...(update === undefined ? {} : { update }),
+    ...(version === undefined ? {} : { version }),
   }
   return target
 }
@@ -211,6 +249,7 @@ const SWITCHES = [
   'routines',
   'device',
   'planLimits',
+  'liveActivityProgress',
   'onlyAway',
   'details',
 ] as const satisfies readonly (keyof NotificationChoices)[]

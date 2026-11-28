@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { currentPrimitives } from './primitives'
 import {
   DEFAULT_CHOICES,
+  LIVE_ACTIVITY_V1,
+  LIVE_ACTIVITY_V2,
   encodeSealed,
   openPush,
   parseChoices,
@@ -14,6 +16,7 @@ import {
   pushTag,
   pushUrlFrom,
   sealPush,
+  supportsRichLiveActivity,
   type PushContent,
 } from './push'
 import vectors from './push-vectors.json'
@@ -163,5 +166,64 @@ describe("a device's notifications", () => {
       choices: DEFAULT_CHOICES,
     })
     expect(parseDevicePush({ target: { apns: {} }, choices: {} })).toBeNull()
+  })
+
+  it('parses and gates Live Activity v2 capability and progress opt-in', () => {
+    const apns = { token: 'a1'.repeat(32), environment: 'production' as const }
+    const start = 'b2'.repeat(32)
+    expect(parsePushTarget({ apns, activity: { start, version: LIVE_ACTIVITY_V2 } })).toEqual({
+      apns,
+      activity: { start, version: LIVE_ACTIVITY_V2 },
+    })
+    expect(parsePushTarget({ apns, activity: { version: LIVE_ACTIVITY_V2 } })).toEqual({
+      apns,
+      activity: { version: LIVE_ACTIVITY_V2 },
+    })
+    for (const bad of [0, -1, 1.5, 101, '2', true, null]) {
+      expect(parsePushTarget({ apns, activity: { start, version: bad } })).toBeNull()
+    }
+
+    expect(parseChoices({ liveActivityProgress: true })).toEqual({ liveActivityProgress: true })
+    expect(parseChoices({ liveActivityProgress: false })).toEqual({ liveActivityProgress: false })
+    expect(parseChoices({ liveActivityProgress: 'yes' })).toBeNull()
+
+    const parsed = parseDevicePush({
+      target: { apns, activity: { start, version: LIVE_ACTIVITY_V2 } },
+      choices: { liveActivityProgress: false },
+    })
+    expect(parsed).toEqual({
+      target: { apns, activity: { start, version: LIVE_ACTIVITY_V2 } },
+      choices: { ...DEFAULT_CHOICES, liveActivityProgress: false },
+    })
+
+    // Legacy devices (omitted or v1) never enable rich Live Activity payloads.
+    expect(
+      supportsRichLiveActivity({ target: { apns, activity: { start } }, choices: DEFAULT_CHOICES }),
+    ).toBe(false)
+    expect(
+      supportsRichLiveActivity({
+        target: { apns, activity: { start, version: LIVE_ACTIVITY_V1 } },
+        choices: { ...DEFAULT_CHOICES, liveActivityProgress: true },
+      }),
+    ).toBe(false)
+    // v2 devices enable rich Live Activity unless explicitly opted out via liveActivityProgress: false.
+    expect(
+      supportsRichLiveActivity({
+        target: { apns, activity: { start, version: LIVE_ACTIVITY_V2 } },
+        choices: DEFAULT_CHOICES,
+      }),
+    ).toBe(true)
+    expect(
+      supportsRichLiveActivity({
+        target: { apns, activity: { start, version: LIVE_ACTIVITY_V2 } },
+        choices: { ...DEFAULT_CHOICES, liveActivityProgress: true },
+      }),
+    ).toBe(true)
+    expect(
+      supportsRichLiveActivity({
+        target: { apns, activity: { start, version: LIVE_ACTIVITY_V2 } },
+        choices: { ...DEFAULT_CHOICES, liveActivityProgress: false },
+      }),
+    ).toBe(false)
   })
 })

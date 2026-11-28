@@ -9,13 +9,14 @@
 // added, until it is answered, and a device that joined, to every device that is not in front.
 
 import type { HostActivitySnapshot } from '@shared/host-control'
-import type {
-  DevicePush,
-  LiveActivityPlan,
-  LiveQuickOptions,
-  NotificationChoices,
-  PushActions,
-  PushEvent,
+import {
+  supportsRichLiveActivity,
+  type DevicePush,
+  type LiveActivityPlan,
+  type LiveQuickOptions,
+  type NotificationChoices,
+  type PushActions,
+  type PushEvent,
 } from '@shared/remote/push'
 
 /** 推送到移动端灵动岛与锁屏实时活动的 5 态语义负载。 */
@@ -181,11 +182,13 @@ interface Told {
 
 interface Activity {
   running: boolean
-  /** 最近一次实际发出给网关的状态指纹，供设备回传 updateToken 后判定是否需补发更新。 */
+  /** Last fingerprint sent to the gateway, used to decide whether an update is needed once a token arrives. */
   fingerprint: string
-  /** 已发 push-to-start 但尚未收到设备回传 updateToken。 */
+  /** A push-to-start was issued and the device has not reported an update token yet. */
   awaitingToken?: boolean
-  /** 在收到 updateToken 前状态已归零，等设备回传 updateToken 后立即补发 end，防止孤儿灵动岛。 */
+  /** The exact start job awaiting delivery/token so unsent starts can clear `awaitingToken` safely. */
+  startJob?: PushJob
+  /** Activity cleared before an update token arrived; send `end` immediately once the token arrives. */
   pendingEnd?: boolean
   pendingEndAt?: number
 }
@@ -389,11 +392,26 @@ export class Notifier {
       return true
     }
     if (job.action === 'start' && this.options.foreground?.(job.deviceId)) return false
-    const current = this.pickActivityPayload(choices)
+    const allowRich = supportsRichLiveActivity(device.push)
+    if (!allowRich && job.payload && job.payload.kind !== 'waiting') return false
+    const current = this.pickActivityPayload(choices, allowRich)
     if (!current) return false
     const isWaitingJob = job.payload ? job.payload.kind === 'waiting' : job.count > 0
     if (isWaitingJob && current.kind !== 'waiting') return false
     return true
+  }
+
+  /**
+   * Clears `awaitingToken` when `PushSender` confirms a `push-to-start` job was never sent to APNs
+   * (e.g., cancelled while queued, signed out, or definitively refused by the gateway), preventing
+   * the device from getting stuck waiting for an update token that will never arrive.
+   */
+  activityStartNotSent(job: PushJob): void {
+    if (job.type !== 'activity' || job.action !== 'start') return
+    const state = this.activities.get(job.deviceId)
+    if (state?.awaitingToken && state.startJob === job) {
+      this.activities.delete(job.deviceId)
+    }
   }
 
   /** Tells every device that wants notices about devices, but `except`. */
@@ -585,12 +603,15 @@ export class Notifier {
     }
   }
 
-  private pickActivityPayload(choices: NotificationChoices): LiveActivityPayload | null {
+  private pickActivityPayload(
+    choices: NotificationChoices,
+    allowRich: boolean,
+  ): LiveActivityPayload | null {
     const snap = this.hostActivity
     const now = Date.now()
     const isMuted = (sessionId: string): boolean => choices.muted.includes(sessionId)
 
-    // P1：等待审批请求（优先级最高）
+    // P1: waiting permission / question requests (highest priority; supported by all iOS versions).
     if (choices.permission) {
       let count = 0
       for (const [sessionId, ids] of this.waiting) {
@@ -629,7 +650,7 @@ export class Notifier {
       }
     }
 
-    if (!snap) return null
+    if (!allowRich || !snap) return null
 
     // P2: recent unread error session within the 15-minute window
     if (choices.errors) {
@@ -722,21 +743,25 @@ export class Notifier {
       if (state?.awaitingToken) this.options.cancel?.(deviceId, ACTIVITY_SUBJECT)
       return
     }
-    const payload = enabled && choices && !held ? this.pickActivityPayload(choices) : null
-    // 一旦设备回传 updateToken 或主机已发出 start，即视为存在待维护的活动生命周期。
+    const allowRich = Boolean(device && supportsRichLiveActivity(device.push))
+    const payload =
+      enabled && choices && !held ? this.pickActivityPayload(choices, allowRich) : null
+    // Once a start was issued or the device reported an update token, treat the lifecycle as active.
     const hasLiveActivity = Boolean(state?.running || state?.awaitingToken || tokens?.update)
 
-    const send = (action: 'start' | 'update' | 'end', next: LiveActivityPayload | null): void =>
-      this.options.send({
-        deviceId,
-        subject: ACTIVITY_SUBJECT,
-        type: 'activity',
-        action,
-        count: next?.kind === 'waiting' ? next.count : 0,
-        sessionId: next && 'sessionId' in next ? (next.sessionId ?? null) : null,
-        title: next && 'title' in next ? (next.title ?? null) : null,
-        ...(next ? { payload: next } : {}),
-      })
+    const buildJob = (
+      action: 'start' | 'update' | 'end',
+      next: LiveActivityPayload | null,
+    ): PushJob => ({
+      deviceId,
+      subject: ACTIVITY_SUBJECT,
+      type: 'activity',
+      action,
+      count: next?.kind === 'waiting' ? next.count : 0,
+      sessionId: next && 'sessionId' in next ? (next.sessionId ?? null) : null,
+      title: next && 'title' in next ? (next.title ?? null) : null,
+      ...(next ? { payload: next } : {}),
+    })
 
     if (payload) {
       const fingerprint = JSON.stringify(payload)
@@ -744,21 +769,25 @@ export class Notifier {
         if (!tokens?.start || !canStartActivity(payload) || inForeground) {
           return
         }
-        send('start', payload)
+        const job = buildJob('start', payload)
+        // Record awaitingToken before calling send() so a synchronous drop callback can clear it.
         this.activities.set(deviceId, {
           running: true,
           fingerprint,
           awaitingToken: true,
+          startJob: job,
           pendingEnd: false,
         })
+        this.options.send(job)
         return
       }
-      // 刚发出 start 但尚未收到设备回传 updateToken：不重复 start，保留已发指纹等待回传后按需补发 update。
+      // A start is still awaiting the device's update token: do not burst duplicate starts.
       if (!tokens?.update) {
         this.activities.set(deviceId, {
           running: true,
           fingerprint: state?.fingerprint ?? fingerprint,
           awaitingToken: true,
+          ...(state?.startJob ? { startJob: state.startJob } : {}),
           pendingEnd: false,
         })
         return
@@ -769,26 +798,28 @@ export class Notifier {
         }
         return
       }
-      send('update', payload)
+      this.options.send(buildJob('update', payload))
       this.activities.set(deviceId, { running: true, fingerprint })
       return
     }
 
     if (!hasLiveActivity) return
     if (tokens?.update) {
-      send('end', null)
+      this.options.send(buildJob('end', null))
       this.activities.delete(deviceId)
       return
     }
-    // 刚发 push-to-start 尚未拿到 updateToken 就无待展示状态：先中止在途 start，并记 pendingEnd，
-    // 待设备把该活动的 updateToken 上报回来后立即补发 end，避免孤儿灵动岛残留。
-    this.options.cancel?.(deviceId, ACTIVITY_SUBJECT)
+    // State cleared before the device reported an update token: record pendingEnd before
+    // cancelling so a synchronous unsent-start callback clears it cleanly, while an already-sent
+    // start still ends as soon as the device reports its update token.
     this.activities.set(deviceId, {
       running: false,
       fingerprint: state?.fingerprint ?? '',
       awaitingToken: true,
+      ...(state?.startJob ? { startJob: state.startJob } : {}),
       pendingEnd: true,
       pendingEndAt: state?.pendingEndAt ?? Date.now(),
     })
+    this.options.cancel?.(deviceId, ACTIVITY_SUBJECT)
   }
 }

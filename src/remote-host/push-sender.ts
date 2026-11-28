@@ -13,6 +13,7 @@ import {
   pushRequestHeaders,
   pushTag,
   sealPush,
+  supportsRichLiveActivity,
   type ApnsEnvironment,
   type GatewayPush,
   type DevicePush,
@@ -24,7 +25,7 @@ import { logDevicePush } from '@shared/log/requests'
 import type { RelayKey } from '@shared/remote/relay'
 import type { LogFn } from '../agent-host/storage'
 import { publicKeyBytes } from './devices'
-import type { PushJob } from './notifier'
+import { ACTIVITY_SUBJECT, type PushJob } from './notifier'
 
 export interface PushRetry {
   /** The first wait after a failure, doubling up to `maxMs`. */
@@ -56,9 +57,11 @@ export interface PushSenderOptions {
   /** A device's key and notifications, or null when it is gone. */
   device(id: string): { publicKey: string; push: DevicePush } | null
   /** Apple no longer takes one of the device's tokens. */
-  unregistered(deviceId: string, token: PushTokenKind): void
-  /** 每次发送或重试前二次校验任务是否仍有效（例如审批尚未在桌面端解决）；返回 false 则直接放弃。 */
+  unregistered(deviceId: string, token: PushTokenKind, tokenValue?: string): void
+  /** Re-validates a job right before sending or retrying; returning false drops it. */
   shouldSend?(job: PushJob, ageMs: number): boolean
+  /** Called when a Live Activity `start` job is dropped or cancelled before reaching APNs. */
+  activityStartNotSent?(job: PushJob): void
   log: LogFn
   fetch?: typeof fetch
   now?: () => number
@@ -67,14 +70,36 @@ export interface PushSenderOptions {
 
 interface Entry {
   job: PushJob
-  /** What a newer push replaces: the subject's notification, or the Live Activity. */
+  /**
+   * Cancellation key: notification subject tag, transient Live Activity (`activity`), or a
+   * token-scoped Live Activity end (`activity-end:<token>`), which is never cancelled by newer
+   * starts/updates.
+   */
   key: string
   token: { kind: PushTokenKind; token: string; environment: ApnsEnvironment }
-  /** 推送入队时刻（毫秒），同时作为密文负载的真实事件时间戳与耗时统计基准。 */
+  /** Enqueue timestamp in ms, kept as the sealed content's `at` and latency baseline. */
   queuedAt: number
   cancelled: boolean
-  /** 用于在新推送取代或主动取消时立即中止在途请求与退避等待。 */
+  /** True once the gateway accepted this entry with a 2xx response. */
+  delivered: boolean
+  /** True while a gateway fetch is in flight or terminated without a definitive HTTP refusal. */
+  uncertainDelivery: boolean
+  /** Ensures `activityStartNotSent` is invoked at most once for an entry. */
+  notifiedNotSent: boolean
+  /** Aborts an in-flight request or retry backoff when superseded or explicitly cancelled. */
   abort: AbortController
+}
+
+const activityEndKey = (token: string): string => `activity-end:${token}`
+
+function isUnsupportedRichActivity(job: PushJob, push: DevicePush): boolean {
+  return (
+    job.type === 'activity' &&
+    job.action !== 'end' &&
+    job.payload !== undefined &&
+    job.payload.kind !== 'waiting' &&
+    !supportsRichLiveActivity(push)
+  )
 }
 
 /** Why a try failed: to try again, maybe after a wait the gateway asked for, or to give up. */
@@ -115,10 +140,21 @@ export class PushSender {
 
   /** Queues a push for its device; the token it goes to is the one the device has now. */
   send(job: PushJob): void {
-    if (this.stopped) return
+    const notifyStartNotSent = (): void => {
+      if (job.type === 'activity' && job.action === 'start') {
+        this.options.activityStartNotSent?.(job)
+      }
+    }
+    if (this.stopped) {
+      notifyStartNotSent()
+      return
+    }
     const device = this.options.device(job.deviceId)
     const token = device && tokenOf(device.push, job)
-    if (!token) return
+    if (!device || !token || isUnsupportedRichActivity(job, device.push)) {
+      notifyStartNotSent()
+      return
+    }
     if (!this.options.token()) {
       if (!this.signedOutLogged) {
         this.options.log(
@@ -127,11 +163,26 @@ export class PushSender {
         )
         this.signedOutLogged = true
       }
+      notifyStartNotSent()
       return
     }
     this.signedOutLogged = false
-    const key = job.type === 'activity' ? 'activity' : `tag:${job.subject}`
-    this.cancel(job.deviceId, key)
+    let key: string
+    if (job.type === 'activity') {
+      if (job.action === 'end') {
+        // An end supersedes pending transient activity pushes, but never aborts an earlier end.
+        this.cancel(job.deviceId, ACTIVITY_SUBJECT)
+        key = activityEndKey(token.token)
+        if (this.hasPendingKey(job.deviceId, key)) return
+      } else {
+        // Newer start/update replaces older transient activity pushes without touching in-flight ends.
+        key = ACTIVITY_SUBJECT
+        this.cancel(job.deviceId, ACTIVITY_SUBJECT)
+      }
+    } else {
+      key = `tag:${job.subject}`
+      this.cancel(job.deviceId, key)
+    }
     const queue = this.queues.get(job.deviceId) ?? []
     queue.push({
       job,
@@ -139,28 +190,47 @@ export class PushSender {
       token,
       queuedAt: this.now(),
       cancelled: false,
+      delivered: false,
+      uncertainDelivery: false,
+      notifiedNotSent: false,
       abort: new AbortController(),
     })
     this.queues.set(job.deviceId, queue)
     void this.run(job.deviceId)
   }
 
-  /** 立即取消指定设备上同键的排队条目与正在发送/退避重试中的在途条目。 */
+  /** Immediately cancels queued and in-flight entries matching `key` for a device. */
   cancel(deviceId: string, key: string): void {
     const queue = this.queues.get(deviceId)
     if (queue) {
       for (const entry of queue) {
-        if (entry.key === key) {
+        if (entry.key === key && !entry.cancelled) {
           entry.cancelled = true
           entry.abort.abort()
+          // Queued entries have never started a gateway request, so unsent starts can be cleared now.
+          if (
+            entry.job.type === 'activity' &&
+            entry.job.action === 'start' &&
+            !entry.notifiedNotSent
+          ) {
+            entry.notifiedNotSent = true
+            this.options.activityStartNotSent?.(entry.job)
+          }
         }
       }
     }
     const current = this.active.get(deviceId)
-    if (current?.key === key) {
+    if (current?.key === key && !current.cancelled) {
       current.cancelled = true
       current.abort.abort()
     }
+  }
+
+  private hasPendingKey(deviceId: string, key: string): boolean {
+    const current = this.active.get(deviceId)
+    if (current && !current.cancelled && current.key === key) return true
+    const queue = this.queues.get(deviceId)
+    return Boolean(queue?.some((entry) => !entry.cancelled && entry.key === key))
   }
 
   /** Ends every wait; what is queued is dropped. */
@@ -233,6 +303,17 @@ export class PushSender {
       }
     } finally {
       if (this.active.get(deviceId) === entry) this.active.delete(deviceId)
+      if (
+        !this.stopped &&
+        entry.job.type === 'activity' &&
+        entry.job.action === 'start' &&
+        !entry.delivered &&
+        !entry.uncertainDelivery &&
+        !entry.notifiedNotSent
+      ) {
+        entry.notifiedNotSent = true
+        this.options.activityStartNotSent?.(entry.job)
+      }
     }
   }
 
@@ -260,7 +341,9 @@ export class PushSender {
   ): Promise<Failure | null> {
     const device = this.options.device(deviceId)
     const accessToken = this.options.token()
-    if (!device || !accessToken) return { retry: false }
+    if (!device || !accessToken || isUnsupportedRichActivity(entry.job, device.push)) {
+      return { retry: false }
+    }
     const devicePublicKey = publicKeyBytes(device.publicKey)
     if (!devicePublicKey) return { retry: false }
     const push = await this.gatewayPush(entry.job, device.push, devicePublicKey, entry.queuedAt)
@@ -279,6 +362,7 @@ export class PushSender {
     const headers = await pushRequestHeaders(key, url, hostId, body, accessToken)
     if (entry.cancelled || this.stopped) return { retry: false }
     const sentAt = this.now()
+    entry.uncertainDelivery = true
     const response = await this.fetch(`${url}${PUSH_PATH}`, {
       method: 'POST',
       headers,
@@ -286,6 +370,8 @@ export class PushSender {
       signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), entry.abort.signal]),
     })
     if (response.ok) {
+      entry.delivered = true
+      entry.uncertainDelivery = false
       const acceptedAt = this.now()
       logDevicePush({
         device: deviceId,
@@ -296,10 +382,11 @@ export class PushSender {
       })
       return null
     }
+    entry.uncertainDelivery = false
     const refusal = await refusalOf(response)
     if (response.status === 410 || refusal === 'unregistered') {
       this.options.log('info', `Apple no longer takes a push token of device ${deviceId}`)
-      this.options.unregistered(deviceId, entry.token.kind)
+      this.options.unregistered(deviceId, entry.token.kind, entry.token.token)
       return { retry: false }
     }
     const reason = refusal ?? `status ${response.status}`
