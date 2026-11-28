@@ -85,6 +85,54 @@ describe('findChips with exclusive commands and stackable skills', () => {
       { kind: 'skill', from: 19, to: 34, name: 'security-audit' },
     ])
   })
+
+  it('recognizes #123 and owner/repo#456 as GitHub link chips only when githubRepo is present', () => {
+    const text =
+      'See #2600, other/repo#42, `#999`, #L10, #ff0000, foo#123, and https://example.com/p#123'
+    // Without a linked GitHub repository, #123 stays plain text and only the full URL is a link.
+    expect(findChips(text, ctx())).toEqual([
+      {
+        kind: 'link',
+        from: 62,
+        to: 87,
+        url: 'https://example.com/p#123',
+        host: 'example.com',
+        path: '/p#123',
+        local: false,
+      },
+    ])
+
+    // With a linked GitHub repository, #2600 and other/repo#42 resolve cleanly while code/anchors/colors stay text.
+    expect(findChips(text, ctx({ githubRepo: { owner: 'KettuAI', repo: 'Kettu' } }))).toEqual([
+      {
+        kind: 'link',
+        from: 4,
+        to: 9,
+        url: 'https://github.com/KettuAI/Kettu/issues/2600',
+        host: 'github.com',
+        path: '/KettuAI/Kettu/issues/2600',
+        local: false,
+      },
+      {
+        kind: 'link',
+        from: 11,
+        to: 24,
+        url: 'https://github.com/other/repo/issues/42',
+        host: 'github.com',
+        path: '/other/repo/issues/42',
+        local: false,
+      },
+      {
+        kind: 'link',
+        from: 62,
+        to: 87,
+        url: 'https://example.com/p#123',
+        host: 'example.com',
+        path: '/p#123',
+        local: false,
+      },
+    ])
+  })
 })
 
 describe('composer skill feedback and popover dismissal wiring', () => {

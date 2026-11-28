@@ -123,6 +123,7 @@ import type {
   PullRequestState,
   ProjectWorktreeSettings,
   ReferenceLookup,
+  RepositoryReferenceSearchResult,
   RepositoryVisibility,
   SessionWorktree,
   WorktreeInspection,
@@ -2033,6 +2034,11 @@ export interface HostContract {
   'git.issue': { params: { url: string }; result: IssueLookup }
   // A github.com pull request stack URL; degrades cleanly when unsupported or unreadable.
   'git.stack': { params: { url: string; fresh?: boolean }; result: PullRequestStackLookup }
+  // Lists recent issues/PRs for a GitHub repository, or searches them by number or title.
+  'git.searchReferences': {
+    params: { owner: string; repo: string; query: string }
+    result: RepositoryReferenceSearchResult
+  }
   'git.watchReferences': { params: { urls: string[] }; result: void }
   // A chip's author; null when GitHub's avatar host has no picture for the login.
   'git.avatarUrl': { params: { login: string }; result: string | null }
@@ -2712,6 +2718,7 @@ export const HOST_METHODS = [
   'git.pullRequest',
   'git.issue',
   'git.stack',
+  'git.searchReferences',
   'git.watchReferences',
   'git.avatarUrl',
   'git.currentPullRequest',

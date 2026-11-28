@@ -5,16 +5,19 @@ import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
   GITHUB_STACK_URL,
+  githubReferenceOf,
   isRepositoryName,
   type CheckRun,
   type Issue,
   type IssueLabel,
+  type IssueState,
   type PullRequest,
   type PullRequestAuthor,
   type PullRequestStack,
   type PullRequestStackItem,
   type PullRequestStackState,
   type PullRequestState,
+  type RepositoryReferenceItem,
 } from '@shared/git'
 import { LocalizedError } from '../localized-error'
 import type { BranchPullRequest } from './api'
@@ -509,4 +512,217 @@ export function mapBranchPullRequests(raw: unknown): Map<string, BranchPullReque
 /** How long to wait before asking again: checks that are running change quickly. */
 export function nextPollDelayMs(pr: PullRequest | null): number {
   return pr?.checks.state === 'pending' ? 60_000 : 300_000
+}
+
+const RECENT_REFERENCES_QUERY = `query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    issues(first: 25, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { __typename number title url state stateReason updatedAt }
+    }
+    pullRequests(first: 25, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { __typename number title url state isDraft updatedAt }
+    }
+  }
+}`
+
+const SEARCH_TEXT_REFERENCES_QUERY = `query($searchQuery: String!) {
+  search(query: $searchQuery, type: ISSUE, first: 25) {
+    nodes {
+      __typename
+      ... on Issue { number title url state stateReason updatedAt }
+      ... on PullRequest { number title url state isDraft updatedAt }
+    }
+  }
+}`
+
+const SEARCH_NUMBER_REFERENCES_QUERY = `query($owner: String!, $repo: String!, $number: Int!, $searchQuery: String!) {
+  repository(owner: $owner, name: $repo) {
+    issueOrPullRequest(number: $number) {
+      __typename
+      ... on Issue { number title url state stateReason updatedAt }
+      ... on PullRequest { number title url state isDraft updatedAt }
+    }
+  }
+  search(query: $searchQuery, type: ISSUE, first: 20) {
+    nodes {
+      __typename
+      ... on Issue { number title url state stateReason updatedAt }
+      ... on PullRequest { number title url state isDraft updatedAt }
+    }
+  }
+}`
+
+const REFERENCE_QUERY_MAX = 100
+
+/**
+ * Strips control characters, quotes, and qualifier colons from a user query before embedding it
+ * inside GitHub's search syntax, keeping words safe and scoped to `repo:owner/repo`.
+ */
+export function sanitizeReferenceSearchTerms(query: string): string {
+  let cleaned = ''
+  for (const ch of query.slice(0, REFERENCE_QUERY_MAX)) {
+    const code = ch.charCodeAt(0)
+    cleaned += code <= 0x1f || code === 0x7f || ch === '"' || ch === '\\' || ch === ':' ? ' ' : ch
+  }
+  return cleaned
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .map((term) => `"${term}"`)
+    .join(' ')
+}
+
+function assertRepo(owner: string, repo: string): void {
+  if (!GITHUB_LOGIN.test(owner) || !isRepositoryName(repo)) {
+    throw new LocalizedError({ key: 'git.notRepositoryName', params: { name: `${owner}/${repo}` } })
+  }
+}
+
+/** Arguments of `gh api graphql` to list recently updated issues and PRs of `owner/repo`. */
+export function recentReferencesArgs(owner: string, repo: string): string[] {
+  assertRepo(owner, repo)
+  return [
+    'api',
+    'graphql',
+    '--hostname',
+    'github.com',
+    '-f',
+    `query=${RECENT_REFERENCES_QUERY}`,
+    '-f',
+    `owner=${owner}`,
+    '-f',
+    `repo=${repo}`,
+  ]
+}
+
+/**
+ * Arguments of `gh api graphql` to search issues and PRs of `owner/repo` by number or title.
+ * Pure positive integers also perform an exact `issueOrPullRequest(number:)` lookup so older
+ * numbers outside the recent window resolve reliably.
+ */
+export function searchReferencesArgs(owner: string, repo: string, query: string): string[] {
+  assertRepo(owner, repo)
+  const trimmed = query.trim().slice(0, REFERENCE_QUERY_MAX)
+  if (!trimmed) return recentReferencesArgs(owner, repo)
+  const sanitized = sanitizeReferenceSearchTerms(trimmed)
+  if (!sanitized) return recentReferencesArgs(owner, repo)
+  const searchQuery = `repo:${owner}/${repo} ${sanitized} in:title`
+  if (/^[1-9]\d{0,8}$/.test(trimmed)) {
+    const number = Number(trimmed)
+    return [
+      'api',
+      'graphql',
+      '--hostname',
+      'github.com',
+      '-f',
+      `query=${SEARCH_NUMBER_REFERENCES_QUERY}`,
+      '-f',
+      `owner=${owner}`,
+      '-f',
+      `repo=${repo}`,
+      '-F',
+      `number=${number}`,
+      '-f',
+      `searchQuery=${searchQuery}`,
+    ]
+  }
+  return [
+    'api',
+    'graphql',
+    '--hostname',
+    'github.com',
+    '-f',
+    `query=${SEARCH_TEXT_REFERENCES_QUERY}`,
+    '-f',
+    `searchQuery=${searchQuery}`,
+  ]
+}
+
+function graphIssueState(node: Json): IssueState {
+  const closed = text(node.state).toUpperCase() === 'CLOSED'
+  if (!closed) return 'open'
+  const reason = text(node.stateReason).toUpperCase()
+  return reason === 'NOT_PLANNED' || reason === 'DUPLICATE' ? 'not_planned' : 'completed'
+}
+
+function mapReferenceNode(
+  raw: unknown,
+  owner: string,
+  repo: string,
+): RepositoryReferenceItem | null {
+  if (!isObject(raw)) return null
+  const url = text(raw.url)
+  const parsed = githubReferenceOf(url)
+  if (!parsed || parsed.kind === 'stack') return null
+  if (
+    parsed.owner.toLowerCase() !== owner.toLowerCase() ||
+    parsed.repo.toLowerCase() !== repo.toLowerCase()
+  ) {
+    return null
+  }
+  const title = text(raw.title).trim()
+  if (!title) return null
+  const updatedAt = timeOf(raw.updatedAt) ?? 0
+  const typename = text(raw.__typename)
+  if (typename === 'PullRequest' || (typename === '' && parsed.kind === 'pull')) {
+    return {
+      kind: 'pull',
+      owner: parsed.owner,
+      repo: parsed.repo,
+      number: parsed.number,
+      title,
+      url: parsed.url,
+      state: pullRequestState(raw),
+      updatedAt,
+    }
+  }
+  if (typename === 'Issue' || (typename === '' && parsed.kind === 'issue')) {
+    return {
+      kind: 'issue',
+      owner: parsed.owner,
+      repo: parsed.repo,
+      number: parsed.number,
+      title,
+      url: parsed.url,
+      state: graphIssueState(raw),
+      updatedAt,
+    }
+  }
+  return null
+}
+
+/**
+ * Maps a `recentReferencesArgs` or `searchReferencesArgs` GraphQL payload into deduplicated,
+ * repository-scoped issue and pull request items, ordered newest updated first.
+ */
+export function mapRepositoryReferences(
+  raw: unknown,
+  owner: string,
+  repo: string,
+): RepositoryReferenceItem[] {
+  if (!isObject(raw) || !isObject(raw.data)) {
+    throw new LocalizedError({ key: 'git.unexpected.pullRequestList' })
+  }
+  const data = raw.data
+  const nodes: unknown[] = []
+  if (isObject(data.repository)) {
+    const repository = data.repository
+    if (repository.issueOrPullRequest) nodes.push(repository.issueOrPullRequest)
+    if (isObject(repository.issues) && Array.isArray(repository.issues.nodes)) {
+      nodes.push(...repository.issues.nodes)
+    }
+    if (isObject(repository.pullRequests) && Array.isArray(repository.pullRequests.nodes)) {
+      nodes.push(...repository.pullRequests.nodes)
+    }
+  }
+  if (isObject(data.search) && Array.isArray(data.search.nodes)) {
+    nodes.push(...data.search.nodes)
+  }
+  const byNumber = new Map<number, RepositoryReferenceItem>()
+  for (const node of nodes) {
+    const item = mapReferenceNode(node, owner, repo)
+    if (!item || byNumber.has(item.number)) continue
+    byNumber.set(item.number, item)
+  }
+  return [...byNumber.values()].sort((a, b) => b.updatedAt - a.updatedAt || b.number - a.number)
 }

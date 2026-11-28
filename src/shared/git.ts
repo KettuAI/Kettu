@@ -268,6 +268,44 @@ export type PullRequestStackLookup =
 /** What any watched GitHub reference lookup produces for the renderer cache. */
 export type ReferenceLookup = IssueLookup | PullRequestStackLookup
 
+/** A GitHub repository identified by its owner and repository name. */
+export interface GitHubRepository {
+  owner: string
+  repo: string
+}
+
+/** A compact issue or pull request entry returned for the composer `#` reference picker. */
+export type RepositoryReferenceItem =
+  | {
+      kind: 'issue'
+      owner: string
+      repo: string
+      number: number
+      title: string
+      url: string
+      state: IssueState
+      updatedAt: number
+    }
+  | {
+      kind: 'pull'
+      owner: string
+      repo: string
+      number: number
+      title: string
+      url: string
+      state: PullRequestState
+      updatedAt: number
+    }
+
+/** Why listing or searching repository issues/PRs degraded cleanly without blocking typing. */
+export type RepositoryReferenceUnavailableReason =
+  'gh-missing' | 'gh-signed-out' | 'timeout' | 'failed'
+
+/** Read-only repository issue/PR search outcome for the composer `#` picker. */
+export type RepositoryReferenceSearchResult =
+  | { kind: 'ok'; items: RepositoryReferenceItem[] }
+  | { kind: 'unavailable'; reason: RepositoryReferenceUnavailableReason; message?: string }
+
 /** A pull request, issue, or pull request stack a reply names, by its canonical URL. */
 export interface GitHubReference {
   kind: 'pull' | 'issue' | 'stack'
@@ -346,6 +384,121 @@ export function schemelessGitHubUrl(text: string): string | null {
 /** A canonical URL for `owner/repo#number`; GitHub redirects `/issues/<n>` to a pull request. */
 export function githubIssueUrl(owner: string, repo: string, number: number): string {
   return `https://github.com/${owner}/${repo}/issues/${number}`
+}
+
+/** A backtick-delimited inline code span `[from, to)` inside a single text block. */
+export interface TextSpan {
+  from: number
+  to: number
+}
+
+/**
+ * Finds CommonMark inline code spans delimited by matching runs of backticks within `text`
+ * (without crossing a blank line). Unmatched backtick runs stay ordinary text.
+ */
+export function inlineCodeSpans(text: string): TextSpan[] {
+  const spans: TextSpan[] = []
+  let i = 0
+  while (i < text.length) {
+    if (text[i] !== '`') {
+      i++
+      continue
+    }
+    const openStart = i
+    while (i < text.length && text[i] === '`') i++
+    const ticks = i - openStart
+    let j = i
+    let matchedEnd = -1
+    while (j < text.length) {
+      if (
+        (text[j] === '\n' && text[j + 1] === '\n') ||
+        (text[j] === '\r' && text[j + 1] === '\n' && text[j + 2] === '\r' && text[j + 3] === '\n')
+      ) {
+        break
+      }
+      if (text[j] === '`') {
+        const closeStart = j
+        while (j < text.length && text[j] === '`') j++
+        if (j - closeStart === ticks) {
+          matchedEnd = j
+          break
+        }
+      } else {
+        j++
+      }
+    }
+    if (matchedEnd !== -1) {
+      spans.push({ from: openStart, to: matchedEnd })
+      i = matchedEnd
+    }
+  }
+  return spans
+}
+
+/** A `#123` or `owner/repo#123` GitHub reference found in prose text. */
+export interface TextGitHubReference {
+  from: number
+  to: number
+  owner: string | null
+  repo: string | null
+  number: number
+}
+
+// `owner/repo#12` or `#12`, starting with a non-zero digit so `#0` and `#000000` stay out, not
+// after identifier/path/entity/email/hash characters, and not followed by identifier/hyphen chars
+// so `#L10`, `#ff0000`, `foo#123`, `&#123;`, `##123`, and `#123-foo` stay plain text.
+const TEXT_GITHUB_REFERENCE =
+  /(?<![\w/&#.@-])(?:([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([\w.-]{1,100}))?#([1-9]\d{0,8})(?![\w-])/g
+
+/**
+ * Finds `#123` and `owner/repo#123` references in `text`, optionally skipping CommonMark inline
+ * code spans. Callers without an associated repository should ignore bare (`owner === null`) refs.
+ */
+export function githubTextReferences(
+  text: string,
+  options?: { skipInlineCode?: boolean },
+): TextGitHubReference[] {
+  const skipSpans = options?.skipInlineCode ? inlineCodeSpans(text) : []
+  const inCode = (from: number, to: number) =>
+    skipSpans.some((span) => from < span.to && to > span.from)
+  const found: TextGitHubReference[] = []
+  for (const match of text.matchAll(TEXT_GITHUB_REFERENCE)) {
+    const [whole, owner, repo, rawNumber] = match
+    if (repo && !isRepositoryName(repo)) continue
+    const from = match.index
+    const to = from + whole.length
+    if (inCode(from, to)) continue
+    const number = Number(rawNumber)
+    if (!Number.isSafeInteger(number) || number < 1) continue
+    found.push({ from, to, owner: owner ?? null, repo: repo ?? null, number })
+  }
+  return found
+}
+
+/**
+ * Resolves `#123` (and `owner/repo#123`) text references to canonical GitHub URLs when `repo` is
+ * associated with the current project. Without an associated repository, returns an empty list so
+ * plain-text input stays untouched.
+ */
+export function githubShortReferenceLinks(
+  text: string,
+  repo: GitHubRepository | null,
+  options?: { skipInlineCode?: boolean },
+): TextLink[] {
+  if (!repo) return []
+  const refs = githubTextReferences(text, { skipInlineCode: options?.skipInlineCode ?? true })
+  return refs.map((ref) => ({
+    from: ref.from,
+    to: ref.to,
+    url: githubIssueUrl(ref.owner ?? repo.owner, ref.repo ?? repo.repo, ref.number),
+  }))
+}
+
+/** Canonical URL when `text` is exclusively a single `owner/repo#123` reference, else null. */
+export function qualifiedGitHubRefUrl(text: string): string | null {
+  const [ref] = githubTextReferences(text)
+  if (!ref || ref.from !== 0 || ref.to !== text.length || !ref.owner || !ref.repo) return null
+  return githubIssueUrl(ref.owner, ref.repo, ref.number)
 }
 
 /** A GitHub user's login, an enterprise one with its `_shortcode`, or a bot's `<slug>[bot]`. */

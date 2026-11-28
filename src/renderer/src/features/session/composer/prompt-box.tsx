@@ -18,6 +18,7 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { menuCollisionPadding } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
+import { rememberReferenceSummary, useGitStore } from '@renderer/stores/git'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { useOverlayPresence } from '@renderer/stores/overlays'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
@@ -25,6 +26,8 @@ import { ArtifactPickerPopover, AttachedArtifactChips } from './artifact-picker'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
+import { hashPickerShown, hashRefAt, replaceHashRef, type GitHubRefRow } from './github-picker'
+import { GitHubRefFooter, GitHubRefHeading, GitHubRefItem } from './github-ref-popover'
 import {
   MentionFooter,
   MentionItem,
@@ -61,6 +64,7 @@ import {
 } from './slash'
 import { slashKeys } from './slash-list'
 import { addDraftMention } from './plugin-mentions'
+import { useGitHubRefPicker, type GitHubRefPickerState } from './use-github-ref-picker'
 import { useMentionList, type MentionList } from './use-mention-list'
 import {
   usePluginMentions,
@@ -70,22 +74,26 @@ import {
 } from './use-plugin-mentions'
 import { useBoxText, type PromptBoxState } from './use-prompt-box'
 
-// The box both composers share, the session's and New session's: the text with its slash and `@`
-// popovers and the attachments, kept in a draft, inside the Chat Composer's writing area. What
-// sends, and how, is each one's own.
+// The box both composers share, the session's and New session's: the text with its slash, `@`,
+// and `#` popovers and the attachments, kept in a draft, inside the Chat Composer's writing area.
+// What sends, and how, is each one's own.
 
-type PopoverItem = SlashCommand | MentionRow | PluginRow
+type PopoverItem = SlashCommand | MentionRow | PluginRow | GitHubRefRow
 
 /** What the mention list shows: the project's files and what the plugins offer. */
 interface MentionView extends MentionList {
   plugins: PluginMentions
 }
 
+type PopoverView =
+  'slash' | { kind: 'mention'; view: MentionView } | { kind: 'hash'; view: GitHubRefPickerState }
+
 /** Why there are no commands to list yet: none reported so far, or no project chosen. */
 export type SlashNote = 'loading' | 'chooseProject'
 
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 const isPluginRow = (item: PopoverItem): item is PluginRow => 'plugin' in item
+const isGitHubRefRow = (item: PopoverItem): item is GitHubRefRow => 'githubRef' in item
 /** A source with no items still shows a line when it is searching or failed. */
 const shownNote = (group: PluginMentionGroup) => group.error !== null || group.searching
 
@@ -143,15 +151,27 @@ export function PromptBox({
   const [completedSlash, setCompletedSlash] = useState<CompletedSlash | null>(null)
   // The `@` whose popover Esc or a click elsewhere closed.
   const [mentionDismissed, setMentionDismissed] = useState<number | null>(null)
-  // While an input method composes: whether the mention popover was open when it started.
+  // The `#` whose GitHub reference picker Esc or a click elsewhere closed.
+  const [hashDismissed, setHashDismissed] = useState<number | null>(null)
+  // While an input method composes: whether a mention or `#` picker was open when it started.
   const [composition, setComposition] = useState<{ open: boolean } | null>(null)
-  const [popover, setPopover] = useState<'slash' | MentionView | null>(null)
+  const [popover, setPopover] = useState<PopoverView | null>(null)
   const [viewing, setViewing] = useState<TextDialogTarget | null>(null)
   // The highlighted row, for the list `list` names.
   const [highlight, setHighlight] = useState({ list: '', index: 0 })
   const group = useRef<HTMLDivElement>(null)
   const popup = useRef<HTMLDivElement>(null)
   const listId = useId()
+  const githubOwner = useGitStore((s) =>
+    !box.noProject && projectPath ? (s.status[projectPath]?.remote?.github?.owner ?? null) : null,
+  )
+  const githubRepoName = useGitStore((s) =>
+    !box.noProject && projectPath ? (s.status[projectPath]?.remote?.github?.repo ?? null) : null,
+  )
+  const githubRepo = useMemo(
+    () => (githubOwner && githubRepoName ? { owner: githubOwner, repo: githubRepoName } : null),
+    [githubOwner, githubRepoName],
+  )
 
   // Read from the text as values, so a key or a caret move renders the box only when one changes.
   const completedAlive = useBoxText(box, (text, caret) =>
@@ -209,22 +229,64 @@ export function PromptBox({
       files.rows.length > 0 ||
       plugins.visible ||
       (mention!.query !== '' && !filesReady))
+
+  const hashKey = useBoxText(box, (text, caret) => {
+    if (!githubRepo) return null
+    const found = hashRefAt(text, caret)
+    return found ? `${found.start}:${found.query}` : null
+  })
+  const hash = useMemo(() => {
+    if (hashKey === null) return null
+    const colon = hashKey.indexOf(':')
+    return { start: Number(hashKey.slice(0, colon)), query: hashKey.slice(colon + 1) }
+  }, [hashKey])
+  if (hashDismissed !== null && hash?.start !== hashDismissed) setHashDismissed(null)
+  const hashShown = githubRepo !== null && hashPickerShown(hash, hashDismissed, composition)
+  const githubRefs = useGitHubRefPicker(hostId, githubRepo, hashShown ? hash!.query : null)
+  const hashOpen = hashShown
+
+  const mentionPopover = useMemo<PopoverView>(
+    () => ({ kind: 'mention', view: mentions }),
+    [mentions],
+  )
+  const hashPopover = useMemo<PopoverView>(() => ({ kind: 'hash', view: githubRefs }), [githubRefs])
+
   // What the popup shows, kept after it closes so it fades out as it was.
-  const showing = slashOpen || slashNote ? 'slash' : mentionOpen ? mentions : popover
+  const showing: PopoverView | null =
+    slashOpen || slashNote
+      ? 'slash'
+      : mentionOpen
+        ? mentionPopover
+        : hashOpen
+          ? hashPopover
+          : popover
   if (showing !== popover) setPopover(showing)
-  // Keep the trigger index (`@` or `/`) so the popup stays put while it fades out.
+  // Keep the trigger index (`@`, `#`, or `/`) so the popup stays put while it fades out.
   const [atStart, setAtStart] = useState(0)
   if (mentionOpen && mention!.start !== atStart) setAtStart(mention!.start)
+  const [hashStart, setHashStart] = useState(0)
+  if (hashOpen && hash!.start !== hashStart) setHashStart(hash!.start)
   const [slashStart, setSlashStart] = useState(0)
   if (slashOpen && slash!.start !== slashStart) setSlashStart(slash!.start)
   else if (slashNote !== null && slash && slash.start !== slashStart) setSlashStart(slash.start)
-  const listing = typeof showing === 'object' ? showing : null
-  const open = slashOpen || slashNote !== null || mentionOpen
+  const listing = showing !== 'slash' && showing?.kind === 'mention' ? showing.view : null
+  const hashListing = showing !== 'slash' && showing?.kind === 'hash' ? showing.view : null
+  const open = slashOpen || slashNote !== null || mentionOpen || hashOpen
   const rows: PopoverItem[] =
-    showing === 'slash' ? slashMatches : listing ? [...listing.rows, ...listing.plugins.rows] : []
-  const popoverKind: PopoverKind = showing === 'slash' ? 'slash' : 'mention'
-  const triggerStart = popoverKind === 'slash' ? slashStart : atStart
-  const popoverCompact = popoverKind === 'slash' && rows.length === 0 && noteShown !== null
+    showing === 'slash'
+      ? slashMatches
+      : listing
+        ? [...listing.rows, ...listing.plugins.rows]
+        : hashListing
+          ? hashListing.rows
+          : []
+  const popoverKind: PopoverKind =
+    showing === 'slash' ? 'slash' : showing?.kind === 'hash' ? 'hash' : 'mention'
+  const triggerStart =
+    popoverKind === 'slash' ? slashStart : popoverKind === 'hash' ? hashStart : atStart
+  const popoverCompact =
+    (popoverKind === 'slash' && rows.length === 0 && noteShown !== null) ||
+    (popoverKind === 'hash' && rows.length === 0)
   const [popoverSide, setPopoverSide] = useState<PopoverSide>('top')
   // Bumped when the editor's inner scroller moves while open so Floating UI re-reads the line.
   const [scrollTick, setScrollTick] = useState(0)
@@ -286,7 +348,9 @@ export function PromptBox({
     ? `/${slash.start}:${slash.query}`
     : mentionOpen
       ? `@${mention!.start}:${mention!.query}`
-      : ''
+      : hashOpen
+        ? `#${hash!.start}:${hash!.query}`
+        : ''
   if (highlight.list !== listKey) setHighlight({ list: listKey, index: 0 })
   const active = rows.length === 0 ? -1 : Math.min(highlight.index, rows.length - 1)
   const optionId = (index: number) => `${listId}-${index}`
@@ -322,9 +386,17 @@ export function PromptBox({
     const next = replaceMention(source.text, mention, word)
     update(next.text, next.caret)
   }
+  const chooseGitHubRef = (row: GitHubRefRow) => {
+    if (!hash) return
+    rememberReferenceSummary(row.item, hostId)
+    const current = editor.current?.text() ?? source.text
+    const next = replaceHashRef(current, hash, row.item.url)
+    update(next.text, next.caret)
+  }
   const chooseItem = (item: PopoverItem | undefined) => {
     if (!item) return
-    if (isPluginRow(item)) choosePlugin(item)
+    if (isGitHubRefRow(item)) chooseGitHubRef(item)
+    else if (isPluginRow(item)) choosePlugin(item)
     else if (isMentionRow(item)) choose(item)
     else if (slash) {
       const current = editor.current?.text() ?? source.text
@@ -341,6 +413,7 @@ export function PromptBox({
   const dismiss = () => {
     if (slash && (slashOpen || slashNote)) setSlashDismissed(slash.start)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
+    if (hashOpen && hash) setHashDismissed(hash.start)
   }
   const [focused, setFocused] = useState(false)
   const chips = usePromptChips({
@@ -374,6 +447,8 @@ export function PromptBox({
       slashOpen,
       mentionOpen,
       mentionRows: files.rows.length > 0 || plugins.rows.length > 0,
+      hashOpen,
+      hashRows: githubRefs.rows.length > 0,
     })
     // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
     if (handling === 'block') return false
@@ -473,7 +548,7 @@ export function PromptBox({
               box.onActivity?.()
             }}
             onBlur={blur}
-            onCompositionStart={() => setComposition({ open: mentionOpen })}
+            onCompositionStart={() => setComposition({ open: mentionOpen || hashOpen })}
             onCompositionEnd={() => setComposition(null)}
           />
         </div>
@@ -500,31 +575,39 @@ export function PromptBox({
                 'rounded-xl p-1.25',
                 showing === 'slash'
                   ? 'w-[min(var(--anchor-width),540px)]'
-                  : 'w-85 max-w-(--available-width)',
+                  : hashListing
+                    ? 'w-96 max-w-(--available-width)'
+                    : 'w-85 max-w-(--available-width)',
               )}
             >
-              {(showing === 'slash' ? rows.length > 0 : listing && listing.rows.length > 0) && (
-                <div
-                  id={`${listId}-label`}
-                  className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary"
-                >
-                  {showing === 'slash'
-                    ? t('slash.heading')
-                    : listing?.used
-                      ? t('mentions.used')
-                      : t('mentions.files')}
-                </div>
+              {hashListing ? (
+                <GitHubRefHeading id={`${listId}-label`} picker={hashListing} />
+              ) : (
+                (showing === 'slash' ? rows.length > 0 : listing && listing.rows.length > 0) && (
+                  <div
+                    id={`${listId}-label`}
+                    className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary"
+                  >
+                    {showing === 'slash'
+                      ? t('slash.heading')
+                      : listing?.used
+                        ? t('mentions.used')
+                        : t('mentions.files')}
+                  </div>
+                )
               )}
               <div
                 role="listbox"
                 id={listId}
                 aria-labelledby={
-                  showing === 'slash' || (listing && listing.rows.length > 0)
+                  showing === 'slash' || hashListing || (listing && listing.rows.length > 0)
                     ? `${listId}-label`
                     : undefined
                 }
                 aria-label={
-                  showing !== 'slash' && listing && listing.rows.length === 0 ? label : undefined
+                  showing !== 'slash' && !hashListing && listing && listing.rows.length === 0
+                    ? label
+                    : undefined
                 }
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
@@ -535,7 +618,16 @@ export function PromptBox({
                 )}
               >
                 {rows.map((item, index) =>
-                  isPluginRow(item) ? null : isMentionRow(item) ? (
+                  isPluginRow(item) ? null : isGitHubRefRow(item) ? (
+                    <GitHubRefItem
+                      key={`${item.item.kind}:${item.item.number}`}
+                      id={optionId(index)}
+                      row={item}
+                      highlighted={index === active}
+                      onHighlight={() => highlightRow(index)}
+                      onChoose={chooseGitHubRef}
+                    />
+                  ) : isMentionRow(item) ? (
                     <MentionItem
                       key={`${item.folder ? 'd' : 'f'}:${item.path}`}
                       id={optionId(index)}
@@ -591,6 +683,7 @@ export function PromptBox({
                 })}
               </div>
               {listing && <MentionFooter list={listing} more={listing.plugins.rows.length} />}
+              {hashListing && <GitHubRefFooter picker={hashListing} />}
               {showing === 'slash' && rows.length === 0 && noteShown && (
                 <p className="shrink-0 px-3 pt-1 pb-1.5 text-small text-tertiary">
                   {noteShown === 'loading' ? (

@@ -17,7 +17,7 @@ export interface ViewportBounds {
   bottom: number
 }
 
-export type PopoverKind = 'mention' | 'slash'
+export type PopoverKind = 'mention' | 'slash' | 'hash'
 export type PopoverSide = 'top' | 'bottom'
 
 export interface PopoverPlacement {

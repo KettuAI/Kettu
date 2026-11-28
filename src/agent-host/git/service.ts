@@ -8,6 +8,7 @@ import {
   GITHUB_PULL_REQUEST_URL,
   GITHUB_STACK_URL,
   githubReferenceOf,
+  isRepositoryName,
   type ChangedFile,
   type GitOperation,
   type GitStatus,
@@ -18,6 +19,7 @@ import {
   type PullRequestState,
   type PushTarget,
   type ReferenceLookup,
+  type RepositoryReferenceSearchResult,
 } from '@shared/git'
 import type {
   BranchPullRequest,
@@ -39,6 +41,7 @@ import { CommandError, createExec, failureText, FETCH_TIMEOUT_MS, type Exec } fr
 import {
   listBranchPullRequests,
   probeTools,
+  searchRepositoryReferences,
   viewAvatarUrl,
   viewCurrentPullRequest,
   viewIssueByUrl,
@@ -73,6 +76,9 @@ export interface GitServiceOptions {
 const PULL_REQUEST_MIN_INTERVAL_MS = 60_000
 const PULL_REQUEST_CACHE_MS = 60_000
 const PULL_REQUEST_CACHE_SIZE = 200
+const REFERENCE_SEARCH_CACHE_MS = 60_000
+const REFERENCE_SEARCH_FAILURE_CACHE_MS = 10_000
+const REFERENCE_SEARCH_CACHE_SIZE = 100
 const AVATAR_URL_CACHE_SIZE = 200
 const UNREADABLE_RETRY_MS = 10 * 60_000
 const BACKGROUND_FETCH_INTERVAL_MS = 5 * 60_000
@@ -192,6 +198,11 @@ export function createGitService(
   const issueLoads = new Map<string, Promise<IssueLookup>>()
   const stackCache = new Map<string, { at: number; value: PullRequestStackLookup }>()
   const stackLoads = new Map<string, Promise<PullRequestStackLookup>>()
+  const referenceSearchCache = new Map<
+    string,
+    { at: number; value: RepositoryReferenceSearchResult }
+  >()
+  const referenceSearchLoads = new Map<string, Promise<RepositoryReferenceSearchResult>>()
   // Session rows' pull requests gh could not read, so a row does not ask again on every render.
   const unreadablePullRequests = new Map<string, number>()
   // Kept for the run: an avatar URL changes only when its user uploads a new picture.
@@ -624,6 +635,31 @@ export function createGitService(
     stackCache.set(url, { at: now(), value })
     trimCache(stackCache)
     if (!previous || !sameJson(previous, value)) referenceChanged.emit(url, value)
+    return value
+  }
+
+  async function loadReferenceSearch(
+    key: string,
+    owner: string,
+    repo: string,
+    query: string,
+  ): Promise<RepositoryReferenceSearchResult> {
+    const tools = await getTools()
+    let value: RepositoryReferenceSearchResult
+    if (tools.gh.state === 'not-installed') {
+      value = { kind: 'unavailable', reason: 'gh-missing' }
+    } else if (tools.gh.state === 'signed-out') {
+      value = { kind: 'unavailable', reason: 'gh-signed-out' }
+    } else {
+      value = await searchRepositoryReferences(exec, owner, repo, query, homedir())
+    }
+    referenceSearchCache.delete(key)
+    referenceSearchCache.set(key, { at: now(), value })
+    while (referenceSearchCache.size > REFERENCE_SEARCH_CACHE_SIZE) {
+      const oldest = referenceSearchCache.keys().next().value
+      if (oldest === undefined) break
+      referenceSearchCache.delete(oldest)
+    }
     return value
   }
 
@@ -1203,6 +1239,33 @@ export function createGitService(
       return load
     },
 
+    async searchReferences(owner, repo, query) {
+      if (disposed) throw new Error('The git service is disposed')
+      if (!GITHUB_LOGIN.test(owner) || !isRepositoryName(repo)) {
+        throw new Error('Not a GitHub repository')
+      }
+      const normalized = query.trim().slice(0, 100)
+      const key = `${owner.toLowerCase()}/${repo.toLowerCase()}\0${normalized.toLowerCase()}`
+      const cached = referenceSearchCache.get(key)
+      if (cached) {
+        const ttl =
+          cached.value.kind === 'ok'
+            ? REFERENCE_SEARCH_CACHE_MS
+            : cached.value.reason === 'gh-missing' || cached.value.reason === 'gh-signed-out'
+              ? REFERENCE_SEARCH_CACHE_MS
+              : REFERENCE_SEARCH_FAILURE_CACHE_MS
+        if (now() - cached.at < ttl) return cached.value
+      }
+      let load = referenceSearchLoads.get(key)
+      if (!load) {
+        load = track(loadReferenceSearch(key, owner, repo, normalized)).finally(() =>
+          referenceSearchLoads.delete(key),
+        )
+        referenceSearchLoads.set(key, load)
+      }
+      return load
+    },
+
     knownPullRequest,
 
     async avatarUrl(login) {
@@ -1255,6 +1318,14 @@ export function createGitService(
             (entry.value.reason === 'gh-missing' || entry.value.reason === 'gh-signed-out')
           ) {
             stackCache.delete(url)
+          }
+        }
+        for (const [key, entry] of referenceSearchCache) {
+          if (
+            entry.value.kind === 'unavailable' &&
+            (entry.value.reason === 'gh-missing' || entry.value.reason === 'gh-signed-out')
+          ) {
+            referenceSearchCache.delete(key)
           }
         }
         for (const state of projects.values()) {

@@ -2,7 +2,11 @@
 // or project files and of the session's terminals, and links. Chips are only how the text looks;
 // the text is what is sent, with a ref for each terminal it mentions.
 
-import { schemelessGitHubLinks } from '@shared/git'
+import {
+  githubShortReferenceLinks,
+  schemelessGitHubLinks,
+  type GitHubRepository,
+} from '@shared/git'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import { findSkillTokens } from '@shared/slash'
 import { leadingCommand } from './slash'
@@ -52,6 +56,8 @@ export interface ChipContext {
   skills?: readonly string[]
   /** What `@token` names, or null when nothing does and it stays text. */
   resolve: (token: string) => MentionTarget | null
+  /** Current project's GitHub repository for resolving `#123` references; null keeps plain text. */
+  githubRepo?: GitHubRepository | null
 }
 
 // A full-width at sign is what some input methods type for `@`. A mention starts at a space, the
@@ -143,9 +149,13 @@ export function trimLink(url: string): string {
 
 /**
  * The links in the text, each without the punctuation that ends a sentence after it. A GitHub
- * pull request or issue written without `https://` is one too, with the address it stands for.
+ * pull request or issue written without `https://` is one too, and when the project is linked to
+ * a GitHub repository, `#123` (and `owner/repo#123`) outside inline code resolves as a link too.
  */
-export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
+export function findLinks(
+  text: string,
+  githubRepo: GitHubRepository | null = null,
+): Extract<Chip, { kind: 'link' }>[] {
   const links: Extract<Chip, { kind: 'link' }>[] = []
   for (const match of text.matchAll(URL_TEXT)) {
     const url = trimLink(match[0])
@@ -157,6 +167,15 @@ export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
     const parts = linkParts(url)
     if (!parts || links.some((link) => from < link.to && to > link.from)) continue
     links.push({ kind: 'link', from, to, url, ...parts })
+  }
+  if (githubRepo) {
+    for (const { from, to, url } of githubShortReferenceLinks(text, githubRepo, {
+      skipInlineCode: true,
+    })) {
+      const parts = linkParts(url)
+      if (!parts || links.some((link) => from < link.to && to > link.from)) continue
+      links.push({ kind: 'link', from, to, url, ...parts })
+    }
   }
   return links.sort((a, b) => a.from - b.from)
 }
@@ -183,7 +202,9 @@ export function findChips(text: string, context: ChipContext): Chip[] {
     chips.push({ ...target, from, to: from + 1 + token.length, label, lines })
   }
   const taken = (from: number, to: number) => chips.some((c) => from < c.to && to > c.from)
-  for (const link of findLinks(text)) if (!taken(link.from, link.to)) chips.push(link)
+  for (const link of findLinks(text, context.githubRepo ?? null)) {
+    if (!taken(link.from, link.to)) chips.push(link)
+  }
   if (context.skills && context.skills.length > 0) {
     for (const token of findSkillTokens(text, context.skills)) {
       if (!taken(token.from, token.to)) {

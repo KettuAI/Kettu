@@ -1,8 +1,24 @@
 import { createElement, Fragment, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { StateCreator } from 'zustand'
 import { formatAttachedArtifactsPrompt } from '../composer/artifact-attachments'
 import type { Chip, ChipContext } from '../composer/chips'
+
+// In renderToStaticMarkup (SSR), React reads Zustand's getInitialState instead of live getState.
+// Wrap zustand's `create` so selector reads during static markup reflect current store state.
+vi.mock('zustand', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('zustand')>()
+  const make = <T>(initializer: StateCreator<T, [], []>) => {
+    const api = actual.createStore(initializer)
+    const read = <U = T>(selector?: (state: T) => U): U =>
+      selector ? selector(api.getState()) : (api.getState() as unknown as U)
+    return Object.assign(read, api)
+  }
+  const create = <T>(initializer?: StateCreator<T, [], []>) =>
+    initializer ? make(initializer) : (fn: StateCreator<T, [], []>) => make(fn)
+  return { ...actual, create }
+})
 
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: () => undefined },
@@ -325,6 +341,32 @@ describe('SentText rendering', () => {
     expect(html).not.toContain('data-test-chip="link"')
     expect(html).not.toContain('data-test-chip="skill"')
   })
+
+  it('recognizes #123 in sent messages only when githubRepo is set, excluding code, anchors, and colors (#2600)', async () => {
+    const text = [
+      'Check #2600 and other/repo#42, ignore `#123`, #L10, #ff0000, foo#123, #0.',
+      '```ts',
+      '// #2600 inside fenced code',
+      '```',
+    ].join('\n')
+
+    const withoutRepo = await renderSent(text, ctx())
+    expect(withoutRepo).not.toContain('data-test-chip="link"')
+
+    const withRepo = await renderSent(
+      text,
+      ctx({ githubRepo: { owner: 'KettuAI', repo: 'Kettu' } }),
+    )
+    expect(withRepo.match(/data-test-chip="link"/g)).toHaveLength(2)
+    expect(withRepo).toContain(
+      'data-test-chip="link" data-test-value="https://github.com/KettuAI/Kettu/issues/2600"',
+    )
+    expect(withRepo).toContain(
+      'data-test-chip="link" data-test-value="https://github.com/other/repo/issues/42"',
+    )
+    expect(withRepo).toContain('ignore `#123`, #L10, #ff0000, foo#123, #0.')
+    expect(withRepo).toContain('// #2600 inside fenced code')
+  })
 })
 
 describe('UserContentView integration', () => {
@@ -349,5 +391,134 @@ describe('UserContentView integration', () => {
     )
     expect(html).toContain('Design Spec')
     expect(html).toContain('data-selectable=""')
+  })
+
+  it('renders #123 in UserContentView as a GitHub reference chip only when project has a GitHub repo (#2600)', async () => {
+    const { UserContentView } = await import('./user-content')
+    const { ProjectPathContext } = await import('@renderer/features/files/file-refs')
+    const { receiveGitStatus, useGitStore } = await import('@renderer/stores/git')
+    const projectPath = '/repo/kettu'
+
+    // Without a linked GitHub remote: plain text.
+    const plainHtml = renderToStaticMarkup(
+      createElement(
+        ProjectPathContext.Provider,
+        { value: projectPath },
+        createElement(UserContentView, {
+          content: [{ type: 'text', text: 'Look at #2600 and `#123`' }],
+        }),
+      ),
+    )
+    expect(plainHtml).not.toContain('data-chip="link"')
+    expect(plainHtml).toContain('Look at #2600 and `#123`')
+
+    // With a linked GitHub remote: #2600 renders as a link chip with original sr-only text; `#123` stays plain.
+    receiveGitStatus({
+      projectPath,
+      repo: { root: projectPath, gitDir: `${projectPath}/.git` },
+      head: { branch: 'main', oid: 'abc123', detached: false },
+      upstream: null,
+      base: null,
+      changes: {
+        staged: 0,
+        unstaged: 0,
+        untracked: 0,
+        conflicted: 0,
+        insertions: 0,
+        deletions: 0,
+      },
+      operation: null,
+      commits: [],
+      remote: {
+        name: 'origin',
+        url: 'https://github.com/KettuAI/Kettu.git',
+        github: { owner: 'KettuAI', repo: 'Kettu' },
+      },
+      defaultBranch: 'main',
+      push: null,
+      lastFetchedAt: null,
+      updatedAt: Date.now(),
+      stale: false,
+    })
+    try {
+      const linkedHtml = renderToStaticMarkup(
+        createElement(
+          ProjectPathContext.Provider,
+          { value: projectPath },
+          createElement(UserContentView, {
+            content: [{ type: 'text', text: 'Look at #2600 and `#123`' }],
+          }),
+        ),
+      )
+      expect(linkedHtml, linkedHtml).toContain('data-chip="link"')
+      expect(linkedHtml.match(/data-chip="link"/g)).toHaveLength(1)
+      expect(linkedHtml).toContain('aria-label="#2600"')
+      expect(linkedHtml).toContain('data-slot="hover-card-trigger"')
+      expect(linkedHtml).toContain('<span aria-hidden="true" class="sr-only">#2600</span>')
+      expect(linkedHtml).toContain('and `#123`')
+    } finally {
+      useGitStore.setState({ status: {} })
+    }
+  })
+
+  it('recognizes #123 in SentMarkdown remark pipeline only when githubRepo is set and skips inline/fenced code (#2600)', async () => {
+    const { Streamdown } = await import('streamdown')
+    const { findChips } = await import('../composer/chips')
+    const { remarkPlugins } = await import('../markdown/remark')
+    const { chipLinks } = await import('./sent-chip-links')
+    const text = 'See #2600, other/repo#42, `#123`, #L10, #ff0000.\n\n```\n#2600\n```'
+
+    const renderMd = (context: ChipContext) =>
+      renderToStaticMarkup(
+        createElement(
+          Streamdown,
+          {
+            mode: 'static',
+            controls: false,
+            linkSafety: { enabled: false },
+            remarkPlugins: [
+              ...remarkPlugins,
+              [
+                chipLinks,
+                {
+                  chips: findChips(text, context).map((chip) => ({
+                    chip,
+                    raw: text.slice(chip.from, chip.to),
+                  })),
+                  githubRepo: context.githubRepo ?? null,
+                },
+              ],
+            ],
+            components: {
+              a: ({ href, children }) => {
+                if (href?.startsWith('#prompt-chip:')) {
+                  const raw =
+                    new URLSearchParams(`text=${href.slice('#prompt-chip:'.length)}`).get('text') ??
+                    ''
+                  const chip = findChips(raw, context)[0]
+                  if (chip) return renderChipMarker(chip, raw)
+                }
+                return createElement('a', { href }, children)
+              },
+            },
+          },
+          text,
+        ),
+      )
+
+    const withoutRepo = renderMd(ctx())
+    expect(withoutRepo).not.toContain('data-test-chip="link"')
+    expect(withoutRepo).not.toContain('href="#github-ref:')
+    expect(withoutRepo).not.toContain('href="https://github.com/other/repo/issues/42"')
+
+    const withRepo = renderMd(ctx({ githubRepo: { owner: 'KettuAI', repo: 'Kettu' } }))
+    expect(withRepo.match(/data-test-chip="link"/g)).toHaveLength(2)
+    expect(withRepo).toContain(
+      'data-test-chip="link" data-test-value="https://github.com/KettuAI/Kettu/issues/2600"',
+    )
+    expect(withRepo).toContain(
+      'data-test-chip="link" data-test-value="https://github.com/other/repo/issues/42"',
+    )
+    expect(withRepo).toContain('data-streamdown="inline-code">#123</code>')
   })
 })

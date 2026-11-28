@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   githubReferenceFromLink,
   githubReferenceOf,
+  githubShortReferenceLinks,
+  githubTextReferences,
+  inlineCodeSpans,
+  qualifiedGitHubRefUrl,
   schemelessGitHubLinks,
   schemelessGitHubUrl,
 } from './git'
@@ -158,5 +162,62 @@ describe('GitHub stacked pull request links (#2844)', () => {
     ]) {
       expect(schemelessGitHubLinks(text), text).toEqual([])
     }
+  })
+})
+
+describe('inlineCodeSpans and GitHub short #123 references (#2600)', () => {
+  const repo = { owner: 'KettuAI', repo: 'Kettu' }
+
+  it('finds matching single- and multi-backtick inline code spans without matching stray backticks', () => {
+    expect(inlineCodeSpans('Check `#123` and ``#456`` then #789')).toEqual([
+      { from: 6, to: 12 },
+      { from: 17, to: 25 },
+    ])
+    expect(inlineCodeSpans('it`s #123 and not closed')).toEqual([])
+    expect(inlineCodeSpans('`first\n\n#123`')).toEqual([])
+  })
+
+  it('resolves #123 and owner/repo#456 only when linked to a GitHub repository', () => {
+    const text = 'See #2600, other/proj#42, and 查看#123。'
+    expect(githubShortReferenceLinks(text, null)).toEqual([])
+    expect(githubShortReferenceLinks(text, repo)).toEqual([
+      { from: 4, to: 9, url: 'https://github.com/KettuAI/Kettu/issues/2600' },
+      { from: 11, to: 24, url: 'https://github.com/other/proj/issues/42' },
+      { from: 32, to: 36, url: 'https://github.com/KettuAI/Kettu/issues/123' },
+    ])
+  })
+
+  it('excludes inline code, line anchors, hex colors, zero numbers, and non-boundary tokens', () => {
+    const text = [
+      '`#123`',
+      '``#456``',
+      '#0',
+      '#000',
+      '#000000',
+      '#L10',
+      '#L10-L20',
+      '#ff0000',
+      '#fff',
+      '#123abc',
+      '#123-foo',
+      'foo#123',
+      'a.b#123',
+      'a-b#123',
+      '&#123;',
+      '##123',
+      'a/b/c#123',
+      'user@owner/repo#123',
+    ].join(' ')
+    expect(githubShortReferenceLinks(text, repo)).toEqual([])
+    expect(githubTextReferences(text, { skipInlineCode: true })).toEqual([])
+  })
+
+  it('parses a standalone owner/repo#123 string via qualifiedGitHubRefUrl', () => {
+    expect(qualifiedGitHubRefUrl('KettuAI/Kettu#2600')).toBe(
+      'https://github.com/KettuAI/Kettu/issues/2600',
+    )
+    expect(qualifiedGitHubRefUrl('#2600')).toBeNull()
+    expect(qualifiedGitHubRefUrl('KettuAI/Kettu#0')).toBeNull()
+    expect(qualifiedGitHubRefUrl('See KettuAI/Kettu#2600')).toBeNull()
   })
 })

@@ -3,7 +3,7 @@
 
 import {
   githubIssueUrl,
-  isRepositoryName,
+  githubTextReferences,
   schemelessGitHubLinks,
   schemelessGitHubUrl,
 } from '@shared/git'
@@ -15,23 +15,17 @@ interface MdNode {
   children?: MdNode[]
 }
 
-// `owner/repo#12` or `#12`, not inside a word, a path or an entity such as `&#12;`.
-const REFERENCE =
-  /(?<![\w/&#.-])(?:([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([\w.-]{1,100}))?#(\d{1,9})(?![\w-])/g
 const PREFIX = '#github-ref:'
 // Their text is the link's own words, or code, which stays as written.
 const SKIP = new Set(['link', 'linkReference', 'inlineCode', 'code', 'html', 'definition'])
 
 function split(text: string): MdNode[] | null {
   const found = schemelessGitHubLinks(text)
-  for (const match of text.matchAll(REFERENCE)) {
-    const [whole, owner, repo, number] = match
-    if (repo && !isRepositoryName(repo)) continue
-    const from = match.index
-    const to = from + whole.length
+  for (const ref of githubTextReferences(text)) {
+    const { from, to, owner, repo, number } = ref
     if (found.some((link) => from < link.to && to > link.from)) continue
     // A bare number names an issue in the project's own repository, which only the link knows.
-    const url = owner && repo ? githubIssueUrl(owner, repo, Number(number)) : PREFIX + number
+    const url = owner && repo ? githubIssueUrl(owner, repo, number) : PREFIX + number
     found.push({ from, to, url })
   }
   if (found.length === 0) return null

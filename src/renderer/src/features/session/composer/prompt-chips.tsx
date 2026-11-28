@@ -15,6 +15,7 @@ import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { useGitStore } from '@renderer/stores/git'
 import { useOverlayPresence } from '@renderer/stores/overlays'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
 import { newSessionPanel } from '@renderer/stores/view'
@@ -94,6 +95,16 @@ export function usePromptChips({
 }) {
   const { t } = useTranslation('composer')
   const files = useFilesStore((s) => (projectPath ? s.byProject[projectPath] : undefined))
+  const githubOwner = useGitStore((s) =>
+    projectPath ? (s.status[projectPath]?.remote?.github?.owner ?? null) : null,
+  )
+  const githubRepoName = useGitStore((s) =>
+    projectPath ? (s.status[projectPath]?.remote?.github?.repo ?? null) : null,
+  )
+  const githubRepo = useMemo(
+    () => (githubOwner && githubRepoName ? { owner: githubOwner, repo: githubRepoName } : null),
+    [githubOwner, githubRepoName],
+  )
   const mentions = useBoxText({ source }, (text) => /[@＠]/.test(text))
   useEffect(() => {
     if (projectPath && mentions) ensureFiles(projectPath)
@@ -222,6 +233,7 @@ export function usePromptChips({
       commands: exclusiveNames,
       skills: skillNames,
       resolve,
+      githubRepo,
       onHover: (chip, element) => handlers.current.onHover(chip, element),
       onOpen: (chip) => handlers.current.open(chip),
       onLinkPasted: (from, to) => handlers.current.onLinkPasted(from, to),
@@ -231,7 +243,7 @@ export function usePromptChips({
       projectPath,
       hostId,
     }),
-    [exclusiveNames, skillNames, resolve, pasted, projectPath, hostId],
+    [exclusiveNames, skillNames, resolve, githubRepo, pasted, projectPath, hostId],
   )
 
   const keyDown = (event: KeyboardEvent): boolean => {

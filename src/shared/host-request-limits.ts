@@ -287,6 +287,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'git.pullRequest': AGENT_MS,
   'git.issue': AGENT_MS,
   'git.stack': AGENT_MS,
+  'git.searchReferences': AGENT_MS,
   'git.watchReferences': HOST_MS,
   'git.avatarUrl': AGENT_MS,
   'git.currentPullRequest': AGENT_MS,
