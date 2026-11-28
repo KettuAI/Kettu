@@ -444,6 +444,7 @@
   --layer-menu: 70;
 
   /* Motion: 150 to 220 ms on --ease-standard; spinners turn once in 0.9 s. */
+  --ease: var(--ease-out-quint);
   --duration-instant: 60ms;
   --duration-fast: 150ms;
   --duration-base: 180ms;
@@ -1120,6 +1121,13 @@
 }
 .kettu-ring-in > svg {
   animation: ring-in var(--duration-morph) var(--ease-out-quart) both;
+}
+
+/* Session hover card outputs fading in when they finish loading after the card opened. */
+@keyframes card-outputs-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
