@@ -357,4 +357,156 @@ describe('ArtifactEditor.revealPin', () => {
     expect(editor.getAnchor()).toBeNull()
     editor.dispose()
   })
+
+  it('handles marquee multi-selection groups, union viewport boxes, item removal, mode switching, and frame release', async () => {
+    const rafQueue: (() => void)[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => {
+      rafQueue.push(cb)
+      return rafQueue.length
+    })
+
+    const { ArtifactEditor } = await import('./editor')
+    const origin = 'http://127.0.0.1:4123'
+    const editor = new ArtifactEditor(origin)
+    const posted: DriveMessage[] = []
+    const frame = editor.frame(null)
+    // Scale 0.5x at window offset (100, 50).
+    frame.link.attach(
+      makeIframe(posted, {
+        left: 100,
+        top: 50,
+        width: 600,
+        height: 400,
+        offsetWidth: 1200,
+        offsetHeight: 800,
+      }),
+    )
+    frame.open()
+    editor.setMode('select')
+
+    // Preview marquee throttles via rAF; commit cancels pending preview and sends commit: true.
+    frame.marquee({ x: 10, y: 20, width: 100, height: 80 })
+    frame.marquee({ x: 10, y: 20, width: 300, height: 180 })
+    expect(posted.filter((m) => m.kind === 'select-marquee')).toHaveLength(0)
+    rafQueue.splice(0).forEach((cb) => cb())
+    expect(posted.at(-1)).toEqual({
+      v: RUNTIME_VERSION,
+      kind: 'select-marquee',
+      rect: { x: 10, y: 20, width: 300, height: 180 },
+      commit: false,
+    })
+
+    frame.marqueeCommit({ x: 10, y: 20, width: 320, height: 200 })
+    expect(posted.at(-1)).toEqual({
+      v: RUNTIME_VERSION,
+      kind: 'select-marquee',
+      rect: { x: 10, y: 20, width: 320, height: 200 },
+      commit: true,
+    })
+
+    // Deliver two selected elements -> populates pickedGroup with scaled union box and clears single picked.
+    for (const handler of selectedHandlers) {
+      handler({
+        origin,
+        message: {
+          v: RUNTIME_VERSION,
+          id: 'k-multi',
+          kind: 'select',
+          channel: frame.link.channel,
+          selection: null,
+          selections: [
+            {
+              path: 'index.html',
+              src: 10,
+              tag: 'article',
+              text: 'Card A',
+              textOnly: false,
+              style: {},
+              box: { x: 40, y: 60, width: 200, height: 100 },
+            },
+            {
+              path: 'index.html',
+              src: 30,
+              tag: 'article',
+              text: 'Card B',
+              textOnly: false,
+              style: {},
+              box: { x: 260, y: 100, width: 200, height: 160 },
+            },
+          ],
+        },
+      })
+    }
+
+    const group = editor.get().pickedGroup
+    expect(editor.get().picked).toBeNull()
+    expect(group?.selections).toHaveLength(2)
+    // Scaled 0.5x at (100, 50): x [40..460] -> [120..330], y [60..260] -> [80..180].
+    expect(group?.box).toEqual({ left: 120, top: 80, right: 330, bottom: 180 })
+
+    // Removing index 0 keeps the same group.id, syncs select-remove to the iframe, and shrinks union box.
+    const stableId = group!.id
+    editor.removeFromPickedGroup(0)
+    expect(posted.at(-1)).toEqual({ v: RUNTIME_VERSION, kind: 'select-remove', index: 0 })
+    expect(editor.get().pickedGroup?.id).toBe(stableId)
+    expect(editor.get().pickedGroup?.selections).toHaveLength(1)
+    expect(editor.get().pickedGroup?.box).toEqual({ left: 230, top: 100, right: 330, bottom: 180 })
+
+    // Switching to comment mode clears the marquee selection group and ignores multi-select messages.
+    editor.setMode('comment')
+    expect(editor.get().pickedGroup).toBeNull()
+    for (const handler of selectedHandlers) {
+      handler({
+        origin,
+        message: {
+          v: RUNTIME_VERSION,
+          id: 'k-multi-ignored',
+          kind: 'select',
+          channel: frame.link.channel,
+          selection: null,
+          selections: [
+            {
+              path: 'index.html',
+              src: 10,
+              tag: 'article',
+              text: 'Card A',
+              textOnly: false,
+              style: {},
+            },
+          ],
+        },
+      })
+    }
+    expect(editor.get().pickedGroup).toBeNull()
+
+    // Releasing the owning frame (e.g. leaving a focused canvas page) clears pickedGroup cleanly.
+    editor.setMode('select')
+    for (const handler of selectedHandlers) {
+      handler({
+        origin,
+        message: {
+          v: RUNTIME_VERSION,
+          id: 'k-multi-2',
+          kind: 'select',
+          channel: frame.link.channel,
+          selection: null,
+          selections: [
+            {
+              path: 'index.html',
+              src: 10,
+              tag: 'article',
+              text: 'Card A',
+              textOnly: false,
+              style: {},
+            },
+          ],
+        },
+      })
+    }
+    expect(editor.get().pickedGroup?.selections).toHaveLength(1)
+    frame.release()
+    expect(editor.get().pickedGroup).toBeNull()
+
+    editor.dispose()
+  })
 })

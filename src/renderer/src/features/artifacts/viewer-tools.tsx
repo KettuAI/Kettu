@@ -11,6 +11,7 @@ import type { ArtifactSummary, VersionSummary } from '@shared/artifacts'
 import type { CanvasDoc } from '@shared/canvas-doc'
 import { emitAppEvent } from '@renderer/app/events'
 import { toast } from '@renderer/components/ui/toast'
+import { flushDraft, readDraft, writeDraft } from '@renderer/features/session/composer/drafts'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
 import {
@@ -22,7 +23,7 @@ import {
 import { setPaneSelection } from '@renderer/stores/artifacts'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { openSessionWithArtifact, showArtifactPage } from '@renderer/stores/view'
-import { anchorOf } from './anchors'
+import { anchorOf, anchorsOfGroup } from './anchors'
 import { AskPop } from './ask-pop'
 import {
   anchorChip,
@@ -197,16 +198,16 @@ export function useViewerTools(input: ToolsInput) {
     },
     [],
   )
-  // A direct click on the page (another pin or a draft pick) supersedes a card-opened thread
-  // and any explicit new-thread draft.
+  // A direct click or marquee selection supersedes a card-opened thread, explicit draft, or prior Ask.
   useEffect(() => {
     if (!editor) return
     return editor.subscribe(() => {
       const state = editor.get()
-      if (state.pin || state.picked) {
+      if (state.pin || state.picked || state.pickedGroup) {
         closeCardThread()
         setForcedDraft(null)
       }
+      if (state.pickedGroup) setAsk(null)
     })
   }, [editor, closeCardThread])
   // A click in Comment pins a draft there, or reuses an existing open thread on the same element.
@@ -266,7 +267,23 @@ export function useViewerTools(input: ToolsInput) {
     [id, title, head, summaryVersion, summaryProject],
   )
 
-  // Track the anchored element inside its iframe whenever an iframe-backed popover is open.
+  // Marquee multi-selection in Edit mode opens AskPop automatically when not beside a session.
+  const marqueeGroup =
+    !beside &&
+    input.mode === 'edit' &&
+    editing.mode === 'select' &&
+    editing.pickedGroup &&
+    editing.pickedGroup.selections.length > 0 &&
+    shown &&
+    artifactInfo
+      ? editing.pickedGroup
+      : null
+  const marqueeAnchors = useMemo(
+    () => (marqueeGroup && shown ? anchorsOfGroup(marqueeGroup, shown) : []),
+    [marqueeGroup, shown],
+  )
+
+  // Track the anchored element(s) inside their iframe whenever an iframe-backed popover is open.
   let activeAnchorSpec: AnchorTrackSpec | null = null
   if (ask && artifactInfo) {
     if (ask.subject.kind === 'element' && ask.subject.fromIframe) {
@@ -275,6 +292,8 @@ export function useViewerTools(input: ToolsInput) {
         target: ask.subject.anchor.offset !== null ? ask.subject.anchor.offset : 'picked',
       }
     }
+  } else if (marqueeGroup) {
+    activeAnchorSpec = { page: marqueeGroup.page, target: 'picked' }
   } else if (activeForcedDraft && shown && latest) {
     if (!activeForcedDraft.anchor.missing && activeForcedDraft.anchor.offset !== null) {
       activeAnchorSpec = { page: activeForcedDraft.page, target: activeForcedDraft.anchor.offset }
@@ -634,6 +653,57 @@ export function useViewerTools(input: ToolsInput) {
     const session = useSessionsStore.getState().byId[sessionId]
     if (session) openSessionWithArtifact(session.id, session.projectPath, id)
     setAsk(null)
+    if (marqueeGroup) editor?.clearPick()
+  }
+
+  const attachSession =
+    target !== NEW_SESSION ? (targets.sessions.find((s) => s.id === target) ?? null) : null
+
+  const attachAnchorsToComposer = (anchors: CommentAnchor[], draftText: string) => {
+    if (!attachSession || anchors.length === 0) return
+    setPaneSelection({
+      projectPath: attachSession.projectPath,
+      artifactId: id,
+      title,
+      anchor: anchors[0]!,
+      others: anchors.slice(1),
+    })
+    if (draftText.trim()) {
+      const existing = readDraft(attachSession.id)
+      writeDraft(attachSession.id, existing.trim() ? `${existing}\n\n${draftText}` : draftText)
+      flushDraft(attachSession.id)
+      emitAppEvent({ kind: 'draft-written', draft: attachSession.id })
+    }
+    setAsk(null)
+    openSessionWithArtifact(attachSession.id, attachSession.projectPath, id)
+    requestAnimationFrame(() => emitAppEvent({ kind: 'focus-composer' }))
+  }
+
+  const marqueeMessage = (): AskMessage => {
+    const group = marqueeGroup!
+    const version = shown?.version ?? head ?? 1
+    const page = group.page !== null ? (shown?.canvas?.pages[group.page] ?? null) : null
+    const rect = input.area.current?.getBoundingClientRect()
+    return anchorMessage(
+      {
+        artifactId: id,
+        title,
+        anchor: marqueeAnchors[0]!,
+        others: marqueeAnchors.slice(1),
+      },
+      async () => {
+        if (summary?.type) return null
+        const boxes = editor ? await editor.locatePickedGroup() : []
+        return elementPicture({
+          artifactId: id,
+          version,
+          file: page?.file ?? null,
+          width: page?.width ?? rect?.width ?? 1280,
+          height: page?.height ?? rect?.height ?? 800,
+          boxes,
+        })
+      },
+    )
   }
 
   // Who holds the picked element: an agent whose running turn wrote its frame or the artifact.
@@ -652,7 +722,12 @@ export function useViewerTools(input: ToolsInput) {
     setViewerState(id, (s) => ({ right: null, version: s.right === 'history' ? null : s.version }))
   }
   const propsShown =
-    input.mode === 'edit' && editing.mode === 'select' && !!editing.picked && !!editor && !!head
+    input.mode === 'edit' &&
+    editing.mode === 'select' &&
+    !!editing.picked &&
+    !editing.pickedGroup &&
+    !!editor &&
+    !!head
   if (propsShown && editor && shown && editing.picked) {
     right = {
       key: `props:${editing.picked.page}:${editing.picked.selection.path}:${editing.picked.selection.src}`,
@@ -760,6 +835,35 @@ export function useViewerTools(input: ToolsInput) {
         message={askMessage()}
         onOpenSession={openSession}
         onClose={() => setAsk(null)}
+      />
+    )
+  } else if (marqueeGroup && marqueeAnchors.length > 0 && artifactInfo) {
+    const marqueeChips = marqueeAnchors.map((anchor, index) => anchorChip(anchor, index))
+    const multi = marqueeAnchors.length > 1
+    popover = (
+      <AskPop
+        key={`marquee:${marqueeGroup.id}`}
+        at={marqueeGroup.box}
+        liveAnchor={liveAnchor}
+        onReturnToAnchor={liveAnchor ? returnToAnchor : null}
+        offscreenNote={multi ? t('ask.selectionOffscreen') : undefined}
+        backLabel={multi ? t('ask.backToSelection') : undefined}
+        selectionCount={marqueeAnchors.length}
+        chips={marqueeChips}
+        onRemoveChip={(key) => {
+          const index = marqueeChips.findIndex((chip) => chip.key === key)
+          if (index >= 0) editor?.removeFromPickedGroup(index)
+        }}
+        onAttachToComposer={
+          attachSession ? (draftText) => attachAnchorsToComposer(marqueeAnchors, draftText) : null
+        }
+        targets={targets}
+        target={target}
+        onTarget={setPicked}
+        project={project}
+        message={marqueeMessage()}
+        onOpenSession={openSession}
+        onClose={() => editor?.clearPick()}
       />
     )
   } else if (activeForcedDraft && shown && latest) {

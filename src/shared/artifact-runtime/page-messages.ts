@@ -13,6 +13,8 @@ export { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer }
 export const MESSAGE_BYTES = 64 * 1024
 
 export const SNIPPET_CHARS = 120
+/** The most elements a single marquee selection may report. */
+export const MAX_MULTI_SELECT = 24
 const TAG = /^[a-z][a-z0-9-]{0,31}$/
 const CHANNEL = /^[A-Za-z0-9_-]{8,64}$/
 const ID_CHARS = 64
@@ -87,6 +89,8 @@ export interface SelectMessage {
   /** The frame's, as its client gave it with select mode. */
   channel: string
   selection: PageSelection | null
+  /** Multiple elements picked together via marquee selection in select mode. */
+  selections?: PageSelection[]
   /** An answer to `select-locate` instead of a pick: where the element at `src` lies, if anywhere. */
   located?: { src: number; box: PageBox | null }
   /** A key pressed in the page, outside its text fields, instead of a pick, after `select-keys`. */
@@ -148,6 +152,10 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'select-point'; x: number; y: number }
   | { v: typeof RUNTIME_VERSION; kind: 'select-leave' }
   | { v: typeof RUNTIME_VERSION; kind: 'select-pick'; x: number; y: number }
+  // Live marquee drag rectangle in iframe viewport CSS pixels (`rect: null` cancels it).
+  | { v: typeof RUNTIME_VERSION; kind: 'select-marquee'; rect: PageBox | null; commit?: boolean }
+  // Removes one element by index from the active multi-element marquee selection.
+  | { v: typeof RUNTIME_VERSION; kind: 'select-remove'; index: number }
   | {
       v: typeof RUNTIME_VERSION
       kind: 'select-source'
@@ -341,30 +349,63 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     channel,
     selection: picked,
   }
+  if (value.selections !== undefined) {
+    if (
+      picked !== null ||
+      !Array.isArray(value.selections) ||
+      value.selections.length === 0 ||
+      value.selections.length > MAX_MULTI_SELECT
+    ) {
+      return null
+    }
+    const items: PageSelection[] = []
+    for (const entry of value.selections) {
+      const parsed = selection(entry)
+      if (!parsed) return null
+      items.push(parsed)
+    }
+    message.selections = items
+  }
   if (value.located !== undefined) {
     const located = locatedOf(value.located)
-    if (!located || picked !== null) return null
+    if (!located || picked !== null || message.selections) return null
     message.located = located
   }
   if (value.key !== undefined) {
     const key = PAGE_KEYS.find((k) => k === value.key)
-    if (!key || picked !== null || message.located) return null
+    if (!key || picked !== null || message.selections || message.located) return null
     message.key = key
   }
   if (value.doc !== undefined) {
     const doc = parseDocReport(value.doc)
-    if (!doc || picked !== null || message.located || message.key) return null
+    if (!doc || picked !== null || message.selections || message.located || message.key) return null
     message.doc = doc
   }
   if (value.deck !== undefined) {
     const deck = parseDeckReport(value.deck)
-    if (!deck || picked !== null || message.located || message.key || message.doc) return null
+    if (
+      !deck ||
+      picked !== null ||
+      message.selections ||
+      message.located ||
+      message.key ||
+      message.doc
+    ) {
+      return null
+    }
     message.deck = deck
   }
   if (value.pin !== undefined) {
     const pin = value.pin
     if (!Number.isSafeInteger(pin) || (pin as number) < 1 || (pin as number) > MAX_PINS) return null
-    if (picked !== null || message.located || message.key || message.doc || message.deck) {
+    if (
+      picked !== null ||
+      message.selections ||
+      message.located ||
+      message.key ||
+      message.doc ||
+      message.deck
+    ) {
       return null
     }
     message.pin = pin as number
@@ -381,7 +422,13 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     if (!isRecord(typed) || typeof typed.text !== 'string' || typeof typed.done !== 'boolean') {
       return null
     }
-    if (typed.text.length > EDIT_TEXT_CHARS || picked !== null || message.located || message.key) {
+    if (
+      typed.text.length > EDIT_TEXT_CHARS ||
+      picked !== null ||
+      message.selections ||
+      message.located ||
+      message.key
+    ) {
       return null
     }
     if (message.pin !== undefined || message.doc || message.deck) return null
@@ -392,6 +439,7 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     if (
       !anchor ||
       picked !== null ||
+      message.selections ||
       message.located ||
       message.key ||
       message.doc ||

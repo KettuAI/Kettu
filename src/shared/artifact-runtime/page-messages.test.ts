@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_VERSION } from '../artifact-capabilities'
-import { parseSelectMessage } from './page-messages'
+import { MAX_MULTI_SELECT, parseSelectMessage } from './page-messages'
 
 const keyMessage = (extra: Record<string, unknown>) => ({
   v: RUNTIME_VERSION,
@@ -177,6 +177,59 @@ describe('pin bounding box and live anchor bounds', () => {
       parseSelectMessage(
         keyMessage({
           key: 'Escape',
+          anchor: { box: null, viewport: { width: 800, height: 600 } },
+        }),
+      ),
+    ).toBeNull()
+  })
+})
+
+describe('multi-element marquee selections', () => {
+  const sampleItem = (src: number | null, tag = 'article', text = 'Card') => ({
+    path: 'index.html',
+    src,
+    tag,
+    text,
+    textOnly: false,
+    style: {},
+    box: { x: 20, y: 40, width: 200, height: 100 },
+  })
+
+  it('parses a valid selections array including script-created elements with null src', () => {
+    const parsed = parseSelectMessage(
+      keyMessage({
+        selections: [sampleItem(10, 'article', 'Card 1'), sampleItem(null, 'button', 'Action')],
+      }),
+    )
+    expect(parsed?.selection).toBeNull()
+    expect(parsed?.selections).toHaveLength(2)
+    expect(parsed?.selections?.[0]).toMatchObject({
+      src: 10,
+      tag: 'article',
+      text: 'Card 1',
+      box: { x: 20, y: 40, width: 200, height: 100 },
+    })
+    expect(parsed?.selections?.[1]).toMatchObject({ src: null, tag: 'button', text: 'Action' })
+  })
+
+  it('rejects empty, oversized, malformed, or mixed selections messages', () => {
+    expect(parseSelectMessage(keyMessage({ selections: [] }))).toBeNull()
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          selections: Array.from({ length: MAX_MULTI_SELECT + 1 }, (_, i) => sampleItem(i)),
+        }),
+      ),
+    ).toBeNull()
+    expect(parseSelectMessage(keyMessage({ selections: [null] }))).toBeNull()
+    expect(
+      parseSelectMessage(keyMessage({ selection: sampleItem(1), selections: [sampleItem(2)] })),
+    ).toBeNull()
+    expect(parseSelectMessage(keyMessage({ selections: [sampleItem(1)], pin: 1 }))).toBeNull()
+    expect(
+      parseSelectMessage(
+        keyMessage({
+          selections: [sampleItem(1)],
           anchor: { box: null, viewport: { width: 800, height: 600 } },
         }),
       ),

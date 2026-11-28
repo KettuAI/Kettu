@@ -23,9 +23,16 @@ export function SelectionChip({
         title: selection.title,
         anchor: more > 0 ? `${anchorLabel(anchor)} +${more}` : anchorLabel(anchor),
       })
+  const tooltip =
+    more > 0
+      ? [anchor, ...(selection.others ?? [])].map((item) => anchorLabel(item)).join(', ')
+      : label
   return (
     <div className="flex w-full min-w-0 animate-in pb-0.5 fade-in animation-duration-(--duration-fast)">
-      <span className="flex h-6.5 min-w-0 items-center gap-1.5 rounded-lg bg-subtle pr-0.5 pl-2 text-small text-secondary">
+      <span
+        title={tooltip}
+        className="flex h-6.5 min-w-0 items-center gap-1.5 rounded-lg bg-subtle pr-0.5 pl-2 text-small text-secondary"
+      >
         <HugeiconsIcon
           aria-hidden
           icon={Cursor01Icon}
