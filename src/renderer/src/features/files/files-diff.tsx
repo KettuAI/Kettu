@@ -64,7 +64,7 @@ function FilesDiffImpl({
   return (
     <WorkerPoolContext.Provider value={pool}>
       {first && (
-        <div className="mt-1.5 bg-hover px-3 py-0.5 font-mono text-code leading-5.25 text-disabled select-none">
+        <div className="files-diff-hunk mt-1.5 bg-hover px-3 py-0.5 font-mono text-disabled select-none">
           {hunkHeader(first)}
         </div>
       )}

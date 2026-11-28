@@ -656,7 +656,7 @@ function TextCodePreview({
         ref={scrollRef}
         data-preview-code=""
         data-selectable=""
-        className="min-h-0 flex-1 overflow-auto overscroll-contain bg-code-block py-2 font-mono text-code-sm leading-[1.65]"
+        className="min-h-0 flex-1 overflow-auto overscroll-contain bg-code-block py-2 font-mono text-[calc(var(--text-code-sm)+var(--code-size-offset))] leading-[1.65]"
       >
         <div className="min-w-max">
           {slice.lines.map((line, index) => {

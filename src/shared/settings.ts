@@ -77,6 +77,7 @@ export interface SettingsFile {
     colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
     appIcon: AppIcon // the app's icon in the Dock, taskbar, windows and in-app brand marks
     textSize: 'small' | 'default' | 'large' // the composer: 14, 15 or 16 px; thread prose a pixel less
+    codeSize: CodeSize // step for code blocks, inline code, the editor and diffs (-1, 0 or +1 px)
     conversationWidth: ConversationWidth // default column width preset for the thread and composer
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
@@ -321,6 +322,14 @@ export function normalizeAppIcon(value: unknown): AppIcon | null {
   return isAppIcon(value) ? value : null
 }
 
+/** The font size presets for code blocks, inline code, the editor and diffs. */
+export const CODE_SIZES = ['small', 'default', 'large'] as const
+export type CodeSize = (typeof CODE_SIZES)[number]
+
+export function isCodeSize(value: unknown): value is CodeSize {
+  return (CODE_SIZES as readonly unknown[]).includes(value)
+}
+
 /** The default width presets for the conversation column (thread and composer). */
 export const CONVERSATION_WIDTHS = ['standard', 'wide'] as const
 export type ConversationWidth = (typeof CONVERSATION_WIDTHS)[number]
@@ -370,6 +379,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     colorTheme: BUILTIN_THEME_ID,
     appIcon: 'kettu',
     textSize: 'default',
+    codeSize: 'default',
     conversationWidth: 'standard',
     reduceMotion: 'system',
     zoom: 1.1,

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
-import { APP_ICONS, CONVERSATION_WIDTHS, DEFAULT_SETTINGS } from '@shared/settings'
+import { APP_ICONS, CODE_SIZES, CONVERSATION_WIDTHS, DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
 import {
   effectiveDirect,
@@ -1247,6 +1247,46 @@ describe('conversation width preset', () => {
 
     for (const bad of ['full', 'compact', '', 1088, null, []]) {
       expect(() => validateSettingsPatch({ appearance: { conversationWidth: bad } })).toThrow()
+    }
+  })
+})
+
+describe('code font size setting', () => {
+  it('defaults to default for fresh and legacy files, accepts valid presets, and sanitizes invalid values', async () => {
+    expect((await SettingsStore.load(dir)).get().appearance.codeSize).toBe('default')
+    await save({ version: 1, appearance: { textSize: 'large' } })
+    const legacy = (await SettingsStore.load(dir)).get()
+    expect(legacy.appearance.textSize).toBe('large')
+    expect(legacy.appearance.codeSize).toBe('default')
+
+    for (const preset of CODE_SIZES) {
+      await save({ version: 1, appearance: { codeSize: preset } })
+      expect((await SettingsStore.load(dir)).get().appearance.codeSize).toBe(preset)
+    }
+    for (const bad of ['medium', 'xlarge', '', 13, null, {}]) {
+      await save({ version: 1, appearance: { codeSize: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.codeSize).toBe('default')
+    }
+  })
+
+  it('validates, merges, persists and keeps the code size preset on the client', async () => {
+    const patch = validateSettingsPatch({ appearance: { codeSize: 'large' } })
+    expect(patch).toEqual({ appearance: { codeSize: 'large' } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.appearance.codeSize).toBe('large')
+    expect(next.appearance.textSize).toBe('default')
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).appearance.codeSize).toBe(
+      'large',
+    )
+
+    const store = await SettingsStore.load(dir)
+    store.update(patch)
+    await store.flush()
+    expect((await SettingsStore.load(dir)).get().appearance.codeSize).toBe('large')
+
+    for (const bad of ['medium', 'tiny', '', 14, null, []]) {
+      expect(() => validateSettingsPatch({ appearance: { codeSize: bad } })).toThrow()
     }
   })
 })

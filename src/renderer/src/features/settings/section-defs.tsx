@@ -155,6 +155,7 @@ import {
   BackgroundFetch,
   ClearBrowsingData,
   CloseSidePanelWithLastTab,
+  CodeSize,
   ColorMode,
   ConfirmLinks,
   ConversationWidth,
@@ -435,6 +436,13 @@ export function useAppearanceSection(): SectionDef {
         group: scale,
         layout: 'bare',
         render: (text) => <TextSize label={text} />,
+      },
+      {
+        id: 'code-size',
+        setting: 'appearance.code-size',
+        group: scale,
+        layout: 'bare',
+        render: (text) => <CodeSize label={text} />,
       },
       ...USER_FONT_ROLES.flatMap<RowDef>((role) => [
         {

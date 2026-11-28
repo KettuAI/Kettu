@@ -469,6 +469,12 @@
   --prose-size: 15px;
   /* The thread's prose, a pixel under the composer's; Text size moves both. */
   --thread-prose-size: calc(var(--prose-size) - 1px);
+  /* Code size adjustment: 0 px at default so existing textSize presets keep their exact rendering. */
+  --code-size-offset: 0px;
+  --code-line-height-offset: 0px;
+  /* Code editor, diffs and tool code blocks: 12 px / 20 px at default, stepped by Code size. */
+  --code-size: calc(var(--text-code) + var(--code-size-offset));
+  --code-line-height: calc(var(--text-code--line-height) + var(--code-line-height-offset));
   /* Font files load only when text uses their face. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
@@ -521,8 +527,8 @@
   /* Diffs: code at the code step, separators in Inter. @pierre/diffs reads these in its shadow
      root, where its own fallbacks are the platform's faces. */
   --diffs-font-family: var(--font-mono);
-  --diffs-font-size: var(--text-code);
-  --diffs-line-height: var(--text-code--line-height);
+  --diffs-font-size: var(--code-size);
+  --diffs-line-height: var(--code-line-height);
   --diffs-header-font-family: var(--font-sans);
 }
 
@@ -586,6 +592,14 @@
 }
 :root[data-text-size='large'] {
   --prose-size: 16px;
+}
+:root[data-code-size='small'] {
+  --code-size-offset: -1px;
+  --code-line-height-offset: -2px;
+}
+:root[data-code-size='large'] {
+  --code-size-offset: 1px;
+  --code-line-height-offset: 2px;
 }
 
 @layer base {
@@ -1431,7 +1445,7 @@
     padding: 0.0667em 0.3333em;
     font-family: var(--font-mono);
     font-variant-ligatures: none;
-    font-size: 0.8667em;
+    font-size: calc(0.8667em + var(--code-size-offset));
   }
   & del {
     color: var(--text-tertiary);
@@ -1601,7 +1615,7 @@
     background: var(--bg-hover);
   }
   & [data-streamdown='table-cell'] [data-streamdown='inline-code'] {
-    font-size: calc(var(--prose-size) - 3px);
+    font-size: calc(var(--prose-size) - 3px + var(--code-size-offset));
   }
   & [data-table-footer] {
     display: flex;
@@ -1675,7 +1689,7 @@
     }
     & > code {
       font-family: var(--font-mono);
-      font-size: 0.8667em;
+      font-size: calc(0.8667em + var(--code-size-offset));
       white-space: pre-wrap;
     }
   }
@@ -1695,7 +1709,7 @@
   & [data-math-error] {
     font-family: var(--font-mono);
     font-variant-ligatures: none;
-    font-size: 0.8667em;
+    font-size: calc(0.8667em + var(--code-size-offset));
     & mark {
       border-radius: 2px;
       background: var(--danger-tint);
@@ -1892,7 +1906,7 @@ body > div[id^='dkettu-mermaid-'] {
   background: transparent;
   padding: 10px 0;
   font-family: var(--font-mono);
-  font-size: calc(var(--prose-size) - 2.5px);
+  font-size: calc(var(--prose-size) - 2.5px + var(--code-size-offset));
   font-variant-ligatures: none;
   line-height: 1.7;
 }
@@ -1977,7 +1991,7 @@ body > div[id^='dkettu-mermaid-'] {
   background: transparent;
   padding: 3px 0;
   font-family: var(--font-mono);
-  font-size: calc(var(--prose-size) - 2.5px);
+  font-size: calc(var(--prose-size) - 2.5px + var(--code-size-offset));
   font-variant-ligatures: none;
   line-height: 1.7;
 }
@@ -2224,9 +2238,9 @@ body > div[id^='dkettu-mermaid-'] {
   overflow: hidden;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px + var(--code-size-offset));
   font-variant-ligatures: none;
-  line-height: 19px;
+  line-height: calc(19px + var(--code-line-height-offset));
   white-space: pre;
   text-overflow: ellipsis;
 }
@@ -2242,7 +2256,7 @@ body > div[id^='dkettu-mermaid-'] {
 
 /* Compact line height for inline working-tree previews inside the Git changes list. */
 .git-inline-diff {
-  --diffs-line-height: 20px;
+  --diffs-line-height: var(--code-line-height);
   font-variant-ligatures: none;
 }
 
@@ -2265,8 +2279,12 @@ body > div[id^='dkettu-mermaid-'] {
   --diffs-bg-selection-number-override: var(--selection);
   --diffs-bg-separator-override: var(--bg-subtle);
   --diffs-header-font-family: var(--font-mono);
-  --diffs-line-height: 21px;
+  --diffs-line-height: calc(21px + var(--code-line-height-offset));
   /* A changed line's tint runs from the numbers into the code without a seam. */
   --diffs-gap-style: none;
   font-variant-ligatures: none;
+}
+.files-diff-hunk {
+  font-size: var(--code-size);
+  line-height: calc(21px + var(--code-line-height-offset));
 }
