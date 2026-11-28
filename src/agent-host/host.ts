@@ -4781,6 +4781,8 @@ export class AgentHost {
           turnStartedAt: s.turnStartedAt ?? s.updatedAt,
           ...(project ? { project } : {}),
           ...(activityBody ? { body: activityBody } : {}),
+          ...(s.phase ? { phase: s.phase } : {}),
+          ...(s.activity?.toolKind ? { activityKind: s.activity.toolKind } : {}),
           ...(s.plan && s.plan.total > 0
             ? {
                 plan: {

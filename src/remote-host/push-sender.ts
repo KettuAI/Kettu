@@ -325,6 +325,9 @@ export class PushSender {
                   : {}),
                 ...(details && p.agentId ? { agentId: p.agentId } : {}),
                 ...(p.turnStartedAt !== undefined ? { turnStartedAt: p.turnStartedAt } : {}),
+                ...(p.runningCount !== undefined ? { runningCount: p.runningCount } : {}),
+                ...(details && p.phase ? { phase: p.phase } : {}),
+                ...(details && !compact && p.activityKind ? { activityKind: p.activityKind } : {}),
                 ...(details && p.plan
                   ? {
                       plan: compact

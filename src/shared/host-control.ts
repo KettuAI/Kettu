@@ -346,6 +346,10 @@ export interface HostActivityRunning {
   turnStartedAt: number
   project?: string
   body?: string
+  /** 当前运行阶段（如 thinking / writing / execute / edit），用于锁屏实时活动状态兜底。 */
+  phase?: string
+  /** 当前正在执行的工具类型，用于匹配锁屏实时活动状态槽图标。 */
+  activityKind?: string
   plan?: { done: number; total: number; current?: string }
   parentId?: string | null
 }
