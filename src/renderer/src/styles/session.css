@@ -2520,6 +2520,17 @@
   display: inline-flex;
   gap: 4px;
 }
+.ks-changes__undone {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--info-tint);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--thread-muted);
+}
 .ks-changes__actions {
   display: flex;
   gap: 6px;
@@ -2529,7 +2540,7 @@
   display: none;
 }
 /* In a narrow column the actions keep only their icons, so the head stays on one line. */
-@container (inline-size < 440px) {
+@container (inline-size < 480px) {
   .ks-changes__actions .ks-btn {
     width: 26px;
     padding: 0;
@@ -2683,6 +2694,113 @@
 }
 .ks-changes__more:hover {
   color: var(--thread-ink);
+}
+
+/* Turn undo preview dialog. */
+.ks-undo__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.ks-undo__banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ks-undo__banner--danger {
+  background: var(--danger-tint);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 var(--hairline) var(--danger-border);
+}
+.ks-undo__banner--warn {
+  background: var(--tone-amber-fill);
+  color: var(--tone-amber);
+  box-shadow: inset 0 0 0 var(--hairline) var(--tone-amber-edge);
+}
+.ks-undo__banner--info {
+  background: var(--info-tint);
+  color: var(--thread-muted);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-subtle);
+}
+.ks-undo__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ks-undo__file {
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-subtle);
+  overflow: hidden;
+}
+.ks-undo__file--blocked {
+  box-shadow: inset 0 0 0 var(--hairline) var(--danger-border);
+}
+.ks-undo__file-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--thread-ink);
+  text-align: left;
+}
+.ks-undo__file-head:hover {
+  background: var(--bg-hover);
+}
+.ks-undo__chevron {
+  color: var(--thread-muted);
+  transition: transform var(--duration-fast);
+}
+.ks-undo__file-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.ks-undo__file-reason {
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.ks-undo__file-hint {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-undo__badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.ks-undo__badge--revert {
+  background: var(--info-tint);
+  color: var(--thread-muted);
+}
+.ks-undo__badge--delete {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.ks-undo__badge--restore {
+  background: var(--success-tint);
+  color: var(--success);
+}
+.ks-undo__badge--conflict {
+  background: var(--danger-tint);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 var(--hairline) var(--danger-border);
 }
 
 /* A subagent's card, on Tool Call Card's measures; it opens the subagent's session. */

@@ -145,6 +145,7 @@ import type {
 import type { AgentColor } from './settings'
 import type { CatalogSection } from './settings-catalog'
 import type { TurnPhase } from './turn-phase'
+import type { TurnUndoFileDigest, TurnUndoPreview, TurnUndoResult } from './turn-undo'
 import type {
   ApprovedWorkflow,
   SessionTaskRef,
@@ -1866,6 +1867,16 @@ export interface HostContract {
   }
   // Brings back the turns an edit set aside, with the draft the composer held before it.
   'sessions.putBack': { params: { sessionId: string }; result: { draft: UserContent[] } }
+  // Previews undoing the file changes of one turn without writing to disk.
+  'sessions.previewUndoTurn': {
+    params: { sessionId: string; toolIds: string[] }
+    result: TurnUndoPreview
+  }
+  // Re-verifies current disk files against `expectedDigests` and applies the turn undo all-or-nothing.
+  'sessions.undoTurn': {
+    params: { sessionId: string; toolIds: string[]; expectedDigests: TurnUndoFileDigest[] }
+    result: TurnUndoResult
+  }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
   // A fork of a session in a worktree gets its own, from the source's branch, unless `same`.
   'sessions.fork': {
@@ -2612,6 +2623,8 @@ export const HOST_METHODS = [
   'sessions.cancelContinue',
   'sessions.rewind',
   'sessions.putBack',
+  'sessions.previewUndoTurn',
+  'sessions.undoTurn',
   'sessions.fork',
   'worktrees.inspect',
   'worktrees.remove',

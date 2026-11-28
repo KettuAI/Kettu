@@ -251,6 +251,8 @@ import {
   type SessionWorktree,
   type WorktreeFailure,
 } from '@shared/git'
+import type { TurnUndoFileDigest, TurnUndoPreview, TurnUndoResult } from '@shared/turn-undo'
+import { applyTurnUndo, previewTurnUndo } from './turn-undo'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { canonicalizePath, isInside, pathKey, samePath } from './paths'
 import type { ProjectHooksAnswers } from './project-hooks'
@@ -1558,6 +1560,8 @@ export class SessionManager {
   private readonly releasing = new Map<string, Promise<void>>()
   /** Per-session serialization tail for config mutations so state and remembered values stay ordered. */
   private readonly configQueues = new Map<string, Promise<void>>()
+  /** Sessions currently applying a turn undo, preventing concurrent disk writes. */
+  private readonly turnUndos = new Set<string>()
   /** A look at the idle limit is due once the current work is done. */
   private limitCheck = false
   /** Sessions let go for idleness since this host started, whose resume the cache guard checks. */
@@ -2296,6 +2300,147 @@ export class SessionManager {
     throw new HostError('not_found', t('session.waiting.memoryUndo.undone'), {
       reason: 'memory_gone',
     })
+  }
+
+  /** Resolves and validates the completed tool entries belonging to a single turn. */
+  private resolveTurnToolEntries(
+    live: Live,
+    toolIds: readonly string[],
+  ): { entries: ToolEntry[]; undoableEntryIds: string[]; alreadyUndone: boolean } {
+    const uniqueIds = [...new Set(toolIds)]
+    const positioned: { index: number; entry: ToolEntry }[] = []
+    for (const id of uniqueIds) {
+      const index = live.thread.order.indexOf(id)
+      const entry = index >= 0 ? live.thread.byId[id] : undefined
+      if (!entry || entry.kind !== 'tool') {
+        throw notFound(t('turnUndo.noEntries'))
+      }
+      positioned.push({ index, entry })
+    }
+    positioned.sort((a, b) => a.index - b.index)
+
+    if (positioned.length > 1) {
+      const firstIndex = positioned[0]!.index
+      const lastIndex = positioned[positioned.length - 1]!.index
+      for (let i = firstIndex + 1; i < lastIndex; i++) {
+        const between = live.thread.byId[live.thread.order[i]!]
+        if (between?.kind === 'user' && !between.steered) {
+          throw invalidParams(t('turnUndo.crossTurn'))
+        }
+      }
+    }
+
+    const entries = positioned.map(({ entry }) => entry)
+    const diffTools = entries.filter(
+      (entry) =>
+        entry.status === 'completed' &&
+        (entry.content.some((item) => item.type === 'diff') ||
+          entry.toolKind === 'delete' ||
+          entry.toolKind === 'move'),
+    )
+    const undoableEntryIds = diffTools.map((entry) => entry.id)
+    const alreadyUndone = diffTools.length > 0 && diffTools.every((entry) => entry.undone === true)
+    return { entries, undoableEntryIds, alreadyUndone }
+  }
+
+  private assertReadyForTurnUndo(sessionId: string): { workDir: string } {
+    const record = this.recordOf(sessionId)
+    if (this.isArchived(record)) {
+      throw new HostError('restricted', t('turnUndo.archived'))
+    }
+    const workDir = this.workFolder(sessionId)
+    if (!workDir) {
+      throw notFound(t('turnUndo.noWorkspace'))
+    }
+    return { workDir }
+  }
+
+  private assertIdleForTurnUndo(live: Live): void {
+    const { status } = live.thread.session
+    if (
+      live.turn !== null ||
+      status === 'running' ||
+      status === 'awaiting_permission' ||
+      status === 'starting'
+    ) {
+      throw busyError(status)
+    }
+  }
+
+  /** Previews reversing one turn's file edits against current disk files without writing anything. */
+  async previewUndoTurn(sessionId: string, toolIds: string[]): Promise<TurnUndoPreview> {
+    const { workDir } = this.assertReadyForTurnUndo(sessionId)
+    const live = await this.revive(sessionId)
+    this.assertIdleForTurnUndo(live)
+    const { entries, alreadyUndone } = this.resolveTurnToolEntries(live, toolIds)
+    try {
+      return await previewTurnUndo({
+        workRoot: workDir,
+        entries,
+        platform: this.deps.platform,
+        alreadyUndone,
+      })
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        throw notFound(t('turnUndo.noWorkspace'))
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Re-verifies current disk files against `expectedDigests` and applies one turn's reverse edits
+   * all-or-nothing, marking its tool entries undone only after disk writes succeed.
+   */
+  async undoTurn(
+    sessionId: string,
+    toolIds: string[],
+    expectedDigests: TurnUndoFileDigest[],
+  ): Promise<{ result: TurnUndoResult; workDir: string }> {
+    const { workDir } = this.assertReadyForTurnUndo(sessionId)
+    if (this.turnUndos.has(sessionId)) {
+      throw new HostError('busy', t('turnUndo.busy'))
+    }
+    this.turnUndos.add(sessionId)
+    try {
+      const live = await this.revive(sessionId)
+      this.assertIdleForTurnUndo(live)
+      const { entries, undoableEntryIds, alreadyUndone } = this.resolveTurnToolEntries(
+        live,
+        toolIds,
+      )
+      let result: TurnUndoResult
+      try {
+        result = await applyTurnUndo({
+          workRoot: workDir,
+          entries,
+          expectedDigests,
+          platform: this.deps.platform,
+          alreadyUndone,
+        })
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code
+        if (code === 'ENOENT' || code === 'ENOTDIR') {
+          throw notFound(t('turnUndo.noWorkspace'))
+        }
+        throw error
+      }
+      if (result.status === 'applied' && undoableEntryIds.length > 0) {
+        this.emit(
+          live,
+          undoableEntryIds.map((id): Patch => ({
+            op: 'entry.update',
+            id,
+            changes: { undone: true },
+          })),
+        )
+        this.checkpoint(live)
+      }
+      return { result, workDir }
+    } finally {
+      this.turnUndos.delete(sessionId)
+    }
   }
 
   /**

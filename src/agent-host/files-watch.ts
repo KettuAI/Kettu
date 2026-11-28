@@ -84,6 +84,13 @@ export class FilesWatches {
     this.read(root, file.split(/[\\/]/).filter(Boolean).slice(0, -1).join('/'))
   }
 
+  /** Immediately notifies ports watching `root` after the host itself modified files on disk. */
+  notify(root: string): void {
+    const project = this.projects.get(pathKey(root, this.options.platform))
+    if (!project) return
+    for (const [portId, named] of project.ports) this.options.changed(portId, named)
+  }
+
   stop(): void {
     for (const project of this.projects.values()) project.watch.close()
     this.projects.clear()

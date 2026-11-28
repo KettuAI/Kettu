@@ -1819,6 +1819,13 @@
     "nothing": "没有可以放回原处的内容",
     "failed": "没能回到重新编辑的消息：{{reason}}"
   },
+  "turnUndo": {
+    "archived": "请先恢复这个会话，再撤销其中的文件改动",
+    "busy": "这个会话正在执行撤销操作，请稍候",
+    "noWorkspace": "这个会话的工作目录已不可用",
+    "noEntries": "这一轮的工具改动记录已不在这个会话中",
+    "crossTurn": "每次只能撤销同一轮对话产生的文件改动"
+  },
   "usageRead": {
     "notSignedIn": "{{vendor}} 尚未登录",
     "signInExpired": "{{vendor}} 的登录已过期",
