@@ -559,7 +559,10 @@
     "finished": "{{agent}} 做完了",
     "stopped": "{{agent}} 被停止了",
     "failed": "{{agent}} 出错了",
-    "failedWith": "{{agent}} 出错了 · {{reason}}"
+    "failedWith": "{{agent}} 出错了 · {{reason}}",
+    "round": "第 {{round}} 轮",
+    "openSession": "打开 {{title}}",
+    "openRound": "打开 {{title}} 的第 {{round}} 轮"
   },
   "sessionStarted": {
     "label": "已启动 <title>{{title}}</title>",

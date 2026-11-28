@@ -292,6 +292,20 @@ export function isQueuedComments(value: unknown): value is QueuedComments {
   )
 }
 
+/** Kettu's report of a turn a started child session ended for its starter. */
+export interface FromSessionEnded {
+  agent: string
+  stopReason: StopReason | null
+  /** 1-based round number in the child session when this turn ended. */
+  round?: number
+  /** Epoch ms when the child session's round finished. */
+  completedAt?: number
+  /** Target entry id in the child session for this round (its starting user entry). */
+  entryId?: string
+  /** Stored position of `entryId` in the child session, for paged loading on jump. */
+  pos?: number
+}
+
 /** The session that started or messaged another one through the session tools. */
 export interface FromSession {
   sessionId: string
@@ -299,10 +313,66 @@ export interface FromSession {
   /** The sender asked not to be told when the turn this message begins ends. */
   report?: false
   /**
-   * Set on Kettu's report of a turn the receiver asked this session for: the agent's name and how
-   * the turn ended, null for a failure. The thread draws it from these, not from the message text.
+   * Set on Kettu's report of a turn the receiver asked this session for: the agent's name, how
+   * the turn ended (null for a failure), and optional round metadata. The thread and composer
+   * queue draw the notification from these, not from the message text.
    */
-  ended?: { agent: string; stopReason: StopReason | null }
+  ended?: FromSessionEnded
+}
+
+const STOP_REASONS: ReadonlySet<unknown> = new Set<StopReason>([
+  'end_turn',
+  'max_tokens',
+  'max_turn_requests',
+  'refusal',
+  'cancelled',
+])
+
+export function isStopReason(value: unknown): value is StopReason {
+  return STOP_REASONS.has(value)
+}
+
+/** Parses and sanitizes report ending metadata, keeping legacy reports without round fields. */
+export function parseFromSessionEnded(value: unknown): FromSessionEnded | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.agent !== 'string') return undefined
+  if (raw.stopReason !== null && !isStopReason(raw.stopReason)) return undefined
+  const round =
+    typeof raw.round === 'number' && Number.isSafeInteger(raw.round) && raw.round >= 1
+      ? raw.round
+      : undefined
+  const completedAt =
+    typeof raw.completedAt === 'number' && Number.isFinite(raw.completedAt) && raw.completedAt > 0
+      ? raw.completedAt
+      : undefined
+  const entryId = typeof raw.entryId === 'string' && raw.entryId !== '' ? raw.entryId : undefined
+  const pos =
+    typeof raw.pos === 'number' && Number.isSafeInteger(raw.pos) && raw.pos >= 0
+      ? raw.pos
+      : undefined
+  return {
+    agent: raw.agent,
+    stopReason: raw.stopReason,
+    ...(round !== undefined ? { round } : {}),
+    ...(completedAt !== undefined ? { completedAt } : {}),
+    ...(entryId !== undefined ? { entryId } : {}),
+    ...(pos !== undefined ? { pos } : {}),
+  }
+}
+
+/** Parses a `FromSession` origin from stored or wire data, dropping malformed optional fields. */
+export function parseFromSession(value: unknown): FromSession | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.sessionId !== 'string' || typeof raw.title !== 'string') return undefined
+  const ended = parseFromSessionEnded(raw.ended)
+  return {
+    sessionId: raw.sessionId,
+    title: raw.title,
+    ...(raw.report === false ? { report: false as const } : {}),
+    ...(ended ? { ended } : {}),
+  }
 }
 
 /** The paired device a message or answer came from, under the name the host lists it by. */

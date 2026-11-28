@@ -7568,6 +7568,62 @@ button.kettu-ctx__part-row:focus-visible {
   font-size: 12px;
   color: var(--composer-faint);
 }
+.kettu-queue__report {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.kettu-queue__report-sentence {
+  flex: none;
+  color: var(--composer-muted);
+}
+.kettu-queue__report-link,
+.kettu-queue__report-static {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  color: var(--composer-text);
+  transition: color 160ms ease;
+}
+.kettu-queue__report-link {
+  border-radius: 4px;
+  outline: none;
+}
+.kettu-queue__report-link:is(:hover, :focus-visible) {
+  color: var(--composer-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--composer-line-strong);
+  text-underline-offset: 2px;
+}
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__report-link,
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__report-static {
+  color: var(--composer-ink);
+}
+.kettu-queue__report-round {
+  flex: none;
+  font-weight: 400;
+  color: var(--composer-muted);
+  font-variant-numeric: tabular-nums;
+}
+.kettu-queue__report-arrow {
+  flex: none;
+  color: var(--composer-muted);
+}
+.kettu-queue__report-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--composer-faint);
+  font-variant-numeric: tabular-nums;
+}
 .kettu-queue__paused {
   display: inline-flex;
   flex: none;
@@ -7636,7 +7692,9 @@ button.kettu-ctx__part-row:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .kettu-queue__card,
   .kettu-queue__card > *,
-  .kettu-queue__count svg {
+  .kettu-queue__count svg,
+  .kettu-queue__report-link,
+  .kettu-queue__report-static {
     transition: none;
   }
 }

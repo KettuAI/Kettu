@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 
-/** A message of a session that Search opened it for, until its thread has gone there. */
+/** A message of a session that Search or a session report opened it for, until its thread has gone there. */
 export interface RevealTarget {
   sessionId: string
   entryId: string
-  pos: number
+  pos: number | null
 }
 
 /** A target nobody took within this long is dropped, so a session that never opened is not jumped in later. */
