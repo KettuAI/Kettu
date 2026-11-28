@@ -13,7 +13,12 @@ export interface WindowsProcess {
 }
 
 // Console infrastructure processes attached to ConPTY or WinPTY sessions are not user commands.
-const CONSOLE_HELPERS = new Set(['conhost', 'openconsole', 'winpty-agent'])
+const CONSOLE_HELPERS = new Set([
+  'conhost',
+  'openconsole',
+  'winpty-agent',
+  'conpty_console_list_agent',
+])
 
 // Must finish well under QuitFlow's BUSY_TIMEOUT_MS (2000 ms) even when WMI is slow.
 const PROCESS_LIST_TIMEOUT_MS = 1500

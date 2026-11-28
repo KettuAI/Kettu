@@ -534,6 +534,16 @@ export class RemoteHost {
     })
   }
 
+  /**
+   * Waits until connected devices have received previously sent admin events (or `timeoutMs`
+   * elapses), so final update transitions reach mobile clients before stopping or handing off to
+   * a native installer.
+   */
+  async flushEvents(timeoutMs = 1500): Promise<void> {
+    if (!this.serving || !this.host) return
+    await this.request((requestId) => ({ type: 'remote-host:flush-events', requestId }), timeoutMs)
+  }
+
   /** What the agent host says needs the user, which devices may be notified of. */
   attention(message: Extract<HostToMain, { type: 'host:attention' }>): void {
     const attention = pushedAttention(message)
@@ -1215,6 +1225,7 @@ export class RemoteHost {
       case 'remote-host:activity':
       case 'remote-host:discovery-answer':
       case 'remote-host:reverse-host':
+      case 'remote-host:events-flushed':
       case 'remote-host:reset':
       case 'remote-host:stop-serving':
       case 'remote-host:forwarding':

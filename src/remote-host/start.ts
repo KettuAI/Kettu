@@ -931,6 +931,13 @@ export function startRemoteHost(
         withServing(({ server: s }) => s.adminEvent(event, deviceId, except))
         break
       }
+      case 'remote-host:flush-events': {
+        const { requestId } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const done = (): void => send({ type: 'remote-host:events-flushed', requestId })
+        if (!withServing(({ server: s }) => void s.flushAdminEvents().then(done, done))) done()
+        break
+      }
       case 'remote-host:attention': {
         const attention = parseAttention(message.attention)
         if (!attention) {

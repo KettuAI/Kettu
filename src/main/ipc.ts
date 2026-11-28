@@ -718,8 +718,12 @@ export function registerIpcHandlers({
   handle('update:get-status', 0, () => updater.getStatus())
   handle('update:check', 0, () => updater.check())
   handle('update:download', 0, () => updater.download())
-  handle('update:cancel', 0, () => updater.cancel())
-  handle('update:restart', 0, () => updater.restart())
+  handle('update:cancel', 0, () => {
+    updater.cancel()
+  })
+  handle('update:restart', 0, () => {
+    updater.restart()
+  })
   handle('update:running-work', 0, () => quit.runningWork())
   handle('update:restart-confirmed', 0, () => updater.restartConfirmed())
   handle('update:restart-when-idle', 0, () => updater.restartWhenIdle())

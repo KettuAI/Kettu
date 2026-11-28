@@ -42,7 +42,12 @@ import type {
 } from '@shared/sharing'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult } from '@shared/themes'
 import { isHarnessId } from '@shared/thread'
-import type { UpdateStatus } from '@shared/updates'
+import {
+  isUpdateConfirmationAction,
+  type UpdateConfirmationAction,
+  type UpdateInitiator,
+  type UpdateStatus,
+} from '@shared/updates'
 import { isAbsolutePath } from '../agent-host/paths'
 import type { AgentFolders } from './agent-folders'
 import { isExecutableFile } from './executable'
@@ -184,9 +189,16 @@ export interface AdminThemes {
 export interface AdminUpdates {
   getStatus(): UpdateStatus
   check(): Promise<UpdateStatus>
-  download(): Promise<void>
-  cancel(): void
-  restart(): void
+  download(initiator?: UpdateInitiator): Promise<void>
+  startRemoteDownload?(initiator: UpdateInitiator): UpdateStatus
+  cancel(by?: 'local' | 'remote'): UpdateStatus | void
+  restart(initiator?: UpdateInitiator): UpdateStatus | void
+  confirm?(
+    requestId: string,
+    action: UpdateConfirmationAction,
+    initiator: UpdateInitiator,
+  ): UpdateStatus
+  revokeRemoteDevice?(deviceId: string): void
   dismiss(): void
 }
 
@@ -203,6 +215,8 @@ export interface HostAdminDeps {
   sharing: AdminSharing | null
   /** Null where Kettu is not updated from Settings, as under the daemon. */
   updates: AdminUpdates | null
+  /** Optional per-device host update permission check beyond paired-owner membership. */
+  canUpdateDevice?: (deviceId: string) => boolean
   themes: AdminThemes
   /** The Marketplace's keys, which check an untrusted patch themselves. */
   marketKeys: {
@@ -235,8 +249,6 @@ export class HostAdmin {
   private sentRemote: string | null = null
   /** The devices with a session open as remote access last said, which a new one is not among. */
   private online = new Set<string>()
-  /** Calls waiting for the updater to say what it does next. */
-  private updateWaiters: (() => void)[] = []
   /** Themes a device's install showed, which its answer tells it to show. */
   private readonly shown = new Set<string>()
   private readonly showOnDevice: ThemeSelect = (id) => void this.shown.add(id)
@@ -299,6 +311,14 @@ export class HostAdmin {
       }
     }
     this.online = new Set(status.online)
+    const pendingConfirmation = this.deps.updates?.getStatus().confirmation
+    if (
+      pendingConfirmation?.initiator.kind === 'remote' &&
+      pendingConfirmation.initiator.deviceId &&
+      !this.hasUpdatePermission(pendingConfirmation.initiator.deviceId, status)
+    ) {
+      this.deps.updates?.revokeRemoteDevice?.(pendingConfirmation.initiator.deviceId)
+    }
     const sent = JSON.stringify(status)
     if (sent === this.sentRemote) return
     this.sentRemote = sent
@@ -320,7 +340,6 @@ export class HostAdmin {
   }
 
   updatesChanged(status: UpdateStatus): void {
-    for (const resolve of this.updateWaiters.splice(0)) resolve()
     this.deps.send({ type: 'updates.changed', status }, null)
   }
 
@@ -407,6 +426,37 @@ export class HostAdmin {
       throw new AdminError('unavailable', t('hostAdmin.noUpdates'))
     }
     return this.deps.updates
+  }
+
+  /** Whether `deviceId` is still an authorized paired device permitted to control host updates. */
+  private hasUpdatePermission(
+    deviceId: string,
+    status: RemoteStatus = this.deps.remoteStatus(),
+  ): boolean {
+    if (!this.deps.updates) return false
+    if (status.state === 'off') return false
+    if (!status.devices.some((entry) => entry.id === deviceId)) return false
+    if (this.deps.canUpdateDevice && !this.deps.canUpdateDevice(deviceId)) return false
+    return true
+  }
+
+  private requireUpdatePermission(deviceId: string): AdminUpdates {
+    const updates = this.updates()
+    if (updates.getStatus().state.kind === 'off') {
+      throw new AdminError('unavailable', t('hostAdmin.noUpdates'))
+    }
+    if (!this.hasUpdatePermission(deviceId)) {
+      throw new AdminError('forbidden', t('hostAdmin.updateNotAllowed'))
+    }
+    return updates
+  }
+
+  private remoteUpdateInitiator(deviceId: string): UpdateInitiator {
+    return {
+      kind: 'remote',
+      deviceId,
+      deviceName: this.deviceNamed(deviceId),
+    }
   }
 
   private async run(deviceId: string, method: HostAdminMethod, params: unknown): Promise<unknown> {
@@ -591,21 +641,70 @@ export class HostAdmin {
       case 'updates.check':
         return this.updates().check()
       case 'updates.download': {
-        // A download outlasts a device's call: answer once it starts, or with why it cannot.
-        const download = this.updates().download()
+        const updates = this.requireUpdatePermission(deviceId)
+        const initiator = this.remoteUpdateInitiator(deviceId)
+        if (updates.startRemoteDownload) {
+          return updates.startRemoteDownload(initiator)
+        }
+        const download = updates.download(initiator)
         download.catch(() => {})
-        await Promise.race([
-          download,
-          new Promise<void>((resolve) => this.updateWaiters.push(resolve)),
-        ])
-        return null
+        return updates.getStatus()
       }
-      case 'updates.cancel':
-        this.updates().cancel()
-        return null
-      case 'updates.restart':
-        this.updates().restart()
-        return null
+      case 'updates.cancel': {
+        const updates = this.requireUpdatePermission(deviceId)
+        const status = updates.getStatus()
+        if (status.confirmation) {
+          if (
+            status.confirmation.initiator.kind !== 'remote' ||
+            status.confirmation.initiator.deviceId !== deviceId
+          ) {
+            throw new AdminError('forbidden', t('hostAdmin.updateConfirmationWrongCaller'))
+          }
+        } else if (
+          status.restartWhenIdle &&
+          status.initiator?.kind === 'remote' &&
+          status.initiator.deviceId !== deviceId
+        ) {
+          throw new AdminError('forbidden', t('hostAdmin.updateConfirmationWrongCaller'))
+        }
+        return updates.cancel('remote') ?? updates.getStatus()
+      }
+      case 'updates.restart': {
+        const updates = this.requireUpdatePermission(deviceId)
+        const initiator = this.remoteUpdateInitiator(deviceId)
+        return updates.restart(initiator) ?? updates.getStatus()
+      }
+      case 'updates.confirm': {
+        const { requestId, action } = fields(params)
+        if (
+          typeof requestId !== 'string' ||
+          requestId.trim().length === 0 ||
+          requestId.length > 128
+        ) {
+          throw invalid('"requestId" must be a non-empty string')
+        }
+        if (!isUpdateConfirmationAction(action)) {
+          throw invalid('"action" must be "now", "whenIdle", or "cancel"')
+        }
+        const updates = this.requireUpdatePermission(deviceId)
+        const confirmation = updates.getStatus().confirmation
+        if (!confirmation || confirmation.requestId !== requestId) {
+          throw new AdminError('conflict', t('hostAdmin.updateConfirmationStale'))
+        }
+        if (
+          confirmation.initiator.kind !== 'remote' ||
+          confirmation.initiator.deviceId !== deviceId
+        ) {
+          throw new AdminError('forbidden', t('hostAdmin.updateConfirmationWrongCaller'))
+        }
+        if (!confirmation.choices.includes(action)) {
+          throw invalid(`Action "${action}" is not allowed for this update request`)
+        }
+        if (!updates.confirm) {
+          throw new AdminError('unavailable', t('hostAdmin.noUpdates'))
+        }
+        return updates.confirm(requestId, action, this.remoteUpdateInitiator(deviceId))
+      }
       case 'updates.dismiss':
         this.updates().dismiss()
         return null

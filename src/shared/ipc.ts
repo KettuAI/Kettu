@@ -607,6 +607,8 @@ export interface IpcEventContract {
   'themes:changed': ThemesState
   'update:changed': UpdateStatus
   'app:confirm-quit': QuitRequest
+  /** Dismisses an open quit confirmation dialog when resolved remotely or cancelled by main. */
+  'app:confirm-quit-resolved': number
   'debug:changed': DebugStatus
   'app:command': AppCommand
   /** To the focused window: a session's turn ended, failed or waits, in place of a notification. */
@@ -723,6 +725,7 @@ export interface KettuApi {
     captureRect(rect: PageRect): Promise<Uint8Array | null>
     respondQuit(id: number, answer: boolean | 'background' | 'when-idle'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
+    onConfirmQuitResolved(listener: (id: number) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
     closeWindow(): void
     onCommand(listener: (command: AppCommand) => void): () => void

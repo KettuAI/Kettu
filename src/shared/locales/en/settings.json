@@ -1382,7 +1382,10 @@
       "readyDetail": "Restart to finish. Your sessions come back.",
       "readyWaiting_one": "Restarts by itself once {{count}} working session finishes.",
       "readyWaiting_other": "Restarts by itself once {{count}} working sessions finish.",
-      "readyWaitingSoon": "Restarts by itself in a moment."
+      "readyWaitingSoon": "Restarts by itself in a moment.",
+      "awaitingConfirmation": "Waiting for confirmation before restarting…",
+      "awaitingHostConfirmation": "Waiting for system confirmation on the host…",
+      "restarting": "Restarting to install the update…"
     },
     "automatic": {
       "name": "Automatic updates",

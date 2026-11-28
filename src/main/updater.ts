@@ -1,15 +1,29 @@
+import { randomUUID } from 'node:crypto'
 import { access, constants } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { app, autoUpdater as squirrel, shell } from 'electron'
 import type { AppUpdater, CancellationToken, ProgressInfo, UpdateFileInfo } from 'electron-updater'
+import type { Platform } from '@shared/platform'
 import type { SettingsFile } from '@shared/settings'
-import type { UpdateStatus } from '@shared/updates'
+import {
+  LOCAL_UPDATE_INITIATOR,
+  type UpdateBusySummary,
+  type UpdateConfirmationAction,
+  type UpdateConfirmationRequest,
+  type UpdateHostConfirmation,
+  type UpdateInitiator,
+  type UpdateOutcome,
+  type UpdateOutcomeCode,
+  type UpdatePhase,
+  type UpdateStatus,
+} from '@shared/updates'
 import type { AppStateStore } from './app-state'
 import { loadAutoUpdater } from './auto-updater'
 import { broadcast } from './events'
 import { t } from './i18n'
 import { createLogger } from './log'
 import { sessionProxy } from './proxy'
+import type { QuitRequestOptions, UpdateRestartPrepareResult } from './quit'
 import type { SettingsSection } from './settings-schema'
 import { diskImageFor, downloadDiskImage, type DownloadFile } from './update-dmg'
 import { guardUpdaterHttpExecutor } from './update-http'
@@ -36,6 +50,11 @@ import {
   updatedFrom,
   updateMode,
 } from './update-state'
+import {
+  runWindowsInstaller,
+  type WindowsInstallOptions,
+  type WindowsInstallResult,
+} from './windows-installer'
 
 const log = createLogger('updater')
 
@@ -62,6 +81,22 @@ const MOVE_PAINT_MS = 100
 // Squirrel.Mac unpacks and verifies a downloaded update in seconds; past this, a restart goes on.
 const SQUIRREL_PREPARE_MS = 60_000
 
+/** Subset of electron-updater's NsisUpdater internals read on Windows for host confirmation flow. */
+interface NsisUpdaterInternals {
+  installerPath?: string | null
+  installDirectory?: string | null
+  downloadedUpdateHelper?: {
+    file?: string | null
+    packageFile?: string | null
+    downloadedFileInfo?: { isAdminRightsRequired?: boolean } | null
+  } | null
+}
+
+type BaseUpdateStatus = Pick<
+  UpdateStatus,
+  'state' | 'mode' | 'readOnly' | 'current' | 'updatedFrom' | 'dismissed' | 'restartWhenIdle'
+>
+
 export interface UpdaterDeps {
   appState: AppStateStore
   settings(): SettingsFile
@@ -71,13 +106,33 @@ export interface UpdaterDeps {
    * interrupted sessions should resume after relaunch. False when another quit or restart is in
    * progress.
    */
-  requestRestart(confirmed: boolean, resumeAfterUpdate?: boolean): boolean
+  requestRestart(
+    confirmed: boolean,
+    resumeAfterUpdate?: boolean,
+    options?: QuitRequestOptions,
+  ): boolean
   /** Clears any staged update-resume record if installing the update is skipped or fails. */
   clearUpdateResume?(): Promise<void>
   /** How many sessions are working in a way a restart can wait for. */
   waitableSessions(): Promise<number>
+  /** How many terminals currently have a foreground command running. */
+  busyTerminals?(): Promise<number>
   /** Moves the app through the quit flow, which confirms and then calls `moveNow`. */
-  requestMove(): void
+  requestMove(options?: QuitRequestOptions): void
+  /** Resolves a pending update timing confirmation in QuitFlow. */
+  respondUpdateConfirmation?(
+    requestId: string,
+    action: UpdateConfirmationAction,
+    by: 'local' | 'remote',
+  ): boolean
+  /** Cancels a pending update timing confirmation in QuitFlow (for example when device access is revoked). */
+  cancelPendingUpdateConfirmation?(requestId: string, code?: UpdateOutcomeCode): boolean
+  /** Waits until connected remote devices have received prior `updates.changed` broadcasts. */
+  flushRemoteEvents?(): Promise<void>
+  /** Test seam for Windows NSIS installer execution and UAC confirmation handling. */
+  runWindowsInstaller?: (options: WindowsInstallOptions) => Promise<WindowsInstallResult>
+  /** Test seam for host platform; defaults to `process.platform`. */
+  platform?: Platform
   /** The status changed, which the windows hear too. */
   changed?(status: UpdateStatus): void
 }
@@ -89,6 +144,7 @@ export interface UpdaterDeps {
 export class Updater {
   private status: UpdateStatus
   private readonly mode: UpdateMode
+  private readonly platform: Platform
   private updater: Promise<AppUpdater> | null = null
   /** Resolved electron-updater instance, so shutdown hooks can update it synchronously. */
   private loadedUpdater: AppUpdater | null = null
@@ -118,24 +174,43 @@ export class Updater {
   private readonly located: Promise<void>
   /** The version of an Update that moved the app, which this launch carries on with. */
   private afterMove: string | null
-  /** The next look while a restart waits for sessions to finish. */
+  /** The next look while a restart waits for sessions or busy terminals to finish. */
   private waitTimer: ReturnType<typeof setTimeout> | null = null
   /** Counts each wait and each end of one, so a look an earlier wait started stops. */
   private waitRun = 0
-  /** Looks in a row that found no session to wait for. */
+  /** Looks in a row that found no session or terminal to wait for. */
   private idlePolls = 0
   /**
    * macOS: Squirrel.Mac preparing the update just downloaded. Until it has, a restart would install
    * the update it prepared before, as electron-updater only knows that one was prepared.
    */
   private squirrelPreparing: Promise<void> | null = null
+  /** Active or most recently settled request id for remote/local update tracking. */
+  private activeRequestId: string | null = null
+  /** Initiator of the current or most recent update operation. */
+  private activeInitiator: UpdateInitiator | null = null
+  /** True right after an update or restart request is accepted before the next state arrives. */
+  private acceptedPhase = false
+  /** Pending timing confirmation while QuitFlow waits for a choice. */
+  private confirmation: UpdateConfirmationRequest | null = null
+  /** Pending native OS confirmation on Windows (UAC/SmartScreen) or macOS (Applications move). */
+  private hostConfirmation: UpdateHostConfirmation | null = null
+  /** True once the host is stopping and handing off to the installer to restart. */
+  private restartingPhase = false
+  /** Most recent terminal cancellation or failure outcome until superseded by a new operation. */
+  private outcome: UpdateOutcome | null = null
+  /** Source of an in-flight manual download cancellation. */
+  private cancelSource: 'local' | 'remote' = 'local'
+  /** Set on Windows when `prepareRestartForInstall` already launched the installer after confirmation. */
+  private alreadyLaunchedInstaller = false
 
   constructor(private readonly deps: UpdaterDeps) {
     const current = app.getVersion()
     const { lastRunVersion, dismissedUpdate, updateAfterMove } = deps.appState.get()
-    this.mode = updateMode(process.platform, import.meta.env.MAIN_VITE_UPDATE_MODE)
-    this.status = {
-      state: offReason(app.isPackaged, process.platform, process.env) ?? {
+    this.platform = deps.platform ?? process.platform
+    this.mode = updateMode(this.platform, import.meta.env.MAIN_VITE_UPDATE_MODE)
+    this.status = this.compose({
+      state: offReason(app.isPackaged, this.platform, process.env) ?? {
         kind: 'idle',
         checkedAt: null,
       },
@@ -145,7 +220,7 @@ export class Updater {
       updatedFrom: updatedFrom(lastRunVersion, current),
       dismissed: dismissedUpdate,
       restartWhenIdle: null,
-    }
+    })
     this.afterMove = updateAfterMove
     deps.appState.update({ lastRunVersion: current, updateAfterMove: null })
     this.located = this.locate()
@@ -153,6 +228,20 @@ export class Updater {
 
   getStatus(): UpdateStatus {
     return this.status
+  }
+
+  /** Version currently downloaded or available, for confirmation metadata. */
+  targetVersion(): string | null {
+    const { state } = this.status
+    if (
+      state.kind === 'ready' ||
+      state.kind === 'available' ||
+      state.kind === 'downloading' ||
+      state.kind === 'moving'
+    ) {
+      return state.version
+    }
+    return this.lastAvailable
   }
 
   /** Schedules the first check 30 s from now and then one every hour. */
@@ -174,12 +263,29 @@ export class Updater {
   async check(): Promise<UpdateStatus> {
     const { kind } = this.status.state
     if (kind === 'off' || kind === 'downloading' || kind === 'moving') return this.status
+    this.outcome = null
     await this.runCheck(true)
     return this.status
   }
 
   /** Update: downloads the update found, then restarts once it is ready. */
-  async download(): Promise<void> {
+  async download(initiator: UpdateInitiator = LOCAL_UPDATE_INITIATOR): Promise<void> {
+    const { run } = this.beginDownload(initiator)
+    if (run) await run
+  }
+
+  /**
+   * Remote Update entry point: synchronously validates, records the accepted request and starts
+   * downloading or moving without racing on async status waiters, returning the updated status.
+   */
+  startRemoteDownload(initiator: UpdateInitiator): UpdateStatus {
+    if (this.status.state.kind === 'downloading') return this.status
+    const { run } = this.beginDownload(initiator)
+    run?.catch(() => undefined)
+    return this.status
+  }
+
+  private beginDownload(initiator: UpdateInitiator): { run: Promise<void> | null } {
     const off = this.status.state
     if (off.kind === 'off') {
       throw new Error(
@@ -188,12 +294,18 @@ export class Updater {
     }
     const { state } = this.status
     if (state.kind !== 'available') throw new Error(t('updater.nothingToDownload'))
+    const requestId = randomUUID()
+    this.activeRequestId = requestId
+    this.activeInitiator = initiator
+    this.outcome = null
+    this.acceptedPhase = true
+    this.publish()
     if (this.readOnly) {
-      this.deps.requestMove()
-      return
+      this.deps.requestMove(initiator.kind === 'remote' ? { initiator, requestId } : undefined)
+      return { run: null }
     }
     this.manual = true
-    await this.startDownload(state.version, 'user')
+    return { run: this.startDownload(state.version, 'user') }
   }
 
   /**
@@ -212,7 +324,16 @@ export class Updater {
       )
       return false
     }
+    this.acceptedPhase = false
+    this.hostConfirmation = {
+      platform: 'darwin',
+      kind: 'macos_authorization',
+      version: state.version,
+      initiator: this.activeInitiator ?? LOCAL_UPDATE_INITIATOR,
+      startedAt: Date.now(),
+    }
     this.dispatch({ type: 'moving', version: state.version })
+    await this.deps.flushRemoteEvents?.()
     this.deps.appState.update({ updateAfterMove: state.version })
     await new Promise((done) => setTimeout(done, MOVE_PAINT_MS))
     let moved: boolean
@@ -220,68 +341,307 @@ export class Updater {
       moved = app.moveToApplicationsFolder()
     } catch (error) {
       if (!moveCancelled(error)) {
+        this.hostConfirmation = null
         this.deps.appState.update({ updateAfterMove: null })
         this.moveFailed(errorMessage(error))
         return false
       }
       moved = false
     }
-    if (moved) return true
+    this.hostConfirmation = null
+    if (moved) {
+      this.restartingPhase = true
+      this.publish()
+      await this.deps.flushRemoteEvents?.()
+      return true
+    }
     log.info('Moving the app to /Applications was cancelled')
     this.deps.appState.update({ updateAfterMove: null })
+    this.outcome = {
+      kind: 'cancelled',
+      code: 'host_confirmation_cancelled',
+      requestId: this.activeRequestId,
+      by: 'host',
+      at: Date.now(),
+    }
     this.dispatch({ type: 'move-cancelled' })
     return false
   }
 
-  /** Stops a download started with Update, which leaves the update available again. */
-  cancel(): void {
-    if (this.status.state.kind === 'downloading') this.cancellation?.cancel()
+  /**
+   * Stops a running download, a pending timing confirmation, or an idle wait, returning the
+   * resulting status.
+   */
+  cancel(by: 'local' | 'remote' = 'local'): UpdateStatus {
+    if (this.status.state.kind === 'downloading') {
+      this.cancelSource = by
+      this.cancellation?.cancel()
+      return this.status
+    }
+    if (this.confirmation) {
+      this.deps.respondUpdateConfirmation?.(this.confirmation.requestId, 'cancel', by)
+      return this.status
+    }
+    if (this.status.restartWhenIdle) {
+      this.cancelRestartWhenIdle(by)
+      return this.status
+    }
+    return this.status
   }
 
-  restart(): void {
+  restart(initiator: UpdateInitiator = LOCAL_UPDATE_INITIATOR): UpdateStatus {
     if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
-    this.deps.requestRestart(false, true)
+    if (this.confirmation || this.hostConfirmation || this.restartingPhase) {
+      return this.status
+    }
+    this.stopWaiting(false)
+    const requestId = randomUUID()
+    this.activeRequestId = requestId
+    this.activeInitiator = initiator
+    this.outcome = null
+    this.acceptedPhase = true
+    this.publish()
+    const started =
+      initiator.kind === 'remote'
+        ? this.deps.requestRestart(false, true, { initiator, requestId })
+        : this.deps.requestRestart(false, true)
+    if (!started) {
+      this.acceptedPhase = false
+      this.outcome = {
+        kind: 'failed',
+        code: 'restart_failed',
+        message: 'Another quit or restart is already in progress',
+        requestId,
+        by: 'host',
+        at: Date.now(),
+      }
+      this.publish()
+    }
+    return this.status
+  }
+
+  /** Responds to an active timing confirmation request (`now`, `whenIdle`, or `cancel`). */
+  confirm(
+    requestId: string,
+    action: UpdateConfirmationAction,
+    initiator: UpdateInitiator,
+  ): UpdateStatus {
+    const pending = this.confirmation
+    if (!pending || pending.requestId !== requestId) {
+      throw new Error('No matching pending update confirmation')
+    }
+    if (!pending.choices.includes(action)) {
+      throw new Error(`Action "${action}" is not allowed for this update confirmation`)
+    }
+    if (action === 'now') {
+      // Keep the transition smooth (awaiting_confirmation -> accepted -> restarting) without flashing back to ready.
+      this.acceptedPhase = true
+    }
+    const answered =
+      this.deps.respondUpdateConfirmation?.(requestId, action, initiator.kind) ?? false
+    if (!answered) {
+      this.acceptedPhase = false
+      throw new Error('No matching pending update confirmation')
+    }
+    return this.status
+  }
+
+  /** Cancels a pending remote confirmation if the initiating device lost access. */
+  revokeRemoteDevice(deviceId: string): void {
+    const pending = this.confirmation
+    if (pending && pending.initiator.kind === 'remote' && pending.initiator.deviceId === deviceId) {
+      this.deps.cancelPendingUpdateConfirmation?.(pending.requestId, 'permission_revoked')
+    }
+  }
+
+  /** Called by QuitFlow when a timing confirmation opens or clears. */
+  handleUpdateConfirmation(confirmation: UpdateConfirmationRequest | null): void {
+    if (confirmation) {
+      this.acceptedPhase = false
+      this.outcome = null
+      this.confirmation = confirmation
+      this.activeRequestId = confirmation.requestId
+      this.activeInitiator = confirmation.initiator
+      this.publish()
+      return
+    }
+    if (!this.confirmation) return
+    this.confirmation = null
+    this.publish()
+  }
+
+  /** Called by QuitFlow when an update confirmation is cancelled. */
+  handleUpdateCancelled(info: {
+    requestId: string | null
+    by: 'local' | 'remote' | 'host'
+    code: UpdateOutcomeCode
+  }): void {
+    this.acceptedPhase = false
+    this.confirmation = null
+    this.hostConfirmation = null
+    this.restartingPhase = false
+    this.outcome = {
+      kind: 'cancelled',
+      code: info.code,
+      requestId: info.requestId ?? this.activeRequestId,
+      by: info.by,
+      at: Date.now(),
+    }
+    this.publish()
+  }
+
+  /**
+   * Called by QuitFlow right before `shutDown()` so remote clients receive the restarting state
+   * (or Windows native host confirmation state and outcome) while the connection is still alive.
+   */
+  async prepareRestartForInstall(info: {
+    requestId: string | null
+    initiator: UpdateInitiator
+  }): Promise<UpdateRestartPrepareResult> {
+    this.acceptedPhase = false
+    this.confirmation = null
+    this.stopWaiting(false)
+    this.alreadyLaunchedInstaller = false
+    if (this.shuttingDown) return 'proceed'
+
+    if (this.platform === 'win32') {
+      const updater = this.loadedUpdater ?? (await this.load().catch(() => null))
+      const nsis = updater as (AppUpdater & NsisUpdaterInternals) | null
+      const installerPath = nsis?.installerPath ?? nsis?.downloadedUpdateHelper?.file ?? null
+      if (installerPath) {
+        const isAdminRightsRequired =
+          nsis?.downloadedUpdateHelper?.downloadedFileInfo?.isAdminRightsRequired === true
+        const runner = this.deps.runWindowsInstaller ?? runWindowsInstaller
+        const version = this.targetVersion()
+        const result = await runner({
+          installerPath,
+          isSilent: true,
+          isForceRunAfter: true,
+          isAdminRightsRequired,
+          installDirectory: nsis?.installDirectory ?? null,
+          packagePath: nsis?.downloadedUpdateHelper?.packageFile ?? null,
+          execPath: process.execPath,
+          resourcesPath: process.resourcesPath,
+          onAwaitingHostConfirmation: async () => {
+            this.hostConfirmation = {
+              platform: 'win32',
+              kind: 'windows_system',
+              version,
+              initiator: info.initiator,
+              startedAt: Date.now(),
+            }
+            this.publish()
+            await this.deps.flushRemoteEvents?.()
+          },
+        })
+        this.hostConfirmation = null
+        if (result.kind === 'launched') {
+          if (updater) updater.autoInstallOnAppQuit = false
+          this.alreadyLaunchedInstaller = true
+          this.restartingPhase = true
+          this.publish()
+          await this.deps.flushRemoteEvents?.()
+          return 'launched'
+        }
+        this.restartingPhase = false
+        this.outcome = {
+          kind: result.kind === 'cancelled' ? 'cancelled' : 'failed',
+          code: result.code,
+          message: result.message,
+          requestId: info.requestId ?? this.activeRequestId,
+          by: 'host',
+          at: Date.now(),
+        }
+        this.publish()
+        return 'aborted'
+      }
+    }
+
+    this.restartingPhase = true
+    this.publish()
+    await this.deps.flushRemoteEvents?.()
+    return 'proceed'
   }
 
   /** Restart now, from the update dialog, which already showed the work it stops. */
   restartConfirmed(): void {
     if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
-    this.stopWaiting()
+    this.stopWaiting(false)
+    this.activeRequestId = randomUUID()
+    this.activeInitiator = LOCAL_UPDATE_INITIATOR
+    this.outcome = null
+    this.acceptedPhase = true
+    this.publish()
     this.deps.requestRestart(true, true)
   }
 
   /**
-   * Restarts into the update by itself once no session works in a way that ends by itself, as the
-   * user chose; a newer update downloading then is waited for too.
+   * Restarts into the update by itself once no session or terminal works in a way that ends by
+   * itself, as the user chose; a newer update downloading then is waited for too.
    */
-  async restartWhenIdle(): Promise<void> {
+  async restartWhenIdle(
+    initiator?: UpdateInitiator,
+    requestId?: string,
+    initialBusy?: UpdateBusySummary,
+  ): Promise<void> {
     if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
     if (this.status.restartWhenIdle) return
-    log.info('The restart to update waits for the working sessions to finish')
+    log.info('The restart to update waits for the running work to finish')
+    this.acceptedPhase = false
+    this.confirmation = null
+    this.outcome = null
+    if (initiator) this.activeInitiator = initiator
+    if (requestId) this.activeRequestId = requestId
+    if (initialBusy) {
+      this.publish({
+        ...this.status,
+        restartWhenIdle: {
+          sessions: initialBusy.waitableSessions,
+          terminals: initialBusy.terminals,
+        },
+      })
+    }
     const run = ++this.waitRun
     this.idlePolls = 0
     await this.lookForIdle(run)
   }
 
   /** Stops waiting to restart; the update stays ready. */
-  cancelRestartWhenIdle(): void {
-    if (this.status.restartWhenIdle) log.info('The restart to update no longer waits')
+  cancelRestartWhenIdle(by: 'local' | 'remote' = 'local'): void {
+    const wasWaiting = this.status.restartWhenIdle !== null
+    if (wasWaiting) log.info('The restart to update no longer waits')
     // Also before the first look has answered, when nothing shows the wait yet.
-    this.stopWaiting()
+    this.stopWaiting(false)
+    if (wasWaiting) {
+      this.outcome = {
+        kind: 'cancelled',
+        code: 'user_cancelled',
+        requestId: this.activeRequestId,
+        by,
+        at: Date.now(),
+      }
+      this.publish()
+    }
   }
 
-  private stopWaiting(): void {
+  private stopWaiting(publishNow = true): void {
     this.waitRun++
     if (this.waitTimer) clearTimeout(this.waitTimer)
     this.waitTimer = null
     this.idlePolls = 0
-    if (this.status.restartWhenIdle) this.publish({ ...this.status, restartWhenIdle: null })
+    if (this.status.restartWhenIdle) {
+      this.status = this.compose({ ...this.status, restartWhenIdle: null })
+      if (publishNow) this.emitStatus(this.status)
+    }
   }
 
   private async lookForIdle(run: number): Promise<void> {
     this.waitTimer = null
-    const sessions = await this.deps.waitableSessions()
-    // Cancelled, or restarted now, while the agent host answered.
+    const [sessions, terminals] = await Promise.all([
+      this.deps.waitableSessions(),
+      this.deps.busyTerminals ? this.deps.busyTerminals() : Promise.resolve(0),
+    ])
+    // Cancelled, or restarted now, while the hosts answered.
     if (run !== this.waitRun) return
     const { kind } = this.status.state
     if (kind !== 'ready' && kind !== 'downloading') {
@@ -289,16 +649,28 @@ export class Updater {
       this.stopWaiting()
       return
     }
-    if (this.status.restartWhenIdle?.sessions !== sessions) {
-      this.publish({ ...this.status, restartWhenIdle: { sessions } })
+    const currentWait = this.status.restartWhenIdle
+    if (currentWait?.sessions !== sessions || (currentWait?.terminals ?? 0) !== terminals) {
+      this.publish({
+        ...this.status,
+        restartWhenIdle: terminals > 0 ? { sessions, terminals } : { sessions },
+      })
     }
-    const idle = sessions === 0 && kind === 'ready' && !this.squirrelPreparing
+    const idle = sessions === 0 && terminals === 0 && kind === 'ready' && !this.squirrelPreparing
     this.idlePolls = idle ? this.idlePolls + 1 : 0
     if (this.idlePolls >= IDLE_POLLS) {
-      // Wait-for-idle restarts only once sessions finish, so it never schedules post-update resume.
-      if (this.deps.requestRestart(true, false)) {
-        log.info('The working sessions finished: restarting to update')
-        this.stopWaiting()
+      // Wait-for-idle restarts only once running work finishes, so it never schedules post-update resume.
+      const initiator = this.activeInitiator
+      const requestId = this.activeRequestId ?? undefined
+      const started =
+        initiator?.kind === 'remote'
+          ? this.deps.requestRestart(true, false, { initiator, requestId })
+          : this.deps.requestRestart(true, false)
+      if (started) {
+        log.info('The running work finished: restarting to update')
+        this.acceptedPhase = true
+        this.stopWaiting(false)
+        this.publish()
         return
       }
       log.info('Another quit or restart is in progress; the restart to update waits on')
@@ -322,10 +694,24 @@ export class Updater {
       app.quit()
       return
     }
+    if (this.alreadyLaunchedInstaller) {
+      app.quit()
+      return
+    }
     let updater: AppUpdater
     try {
       updater = await this.load()
     } catch (error) {
+      this.restartingPhase = false
+      this.outcome = {
+        kind: 'failed',
+        code: 'install_failed',
+        message: errorMessage(error),
+        requestId: this.activeRequestId,
+        by: 'host',
+        at: Date.now(),
+      }
+      this.publish()
       await this.deps.clearUpdateResume?.()
       throw error
     }
@@ -343,6 +729,16 @@ export class Updater {
       // Silent, and start the new version afterwards.
       updater.quitAndInstall(true, true)
     } catch (error) {
+      this.restartingPhase = false
+      this.outcome = {
+        kind: 'failed',
+        code: 'install_failed',
+        message: errorMessage(error),
+        requestId: this.activeRequestId,
+        by: 'host',
+        at: Date.now(),
+      }
+      this.publish()
       await this.deps.clearUpdateResume?.()
       throw error
     }
@@ -454,7 +850,7 @@ export class Updater {
    * a read-only mount, so Linux is never tested.
    */
   private async locate(): Promise<void> {
-    if (process.platform !== 'darwin' || this.mode !== 'install') return
+    if (this.platform !== 'darwin' || this.mode !== 'install') return
     if (this.status.state.kind === 'off') return
     // The bundle holds the executable in Contents/MacOS.
     const bundle = resolve(process.execPath, '..', '..', '..')
@@ -531,7 +927,7 @@ export class Updater {
         this.loadedUpdater = autoUpdater
         this.applyInstallOnQuit(autoUpdater, settings)
         // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
-        autoUpdater.disableDifferentialDownload = process.platform === 'win32'
+        autoUpdater.disableDifferentialDownload = this.platform === 'win32'
         autoUpdater.on('checking-for-update', () =>
           this.dispatch({ type: 'checking', manual: this.manual }),
         )
@@ -558,7 +954,7 @@ export class Updater {
         autoUpdater.on('update-downloaded', (info) => {
           // electron-updater hands the file to Squirrel.Mac right after this event while
           // autoInstallOnAppQuit is on, which the microtask below may turn off only afterwards.
-          if (process.platform === 'darwin' && autoUpdater.autoInstallOnAppQuit) {
+          if (this.platform === 'darwin' && autoUpdater.autoInstallOnAppQuit) {
             this.followSquirrel(info.version)
           }
           this.dispatch({
@@ -569,7 +965,28 @@ export class Updater {
           // electron-updater adds its quit handler right after this event, so the choice applies
           // once it has.
           queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))
-          if (this.startedBy === 'user') this.deps.requestRestart(false, true)
+          if (this.startedBy === 'user') {
+            const initiator = this.activeInitiator
+            const requestId = this.activeRequestId ?? undefined
+            this.acceptedPhase = true
+            this.publish()
+            const started =
+              initiator?.kind === 'remote'
+                ? this.deps.requestRestart(false, true, { initiator, requestId })
+                : this.deps.requestRestart(false, true)
+            if (!started) {
+              this.acceptedPhase = false
+              this.outcome = {
+                kind: 'failed',
+                code: 'restart_failed',
+                message: 'Another quit or restart is already in progress',
+                requestId: requestId ?? null,
+                by: 'host',
+                at: Date.now(),
+              }
+              this.publish()
+            }
+          }
         })
         autoUpdater.on('error', (error) => {
           if (this.downloadActive) return
@@ -845,11 +1262,131 @@ export class Updater {
       lastCheckedAt: this.lastCheckedAt,
       lastAvailable: this.lastAvailable,
     })
-    if (state !== this.status.state) this.publish({ ...this.status, state })
+    let lifecycleChanged = false
+    switch (event.type) {
+      case 'download-started':
+        if (this.acceptedPhase || this.outcome !== null) lifecycleChanged = true
+        this.acceptedPhase = false
+        this.outcome = null
+        break
+      case 'downloaded':
+        if (this.acceptedPhase || this.outcome !== null) lifecycleChanged = true
+        this.acceptedPhase = false
+        this.outcome = null
+        break
+      case 'download-cancelled':
+        this.acceptedPhase = false
+        this.outcome = {
+          kind: 'cancelled',
+          code: 'user_cancelled',
+          requestId: this.activeRequestId,
+          by: this.cancelSource,
+          at: Date.now(),
+        }
+        this.cancelSource = 'local'
+        lifecycleChanged = true
+        break
+      case 'move-failed':
+        this.acceptedPhase = false
+        this.hostConfirmation = null
+        this.restartingPhase = false
+        this.outcome = {
+          kind: 'failed',
+          code: 'move_failed',
+          message: event.message,
+          requestId: this.activeRequestId,
+          by: 'host',
+          at: Date.now(),
+        }
+        lifecycleChanged = true
+        break
+      case 'error':
+      case 'load-failed':
+        if (event.manual || state.kind === 'error') {
+          this.acceptedPhase = false
+          this.hostConfirmation = null
+          this.restartingPhase = false
+          this.outcome = {
+            kind: 'failed',
+            code: this.downloadActive ? 'download_failed' : 'check_failed',
+            message: event.message,
+            requestId: this.activeRequestId,
+            by: 'host',
+            at: Date.now(),
+          }
+          lifecycleChanged = true
+        }
+        break
+      case 'checking':
+        if (event.manual && this.outcome !== null) {
+          this.outcome = null
+          lifecycleChanged = true
+        }
+        break
+      case 'moving':
+        if (this.acceptedPhase) {
+          this.acceptedPhase = false
+          lifecycleChanged = true
+        }
+        break
+      default:
+        break
+    }
+    if (state !== this.status.state || lifecycleChanged) {
+      this.publish({ ...this.status, state })
+    }
   }
 
-  private publish(status: UpdateStatus): void {
+  private compose(base: BaseUpdateStatus): UpdateStatus {
+    const { state } = base
+    let outcome = this.outcome
+    if (!outcome && state.kind === 'error') {
+      outcome = {
+        kind: 'failed',
+        code: state.move ? 'move_failed' : 'unknown',
+        message: state.message,
+        requestId: this.activeRequestId,
+        by: 'host',
+        at: Date.now(),
+      }
+    }
+    let phase: UpdatePhase
+    if (state.kind === 'off') phase = 'off'
+    else if (this.hostConfirmation) phase = 'awaiting_host_confirmation'
+    else if (this.restartingPhase) phase = 'restarting'
+    else if (this.confirmation) phase = 'awaiting_confirmation'
+    else if (base.restartWhenIdle) phase = 'waiting_for_idle'
+    else if (this.acceptedPhase) phase = 'accepted'
+    else if (outcome) phase = outcome.kind === 'failed' ? 'failed' : 'cancelled'
+    else if (state.kind === 'error') phase = 'failed'
+    else phase = state.kind
+
+    return {
+      state: base.state,
+      mode: base.mode,
+      readOnly: base.readOnly,
+      current: base.current,
+      updatedFrom: base.updatedFrom,
+      dismissed: base.dismissed,
+      restartWhenIdle: base.restartWhenIdle,
+      phase,
+      requestId: this.confirmation?.requestId ?? this.activeRequestId,
+      initiator:
+        this.confirmation?.initiator ?? this.hostConfirmation?.initiator ?? this.activeInitiator,
+      confirmation: this.confirmation,
+      hostConfirmation: this.hostConfirmation,
+      outcome,
+      progress: state.kind === 'downloading' ? state.percent : null,
+    }
+  }
+
+  private publish(base: BaseUpdateStatus = this.status): void {
+    const status = this.compose(base)
     this.status = status
+    this.emitStatus(status)
+  }
+
+  private emitStatus(status: UpdateStatus): void {
     broadcast('update:changed', status)
     this.deps.changed?.(status)
   }

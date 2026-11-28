@@ -16,6 +16,8 @@ describe('isConsoleHelper', () => {
       'openconsole',
       'winpty-agent.exe',
       'C:\\app\\winpty-agent.exe',
+      'conpty_console_list_agent.exe',
+      'C:\\app\\node_modules\\node-pty\\conpty_console_list_agent.exe',
     ]) {
       expect(isConsoleHelper(name)).toBe(true)
     }
@@ -68,8 +70,21 @@ describe('hasRunningChildProcess', () => {
       { pid: 101, parentPid: 100, name: 'conhost.exe' },
       { pid: 102, parentPid: 100, name: 'OpenConsole.exe' },
       { pid: 103, parentPid: 101, name: 'winpty-agent.exe' },
+      { pid: 104, parentPid: 100, name: 'conpty_console_list_agent.exe' },
     ]
     expect(hasRunningChildProcess(100, processes)).toBe(false)
+  })
+
+  it('returns false for idle PowerShell and cmd prompts after a previous command has exited', () => {
+    const idleAfterCommand: WindowsProcess[] = [
+      { pid: 50, parentPid: 1, name: 'Kettu.exe' },
+      { pid: 100, parentPid: 50, name: 'powershell.exe' },
+      { pid: 101, parentPid: 100, name: 'conhost.exe' },
+      { pid: 200, parentPid: 50, name: 'cmd.exe' },
+      { pid: 201, parentPid: 200, name: 'conhost.exe' },
+    ]
+    expect(hasRunningChildProcess(100, idleAfterCommand)).toBe(false)
+    expect(hasRunningChildProcess(200, idleAfterCommand)).toBe(false)
   })
 
   it('returns true when the shell runs a child command directly or beneath a console helper', () => {

@@ -1370,7 +1370,10 @@
       "noneDetail_web": "{{host}} 上的 Kettu 按安装它的方式更新。",
       "readyDetail": "重启后完成更新。你的会话会回来。",
       "readyWaiting_other": "{{count}} 个会话完成后会自己重启。",
-      "readyWaitingSoon": "马上会自己重启。"
+      "readyWaitingSoon": "马上会自己重启。",
+      "awaitingConfirmation": "正在等待确认更新时机…",
+      "awaitingHostConfirmation": "正在等待主机完成系统确认…",
+      "restarting": "正在重启以安装更新…"
     },
     "automatic": {
       "name": "自动更新",

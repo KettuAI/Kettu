@@ -291,6 +291,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       captureRect: async () => null,
       respondQuit: async () => {},
       onConfirmQuit: never,
+      onConfirmQuitResolved: never,
       setUnsaved: () => {},
       closeWindow: () => {},
       onCommand: (listener) => {
@@ -570,7 +571,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       runningWork: () => Promise.resolve({ sessions: [], terminals: [] }),
       restartConfirmed: () => done(admin('updates.restart')),
       restartWhenIdle: () => unsupported('restart the computer once its sessions finish'),
-      cancelRestartWhenIdle: () => Promise.resolve(),
+      cancelRestartWhenIdle: () => done(admin('updates.cancel')),
       dismiss: () => done(admin('updates.dismiss')),
       onChanged: (listener) => adminEvent('updates.changed', (event) => listener(event.status)),
     },

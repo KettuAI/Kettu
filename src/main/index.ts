@@ -1099,11 +1099,17 @@ async function start(): Promise<void> {
   const updater = new Updater({
     appState,
     settings: () => settings.get(),
-    requestRestart: (confirmed, resumeAfterUpdate = true) =>
-      quit?.request('update', confirmed, resumeAfterUpdate) ?? false,
+    requestRestart: (confirmed, resumeAfterUpdate = true, options) =>
+      quit?.request('update', confirmed, resumeAfterUpdate, options) ?? false,
     clearUpdateResume: () => clearUpdateResume(userDataPath),
     waitableSessions: async () => (await agentHost.busy(2000)).filter(restartWaitsFor).length,
-    requestMove: () => quit?.request('move'),
+    busyTerminals: async () => (await terminalHost.busy(2000)).length,
+    requestMove: (options) => quit?.request('move', false, false, options),
+    respondUpdateConfirmation: (requestId, action, by) =>
+      quit?.respondUpdate(requestId, action, by) ?? false,
+    cancelPendingUpdateConfirmation: (requestId, code) =>
+      quit?.cancelPendingUpdate(requestId, code) ?? false,
+    flushRemoteEvents: () => remoteHost.flushEvents(1500),
     changed: (status) => {
       hostAdmin?.updatesChanged(status)
       island.updatesChanged()
@@ -1168,10 +1174,14 @@ async function start(): Promise<void> {
     },
     installUpdate: () => updater.installNow(),
     moveApp: () => updater.moveNow(),
-    restartWhenIdle: () =>
-      void updater.restartWhenIdle().catch((error: unknown) => {
+    restartWhenIdle: (initiator, requestId, busy) =>
+      void updater.restartWhenIdle(initiator, requestId, busy).catch((error: unknown) => {
         log.warn(`Could not wait to restart to update: ${String(error)}`)
       }),
+    updateVersion: () => updater.targetVersion(),
+    onUpdateConfirmation: (confirmation) => updater.handleUpdateConfirmation(confirmation),
+    onUpdateCancelled: (info) => updater.handleUpdateCancelled(info),
+    onUpdateRestarting: (info) => updater.prepareRestartForInstall(info),
   })
   const quitFlow = quit
   configurePageRecovery({
@@ -1237,6 +1247,7 @@ async function start(): Promise<void> {
       ...(await appInfo()),
       sharing: true,
       updates: updater.getStatus().state.kind !== 'off',
+      remoteUpdateFlow: updater.getStatus().state.kind !== 'off',
       remoteSwitch: true,
       remoteReset: true,
       ownRelay: true,

@@ -228,15 +228,20 @@ export function QuitConfirm() {
   const remote = useSettingsStore((s) => s.settings.remote.enabled)
   const keep = useRef<HTMLButtonElement>(null)
   const wait = useRef<HTMLButtonElement>(null)
-  useEffect(
-    () =>
-      window.kettu.app.onConfirmQuit((next) => {
-        setSaveFailed(false)
-        setNow(Date.now())
-        setRequest(next)
-      }),
-    [],
-  )
+  useEffect(() => {
+    const offAsk = window.kettu.app.onConfirmQuit((next) => {
+      setSaveFailed(false)
+      setNow(Date.now())
+      setRequest(next)
+    })
+    const offResolved = window.kettu.app.onConfirmQuitResolved((id) => {
+      setRequest((current) => (current?.id === id ? null : current))
+    })
+    return () => {
+      offAsk()
+      offResolved()
+    }
+  }, [])
   const open = request !== null
   useEffect(() => {
     if (!open) return
