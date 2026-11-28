@@ -5773,6 +5773,22 @@ export class AgentManager {
   // Claude Code's common settings.
 
   /**
+   * Whether `agentId` can offer Full access on this host right now. Claude Code disables
+   * `bypassPermissions` when running as root; Antigravity depends on the initialized session
+   * router flag.
+   */
+  offersFullAccess(agentId: AgentId): boolean {
+    const harness = harnessOf(agentId)
+    if (!isRanked(harness)) return false
+    if (harness === 'claude-code') return process.getuid?.() !== 0
+    if (harness === 'antigravity') {
+      const live = this.slots.get(agentId)?.runtime?.connection
+      if (live?.offersFullAccess) return live.offersFullAccess()
+    }
+    return true
+  }
+
+  /**
    * The permission mode a new session of `agentId` opens with in `cwd` when Settings > Agents sets
    * none, or null for an unranked harness. For Claude Code this prefers the live connection's SDK
    * resolution (matching `ClaudeConnection.open`) and falls back to reading its settings files.

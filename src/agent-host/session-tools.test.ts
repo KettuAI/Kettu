@@ -12,7 +12,7 @@ import {
   type ToolMode,
   type ToolSession,
 } from './session-tools'
-import type { ModeRank } from './started-mode'
+import type { ModeRank, StartedScope } from './started-mode'
 
 const caller: Caller = { sessionId: 'starter', project: '/repo' }
 
@@ -228,6 +228,8 @@ function starting(
     startMode?: string | Record<string, string | undefined>
     defaultMode?: string | null | Record<string, string | null | undefined>
     starterRank?: ModeRank | null
+    inheritanceScope?: StartedScope
+    offersFullAccess?: boolean | Record<string, boolean>
     mode?: ToolMode
     roles?: KettuRole[]
     others?: { id: string; name: string }[]
@@ -283,6 +285,17 @@ function starting(
     startMode,
     ...(defaultMode ? { defaultMode } : {}),
     starterRank: () => (opts.starterRank === undefined ? 3 : opts.starterRank),
+    ...(opts.inheritanceScope !== undefined
+      ? { inheritanceScope: () => opts.inheritanceScope! }
+      : {}),
+    ...(opts.offersFullAccess !== undefined
+      ? {
+          offersFullAccess: (agentId: string) =>
+            typeof opts.offersFullAccess === 'object'
+              ? (opts.offersFullAccess[agentId] ?? true)
+              : opts.offersFullAccess!,
+        }
+      : {}),
     carried: () => ({ ...(opts.carried ?? {}) }),
     agentOptions: () => cache,
     readOptions,
@@ -463,60 +476,91 @@ describe('start_session mode', () => {
     expect(text(out)).toContain('narrower than asked: your own mode allows no wider.')
   })
 
-  it("names the agent's mode for new sessions when the user set it", async () => {
-    const { tools: t } = starting({
-      startMode: 'read-only',
-      mode: { id: 'read-only', name: 'Read-only' },
+  it('lists Full access in list_agents and accepts Full access in start_session for a same-scope Full access parent', async () => {
+    const { tools: t, start } = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      others: [
+        { id: 'claude-code~work', name: 'Claude Work' },
+        { id: 'codex', name: 'Codex' },
+        { id: 'deepseek', name: 'DeepSeek Harness' },
+        { id: 'antigravity', name: 'Google Antigravity' },
+        { id: 'opencode', name: 'OpenCode' },
+      ],
+      starterRank: 4,
+      offersFullAccess: true,
+      mode: { id: 'agent-full-access', name: 'Full access' },
     })
-    const out = await t.call(caller, 'start_session', { prompt: 'x', mode: 'agent' })
-    expect(text(out)).toContain(
-      "narrower than asked: the user set Codex's new sessions to start in Read-only",
+    const listed = await t.call(caller, 'list_agents', {})
+    const byId = Object.fromEntries(
+      (
+        listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+      ).agents.map((item) => [item.id, item.modes.map((m) => m.id)]),
     )
-    expect(text(out)).not.toContain('your own mode')
-  })
-
-  it("names an agent's own start when no mode for its new sessions is set", async () => {
-    const { tools: t } = starting({
-      agent: { id: 'antigravity', name: 'Google Antigravity' },
-      mode: { id: 'default', name: 'Default' },
+    expect(byId).toEqual({
+      'claude-code': ['default', 'acceptEdits', 'auto', 'bypassPermissions'],
+      'claude-code~work': ['default', 'acceptEdits', 'auto', 'bypassPermissions'],
+      codex: ['read-only', 'workspace-write', 'agent', 'agent-full-access'],
+      deepseek: ['read-only', 'workspace-write', 'danger-full-access'],
+      antigravity: ['default', 'accept-edits', 'auto', 'dangerously-skip-permissions'],
+      opencode: [],
     })
-    const out = await t.call(caller, 'start_session', {
+
+    const started = await t.call(caller, 'start_session', {
       prompt: 'x',
-      agent: 'antigravity',
-      mode: 'auto',
+      agent: 'codex',
+      mode: 'agent-full-access',
     })
-    expect(text(out)).toContain(
-      'narrower than asked: Google Antigravity starts its sessions in Default, and the user ' +
-        'set no mode for its new sessions in Settings > Agents.',
-    )
+    expect(started.isError).toBeUndefined()
+    expect(start.mock.calls[0]![1].mode).toBe('agent-full-access')
+    expect((started.structuredContent as { mode_lowered?: boolean }).mode_lowered).toBeUndefined()
   })
 
-  it('caps Claude Code list_agents modes and explains lowering when no start mode is configured', async () => {
+  it('omits Full access in list_agents and explains lowering when the host environment cannot offer Full access', async () => {
     const { tools: t } = starting({
       agent: { id: 'claude-code', name: 'Claude Code' },
       starterRank: 4,
-      mode: { id: 'default', name: 'Ask before edits' },
+      offersFullAccess: { 'claude-code': false },
+      mode: { id: 'auto', name: 'Auto' },
     })
     const listed = await t.call(caller, 'list_agents', {})
     const agents = (
       listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
     ).agents
-    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default'])
+    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits', 'auto'])
 
     const started = await t.call(caller, 'start_session', {
       prompt: 'x',
       agent: 'claude-code',
-      mode: 'auto',
+      mode: 'bypassPermissions',
     })
     expect(started.structuredContent).toMatchObject({ mode_lowered: true })
-    expect(text(started)).toContain(
-      'narrower than asked: Claude Code starts its sessions in Ask before edits, and the user ' +
-        'set no mode for its new sessions in Settings > Agents.',
-    )
+    expect(text(started)).toContain('Claude Code does not offer full access in this environment')
   })
 
-  it("reflects Claude Code's resolved defaultMode from settings in list_agents and loweredText", async () => {
+  it('explains lowering when a lower-mode same-scope parent requests Full access', async () => {
     const { tools: t } = starting({
+      agent: { id: 'claude-code', name: 'Claude Code' },
+      starterRank: 2,
+      mode: { id: 'acceptEdits', name: 'Accept edits' },
+    })
+    const listed = await t.call(caller, 'list_agents', {})
+    const agents = (
+      listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
+    ).agents
+    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits'])
+
+    const started = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'claude-code',
+      mode: 'bypassPermissions',
+    })
+    expect(started.structuredContent).toMatchObject({ mode_lowered: true })
+    expect(text(started)).toContain('narrower than asked: your own mode allows no wider.')
+  })
+
+  it('does not carry Full access across projects or hosts and enforces target-scope agent settings', async () => {
+    // Cross-host (inheritanceScope: 'cross-scope') with a Full access parent.
+    const crossHost = starting({
       agent: { id: 'claude-code', name: 'Claude Code' },
       others: [
         { id: 'claude-code~work', name: 'Claude Work' },
@@ -530,9 +574,10 @@ describe('start_session mode', () => {
         'claude-code~work': 'bypassPermissions',
       },
       starterRank: 4,
+      inheritanceScope: 'cross-scope',
       mode: { id: 'acceptEdits', name: 'Accept edits' },
     })
-    const listed = await t.call(caller, 'list_agents', {})
+    const listed = await crossHost.tools.call(caller, 'list_agents', {})
     const byId = Object.fromEntries(
       (
         listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
@@ -540,7 +585,7 @@ describe('start_session mode', () => {
     )
     expect(byId).toEqual({
       'claude-code': ['default', 'acceptEdits'],
-      // Full access from Claude settings is still capped at Auto (rank 3).
+      // Cross-scope Full access from settings is still capped at Auto (rank 3).
       'claude-code~work': ['default', 'acceptEdits', 'auto'],
       codex: ['read-only', 'workspace-write', 'agent'],
       deepseek: ['read-only', 'workspace-write'],
@@ -548,42 +593,87 @@ describe('start_session mode', () => {
       opencode: [],
     })
 
-    const lowered = await t.call(caller, 'start_session', {
+    const lowered = await crossHost.tools.call(caller, 'start_session', {
       prompt: 'x',
       agent: 'claude-code',
-      mode: 'auto',
+      mode: 'bypassPermissions',
     })
+    expect(lowered.structuredContent).toMatchObject({ mode_lowered: true })
+    expect(text(lowered)).toContain('full access is not inherited across projects or hosts')
     expect(text(lowered)).toContain(
-      'narrower than asked: Claude Code starts its sessions in Accept edits, and the user set ' +
-        'no mode for its new sessions in Settings > Agents.',
+      'Claude Code starts its sessions in Accept edits, and the user set no mode for its new sessions in Settings > Agents',
     )
+
+    // Cross-project (caller.project differs from real session projectPath) also drops Full access.
+    const crossProject = starting({
+      agent: { id: 'codex', name: 'Codex' },
+      starterRank: 4,
+      startMode: { codex: 'agent-full-access' },
+    })
+    const listedCrossProject = await crossProject.tools.call(
+      { sessionId: 'starter', project: '/other-repo' },
+      'list_agents',
+      {},
+    )
+    const crossProjectModes = (
+      listedCrossProject.structuredContent as { agents: { modes: { id: string }[] }[] }
+    ).agents[0]!.modes.map((m) => m.id)
+    expect(crossProjectModes).toEqual(['read-only', 'workspace-write', 'agent'])
   })
 
-  it('prefers explicit Settings > Agents startMode over the agent defaultMode in list_agents', async () => {
-    const { tools: t } = starting({
-      agent: { id: 'claude-code', name: 'Claude Code' },
-      startMode: { 'claude-code': 'auto' },
-      defaultMode: { 'claude-code': 'default' },
-      starterRank: 3,
+  it('caps unranked starters by Settings > Agents startMode / defaultMode and never grants Full access', async () => {
+    const withSetting = starting({
+      agent: { id: 'codex', name: 'Codex' },
+      starterRank: null,
+      startMode: 'read-only',
+      mode: { id: 'read-only', name: 'Read-only' },
     })
-    const listed = await t.call(caller, 'list_agents', {})
-    const agents = (
-      listed.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
-    ).agents
-    expect(agents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits', 'auto'])
+    const outSetting = await withSetting.tools.call(caller, 'start_session', {
+      prompt: 'x',
+      mode: 'agent',
+    })
+    expect(text(outSetting)).toContain(
+      "narrower than asked: the user set Codex's new sessions to start in Read-only",
+    )
+    expect(text(outSetting)).not.toContain('your own mode')
 
-    // Explicit Settings > Agents startMode of full access is still capped below full access.
-    const fullAccess = starting({
+    const withDefault = starting({
+      agent: { id: 'antigravity', name: 'Google Antigravity' },
+      starterRank: null,
+      mode: { id: 'default', name: 'Default' },
+    })
+    const outDefault = await withDefault.tools.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'antigravity',
+      mode: 'auto',
+    })
+    expect(text(outDefault)).toContain(
+      'narrower than asked: Google Antigravity starts its sessions in Default, and the user ' +
+        'set no mode for its new sessions in Settings > Agents.',
+    )
+
+    // Even if Settings > Agents sets Full access, an unranked parent stays capped below Full access.
+    const fullSetting = starting({
       agent: { id: 'claude-code', name: 'Claude Code' },
+      starterRank: null,
       startMode: { 'claude-code': 'bypassPermissions' },
       defaultMode: { 'claude-code': 'default' },
-      starterRank: 4,
+      mode: { id: 'auto', name: 'Auto' },
     })
-    const listedFull = await fullAccess.tools.call(caller, 'list_agents', {})
+    const listedFull = await fullSetting.tools.call(caller, 'list_agents', {})
     const fullAgents = (
       listedFull.structuredContent as { agents: { id: string; modes: { id: string }[] }[] }
     ).agents
     expect(fullAgents[0]!.modes.map((m) => m.id)).toEqual(['default', 'acceptEdits', 'auto'])
+
+    const startedFull = await fullSetting.tools.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'claude-code',
+      mode: 'bypassPermissions',
+    })
+    expect(text(startedFull)).toContain(
+      'sessions started without a ranked parent mode cannot start in full access',
+    )
   })
 
   it('refuses explicit mode on unranked harnesses like OpenCode, Pi, Gemini, and Cursor', async () => {

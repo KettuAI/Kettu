@@ -1570,6 +1570,8 @@ export class AgentHost {
         history: (sessionId) => this.sessions.historyTurns(sessionId),
         mode: (sessionId) => this.sessions.toolMode(sessionId),
         starterRank: (sessionId) => this.sessions.starterRank(sessionId),
+        inheritanceScope: (callerId, target) => this.sessions.inheritanceScope(callerId, target),
+        offersFullAccess: (agentId) => this.agents.offersFullAccess(agentId),
         startMode: (agentId) => startModeIn(this.settings, agentId),
         defaultMode: (agentId, callerId) =>
           this.agents.defaultMode(agentId, this.sessions.workFolder(callerId)),

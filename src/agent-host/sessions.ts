@@ -69,7 +69,7 @@ import type {
   BusySession,
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
-import { pluginStarter, type PluginHookEvent } from '@shared/plugins'
+import { isPluginStarter, pluginStarter, type PluginHookEvent } from '@shared/plugins'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
@@ -287,14 +287,19 @@ import {
 } from './session-tools'
 import {
   defaultMode,
+  FULL_ACCESS_RANK,
+  inheritedMode,
   isRanked,
   modeLabel,
   modeRank,
+  resolveStartedScope,
   startableModes,
   startedCeiling,
   startedMode,
   starterRank,
+  STARTED_MAX,
   type ModeRank,
+  type StartedScope,
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import type {
@@ -616,6 +621,8 @@ export interface MemoryProposal {
 
 export interface SessionManagerDeps {
   platform: Platform
+  /** Server-authoritative identity of this host, used for sub-session permission scope checks. */
+  hostId?: string
   agents: AgentManager
   projects: Projects
   scratch: ScratchFolders
@@ -830,12 +837,14 @@ interface PendingRequest {
 }
 
 /**
- * The mode of a session another session's agent or a workflow started: the starter's rank, null
- * for none Kettu can rank, the mode it asked for, and the ceiling, known once the agent's own mode is.
+ * The mode of a session another session's agent, plugin, or workflow started: the starter's
+ * server-verified rank (null for an unranked harness), the mode it asked for, the server-verified
+ * host/project scope relationship, and the resolved ceiling once the agent's own mode is known.
  */
 interface StartedModeHold {
   starter: ModeRank | null
   wanted: string | null
+  scope: StartedScope
   ceiling: ModeRank | null
 }
 
@@ -1590,10 +1599,13 @@ export class SessionManager {
   private readonly fullSources = new Set<string>()
   /** Timestamp of the last host-level disk-full attention notification, for cooldown throttling. */
   private diskFullAttentionAt = 0
+  /** Server-authoritative identity of this host for cross-host scope checks. */
+  readonly hostId: string
   /** Unsubscribe callbacks for direct JsonFile write observers owned by SessionManager. */
   private readonly fileWatchers: (() => void)[] = []
 
   constructor(private readonly deps: SessionManagerDeps) {
+    this.hostId = deps.hostId ?? 'local'
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
     this.now = deps.now ?? Date.now
     deps.agents.hooks = {
@@ -5687,6 +5699,10 @@ export class SessionManager {
       startedBy?: string
       /** What the mode of a session an agent starts is held to. */
       startedMode?: { starter: ModeRank | null; wanted: string | null }
+      /** Server-side host identity of the parent session when started across hosts. */
+      parentHostId?: string
+      /** Server-side host identity where the child session will execute. */
+      targetHostId?: string
       /** Whose prompt the first message is, when another session's agent sends it. */
       from?: FromSession
       /** The paired device that sent the first message. */
@@ -5798,7 +5814,12 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
-    if (params.startedMode) live.startedMode = { ...params.startedMode, ceiling: null }
+    if (params.startedMode) {
+      live.startedMode = this.resolveStartedHold(
+        { ...params, startedMode: params.startedMode },
+        projectPath,
+      )
+    }
     // The message shows at once and goes out as the session's first turn, so it never enters the
     // index without it.
     if (prompt) {
@@ -5911,7 +5932,7 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
-    live.startedMode = { starter: null, wanted: null, ceiling: null }
+    live.startedMode = { starter: null, wanted: null, scope: 'cross-scope', ceiling: null }
     const content: UserContent[] = [{ type: 'text', text: params.prompt }]
     // The step's prompt is Kettu's, written from the workflow, not the user's.
     const entryId = this.addPrompt(live, content, now, undefined, undefined, undefined, true)
@@ -6589,7 +6610,11 @@ export class SessionManager {
       return
     }
     const finalConfig = live.thread.session.config
+    // Clear the startup-only mode hold once a user session's initial mode is settled so later
+    // resumes preserve the effective mode directly, and persist the settled config right away.
+    if (live.record.origin === 'user') live.startedMode = null
     this.update(live, { status: 'ready' })
+    this.save(live)
     this.deps.agents.signedIn(agentId)
     this.touch(live.id)
     const first = live.first
@@ -6858,8 +6883,62 @@ export class SessionManager {
   }
 
   /**
-   * Sets the start value of a started session's mode once the agent's own is known: the mode asked
-   * for, else the start mode or the agent's own, held to the ceiling.
+   * Resolves the server-authoritative permission hold for an agent-, plugin-, or workflow-started
+   * session from the real parent session record, host identity, and canonical target project path.
+   * Never trusts caller-supplied parent rank or scope claims.
+   */
+  private resolveStartedHold(
+    params: {
+      parentId?: string
+      startedBy?: string
+      startedMode: { starter: ModeRank | null; wanted: string | null }
+      parentHostId?: string
+      targetHostId?: string
+    },
+    targetProjectPath: string,
+  ): StartedModeHold {
+    const starterId = params.startedBy
+    const starterRecord =
+      starterId !== undefined && !isPluginStarter(starterId)
+        ? (this.live.get(starterId)?.record ?? this.records.get(starterId))
+        : undefined
+    const parentHostId = params.parentHostId ?? (starterRecord ? this.hostId : null)
+    const targetHostId = params.targetHostId ?? this.hostId
+    const verifiedParent =
+      starterRecord !== undefined &&
+      starterRecord.origin === 'user' &&
+      starterRecord.startedBy === undefined &&
+      !this.live.get(starterRecord.id)?.prepared &&
+      (params.parentId === undefined || params.parentId === starterRecord.id)
+    const scope = resolveStartedScope(
+      {
+        verifiedParent,
+        parentHostId,
+        targetHostId,
+        parentProject: verifiedParent ? starterRecord.projectPath : null,
+        targetProject: targetProjectPath,
+      },
+      (a, b) => samePath(a, b, this.deps.platform),
+    )
+    const starter = verifiedParent
+      ? this.starterRank(starterRecord.id)
+      : params.startedMode.starter !== null
+        ? (Math.min(params.startedMode.starter, STARTED_MAX) as ModeRank)
+        : null
+    return {
+      starter,
+      wanted: params.startedMode.wanted,
+      scope,
+      ceiling: null,
+    }
+  }
+
+  /**
+   * Sets the start value of a started session's mode once the agent's own is known:
+   * - In the same host and project with a ranked parent, inherits the parent's current effective
+   *   permission tier directly (including Full access) unless a narrower mode was explicitly asked.
+   * - Across projects/hosts or without a ranked parent, uses the agent's start/default mode capped
+   *   below Full access.
    */
   private holdStartedMode(live: Live, config: readonly ConfigOption[]): void {
     const hold = live.startedMode
@@ -6871,8 +6950,15 @@ export class SessionManager {
     const agentMode =
       startModeIn(this.deps.settings(), agentId) ??
       (typeof own === 'string' ? own : defaultMode(harness))
-    hold.ceiling = startedCeiling(hold.starter, harness, agentMode)
-    live.startValues[optionId] = startedMode(harness, hold.wanted ?? agentMode, hold.ceiling)
+    const allowFullAccess = this.allowsAgentFullAccess(agentId)
+    hold.ceiling = startedCeiling(hold.starter, harness, agentMode, hold.scope)
+    const inherits = hold.scope === 'same-scope' && hold.starter !== null
+    const fallback = inherits
+      ? inheritedMode(harness, hold.ceiling, { allowFullAccess })
+      : agentMode
+    live.startValues[optionId] = startedMode(harness, hold.wanted ?? fallback, hold.ceiling, {
+      allowFullAccess,
+    })
   }
 
   /**
@@ -6894,7 +6980,9 @@ export class SessionManager {
       ceiling,
       typeof held === 'string' ? (modeRank(harness, held) ?? 1) : ceiling,
     ) as ModeRank
-    const allowed = startableModes(harness, limit)
+    const allowed = startableModes(harness, limit, {
+      allowFullAccess: this.allowsAgentFullAccess(agentId),
+    })
     const currentValue = (): string | null => {
       const latest = live.thread.session.config.find(
         (candidate) => candidate.id === optionId && candidate.type === 'select',
@@ -7286,14 +7374,34 @@ export class SessionManager {
     return mode === undefined || optionId === null ? {} : { [optionId]: mode }
   }
 
+  private allowsAgentFullAccess(agentId: AgentId): boolean {
+    if (typeof this.deps.agents.offersFullAccess === 'function') {
+      return this.deps.agents.offersFullAccess(agentId)
+    }
+    return harnessOf(agentId) === 'claude-code' ? process.getuid?.() !== 0 : true
+  }
+
   /**
-   * Whether a session the user starts takes full access from `values`, so its agent can open it in
-   * full access at once; a session another one started, a workflow step's and a routine's never do.
+   * Whether a session takes full access from `values` (or inherits Full access from a same-scope
+   * parent session), so its agent can open it in full access at once without an extra restart;
+   * routines, workflows, plugins, and cross-scope starts never do.
    */
   private startsInFullAccess(live: Live, values: Record<string, string | boolean>): boolean {
-    if (live.startedMode || live.routineMode !== null) return false
-    const optionId = modeOptionId(live.record.agentId)
-    const mode = optionId === null ? undefined : values[optionId]
+    if (live.routineMode !== null) return false
+    const { agentId } = live.record
+    const optionId = modeOptionId(agentId)
+    if (optionId === null) return false
+    if (live.startedMode) {
+      const harness = harnessOf(agentId)
+      if (!isRanked(harness)) return false
+      const hold = live.startedMode
+      if (hold.scope !== 'same-scope' || hold.starter !== FULL_ACCESS_RANK) return false
+      if (!this.allowsAgentFullAccess(agentId)) return false
+      const ceiling = hold.ceiling ?? hold.starter
+      const desired = hold.wanted ?? inheritedMode(harness, ceiling, { allowFullAccess: true })
+      return isFullAccessMode(startedMode(harness, desired, ceiling, { allowFullAccess: true }))
+    }
+    const mode = values[optionId]
     return typeof mode === 'string' && isFullAccessMode(mode)
   }
 
@@ -13485,6 +13593,36 @@ export class SessionManager {
   }
 
   /**
+   * Server-authoritative inheritance scope between `callerId` and a target project/host.
+   * Only a verified user-started session on this host targeting the same host and project returns
+   * `'same-scope'`; anything else fails closed to `'cross-scope'`.
+   */
+  inheritanceScope(
+    callerId: string,
+    target?: { projectPath?: string | null; hostId?: string | null },
+  ): StartedScope {
+    const caller = this.live.get(callerId)?.record ?? this.records.get(callerId)
+    const verifiedParent =
+      caller !== undefined &&
+      caller.origin === 'user' &&
+      caller.startedBy === undefined &&
+      !this.live.get(callerId)?.prepared
+    const targetHostId = target?.hostId === undefined ? this.hostId : target.hostId
+    const targetProject =
+      target?.projectPath === undefined ? (caller?.projectPath ?? null) : target.projectPath
+    return resolveStartedScope(
+      {
+        verifiedParent,
+        parentHostId: verifiedParent ? this.hostId : null,
+        targetHostId,
+        parentProject: verifiedParent ? caller.projectPath : null,
+        targetProject,
+      },
+      (a, b) => samePath(a, b, this.deps.platform),
+    )
+  }
+
+  /**
    * The rank the caller's mode holds the sessions it starts to: planning counts as asking. Null
    * for an agent whose modes Kettu cannot rank.
    */
@@ -13792,9 +13930,10 @@ export class SessionManager {
   }
 
   /**
-   * Starts a sub-session of the caller with its first prompt and start values, as New sub-session
-   * would: the caller's project and parent. Its mode is the one asked for or the start mode, never
-   * wider than the caller's or than full access allows.
+   * Starts a sub-session of the caller with its first prompt and start values. Within the same
+   * host and project, the child inherits the caller's current effective permission mode (including
+   * Full access) unless a narrower mode is requested, and never escalates above it; across
+   * projects or hosts, Full access is never carried over automatically.
    */
   async startFromTool(
     callerId: string,
@@ -13807,10 +13946,25 @@ export class SessionManager {
       report: boolean
       /** A role to start as, by its reference. */
       role?: string
+      /** Optional target project path; a different project never inherits Full access. */
+      projectPath?: string | null
+      /** Optional target host identity; a different host never inherits Full access. */
+      targetHostId?: string
     },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
     const agentId = params.agentId ?? caller.agentId
+    const targetProject = params.projectPath === undefined ? caller.projectPath : params.projectPath
+    const targetHostId = params.targetHostId ?? this.hostId
+    const resolvedTarget =
+      targetProject === null
+        ? null
+        : params.projectPath === undefined
+          ? caller.projectPath
+          : await this.deps.projects.resolveDirectory(targetProject)
+    const sameProject =
+      resolvedTarget !== null && samePath(caller.projectPath, resolvedTarget, this.deps.platform)
+    const sameHost = targetHostId === this.hostId
     const from: FromSession = {
       sessionId: callerId,
       title: this.toolName(callerId),
@@ -13819,12 +13973,14 @@ export class SessionManager {
     const options = { ...params.options, ...this.startModeOf(agentId) }
     const summary = await this.create({
       agentId,
-      projectPath: caller.projectPath,
-      parentId: callerId,
+      projectPath: resolvedTarget,
+      ...(sameProject && sameHost ? { parentId: callerId } : {}),
       options,
       prompt: [{ type: 'text', text: params.prompt }],
       startedBy: callerId,
       startedMode: { starter: this.starterRank(callerId), wanted: params.mode ?? null },
+      parentHostId: this.hostId,
+      targetHostId,
       from,
       ...(params.role === undefined ? {} : { role: params.role }),
       ...(params.title === undefined ? {} : { title: params.title }),

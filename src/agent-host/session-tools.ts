@@ -26,13 +26,14 @@ import { HostError } from './errors'
 import { offered, pickedValues, type OfferedModel, type StartPick } from './started-options'
 import {
   defaultMode,
+  FULL_ACCESS_RANK,
   isRanked,
   modeLabel,
   modeRank,
   startableModes,
   startedCeiling,
-  STARTED_MAX,
   type ModeRank,
+  type StartedScope,
 } from './started-mode'
 
 export const TITLE_CHARS = 120
@@ -146,6 +147,16 @@ export interface SessionToolsDeps {
   mode(sessionId: string): Promise<ToolMode | null>
   /** The rank the caller's mode holds the sessions it starts to; null when Kettu cannot rank it. */
   starterRank(sessionId: string): ModeRank | null
+  /**
+   * Server-authoritative inheritance scope between `callerId` and the target project/host.
+   * Defaults to checking that the caller is a user-started session in `target.projectPath`.
+   */
+  inheritanceScope?(
+    callerId: string,
+    target?: { projectPath?: string | null; hostId?: string | null },
+  ): StartedScope
+  /** Whether `agentId` currently supports Full access on this host. */
+  offersFullAccess?(agentId: AgentId): boolean
   /** The mode the user set for an agent's new sessions in Settings › Agent. */
   startMode(agentId: AgentId): string | undefined
   /**
@@ -341,8 +352,8 @@ const MODE: Schema = {
   minLength: 1,
   maxLength: START_MODE_CHARS,
   description:
-    'The permission mode to start it in, one list_agents gives for the agent; without it, the ' +
-    'mode the user set for its new sessions. Kettu starts it no wider than yours.',
+    'Permission mode from list_agents; omitted inherits your effective mode in this project ' +
+    '(including Full access), never wider than yours.',
 }
 const ROLE: Schema = {
   type: 'string',
@@ -965,6 +976,7 @@ export class SessionTools {
     const only = agent(o)
     const own = this.deps.info(caller.sessionId)?.agentId
     const starter = this.deps.starterRank(caller.sessionId)
+    const scope = this.scopeOf(caller)
     const listed = this.deps
       .agents()
       .filter((status) => only === undefined || status.id === only)
@@ -990,7 +1002,7 @@ export class SessionTools {
         harness: status.harnessName,
         is_you: status.id === own,
         status: state,
-        modes: await this.modesOf(status.id, starter, caller.sessionId),
+        modes: await this.modesOf(status.id, starter, caller, scope),
         ...offered(this.deps.agentOptions(status.id)),
       })),
     )
@@ -1073,41 +1085,89 @@ export class SessionTools {
   }
 
   /**
+   * Server-verified inheritance scope for `caller`: only a user-started session targeting its own
+   * host and project inherits its effective permissions directly.
+   */
+  private scopeOf(caller: Caller): StartedScope {
+    if (this.deps.inheritanceScope) {
+      return this.deps.inheritanceScope(caller.sessionId, { projectPath: caller.project })
+    }
+    const info = this.deps.info(caller.sessionId)
+    if (!info || info.startedBy !== null) return 'cross-scope'
+    return info.projectPath === caller.project ? 'same-scope' : 'cross-scope'
+  }
+
+  private allowsFullAccess(agentId: AgentId): boolean {
+    if (this.deps.offersFullAccess) return this.deps.offersFullAccess(agentId)
+    return harnessOf(agentId) === 'claude-code' ? process.getuid?.() !== 0 : true
+  }
+
+  /**
    * The modes a caller can start an agent in now: none for an agent whose modes Kettu cannot rank.
    */
   private async modesOf(
     agentId: AgentId,
     starter: ModeRank | null,
-    callerId: string,
+    caller: Caller,
+    scope: StartedScope,
   ): Promise<{ id: string; name: string; description: string }[]> {
     const harness = harnessOf(agentId)
     if (!isRanked(harness)) return []
-    const resolved = await this.agentModeOf(agentId, callerId)
-    const ceiling = startedCeiling(starter, harness, resolved?.mode ?? null)
-    return startableModes(harness, ceiling).map((id) => ({ id, ...modeLabel(harness, id) }))
+    const allowFullAccess = this.allowsFullAccess(agentId)
+    if (scope === 'same-scope' && starter !== null) {
+      const ceiling = startedCeiling(starter, harness, null, scope)
+      return startableModes(harness, ceiling, { allowFullAccess }).map((id) => ({
+        id,
+        ...modeLabel(harness, id),
+      }))
+    }
+    const resolved = await this.agentModeOf(agentId, caller.sessionId)
+    const ceiling = startedCeiling(starter, harness, resolved?.mode ?? null, scope)
+    return startableModes(harness, ceiling, { allowFullAccess }).map((id) => ({
+      id,
+      ...modeLabel(harness, id),
+    }))
   }
 
   /**
-   * Why a started session got a narrower mode than `wanted`: the caller's own mode, the mode the
-   * agent's new sessions start in, or both.
+   * Why a started session got a narrower mode than `wanted`: the caller's own mode, scope
+   * boundaries, host availability, or the target agent's configured default mode.
    */
-  private async loweredText(callerId: string, agentId: AgentId, wanted: string): Promise<string> {
+  private async loweredText(
+    caller: Caller,
+    agentId: AgentId,
+    wanted: string,
+    scope: StartedScope,
+  ): Promise<string> {
     const harness = harnessOf(agentId)
     if (!isRanked(harness)) return ' That is narrower than asked.'
     const asked = modeRank(harness, wanted) ?? 1
     const reasons: string[] = []
-    const starter = this.deps.starterRank(callerId)
+    const starter = this.deps.starterRank(caller.sessionId)
     if (starter !== null && starter < asked) reasons.push('your own mode allows no wider')
-    const resolved = await this.agentModeOf(agentId, callerId)
-    if (resolved !== null && (modeRank(harness, resolved.mode) ?? 1) < asked) {
+    const inherits = scope === 'same-scope' && starter !== null
+    if (!inherits) {
+      if (asked === FULL_ACCESS_RANK) {
+        reasons.push(
+          scope === 'cross-scope'
+            ? 'full access is not inherited across projects or hosts'
+            : 'sessions started without a ranked parent mode cannot start in full access',
+        )
+      }
+      const resolved = await this.agentModeOf(agentId, caller.sessionId)
+      if (resolved !== null && (modeRank(harness, resolved.mode) ?? 1) < asked) {
+        const name = this.deps.agents().find((status) => status.id === agentId)?.name ?? agentId
+        const label = modeLabel(harness, resolved.mode).name
+        reasons.push(
+          resolved.fromSettings
+            ? `the user set ${name}'s new sessions to start in ${label} in Settings > Agents`
+            : `${name} starts its sessions in ${label}, and the user set no mode for its new ` +
+                'sessions in Settings > Agents',
+        )
+      }
+    } else if (asked === FULL_ACCESS_RANK && !this.allowsFullAccess(agentId)) {
       const name = this.deps.agents().find((status) => status.id === agentId)?.name ?? agentId
-      const label = modeLabel(harness, resolved.mode).name
-      reasons.push(
-        resolved.fromSettings
-          ? `the user set ${name}'s new sessions to start in ${label} in Settings > Agents`
-          : `${name} starts its sessions in ${label}, and the user set no mode for its new ` +
-              'sessions in Settings > Agents',
-      )
+      reasons.push(`${name} does not offer full access in this environment`)
     }
     return reasons.length === 0
       ? ' That is narrower than asked.'
@@ -1124,7 +1184,7 @@ export class SessionTools {
         `The mode of ${name} cannot be chosen here. Leave mode out.`,
       )
     }
-    if (!startableModes(harness, STARTED_MAX).includes(value)) {
+    if (!startableModes(harness, FULL_ACCESS_RANK).includes(value)) {
       throw new SessionToolError(
         'not_allowed',
         `${name} has no mode ${value} that a session you start can have. ` +
@@ -1343,8 +1403,9 @@ export class SessionTools {
     if (!session) throw notFound(started)
     const current = await this.deps.mode(started)
     const choices = await this.deps.choices(started)
+    const scope = this.scopeOf(caller)
     const lowered = wanted !== undefined && current !== null && current.id !== wanted
-    const loweredNote = lowered ? await this.loweredText(caller.sessionId, target, wanted) : ''
+    const loweredNote = lowered ? await this.loweredText(caller, target, wanted, scope) : ''
     const held = this.deps.held(started)
     return result(
       `Started "${titleOf(session)}"${modeText(current)}${choicesText(choices)}.` +
