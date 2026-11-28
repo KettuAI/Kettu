@@ -3,7 +3,7 @@ import { cn } from '@renderer/lib/utils'
 
 export interface PlanRing {
   id: string
-  /** The whole percentage used. */
+  /** The whole percentage shown on the ring (used or left, matching the active limit view). */
   percent: number
   level: LimitLevel
   /** The share of the window's time already passed, drawn a step darker on its track. */
@@ -11,7 +11,7 @@ export interface PlanRing {
 }
 
 /**
- * One ring per plan window, the first innermost, each filled to how much of it is used, on a
+ * One ring per plan window, the first innermost, each filled to its shown percentage, on a
  * track in a tint of its own color, or in a neutral gray with `track="neutral"`; a tinted track
  * darkens a step over the time already passed when a ring says how much. `size` is the diagram's
  * width in pixels.
@@ -44,7 +44,7 @@ export function PlanRings({
         const fromOuter = rings.length - 1 - i
         const r = center - stroke / 2 - fromOuter * (stroke + gap)
         const length = 2 * Math.PI * r
-        const share = Math.min(100, ring.percent) / 100
+        const share = Math.min(100, Math.max(0, ring.percent)) / 100
         const passed = track === 'tint' && ring.passed ? Math.min(1, ring.passed) : 0
         return (
           <g key={ring.id} className={LIMIT_STROKE[ring.level]}>
