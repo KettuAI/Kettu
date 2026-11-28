@@ -647,7 +647,9 @@ export const Thread = memo(function Thread({
       reveal: (key) =>
         new Promise((resolve) => {
           detachedRef.current = true
+          followBottomRef.current = false
           returnToRef.current = null
+          setFollowBottom(false)
           setReturnTo(null)
           setReturnPositioned(true)
           setPinnedKey(key)

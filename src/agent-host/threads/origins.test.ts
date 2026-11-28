@@ -82,4 +82,53 @@ describe('origins of a rebuilt thread', () => {
     expect(originOf({ ...say('u1', 'x'), kettu: true, steered: true })).toEqual({ kettu: true })
     expect(originOf(reply('a0'))).toBeNull()
   })
+
+  it('keeps round metadata on report origins and sanitizes legacy or malformed report fields', () => {
+    const report = {
+      from: {
+        sessionId: 'child-1',
+        title: 'Child task',
+        ended: {
+          agent: 'Codex',
+          stopReason: 'end_turn' as const,
+          round: 2,
+          completedAt: 1_764_200_000_000,
+          entryId: 'e5',
+          pos: 4,
+        },
+      },
+    }
+    const legacy = {
+      from: {
+        sessionId: 'child-legacy',
+        title: 'Legacy child',
+        ended: { agent: 'Claude Code', stopReason: 'end_turn' as const },
+      },
+    }
+    expect(originOf({ ...say('u1', 'report 2'), ...report })).toEqual(report)
+    expect(originOf({ ...say('u2', 'legacy'), ...legacy })).toEqual(legacy)
+    expect(
+      originOf({
+        ...say('u3', 'dirty'),
+        from: {
+          sessionId: 'child-dirty',
+          title: 'Dirty',
+          ended: {
+            agent: 'Codex',
+            stopReason: 'end_turn',
+            round: 0,
+            completedAt: Number.NaN,
+            entryId: '',
+            pos: -2,
+          },
+        },
+      }),
+    ).toEqual({
+      from: {
+        sessionId: 'child-dirty',
+        title: 'Dirty',
+        ended: { agent: 'Codex', stopReason: 'end_turn' },
+      },
+    })
+  })
 })

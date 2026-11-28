@@ -14083,11 +14083,21 @@ export class SessionManager {
     if (entry?.kind !== 'user' || entry.from?.sessionId !== starterId) return
     if (entry.from.report === false) return
     const agent = this.agentName(live.id)
-    const text = reportText(agent, live.id, stopReason)
+    const completedAt = this.now()
+    const round = turnRoundOf(live.thread, turn.entryId)
+    const pos = live.positions.get(turn.entryId)
+    const text = reportText(agent, live.id, stopReason, round)
     const from: FromSession = {
       sessionId: live.id,
       title: this.toolName(live.id),
-      ended: { agent, stopReason },
+      ended: {
+        agent,
+        stopReason,
+        ...(round !== undefined ? { round } : {}),
+        completedAt,
+        entryId: turn.entryId,
+        ...(pos !== undefined ? { pos } : {}),
+      },
     }
     queueMicrotask(() => {
       void this.deliverReport(starterId, text, from).catch((error: unknown) => {
@@ -16185,4 +16195,24 @@ export function sessionWithPage<T extends Pick<SessionRecord, 'id' | 'origin' | 
     current = parent
   }
   return current
+}
+
+/**
+ * 1-based round number for `entryId` in `thread`: counts non-steered, non-approval, non-report
+ * user turn starts from the beginning of the thread up to and including `entryId`. Returns
+ * undefined if `entryId` is not present or no turn start precedes it.
+ */
+export function turnRoundOf(
+  thread: Pick<ThreadState, 'order' | 'byId'>,
+  entryId: string,
+): number | undefined {
+  let round = 0
+  for (const id of thread.order) {
+    const entry = thread.byId[id]
+    if (entry?.kind === 'user' && !entry.steered && !entry.approval && !entry.from?.ended) {
+      round++
+    }
+    if (id === entryId) return round > 0 ? round : undefined
+  }
+  return undefined
 }

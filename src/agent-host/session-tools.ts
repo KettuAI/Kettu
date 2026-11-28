@@ -1583,6 +1583,7 @@ export function reportText(
   agent: string,
   sessionId: string,
   stopReason: StopReason | null,
+  round?: number,
 ): string {
   const how =
     stopReason === 'end_turn'
@@ -1594,8 +1595,12 @@ export function reportText(
           : stopReason === null
             ? 'failed'
             : 'ended at a limit'
+  const turnLabel =
+    typeof round === 'number' && Number.isSafeInteger(round) && round >= 1
+      ? `the turn (round ${round})`
+      : 'the turn'
   return (
-    `Kettu: the turn you asked the ${agent} session ${sessionId} for ${how}. ` +
+    `Kettu: ${turnLabel} you asked the ${agent} session ${sessionId} for ${how}. ` +
     'Read its reply with get_session.'
   )
 }

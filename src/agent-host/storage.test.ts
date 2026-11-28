@@ -462,6 +462,75 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [{ ...session, queue: [{ ...item, from }] }] })
   })
 
+  it('keeps completion report metadata on queued prompts, including legacy and sanitized forms', () => {
+    const item = { id: 'q1', content: [{ type: 'text' as const, text: 'Kettu: report' }], at: 100 }
+    const withRound = {
+      ...item,
+      from: {
+        sessionId: 's-child',
+        title: 'Child task',
+        ended: {
+          agent: 'Codex',
+          stopReason: 'end_turn' as const,
+          round: 2,
+          completedAt: 1_764_200_000_000,
+          entryId: 'e5',
+          pos: 4,
+        },
+      },
+    }
+    const legacy = {
+      ...item,
+      id: 'q2',
+      from: {
+        sessionId: 's-legacy',
+        title: 'Legacy child',
+        ended: { agent: 'Claude Code', stopReason: null },
+      },
+    }
+    const malformed = {
+      ...item,
+      id: 'q3',
+      from: {
+        sessionId: 's-dirty',
+        title: 'Dirty child',
+        ended: {
+          agent: 'Codex',
+          stopReason: 'cancelled',
+          round: 0,
+          completedAt: -5,
+          entryId: '',
+          pos: -1,
+        },
+      },
+    }
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, queue: [withRound, legacy, malformed as never] }],
+      }),
+    ).toEqual({
+      version: 1,
+      sessions: [
+        {
+          ...session,
+          queue: [
+            withRound,
+            legacy,
+            {
+              ...item,
+              id: 'q3',
+              from: {
+                sessionId: 's-dirty',
+                title: 'Dirty child',
+                ended: { agent: 'Codex', stopReason: 'cancelled' },
+              },
+            },
+          ],
+        },
+      ],
+    })
+  })
+
   it("keeps a queued message's comment summary, dropping one that does not read", () => {
     const item = { id: 'q1', content: [{ type: 'text' as const, text: '> a\n\nb' }], at: 1 }
     const queued: SessionRecord = {

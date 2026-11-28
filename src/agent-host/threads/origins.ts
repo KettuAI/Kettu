@@ -1,7 +1,7 @@
 // Who sent a message other than the user at this computer, which the agent's own history never
 // says: Kettu keeps it apart from the thread, so a thread rebuilt from that history gets it back.
 
-import type { ThreadEntry, UserContent } from '@shared/thread'
+import { parseFromSession, type ThreadEntry, type UserContent } from '@shared/thread'
 
 type UserEntry = Extract<ThreadEntry, { kind: 'user' }>
 
@@ -17,8 +17,9 @@ export interface StoredOrigin {
 /** The entry's origin; null for the user's own message from this computer, or another kind. */
 export function originOf(entry: ThreadEntry | undefined): MessageOrigin | null {
   if (entry?.kind !== 'user') return null
+  const from = entry.from ? parseFromSession(entry.from) : undefined
   const origin: MessageOrigin = {
-    ...(entry.from ? { from: entry.from } : {}),
+    ...(from ? { from } : {}),
     ...(entry.device ? { device: entry.device } : {}),
     ...(entry.approval ? { approval: entry.approval } : {}),
     ...(entry.kettu ? { kettu: entry.kettu } : {}),

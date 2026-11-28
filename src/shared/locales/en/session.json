@@ -575,7 +575,10 @@
     "finished": "{{agent}} finished",
     "stopped": "{{agent}} was stopped",
     "failed": "{{agent}} failed",
-    "failedWith": "{{agent}} failed · {{reason}}"
+    "failedWith": "{{agent}} failed · {{reason}}",
+    "round": "Round {{round}}",
+    "openSession": "Open {{title}}",
+    "openRound": "Open Round {{round}} in {{title}}"
   },
   "sessionStarted": {
     "label": "Started <title>{{title}}</title>",

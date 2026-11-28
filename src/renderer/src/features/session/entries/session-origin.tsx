@@ -8,32 +8,17 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { FromSession, StopReason } from '@shared/thread'
+import type { FromSession, FromSessionEnded, StopReason } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
+import { useClock } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
-import { reportSentence } from './helpers'
+import { openSessionReport, sessionReportDisplay, useSender } from './session-report'
 import { TurnEndTag } from './turn-end-tag'
 
-/** The session a message or report came from, while Kettu still holds it. */
-function useSender(sessionId: string) {
-  return useSessionsStore(
-    useShallow((s) => {
-      const sender = s.byId[sessionId]
-      return sender
-        ? {
-            id: sender.id,
-            title: sessionTitle(sender),
-            agentId: sender.agentId,
-            projectPath: sender.projectPath,
-          }
-        : null
-    }),
-  )
-}
+const dayStart = (now: number): number => new Date(now).setHours(0, 0, 0, 0)
 
 /**
  * A message another session's agent sent: a quoted card on the agent's side of the thread, so the
@@ -99,14 +84,16 @@ export function ReportLine({
   className,
 }: {
   from: FromSession
-  ended: NonNullable<FromSession['ended']>
+  ended: FromSessionEnded
   /** How the turn the report started ended, when it got no reply. */
   end?: { stopReason: StopReason; durationMs: number }
   className?: string
 }) {
   useTranslation('session')
   const sender = useSender(from.sessionId)
+  const today = useClock(dayStart)
   const title = sender?.title ?? from.title
+  const display = sessionReportDisplay(ended, title, today)
   const done = ended.stopReason === 'end_turn'
   const stopped = ended.stopReason === 'cancelled'
   return (
@@ -122,14 +109,21 @@ export function ReportLine({
             !done && !stopped && 'text-danger',
           )}
         />
-        <span className="shrink-0">{reportSentence(ended)}</span>
+        <span className="shrink-0">{display.sentence}</span>
         {sender ? (
           <button
             type="button"
             className="flex min-w-0 items-center gap-1 rounded-sm font-medium text-foreground outline-none hover:underline focus-visible:underline"
-            onClick={() => openSession(sender.id, sender.projectPath)}
+            aria-label={display.openLabel}
+            title={display.openLabel}
+            onClick={() => openSessionReport(sender, ended)}
           >
             <span className="truncate">{title}</span>
+            {display.roundLabel && (
+              <span className="shrink-0 font-normal text-muted-foreground tabular-nums">
+                · {display.roundLabel}
+              </span>
+            )}
             <HugeiconsIcon
               icon={ArrowUpRight01Icon}
               strokeWidth={1.9}
@@ -138,7 +132,23 @@ export function ReportLine({
             />
           </button>
         ) : (
-          <span className="min-w-0 truncate font-medium">{title}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="truncate font-medium">{title}</span>
+            {display.roundLabel && (
+              <span className="shrink-0 text-muted-foreground tabular-nums">
+                · {display.roundLabel}
+              </span>
+            )}
+          </span>
+        )}
+        {display.time && (
+          <time
+            dateTime={display.time.iso}
+            title={display.time.title}
+            className="shrink-0 text-xs text-muted-foreground tabular-nums"
+          >
+            {display.time.label}
+          </time>
         )}
       </div>
       {end && <TurnEndTag stopReason={end.stopReason} durationMs={end.durationMs} />}

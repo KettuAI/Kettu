@@ -7,7 +7,6 @@ import {
   type DiffContentItem,
   type FormValues,
   type FromDevice,
-  type FromSession,
   type PermissionKind,
   type QuestionAnswer,
   type SessionStatus,
@@ -407,23 +406,7 @@ export function thoughtTitle(markdown: string): string | null {
   return title === '' ? null : title
 }
 
-/** The words of a report of a turn the session asked another one for, from how it ended. */
-export function reportSentence(ended: NonNullable<FromSession['ended']>): string {
-  const agent = ended.agent || i18n.t('session:sessionReport.agent')
-  switch (ended.stopReason) {
-    case 'end_turn':
-      return i18n.t('session:sessionReport.finished', { agent })
-    case 'cancelled':
-      return i18n.t('session:sessionReport.stopped', { agent })
-    case null:
-      return i18n.t('session:sessionReport.failed', { agent })
-    default:
-      return i18n.t('session:sessionReport.failedWith', {
-        agent,
-        reason: stopReasonText(ended.stopReason, 0),
-      })
-  }
-}
+export { reportSentence } from './session-report'
 
 /**
  * The agent message a reply's Fork starts the new session at, or null when it offers none. The

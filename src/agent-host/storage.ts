@@ -16,6 +16,7 @@ import {
   isAgentId,
   isQueuedComments,
   isUserContent,
+  parseFromSession,
   type AgentId,
   type PromptCache,
   type QueuedPrompt,
@@ -904,16 +905,8 @@ function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
 function withFrom(item: QueuedPrompt): QueuedPrompt {
   const { from, comments, ...kept } = item as QueuedPrompt & { from?: unknown; comments?: unknown }
   const rest = isQueuedComments(comments) ? { ...kept, comments } : kept
-  return isRecord(from) && isString(from.sessionId) && isString(from.title)
-    ? {
-        ...rest,
-        from: {
-          sessionId: from.sessionId,
-          title: from.title,
-          ...(from.report === false ? { report: false as const } : {}),
-        },
-      }
-    : rest
+  const parsedFrom = parseFromSession(from)
+  return parsedFrom ? { ...rest, from: parsedFrom } : rest
 }
 
 function roleOf(value: unknown): { role?: SessionRole } {

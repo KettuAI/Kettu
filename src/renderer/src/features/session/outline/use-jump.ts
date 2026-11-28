@@ -117,10 +117,20 @@ export function useJumpToMessage(
         if (current()) setWaiting(target.entryId)
       }, SPINNER_AFTER_MS)
       try {
-        const replica = useThreadsStore.getState().replicas[sessionId]
-        const loaded = replica?.state?.byId[target.entryId] !== undefined
-        if (!loaded && !(await loadThrough(sessionId, target.pos ?? 0))) return false
-        if (!current()) return false
+        const hasEntry = (): boolean =>
+          useThreadsStore.getState().replicas[sessionId]?.state?.byId[target.entryId] !== undefined
+        if (!hasEntry()) {
+          if (!(await loadThrough(sessionId, target.pos ?? 0))) return false
+          if (!current()) return false
+          if (!hasEntry()) {
+            const after = useThreadsStore.getState().replicas[sessionId]
+            if (after?.older !== null && after?.older !== undefined && (target.pos ?? 0) > 0) {
+              if (!(await loadThrough(sessionId, 0))) return false
+              if (!current()) return false
+            }
+          }
+        }
+        if (!hasEntry()) return false
         await jumps.reveal(target.entryId)
       } finally {
         clearTimeout(timer)
