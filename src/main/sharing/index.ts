@@ -60,6 +60,8 @@ export interface SharingHost {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   /** Every artifact, Recently deleted included; null when the host cannot say. */
   artifacts(): Promise<ArtifactBrief[] | null>
+  /** Persists Kettu account ownership onto an unowned local artifact once published to Kettu. */
+  claimOwner?(id: string, accountId: string): void
 }
 
 export interface ViewerFile {
@@ -171,6 +173,8 @@ export class Sharing {
   /** Something waits for the one-time notice before it is uploaded. */
   private autoHeld = false
   private readonly skipped = new Map<string, Skipped>()
+  /** Latest Kettu owner id reported by the host for each artifact, null for unowned local ones. */
+  private readonly artifactOwners = new Map<string, string | null>()
   /** Why counting visitors last failed, so a poll that keeps failing logs it once. */
   private visitorsFailed: string | null = null
 
@@ -184,6 +188,34 @@ export class Sharing {
 
   static async load(deps: SharingDeps): Promise<Sharing> {
     return new Sharing(deps, await SharingStore.load(deps.userDataPath, deps.cipher))
+  }
+
+  /** The Kettu account owning the underlying artifact of `page`, or null when unowned local. */
+  private pageOwner(page: PublishedPage): string | null {
+    if (page.target === 'kettu') return page.accountId
+    if (this.artifactOwners.has(page.id)) return this.artifactOwners.get(page.id) ?? null
+    return page.ownerAccountId ?? null
+  }
+
+  /** Whether `page` is visible and manageable under the currently signed-in Kettu account. */
+  private isPageVisible(page: PublishedPage): boolean {
+    const owner = this.pageOwner(page)
+    if (owner === null) return true
+    const current = this.deps.kettu.account()?.id ?? null
+    return current !== null && owner === current
+  }
+
+  /** Updates cached artifact ownership from the host; true when any published page's visibility changed. */
+  private recordArtifactOwners(artifacts: readonly ArtifactBrief[]): boolean {
+    const before = new Map(
+      this.store.published().map((page) => [page.id, this.isPageVisible(page)]),
+    )
+    for (const artifact of artifacts) {
+      if (artifact.ownerAccountId !== undefined) {
+        this.artifactOwners.set(artifact.id, artifact.ownerAccountId)
+      }
+    }
+    return this.store.published().some((page) => before.get(page.id) !== this.isPageVisible(page))
   }
 
   /** What the interface shows; the tokens stay in main. */
@@ -204,22 +236,25 @@ export class Sharing {
           }
         : null,
       auto: this.autoStatus(),
-      published: this.store.published().map((page) => {
-        const owner = page.target === 'kettu' ? kettu?.id : cloudflare?.accountId
-        const otherAccount = page.accountId !== owner
-        return {
-          id: page.id,
-          url: page.url,
-          version: page.version,
-          publishedAt: page.publishedAt,
-          target: page.target,
-          otherAccount,
-          accountEmail: otherAccount ? page.accountEmail : null,
-          access: page.access,
-          code: page.code,
-          codeLocked: page.target === 'kettu' && this.locked.has(page.ref),
-        }
-      }),
+      published: this.store
+        .published()
+        .filter((page) => this.isPageVisible(page))
+        .map((page) => {
+          const owner = page.target === 'kettu' ? kettu?.id : cloudflare?.accountId
+          const otherAccount = page.accountId !== owner
+          return {
+            id: page.id,
+            url: page.url,
+            version: page.version,
+            publishedAt: page.publishedAt,
+            target: page.target,
+            otherAccount,
+            accountEmail: otherAccount ? page.accountEmail : null,
+            access: page.access,
+            code: page.code,
+            codeLocked: page.target === 'kettu' && this.locked.has(page.ref),
+          }
+        }),
     }
   }
 
@@ -233,6 +268,7 @@ export class Sharing {
     this.kettuSeen = id
     this.storage = null
     this.skipped.clear()
+    this.autoHeld = false
     this.followAccount(id)
     this.deps.changed?.(this.status())
     if (id !== null) void this.refresh().then(() => this.scheduleAuto())
@@ -321,7 +357,10 @@ export class Sharing {
     if (!isTarget(rawTarget)) return failed('failed', 'Not a place to publish to.')
     if (!isAccess(rawAccess)) return failed('failed', 'Not a level a page can have.')
     const page = this.store.page(wanted.id)
-    if (page) return this.deploy(page, wanted.version)
+    if (page) {
+      if (!this.isPageVisible(page)) return failed('not_found', 'This artifact is not published.')
+      return this.deploy(page, wanted.version)
+    }
     const owner = this.owner(rawTarget)
     if (!owner) return failed(rawTarget === 'kettu' ? 'signed_out' : 'no_account')
     try {
@@ -329,6 +368,12 @@ export class Sharing {
       const published = await this.at(rawTarget, owner.id, (provider) =>
         provider.publish(content.files, pageHeaders(), rawAccess),
       )
+      if (rawTarget === 'kettu') {
+        this.artifactOwners.set(wanted.id, owner.id)
+        this.deps.host.claimOwner?.(wanted.id, owner.id)
+      } else if (content.ownerAccountId !== undefined) {
+        this.artifactOwners.set(wanted.id, content.ownerAccountId)
+      }
       this.store.put({
         id: wanted.id,
         target: rawTarget,
@@ -338,6 +383,9 @@ export class Sharing {
         publishedAt: this.now(),
         accountId: owner.id,
         accountEmail: owner.email,
+        ...(rawTarget === 'cloudflare' && content.ownerAccountId
+          ? { ownerAccountId: content.ownerAccountId }
+          : {}),
         // What the target says, which a service from before levels gives as public.
         access: published.access,
         code: published.code,
@@ -354,7 +402,9 @@ export class Sharing {
     const wanted = target(rawId, rawVersion)
     if (!wanted) return failed('failed', 'Not an artifact id and version.')
     const page = this.store.page(wanted.id)
-    if (!page) return failed('not_found', 'This artifact is not published.')
+    if (!page || !this.isPageVisible(page)) {
+      return failed('not_found', 'This artifact is not published.')
+    }
     return this.deploy(page, wanted.version)
   }
 
@@ -376,7 +426,9 @@ export class Sharing {
   async openLink(rawId: unknown): Promise<SharingOpenResult> {
     if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
     const page = this.store.page(rawId)
-    if (!page) return failed('not_found', 'This artifact is not published.')
+    if (!page || !this.isPageVisible(page)) {
+      return failed('not_found', 'This artifact is not published.')
+    }
     if (page.target !== 'kettu' || page.access === 'public') return { url: page.url }
     try {
       return {
@@ -394,7 +446,7 @@ export class Sharing {
   async visitors(rawId: unknown): Promise<number | null> {
     if (!isArtifactId(rawId)) return null
     const page = this.store.page(rawId)
-    if (!page || page.target !== 'kettu') return null
+    if (!page || page.target !== 'kettu' || !this.isPageVisible(page)) return null
     try {
       const counts = await this.atKettu(page.accountId, (share) => share.visitors([page.ref]))
       this.visitorsFailed = null
@@ -412,6 +464,9 @@ export class Sharing {
     if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
     const page = this.store.page(rawId)
     if (!page) return { status: this.status() }
+    if (!this.isPageVisible(page)) {
+      return failed('not_found', 'This artifact is not published.')
+    }
     try {
       await this.at(page.target, page.accountId, (provider) => provider.unpublish(page.ref))
       this.store.forget(page.id)
@@ -647,7 +702,9 @@ export class Sharing {
   ): Promise<SharingResult> {
     if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
     const page = this.store.page(rawId)
-    if (!page) return failed('not_found', 'This artifact is not published.')
+    if (!page || !this.isPageVisible(page)) {
+      return failed('not_found', 'This artifact is not published.')
+    }
     if (page.target !== 'kettu') return failed('failed', 'Pages on Cloudflare are always public.')
     try {
       const given = await this.atKettu(page.accountId, (share) => share.setAccess(page.ref, change))
@@ -700,13 +757,14 @@ export class Sharing {
   private async doReconcile(): Promise<void> {
     const artifacts = await this.deps.host.artifacts()
     if (!artifacts) return
+    let changed = this.recordArtifactOwners(artifacts)
     const ids = new Set(artifacts.map((artifact) => artifact.id))
     this.forgetDeclined(ids)
-    let changed = false
     for (const target of SHARING_TARGETS) {
       const owner = this.owner(target)
       if (!owner) continue
       for (const page of pagesToUnpublish(this.store.published(), ids, target, owner.id)) {
+        if (!this.isPageVisible(page)) continue
         try {
           await this.at(target, owner.id, (provider) => provider.unpublish(page.ref))
           this.store.forget(page.id)
@@ -725,7 +783,12 @@ export class Sharing {
     const kept = cloudflare
       ? this.store
           .published()
-          .filter((page) => page.target === 'cloudflare' && page.accountId === cloudflare.id)
+          .filter(
+            (page) =>
+              page.target === 'cloudflare' &&
+              page.accountId === cloudflare.id &&
+              this.isPageVisible(page),
+          )
       : []
     if (cloudflare && kept.length > 0) {
       try {
@@ -863,7 +926,7 @@ export class Sharing {
   private async readFiles(
     id: string,
     version: number,
-  ): Promise<{ files: PageFile[]; version: number }> {
+  ): Promise<{ files: PageFile[]; version: number; ownerAccountId?: string | null }> {
     const found = await this.deps.host.content(id, version)
     if (found.kind === 'not_found') {
       throw new SharingError('not_found', 'The agent host no longer has this version.')
@@ -893,7 +956,11 @@ export class Sharing {
     } catch (error) {
       throw new SharingError('failed', `Could not read the canvas: ${(error as Error).message}`)
     }
-    return { files, version: found.version }
+    return {
+      files,
+      version: found.version,
+      ...(found.ownerAccountId !== undefined ? { ownerAccountId: found.ownerAccountId } : {}),
+    }
   }
 
   /**

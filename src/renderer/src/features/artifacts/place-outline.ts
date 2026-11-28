@@ -16,6 +16,13 @@ const read = new Map<string, ArtifactOutline | null>()
 const asked = new Set<string>()
 const listeners = new Set<() => void>()
 
+/** Clears cached artifact place outlines (e.g. after switching accounts). */
+export function clearPlaceOutlineCache(): void {
+  read.clear()
+  asked.clear()
+  for (const listener of listeners) listener()
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

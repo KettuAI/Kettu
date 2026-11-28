@@ -7,6 +7,7 @@ import { artifactLink, parseArtifactLink } from '@shared/artifact-links'
 import { ARTIFACT_ID, type ArtifactSummary } from '@shared/artifacts'
 import { artifactKind, foldForMatch } from '@renderer/features/artifacts/model'
 import { artifactHost } from '@renderer/lib/host'
+import { useArtifactsStore } from '@renderer/stores/artifacts'
 import {
   readDraftArtifacts,
   writeDraftArtifacts,
@@ -56,7 +57,11 @@ export function toAttachedArtifact(
 }
 
 export function draftArtifactAttachments(draft: string): readonly AttachedArtifact[] {
-  return useAttachedArtifactsStore.getState().byDraft[draft] ?? NONE
+  const items = useAttachedArtifactsStore.getState().byDraft[draft] ?? NONE
+  if (items.length === 0) return items
+  const { hidden } = useArtifactsStore.getState()
+  if (hidden.size === 0) return items
+  return items.filter((item) => !hidden.has(item.id))
 }
 
 /** A composer's attached artifacts, for a component; the same empty list when it has none. */

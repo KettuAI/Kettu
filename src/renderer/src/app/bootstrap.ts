@@ -24,26 +24,38 @@ import {
 import { whenHostHas } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isHosted, isWeb, platform } from '@renderer/lib/platform'
-import { initAccount } from '@renderer/stores/account'
+import { initAccount, useAccountStore } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initDevices } from '@renderer/stores/devices'
 import { initBrowser } from '@renderer/stores/browser'
+import { clearPlaceOutlineCache } from '@renderer/features/artifacts/place-outline'
+import { clearArtifactThumbnailsCache } from '@renderer/features/artifacts/thumbnails'
+import { clearWaitingRepliesCache } from '@renderer/features/artifacts/waiting-replies'
+import {
+  clearArtifactChangesCache,
+  clearArtifactVersionReadsCache,
+} from '@renderer/features/session/entries/artifact-changes'
 import {
   hostRestarted,
   preparedRemoved,
   receivePrepared,
 } from '@renderer/features/session/new-session/prepared'
+import { clearSessionOutputsCache } from '@renderer/features/sidebar/use-outputs'
 import {
   hostAgentChanged,
   hostAgentRemoved,
   receiveSignInLink,
   useAgentsStore,
 } from '@renderer/stores/agents'
+import { clearArtifactViewerState } from '@renderer/stores/artifact-viewer'
 import {
+  artifactsAccountChanged,
   artifactsChanged,
   artifactsHostClosed,
   artifactsHostOpened,
+  onHiddenArtifacts,
   receiveArtifactEvent,
+  refreshLocalArtifacts,
 } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
 import { filesChanged, rewatchFiles } from '@renderer/stores/files'
@@ -102,6 +114,7 @@ import {
   usageChanged,
 } from '@renderer/stores/usage'
 import {
+  closeHiddenArtifacts,
   lastSessionId,
   layoutSessions,
   openArtifact,
@@ -300,6 +313,7 @@ function loadAgents(): Promise<void> {
 export async function loadHostState(): Promise<void> {
   useIdleReleaseStore.getState().reload(null)
   hostLoadOpened(null)
+  refreshLocalArtifacts()
   await Promise.allSettled([
     loadSessionState(),
     loadAgents(),
@@ -438,6 +452,28 @@ export function bootstrap(): Promise<unknown> {
     rewatchFiles(null)
   })
   useViewStore.subscribe(() => showFront())
+  onHiddenArtifacts((hidden) => {
+    closeHiddenArtifacts(hidden)
+    clearArtifactViewerState(hidden)
+  })
+  let seenAccountId: string | null | undefined = undefined
+  useAccountStore.subscribe((state) => {
+    if (state.status === null) return
+    const next = state.status.state === 'signed-in' ? state.status.account.id : null
+    if (seenAccountId === undefined) {
+      seenAccountId = next
+      return
+    }
+    if (next === seenAccountId) return
+    seenAccountId = next
+    clearArtifactChangesCache()
+    clearArtifactThumbnailsCache()
+    clearPlaceOutlineCache()
+    clearWaitingRepliesCache()
+    clearArtifactVersionReadsCache()
+    clearSessionOutputsCache()
+    artifactsAccountChanged()
+  })
   followShownSession()
   followUsageHosts()
   // A project list that fills after launch, as after a failed first read, leaves the launch view.
@@ -516,6 +552,7 @@ export function bootstrap(): Promise<unknown> {
   void takeReturnedMessages()
   // Asked first, so the host reads the threads before the ones the launch opens.
   void removeEmptySessions()
+  refreshLocalArtifacts()
   const sessionState = loadSessionState()
   void loadAgents()
   void loadGitTools()

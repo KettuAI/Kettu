@@ -57,7 +57,9 @@ export type RuntimeFail = (message: string, code: ThreadErrorCode, data?: Artifa
 export function prepareRuntime(db: DatabaseSync) {
   const sql = (text: string): StatementSync => db.prepare(text)
   return {
-    artifact: sql('SELECT id, project, title, head, deleted_at FROM artifacts WHERE id = ?'),
+    artifact: sql(
+      'SELECT id, project, title, head, deleted_at, owner_account_id FROM artifacts WHERE id = ?',
+    ),
     hasVersion: sql('SELECT 1 FROM artifact_versions WHERE artifact_id = ? AND n = ?'),
     declaration: sql(
       'SELECT capabilities, runtime FROM artifact_runtime WHERE artifact_id = ? AND n = ?',
@@ -97,7 +99,8 @@ export function prepareRuntime(db: DatabaseSync) {
     consents: sql(`
       SELECT a.id, a.title, a.project, group_concat(c.capability) AS capabilities
       FROM artifact_consents c JOIN artifacts a ON a.id = c.artifact_id
-      WHERE a.deleted_at IS NULL GROUP BY a.id ORDER BY a.title COLLATE NOCASE, a.id`),
+      WHERE a.deleted_at IS NULL AND (a.owner_account_id IS NULL OR a.owner_account_id = ?)
+      GROUP BY a.id ORDER BY a.title COLLATE NOCASE, a.id`),
   }
 }
 
@@ -155,15 +158,29 @@ export interface RuntimeContext {
   fail: RuntimeFail
 }
 
+function ownerOf(row: Row | undefined): string | null {
+  if (!row || row.owner_account_id === null || row.owner_account_id === undefined) return null
+  return String(row.owner_account_id)
+}
+
+function visibleTo(ownerAccountId: string | null, accountId: string | null): boolean {
+  return ownerAccountId === null || (accountId !== null && ownerAccountId === accountId)
+}
+
 /** The artifact in reach, as for the artifact calls; `live` refuses one in Recently deleted. */
 function artifactIn(
   ctx: RuntimeContext,
   id: string,
   project: string | null,
   live: boolean,
+  accountId: string | null = null,
 ): { project: string; title: string; head: number; deleted: boolean } {
   const row = ctx.sql.artifact.get(id)
-  if (!row || (project !== null && String(row.project) !== project)) {
+  if (
+    !row ||
+    (project !== null && String(row.project) !== project) ||
+    !visibleTo(ownerOf(row), accountId)
+  ) {
     throw ctx.fail(`No artifact ${id}`, 'not_found')
   }
   const deleted = row.deleted_at !== null
@@ -190,9 +207,9 @@ function fromBase(ctx: RuntimeContext, doc: DataDoc | null, baseVersion: number 
 
 function declaration(
   ctx: RuntimeContext,
-  { id, project, version }: RuntimeCalls['declaration']['params'],
+  { id, project, version, accountId }: RuntimeCalls['declaration']['params'],
 ): DeclaredArtifact {
-  const artifact = artifactIn(ctx, id, project, project !== null)
+  const artifact = artifactIn(ctx, id, project, project !== null, accountId ?? null)
   const n = version ?? artifact.head
   if (!ctx.sql.hasVersion.get(id, n)) throw ctx.fail(`${id} has no version ${n}`, 'not_found')
   return {
@@ -207,7 +224,7 @@ function declaration(
 
 function dataPut(ctx: RuntimeContext, params: RuntimeCalls['dataPut']['params']): DataDoc {
   return ctx.transaction(() => {
-    artifactIn(ctx, params.id, params.project, true)
+    artifactIn(ctx, params.id, params.project, true, params.accountId ?? null)
     const row = ctx.sql.doc.get(params.id, params.collection, params.docId)
     const previous = row ? docOf(row) : null
     fromBase(ctx, previous, params.baseVersion)
@@ -249,7 +266,7 @@ function dataDelete(
   params: RuntimeCalls['dataDelete']['params'],
 ): { deleted: boolean } {
   return ctx.transaction(() => {
-    artifactIn(ctx, params.id, params.project, true)
+    artifactIn(ctx, params.id, params.project, true, params.accountId ?? null)
     const row = ctx.sql.doc.get(params.id, params.collection, params.docId)
     fromBase(ctx, row ? docOf(row) : null, params.baseVersion)
     if (!row) return { deleted: false }
@@ -265,7 +282,7 @@ function dataDelete(
 }
 
 function dataQuery(ctx: RuntimeContext, params: RuntimeCalls['dataQuery']['params']): DataDoc[] {
-  artifactIn(ctx, params.id, params.project, true)
+  artifactIn(ctx, params.id, params.project, true, params.accountId ?? null)
   const clauses = ['artifact_id = ?', 'collection = ?']
   const values: SQLInputValue[] = [params.id, params.collection]
   for (const filter of params.where) {
@@ -304,8 +321,8 @@ export function runtimeCall(ctx: RuntimeContext, call: RuntimeCall): unknown {
     case 'declaration':
       return declaration(ctx, call.params)
     case 'dataGet': {
-      const { id, project, collection, docId } = call.params
-      artifactIn(ctx, id, project, true)
+      const { id, project, collection, docId, accountId } = call.params
+      artifactIn(ctx, id, project, true, accountId ?? null)
       const row = sql.doc.get(id, collection, docId)
       return row ? docOf(row) : null
     }
@@ -314,8 +331,8 @@ export function runtimeCall(ctx: RuntimeContext, call: RuntimeCall): unknown {
     case 'dataDelete':
       return dataDelete(ctx, call.params)
     case 'dataList': {
-      const { id, project, collection, after, limit } = call.params
-      artifactIn(ctx, id, project, true)
+      const { id, project, collection, after, limit, accountId } = call.params
+      artifactIn(ctx, id, project, true, accountId ?? null)
       const rows = sql.list.all(id, collection, after ?? '', limit + 1)
       const docs = rows.slice(0, limit).map(docOf)
       return { docs, next: rows.length > limit ? docs[docs.length - 1]!.id : null }
@@ -323,8 +340,8 @@ export function runtimeCall(ctx: RuntimeContext, call: RuntimeCall): unknown {
     case 'dataQuery':
       return dataQuery(ctx, call.params)
     case 'dataCollections': {
-      const { id, project } = call.params
-      artifactIn(ctx, id, project, true)
+      const { id, project, accountId } = call.params
+      artifactIn(ctx, id, project, true, accountId ?? null)
       return {
         collections: sql.collections
           .all(id)
@@ -332,18 +349,26 @@ export function runtimeCall(ctx: RuntimeContext, call: RuntimeCall): unknown {
         bytes: Number(sql.totals.get(id)?.bytes ?? 0),
       }
     }
-    case 'consentOf':
-      return sql.consentOf.all(call.params.id).map((row) => String(row.capability))
+    case 'consentOf': {
+      const row = sql.artifact.get(call.params.id)
+      if (row && !visibleTo(ownerOf(row), call.params.accountId ?? null)) return []
+      return sql.consentOf.all(call.params.id).map((entry) => String(entry.capability))
+    }
     case 'consentGrant': {
-      const { id, capability, at } = call.params
-      artifactIn(ctx, id, null, true)
+      const { id, capability, at, accountId } = call.params
+      artifactIn(ctx, id, null, true, accountId ?? null)
       sql.grant.run(id, capability, at)
       return null
     }
-    case 'consentRevoke':
+    case 'consentRevoke': {
+      const row = sql.artifact.get(call.params.id)
+      if (row && !visibleTo(ownerOf(row), call.params.accountId ?? null)) {
+        throw ctx.fail(`No artifact ${call.params.id}`, 'not_found')
+      }
       return { changed: Number(sql.revoke.run(call.params.id).changes) > 0 }
+    }
     case 'consents':
-      return sql.consents.all().map((row) => ({
+      return sql.consents.all(call.params?.accountId ?? null).map((row) => ({
         id: String(row.id),
         title: String(row.title),
         project: String(row.project),

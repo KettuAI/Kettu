@@ -31,7 +31,13 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { artifactShown, openArtifact, openArtifactTab, useViewStore } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { useChanges, type Changes, type ChangedFrame } from './artifact-changes'
+import {
+  rememberVersionRead,
+  useChanges,
+  versionReads,
+  type Changes,
+  type ChangedFrame,
+} from './artifact-changes'
 import { isLastArtifactEntry, restoredVersionOf } from './artifact-writes'
 
 // A click on a card opens the preview tab, which the next card's click replaces.
@@ -81,24 +87,6 @@ function useStanding(id: string): ArtifactStanding {
     return () => artifactListShown(false)
   }, [])
   return useArtifactsStore((s) => artifactStanding(s, id))
-}
-
-/** Each artifact's latest read of its versions, at the head it was read for, shared by its cards. */
-const MAX_VERSION_READS = 100
-const versionReads = new Map<
-  string,
-  { head: number | null; versions: VersionSummary[] | null; done: Promise<void> }
->()
-
-function rememberVersionRead(
-  id: string,
-  entry: { head: number | null; versions: VersionSummary[] | null; done: Promise<void> },
-): void {
-  versionReads.delete(id)
-  versionReads.set(id, entry)
-  if (versionReads.size > MAX_VERSION_READS) {
-    versionReads.delete(versionReads.keys().next().value!)
-  }
 }
 
 /**
@@ -201,11 +189,12 @@ function EntryCard({
     return session ? hostOfSession(session) : null
   })
   const inView = useInView(card)
+  const accessible = standing === 'live' || standing === 'deleted'
   const versions = useVersions(
     entry.artifactId,
     entry.version,
     summary?.version ?? null,
-    inView && entry.action !== 'delete',
+    inView && accessible && entry.action !== 'delete',
   )
   const version = versions?.find((v) => v.version === entry.version) ?? null
 
@@ -224,7 +213,9 @@ function EntryCard({
   const range = from !== null && entry.version !== null ? { from, to: entry.version } : null
   // The frame the open viewer's pill is at, which this card rings while it shows the artifact.
   const walkAt = useArtifactWalk((s) => (pressed ? (s.at[entry.artifactId] ?? null) : null))
+  if (standing === 'hidden') return null
   const open = () => {
+    if (!accessible) return
     if (!pressed) landArtifact(sessionId, entry.artifactId, { range })
     openArtifactTab(sessionId, entry.artifactId, PREVIEW)
   }
@@ -249,7 +240,9 @@ function EntryCard({
       ref={card}
       className={cn('k-art-room w-full', className)}
       // A double click keeps the tab the first click opened.
-      onDoubleClick={() => openArtifactTab(sessionId, entry.artifactId)}
+      onDoubleClick={() => {
+        if (accessible) openArtifactTab(sessionId, entry.artifactId)
+      }}
     >
       <ArtifactCard
         id={entry.artifactId}

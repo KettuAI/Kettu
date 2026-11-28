@@ -8,6 +8,11 @@ const NONE: SessionOutputs = { artifacts: [], references: [], reply: null, turnM
 // twice shows its card at once.
 const kept = new Map<string, { updatedAt: number; outputs: SessionOutputs }>()
 
+/** Clears cached session output summaries (e.g. after switching accounts). */
+export function clearSessionOutputsCache(): void {
+  kept.clear()
+}
+
 /** What the session made, from its host; null while it is read. */
 export function useOutputs(summary: SessionSummary): SessionOutputs | null {
   const { id, updatedAt } = summary

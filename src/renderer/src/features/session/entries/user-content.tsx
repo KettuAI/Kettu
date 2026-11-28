@@ -30,6 +30,7 @@ import { useDevicesStore } from '@renderer/stores/devices'
 import { useTerminalsStore } from '@renderer/stores/terminals'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
 import { useThreadsStore } from '@renderer/stores/threads'
+import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { openAttachmentPath } from '../attachments/open-attachment'
@@ -86,6 +87,16 @@ export function UserContentView({
   const parsedArtifacts = splitAttachedArtifactsPrompt(rawText)
   const text = parsedArtifacts ? parsedArtifacts.text : rawText
   const attachedArtifacts = parsedArtifacts?.artifacts ?? []
+  const hasAttachedArtifacts = attachedArtifacts.length > 0
+  const hiddenArtifacts = useArtifactsStore((s) => s.hidden)
+  useEffect(() => {
+    if (!hasAttachedArtifacts) return
+    artifactListShown(true)
+    return () => artifactListShown(false)
+  }, [hasAttachedArtifacts])
+  const visibleArtifacts = hasAttachedArtifacts
+    ? attachedArtifacts.filter((artifact) => !hiddenArtifacts.has(artifact.id))
+    : attachedArtifacts
   // A command of Kettu's is no name the session's agent lists, but its text starts with it.
   const ran = content.some((c) => c.type === 'text' && c.command)
   const command = ran ? (/^\/(\S+)/.exec(text)?.[1] ?? null) : null
@@ -110,14 +121,14 @@ export function UserContentView({
           </Clamp>
         </div>
       )}
-      {attachedArtifacts.length > 0 && (
+      {visibleArtifacts.length > 0 && (
         <SessionIdContext value={sessionId ?? null}>
           <div
             role="list"
             aria-label={t('artifacts.sentLabel')}
             className="flex flex-wrap items-center gap-1.5"
           >
-            {attachedArtifacts.map((artifact) => (
+            {visibleArtifacts.map((artifact) => (
               <span
                 key={artifact.id}
                 role="listitem"

@@ -400,8 +400,8 @@ export class ThreadStore {
   }
 
   /** What the stored thread made; null when there is none. */
-  outputs(sessionId: string): Promise<StoredOutputs | null> {
-    return this.read({ op: 'outputs', sessionId }, sessionId)
+  outputs(sessionId: string, accountId: string | null = null): Promise<StoredOutputs | null> {
+    return this.read({ op: 'outputs', sessionId, accountId }, sessionId)
   }
 
   /** Stores outline titles; false when the session has no stored thread to keep them with. */

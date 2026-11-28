@@ -127,7 +127,7 @@ function run(
         })
       return reads.snippets(request.words, request.picks)
     case 'outputs':
-      return db.outputs(request.sessionId)
+      return db.outputs(request.sessionId, request.accountId ?? null)
     case 'setOutlineTitles':
       return db.setOutlineTitles(request.sessionId, request.titles)
     case 'origins':
@@ -171,9 +171,9 @@ function artifact(db: ThreadDb, call: ArtifactCall): unknown {
     case 'delete':
       return db.deleteArtifact(call.params)
     case 'undelete':
-      return db.undeleteArtifact(call.params.id)
+      return db.undeleteArtifact(call.params.id, call.params.accountId ?? null)
     case 'erase':
-      db.eraseArtifact(call.params.id)
+      db.eraseArtifact(call.params.id, call.params.accountId ?? null)
       return null
     case 'purge':
       return db.purgeArtifacts(call.params.before)
@@ -193,5 +193,11 @@ function artifact(db: ThreadDb, call: ArtifactCall): unknown {
       return db.markThreadsSent(call.params)
     case 'reanchor':
       return db.reanchorThreads(call.params)
+    case 'claimOwners':
+      return db.claimArtifactOwners(call.params.owners)
+    case 'hiddenIds':
+      return db.hiddenArtifactIds(call.params.accountId)
+    case 'briefs':
+      return db.artifactBriefs()
   }
 }

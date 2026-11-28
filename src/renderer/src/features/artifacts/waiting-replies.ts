@@ -62,6 +62,13 @@ function pump(): void {
   pump()
 }
 
+/** Clears cached waiting-reply counts (e.g. after switching accounts). */
+export function clearWaitingRepliesCache(): void {
+  counts.clear()
+  waiting.length = 0
+  notify()
+}
+
 /** Queues the ids not read yet; the ones already waiting keep their turn. */
 export function readWaitingReplies(ids: readonly string[]): void {
   watch()

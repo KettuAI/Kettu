@@ -251,6 +251,11 @@ export class Thumbnails {
     this.session = session
   }
 
+  /** Drops in-flight thumbnail dedup entries so an account switch never reuses a prior render. */
+  clearPending(): void {
+    this.making.clear()
+  }
+
   /** `artifact:thumbnail`: the version's image as a `data:` URL, or null when it cannot render. */
   thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null> {
     const key = `${id}\0${version}\0${JSON.stringify(layout)}`
@@ -447,8 +452,10 @@ export class Thumbnails {
    * thumbnails' session; one at a time, with the page images.
    */
   print(id: string, version: number): Promise<Buffer> {
-    const run = this.exports.then(() => {
+    const run = this.exports.then(async () => {
       if (!this.session) throw new Error(t('artifacts.printNotReady'))
+      const found = await this.deps.content(id, version)
+      if (found.kind !== 'found') throw new Error(t('artifacts.notFound'))
       return printViewer(
         this.session,
         `${this.deps.serve(id).replace(/\/$/, '')}${versionUrlPath(version)}`,

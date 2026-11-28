@@ -331,4 +331,9 @@ export class Artifacts {
     }
     this.origins.close(contents, url)
   }
+
+  /** Drops in-flight thumbnail caches after the active Kettu account changes. */
+  accountChanged(): void {
+    this.thumbnails.clearPending()
+  }
 }

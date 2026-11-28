@@ -345,4 +345,9 @@ export class RuntimeRequests {
   mainGone(): void {
     this.portClosed(DESKTOP_CLIENT)
   }
+
+  /** Aborts every in-flight request across all clients (e.g. after an account switch). */
+  abortAll(): void {
+    for (const controller of [...this.open.values()]) controller.abort()
+  }
 }

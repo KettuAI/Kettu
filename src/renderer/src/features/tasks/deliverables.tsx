@@ -1,6 +1,7 @@
 // What a task delivered, as rows of links that open: its pull requests with their state, the
 // documents its steps handed in, and the files and links they handed over.
 
+import { useEffect } from 'react'
 import { File01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { TaskDeliverable } from '@shared/workflow'
@@ -10,6 +11,7 @@ import { nameOf } from '@renderer/features/files/paths'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
+import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
 import { openFile } from '@renderer/stores/files'
 import { openArtifactTab } from '@renderer/stores/view'
 
@@ -43,10 +45,20 @@ export function DeliverableRows({
   local: boolean
   className?: string
 }) {
-  if (deliverables.length === 0) return null
+  const hasDocuments = deliverables.some((item) => item.kind === 'document')
+  useEffect(() => {
+    if (!hasDocuments) return
+    artifactListShown(true)
+    return () => artifactListShown(false)
+  }, [hasDocuments])
+  const hidden = useArtifactsStore((s) => s.hidden)
+  const visible = hasDocuments
+    ? deliverables.filter((item) => item.kind !== 'document' || !hidden.has(item.artifactId))
+    : deliverables
+  if (visible.length === 0) return null
   return (
     <ul className={cn('flex min-w-0 flex-col gap-1.5', className)}>
-      {deliverables.map((item) => (
+      {visible.map((item) => (
         <li key={deliverableKey(item)} className="min-w-0 text-small text-(--thread-text)">
           <Row item={item} panel={panel} projectPath={projectPath} local={local} />
         </li>
@@ -83,7 +95,12 @@ function Row({
           <button
             type="button"
             className="text-left"
-            onClick={() => openArtifactTab(panel, item.artifactId, { preview: true })}
+            onClick={() => {
+              if (artifactStanding(useArtifactsStore.getState(), item.artifactId) === 'hidden') {
+                return
+              }
+              openArtifactTab(panel, item.artifactId, { preview: true })
+            }}
           >
             <span className="thread-link">
               <Glyph

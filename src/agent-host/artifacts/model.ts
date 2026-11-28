@@ -3,6 +3,7 @@
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import type { ArtifactSummary } from '@shared/artifacts'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
+import type { ArtifactBrief } from '@shared/host-control'
 import type { Declaration } from './runtime/calls'
 
 export interface ArtifactRecord {
@@ -16,6 +17,8 @@ export interface ArtifactRecord {
   deletedAt: number | null
   /** The newest version its owner had open in a viewer; null until they open it. */
   seen: number | null
+  /** The Kettu account id owning this artifact, or null for an unowned purely local artifact. */
+  ownerAccountId: string | null
 }
 
 export interface VersionRecord {
@@ -47,17 +50,24 @@ export type ArtifactListing = Omit<StoredSummary, 'editing'>
 
 /**
  * `project` is the reach of a session: the artifacts of its project, outside Recently deleted.
- * Null is the user's, who reaches every artifact.
+ * Null is the user's, who reaches every artifact visible to `accountId`.
  */
 export interface ArtifactCalls {
   /** Newest first; Recently deleted by when each went, and for the user only. */
   list: {
-    params: { project: string } | { project: null; deleted: boolean }
+    params:
+      | { project: string; accountId?: string | null }
+      | { project: null; deleted: boolean; accountId?: string | null }
     result: ArtifactListing[]
   }
   /** The artifact with one of its versions, the latest when `version` is null, and its files. */
   get: {
-    params: { id: string; version: number | null; project: string | null }
+    params: {
+      id: string
+      version: number | null
+      project: string | null
+      accountId?: string | null
+    }
     result: {
       artifact: ArtifactRecord
       version: VersionRecord
@@ -67,7 +77,10 @@ export interface ArtifactCalls {
     }
   }
   /** Newest first. */
-  versions: { params: { id: string; project: string | null }; result: VersionRecord[] }
+  versions: {
+    params: { id: string; project: string | null; accountId?: string | null }
+    result: VersionRecord[]
+  }
   create: {
     params: {
       id: string
@@ -82,6 +95,8 @@ export interface ArtifactCalls {
       declaration?: Declaration
       /** Made from a type, whose content the caller checked. */
       type?: ArtifactTypeInfo | null
+      /** The Kettu account id owning this artifact, or null when created while signed out. */
+      ownerAccountId?: string | null
     }
     result: { version: number }
   }
@@ -93,6 +108,7 @@ export interface ArtifactCalls {
     params: {
       id: string
       project: string | null
+      accountId?: string | null
       baseVersion: number
       changes: FileChange[]
       pages: number
@@ -113,6 +129,7 @@ export interface ArtifactCalls {
     params: {
       id: string
       project: string | null
+      accountId?: string | null
       version: number
       baseVersion: number
       author: string | null
@@ -121,25 +138,32 @@ export interface ArtifactCalls {
     }
     result: { version: number }
   }
-  rename: { params: { id: string; project: string | null; title: string }; result: null }
+  rename: {
+    params: { id: string; project: string | null; accountId?: string | null; title: string }
+    result: null
+  }
   /** Into Recently deleted; an artifact there keeps the time it went, and `changed` is false. */
   delete: {
-    params: { id: string; project: string | null; at: number }
+    params: { id: string; project: string | null; accountId?: string | null; at: number }
     result: { deletedAt: number; changed: boolean }
   }
   /** Back from Recently deleted; false when it was not there. */
-  undelete: { params: { id: string }; result: { changed: boolean } }
+  undelete: { params: { id: string; accountId?: string | null }; result: { changed: boolean } }
   /** Removes an artifact in Recently deleted for good, with the files no other version names. */
-  erase: { params: { id: string }; result: null }
+  erase: { params: { id: string; accountId?: string | null }; result: null }
   /** Removes what was deleted before `before`, then every file no version names. */
   purge: { params: { before: number }; result: { artifacts: number; files: number } }
   /** The artifact's comment threads, oldest first. */
-  threads: { params: { id: string; project: string | null }; result: CommentThread[] }
+  threads: {
+    params: { id: string; project: string | null; accountId?: string | null }
+    result: CommentThread[]
+  }
   /** A new thread with its first comment. */
   addThread: {
     params: {
       id: string
       project: string | null
+      accountId?: string | null
       threadId: string
       anchor: CommentAnchor
       author: CommentAuthor
@@ -152,6 +176,7 @@ export interface ArtifactCalls {
     params: {
       id: string
       project: string | null
+      accountId?: string | null
       threadId: string
       author: CommentAuthor
       body: string
@@ -160,28 +185,60 @@ export interface ArtifactCalls {
     result: CommentThread
   }
   resolve: {
-    params: { id: string; project: string | null; threadId: string; resolved: boolean; at: number }
+    params: {
+      id: string
+      project: string | null
+      accountId?: string | null
+      threadId: string
+      resolved: boolean
+      at: number
+    }
     result: CommentThread
   }
   /** Permanently deletes one comment thread and its comments. */
   deleteThread: {
-    params: { id: string; project: string | null; threadId: string }
+    params: { id: string; project: string | null; accountId?: string | null; threadId: string }
     result: null
   }
   /** The owner had `version` open in a viewer; the newer of it and the record, up to the latest. */
   see: {
-    params: { id: string; version: number }
+    params: { id: string; version: number; accountId?: string | null }
     result: { seen: number | null; changed: boolean }
   }
   /** The user sent the threads to a session. */
   markSent: {
-    params: { id: string; threadIds: string[]; sessionId: string; at: number }
+    params: {
+      id: string
+      threadIds: string[]
+      sessionId: string
+      at: number
+      accountId?: string | null
+    }
     result: null
   }
   /** Anchors found again in a later version, in place of the threads' old ones. */
   reanchor: {
-    params: { id: string; anchors: { threadId: string; anchor: CommentAnchor }[] }
+    params: {
+      id: string
+      anchors: { threadId: string; anchor: CommentAnchor }[]
+      accountId?: string | null
+    }
     result: null
+  }
+  /** Assigns reliable Kettu account ownership to unowned artifacts without overwriting existing owners. */
+  claimOwners: {
+    params: { owners: { id: string; accountId: string }[] }
+    result: { changed: number }
+  }
+  /** Opaque ids of artifacts owned by another account and hidden from `accountId`. */
+  hiddenIds: {
+    params: { accountId: string | null }
+    result: string[]
+  }
+  /** Every artifact in storage with its owner, for main's sharing reconcile without leaking across accounts. */
+  briefs: {
+    params: Record<string, never>
+    result: ArtifactBrief[]
   }
 }
 

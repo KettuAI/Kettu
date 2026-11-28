@@ -67,6 +67,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       ...(message.isPackaged ? {} : { harnessesDir: join(message.userDataPath, 'harnesses') }),
       computer: message.computer ?? null,
       ...(message.userAgent ? { userAgent: message.userAgent } : {}),
+      accountId: message.accountId ?? null,
       send,
       git: (deps) => createGitService(deps),
       mirrorTraffic: !message.isPackaged && process.env.KETTU_ACP_LOG === '1',
@@ -117,6 +118,22 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:market-account':
         withHost((h) => h.setMarketAccount(message.account))
+        break
+      case 'host:account':
+        if (message.accountId === null || typeof message.accountId === 'string') {
+          const { accountId } = message
+          withHost((h) => h.setAccount(accountId))
+        }
+        break
+      case 'host:artifact-claim-owner':
+        if (
+          ARTIFACT_ID.test(String(message.id)) &&
+          typeof message.accountId === 'string' &&
+          message.accountId.length > 0
+        ) {
+          const { id, accountId } = message
+          withHost((h) => h.claimArtifactOwner(id, accountId))
+        }
         break
       case 'market-result':
         if (
