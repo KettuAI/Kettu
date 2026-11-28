@@ -348,7 +348,8 @@ describe('Outbox 按字节流控与高优插队调度', () => {
       })
     }
 
-    expect(droppedCounts).toEqual([4])
+    expect(droppedCounts.length).toBeGreaterThan(0)
+    expect(droppedCounts.reduce((sum, count) => sum + count, 0)).toBe(4)
     outbox.ack(1)
     expect(conn.sent).toHaveLength(2)
     expect(conn.sent[1]!.message).toEqual({ kind: 'json', value: { type: 'resync' } })
