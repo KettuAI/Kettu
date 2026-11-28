@@ -18,6 +18,7 @@ export type HostFeature = keyof Pick<
   | 'ownRelay'
   | 'computerUse'
   | 'dualRelay'
+  | 'relayMeasure'
   | 'diagnostics'
 >
 

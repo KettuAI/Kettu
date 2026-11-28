@@ -1,14 +1,17 @@
 // The relay in Settings › Remote access: its part of the status line, each region of the Kettu
-// relay, and the direct connections' switch, which a relay in use frees.
+// relay, speed testing and manual node selection, and the direct connections' switch.
 
 import { useState } from 'react'
 import { AlertCircleIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { RelayStatus } from '@shared/remote/relay-host'
+import { MAX_REGIONS } from '@shared/remote/relay'
+import type { RelayRegionStatus } from '@shared/remote/relay-host'
 import { localizedRegionName } from '@shared/remote/relay-regions'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn } from '@renderer/stores/account'
 import { useHostScope } from '@renderer/stores/host-scope'
@@ -37,6 +40,34 @@ export function RetryRelay() {
         }}
       >
         {t('remote.status.retry')}
+      </SetButton>
+    </>
+  )
+}
+
+/** Triggers a fresh latency probe across all official relay regions on the host. */
+export function MeasureRelays() {
+  const { api } = useHostScope()
+  const { t } = useTranslation('settings')
+  const canMeasure = useHostHas('relayMeasure') !== false
+  const refresh = useRefresh()
+  const [error, setError] = useState<string | null>(null)
+  if (!canMeasure) return null
+  return (
+    <>
+      <ControlError error={error} />
+      <SetButton
+        size="sm"
+        loading={refresh.phase === 'turning'}
+        icon={<Icon icon={refresh.phase === 'done' ? Tick02Icon : RefreshIcon} size={14} />}
+        onClick={() => {
+          setError(null)
+          void refresh
+            .run(() => api.remote.measureRelays())
+            .catch((e: unknown) => setError(errorMessage(e)))
+        }}
+      >
+        {t('remote.relay.measure')}
       </SetButton>
     </>
   )
@@ -73,38 +104,156 @@ export function DiscoverableSwitch({ label }: { label: string }) {
   )
 }
 
-/** Each relay and how it is doing, while the host signs in to them. */
+/**
+ * Official relay regions with live status, measured RTT, and automatic vs. manual host selection.
+ * Strictly renders localized region labels and never exposes underlying domains, IPs, or ports.
+ */
 export function RelayRegions() {
-  const { useRemoteStore } = useHostScope()
+  const { useRemoteStore, useSettingsStore } = useHostScope()
   const { t, i18n } = useTranslation('settings')
   const relay = useRemoteStore((s) => s.status?.relay)
-  if (relay?.state !== 'on' || relay.relays.length === 0) {
+  const selected = useSettingsStore((s) => s.settings.remote.relayRegions)
+  const canSelect = useHostHas('relayMeasure') !== false
+  const [apply, error] = useApply()
+
+  if (relay?.state !== 'on') {
     return <span className="text-hint text-tertiary">{t('remote.relay.regionsNone')}</span>
   }
+  const nodes: RelayRegionStatus[] =
+    relay.available && relay.available.length > 0
+      ? relay.available
+      : relay.relays.map((entry) => ({ ...entry, rtt: entry.rtt ?? null }))
+  if (nodes.length === 0) {
+    return <span className="text-hint text-tertiary">{t('remote.relay.regionsNone')}</span>
+  }
+
+  const mainNode = nodes.find((entry) => entry.id === 'main')
+  const regionalNodes = nodes.filter((entry) => entry.id !== 'main')
+  const selectable = canSelect && regionalNodes.length > 0
+  const isAutomatic = selected === null || selected.length === 0
+  const maxManual = MAX_REGIONS - 1
+
+  const toggleRegion = (id: string): void => {
+    if (isAutomatic) {
+      apply({ remote: { relayRegions: [id] } })
+      return
+    }
+    if (selected.includes(id)) {
+      const next = selected.filter((item) => item !== id)
+      apply({ remote: { relayRegions: next.length > 0 ? next : null } })
+      return
+    }
+    if (selected.length >= maxManual) return
+    apply({ remote: { relayRegions: [...selected, id] } })
+  }
+
+  const regionLabel = (entry: RelayRegionStatus): string =>
+    entry.id === 'main'
+      ? t('remote.relay.regionMain')
+      : (localizedRegionName(entry.name, entry.names, i18n.language) ??
+        t('remote.relay.region', { id: entry.id.toUpperCase() }))
+
+  if (!selectable) {
+    return (
+      <ul className="k-inset k-list">
+        {nodes.map((entry) => (
+          <li key={entry.url} className="k-list__row">
+            <span className="k-list__name">{regionLabel(entry)}</span>
+            <RegionPill relay={entry} />
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   return (
-    <ul className="k-inset k-list">
-      {relay.relays.map((entry) => (
-        <li key={entry.url} className="k-list__row">
-          <span className="k-list__name">
-            {/* 官方中继仅按当前界面语言展示友好区域名称，不暴露底层域名、IP 或端口 */}
-            {entry.id === 'main'
-              ? t('remote.relay.regionMain')
-              : (localizedRegionName(entry.name, entry.names, i18n.language) ??
-                t('remote.relay.region', { id: entry.id.toUpperCase() }))}
-          </span>
-          <RegionPill relay={entry} />
+    <>
+      <ControlError error={error} wrap />
+      <ul className="k-inset k-list k-relay-nodes">
+        <li className="k-relay-node-item">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isAutomatic}
+            className="k-list__row k-relay-node"
+            data-selected={isAutomatic || undefined}
+            onClick={() => {
+              if (!isAutomatic) apply({ remote: { relayRegions: null } })
+            }}
+          >
+            <span className="k-relay-node__check k-relay-node__check--radio" aria-hidden>
+              {isAutomatic && <Icon icon={Tick02Icon} size={11} />}
+            </span>
+            <span className="k-relay-node__text">
+              <span className="k-list__name">{t('remote.relay.auto.name')}</span>
+              <span className="k-relay-node__sub">{t('remote.relay.auto.description')}</span>
+            </span>
+          </button>
         </li>
-      ))}
-    </ul>
+        {mainNode && (
+          <li key={mainNode.url} className="k-relay-node-item">
+            <div className="k-list__row k-relay-node k-relay-node--static">
+              <span className="k-relay-node__check k-relay-node__check--locked" aria-hidden>
+                <Icon icon={Tick02Icon} size={11} />
+              </span>
+              <span className="k-relay-node__text">
+                <span className="k-list__name">{regionLabel(mainNode)}</span>
+                <span className="k-relay-node__sub">{t('remote.relay.alwaysOn')}</span>
+              </span>
+              <RegionPill relay={mainNode} />
+            </div>
+          </li>
+        )}
+        {regionalNodes.map((entry) => {
+          const checked = !isAutomatic && selected.includes(entry.id)
+          const atLimit = !isAutomatic && !checked && selected.length >= maxManual
+          const button = (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              disabled={atLimit}
+              className="k-list__row k-relay-node"
+              data-selected={checked || undefined}
+              onClick={() => toggleRegion(entry.id)}
+            >
+              <span className="k-relay-node__check" aria-hidden>
+                {checked && <Icon icon={Tick02Icon} size={11} />}
+              </span>
+              <span className="k-list__name">{regionLabel(entry)}</span>
+              <RegionPill relay={entry} />
+            </button>
+          )
+          return (
+            <li key={entry.url} className="k-relay-node-item">
+              {atLimit ? (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="k-relay-node__wrap">{button}</span>} />
+                  <TooltipContent>
+                    {t('remote.relay.maxSelected', { max: maxManual })}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                button
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </>
   )
 }
 
-function RegionPill({ relay }: { relay: RelayStatus }) {
+function RegionPill({ relay }: { relay: RelayRegionStatus }) {
   const { t } = useTranslation('settings')
   const { connection } = relay
+  const rtt = relay.rtt !== null ? t('remote.relay.rtt', { ms: Math.round(relay.rtt) }) : null
+  const withRtt = (label: string): string => (rtt ? `${label} · ${rtt}` : label)
   switch (connection.state) {
     case 'connected':
-      return <Pill tone="success">{t('remote.relay.state.connected')}</Pill>
+      return <Pill tone="success">{withRtt(t('remote.relay.state.connected'))}</Pill>
+    case 'standby':
+      return <Pill>{withRtt(t('remote.relay.state.standby'))}</Pill>
     case 'connecting':
       return <Pill>{t('remote.relay.state.connecting')}</Pill>
     case 'conflict':

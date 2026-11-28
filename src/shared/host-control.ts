@@ -42,7 +42,7 @@ import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
 import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
-import type { RelayConnection, RelayStatus } from './remote/relay-host'
+import type { RelayConnection, RelayRegionStatus, RelayStatus } from './remote/relay-host'
 import type {
   DirectSettings,
   HostSettings,
@@ -716,9 +716,14 @@ export type MainToRemoteHost =
       /** The Ed25519 seed to sign in to the relay with, in base64. Never logged. */
       relayKey?: string
     }
-  // Use the Kettu relay turned on or off, or the owner's own relay chosen, changed or left, which
-  // `own` gives in place of the Kettu relay.
-  | { type: 'remote-host:relay'; enabled: boolean; own?: OwnRelayInit | null }
+  // Use the Kettu relay turned on or off, explicit official regions changed, or the owner's own
+  // relay chosen, changed or left.
+  | {
+      type: 'remote-host:relay'
+      enabled: boolean
+      own?: OwnRelayInit | null
+      regions?: string[] | null
+    }
   // Whether devices of the account find this host on the relay; off ends the open request.
   | { type: 'remote-host:discoverable'; enabled: boolean }
   // An answer to the discovery request `discoveryId`, with the name to add the device under and
@@ -757,6 +762,8 @@ export type MainToRemoteHost =
   | { type: 'remote-host:account'; account: string | null }
   // Retry on the relay: tries every relay now, a conflict included.
   | { type: 'remote-host:relay-retry' }
+  // Measures latency to every official relay region; answered by remote-host:relay-measured.
+  | { type: 'remote-host:relay-measure'; requestId: number }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the
   // connections to other hosts go on. Answered by remote-host:stop-serving once the device files
   // are written for the last time, which main then reads and changes itself.
@@ -864,6 +871,8 @@ export interface RelayInit {
   relayToken?: string | null
   /** The owner's own relay, used in place of the Kettu relay; null or absent for none. */
   own?: OwnRelayInit | null
+  /** Explicit host-selected official relay region ids, or null/absent for automatic selection. */
+  regions?: string[] | null
 }
 
 /** What the remote host reports to main, for Settings. */
@@ -887,6 +896,8 @@ export interface RemoteHostStatus {
   sshPort?: number | null
   /** Each relay the host signs in to and how it is doing; none while it signs in to none. */
   relays: RelayStatus[]
+  /** Every usable official region from the signed list with connection state and measured RTT. */
+  availableRelays?: RelayRegionStatus[]
   /** The owner's own relay while it is the one in use, as its `GET /v1` and pings say. */
   ownRelay?: OwnRelayStatus
 }
@@ -953,6 +964,7 @@ export type RemoteHostToMain =
       params: unknown
     }
   | { type: 'remote-host:events-flushed'; requestId: number }
+  | { type: 'remote-host:relay-measured'; requestId: number }
   | { type: 'remote-host:reset'; requestId: number }
   | { type: 'remote-host:stop-serving'; requestId: number }
   | { type: 'remote-host:stopped' }

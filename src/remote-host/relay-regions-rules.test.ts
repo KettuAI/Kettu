@@ -14,6 +14,10 @@ import type { RelayRegion } from '@shared/remote/relay'
 const answers = vi.hoisted(() => ({
   features: [] as string[],
   posted: [] as { url: string; headers: Record<string, string>; body: unknown }[],
+  signedList: null as unknown,
+  pingRtt: {} as Record<string, number>,
+  pings: [] as string[],
+  onPing: null as ((url: string) => Promise<void> | void) | null,
 }))
 
 vi.mock('./relay-net', () => ({
@@ -22,7 +26,7 @@ vi.mock('./relay-net', () => ({
     url: string,
     request: { method?: string; headers?: Record<string, string>; body?: string },
   ) => {
-    const { pathname } = new URL(url)
+    const { origin, pathname } = new URL(url)
     const reply = (status: number, body: unknown = null) => ({
       status,
       header: (name: string) => (name === 'etag' ? '"42"' : null),
@@ -31,8 +35,12 @@ vi.mock('./relay-net', () => ({
     if (pathname === '/v1') {
       return reply(200, { relay: 'kettu', protocol: 1, regions: [], features: answers.features })
     }
-    if (pathname === '/v1/regions') return reply(200, vectors.regions.signed)
-    if (pathname === '/v1/ping') return reply(204)
+    if (pathname === '/v1/regions') return reply(200, answers.signedList ?? vectors.regions.signed)
+    if (pathname === '/v1/ping') {
+      answers.pings.push(origin)
+      await answers.onPing?.(origin)
+      return reply(204)
+    }
     if (pathname === '/v1/reports' && request.method === 'POST') {
       answers.posted.push({ url, headers: request.headers ?? {}, body: JSON.parse(request.body!) })
       return reply(204)
@@ -58,10 +66,22 @@ const T1 = createPrivateKey({
   type: 'pkcs8',
 })
 
-function signedList(serial: number) {
+function signedList(
+  serial: number,
+  customRegions?: {
+    id: string
+    name: string
+    names?: Record<string, string>
+    url: string
+    pin?: string
+    state: 'active' | 'probe'
+  }[],
+) {
   const body = { v: 1, serial, issuedAt: 1763300000000, place: { country: 'CN', asn: 4134 } }
-  const regions = [{ id: 'main', name: 'Global', url: MAIN, state: 'active' }]
-  const payload = Buffer.from(JSON.stringify({ ...body, regions, stun: [] })).toString('base64url')
+  const list = customRegions ?? [{ id: 'main', name: 'Global', url: MAIN, state: 'active' }]
+  const payload = Buffer.from(JSON.stringify({ ...body, regions: list, stun: [] })).toString(
+    'base64url',
+  )
   const text = Buffer.from(`${vectors.regions.context}${payload}`)
   return { key: 't1', payload, signature: sign(null, text, T1).toString('base64url') }
 }
@@ -69,12 +89,20 @@ function signedList(serial: number) {
 afterEach(async () => {
   vi.useRealTimers()
   answers.posted.length = 0
+  answers.signedList = null
+  answers.pingRtt = {}
+  answers.pings.length = 0
+  answers.onPing = null
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
 })
 
 async function regions(options: {
   features: string[]
   relayToken: string | null
+  device?: boolean
+  selectedRegions?: readonly string[] | null
+  hostLegRtt?: (url: string) => number | null
+  statusChanged?: () => void
   now?: () => number
 }) {
   answers.features = options.features
@@ -87,13 +115,16 @@ async function regions(options: {
     main: MAIN,
     app: 'desktop',
     keys: KEYS,
-    device: false,
+    device: options.device ?? false,
     accessToken: () => 'access-token',
     relayToken: () => relayToken,
     relayOn: () => true,
     plan: (plan) => plans.push(plan),
     hostChanged: () => {},
     timesChanged: () => {},
+    ...(options.selectedRegions !== undefined ? { selectedRegions: options.selectedRegions } : {}),
+    ...(options.hostLegRtt ? { hostLegRtt: options.hostLegRtt } : {}),
+    ...(options.statusChanged ? { statusChanged: options.statusChanged } : {}),
     log: () => {},
     ...(options.now ? { now: options.now } : {}),
   })
@@ -219,5 +250,125 @@ describe('the remote host’s relay regions', () => {
     vi.setSystemTime(new Date(2026, 10, 15, 9))
     await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
     expect(answers.posted).toEqual([])
+  })
+
+  it('measures all regions in host-only (daemon) mode, replans by RTT, supports manual selection, and reports standby regions', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    vi.setSystemTime(new Date(2026, 10, 28, 12))
+
+    const LA = 'https://la-1.relay.kettu.sh'
+    const HK = 'https://hk-1.relay.kettu.sh'
+    const GZ = 'https://gz-1.relay.kettu.sh'
+    const SH = 'https://sh-1.relay.kettu.sh'
+    const PROBE = 'https://probe-1.relay.kettu.sh'
+    answers.signedList = signedList(10, [
+      { id: 'main', name: 'Global', url: MAIN, state: 'active' },
+      {
+        id: 'la-1',
+        name: 'Los Angeles',
+        names: { en: 'Los Angeles', 'zh-CN': '洛杉矶' },
+        url: LA,
+        state: 'active',
+      },
+      {
+        id: 'hk-1',
+        name: 'Hong Kong',
+        names: { en: 'Hong Kong', 'zh-CN': '香港' },
+        url: HK,
+        state: 'active',
+      },
+      {
+        id: 'gz-1',
+        name: 'Guangzhou',
+        names: { en: 'Guangzhou', 'zh-CN': '广州' },
+        url: GZ,
+        state: 'active',
+      },
+      {
+        id: 'sh-1',
+        name: 'Shanghai',
+        names: { en: 'Shanghai', 'zh-CN': '上海' },
+        url: SH,
+        state: 'active',
+      },
+      { id: 'probe-1', name: 'Probe', url: PROBE, state: 'probe' },
+    ])
+
+    const simulatedRtt: Record<string, number> = {
+      [MAIN]: 220,
+      [LA]: 210,
+      [HK]: 150,
+      [GZ]: 28,
+      [SH]: 36,
+      [PROBE]: 10,
+    }
+    answers.onPing = (origin) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, simulatedRtt[origin] ?? 50)
+      })
+
+    let statusChanges = 0
+    const t = await regions({
+      features: ['regions', 'relay-tokens'],
+      relayToken: 'relay-token',
+      device: false,
+      statusChanged: () => {
+        statusChanges++
+      },
+    })
+
+    // Wait for async WebCrypto verification of the signed region list, then advance fake timers
+    // so every concurrent RTT ping settles deterministically.
+    for (let i = 0; i < 50 && !t.regions.source.list; i++) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    expect(t.regions.source.list).not.toBeNull()
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    // Host probes regions even when device === false and replans to the lowest-RTT active regions.
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'gz-1', 'sh-1'])
+    expect(statusChanges).toBeGreaterThan(0)
+
+    // availableRegions merges live connected states/RTTs with standby regions and omits probes.
+    const available = t.regions.availableRegions(
+      [
+        { id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: 224 },
+        { id: 'gz-1', url: GZ, name: 'Guangzhou', connection: { state: 'connected' }, rtt: 30 },
+        { id: 'sh-1', url: SH, name: 'Shanghai', connection: { state: 'connecting' } },
+      ],
+      [
+        { id: 'main', url: MAIN, hostRtt: 224 },
+        { id: 'gz-1', url: GZ, hostRtt: 30 },
+      ],
+    )
+    expect(available.map((r) => ({ id: r.id, state: r.connection.state, rtt: r.rtt }))).toEqual([
+      { id: 'main', state: 'connected', rtt: 224 },
+      { id: 'la-1', state: 'standby', rtt: 210 },
+      { id: 'hk-1', state: 'standby', rtt: 150 },
+      { id: 'gz-1', state: 'connected', rtt: 30 },
+      { id: 'sh-1', state: 'connecting', rtt: 36 },
+    ])
+    expect(available.find((r) => r.id === 'gz-1')?.names).toEqual({
+      en: 'Guangzhou',
+      'zh-CN': '广州',
+    })
+
+    // Manual selection overrides automatic RTT picks and keeps main as baseline.
+    t.regions.setSelectedRegions(['hk-1'])
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1'])
+
+    // Clearing manual selection returns to automatic mode.
+    t.regions.setSelectedRegions(null)
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'gz-1', 'sh-1'])
+
+    // measureNow forces a fresh measurement pass and replans when latencies shift.
+    simulatedRtt[HK] = 15
+    simulatedRtt[GZ] = 120
+    const beforeStatus = statusChanges
+    const measuring = t.regions.measureNow()
+    await vi.advanceTimersByTimeAsync(1_000)
+    await measuring
+    expect(statusChanges).toBeGreaterThan(beforeStatus)
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
   })
 })

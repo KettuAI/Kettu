@@ -10,17 +10,20 @@ import {
   parseRegionNames,
   parseRegionPayload,
   parseRelayPrefer,
+  parseRelayPreference,
   parseRelayRegions,
   rankRegions,
   regionKeys,
   regionOrigin,
+  serializeRelayPreference,
   verifyRegionList,
   type ListedRegion,
   type RegionList,
 } from './relay-regions'
 import { decodeRelayBytes } from './relay'
-import { parseRelayStatuses } from './relay-host'
+import { parseRelayRegionStatuses, parseRelayStatuses } from './relay-host'
 import { RelayStats, localDay, reportBody } from './relay-report'
+import { relayReport } from './status'
 
 const { regions: v } = vectors
 const KEYS = { ...REGION_KEYS, [v.key.id]: v.key.publicKey }
@@ -146,6 +149,143 @@ describe('the regions a host signs in to', () => {
       draining: new Set(['https://hk-1.relay.kettu.sh']),
     })
     expect(picked.map((r) => r.id)).toEqual(['main', 'sh-1'])
+  })
+
+  it('ranks automatic own-list picks by measured hostRtt ascending when proxy GeoIP order is skewed', () => {
+    const own: RegionList = {
+      serial: 1,
+      issuedAt: 1000,
+      place: { country: 'US', asn: null },
+      regions: [
+        region('main', { url: MAIN }),
+        region('la-1'),
+        region('hk-1'),
+        region('sh-1'),
+        region('gz-1'),
+        region('probe-1', { state: 'probe' }),
+      ],
+      stun: [],
+    }
+    const rtts: Record<string, number | null> = {
+      'la-1': 220,
+      'hk-1': 180,
+      'sh-1': 36,
+      'gz-1': 28,
+      'probe-1': 5,
+    }
+    const picked = hostRegions({
+      main: MAIN,
+      own,
+      preferred: [],
+      hostRtt: (r) => rtts[r.id] ?? null,
+    })
+    expect(picked.map((r) => r.id)).toEqual(['main', 'gz-1', 'sh-1'])
+
+    // Known RTTs rank ahead of unmeasured ones; ties preserve list order.
+    const partial: Record<string, number | null> = { 'gz-1': 40 }
+    expect(
+      hostRegions({
+        main: MAIN,
+        own,
+        preferred: [],
+        hostRtt: (r) => partial[r.id] ?? null,
+      }).map((r) => r.id),
+    ).toEqual(['main', 'gz-1', 'la-1'])
+  })
+
+  it('uses explicit selected regions in manual mode without device preference overrides', () => {
+    const own: RegionList = {
+      serial: 1,
+      issuedAt: 1000,
+      place: { country: 'CN', asn: 4134 },
+      regions: [
+        region('main', { url: MAIN }),
+        region('bj-1'),
+        region('sh-1'),
+        region('gz-1'),
+        region('hk-1'),
+        region('probe-1', { state: 'probe' }),
+        ...['r1', 'r2', 'r3', 'r4', 'r5', 'r6'].map((id) => region(id)),
+      ],
+      stun: [],
+    }
+    const manual = hostRegions({
+      main: MAIN,
+      own,
+      preferred: [region('hk-1'), region('bj-1')],
+      draining: new Set(['https://bj-1.relay.kettu.sh']),
+      hostRtt: (r) => (r.id === 'hk-1' ? 10 : 90),
+      selected: ['main', 'gz-1', 'bj-1', 'probe-1', 'missing', 'sh-1', 'gz-1'],
+    })
+    expect(manual.map((r) => r.id)).toEqual(['main', 'gz-1', 'sh-1'])
+
+    // Caps manual selection at MAX_REGIONS (8 total including main).
+    const capped = hostRegions({
+      main: MAIN,
+      own,
+      preferred: [],
+      selected: ['gz-1', 'sh-1', 'hk-1', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6'],
+    })
+    expect(capped.map((r) => r.id)).toEqual([
+      'main',
+      'gz-1',
+      'sh-1',
+      'hk-1',
+      'r1',
+      'r2',
+      'r3',
+      'r4',
+    ])
+
+    // Empty or null selection falls back to automatic mode.
+    expect(
+      hostRegions({
+        main: MAIN,
+        own,
+        preferred: [],
+        hostRtt: (r) => (r.id === 'gz-1' ? 15 : r.id === 'sh-1' ? 20 : 100),
+        selected: [],
+      }).map((r) => r.id),
+    ).toEqual(['main', 'gz-1', 'sh-1'])
+  })
+})
+
+describe('RelayPreference parsing and serialization', () => {
+  it('parses and serializes automatic, official, and own relay preferences', () => {
+    expect(parseRelayPreference('auto')).toEqual({ kind: 'automatic' })
+    expect(parseRelayPreference('')).toEqual({ kind: 'automatic' })
+    expect(parseRelayPreference(null)).toEqual({ kind: 'automatic' })
+    expect(parseRelayPreference(42)).toEqual({ kind: 'automatic' })
+
+    expect(parseRelayPreference('official:gz-1')).toEqual({ kind: 'official', id: 'gz-1' })
+    expect(parseRelayPreference('official:main')).toEqual({ kind: 'official', id: 'main' })
+    expect(parseRelayPreference('official:BAD_ID')).toEqual({ kind: 'automatic' })
+    expect(parseRelayPreference('official:')).toEqual({ kind: 'automatic' })
+
+    expect(parseRelayPreference('own:https://relay.example.com')).toEqual({
+      kind: 'own',
+      origin: 'https://relay.example.com',
+    })
+    expect(parseRelayPreference('own:https://relay.example.com:8443/')).toEqual({
+      kind: 'own',
+      origin: 'https://relay.example.com:8443',
+    })
+    expect(parseRelayPreference('own:https://relay.example.com/extra')).toEqual({
+      kind: 'automatic',
+    })
+    expect(parseRelayPreference('own:https://user:pass@relay.example.com')).toEqual({
+      kind: 'automatic',
+    })
+    expect(parseRelayPreference('own:ftp://relay.example.com')).toEqual({ kind: 'automatic' })
+    expect(parseRelayPreference('unknown:gz-1')).toEqual({ kind: 'automatic' })
+
+    expect(serializeRelayPreference({ kind: 'automatic' })).toBe('auto')
+    expect(serializeRelayPreference({ kind: 'official', id: 'sh-1' })).toBe('official:sh-1')
+    expect(serializeRelayPreference({ kind: 'official', id: 'INVALID' })).toBe('auto')
+    expect(serializeRelayPreference({ kind: 'own', origin: 'https://relay.example.com/' })).toBe(
+      'own:https://relay.example.com',
+    )
+    expect(serializeRelayPreference({ kind: 'own', origin: 'not a url' })).toBe('auto')
   })
 })
 
@@ -286,6 +426,55 @@ describe('parseRelayStatuses', () => {
         },
       ]),
     ).toBeNull()
+  })
+
+  it('preserves optional measured rtt and parses standby RelayRegionStatus lists', () => {
+    expect(
+      parseRelayStatuses([{ id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: 42 }]),
+    ).toEqual([{ id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: 42 }])
+    expect(
+      parseRelayStatuses([{ id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: -1 }]),
+    ).toBeNull()
+
+    const available = [
+      { id: 'main', url: MAIN, connection: { state: 'connected' as const }, rtt: 180 },
+      {
+        id: 'gz-1',
+        url: 'https://gz-1.relay.kettu.sh',
+        name: 'Guangzhou',
+        names: { en: 'Guangzhou', 'zh-CN': '广州' },
+        connection: { state: 'standby' as const },
+        rtt: 28,
+      },
+    ]
+    expect(parseRelayRegionStatuses(available)).toEqual(available)
+    expect(
+      parseRelayRegionStatuses([
+        {
+          id: 'gz-1',
+          url: 'https://gz-1.relay.kettu.sh',
+          connection: { state: 'standby' },
+          rtt: 'bad',
+        },
+      ]),
+    ).toBeNull()
+
+    const report = relayReport({
+      official: true,
+      ownEnabled: false,
+      cloud: true,
+      signedIn: true,
+      relays: [{ id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: 180 }],
+      available,
+      own: null,
+      ownStatus: null,
+      keyEnd: null,
+    })
+    expect(report).toEqual({
+      state: 'on',
+      relays: [{ id: 'main', url: MAIN, connection: { state: 'connected' }, rtt: 180 }],
+      available,
+    })
   })
 })
 

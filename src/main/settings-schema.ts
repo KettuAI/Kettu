@@ -65,6 +65,8 @@ import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shar
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { isRelayPin, ownRelayProblem } from '@shared/remote/own-relay'
+import { MAX_REGIONS } from '@shared/remote/relay'
+import { isRegionId } from '@shared/remote/relay-regions'
 import { isStartedLimit, STARTED_LIMIT_MAX, STARTED_LIMIT_MIN } from '@shared/started-sessions'
 import { THEME_ID } from '@shared/themes'
 import { WORKING_STEP_LIMITS } from '@shared/workflow'
@@ -1150,6 +1152,37 @@ export function withOwnRelay(current: SettingsFile, own: OwnRelaySettings): Sett
   return next
 }
 
+/** Maximum number of explicit regional relays a host may select alongside the main relay. */
+const MAX_SELECTED_RELAY_REGIONS = MAX_REGIONS - 1
+
+/** Deduplicates explicit region ids, excludes `'main'`, and normalizes an empty list to `null`. */
+function normalizeRelayRegions(ids: readonly string[]): string[] | null {
+  const unique: string[] = []
+  for (const id of ids) {
+    if (id === 'main' || unique.includes(id)) continue
+    unique.push(id)
+  }
+  return unique.length > 0 ? unique : null
+}
+
+/** Validates `remote.relayRegions`: `null` (automatic) or up to `MAX_REGIONS - 1` valid region ids. */
+function checkRelayRegions(value: unknown, path: string): string | null {
+  if (value === null) return null
+  if (!Array.isArray(value)) return `"${path}" must be null or a list of relay region ids`
+  if (value.length > MAX_REGIONS * 2) {
+    return `"${path}" may hold at most ${MAX_SELECTED_RELAY_REGIONS} relay regions`
+  }
+  const unique = new Set<string>()
+  for (const entry of value) {
+    if (!isRegionId(entry)) return `"${path}" must hold valid relay region ids`
+    if (entry !== 'main') unique.add(entry)
+  }
+  if (unique.size > MAX_SELECTED_RELAY_REGIONS) {
+    return `"${path}" may hold at most ${MAX_SELECTED_RELAY_REGIONS} relay regions`
+  }
+  return null
+}
+
 /** `remote` in a patch. */
 function checkRemote(value: unknown, problems: string[]): void {
   if (!isRecord(value)) {
@@ -1161,6 +1194,9 @@ function checkRemote(value: unknown, problems: string[]): void {
       if (typeof fieldValue !== 'boolean' && !RELAY_CHOICES.includes(fieldValue as RelayChoice)) {
         problems.push('"remote.relay" must be a boolean or "kettu", "own", "off"')
       }
+    } else if (key === 'relayRegions') {
+      const problem = checkRelayRegions(fieldValue, 'remote.relayRegions')
+      if (problem) problems.push(problem)
     } else if (
       key === 'enabled' ||
       key === 'name' ||
@@ -1456,7 +1492,8 @@ export function mergeSettings(
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct, terminal, relay, ownRelayEnabled, discoverable } = patch.remote
+    const { enabled, name, direct, terminal, relay, relayRegions, ownRelayEnabled, discoverable } =
+      patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
@@ -1471,6 +1508,9 @@ export function mergeSettings(
         next.remote.relay = relay === 'kettu'
         next.remote.ownRelayEnabled = relay === 'own'
       }
+    }
+    if (relayRegions !== undefined) {
+      next.remote.relayRegions = relayRegions === null ? null : normalizeRelayRegions(relayRegions)
     }
     if (ownRelayEnabled !== undefined) {
       // Only an own relay that passed its check has an address to turn on.
@@ -1866,6 +1906,10 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
       legacyChoice = raw.relay as RelayChoice
       remote.relay = legacyChoice === 'kettu'
     })
+  read(raw.relayRegions, 'remote.relayRegions', checkRelayRegions, () => {
+    remote.relayRegions =
+      raw.relayRegions === null ? null : normalizeRelayRegions(raw.relayRegions as string[])
+  })
   read(raw.ownRelay, 'remote.ownRelay', isOwnRelaySettings, () => {
     remote.ownRelay = raw.ownRelay as OwnRelaySettings | null
   })

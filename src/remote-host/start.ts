@@ -173,6 +173,7 @@ export function startRemoteHost(
   // the push gateway takes; with the relay token the relays get in its place once they take them.
   let relayUrl: string | null = null
   let relayEnabled = false
+  let relayRegions: string[] | null = null
   let relayToken: string | null = null
   let relayOnlyToken: string | null = null
   /** What the relays get: the relay token, or the access token where they take no other. */
@@ -288,28 +289,36 @@ export function startRemoteHost(
       relay: onRelay,
       send: (codeId, state) => send({ type: 'remote-host:pairing', codeId, pairing: state }),
     })
-    const status = (): RemoteHostStatus => ({
-      publicKey,
-      plainTextKey: options.plainTextKey,
-      devices: devices.list(),
-      online: server.online(),
-      refused: server.refused,
-      direct: direct.status,
-      ...(loopback ? { sshPort: loopback.port } : {}),
-      relays: relay.current && relayEnabled && relayCredential() ? relay.current.status : [],
-      ...(ownRelay && ownSwitch.current
-        ? {
-            ownRelay: {
-              version: ownInfo?.version ?? null,
-              web: ownInfo?.web ?? false,
-              rtt: ownSwitch.current.legs()[0]?.hostRtt ?? null,
-              ...(ownSwitch.current.status[0]?.connection
-                ? { connection: ownSwitch.current.status[0].connection }
-                : {}),
-            },
-          }
-        : {}),
-    })
+    const status = (): RemoteHostStatus => {
+      const officialActive = Boolean(relay.current && relayEnabled && relayCredential())
+      const officialRelays = officialActive ? relay.current!.status : []
+      const officialLegs = officialActive ? relay.current!.legs() : []
+      return {
+        publicKey,
+        plainTextKey: options.plainTextKey,
+        devices: devices.list(),
+        online: server.online(),
+        refused: server.refused,
+        direct: direct.status,
+        ...(loopback ? { sshPort: loopback.port } : {}),
+        relays: officialRelays,
+        ...(officialActive && regions
+          ? { availableRelays: regions.availableRegions(officialRelays, officialLegs) }
+          : {}),
+        ...(ownRelay && ownSwitch.current
+          ? {
+              ownRelay: {
+                version: ownInfo?.version ?? null,
+                web: ownInfo?.web ?? false,
+                rtt: ownSwitch.current.legs()[0]?.hostRtt ?? null,
+                ...(ownSwitch.current.status[0]?.connection
+                  ? { connection: ownSwitch.current.status[0].connection }
+                  : {}),
+              },
+            }
+          : {}),
+      }
+    }
     let ready = false
     const changed = (): void => {
       if (ready) send({ type: 'remote-host:status', status: status() })
@@ -403,7 +412,10 @@ export function startRemoteHost(
         failed: () => regions?.regionFailed(),
         connected: (region, ok) => regions?.hostConnected(region, ok),
         measured: (region, rtt) => regions?.hostMeasured(region, rtt),
-        legsChanged: () => server.regionsChanged(),
+        legsChanged: () => {
+          changed()
+          server.regionsChanged()
+        },
         log,
       })
       host.setPlan(regions?.plan() ?? null)
@@ -674,6 +686,9 @@ export function startRemoteHost(
       relayUrl = message.relay.url
       ownRelay = ownOf(message.relay.own)
       relayEnabled = message.relay.enabled === true
+      relayRegions = Array.isArray(message.relay.regions)
+        ? message.relay.regions.filter((id): id is string => typeof id === 'string')
+        : null
       relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
       const relayOnly = message.relay.relayToken
       relayOnlyToken = relayToken && typeof relayOnly === 'string' ? relayOnly : null
@@ -716,6 +731,10 @@ export function startRemoteHost(
         plan: (plan) => live?.relay.current?.setPlan(plan),
         hostChanged: () => live?.server.regionsChanged(),
         timesChanged: (prefer) => client?.regionsChanged(prefer),
+        selectedRegions: relayRegions,
+        hostLegRtt: (url) =>
+          live?.relay.current?.legs().find((leg) => leg.url === url)?.hostRtt ?? null,
+        statusChanged: () => live?.server.options.changed(),
         log,
       })
     } catch (error) {
@@ -833,6 +852,12 @@ export function startRemoteHost(
         relayEnabled = message.enabled === true
         if (own !== ownRelay) ownInfo = null
         ownRelay = own
+        if (message.regions !== undefined) {
+          relayRegions = Array.isArray(message.regions)
+            ? message.regions.filter((id): id is string => typeof id === 'string')
+            : null
+          regions?.setSelectedRegions(relayRegions)
+        }
         regions?.update()
         withServing(applyRelay)
         break
@@ -913,6 +938,20 @@ export function startRemoteHost(
           ownSwitch.current?.retry()
         })
         break
+      case 'remote-host:relay-measure': {
+        const { requestId } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const done = (): void => send({ type: 'remote-host:relay-measured', requestId })
+        const started = withRunning(async () => {
+          try {
+            await regions?.measureNow()
+          } finally {
+            done()
+          }
+        })
+        if (!started) done()
+        break
+      }
       case 'remote-host:terminal': {
         const allowed = message.allowed === true
         terminal = allowed

@@ -2346,14 +2346,23 @@
       "relay": "中继"
     },
     "relay": {
-      "keywords": "中继 云 远程 任何地方 区域 账号 自建 自己的中继 服务器 访问密钥 relay",
+      "keywords": "中继 云 远程 任何地方 区域 节点 延迟 测速 账号 自建 自己的中继 服务器 访问密钥 relay",
       "regions": "中继区域",
-      "regionsDescription": "同时登录每一个，设备用最先接上的那个。",
+      "regionsDescription": "默认登录主中继并按实测延迟自动选择最快的区域，也可以在下方手动指定节点。",
       "regionsNone": "登录中继后显示。",
       "regionMain": "主中继",
       "region": "区域 {{id}}",
+      "measure": "测速",
+      "alwaysOn": "始终连接",
+      "rtt": "{{ms}} ms",
+      "maxSelected": "除主中继外最多可选择 {{max}} 个区域",
+      "auto": {
+        "name": "自动选择",
+        "description": "按实测延迟自动选择最快的区域"
+      },
       "state": {
         "connected": "已连接",
+        "standby": "待命",
         "connecting": "正在连接",
         "conflict": "身份被占用",
         "refused": "被拒绝",

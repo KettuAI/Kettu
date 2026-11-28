@@ -826,6 +826,7 @@ async function start(): Promise<void> {
         cloud: cloudOn(),
         signedIn: signedIn(),
         relays: status?.relays ?? [],
+        ...(status?.availableRelays ? { available: status.availableRelays } : {}),
         own: settings.get().remote.ownRelay,
         ownStatus: status?.ownRelay ?? null,
         keyEnd: accessKeyEnd(ownRelayKey),
@@ -1002,7 +1003,10 @@ async function start(): Promise<void> {
     newRelayKey: () => newRelayKey(userDataPath, identityCipher),
     relayUrl,
     pushUrl,
-    relay: () => relayChoiceInit(settings.get().remote, cloudOn(), ownRelayKey),
+    relay: () => ({
+      ...relayChoiceInit(settings.get().remote, cloudOn(), ownRelayKey),
+      regions: settings.get().remote.relayRegions,
+    }),
     useOwnRelay: (input) =>
       useOwnRelay(input, {
         key: () => ownRelayKey,
@@ -1304,6 +1308,7 @@ async function start(): Promise<void> {
       remoteReset: true,
       ownRelay: true,
       dualRelay: true,
+      relayMeasure: true,
       thumbnails: true,
       partThumbnails: true,
       pinnedModels: true,

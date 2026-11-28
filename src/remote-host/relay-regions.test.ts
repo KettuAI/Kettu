@@ -96,6 +96,7 @@ describe('a host on the relay regions', () => {
     expect([...t.relays.pins.keys()].every((url) => url.includes('203.0.113.7'))).toBe(true)
     // The first ping goes out as each signs in, for the host's leg.
     await expect.poll(() => t.relay.legs().map((leg) => leg.hostRtt)).toEqual([7, 7, 7])
+    expect(t.relay.status.map((r) => r.rtt)).toEqual([7, 7, 7])
   })
 
   it('节点仅更改展示名称时直接更新状态而不重建连接', async () => {

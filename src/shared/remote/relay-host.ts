@@ -29,7 +29,13 @@ import {
   type RelayRefusal,
   type RelayRegion,
 } from './relay'
-import { DRAINED_MS, isRegionName, parseRegionNames, sameRegionNames } from './relay-regions'
+import {
+  DRAINED_MS,
+  MAX_LISTED_REGIONS,
+  isRegionName,
+  parseRegionNames,
+  sameRegionNames,
+} from './relay-regions'
 
 /** Why the last try on a relay ended. */
 export type RelayHostError =
@@ -52,7 +58,20 @@ export type RelayConnection =
   /** Refused the key or the token, or too many connections; tried again later. */
   | { state: 'refused'; error: RelayHostError }
 
-export type RelayStatus = RelayRegion & { connection: RelayConnection }
+export type RelayStatus = RelayRegion & {
+  connection: RelayConnection
+  /** Host-side round trip in milliseconds, when measured. */
+  rtt?: number | null
+}
+
+/** Connection state of a listed relay region, including regions kept on standby. */
+export type RelayRegionConnection = RelayConnection | { state: 'standby' }
+
+/** An available official relay region with its live connection state and host-measured RTT. */
+export type RelayRegionStatus = RelayRegion & {
+  connection: RelayRegionConnection
+  rtt: number | null
+}
 
 export interface RelayHostTimings {
   /** The first wait after a failure, doubling up to `maxRetryMs`. */
@@ -547,7 +566,11 @@ export class RelayHost {
 
   /** The relays, in order, each with how it is doing. */
   get status(): RelayStatus[] {
-    return this.controls.map(({ region, connection }) => ({ ...region, connection }))
+    return this.controls.map(({ region, connection, rtt }) => ({
+      ...region,
+      connection,
+      ...(rtt !== null ? { rtt } : {}),
+    }))
   }
 
   /** The relays in order, for welcomes and pairing codes. */
@@ -740,13 +763,16 @@ const ERRORS: readonly string[] = [
   'no_answer',
 ]
 
+const isValidRtt = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 60_000
+
 /** The relays as the remote host reports them, checked where they cross a process; null if not. */
 export function parseRelayStatuses(value: unknown): RelayStatus[] | null {
   if (!Array.isArray(value) || value.length > MAX_REGIONS) return null
   const kept: RelayStatus[] = []
   for (const entry of value) {
     if (typeof entry !== 'object' || entry === null) return null
-    const { id, url, name, names, connection } = entry as Record<string, unknown>
+    const { id, url, name, names, connection, rtt } = entry as Record<string, unknown>
     const { state, error } = (connection ?? {}) as Record<string, unknown>
     if (typeof id !== 'string' || id.length > 32 || typeof url !== 'string') return null
     if (name !== undefined && !isRegionName(name)) return null
@@ -755,12 +781,44 @@ export function parseRelayStatuses(value: unknown): RelayStatus[] | null {
     if (relayOrigin(url) !== url || !CONNECTIONS.includes(state as string)) return null
     const failed = state === 'retrying' || state === 'refused'
     if (failed && !ERRORS.includes(error as string)) return null
+    if (rtt !== undefined && rtt !== null && !isValidRtt(rtt)) return null
     kept.push({
       id,
       url,
       ...(name !== undefined ? { name } : {}),
       ...(parsedNames ? { names: parsedNames } : {}),
       connection: (failed ? { state, error } : { state }) as RelayConnection,
+      ...(rtt !== undefined ? { rtt: rtt as number | null } : {}),
+    })
+  }
+  return kept
+}
+
+const REGION_CONNECTIONS: readonly string[] = [...CONNECTIONS, 'standby']
+
+/** Available relay regions as the remote host reports them across processes; null if invalid. */
+export function parseRelayRegionStatuses(value: unknown): RelayRegionStatus[] | null {
+  if (!Array.isArray(value) || value.length > MAX_LISTED_REGIONS + 1) return null
+  const kept: RelayRegionStatus[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) return null
+    const { id, url, name, names, connection, rtt } = entry as Record<string, unknown>
+    const { state, error } = (connection ?? {}) as Record<string, unknown>
+    if (typeof id !== 'string' || id.length > 32 || typeof url !== 'string') return null
+    if (name !== undefined && !isRegionName(name)) return null
+    const parsedNames = parseRegionNames(names)
+    if (parsedNames === null) return null
+    if (relayOrigin(url) !== url || !REGION_CONNECTIONS.includes(state as string)) return null
+    const failed = state === 'retrying' || state === 'refused'
+    if (failed && !ERRORS.includes(error as string)) return null
+    if (rtt !== null && !isValidRtt(rtt)) return null
+    kept.push({
+      id,
+      url,
+      ...(name !== undefined ? { name } : {}),
+      ...(parsedNames ? { names: parsedNames } : {}),
+      connection: (failed ? { state, error } : { state }) as RelayRegionConnection,
+      rtt,
     })
   }
   return kept

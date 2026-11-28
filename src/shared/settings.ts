@@ -157,6 +157,8 @@ export interface SettingsFile {
     terminal: boolean // devices may use this computer's terminals, which run any command
     // Whether the official Kettu relay is enabled while signed in to a Kettu account.
     relay: boolean
+    // Host-selected official relay region ids; null picks automatically by measured latency.
+    relayRegions: string[] | null
     // Whether the owner's own relay is enabled alongside or instead of the Kettu relay.
     ownRelayEnabled: boolean
     // The owner's own relay, kept while turned off; its access key is kept apart, like the host's
@@ -425,6 +427,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     direct: { enabled: true, port: null, addresses: [] },
     terminal: false,
     relay: true,
+    relayRegions: null,
     ownRelayEnabled: false,
     ownRelay: null,
     discoverable: true,
@@ -524,6 +527,8 @@ export interface SettingsPatch {
     terminal?: boolean
     // Boolean switches the official relay independently; legacy choice strings remain accepted.
     relay?: RelayChoice | boolean
+    // Explicit official relay region ids for the host, or null for automatic selection.
+    relayRegions?: string[] | null
     // Enables or disables the saved own relay without touching the official relay toggle.
     ownRelayEnabled?: boolean
     discoverable?: boolean

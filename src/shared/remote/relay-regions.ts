@@ -91,6 +91,62 @@ export interface RegionList {
 }
 
 const REGION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
+
+/** Whether `value` is a valid official relay region identifier. */
+export const isRegionId = (value: unknown): value is string =>
+  typeof value === 'string' && REGION_ID.test(value)
+
+/**
+ * Cross-platform relay preference model shared by desktop, web, and mobile clients.
+ * Serialized as `'auto'`, `'official:<id>'`, or `'own:<origin>'`.
+ */
+export type RelayPreference =
+  { kind: 'automatic' } | { kind: 'official'; id: string } | { kind: 'own'; origin: string }
+
+function parseOwnPreferenceOrigin(raw: string): string | null {
+  const origin = relayOrigin(raw)
+  if (!origin) return null
+  const parsed = URL.parse(raw)
+  if (
+    !parsed ||
+    (parsed.pathname !== '/' && parsed.pathname !== '') ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    return null
+  }
+  return origin
+}
+
+/** Parses a serialized relay preference (`'auto'`, `'official:<id>'`, `'own:<origin>'`). */
+export function parseRelayPreference(raw: unknown): RelayPreference {
+  if (typeof raw !== 'string') return { kind: 'automatic' }
+  const value = raw.trim()
+  if (value === '' || value === 'auto') return { kind: 'automatic' }
+  if (value.startsWith('official:')) {
+    const id = value.slice('official:'.length)
+    return isRegionId(id) ? { kind: 'official', id } : { kind: 'automatic' }
+  }
+  if (value.startsWith('own:')) {
+    const origin = parseOwnPreferenceOrigin(value.slice('own:'.length))
+    return origin ? { kind: 'own', origin } : { kind: 'automatic' }
+  }
+  return { kind: 'automatic' }
+}
+
+/** Serializes a relay preference into its canonical cross-platform string representation. */
+export function serializeRelayPreference(pref: RelayPreference): string {
+  switch (pref.kind) {
+    case 'automatic':
+      return 'auto'
+    case 'official':
+      return isRegionId(pref.id) ? `official:${pref.id}` : 'auto'
+    case 'own': {
+      const origin = parseOwnPreferenceOrigin(pref.origin)
+      return origin ? `own:${origin}` : 'auto'
+    }
+  }
+}
 const COUNTRY = /^[A-Z]{2}$/
 const KEY_ID = /^[a-z0-9][a-z0-9-]{0,15}$/
 const BASE64URL = /^[A-Za-z0-9_-]+$/
@@ -364,22 +420,53 @@ export interface HostRegionsInput {
   preferred: readonly ListedRegion[]
   /** Regions that said they drain, by origin: never signed in to again until the list changes. */
   draining?: ReadonlySet<string>
+  /** Measured host-to-region round trip in milliseconds, used to rank automatic region picks. */
+  hostRtt?: (region: ListedRegion) => number | null
+  /** Explicit host-selected region ids; when non-empty, overrides automatic selection. */
+  selected?: readonly string[] | null
 }
 
 /**
- * Where a host signs in: the main relay always, then the first OWN_REGIONS active regions of its
- * own list, then those its devices prefer, at most MAX_REGIONS in all.
+ * Where a host signs in: the main relay always, then either the explicitly selected active regions
+ * in order (manual mode, up to MAX_REGIONS total), or the fastest OWN_REGIONS active regions of
+ * its own list by measured hostRtt (falling back to list order) followed by those its devices
+ * prefer, at most MAX_REGIONS in all.
  */
 export function hostRegions(input: HostRegionsInput): RelayRegion[] {
-  const { main, own, preferred, draining } = input
+  const { main, own, preferred, draining, hostRtt, selected } = input
   const listedMain = own.regions.find((region) => region.url === main)
   const picked: RelayRegion[] = [{ id: listedMain?.id ?? 'main', url: main }]
   const usable = (region: ListedRegion): boolean =>
     region.state === 'active' &&
     !draining?.has(region.url) &&
     !picked.some((kept) => kept.url === region.url || kept.id === region.id)
+  if (selected && selected.length > 0) {
+    for (const id of selected) {
+      if (picked.length === MAX_REGIONS) break
+      const region = own.regions.find((entry) => entry.id === id)
+      if (region && usable(region)) picked.push(asRelay(region))
+    }
+    return picked
+  }
+  const ownCandidates = own.regions
+    .map((region, order) => ({
+      region,
+      order,
+      rtt: hostRtt ? hostRtt(region) : null,
+    }))
+    .filter(({ region }) => usable(region))
+  if (hostRtt) {
+    ownCandidates.sort((a, b) => {
+      const x = a.rtt
+      const y = b.rtt
+      if (x !== null && y !== null && x !== y) return x - y
+      if (x === null && y !== null) return 1
+      if (x !== null && y === null) return -1
+      return a.order - b.order
+    })
+  }
   let fromOwn = 0
-  for (const region of own.regions) {
+  for (const { region } of ownCandidates) {
     if (fromOwn === OWN_REGIONS) break
     if (!usable(region)) continue
     picked.push(asRelay(region))

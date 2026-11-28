@@ -1146,7 +1146,69 @@ describe('the relay a host uses', () => {
       relay: true,
       ownRelayEnabled: false,
       ownRelay: null,
+      relayRegions: null,
     })
+  })
+
+  it('validates, deduplicates, normalizes, and forwards remote.relayRegions with legacy fallback', async () => {
+    // Missing field in older settings.json defaults to null (automatic) without problems.
+    await save({ version: 1, remote: { relay: true } })
+    expect((await SettingsStore.load(dir)).get().remote.relayRegions).toBeNull()
+
+    // Valid region list is deduplicated and strips 'main'.
+    await save({ version: 1, remote: { relayRegions: ['main', 'gz-1', 'sh-1', 'gz-1'] } })
+    expect((await SettingsStore.load(dir)).get().remote.relayRegions).toEqual(['gz-1', 'sh-1'])
+
+    // Empty array or ['main'] normalizes to null (automatic).
+    await save({ version: 1, remote: { relayRegions: ['main'] } })
+    expect((await SettingsStore.load(dir)).get().remote.relayRegions).toBeNull()
+
+    const before = structuredClone(DEFAULT_SETTINGS)
+    const manual = mergeSettings(
+      before,
+      validateSettingsPatch({ remote: { relayRegions: ['main', 'gz-1', 'sh-1', 'gz-1'] } }),
+    )
+    expect(manual.remote.relayRegions).toEqual(['gz-1', 'sh-1'])
+    expect(
+      mergeSettings(manual, validateSettingsPatch({ remote: { relayRegions: [] } })).remote
+        .relayRegions,
+    ).toBeNull()
+    expect(
+      mergeSettings(manual, validateSettingsPatch({ remote: { relayRegions: null } })).remote
+        .relayRegions,
+    ).toBeNull()
+
+    // Rejects invalid region ids, non-arrays, and lists exceeding MAX_REGIONS - 1 (7).
+    expect(() => validateSettingsPatch({ remote: { relayRegions: 'gz-1' } })).toThrow()
+    expect(() => validateSettingsPatch({ remote: { relayRegions: ['BAD_ID'] } })).toThrow()
+    expect(() => validateSettingsPatch({ remote: { relayRegions: [''] } })).toThrow()
+    expect(() =>
+      validateSettingsPatch({
+        remote: { relayRegions: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8'] },
+      }),
+    ).toThrow()
+    // Exactly 7 unique regions (plus 'main' stripped) is accepted.
+    expect(
+      mergeSettings(
+        before,
+        validateSettingsPatch({
+          remote: { relayRegions: ['main', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'] },
+        }),
+      ).remote.relayRegions,
+    ).toEqual(['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'])
+
+    // HostAdmin settings projection preserves relayRegions and falls back to null for older hosts.
+    const part = hostSettingsPart(manual)
+    expect(part.remote.relayRegions).toEqual(['gz-1', 'sh-1'])
+    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), part).remote.relayRegions).toEqual([
+      'gz-1',
+      'sh-1',
+    ])
+    const withoutField = structuredClone(part)
+    delete withoutField.remote.relayRegions
+    expect(
+      withHostSettings(structuredClone(DEFAULT_SETTINGS), withoutField).remote.relayRegions,
+    ).toBeNull()
   })
 })
 

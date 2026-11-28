@@ -2376,14 +2376,23 @@
       "relay": "Relay"
     },
     "relay": {
-      "keywords": "relay cloud anywhere internet region account kettu self-hosted own server access key",
+      "keywords": "relay cloud anywhere internet region node latency speed account kettu self-hosted own server access key",
       "regions": "Relays",
-      "regionsDescription": "Signed in to each at once; a device uses whichever joins first.",
+      "regionsDescription": "Signed in to the main relay and the fastest regions by measured latency, or choose specific regions below.",
       "regionsNone": "Shown once signed in to the relay.",
       "regionMain": "Main relay",
       "region": "Region {{id}}",
+      "measure": "Test speeds",
+      "alwaysOn": "Always on",
+      "rtt": "{{ms}} ms",
+      "maxSelected": "Select up to {{max}} regions alongside the main relay",
+      "auto": {
+        "name": "Automatic",
+        "description": "Picks the fastest regions by measured latency"
+      },
       "state": {
         "connected": "Connected",
+        "standby": "Standing by",
         "connecting": "Connecting",
         "conflict": "Identity in use",
         "refused": "Refused",
