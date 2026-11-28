@@ -2,6 +2,7 @@ import type { McpImportChoice } from '@shared/mcp-discovery'
 // Hand-written guards for every request on the agent host port. A validator returns a fresh
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
+import { START_MODE_CHARS } from '@shared/agents'
 import {
   MAX_PINNED_MODELS,
   type AgentInstallMethod,
@@ -135,6 +136,7 @@ import {
 } from './plugin-runtime/view-data'
 import { validateProjectIcon, type ProjectIcon } from '@shared/project-icon'
 import { MAX_PROJECT_FOLDERS, PROJECT_NAME_MAX } from './projects'
+import { TITLE_CHARS } from './session-tools'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -2383,6 +2385,22 @@ export function createValidators(platform: Platform): Validators {
         content: promptContent(o.content),
         ...(options !== undefined ? { options } : {}),
         ...(o.summarize === true ? { summarize: true } : {}),
+      }
+    },
+    'sessions.delegateAgents': session,
+    'sessions.delegate': (params) => {
+      const o = fields(params)
+      const mode = optionalString(o, 'mode', START_MODE_CHARS)
+      const title = optionalString(o, 'title', TITLE_CHARS)
+      if (title !== undefined && title.trim() === '') {
+        throw invalidParams('title must not be blank')
+      }
+      return {
+        sessionId: sessionId(o),
+        agentId: agentId(o),
+        content: promptContent(o.content),
+        ...(mode !== undefined ? { mode } : {}),
+        ...(title !== undefined ? { title } : {}),
       }
     },
     'sessions.context': session,

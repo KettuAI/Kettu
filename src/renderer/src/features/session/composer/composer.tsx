@@ -57,6 +57,7 @@ import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './at
 import { formatBrowserAnnotationsPrompt } from './browser-annotations'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { composerRunState } from './composer-state'
+import { canOfferDelegation, isDelegatableAgentStatus, setDraftDelegateTarget } from './delegation'
 import { mentionSurfacesOf } from './mention-surfaces'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
@@ -234,9 +235,36 @@ export function Composer({
     hostId,
     disabled: starting,
   })
-  const { attachments, artifacts, browserAnnotations, error, setError } = box
+  const { attachments, artifacts, browserAnnotations, delegateTarget, error, setError } = box
+  const canDelegate = canOfferDelegation({
+    sessionId,
+    parentId: session.parentId,
+    origin: session.origin,
+    mustSwitch,
+    heldOutside,
+  })
+  const activeDelegate = canDelegate ? delegateTarget : null
+  const delegateLiveName = useAgentsStore((s) =>
+    activeDelegate ? agentsOn(s, hostId).byId[activeDelegate.agentId]?.name : undefined,
+  )
+  const delegateName = activeDelegate ? (delegateLiveName ?? activeDelegate.name) : null
+  const delegatableCount = useAgentsStore((s) => {
+    const hostAgents = agentsOn(s, hostId)
+    let count = 0
+    for (const id of hostAgents.order) {
+      const candidate = hostAgents.byId[id]
+      if (candidate && isDelegatableAgentStatus(candidate)) count++
+    }
+    return count
+  })
+  const agentsLoaded = useAgentsStore((s) => hostId !== null || s.loaded)
+  const delegateDisabled =
+    agentsLoaded && delegatableCount === 0 ? t('delegation.noAgents') : undefined
+  const [delegating, setDelegating] = useState(false)
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
+    canDelegateSend:
+      activeDelegate !== null && !starting && !heldOutside && !delegating && holds && !blocked,
     canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
     // During an active turn the primary shortcut queues or steers by setting; while idle-waiting
     // on background work, follow-ups go straight into the session via `sessions.queue`.
@@ -255,16 +283,23 @@ export function Composer({
     commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
-  const { canSend, canQueue } = can(holdsMessage, blocked)
+  const { canDelegateSend, canSend, canQueue } = can(holdsMessage, blocked)
   // Starting a message, not opening the session with a draft in it, attaches a closed session.
   const held = useRef(holdsMessage)
   useEffect(() => {
     const began = holdsMessage && !held.current
     held.current = holdsMessage
-    if (began && status === 'closed' && !heldOutside && !pending && !mustSwitch) {
+    if (
+      began &&
+      status === 'closed' &&
+      !heldOutside &&
+      !pending &&
+      !mustSwitch &&
+      !activeDelegate
+    ) {
       attachWhileTyping(sessionId)
     }
-  }, [holdsMessage, status, heldOutside, pending, mustSwitch, sessionId])
+  }, [holdsMessage, status, heldOutside, pending, mustSwitch, activeDelegate, sessionId])
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text
@@ -307,6 +342,7 @@ export function Composer({
     box,
     agentName,
     commands,
+    ...(canDelegate ? { onDelegate: box.openDelegatePicker, delegateDisabled } : {}),
     ...(sideOn ? { onSideChat: () => openSideChat(sessionId) } : {}),
   })
 
@@ -384,8 +420,13 @@ export function Composer({
   }, [editingNonce, box.editor])
 
   // Both go through the host's queue, which sends at once when the session is free; a message
-  // that hands the session to another agent goes as that agent's first turn.
-  const send = (now = { canSend, canQueue }) => {
+  // with a selected delegation recipient spawns a child session directly; a message that hands the
+  // session to another agent goes as that agent's first turn.
+  const send = (now = { canDelegateSend, canSend, canQueue }) => {
+    if (activeDelegate) {
+      if (now.canDelegateSend) delegateNow()
+      return
+    }
     if (askBeside()) return
     if (pending && now.canSend) handOver()
     else if (now.canSend || now.canQueue) {
@@ -485,9 +526,39 @@ export function Composer({
       })
   }
 
+  // Spawns a delegated child session directly on the host, bypassing the current session's agent.
+  const delegateNow = () => {
+    if (!activeDelegate || delegating) return
+    const { taken, sent, content, commentIds } = takeContent()
+    const target = taken.delegateTarget
+    if (!target) return
+    setDelegating(true)
+    useSuggestionsStore.getState().stopEditing(sessionId)
+    const releaseSuggestion = suppressSuggestion(sessionId)
+    host('sessions.delegate', {
+      sessionId,
+      agentId: target.agentId,
+      content,
+    })
+      .then((child) => {
+        releaseSuggestion(false)
+        removeComments(sessionId, commentIds)
+        useSessionsStore.getState().upsert(child)
+      })
+      .catch((reason: unknown) => {
+        releaseSuggestion(true)
+        if (sent) setPaneSelection(sent)
+        box.restore(taken)(reason)
+      })
+      .finally(() => {
+        setDelegating(false)
+      })
+  }
+
   // Picking a model of another agent makes it the pending one; the session's own agent undoes it.
   const chooseAgent = (agentId: AgentId, modelValue: string | null) => {
     setChoosingAgent(false)
+    setDraftDelegateTarget(sessionId, null)
     if (agentId === session.agentId && !mustSwitch) {
       setPendingSwitch(sessionId, null)
       const own = session.config.find((o) => o.category === 'model')
@@ -538,7 +609,7 @@ export function Composer({
   const paneId = usePane()?.paneId ?? null
   const sendFromReply = useEffectEvent(() => {
     const now = live()
-    if (now.canSend || now.canQueue) send(now)
+    if (now.canDelegateSend || now.canSend || now.canQueue) send(now)
   })
   useEffect(
     () =>
@@ -612,6 +683,13 @@ export function Composer({
       sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event) && !event.shiftKey
     const secondary =
       sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey
+    if (activeDelegate) {
+      if (!primary && !secondary) return
+      event.preventDefault()
+      if (now.canDelegateSend) delegateNow()
+      else if (now.holds) blockedEnter.enter()
+      return
+    }
     if ((primary || secondary) && askBeside()) {
       event.preventDefault()
       return
@@ -631,39 +709,41 @@ export function Composer({
   const idleLine = t('prompt.placeholder.ask')
   const placeholder = starting
     ? t('prompt.placeholder.starting', { agent: agentName })
-    : mustSwitch && !pending
-      ? t('prompt.placeholder.pickAgent')
-      : awaiting
-        ? t(asked ? 'prompt.placeholder.awaitingAnswer' : 'prompt.placeholder.awaiting')
-        : !activeRunning && reached?.resetsAt
-          ? t(
-              reached.extraUsage
-                ? 'prompt.placeholder.limitExtraUsage'
-                : typeof continuesAt === 'number'
-                  ? 'prompt.placeholder.limitReachedContinue'
-                  : 'prompt.placeholder.limitReached',
-              {
-                limit: limitPhrase(reached),
-                time: resetTime(typeof continuesAt === 'number' ? continuesAt : reached.resetsAt),
-              },
-            )
-          : !activeRunning && editingSuggestion
-            ? t('prompt.placeholder.editWorkflow', { agent: agentName })
-            : !activeRunning && rejected
-              ? t('prompt.placeholder.denied')
-              : activeRunning
-                ? t(
-                    steerDefault
-                      ? phone
-                        ? 'prompt.placeholder.runningSteerTouch'
-                        : 'prompt.placeholder.runningSteer'
-                      : phone
-                        ? 'prompt.placeholder.runningTouch'
-                        : 'prompt.placeholder.runningQueue',
-                  )
-                : taskRunning
-                  ? t('prompt.placeholder.taskRunning')
-                  : idleLine
+    : activeDelegate && delegateName
+      ? t('delegation.placeholder', { agent: delegateName })
+      : mustSwitch && !pending
+        ? t('prompt.placeholder.pickAgent')
+        : awaiting
+          ? t(asked ? 'prompt.placeholder.awaitingAnswer' : 'prompt.placeholder.awaiting')
+          : !activeRunning && reached?.resetsAt
+            ? t(
+                reached.extraUsage
+                  ? 'prompt.placeholder.limitExtraUsage'
+                  : typeof continuesAt === 'number'
+                    ? 'prompt.placeholder.limitReachedContinue'
+                    : 'prompt.placeholder.limitReached',
+                {
+                  limit: limitPhrase(reached),
+                  time: resetTime(typeof continuesAt === 'number' ? continuesAt : reached.resetsAt),
+                },
+              )
+            : !activeRunning && editingSuggestion
+              ? t('prompt.placeholder.editWorkflow', { agent: agentName })
+              : !activeRunning && rejected
+                ? t('prompt.placeholder.denied')
+                : activeRunning
+                  ? t(
+                      steerDefault
+                        ? phone
+                          ? 'prompt.placeholder.runningSteerTouch'
+                          : 'prompt.placeholder.runningSteer'
+                        : phone
+                          ? 'prompt.placeholder.runningTouch'
+                          : 'prompt.placeholder.runningQueue',
+                    )
+                  : taskRunning
+                    ? t('prompt.placeholder.taskRunning')
+                    : idleLine
   // A phone has no Tab to take it with.
   const suggestion =
     placeholder === idleLine && idle && !phone ? (session.suggestion ?? null) : null
@@ -684,56 +764,78 @@ export function Composer({
     holdsMessage &&
     !activeRunning &&
     !starting &&
+    !activeDelegate &&
     pending === null &&
     !mustSwitch &&
     reread >= CACHE_NOTICE_MIN_TOKENS &&
     noticeClosedFor !== timed.lastRequestAt
   const cacheDrop = session.cacheDrop ?? null
   const cacheDropKey = cacheDrop ? `${sessionId}:${cacheDrop.at}` : null
-  const cacheDropNoticeShown = shouldShowCacheDropNotice({
-    enabled: cacheDropNoticeEnabled,
-    drop: cacheDrop,
-    cacheNoticeShown,
-    activeRunning,
-    starting,
-    pendingSwitch: pending !== null,
-    mustSwitch,
-    dismissedKey: dropClosedFor,
-    noticeKey: cacheDropKey,
-  })
+  const cacheDropNoticeShown =
+    !activeDelegate &&
+    shouldShowCacheDropNotice({
+      enabled: cacheDropNoticeEnabled,
+      drop: cacheDrop,
+      cacheNoticeShown,
+      activeRunning,
+      starting,
+      pendingSwitch: pending !== null,
+      mustSwitch,
+      dismissedKey: dropClosedFor,
+      noticeKey: cacheDropKey,
+    })
   const modelName = model
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  // While a turn actively runs, Stop shows with nothing written and Queue/Steer once a message is;
-  // while idle-waiting on background work, the composer matches the idle Send button.
-  const sendControl =
-    showStopWhenEmpty && !holdsMessage ? (
-      <StopButton onStop={cancel} />
-    ) : activeRunning && canQueue ? (
-      <QueueButton
-        steering={steering}
-        steerDefault={steerDefault}
-        queueKey={queueKey}
-        steerKey={steerKey}
-        onQueue={() => queue(false)}
-        onSteer={() => queue(true)}
-      />
-    ) : blocked && holdsMessage ? (
-      // A disabled button takes no pointer, so the tooltip says why from around it.
+  // While a delegation recipient is selected, Send always spawns the delegated child session.
+  // Otherwise, while a turn actively runs, Stop shows with nothing written and Queue/Steer once a
+  // message is; while idle-waiting on background work, the composer matches the idle Send button.
+  const sendControl = activeDelegate ? (
+    blocked && holdsMessage ? (
       <Tooltip>
         <TooltipTrigger render={<span key="send" className="kettu-send-wrap" />}>
-          <SendButton disabled label={t('prompt.send')} />
+          <SendButton
+            disabled
+            label={t('delegation.sendLabel', { agent: delegateName ?? activeDelegate.name })}
+          />
         </TooltipTrigger>
         <TooltipContent>{blocked.message}</TooltipContent>
       </Tooltip>
     ) : (
       <SendButton
         key="send"
-        disabled={!(canSend || (waitingBackground && canQueue))}
-        label={t('prompt.send')}
-        onClick={() => send()}
+        disabled={!canDelegateSend}
+        label={t('delegation.sendLabel', { agent: delegateName ?? activeDelegate.name })}
+        onClick={() => delegateNow()}
       />
     )
+  ) : showStopWhenEmpty && !holdsMessage ? (
+    <StopButton onStop={cancel} />
+  ) : activeRunning && canQueue ? (
+    <QueueButton
+      steering={steering}
+      steerDefault={steerDefault}
+      queueKey={queueKey}
+      steerKey={steerKey}
+      onQueue={() => queue(false)}
+      onSteer={() => queue(true)}
+    />
+  ) : blocked && holdsMessage ? (
+    // A disabled button takes no pointer, so the tooltip says why from around it.
+    <Tooltip>
+      <TooltipTrigger render={<span key="send" className="kettu-send-wrap" />}>
+        <SendButton disabled label={t('prompt.send')} />
+      </TooltipTrigger>
+      <TooltipContent>{blocked.message}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <SendButton
+      key="send"
+      disabled={!(canSend || (waitingBackground && canQueue))}
+      label={t('prompt.send')}
+      onClick={() => send()}
+    />
+  )
   const shownError =
     error ??
     (blocked && !blocked.adding ? blocked.message : null) ??
@@ -780,6 +882,8 @@ export function Composer({
               padding: '0',
               lineHeight: 'calc(var(--prose-size) + 7px)',
             }}
+            canDelegate={canDelegate}
+            onDelegateSelect={() => setPendingSwitch(sessionId, null)}
             onKeyDown={onKeyDown}
             top={
               <>

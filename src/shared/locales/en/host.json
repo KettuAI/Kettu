@@ -25,6 +25,14 @@
       "cannotAnswer": "{{agent}} cannot answer side questions for another session",
       "noAnswer": "{{agent}} gave no answer to this question"
     },
+    "delegate": {
+      "notUserSession": "Only a user session can delegate tasks to another agent",
+      "nestedSession": "A child session cannot delegate tasks to another agent",
+      "agentUnavailable": "{{agent}} cannot be delegated to on this host",
+      "modeUnsupported": "{{agent}} does not support choosing a permission mode here",
+      "modeInvalid": "{{agent}} has no startable permission mode {{mode}}",
+      "emptyPrompt": "Write a task before delegating"
+    },
     "cannotLoad": "{{agent}} can neither load nor resume sessions",
     "cannotSteer": "{{agent}} cannot take messages during a turn",
     "cannotFork": "{{agent}} cannot fork sessions",

@@ -451,5 +451,28 @@
     "noActiveSession": "No active session is available to receive this element reference",
     "sessionStarting": "Wait for the session to finish starting before referencing page elements",
     "sessionHeldOutside": "This session is open in an external terminal and cannot accept composer references right now"
+  },
+  "delegation": {
+    "menuItem": "Delegate to agent…",
+    "noAgents": "No agents available",
+    "pickerTitle": "Delegate to agent",
+    "pickerHint": "Starts a child session in this project",
+    "searchPlaceholder": "Search agents…",
+    "clearSearch": "Clear search",
+    "loading": "Loading agents…",
+    "empty": "No agents available to delegate to",
+    "noMatch": "No matching agents",
+    "loadFailed": "Couldn’t load available agents",
+    "current": "Current",
+    "statusSignIn": "Needs sign-in",
+    "statusInstalling": "Installing…",
+    "statusFailed": "Unavailable",
+    "recipientLabel": "Delegated agent recipient",
+    "to": "To: {{agent}}",
+    "changeRecipient": "Change recipient ({{agent}})",
+    "removeRecipient": "Remove recipient {{agent}}",
+    "chipHint": "Starts a child session; result returns here",
+    "placeholder": "Describe a task for {{agent}} (starts a child session; result returns here)…",
+    "sendLabel": "Delegate to {{agent}}"
   }
 }

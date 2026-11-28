@@ -7,10 +7,13 @@ import {
   readDraft,
   readDraftArtifacts,
   readDraftComments,
+  readDraftDelegateTarget,
   writeDraft,
   writeDraftArtifacts,
   writeDraftComments,
+  writeDraftDelegateTarget,
   type AttachedArtifact,
+  type DelegateTarget,
   type DraftComment,
 } from './drafts'
 
@@ -123,5 +126,51 @@ describe('a draft with attached artifacts', () => {
     })
     expect(parseDraft(raw).artifacts).toEqual([artifact])
     expect(parseDraft(JSON.stringify({ text: 'old', attachments: [] })).artifacts).toEqual([])
+  })
+})
+
+describe('a draft with a delegated agent recipient', () => {
+  const target: DelegateTarget = { agentId: 'codex', name: 'Codex' }
+
+  it('persists and reloads the delegated recipient across flushes and session switches', () => {
+    writeDraft('s1', 'Audit auth middleware')
+    writeDraftDelegateTarget('s1', target)
+    flushDraft('s1')
+
+    expect(readDraft('s1')).toBe('Audit auth middleware')
+    expect(readDraftDelegateTarget('s1')).toEqual(target)
+    expect(readDraftDelegateTarget('s2')).toBeNull()
+  })
+
+  it('keeps a recipient-only draft until cleared and drops malformed stored values', () => {
+    writeDraftDelegateTarget('s1', target)
+    flushDraft('s1')
+    expect(store.has('draft:s1')).toBe(true)
+    expect(readDraftDelegateTarget('s1')).toEqual(target)
+
+    writeDraftDelegateTarget('s1', null)
+    flushDraft('s1')
+    expect(store.has('draft:s1')).toBe(false)
+    expect(readDraftDelegateTarget('s1')).toBeNull()
+
+    expect(parseDraft(JSON.stringify({ text: 'old', attachments: [] })).delegateTarget).toBeNull()
+    expect(
+      parseDraft(
+        JSON.stringify({
+          text: '',
+          attachments: [],
+          delegateTarget: { agentId: 'not-an-agent', name: 'Bad' },
+        }),
+      ).delegateTarget,
+    ).toBeNull()
+    expect(
+      parseDraft(
+        JSON.stringify({
+          text: '',
+          attachments: [],
+          delegateTarget: { agentId: 'codex', name: '   ' },
+        }),
+      ).delegateTarget,
+    ).toBeNull()
   })
 })

@@ -26,6 +26,8 @@ import { ArtifactPickerPopover, AttachedArtifactChips } from './artifact-picker'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { BrowserAnnotationChips } from './browser-annotation-chips'
+import { DelegateAgentPickerPopover, DelegateRecipientChip } from './delegate-picker'
+import type { DelegateTarget } from './delegation'
 import { ComposerEditor } from './editor'
 import { hashPickerShown, hashRefAt, replaceHashRef, type GitHubRefRow } from './github-picker'
 import { GitHubRefFooter, GitHubRefHeading, GitHubRefItem } from './github-ref-popover'
@@ -122,6 +124,8 @@ export function PromptBox({
   label,
   size,
   top,
+  canDelegate = false,
+  onDelegateSelect,
   onKeyDown,
 }: {
   box: PromptBoxState
@@ -140,6 +144,10 @@ export function PromptBox({
   size: { minHeight: string; padding: string; lineHeight?: string }
   /** What the box shows before the attachments, such as a notice. */
   top?: ReactNode
+  /** Whether this composer can delegate tasks to another agent. */
+  canDelegate?: boolean
+  /** Called after a delegation recipient is picked from the popover. */
+  onDelegateSelect?: (target: DelegateTarget) => void
   /** A key the popovers left to the composer, which calls preventDefault on one it takes. */
   onKeyDown: (event: KeyboardEvent) => void
 }) {
@@ -515,6 +523,13 @@ export function PromptBox({
       <div ref={group} className="kettu-prompt" data-disabled={disabled || undefined}>
         <ResizeGrip editor={editor} />
         {top}
+        <DelegateRecipientChip
+          draft={draft}
+          hostId={hostId}
+          visible={canDelegate}
+          onChange={box.openDelegatePicker}
+          onLeave={box.focus}
+        />
         <AttachedArtifactChips draft={draft} sessionId={box.sessionId} onLeave={box.focus} />
         <BrowserAnnotationChips draft={draft} onLeave={box.focus} />
         <AttachmentTray
@@ -712,6 +727,18 @@ export function PromptBox({
         hostId={hostId}
         onPicked={() => requestAnimationFrame(() => box.focus())}
       />
+      {canDelegate && (
+        <DelegateAgentPickerPopover
+          open={box.delegatePickerOpen}
+          onOpenChange={box.setDelegatePickerOpen}
+          anchor={group}
+          draft={draft}
+          sessionId={box.sessionId}
+          hostId={hostId}
+          onSelect={onDelegateSelect}
+          onPicked={() => requestAnimationFrame(() => box.focus())}
+        />
+      )}
       {chips.overlays}
       <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
