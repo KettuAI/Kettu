@@ -1243,6 +1243,9 @@
     "changelog": {
       "missing": "Changelog not found: pi's package could not be located."
     },
+    "permissions": {
+      "requiresExtension": "Pi {{version}} or later is required so Kettu can enforce tool permissions."
+    },
     "noAnswer": "pi did not answer {{command}} within {{seconds}} s",
     "refused": "pi refused it"
   },

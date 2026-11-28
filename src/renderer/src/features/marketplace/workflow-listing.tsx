@@ -43,7 +43,7 @@ import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { basename, fullTime, mediumAgo } from '@renderer/lib/format'
 import { errorCode, errorMessage } from '@renderer/lib/host'
 import { optionsOn, picksOf, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { AGENT_NAMES, agentName } from '@renderer/stores/agents'
+import { agentName } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, openSettings, type MarketplaceTab } from '@renderer/stores/view'
@@ -656,9 +656,8 @@ function Facts({ entry }: { entry: WireWorkflowEntry }) {
         <b className="k-mkt-facts__agents">
           <AgentMark agent="claude-code" size={15} />
           <AgentMark agent="codex" size={15} />
-          <span className="k-mkt-facts__text">
-            {t('more.two', { first: AGENT_NAMES['claude-code'], second: AGENT_NAMES.codex })}
-          </span>
+          <AgentMark agent="pi" size={15} />
+          <span className="k-mkt-facts__text">{t('workflow.facts.stepAgents')}</span>
         </b>
       </span>
       <span>

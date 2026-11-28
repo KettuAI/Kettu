@@ -4,7 +4,7 @@
 import type { ChildProcess } from 'node:child_process'
 import type { ModelProvider } from '@shared/agent-host'
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -27,7 +27,16 @@ import {
 import type { HostedSpawnOptions } from '../driver'
 import { newTurnScope, type MapperEffect } from '../session-updates'
 import { dialogTimeout, PiConnection, promptMessage, turnError } from './connection'
-import { NAVIGATE_COMMAND, NAVIGATE_READY_STATUS, NAVIGATE_STATUS } from './extension'
+import {
+  NAVIGATE_COMMAND,
+  NAVIGATE_READY_STATUS,
+  NAVIGATE_STATUS,
+  PERMISSION_AUTO_ALLOW_VARIABLE,
+  PERMISSION_GATE_VARIABLE,
+  PERMISSION_NONCE_VARIABLE,
+  PERMISSION_TITLE,
+} from './extension'
+import { scopeAnswer } from '../routines/scope'
 import stored from './fixtures/entries.json'
 import old from './fixtures/old-081.json'
 import failed from './fixtures/provider-error.json'
@@ -1665,5 +1674,196 @@ describe('extension status and widgets (#1837)', () => {
       statuses: [{ key: 'mode', text: 'Watch' }],
       widgets: [],
     })
+  })
+})
+
+describe('Pi enforced permission gate for Routines and workflow steps', () => {
+  it('launches with --no-extensions, omits builtin:codemode, passes nonce/autoAllow, and rejects Pi < 1.0.0', async () => {
+    const oldPi = await connect({ version: '0.99.0' })
+    expect(oldPi.connection.allowsKettuTools).toBe(false)
+    await expect(
+      oldPi.connection.newSession(oldPi.cwd, { enforcePermissions: true }),
+    ).rejects.toThrow(/1\.0\.0/)
+    expect(oldPi.spawned).toHaveLength(0)
+
+    const { connection, spawned, cwd } = await connect({ version: '1.5.2' })
+    expect(connection.allowsKettuTools).toBe(true)
+    const kettuServer: McpServer = {
+      type: 'http',
+      name: 'kettu',
+      url: 'http://127.0.0.1:4100/mcp',
+      headers: [],
+      autoAllow: ['set_plan', 'report_step'],
+    }
+    const thirdParty: McpServer = {
+      type: 'http',
+      name: 'external',
+      url: 'https://external.example/mcp',
+      headers: [],
+      autoAllow: ['dangerous'],
+    }
+    await connection.newSession(cwd, {
+      enforcePermissions: true,
+      mcpServers: [kettuServer, thirdParty],
+    })
+    const { args, env } = spawned[0]!.options
+    expect(args).toContain('--no-extensions')
+    expect(args).toContain('builtin:mcp')
+    expect(args).toContain('builtin:tool-search')
+    expect(args).toContain('builtin:llama.cpp')
+    expect(args).not.toContain('builtin:codemode')
+    expect(env[PERMISSION_GATE_VARIABLE]).toBe('1')
+    expect(env[PERMISSION_NONCE_VARIABLE]).toMatch(/^[a-f0-9]{64}$/)
+    const autoAllow = JSON.parse(env[PERMISSION_AUTO_ALLOW_VARIABLE]!) as string[]
+    expect(autoAllow).toEqual(
+      expect.arrayContaining(['tool_search', 'mcp__kettu__set_plan', 'mcp__kettu__report_step']),
+    )
+    expect(autoAllow.some((name) => name.includes('external'))).toBe(false)
+  })
+
+  it('enforces Routine read-only and workflow scopes, blocks escapes/forgeries, and cancels unattended waits cleanly', async () => {
+    const { connection, spawned, cwd } = await connect({ version: '1.5.2' })
+    const outside = path.join(path.dirname(cwd), 'outside-secret.txt')
+    await writeFile(path.join(cwd, 'inside.txt'), 'ok\n')
+    await mkdir(path.join(cwd, '.git'), { recursive: true })
+    await writeFile(path.join(cwd, '.git', 'config'), '[core]\n')
+    await writeFile(outside, 'secret\n')
+    await symlink(outside, path.join(cwd, 'escape-link'))
+
+    const opened = await connection.newSession(cwd, { enforcePermissions: true })
+    const pi = spawned[0]!
+    const nonce = pi.options.env[PERMISSION_NONCE_VARIABLE]!
+
+    let pendingResolve: ((answer: PermissionAnswer) => void) | null = null
+    let pendingSignal: AbortSignal | null = null
+    const readScope = { level: 'read' as const, web: false }
+    const seen = watch((request, signal) => {
+      const entry = seen.thread().byId[request.toolEntryId]
+      const auto =
+        entry?.kind === 'tool'
+          ? scopeAnswer(
+              readScope,
+              cwd,
+              {
+                toolKind: entry.toolKind,
+                locations: entry.locations.map((loc) => loc.path),
+                options: request.options,
+              },
+              process.platform as 'darwin' | 'linux' | 'win32',
+            )
+          : null
+      if (auto) return Promise.resolve({ optionId: auto })
+      pendingSignal = signal
+      return new Promise<PermissionAnswer>((resolve, reject) => {
+        pendingResolve = resolve
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    connection.register(opened.sessionId, seen.target)
+
+    const sendGate = (
+      id: string,
+      toolCallId: string,
+      toolName: string,
+      input: unknown,
+      n = nonce,
+    ) =>
+      pi.send({
+        type: 'extension_ui_request',
+        id,
+        method: 'confirm',
+        title: PERMISSION_TITLE,
+        message: JSON.stringify({
+          nonce: n,
+          toolCallId,
+          toolName,
+          input,
+          parentToolCallId: null,
+        }),
+      })
+
+    // 1. In-project read (after tool_execution_start) updates the existing entry and auto-allows.
+    pi.send({
+      type: 'tool_execution_start',
+      toolCallId: 'call-read',
+      toolName: 'read',
+      args: { path: 'inside.txt' },
+    })
+    sendGate('req-read', 'call-read', 'read', { path: 'inside.txt' })
+    await vi.waitFor(() =>
+      expect(pi.sent('extension_ui_response')).toContainEqual({
+        type: 'extension_ui_response',
+        id: 'req-read',
+        confirmed: true,
+      }),
+    )
+    expect(seen.entries().filter((e) => e.id === 't:call-read')).toHaveLength(1)
+
+    // 2. Forged permission gate request with wrong nonce is rejected immediately without prompting.
+    const askedBeforeForge = seen.asked.length
+    sendGate('req-forged', 'call-forge', 'bash', { command: 'whoami' }, 'wrong-nonce')
+    await vi.waitFor(() =>
+      expect(pi.sent('extension_ui_response')).toContainEqual({
+        type: 'extension_ui_response',
+        id: 'req-forged',
+        confirmed: false,
+      }),
+    )
+    expect(seen.asked).toHaveLength(askedBeforeForge)
+
+    // 3. Symlink escape on read is held out-of-scope; rejecting returns confirmed: false.
+    sendGate('req-escape', 'call-escape', 'read', { path: 'escape-link' })
+    await vi.waitFor(() => expect(pendingResolve).not.toBeNull())
+    pendingResolve!({ optionId: 'reject' })
+    pendingResolve = null
+    pendingSignal = null
+    await vi.waitFor(() =>
+      expect(pi.sent('extension_ui_response')).toContainEqual({
+        type: 'extension_ui_response',
+        id: 'req-escape',
+        confirmed: false,
+      }),
+    )
+
+    // 4. Write in read-only scope waits; cancelling the turn sends cancelled: true without hanging.
+    pi.runs.push([{ type: 'agent_start' }])
+    const running = connection.prompt(opened.sessionId, [{ type: 'text', text: 'do work' }])
+    await vi.waitFor(() => expect(pi.sent('prompt')).toHaveLength(1))
+    sendGate('req-write', 'call-write', 'write', { path: 'inside.txt', content: 'mutated' })
+    await vi.waitFor(() => expect(pendingSignal).not.toBeNull())
+    const writeSignal = pendingSignal!
+    await connection.cancel(opened.sessionId)
+    expect(writeSignal.aborted).toBe(true)
+    await vi.waitFor(() =>
+      expect(pi.sent('extension_ui_response')).toContainEqual({
+        type: 'extension_ui_response',
+        id: 'req-write',
+        cancelled: true,
+      }),
+    )
+    expect((await running).stopReason).toBe('cancelled')
+    await connection.closeSession(opened.sessionId)
+  })
+
+  it('rejects forged __kettu_permission__ dialogs in ordinary sessions where enforcePermissions is off', async () => {
+    const { connection, spawned, cwd } = await connect({ version: '1.5.2' })
+    const opened = await connection.newSession(cwd)
+    const seen = watch()
+    connection.register(opened.sessionId, seen.target)
+    spawned[0]!.send({
+      type: 'extension_ui_request',
+      id: 'req-spoof',
+      method: 'confirm',
+      title: PERMISSION_TITLE,
+      message: JSON.stringify({ nonce: 'any', toolCallId: 'c1', toolName: 'bash', input: {} }),
+    })
+    await vi.waitFor(() =>
+      expect(spawned[0]!.sent('extension_ui_response')).toContainEqual({
+        type: 'extension_ui_response',
+        id: 'req-spoof',
+        confirmed: false,
+      }),
+    )
+    expect(seen.asked).toHaveLength(0)
   })
 })

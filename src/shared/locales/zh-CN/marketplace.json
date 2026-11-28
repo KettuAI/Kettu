@@ -744,6 +744,7 @@
     },
     "facts": {
       "runBy": "步骤由谁做",
+      "stepAgents": "Claude Code、Codex 和 Pi",
       "added": "添加于",
       "steps": "步骤",
       "stepsWait_one": "{{steps}} · {{count}} 步等你",
@@ -784,7 +785,7 @@
     },
     "pin": {
       "afterApproval": "批准后能固定",
-      "notStepAgent": "只有 Claude Code 和 Codex 的智能体能做步骤。",
+      "notStepAgent": "只有 Claude Code、Codex 和 Pi 的智能体能做步骤。",
       "failed": "无法固定：{{error}}",
       "autoLabel": "{{step}} 由谁来做：Auto",
       "backToAuto": "改回 Auto",

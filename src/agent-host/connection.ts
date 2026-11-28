@@ -463,6 +463,11 @@ export interface SessionOptions {
   titled?: boolean
   /** Native branch leaf id to restore when reopening or reconnecting the session (Pi). */
   branchLeafId?: string | null
+  /**
+   * Enforce Kettu's permission gate on every tool call (used for Routines and workflow steps on
+   * harnesses such as Pi that enforce tool permissions through Kettu's extension hook).
+   */
+  enforcePermissions?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */

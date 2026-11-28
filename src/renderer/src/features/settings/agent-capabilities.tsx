@@ -65,7 +65,6 @@ const NOTE_KEYS: Readonly<Record<CapabilityNoteKey, string>> = {
   limitsVendorDisallows: 'agents.capabilities.notes.limitsVendorDisallows',
   noSilentSessionDelete: 'agents.capabilities.notes.noSilentSessionDelete',
   piExtensionRequired: 'agents.capabilities.notes.piExtensionRequired',
-  piNoPermissionPrompts: 'agents.capabilities.notes.piNoPermissionPrompts',
   routinesOnlyNoWorkflows: 'agents.capabilities.notes.routinesOnlyNoWorkflows',
   sideChatHiddenCopyOnly: 'agents.capabilities.notes.sideChatHiddenCopyOnly',
 }

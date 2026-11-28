@@ -4224,4 +4224,70 @@ describe('SessionManager.usages', () => {
       { sessionId: 's-empty', usage: null },
     ])
   })
+
+  it('passes enforcePermissions only for routine and workflow step sessions, never ordinary user sessions', async () => {
+    const seenOptions: { label: string; options: SessionOptions | undefined }[] = []
+    let nextId = 0
+    const { sessions } = manager(
+      {},
+      {
+        agents: {
+          name: () => 'Pi',
+          signedIn: () => {},
+          status: () => ({ capabilities: null, limits: [] }),
+          ensureReady: async () => ({
+            init: { capabilities: {} },
+            connection: {
+              newSession: async (_cwd: string, options?: SessionOptions) => {
+                const id = `pi-${++nextId}`
+                seenOptions.push({ label: id, options })
+                return { sessionId: id, config: [] }
+              },
+              prompt: () => new Promise(() => {}),
+              register: () => {},
+              unregister: () => {},
+              closeSession: async () => {},
+              isClosed: false,
+            },
+          }),
+        },
+        threads: {
+          write: async () => undefined,
+          putOrigin: async () => undefined,
+        },
+      },
+    )
+    await sessions.load()
+
+    await sessions.create({ agentId: 'pi', projectPath: '/repo' })
+    await sessions.createRun({
+      agentId: 'pi',
+      projectPath: '/repo',
+      options: {},
+      prompt: 'Check status',
+      routine: {
+        routineId: 'r-1',
+        runId: 'run-1',
+        trigger: 'manual',
+        scheduledFor: null,
+      },
+      scope: { level: 'read', web: false },
+      mode: null,
+    })
+    await sessions.createStep({
+      agentId: 'pi',
+      projectPath: '/repo',
+      worktree: null,
+      prepare: false,
+      options: {},
+      prompt: 'Implement change',
+      title: 'Build',
+      task: { taskId: 'task-1', stepId: 'build', roundId: 'round-1' },
+    })
+
+    expect(seenOptions).toHaveLength(3)
+    expect(seenOptions[0]!.options?.enforcePermissions).toBeUndefined()
+    expect(seenOptions[1]!.options?.enforcePermissions).toBe(true)
+    expect(seenOptions[2]!.options?.enforcePermissions).toBe(true)
+  })
 })

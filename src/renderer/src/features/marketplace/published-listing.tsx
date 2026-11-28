@@ -278,7 +278,7 @@ function Listing({
               {listing.kind === 'plugin' && listing.harness ? (
                 <AgentMark agent={listing.harness} size={14} dot={null} />
               ) : listing.kind === 'workflow' ? (
-                (['claude-code', 'codex'] as const).map((agent) => (
+                (['claude-code', 'codex', 'pi'] as const).map((agent) => (
                   <AgentMark key={agent} agent={agent} size={14} dot={null} />
                 ))
               ) : (

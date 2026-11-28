@@ -13,7 +13,13 @@ import {
   NAVIGATE_READY_STATUS,
   NAVIGATE_STATUS,
   NAVIGATE_VARIABLE,
+  PERMISSION_AUTO_ALLOW_VARIABLE,
+  PERMISSION_GATE_VARIABLE,
+  PERMISSION_NONCE_VARIABLE,
+  PERMISSION_TITLE,
+  piAutoAllowTools,
   piExtension,
+  piMcpToolName,
   piServers,
 } from './extension'
 
@@ -25,6 +31,9 @@ afterEach(async () => {
   delete process.env.KETTU_MCP_SERVERS
   delete process.env.KETTU_MODEL_SCOPE
   delete process.env[NAVIGATE_VARIABLE]
+  delete process.env[PERMISSION_GATE_VARIABLE]
+  delete process.env[PERMISSION_NONCE_VARIABLE]
+  delete process.env[PERMISSION_AUTO_ALLOW_VARIABLE]
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -226,5 +235,142 @@ describe("Kettu's extension for Pi", () => {
       [NAVIGATE_STATUS, JSON.stringify({ reqId: 'r2', ok: true, cancelled: true })],
       [NAVIGATE_STATUS, JSON.stringify({ reqId: 'r3', ok: false, error: 'Entry fail not found' })],
     ])
+  })
+
+  it('auto-allows only Kettu HTTP autoAllow tools and tool_search, never third-party servers', () => {
+    const allowed = piAutoAllowTools([
+      {
+        ...KETTU,
+        autoAllow: ['set_plan', 'report_step', 'a'.repeat(70)],
+      },
+      {
+        type: 'http',
+        name: 'third-party',
+        url: 'https://evil.example/mcp',
+        headers: [],
+        autoAllow: ['delete_everything'],
+      },
+      { type: 'stdio', name: 'local', command: 'npx', args: [], env: [] },
+    ])
+    expect(allowed).toContain('tool_search')
+    expect(allowed).toContain('mcp__kettu__set_plan')
+    expect(allowed).toContain('mcp__kettu__report_step')
+    expect(allowed).toContain(piMcpToolName('kettu', 'a'.repeat(70)))
+    expect(allowed.some((name) => name.includes('third_party'))).toBe(false)
+    expect(allowed.some((name) => name.includes('delete_everything'))).toBe(false)
+  })
+
+  it('gates every tool call fail-closed when permission gate is active, strips env vars, and survives reload', async () => {
+    const nonce = 'nonce-secret-123'
+    process.env[PERMISSION_GATE_VARIABLE] = '1'
+    process.env[PERMISSION_NONCE_VARIABLE] = nonce
+    process.env[PERMISSION_AUTO_ALLOW_VARIABLE] = JSON.stringify([
+      'tool_search',
+      'mcp__kettu__report_step',
+    ])
+    const extension = await written()
+    const toolHandlers: ((event: unknown, ctx: unknown) => Promise<unknown>)[] = []
+    const pi = {
+      on: (name: string, handler: (event: unknown, ctx: unknown) => Promise<unknown>) => {
+        if (name === 'tool_call') toolHandlers.push(handler)
+      },
+    }
+    extension(pi)
+
+    // Secrets are removed from process.env immediately so bash child processes cannot read them.
+    expect(process.env[PERMISSION_GATE_VARIABLE]).toBeUndefined()
+    expect(process.env[PERMISSION_NONCE_VARIABLE]).toBeUndefined()
+    expect(process.env[PERMISSION_AUTO_ALLOW_VARIABLE]).toBeUndefined()
+    expect(toolHandlers).toHaveLength(1)
+
+    const confirms: [string, string][] = []
+    let nextDecision: boolean | Error = true
+    const ctx = {
+      hasUI: true,
+      ui: {
+        confirm: async (title: string, message: string) => {
+          confirms.push([title, message])
+          if (nextDecision instanceof Error) throw nextDecision
+          return nextDecision
+        },
+      },
+    }
+
+    // Top-level auto-allowed Kettu MCP tool and tool_search pass without prompting.
+    expect(
+      await toolHandlers[0]!(
+        { toolCallId: 'c1', toolName: 'mcp__kettu__report_step', input: {} },
+        ctx,
+      ),
+    ).toBeUndefined()
+    expect(
+      await toolHandlers[0]!(
+        { toolCallId: 'c2', toolName: 'tool_search', input: { query: 'step' } },
+        ctx,
+      ),
+    ).toBeUndefined()
+    expect(confirms).toEqual([])
+
+    // Nested calls NEVER auto-allow even if the tool name matches.
+    nextDecision = false
+    const nestedBlocked = await toolHandlers[0]!(
+      {
+        toolCallId: 'c3',
+        toolName: 'mcp__kettu__report_step',
+        input: {},
+        parentToolCallId: 'parent-1',
+      },
+      ctx,
+    )
+    expect(nestedBlocked).toEqual({
+      block: true,
+      reason: 'Tool call denied by Kettu permission policy',
+    })
+    expect(confirms).toHaveLength(1)
+    expect(confirms[0]![0]).toBe(PERMISSION_TITLE)
+    expect(JSON.parse(confirms[0]![1])).toEqual({
+      nonce,
+      toolCallId: 'c3',
+      toolName: 'mcp__kettu__report_step',
+      input: {},
+      parentToolCallId: 'parent-1',
+    })
+
+    // Approved normal tool passes through.
+    nextDecision = true
+    expect(
+      await toolHandlers[0]!({ toolCallId: 'c4', toolName: 'read', input: { path: 'a.ts' } }, ctx),
+    ).toBeUndefined()
+
+    // Denied tool is blocked.
+    nextDecision = false
+    expect(
+      await toolHandlers[0]!(
+        { toolCallId: 'c5', toolName: 'bash', input: { command: 'rm -rf /' } },
+        ctx,
+      ),
+    ).toEqual({ block: true, reason: 'Tool call denied by Kettu permission policy' })
+
+    // Confirm error fails closed.
+    nextDecision = new Error('disconnected')
+    expect(
+      await toolHandlers[0]!({ toolCallId: 'c6', toolName: 'write', input: { path: 'x' } }, ctx),
+    ).toEqual({ block: true, reason: 'Tool call denied by Kettu permission policy' })
+
+    // Missing UI fails closed.
+    expect(
+      await toolHandlers[0]!(
+        { toolCallId: 'c7', toolName: 'read', input: { path: 'a.ts' } },
+        { hasUI: false },
+      ),
+    ).toEqual({ block: true, reason: 'Tool call blocked: Kettu permission gate is unavailable' })
+
+    // Reloading the extension in the same process keeps the gate active from globalThis.
+    extension(pi)
+    expect(toolHandlers).toHaveLength(2)
+    nextDecision = false
+    expect(
+      await toolHandlers[1]!({ toolCallId: 'c8', toolName: 'bash', input: { command: 'ls' } }, ctx),
+    ).toEqual({ block: true, reason: 'Tool call denied by Kettu permission policy' })
   })
 })

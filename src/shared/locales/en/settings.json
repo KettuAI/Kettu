@@ -1272,9 +1272,9 @@
       "auto": {
         "group": "Agents Auto can pick",
         "note": "When a step is Auto, the agent handing off to it picks one of these, with its model and effort. You can still pin any of them to a step on the workflow’s page in the Marketplace.",
-        "apiKeys": "Only Claude Code and Codex agents can run steps, so no other agent is listed. An agent signed in with an API key starts off here, since every step it runs is paid by the token.",
-        "noneTitle": "No Claude Code or Codex agent",
-        "noneHint": "Steps run on Claude Code and Codex. Add one of them to let Auto pick it.",
+        "apiKeys": "Only Claude Code, Codex and Pi agents can run steps, so no other agent is listed. An agent signed in with an API key starts off here, since every step it runs is paid by the token.",
+        "noneTitle": "No Claude Code, Codex or Pi agent",
+        "noneHint": "Steps run on Claude Code, Codex and Pi. Add one of them to let Auto pick it.",
         "rowName": "Auto can pick {{agent}}",
         "switch": "Auto can pick {{agent}}",
         "offByDefault": "Off by default: paid by the token",
@@ -1337,7 +1337,6 @@
         "limitsVendorDisallows": "Vendor does not allow third-party apps to read plan usage",
         "noSilentSessionDelete": "Harness cannot delete temporary side-chat sessions silently",
         "piExtensionRequired": "Wired through Kettu's Pi extension (requires Pi 1.0+)",
-        "piNoPermissionPrompts": "Pi does not prompt for tool permissions to enforce scopes",
         "routinesOnlyNoWorkflows": "Routine permission modes are mapped; workflow steps are not enabled yet",
         "sideChatHiddenCopyOnly": "Answers in a hidden session with a copied conversation summary"
       }

@@ -53,7 +53,6 @@ export type CapabilityNoteKey =
   | 'limitsVendorDisallows'
   | 'noSilentSessionDelete'
   | 'piExtensionRequired'
-  | 'piNoPermissionPrompts'
   | 'routinesOnlyNoWorkflows'
   | 'sideChatHiddenCopyOnly'
 
@@ -250,11 +249,7 @@ export const HARNESS_CAPABILITIES: Readonly<Record<HarnessId, HarnessCapabilityM
     usageHistory: SUPPORTED,
     planLimits: LIMITS_PROVIDER_MANAGED,
     sideChat: SUPPORTED,
-    workflowsAndRoutines: {
-      status: 'unavailable',
-      gapReason: 'upstream',
-      note: 'piNoPermissionPrompts',
-    },
+    workflowsAndRoutines: SUPPORTED,
   },
   cline: {
     steering: {

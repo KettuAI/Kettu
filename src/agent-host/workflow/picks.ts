@@ -17,7 +17,7 @@ import type { ModelNote } from '../catalog'
 import type { TaskRecord } from './model'
 
 /** The harnesses whose permissions Kettu holds, as for routines: only they do steps. */
-export const STEP_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex'])
+export const STEP_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code', 'codex', 'pi'])
 
 export interface WorkflowModel {
   value: string
@@ -200,7 +200,7 @@ export function checkPick(
     line(
       'agent',
       false,
-      `${agent.name} cannot do workflow steps; only Claude Code and Codex agents can.`,
+      `${agent.name} cannot do workflow steps; only Claude Code, Codex and Pi agents can.`,
     )
     return { lines, reviewShared: false }
   }

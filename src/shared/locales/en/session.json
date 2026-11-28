@@ -1085,7 +1085,7 @@
       "worktreeHint": "A task works in a worktree and on a branch of its own.",
       "worktreeNote": "A task works in its own worktree, on a new branch cut from <base>{{base}}</base>. Kettu names it when you send.",
       "textOnly": "A task takes text only: remove the attachments to send it.",
-      "stepAgents": "Only Claude Code and Codex agents work on workflow steps: choose one of them.",
+      "stepAgents": "Only Claude Code, Codex and Pi agents work on workflow steps: choose one of them.",
       "previewFoot": "Pace: {{pace}} · Auto steps are picked when they start"
     }
   },
@@ -1803,7 +1803,7 @@
       "codex": "Codex"
     },
     "everyAgent": "Every agent",
-    "stepAgents": "Claude Code and Codex",
+    "stepAgents": "Claude Code, Codex and Pi",
     "visibleTo": "Visible to",
     "asBefore": "as before",
     "adds": "Adds",
