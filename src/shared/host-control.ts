@@ -808,6 +808,9 @@ export type MainToRemoteHost =
       deviceId: string | null
       except?: string
     }
+  // Waits until every connected device's outbox has delivered prior admin events, then answers with
+  // remote-host:events-flushed under the same id.
+  | { type: 'remote-host:flush-events'; requestId: number }
   // What the agent host says needs the user, what waits and what was seen, for the devices'
   // notifications.
   | { type: 'remote-host:attention'; attention: Extract<HostToMain, { type: 'host:attention' }> }
@@ -934,6 +937,7 @@ export type RemoteHostToMain =
       method: HostAdminMethod
       params: unknown
     }
+  | { type: 'remote-host:events-flushed'; requestId: number }
   | { type: 'remote-host:reset'; requestId: number }
   | { type: 'remote-host:stop-serving'; requestId: number }
   | { type: 'remote-host:stopped' }

@@ -30,7 +30,9 @@ export function appUpdateNotice(
     return {
       kind: 'ready',
       version: state.version,
-      waiting: status.restartWhenIdle?.sessions ?? null,
+      waiting: status.restartWhenIdle
+        ? status.restartWhenIdle.sessions + (status.restartWhenIdle.terminals ?? 0)
+        : null,
     }
   if (state.kind === 'available' && status.dismissed !== state.version) {
     return state.mode === 'install'

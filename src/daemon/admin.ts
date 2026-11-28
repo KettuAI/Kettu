@@ -163,6 +163,7 @@ export async function startDaemonAdmin({
       isPackaged: true,
       sharing: false,
       updates: false,
+      remoteUpdateFlow: false,
       remoteSwitch: false,
       remoteReset: true,
       ownRelay: true,

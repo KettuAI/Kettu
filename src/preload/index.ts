@@ -80,6 +80,7 @@ function systemLocale(): Locale {
   return isLocale(value) ? value : 'en'
 }
 const onUpdateChanged = subscribe('update:changed')
+const onConfirmQuitResolved = subscribe('app:confirm-quit-resolved')
 const onDebugChanged = subscribe('debug:changed')
 const onRecordingChanged = subscribe('report:recording-changed')
 const onShortcut = subscribe('app:shortcut')
@@ -134,6 +135,7 @@ const api: KettuApi = {
         quitListeners.delete(listener)
       }
     },
+    onConfirmQuitResolved,
     onCommand: (listener) => {
       commandListeners.add(listener)
       const held = heldCommands

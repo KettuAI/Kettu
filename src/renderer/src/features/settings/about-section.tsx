@@ -155,19 +155,33 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       )
       break
     case 'ready': {
-      const waiting = status.restartWhenIdle?.sessions ?? null
+      const waiting = status.restartWhenIdle
+        ? status.restartWhenIdle.sessions + (status.restartWhenIdle.terminals ?? 0)
+        : null
+      const hostConfirming = status.phase === 'awaiting_host_confirmation'
+      const confirming = status.phase === 'awaiting_confirmation'
+      const restarting = status.phase === 'restarting'
       title = t('about.updates.ready', { version: state.version })
-      detail =
-        waiting === null
-          ? t('about.updates.readyDetail')
-          : waiting > 0
-            ? t('about.updates.readyWaiting', { count: waiting })
-            : t('about.updates.readyWaitingSoon')
+      detail = hostConfirming
+        ? t('about.updates.awaitingHostConfirmation')
+        : restarting
+          ? t('about.updates.restarting')
+          : confirming
+            ? t('about.updates.awaitingConfirmation')
+            : waiting === null
+              ? t('about.updates.readyDetail')
+              : waiting > 0
+                ? t('about.updates.readyWaiting', { count: waiting })
+                : t('about.updates.readyWaitingSoon')
       action = (
         <>
           {check}
           {whatsNew(state.version)}
-          <SetButton variant="primary" onClick={restartToUpdate}>
+          <SetButton
+            variant="primary"
+            disabled={hostConfirming || restarting}
+            onClick={restartToUpdate}
+          >
             {t('about.updates.restart')}
           </SetButton>
         </>

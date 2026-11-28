@@ -1491,6 +1491,35 @@ describe("the host's events", () => {
     await expect.poll(() => pad.port.events.filter(isHostAdminEvent)).toEqual([changed, pairing])
     await expect.poll(() => phone.port.events.filter(isHostAdminEvent)).toEqual([changed])
   })
+
+  it('flushes queued updates.changed admin events to connected devices before stopping', async () => {
+    const t = await setup()
+    const phone = await t.connect()
+    await phone.first
+    const restarting: HostAdminEvent = {
+      type: 'updates.changed',
+      status: {
+        state: { kind: 'ready', version: '0.1.29' },
+        mode: 'install',
+        readOnly: false,
+        current: '0.1.28',
+        updatedFrom: null,
+        dismissed: null,
+        restartWhenIdle: null,
+        phase: 'restarting',
+        requestId: 'req-1',
+        initiator: { kind: 'remote', deviceId: t.phone.id, deviceName: 'Phone' },
+        confirmation: null,
+        hostConfirmation: null,
+        outcome: null,
+        progress: null,
+      },
+    }
+    t.server.adminEvent(restarting, null)
+    await t.server.flushAdminEvents()
+    await t.server.stop('stopping')
+    expect(phone.port.events.filter(isHostAdminEvent)).toContainEqual(restarting)
+  })
 })
 
 describe("a desktop app's browser", () => {

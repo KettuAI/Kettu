@@ -425,6 +425,11 @@ export class RemoteServer {
     }
   }
 
+  /** Settles once every open device session has delivered admin events queued so far. */
+  flushAdminEvents(): Promise<void> {
+    return Promise.all([...this.sessions].map((session) => session.flush())).then(() => {})
+  }
+
   /**
    * The host is about to move to another relay, or to none: every device connected hears it.
    * Settles once the devices reached through the relay have everything sent them so far, so the
@@ -1465,6 +1470,11 @@ class DeviceSession {
   /** Something of the host its owner hears, beside the agent host's events. */
   adminEvent(event: HostAdminEvent): void {
     if (this.live && this.role === 'owner') this.send({ type: 'event', event })
+  }
+
+  /** Settles once everything queued in the outbox so far has reached the device, or the session closed. */
+  flush(): Promise<void> {
+    return this.live ? this.outbox.flush() : Promise.resolve()
   }
 
   hostRenamed(name: string): void {
