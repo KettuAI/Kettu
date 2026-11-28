@@ -39,6 +39,7 @@ import { mediumAgo } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isMac, isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
+import { useCloudOffHere } from '@renderer/features/settings/use-cloud-off-here'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useAccountStore } from '@renderer/stores/account'
 import {
@@ -667,22 +668,26 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [communityKey, useMarketplaceStore])
 
-  // Signing in or out of this computer's account changes what the Community shows.
+  // Signing in or out of this computer's account, or toggling Kettu cloud, changes Community.
   const accountState = useAccountStore((s) => s.status?.state ?? null)
+  const cloudOff = useCloudOffHere()
   useEffect(() => {
     if (scope.hostId !== null || accountState === null) return
+    const expected = accountState === 'signed-in' && !cloudOff
     const store = useMarketplaceStore.getState()
-    const all = store.communityPages[communityScopeKey({})]
-    if (all && all.signedIn !== (accountState === 'signed-in')) {
+    const stale = Object.values(store.communityPages).some(
+      (page) => !page.loading && page.signedIn !== expected,
+    )
+    if (stale) {
       useMarketplaceStore.setState({ communityPages: {} })
       void store.loadCommunity({}, true)
       if (communityKey !== null && communityKey !== communityScopeKey({})) {
         void store.loadCommunity(communityScope(tab, filter), true)
       }
     }
-    // Only a change of account reads again; the tab's own reads are the effect above's.
+    // Only a change of account or cloud setting reads again; the tab's own reads are above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountState, scope.hostId, useMarketplaceStore])
+  }, [accountState, cloudOff, scope.hostId, useMarketplaceStore])
 
   const addFolder = async () => {
     const path = await scope.api.dialogs.openProject()
