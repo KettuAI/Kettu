@@ -75,6 +75,7 @@ import {
 } from '@renderer/stores/view'
 import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
+import { ActivityView } from './activity-view'
 import { AddProjectButton } from './add-project'
 import { ArchiveProjectDialog } from './archive-project'
 import { EditProjectDialog } from './edit-project'
@@ -116,6 +117,7 @@ export function SidebarList() {
   // list follows its Tab stop, and each group follows its own sessions.
   const tasks = useTasksStore((s) => s.summaries)
   const main = useViewStore((s) => s.main)
+  const sidebarView = useViewStore((s) => s.sidebarView)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
   const others = useOtherHosts()
@@ -189,6 +191,8 @@ export function SidebarList() {
               </div>
             ))}
           </div>
+        ) : sidebarView === 'activity' ? (
+          <ActivityView />
         ) : hosts ? (
           <>
             <NeedsYouGroup hosts={hosts} away={away} />

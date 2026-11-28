@@ -75,6 +75,7 @@ export const SessionRow = memo(function SessionRow({
   node,
   tabStopId,
   showHost = false,
+  context,
   indent = false,
   branch,
 }: {
@@ -83,6 +84,8 @@ export const SessionRow = memo(function SessionRow({
   tabStopId: string | null
   /** The row ends with its host's name, as in a list across the hosts. */
   showHost?: boolean
+  /** Secondary context line under the title (such as project and host in the Activity view). */
+  context?: string
   /** In a project's folder, so the row lines up with the folder's name. */
   indent?: boolean
   /** A sub-session's place under its parent, which the tree line follows. */
@@ -212,6 +215,43 @@ export const SessionRow = memo(function SessionRow({
     </span>
   )
 
+  const rowBody = (
+    <RowBody>
+      {mark}
+      <span className="ui-as-side__text" dir="auto">
+        {title}
+      </span>
+      {summary.worktree && (
+        <WorktreeRowMark worktree={summary.worktree} onOpen={() => setCardOpen(false)} />
+      )}
+      <PrBadge summary={summary} onOpen={() => setCardOpen(false)} />
+      {hasChildren && !expanded && (
+        <span
+          aria-label={t('row.subSessions', { count: children.length })}
+          className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
+        >
+          {children.length}
+        </span>
+      )}
+      {gone && <span className="sr-only">{gone}</span>}
+      {node.subagents.length > 0 && !away && (
+        <SubagentBadge
+          parent={summary}
+          subagents={node.subagents}
+          onOpen={() => setCardOpen(false)}
+        />
+      )}
+      <RowEnd>
+        {showHost && hostName && (
+          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+            {hostName}
+          </span>
+        )}
+        {!away && <SessionIndicator status={status} expiring={expiring} />}
+      </RowEnd>
+    </RowBody>
+  )
+
   const button = (
     <button
       ref={drag.ref}
@@ -220,6 +260,7 @@ export const SessionRow = memo(function SessionRow({
       // The other panes' rows take the current row's fill.
       className={cn(
         'ui-as-side__item ui-as-chat-row__link data-multi-selected:bg-(--row-picked)!',
+        context && 'kettu-activity-row__link',
         inSplit && 'kettu-row-in-view',
         away && 'text-(--faint)!',
       )}
@@ -259,41 +300,25 @@ export const SessionRow = memo(function SessionRow({
       }}
       style={{ paddingLeft: pad }}
     >
-      {caret}
-      <RowBody>
-        {mark}
-        <span className="ui-as-side__text" dir="auto">
-          {title}
-        </span>
-        {summary.worktree && (
-          <WorktreeRowMark worktree={summary.worktree} onOpen={() => setCardOpen(false)} />
-        )}
-        <PrBadge summary={summary} onOpen={() => setCardOpen(false)} />
-        {hasChildren && !expanded && (
-          <span
-            aria-label={t('row.subSessions', { count: children.length })}
-            className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
-          >
-            {children.length}
+      {context ? (
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-2">
+            {caret}
+            {rowBody}
           </span>
-        )}
-        {gone && <span className="sr-only">{gone}</span>}
-        {node.subagents.length > 0 && !away && (
-          <SubagentBadge
-            parent={summary}
-            subagents={node.subagents}
-            onOpen={() => setCardOpen(false)}
-          />
-        )}
-        <RowEnd>
-          {showHost && hostName && (
-            <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
-              {hostName}
-            </span>
-          )}
-          {!away && <SessionIndicator status={status} expiring={expiring} />}
-        </RowEnd>
-      </RowBody>
+          <span
+            className="kettu-activity-row__context truncate pl-6 text-[11.5px] leading-4 text-(--faint)"
+            title={context}
+          >
+            {context}
+          </span>
+        </span>
+      ) : (
+        <>
+          {caret}
+          {rowBody}
+        </>
+      )}
     </button>
   )
 

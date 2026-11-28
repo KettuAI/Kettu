@@ -4,6 +4,8 @@
     "newSession": "新建会话",
     "overview": "总览",
     "search": "搜索",
+    "activity": "活动",
+    "activityBack": "再次点击回到项目列表",
     "artifacts": "产物",
     "routines": "定时任务",
     "marketplace": "市场",
@@ -402,6 +404,18 @@
   },
   "needsYou": {
     "label": "等你处理"
+  },
+  "activity": {
+    "title": "活动",
+    "waiting": "等你处理",
+    "running": "运行中",
+    "waitingCount_other": "{{count}} 个等你处理",
+    "runningCount_other": "{{count}} 个运行中",
+    "backgroundCount_other": "{{count}} 个后台运行",
+    "separator": " · ",
+    "emptyTitle": "当前没有活跃会话",
+    "emptyBody": "运行中、等待回复或等待批准的会话会集中显示在这里。",
+    "backToProjects": "回到项目列表"
   },
   "hosts": {
     "all": "全部电脑",
