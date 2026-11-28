@@ -58,11 +58,11 @@ const GLM_INIT: AgentInit = {
   raw: {},
 }
 
-function makeSettings(): HostSettings {
+function makeSettings(registered = true): HostSettings {
   return {
     locale: 'en',
     initialSetupDone: true,
-    agents: { glm: { enabled: true } },
+    agents: registered ? { glm: { enabled: true } } : {},
     addedAgents: [],
     disabledAgents: [],
     proxy: DEFAULT_SETTINGS.proxy,
@@ -113,6 +113,7 @@ async function writeInstalledGlm(adaptersDir: string, version = '1.18.0'): Promi
 async function setupManager(
   options: {
     installed?: boolean
+    registered?: boolean
     env?: Record<string, string>
     seedFileKey?: string
     hasEnvKey?: () => boolean
@@ -148,6 +149,7 @@ async function setupManager(
   } as unknown as AgentConnection
   const driver: ProcessDriver = { kind: 'process', connect: () => connection }
 
+  let currentSettings = makeSettings(options.registered ?? true)
   const nodeRuntime = { command: process.execPath, env: {} }
   const agents = new AgentManager({
     catalog: [GLM],
@@ -193,7 +195,7 @@ async function setupManager(
         }
       },
     },
-    settings: () => makeSettings(),
+    settings: () => currentSettings,
     reportsDir: path.join(root, 'reports'),
     adaptersDir,
     bundled: {
@@ -231,9 +233,15 @@ async function setupManager(
   }
 
   const glmStatus = async () => (await agents.list()).find((s) => s.id === 'glm')!
+  const registerGlm = async () => {
+    const previous = currentSettings
+    currentSettings = makeSettings(true)
+    await agents.settingsChanged(previous, currentSettings)
+  }
   return {
     agents,
     glmStatus,
+    registerGlm,
     credentialsPath,
     entry,
     stops: () => stops,
@@ -378,5 +386,24 @@ describe('GLM Agent sign-in in AgentManager', () => {
     storedEnvKey = false
     await agents.agentEnvChanged('glm')
     expect((await glmStatus()).signIn).toBe('required')
+  })
+
+  it('skips credential reads while unregistered and detects existing credentials once added', async () => {
+    const { glmStatus, registerGlm } = await setupManager({
+      registered: false,
+      seedFileKey: 'sk-preexisting-cli-key',
+    })
+    const before = await glmStatus()
+    expect(before.registered).toBe(false)
+    expect(before.signIn).toBe('unknown')
+    expect(before.apiKey).toEqual({ set: false, providers: false })
+
+    await registerGlm()
+
+    const after = await glmStatus()
+    expect(after.registered).toBe(true)
+    expect(after.signIn).toBe('signed-in')
+    expect(after.apiKey).toEqual({ set: true, providers: false })
+    expect(after.account).toEqual({ kind: 'api_key', label: 'Z.AI API key', email: null })
   })
 })

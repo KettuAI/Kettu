@@ -1148,7 +1148,11 @@ export class AgentManager {
         slot.state = effective.state
         slot.detail = effective.state === 'available' ? null : effective.detail
       }
-      if (h.def.id === 'glm') await this.readGlmSignIn(slot)
+    }
+    if (h.def.id === 'glm') {
+      for (const slot of this.agentsOf(h)) {
+        if (this.has(slot.id)) await this.readGlmSignIn(slot)
+      }
     }
     this.emit(this.home(h))
     if (program) h.binaryVersionAsked = this.askBinaryVersion(h, program, env)
@@ -1294,7 +1298,11 @@ export class AgentManager {
       const after = registeredByDefault(h.def.id, next.agents)
       if (before && !after) removed.push(h.def.id)
       // A newly added default instance shows at once; its slot already exists for the harness.
-      else if (!before && after) this.emit(this.home(h))
+      else if (!before && after) {
+        const home = this.home(h)
+        if (h.def.id === 'glm') await this.readGlmSignIn(home)
+        this.emit(home)
+      }
     }
     await Promise.all(
       removed.map(async (agentId) => {
