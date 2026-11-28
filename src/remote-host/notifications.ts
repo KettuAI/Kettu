@@ -467,6 +467,11 @@ export class DeviceNotifications {
     this.notifier.setPresent(present)
   }
 
+  /** Re-evaluates device Live Activities when a device's foreground or connection state changes. */
+  deviceChanged(): void {
+    this.notifier.deviceChanged()
+  }
+
   /** A device of the account asks to be added, which the devices hear until it ends. */
   discoveryChanged({ requestId, request }: DiscoveryRequestEvent): void {
     if (request.state === 'closed') {

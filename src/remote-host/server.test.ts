@@ -197,6 +197,7 @@ async function setup(
   return {
     agent,
     server,
+    notifications,
     hostKey,
     signedIn,
     devices,
@@ -532,6 +533,27 @@ describe("a device's notifications", () => {
     await device.send({ type: 'pace', ms: 0 })
     await device.port.request('sessions.show', { sessionIds: [] })
     expect(t.server.showing(t.phone.id, session.id)).toBe(false)
+  })
+
+  it('notifies notifications when a foreground device enters the background or disconnects', async () => {
+    const t = await setup({ push: true })
+    const spy = vi.spyOn(t.notifications!, 'deviceChanged')
+    const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
+    await device.first
+    expect(t.server.foreground(t.phone.id)).toBe(true)
+
+    await device.send({ type: 'pace', ms: BACKGROUND_PACE_MS })
+    await expect.poll(() => t.server.foreground(t.phone.id)).toBe(false)
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    // Returning to foreground does not re-trigger the background transition, disconnecting does.
+    await device.send({ type: 'pace', ms: 0 })
+    await expect.poll(() => t.server.foreground(t.phone.id)).toBe(true)
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    device.close()
+    await expect.poll(() => t.server.foreground(t.phone.id)).toBe(false)
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 })
 

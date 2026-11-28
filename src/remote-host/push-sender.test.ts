@@ -404,4 +404,50 @@ describe('sending a push', () => {
     expect(redacted).not.toHaveProperty('agentId')
     expect(redacted).not.toHaveProperty('changedFiles')
   })
+
+  it('encodes Live Activity end pushes as an empty waiting state and strips stale fields', async () => {
+    const updateToken = '44'.repeat(32)
+    const t = await setup([200], {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { update: updateToken },
+      },
+    })
+    t.sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 3,
+      sessionId: 'stale-session',
+      title: 'Stale title',
+      payload: {
+        kind: 'waiting',
+        count: 3,
+        sessionId: 'stale-session',
+        title: 'Stale title',
+        body: 'Stale body',
+        requestId: 'req-stale',
+      },
+    })
+    await t.finished
+    const parsed = parsePushRequest(t.requests[0]!.body)!
+    expect(parsed).toMatchObject({
+      token: updateToken,
+      environment: 'sandbox',
+      push: { type: 'liveactivity', event: 'end' },
+    })
+    const content = await opened(t, t.requests[0]!.body)
+    expect(content).toMatchObject({
+      v: 1,
+      host: t.hostId,
+      hostName: 'Studio',
+      kind: 'waiting',
+      count: 0,
+    })
+    expect(content).not.toHaveProperty('title')
+    expect(content).not.toHaveProperty('body')
+    expect(content).not.toHaveProperty('sessionId')
+    expect(content).not.toHaveProperty('requestId')
+  })
 })
