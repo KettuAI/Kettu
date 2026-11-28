@@ -236,7 +236,7 @@ function terminalId(value: unknown): string {
 }
 
 function lines(value: unknown): number {
-  if (value === undefined) return DEFAULT_TERMINAL_READ_LINES
+  if (value === undefined || value === null) return DEFAULT_TERMINAL_READ_LINES
   if (
     typeof value !== 'number' ||
     !Number.isInteger(value) ||
@@ -249,7 +249,7 @@ function lines(value: unknown): number {
 }
 
 function flag(value: unknown, key: string, fallback: boolean): boolean {
-  if (value === undefined) return fallback
+  if (value === undefined || value === null) return fallback
   if (typeof value !== 'boolean') throw new TerminalArgsError(`"${key}" must be a boolean`)
   return value
 }
@@ -276,7 +276,8 @@ export function terminalCallOf(
       if (!context.agentId || !context.folder) {
         throw new TerminalArgsError('This session has no folder to open a terminal in')
       }
-      const name = given.name === undefined ? undefined : terminalNameArg(given.name)
+      const name =
+        given.name === undefined || given.name === null ? undefined : terminalNameArg(given.name)
       return {
         kind: 'run',
         sessionId,

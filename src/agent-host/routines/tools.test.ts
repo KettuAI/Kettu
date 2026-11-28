@@ -381,3 +381,29 @@ describe('a call repeated while its card waits', () => {
     expect(h.created).toHaveLength(1)
   })
 })
+
+describe('strict-schema null optional arguments', () => {
+  it('treats null optional fields and inactive schedule fields as omitted while preserving project: null', async () => {
+    const h = harness()
+    const pending = h.tools.call(CALLER, CREATE_ROUTINE, {
+      name: null,
+      prompt: 'Check status',
+      schedule: { kind: 'every', minutes: 30, at: null, days: null, time: null, expression: null },
+      agent: null,
+      model: null,
+      effort: null,
+      project: null,
+      scope: null,
+      web: null,
+      timeLimitMinutes: null,
+    })
+    await vi.waitFor(() => expect(h.asked).toHaveLength(1))
+    expect(h.asked[0]!.routine).toMatchObject({
+      projectPath: null,
+      scope: { level: 'read', web: false },
+      timeLimitMinutes: 60,
+    })
+    h.answer({ decision: 'decline' })
+    await pending
+  })
+})

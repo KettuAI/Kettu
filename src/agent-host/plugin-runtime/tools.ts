@@ -39,13 +39,16 @@ export function checkToolArguments(
   for (const key of Object.keys(given)) {
     if (!Object.hasOwn(schema.properties, key)) return { error: `Unknown argument "${key}".` }
   }
-  for (const key of schema.required ?? []) {
-    if (given[key] === undefined) return { error: `The argument "${key}" is required.` }
+  const required = new Set(schema.required ?? [])
+  for (const key of required) {
+    if (given[key] === undefined || given[key] === null) {
+      return { error: `The argument "${key}" is required.` }
+    }
   }
   const value: Record<string, unknown> = {}
   for (const [key, argument] of Object.entries(schema.properties)) {
     const item = given[key]
-    if (item === undefined) continue
+    if (item === undefined || (item === null && !required.has(key))) continue
     const wrong = (what: string): { error: string } => ({ error: `The argument "${key}" ${what}.` })
     switch (argument.type) {
       case 'string':

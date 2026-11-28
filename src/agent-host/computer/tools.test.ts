@@ -66,6 +66,57 @@ describe('the computer tools', () => {
     refused('computer_list_apps', 'all')
     refused('computer_open_terminal', {})
   })
+
+  it('treats null optional arguments as omitted while still rejecting null required ones', () => {
+    expect(
+      computerCall('computer_list_windows', { pid: 1, on_screen_only: null }, 'darwin').args,
+    ).toEqual({ pid: 1 })
+    expect(
+      computerCall(
+        'computer_get_window_state',
+        {
+          pid: 1,
+          window_id: 2,
+          query: null,
+          since: null,
+          max_elements: null,
+          max_depth: null,
+          include_screenshot: null,
+          include_accessibility_tree: null,
+        },
+        'darwin',
+      ).args,
+    ).toEqual({ pid: 1, window_id: 2 })
+    expect(
+      computerCall(
+        'computer_click',
+        {
+          pid: 1,
+          window_id: 2,
+          element_token: 's0000002a:1',
+          x: null,
+          y: null,
+          button: null,
+          count: null,
+          delivery_mode: null,
+        },
+        'darwin',
+      ).args,
+    ).toEqual({
+      target: { kind: 'window', pid: 1, window_id: 2 },
+      delivery_mode: 'background',
+      element_token: 's0000002a:1',
+    })
+    expect(
+      computerCall(
+        'computer_press_key',
+        { pid: 1, window_id: 2, key: 'return', modifiers: null },
+        'darwin',
+      ).keys,
+    ).toEqual(['return'])
+    refused('computer_list_windows', { pid: null })
+    refused('computer_click', { pid: 1, window_id: 2, element_token: null, x: null, y: null })
+  })
 })
 
 describe('the driver environment', () => {

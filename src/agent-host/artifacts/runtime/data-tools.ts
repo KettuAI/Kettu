@@ -243,7 +243,7 @@ export class DataTools {
     const reach = { id: artifactId(o), project: caller.project }
     const actor = { person: 'owner' as const, session: caller.sessionId }
     const { data } = this.deps
-    if (o.collection === undefined) {
+    if (o.collection === undefined || o.collection === null) {
       const { collections, bytes } = await data.collections(actor, reach)
       const text =
         collections.length === 0
@@ -252,7 +252,7 @@ export class DataTools {
       return result(text, { collections, bytes })
     }
     const collection = checkCollection(o.collection)
-    if (o.doc_id !== undefined) {
+    if (o.doc_id !== undefined && o.doc_id !== null) {
       const doc = await data.get(actor, reach, collection, checkDocId(o.doc_id))
       return result(
         doc
@@ -262,7 +262,10 @@ export class DataTools {
       )
     }
     const limit = checkLimit(o.limit)
-    if (o.where !== undefined || o.order_by !== undefined) {
+    if (
+      (o.where !== undefined && o.where !== null) ||
+      (o.order_by !== undefined && o.order_by !== null)
+    ) {
       const docs = await data.query(
         actor,
         reach,
@@ -275,7 +278,7 @@ export class DataTools {
         documents: docs.map(docOut),
       })
     }
-    const after = o.after === undefined ? null : checkDocId(o.after)
+    const after = o.after === undefined || o.after === null ? null : checkDocId(o.after)
     const { docs, next } = await data.list(actor, reach, collection, after, limit)
     return result(
       next
@@ -309,11 +312,14 @@ export class DataTools {
     const actor = { person: 'owner' as const, session: caller.sessionId }
     const collection = checkCollection(o.collection)
     const docId = checkDocId(o.doc_id)
-    const given = ['value', 'patch', 'delete'].filter((key) => o[key] !== undefined)
+    const hasValue = o.value !== undefined
+    const hasPatch = o.patch !== undefined && o.patch !== null
+    const hasDelete = o.delete !== undefined && o.delete !== null
+    const given = [hasValue, hasPatch, hasDelete].filter(Boolean)
     if (given.length !== 1) {
       throw new CapabilityError('invalid', 'Give exactly one of value, patch or delete.')
     }
-    if (o.delete !== undefined && o.delete !== true) {
+    if (hasDelete && o.delete !== true) {
       throw new CapabilityError('invalid', 'delete must be true.')
     }
     const baseVersion = checkBase(o.base_version)
@@ -328,8 +334,8 @@ export class DataTools {
     const doc = await this.deps.data.put(actor, reach, {
       collection,
       docId,
-      value: o.patch !== undefined ? o.patch : o.value,
-      merge: o.patch !== undefined,
+      value: hasPatch ? o.patch : o.value,
+      merge: hasPatch,
       baseVersion,
     })
     return result(`Wrote ${collection}/${docId}, now at version ${doc.version}.`, {

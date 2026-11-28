@@ -367,7 +367,7 @@ function text(
   required: boolean,
 ): string | null {
   const value = o[key]
-  if (value === undefined && !required) return null
+  if ((value === undefined || value === null) && !required) return null
   if (typeof value !== 'string' || value.trim() === '') {
     if (!required && value === '') return null
     throw invalid(`${key} must be a non-empty string.`)
@@ -390,7 +390,7 @@ function targetOf(o: Record<string, unknown>): Target {
     throw invalid('from_task must be a task id as Kettu gave it.')
   }
   const workflow = o.workflow
-  if (workflow === undefined) {
+  if (workflow === undefined || workflow === null) {
     if (given === null) throw invalid('Pass path, or workflow with from_task.')
     return { path: given, workflow: null, fromTask }
   }

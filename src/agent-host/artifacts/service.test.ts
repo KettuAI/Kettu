@@ -544,6 +544,13 @@ describe("a plugin's tools", () => {
     const wrong = await viaGateway(service, { tool: tool.name, arguments: { word: 'clock' } })
     expect(wrong.isError).toBe(true)
     expect(texts(wrong)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
+    const describedWithNulls = await viaGateway(service, {
+      tool: tool.name,
+      server: null,
+      arguments: null,
+    })
+    expect(describedWithNulls.isError).toBeUndefined()
+    expect(texts(describedWithNulls)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
   })
 })
 

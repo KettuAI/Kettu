@@ -400,4 +400,25 @@ describe('undoing switches', () => {
       projects: { mode: 'except', paths: ['/q'] },
     })
   })
+
+  it('treats null optional fields and empty agents array as omitted', async () => {
+    const h = harness()
+    const switched = h.tools.call(CALLER, SWITCH_MCP_SERVERS, {
+      changes: [{ server: 'github', on: false, agent: null, project: null, tool: null }],
+    })
+    await vi.waitFor(() => expect(h.asked).toHaveLength(1))
+    h.answer({ decision: 'decline' })
+    await switched
+
+    const added = h.tools.call(CALLER, ADD_MCP_SERVER, {
+      catalog: null,
+      config: 'https://example.com/mcp',
+      name: null,
+      agents: [],
+    })
+    await vi.waitFor(() => expect(h.asked).toHaveLength(2))
+    expect(h.asked[1]!.server?.agents).toBe('all')
+    h.answer({ decision: 'decline' })
+    await added
+  })
 })

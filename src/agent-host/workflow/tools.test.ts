@@ -166,4 +166,12 @@ describe('the workflow tools', () => {
       'steps: must list at least one step',
     )
   })
+
+  it('treats null keep on create_workflow as omitted', async () => {
+    const result = await tools().tools.call(caller('plain'), 'create_workflow', {
+      yaml: 'format: 1',
+      keep: null,
+    })
+    expect(result.structuredContent).toMatchObject({ saved: false })
+  })
 })

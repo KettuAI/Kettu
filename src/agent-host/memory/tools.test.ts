@@ -222,4 +222,26 @@ describe('MemoryTools', () => {
     }
     expect(await readdir(path.join(dir, 'memory'))).toEqual(['settings.json'])
   })
+
+  it('treats null optional arguments as omitted while keeping layer required where needed', async () => {
+    const saved = await tools.call(inA, REMEMBER_TOOL, { ...FACT, layer: null })
+    expect(saved.isError).toBeUndefined()
+    const listed = await tools.call(inA, LIST_MEMORIES_TOOL, { layer: null, offset: null })
+    expect(listed.isError).toBeUndefined()
+    expect(text(listed)).toContain('Run tests')
+    const updated = await tools.call(inA, UPDATE_MEMORY_TOOL, {
+      layer: 'project',
+      id: 'run-tests',
+      title: 'Run vitest',
+      description: null,
+      body: null,
+    })
+    expect(updated.isError).toBeUndefined()
+    const missingLayer = await tools.call(inA, READ_MEMORY_TOOL, {
+      layer: null,
+      id: 'run-tests',
+    })
+    expect(missingLayer.isError).toBe(true)
+    expect(missingLayer.structuredContent).toMatchObject({ code: 'invalid' })
+  })
 })

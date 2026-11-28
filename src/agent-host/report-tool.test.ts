@@ -13,6 +13,7 @@ describe('parseDraft', () => {
     })
     expect(parseDraft({ title: 'T', details: 'D', error: 'E' }).error).toBe('E')
     expect(parseDraft({ title: 'T', details: 'D', error: '  ' }).error).toBeNull()
+    expect(parseDraft({ title: 'T', details: 'D', error: null }).error).toBeNull()
   })
 
   it('refuses missing, empty, oversized and unknown fields', () => {

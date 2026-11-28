@@ -619,4 +619,44 @@ describe('deleting a comment thread', () => {
     expect(remaining.map((t) => t.id)).toEqual([second.id])
     await expect(store.deleteThread(id, first.id)).rejects.toMatchObject({ code: 'not_found' })
   })
+
+  it('treats null optional arguments as omitted across artifact tools', async () => {
+    const created = await tools.call(caller, 'create_artifact', {
+      title: 'Null optional test',
+      html: '<p>Hello</p>',
+      files: null,
+      capabilities: null,
+      note: null,
+    })
+    expect(created.isError).toBeUndefined()
+    const id = (created.structuredContent as { id: string }).id
+
+    const read = await tools.call(caller, 'read_artifact', {
+      id,
+      version: null,
+      path: null,
+      offset: null,
+      limit: null,
+    })
+    expect(read.isError).toBeUndefined()
+
+    const updated = await tools.call(caller, 'update_artifact', {
+      id,
+      base_version: 1,
+      html: null,
+      files: null,
+      edits: [{ path: null, old_text: 'Hello', new_text: 'World' }],
+      capabilities: null,
+      canvas: null,
+      title: null,
+      note: null,
+    })
+    expect(updated.isError).toBeUndefined()
+
+    const listed = await tools.call(caller, 'list_artifacts', { query: null, limit: null })
+    expect(listed.isError).toBeUndefined()
+
+    const comments = await tools.call(caller, 'read_comments', { id, resolved: null })
+    expect(comments.isError).toBeUndefined()
+  })
 })
