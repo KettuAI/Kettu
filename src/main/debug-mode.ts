@@ -52,9 +52,16 @@ const CDP_TRIES = 20
 const CDP_RETRY_MS = 250
 
 let ports: DebugPortsFile | null = null
+const listeners = new Set<(status: DebugStatus) => void>()
 
 export function isDebugRun(): boolean {
   return run().on
+}
+
+/** Subscribes to changes in this run's debug mode status (CDP port and host inspectors). */
+export function onDebugChanged(listener: (status: DebugStatus) => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 /** What a second instance tells the running one, through the single-instance lock. */
@@ -82,7 +89,10 @@ export function startDebugMode(logsFolder: string): void {
   if (debug.cdp !== null) app.commandLine.appendSwitch('remote-debugging-port', String(debug.cdp))
   ports = new DebugPortsFile(file, {
     cdp: true,
-    changed: (status) => broadcast('debug:changed', status),
+    changed: (status) => {
+      broadcast('debug:changed', status)
+      for (const listener of listeners) listener(status)
+    },
   })
   log.warn('Debug mode: debugging ports without authentication are open on 127.0.0.1')
   try {

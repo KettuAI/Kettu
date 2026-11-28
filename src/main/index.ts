@@ -20,7 +20,11 @@ import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
-import { ARTIFACT_RECORDS, type HostAttention } from '@shared/remote/host-admin'
+import {
+  ARTIFACT_RECORDS,
+  type DiagnosticsStatus,
+  type HostAttention,
+} from '@shared/remote/host-admin'
 import { restartWaitsFor, type UpdateStatus } from '@shared/updates'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
@@ -49,7 +53,15 @@ import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
 import { startSignIns } from './browser/signins'
-import { asksForDebug, isDebugRun, lockData, prepareRelaunch, startDebugMode } from './debug-mode'
+import {
+  asksForDebug,
+  debugStatus,
+  isDebugRun,
+  lockData,
+  onDebugChanged,
+  prepareRelaunch,
+  startDebugMode,
+} from './debug-mode'
 import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
@@ -131,6 +143,7 @@ import { clearUpdateResume, saveUpdateResume } from './update-resume'
 import { devUserDataPath } from './user-data'
 import {
   applyVerbose,
+  clearVerboseRecords,
   logsFolder,
   markCleanExit,
   markRunning,
@@ -1252,7 +1265,10 @@ async function start(): Promise<void> {
       settings: () => settings.get(),
       setVerbose: (until) => void settings.update({ diagnostics: { verboseUntil: until } }),
       verboseUntil: () => settings.get().diagnostics.verboseUntil,
-      onRecording: (recording) => broadcast('report:recording-changed', recording),
+      onRecording: (recording) => {
+        broadcast('report:recording-changed', recording)
+        hostAdmin?.diagnosticsChanged(diagnosticsStatus())
+      },
       onRecorded: (span) => sendCommand({ kind: 'report-problem', span }),
       submit: (upload) => account.submitReport(upload),
       about: async () => {
@@ -1263,6 +1279,15 @@ async function start(): Promise<void> {
     reportsFolder,
   )
   void reports.clearFolder()
+
+  const diagnosticsStatus = (): DiagnosticsStatus => ({
+    recording: reports.recordingState(),
+    debug: debugStatus(),
+    canRecord: true,
+    canClearVerbose: true,
+    canRestartNormally: true,
+  })
+  onDebugChanged(() => hostAdmin?.diagnosticsChanged(diagnosticsStatus()))
 
   hostAdmin = new HostAdmin({
     settings,
@@ -1284,12 +1309,29 @@ async function start(): Promise<void> {
       pinnedModels: true,
       drives: true,
       computerUse: true,
+      diagnostics: true,
       artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),
     sharing,
     updates: updater,
     computerStatus: computerUseStatus,
+    diagnostics: {
+      status: diagnosticsStatus,
+      startRecording: () => {
+        reports.startRecording('remote')
+        return diagnosticsStatus()
+      },
+      stopRecording: () => {
+        const span = reports.stopRecording('remote')
+        return { status: diagnosticsStatus(), span }
+      },
+      clearVerbose: () => clearVerboseRecords(),
+      restartNormally: () => {
+        // Defer one tick so the RPC response reaches the remote host before shutdown begins.
+        setImmediate(() => quitFlow.restart(() => prepareRelaunch(false)))
+      },
+    },
     themes,
     marketKeys,
     thumbnail: (id, version, layout) => artifacts.thumbnail(ownArtifact(id), version, layout),

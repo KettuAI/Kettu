@@ -61,7 +61,6 @@ import {
   useAccountSection,
   useArchivedSection,
   useArtifactsSection,
-  useAdvancedSection,
   useAgentsSection,
   useHarnessesSection,
   useAppearanceSection,
@@ -75,6 +74,7 @@ import {
   useTerminalSection,
   useUsageSection,
 } from './section-defs'
+import { useAdvancedSection } from './advanced-section'
 import { useComputerUseSection } from './computer-section'
 import { useMemorySection } from './memory-section'
 

@@ -5,6 +5,7 @@
 import { mkdir, rename } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { logFolder } from '@shared/log/process-log'
 import { ARTIFACT_RECORDS } from '@shared/remote/host-admin'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
@@ -55,6 +56,8 @@ export interface DaemonAdminOptions {
   report?: HostAdminDeps['report']
   /** Submits a bundle `report` gave, with the daemon's sign-in. */
   submitReport?: HostAdminDeps['submitReport']
+  /** Daemon diagnostics state and verbose record cleanup (no desktop recording or restart). */
+  diagnostics?: HostAdminDeps['diagnostics']
   marketKeys: HostAdminDeps['marketKeys']
   /** Checks the owner's own relay and switches to it once it passed. */
   useOwnRelay: AdminRemote['useOwnRelay']
@@ -86,6 +89,7 @@ export async function startDaemonAdmin({
   home = os.homedir(),
   report,
   submitReport,
+  diagnostics,
   marketKeys,
   useOwnRelay,
 }: DaemonAdminOptions): Promise<HostAdmin> {
@@ -155,30 +159,36 @@ export async function startDaemonAdmin({
       useOwnRelay,
     },
     remoteStatus: () => hosts.remoteAccess(),
-    info: async () => ({
-      name: 'Kettu',
-      version,
-      system: await nodeSystemNameForRun(),
-      userDataPath: dataPath,
-      isPackaged: true,
-      sharing: false,
-      updates: false,
-      remoteUpdateFlow: false,
-      remoteSwitch: false,
-      remoteReset: true,
-      ownRelay: true,
-      dualRelay: true,
-      thumbnails: false,
-      partThumbnails: false,
-      pinnedModels: true,
-      drives: true,
-      computerUse: false,
-      artifactRecords: [...ARTIFACT_RECORDS],
-    }),
+    info: async () => {
+      const logs = logFolder()
+      return {
+        name: 'Kettu',
+        version,
+        system: await nodeSystemNameForRun(),
+        userDataPath: dataPath,
+        ...(logs ? { logsPath: logs } : {}),
+        isPackaged: true,
+        sharing: false,
+        updates: false,
+        remoteUpdateFlow: false,
+        remoteSwitch: false,
+        remoteReset: true,
+        ownRelay: true,
+        dualRelay: true,
+        thumbnails: false,
+        partThumbnails: false,
+        pinnedModels: true,
+        drives: true,
+        computerUse: false,
+        diagnostics: Boolean(diagnostics),
+        artifactRecords: [...ARTIFACT_RECORDS],
+      }
+    },
     restart: (which) => void hosts.restart(which),
     sharing: null,
     updates: null,
     computerStatus: null,
+    diagnostics: diagnostics ?? null,
     themes,
     marketKeys,
     thumbnail: null,

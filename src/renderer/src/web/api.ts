@@ -23,6 +23,7 @@ import type { Platform } from '@shared/platform'
 import { parseHostRenamed, type DirectAddress } from '@shared/remote/protocol'
 import {
   parseJoined,
+  type DiagnosticsStatus,
   type HostAdminEvent,
   type HostAdminMethod,
   type HostAdminParams,
@@ -32,6 +33,7 @@ import {
 import { parseDiscoveryEvent } from '@shared/remote/discovery'
 import type { TerminalEvent } from '@shared/terminal-host'
 import { copyPath } from '@renderer/lib/copy-path'
+import { receiveWebDiagnostics } from '@renderer/stores/diagnostics'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { exportAs } from './exports'
 import { closeFrame, exportFiles, openFrame } from './frames'
@@ -186,10 +188,36 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
 
   // The host's facts, read again at each connection, as the host may have been updated.
   let info: Promise<HostInfo> | null = null
+  let diagnostics: Promise<DiagnosticsStatus | null> | null = null
+  const readDiagnostics = (known?: HostInfo | null): Promise<DiagnosticsStatus | null> => {
+    const current = known ?? useWebHostStore.getState().info
+    if (current && !current.diagnostics) {
+      receiveWebDiagnostics(null)
+      return Promise.resolve(null)
+    }
+    return (diagnostics ??= (current ? Promise.resolve(current) : hostInfo())
+      .then(async (resolved) => {
+        if (!resolved.diagnostics) {
+          receiveWebDiagnostics(null)
+          return null
+        }
+        const status = await admin('diagnostics.status')
+        receiveWebDiagnostics(status)
+        return status
+      })
+      .catch((error: unknown) => {
+        diagnostics = null
+        console.warn("Could not read the host's diagnostics", error)
+        return null
+      }))
+  }
   const hostInfo = (): Promise<HostInfo> =>
     (info ??= admin('host.info').then(
       (read) => {
         useWebHostStore.setState({ info: read })
+        diagnostics = null
+        if (read.diagnostics) void readDiagnostics(read)
+        else receiveWebDiagnostics(null)
         return read
       },
       (error: unknown) => {
@@ -246,6 +274,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     window.focus()
     for (const listener of commands) listener(command)
   }
+  adminEvent('diagnostics.changed', ({ status }) => receiveWebDiagnostics(status))
   adminEvent('attention', ({ attention }) => {
     noteTabAttention(attention, { settings: () => settings.current(), inFront })
     notifyAttention(attention, {
@@ -491,15 +520,25 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         return true
       },
     },
-    // A browser opens no debugging ports of its own; the host's are on the host.
+    // Paired devices can see debug mode and restart normally, but never turn debug mode on.
     debug: {
-      get: async () => DEBUG_OFF,
-      restart: () => unsupported('restart in debug mode'),
-      onChanged: () => () => {},
+      get: async () => (await readDiagnostics())?.debug ?? DEBUG_OFF,
+      restart: (debug) => {
+        if (debug) return unsupported('restart in debug mode')
+        return done(admin('diagnostics.restartNormally'))
+      },
+      onChanged: (listener) =>
+        adminEvent('diagnostics.changed', (event) => listener(event.status.debug)),
     },
-    report: webReports(admin),
+    report: webReports(admin, {
+      diagnosticsStatus: () => readDiagnostics(),
+      onDiagnosticsChanged: (listener) =>
+        adminEvent('diagnostics.changed', (event) => listener(event.status)),
+      onDiagnosticsUpdate: receiveWebDiagnostics,
+      onRecorded: (span) => open({ kind: 'report-problem', span }),
+    }),
     diagnostics: {
-      clearVerbose: () => unsupported("delete the host's detailed records"),
+      clearVerbose: () => done(admin('diagnostics.clearVerbose')),
       // The host logs what a browser's requests do; the page itself keeps no log.
       recordActions: () => undefined,
     },

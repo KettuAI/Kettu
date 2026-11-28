@@ -1958,7 +1958,7 @@ const ENTRIES = {
     name: 'advanced.logs.name',
     description: 'advanced.logs.description',
     keywords: 'advanced.logs.keywords',
-    part: 'desktop',
+    part: 'host',
     kind: 'action',
   },
   'advanced.record-steps': {
@@ -1978,7 +1978,7 @@ const ENTRIES = {
     name: 'advanced.detailedRecords.name',
     description: 'advanced.detailedRecords.description',
     keywords: 'advanced.detailedRecords.keywords',
-    part: 'desktop',
+    part: 'host',
     kind: 'info',
     get: (file) => file.diagnostics.verboseUntil !== null,
   },

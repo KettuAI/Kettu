@@ -77,7 +77,12 @@ export class Reports {
   /** The zips read to show their files, by the shelf's ids. */
   private readonly zips = new Map<string, JSZip>()
   private readonly shots = new Map<number, NativeImage>()
-  private recording: (ReportRecording & { verboseBefore: number | null }) | null = null
+  private recording:
+    | (ReportRecording & {
+        verboseBefore: number | null
+        source: 'local' | 'remote'
+      })
+    | null = null
   private recordingTimer: NodeJS.Timeout | null = null
 
   constructor(
@@ -231,33 +236,45 @@ export class Reports {
    * Starts recording steps to reproduce: detailed records on, the start marked in the log, and an
    * end at most 30 minutes on, when the dialog opens with the span.
    */
-  startRecording(): ReportRecording {
+  startRecording(source: 'local' | 'remote' = 'local'): ReportRecording {
     if (this.recording) return this.recordingState()!
     const startedAt = Date.now()
     const verboseBefore = this.deps.verboseUntil()
     const endsAt = startedAt + RECORDING_MAX_MS
     if (verboseBefore === null || verboseBefore < endsAt) this.deps.setVerbose(endsAt)
-    this.recording = { startedAt, endsAt, verboseBefore }
-    log.info('Recording steps to reproduce: started')
-    this.recordingTimer = setTimeout(() => this.stopRecording(), RECORDING_MAX_MS)
+    this.recording = { startedAt, endsAt, verboseBefore, source }
+    log.info('Recording steps to reproduce: started', { source })
+    this.recordingTimer = setTimeout(() => {
+      this.stopRecording('timeout')
+    }, RECORDING_MAX_MS)
     this.recordingTimer.unref()
     this.deps.onRecording(this.recordingState())
     return this.recordingState()!
   }
 
-  /** Ends the recording, puts detailed records back as they were, and opens the dialog. */
-  stopRecording(): void {
+  /**
+   * Ends the recording, puts detailed records back as they were, and returns the recorded span.
+   * Opens the local report dialog when stopped locally, or when a locally started recording times
+   * out; remote callers open the report dialog on their own device with the returned span.
+   */
+  stopRecording(
+    source: 'local' | 'remote' | 'timeout' = 'local',
+  ): { from: number; to: number } | null {
     const recording = this.recording
-    if (!recording) return
+    if (!recording) return null
     if (this.recordingTimer) clearTimeout(this.recordingTimer)
     this.recordingTimer = null
     this.recording = null
     const now = Date.now()
-    log.info('Recording steps to reproduce: stopped')
+    log.info('Recording steps to reproduce: stopped', { source })
     const before = recording.verboseBefore
     this.deps.setVerbose(before !== null && before > now ? before : null)
     this.deps.onRecording(null)
-    this.deps.onRecorded({ from: recording.startedAt, to: now })
+    const span = { from: recording.startedAt, to: now }
+    if (source === 'local' || (source === 'timeout' && recording.source === 'local')) {
+      this.deps.onRecorded(span)
+    }
+    return span
   }
 
   private async build(request: ReportRequest, window: BrowserWindow | null) {

@@ -2,6 +2,7 @@
 // keeps it to show and to hand the browser as a download.
 
 import type { KettuApi, ReportPrepareResult } from '@shared/ipc'
+import type { DiagnosticsStatus, RecordedSpan } from '@shared/remote/host-admin'
 import { reportSubmitResult, type ReportFileInfo, type ReportFileView } from '@shared/report'
 import { downloadFile } from './media'
 import type { AdminCall } from './themes'
@@ -16,7 +17,18 @@ interface Kept {
   ref: string
 }
 
-export function webReports(admin: AdminCall): KettuApi['report'] {
+export interface WebReportOptions {
+  /** Reads the host's current diagnostics state when the host supports it. */
+  diagnosticsStatus?: () => Promise<DiagnosticsStatus | null>
+  /** Subscribes to live diagnostics state updates from the host. */
+  onDiagnosticsChanged?: (listener: (status: DiagnosticsStatus) => void) => () => void
+  /** Applies an updated diagnostics snapshot returned by a start/stop RPC. */
+  onDiagnosticsUpdate?: (status: DiagnosticsStatus) => void
+  /** Opens the report dialog for the span a stopped recording covered. */
+  onRecorded?: (span: RecordedSpan) => void
+}
+
+export function webReports(admin: AdminCall, options?: WebReportOptions): KettuApi['report'] {
   const kept = new Map<string, Kept>()
   const zipOf = async (entry: Kept): Promise<import('jszip')> => {
     if (entry.zip) return entry.zip
@@ -66,10 +78,21 @@ export function webReports(admin: AdminCall): KettuApi['report'] {
       if (!entry) return { ok: false, reason: 'failed' }
       return reportSubmitResult(await admin('host.submitReport', { ref: entry.ref }))
     },
-    // Recording steps and the notice of an unexpected quit belong to the desktop app.
-    recording: async () => null,
-    record: async () => null,
-    onRecording: () => () => {},
+    // Recording steps lives on desktop hosts; unexpected-quit notices stay on the desktop app.
+    recording: async () => (await options?.diagnosticsStatus?.())?.recording ?? null,
+    record: async (on) => {
+      if (on) {
+        const status = await admin('diagnostics.startRecording')
+        options?.onDiagnosticsUpdate?.(status)
+        return status.recording
+      }
+      const result = await admin('diagnostics.stopRecording')
+      options?.onDiagnosticsUpdate?.(result.status)
+      if (result.span) options?.onRecorded?.(result.span)
+      return null
+    },
+    onRecording: (listener) =>
+      options?.onDiagnosticsChanged?.((status) => listener(status.recording)) ?? (() => {}),
     crashNotice: async () => null,
     dismissCrashNotice: async () => {},
   }

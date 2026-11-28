@@ -4,8 +4,9 @@
 
 import type { ThumbnailPage, ThumbnailPart } from '../artifacts'
 import { isComputerApp, isStopShortcut, type ComputerUseStatus } from '../computer-use'
+import type { DebugStatus } from '../debug'
 import type { HostToMain } from '../host-control'
-import type { AppInfo, RemotePairingEvent } from '../ipc'
+import type { AppInfo, RemotePairingEvent, ReportRecording } from '../ipc'
 import type { MarketKeysPatch, MarketKeyState } from '../marketplace'
 import {
   DEFAULT_SETTINGS,
@@ -62,6 +63,7 @@ export const HOST_SETTING_KEYS = {
   workflow: 'all',
   startedSessions: 'all',
   updates: 'all',
+  diagnostics: 'all',
   usage: ['fromComputer'],
   remote: 'all',
 } as const satisfies Partial<Record<keyof SettingsFile, 'all' | readonly string[]>>
@@ -94,6 +96,8 @@ export interface HostSettingsPart {
   workflow: SettingsFile['workflow']
   startedSessions: SettingsFile['startedSessions']
   updates: SettingsFile['updates']
+  /** Detailed records window of the host; absent from older hosts, which default to off. */
+  diagnostics?: SettingsFile['diagnostics']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   /**
    * `relay` holds the official Kettu relay boolean; `ownRelayEnabled` holds the independent own-relay
@@ -200,6 +204,20 @@ function computerUseOf(
   }
 }
 
+/** The host's diagnostics section as a client keeps it, from a host of any version. */
+function diagnosticsOf(
+  part: HostSettingsPart['diagnostics'] | undefined,
+): SettingsFile['diagnostics'] {
+  if (!part || typeof part !== 'object') return structuredClone(DEFAULT_SETTINGS.diagnostics)
+  const { verboseUntil } = part
+  return {
+    verboseUntil:
+      typeof verboseUntil === 'number' && Number.isFinite(verboseUntil) && verboseUntil >= 0
+        ? verboseUntil
+        : null,
+  }
+}
+
 /** A client's settings file with the host's part in place of its own. */
 export function withHostSettings(file: SettingsFile, part: HostSettingsPart): SettingsFile {
   const next = structuredClone(file) as unknown as Record<string, unknown>
@@ -207,6 +225,10 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
     const value = (part as unknown as Record<string, unknown>)[section]
     if (section === 'remote') {
       next.remote = remoteOf(value as HostSettingsPart['remote'] | undefined)
+      continue
+    }
+    if (section === 'diagnostics') {
+      next.diagnostics = diagnosticsOf(value as HostSettingsPart['diagnostics'] | undefined)
       continue
     }
     if (keys === 'all') {
@@ -269,6 +291,35 @@ export function splitSettingsPatch(patch: SettingsPatch): {
   }
 }
 
+/** A finished recording's time span in Unix milliseconds, matching a `span` report range. */
+export interface RecordedSpan {
+  from: number
+  to: number
+}
+
+/**
+ * The host's live diagnostics state and which diagnostics actions this host supports. Turning
+ * debug mode on stays strictly local on the host computer itself and is never exposed remotely.
+ */
+export interface DiagnosticsStatus {
+  /** Active reproduction recording, or null when idle. */
+  recording: ReportRecording | null
+  /** Current debug mode status and open local debugging ports of this host. */
+  debug: DebugStatus
+  /** Whether this host supports starting and stopping a reproduction recording remotely. */
+  canRecord: boolean
+  /** Whether this host can delete detailed records while verbose logging is off. */
+  canClearVerbose: boolean
+  /** Whether this host can restart normally (exiting debug mode; never enabling it). */
+  canRestartNormally: boolean
+}
+
+/** Answer to `diagnostics.stopRecording`: updated diagnostics state and the recorded span, if any. */
+export interface DiagnosticsStopRecordingResult {
+  status: DiagnosticsStatus
+  span: RecordedSpan | null
+}
+
 /** A bundle built for an owner's device, or why there is none. */
 export type DeviceReport =
   /** `ref`: the bundle as the host keeps it a while, for `host.submitReport`. */
@@ -317,6 +368,12 @@ export interface HostInfo extends AppInfo {
    * it.
    */
   computerUse?: boolean
+  /**
+   * Reaching the host's diagnostics (`diagnostics.verboseUntil` in settings, `diagnostics.status`,
+   * `diagnostics.clearVerbose`, `diagnostics.startRecording`, `diagnostics.stopRecording`,
+   * `diagnostics.restartNormally` and `diagnostics.changed` events); absent from hosts before it.
+   */
+  diagnostics?: boolean
   /**
    * What the host's agent host keeps of its artifacts beyond the versions, as its requests and
    * fields name them; absent from hosts before any of them.
@@ -453,6 +510,19 @@ export interface HostAdminContract {
   'updates.dismiss': { params: undefined; result: null }
   /** Read-only computer use status of the host (driver and system permissions). */
   'computer.status': { params: undefined; result: ComputerUseStatus }
+  /** Current diagnostics state (recording, debug mode status and supported diagnostics actions). */
+  'diagnostics.status': { params: undefined; result: DiagnosticsStatus }
+  /** Starts recording steps to reproduce on the host; desktop hosts only. */
+  'diagnostics.startRecording': { params: undefined; result: DiagnosticsStatus }
+  /** Stops recording steps to reproduce and returns the recorded span; desktop hosts only. */
+  'diagnostics.stopRecording': { params: undefined; result: DiagnosticsStopRecordingResult }
+  /** Deletes detailed record log files on the host; refused while detailed records are on. */
+  'diagnostics.clearVerbose': { params: undefined; result: null }
+  /**
+   * Restarts the desktop app normally (leaving debug mode); takes no parameters and never enables
+   * debug mode.
+   */
+  'diagnostics.restartNormally': { params: undefined; result: null }
   'themes.get': { params: undefined; result: HostThemes }
   /** Installs a theme file the device read, named `file`, or names the theme it would replace. */
   'themes.add': {
@@ -547,6 +617,11 @@ const METHODS: Record<HostAdminMethod, true> = {
   'updates.confirm': true,
   'updates.dismiss': true,
   'computer.status': true,
+  'diagnostics.status': true,
+  'diagnostics.startRecording': true,
+  'diagnostics.stopRecording': true,
+  'diagnostics.clearVerbose': true,
+  'diagnostics.restartNormally': true,
   'themes.get': true,
   'themes.add': true,
   'themes.replace': true,
@@ -578,6 +653,7 @@ export type HostAdminEvent =
   | { type: 'remote.deviceJoined'; device: JoinedDevice; via: JoinedVia }
   | { type: 'sharing.changed'; status: SharingStatus }
   | { type: 'updates.changed'; status: UpdateStatus }
+  | { type: 'diagnostics.changed'; status: DiagnosticsStatus }
   | { type: 'themes.changed'; themes: HostThemes }
   | { type: 'attention'; attention: HostAttention }
 
@@ -598,6 +674,7 @@ const EVENTS: Record<HostAdminEvent['type'], true> = {
   'remote.deviceJoined': true,
   'sharing.changed': true,
   'updates.changed': true,
+  'diagnostics.changed': true,
   'themes.changed': true,
   attention: true,
 }

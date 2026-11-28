@@ -450,3 +450,99 @@ describe('WebSettings host computerUse sync', () => {
     expect(filtered[0]?.[0]?.id).toBe('computer-use')
   })
 })
+
+describe('WebSettings host diagnostics sync', () => {
+  function fakeLink(initialPart: HostSettingsPart) {
+    let currentPart = structuredClone(initialPart)
+    let adminListener: ((event: HostAdminEvent) => void) | null = null
+    let stateListener: ((state: LinkState) => void) | null = null
+    const request = vi.fn(async (method: string, params: unknown) => {
+      if (method === 'settings.get') return structuredClone(currentPart)
+      if (method === 'settings.update') {
+        const patch = (params as { patch: { diagnostics?: { verboseUntil?: number | null } } })
+          .patch
+        if (patch.diagnostics) {
+          currentPart = {
+            ...currentPart,
+            diagnostics: { verboseUntil: patch.diagnostics.verboseUntil ?? null },
+          }
+        }
+        return structuredClone(currentPart)
+      }
+      throw new Error(`Unexpected method: ${method}`)
+    })
+    const link: SettingsLink = {
+      request,
+      onAdminEvent: (listener) => {
+        adminListener = listener
+        return () => {
+          adminListener = null
+        }
+      },
+      onState: (listener) => {
+        stateListener = listener
+        return () => {
+          stateListener = null
+        }
+      },
+    }
+    return {
+      link,
+      request,
+      emitConnected: () =>
+        stateListener?.({ kind: 'connected' } as unknown as Extract<
+          LinkState,
+          { kind: 'connected' }
+        >),
+      emitAdmin: (event: HostAdminEvent) => adminListener?.(event),
+    }
+  }
+
+  it('reads, updates, and follows diagnostics.verboseUntil on the host without storing it in browser localStorage', async () => {
+    const staleUntil = Date.now() + 60_000
+    const storage = memoryStorage({
+      'kettu.settings': JSON.stringify({ diagnostics: { verboseUntil: staleUntil } }),
+    })
+    const web = new WebSettings(storage)
+    expect(web.current().diagnostics.verboseUntil).toBeNull()
+
+    const hostOn = structuredClone(DEFAULT_SETTINGS)
+    const initialUntil = Date.now() + 4 * 60 * 60 * 1000
+    hostOn.diagnostics.verboseUntil = initialUntil
+    const fake = fakeLink(hostSettingsPart(hostOn))
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.diagnostics.verboseUntil).toBe(initialUntil)
+
+    // Updating diagnostics.verboseUntil writes to the host through settings.update.
+    const nextUntil = Date.now() + 12 * 60 * 60 * 1000
+    const updated = await web.update({ diagnostics: { verboseUntil: nextUntil } })
+    expect(updated.diagnostics.verboseUntil).toBe(nextUntil)
+    expect(fake.request).toHaveBeenCalledWith('settings.update', {
+      patch: { diagnostics: { verboseUntil: nextUntil } },
+    })
+
+    // Live updates from another device or the host propagate through settings.changed.
+    fake.emitAdmin({ type: 'settings.changed', settings: hostSettingsPart(DEFAULT_SETTINGS) })
+    expect(web.current().diagnostics.verboseUntil).toBeNull()
+
+    // Saving a client setting never persists diagnostics into browser localStorage.
+    await web.update({ appearance: { codeSize: 'large' } })
+    expect(JSON.parse(storage.getItem('kettu.settings') ?? '{}')).not.toHaveProperty('diagnostics')
+  })
+
+  it('defaults diagnostics.verboseUntil to null when an older host omits diagnostics from settings.get', async () => {
+    const olderPart = hostSettingsPart(DEFAULT_SETTINGS)
+    delete olderPart.diagnostics
+
+    const web = new WebSettings(memoryStorage())
+    const fake = fakeLink(olderPart)
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.diagnostics).toEqual({ verboseUntil: null })
+  })
+})

@@ -23,6 +23,8 @@ import {
   readOnlyHostKeys,
   splitSettingsPatch,
   type DeviceReport,
+  type DiagnosticsStatus,
+  type DiagnosticsStopRecordingResult,
   type HostAdminEvent,
   type HostAdminMethod,
   type HostAdminResult,
@@ -204,6 +206,19 @@ export interface AdminUpdates {
   dismiss(): void
 }
 
+/**
+ * Host diagnostics exposed to paired devices: reading recording and debug state, starting and
+ * stopping a reproduction recording, clearing detailed records while off, and restarting the app
+ * normally. Turning debug mode on stays strictly local and is never part of this interface.
+ */
+export interface AdminDiagnostics {
+  status(): DiagnosticsStatus
+  startRecording?(): DiagnosticsStatus
+  stopRecording?(): DiagnosticsStopRecordingResult
+  clearVerbose?(): Promise<void>
+  restartNormally?(): void
+}
+
 export interface HostAdminDeps {
   settings: SettingsStore
   agentFolders: AgentFolders
@@ -219,6 +234,8 @@ export interface HostAdminDeps {
   updates: AdminUpdates | null
   /** Read-only computer use status of this host; null where unavailable, as under the daemon. */
   computerStatus?: (() => Promise<ComputerUseStatus>) | null
+  /** Host diagnostics actions and live status; null where unavailable. */
+  diagnostics?: AdminDiagnostics | null
   /** Optional per-device host update permission check beyond paired-owner membership. */
   canUpdateDevice?: (deviceId: string) => boolean
   themes: AdminThemes
@@ -253,6 +270,7 @@ export class HostAdmin {
   private readonly codes = new Map<number, string>()
   private sentSettings: string
   private sentRemote: string | null = null
+  private sentDiagnostics: string | null = null
   /** The devices with a session open as remote access last said, which a new one is not among. */
   private online = new Set<string>()
   /** Themes a device's install showed, which its answer tells it to show. */
@@ -347,6 +365,14 @@ export class HostAdmin {
 
   updatesChanged(status: UpdateStatus): void {
     this.deps.send({ type: 'updates.changed', status }, null)
+  }
+
+  /** Diagnostics changed (recording or debug ports): devices hear it when it differs from last sent. */
+  diagnosticsChanged(status: DiagnosticsStatus): void {
+    const sent = JSON.stringify(status)
+    if (sent === this.sentDiagnostics) return
+    this.sentDiagnostics = sent
+    this.deps.send({ type: 'diagnostics.changed', status }, null)
   }
 
   themesChanged(themes: HostThemes): void {
@@ -726,6 +752,45 @@ export class HostAdmin {
           throw new AdminError('unavailable', t('hostAdmin.noComputerUse'))
         }
         return this.deps.computerStatus()
+      }
+      case 'diagnostics.status': {
+        if (!this.deps.diagnostics) {
+          throw new AdminError('unavailable', t('hostAdmin.noDiagnostics'))
+        }
+        return this.deps.diagnostics.status()
+      }
+      case 'diagnostics.startRecording': {
+        if (!this.deps.diagnostics?.startRecording) {
+          throw new AdminError('unavailable', t('hostAdmin.noRecording'))
+        }
+        return this.deps.diagnostics.startRecording()
+      }
+      case 'diagnostics.stopRecording': {
+        if (!this.deps.diagnostics?.stopRecording) {
+          throw new AdminError('unavailable', t('hostAdmin.noRecording'))
+        }
+        return this.deps.diagnostics.stopRecording()
+      }
+      case 'diagnostics.clearVerbose': {
+        if (!this.deps.diagnostics?.clearVerbose) {
+          throw new AdminError('unavailable', t('hostAdmin.noDiagnostics'))
+        }
+        const until = settings.get().diagnostics.verboseUntil
+        if (until !== null && until > Date.now()) {
+          throw invalid(t('hostAdmin.verboseStillOn'))
+        }
+        await this.deps.diagnostics.clearVerbose()
+        return null
+      }
+      case 'diagnostics.restartNormally': {
+        if (params !== undefined && params !== null) {
+          throw invalid('diagnostics.restartNormally takes no parameters')
+        }
+        if (!this.deps.diagnostics?.restartNormally) {
+          throw new AdminError('unavailable', t('hostAdmin.noRestartNormally'))
+        }
+        this.deps.diagnostics.restartNormally()
+        return null
       }
       case 'themes.get':
         await this.deps.themes.refresh()

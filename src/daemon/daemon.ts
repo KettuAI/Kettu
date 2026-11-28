@@ -3,10 +3,10 @@
 // settings, so a change from the CLI comes through the control socket and applies at once.
 
 import { bundleForDevice, ReportShelf } from '@shared/log/report-bundle'
-import { chmod, rm } from 'node:fs/promises'
+import { chmod, readdir, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { DEBUG_PORTS_FILE } from '@shared/debug'
+import { DEBUG_OFF, DEBUG_PORTS_FILE, type DebugStatus } from '@shared/debug'
 import {
   DebugPortsFile,
   INSPECT_ENV,
@@ -18,8 +18,10 @@ import {
   logFolder,
   setLogLevel,
   setVerboseRecords,
+  VERBOSE_PREFIX,
   verboseRecords,
 } from '@shared/log/process-log'
+import type { DiagnosticsStatus } from '@shared/remote/host-admin'
 import { matchLocale, resolveLocale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES, parsePort } from '@shared/remote/address'
@@ -153,14 +155,17 @@ function debugFile(): string | null {
  * A debug run logs at the debug level and opens the daemon's inspector on 127.0.0.1, then each
  * host's as it starts; a normal run removes the list a debug run left.
  */
-async function startDebugMode(debug: boolean): Promise<DebugPortsFile | null> {
+async function startDebugMode(
+  debug: boolean,
+  onChanged?: (status: DebugStatus) => void,
+): Promise<DebugPortsFile | null> {
   const file = debugFile()
   if (!debug) {
     if (file) await removePortsFile(file)
     return null
   }
   setLogLevel('debug')
-  const ports = new DebugPortsFile(file, { cdp: false })
+  const ports = new DebugPortsFile(file, { cdp: false, changed: onChanged })
   log.warn('Debug mode: inspectors without authentication are open on 127.0.0.1 for this run')
   try {
     ports.setInspector('daemon', openInspector())
@@ -168,6 +173,16 @@ async function startDebugMode(debug: boolean): Promise<DebugPortsFile | null> {
     log.error('Could not open the inspector', error)
   }
   return ports
+}
+
+async function clearDaemonVerboseRecords(folder: string): Promise<void> {
+  const names = await readdir(folder).catch(() => [] as string[])
+  await Promise.all(
+    names
+      .filter((name) => name.startsWith(VERBOSE_PREFIX))
+      .map((name) => rm(path.join(folder, name), { force: true }).catch(() => undefined)),
+  )
+  log.info('Detailed records deleted')
 }
 
 export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon> {
@@ -439,12 +454,24 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       : null
   }
 
+  let admin: HostAdmin | null = null
+  const daemonDiagnosticsStatus = (
+    debug: DebugStatus = debugPorts?.status() ?? DEBUG_OFF,
+  ): DiagnosticsStatus => ({
+    recording: null,
+    debug,
+    canRecord: false,
+    canClearVerbose: logFolder() !== null,
+    canRestartNormally: false,
+  })
   // Taken once the socket is this run's, so a second `kettu run` leaves the service's marker be.
   const marked = await takeDebugRun(options.dataPath).catch((error: unknown) => {
     log.warn(`Could not read the debug marker: ${(error as Error).message}`)
     return false
   })
-  debugPorts = await startDebugMode(options.debug || marked)
+  debugPorts = await startDebugMode(options.debug || marked, (debug) =>
+    admin?.diagnosticsChanged(daemonDiagnosticsStatus(debug)),
+  )
   // The marker stays with the daemon, so a `kettu run` in a shell an agent or terminal starts is
   // not taken for the service.
   const hostEnv: NodeJS.ProcessEnv = {
@@ -453,7 +480,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     ...(options.debug || marked ? { [INSPECT_ENV]: '1' } : {}),
   }
   delete hostEnv[SERVICE_ENV]
-  let admin: HostAdmin | null = null
   const reportShelf = new ReportShelf(reportsFolder(options.dataPath))
   let signIn: DaemonSignIn | null = null
   try {
@@ -611,6 +637,13 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       const shelved = reportShelf.get(ref)
       if (!shelved?.request || !signIn) return { ok: false, reason: 'failed' }
       return submitBundle(shelved.file, shelved.request.description, options.version, signIn)
+    },
+    diagnostics: {
+      status: () => daemonDiagnosticsStatus(),
+      clearVerbose: async () => {
+        const folder = logFolder()
+        if (folder) await clearDaemonVerboseRecords(folder)
+      },
     },
   })
   let verboseTimer: NodeJS.Timeout | null = null
