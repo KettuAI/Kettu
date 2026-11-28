@@ -282,6 +282,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'git.incoming': AGENT_MS,
   'git.fileDiff': AGENT_MS,
   'git.branches': AGENT_MS,
+  'git.graph': AGENT_MS,
   'git.switchBranch': NONE,
   'git.publishBranch': NONE,
   'git.commitChanges': NONE,

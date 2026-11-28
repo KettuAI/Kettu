@@ -2,7 +2,13 @@ import { focusedPane } from '@renderer/features/split/layout'
 import { setGitPaneTab, type GitPaneTab } from '@renderer/stores/git'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { paneProjectPath, panelOf, toggleSidePane, useViewStore } from '@renderer/stores/view'
+import {
+  openSingleTab,
+  paneProjectPath,
+  panelOf,
+  toggleSidePane,
+  useViewStore,
+} from '@renderer/stores/view'
 
 export interface OpenGitPane {
   tab: GitPaneTab
@@ -31,4 +37,9 @@ export function openGitPane(projectPath: string, request: OpenGitPane): void {
   }
   setGitPaneTab(panel, request.tab)
   toggleSidePane(panel, 'git', true)
+}
+
+/** Opens or focuses the dedicated read-only Branch Graph tab in `panel`. */
+export function openBranchGraph(panel: string): void {
+  openSingleTab(panel, 'gitGraph', { fromPanel: true })
 }

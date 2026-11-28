@@ -50,6 +50,8 @@ import {
   type ListingVisibility,
 } from '@shared/market-publish'
 import {
+  GIT_GRAPH_MAX_LIMIT,
+  GIT_GRAPH_MAX_SKIP,
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
   githubReferenceOf,
@@ -2735,6 +2737,39 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'git.branches': project,
+    'git.graph': (params) => {
+      const o = fields(params)
+      const projectPath = absolutePath(o, 'projectPath', platform)
+      let limit: number | undefined
+      if (o.limit !== undefined) {
+        if (
+          typeof o.limit !== 'number' ||
+          !Number.isSafeInteger(o.limit) ||
+          o.limit < 1 ||
+          o.limit > GIT_GRAPH_MAX_LIMIT
+        ) {
+          throw invalidParams(`limit must be an integer between 1 and ${GIT_GRAPH_MAX_LIMIT}`)
+        }
+        limit = o.limit
+      }
+      let skip: number | undefined
+      if (o.skip !== undefined) {
+        if (
+          typeof o.skip !== 'number' ||
+          !Number.isSafeInteger(o.skip) ||
+          o.skip < 0 ||
+          o.skip > GIT_GRAPH_MAX_SKIP
+        ) {
+          throw invalidParams(`skip must be an integer between 0 and ${GIT_GRAPH_MAX_SKIP}`)
+        }
+        skip = o.skip
+      }
+      return {
+        projectPath,
+        ...(limit === undefined ? {} : { limit }),
+        ...(skip === undefined ? {} : { skip }),
+      }
+    },
     'git.switchBranch': (params) => {
       const o = fields(params)
       return {

@@ -1,6 +1,12 @@
 // Pure parsers for the machine-readable output of git and the text of gh.
 
-import type { ChangedFile, ChangeStatus, PushTarget } from '@shared/git'
+import type {
+  BranchGraphRef,
+  BranchGraphRefKind,
+  ChangedFile,
+  ChangeStatus,
+  PushTarget,
+} from '@shared/git'
 import { LocalizedError } from '../localized-error'
 
 export interface PorcelainStatus {
@@ -489,6 +495,7 @@ function fieldsAfter(record: string, count: number): string | null {
 
 export interface CommitHeader {
   oid: string
+  parents: string[]
   authorName: string
   authorEmail: string
   /** Seconds since the epoch. */
@@ -497,20 +504,117 @@ export interface CommitHeader {
   body: string
 }
 
-/** Parses `git show -s --format=%H%x00%an%x00%ae%x00%at%x00%B`. */
+const OID_RE = /^[0-9a-f]{40,64}$/
+
+function parseParentOids(raw: string): string[] {
+  const trimmed = raw.trim()
+  if (!trimmed) return []
+  return trimmed.split(/\s+/).filter((oid) => OID_RE.test(oid))
+}
+
+/** Parses `git show -s --format=%H%x00%P%x00%an%x00%ae%x00%at%x00%B`. */
 export function parseCommitHeader(output: string): CommitHeader | null {
-  const [oid, authorName, authorEmail, time, ...rest] = output.split('\0')
-  if (!oid || !/^[0-9a-f]{40,64}$/.test(oid.trim())) return null
+  const [oid, parentsRaw, authorName, authorEmail, time, ...rest] = output.split('\0')
+  if (!oid || !OID_RE.test(oid.trim())) return null
   const message = rest.join('\0').replace(/\r\n/g, '\n').trim()
   const newline = message.indexOf('\n')
   return {
     oid: oid.trim(),
+    parents: parseParentOids(parentsRaw ?? ''),
     authorName: authorName ?? '',
     authorEmail: authorEmail ?? '',
     time: Number(time) || 0,
     subject: newline < 0 ? message : message.slice(0, newline).trim(),
     body: newline < 0 ? '' : message.slice(newline + 1).trim(),
   }
+}
+
+export interface GraphLogEntry {
+  oid: string
+  parents: string[]
+  authorName: string
+  authorEmail: string
+  /** Seconds since the epoch. */
+  time: number
+  subject: string
+}
+
+/** Parses `git log --format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s%x1e`. */
+export function parseBranchGraphLog(output: string): GraphLogEntry[] {
+  const entries: GraphLogEntry[] = []
+  for (const rawRecord of output.split('\x1e')) {
+    const record = rawRecord.replace(/^\r?\n+|\r?\n+$/g, '')
+    if (!record) continue
+    const [oid, parentsRaw, authorName, authorEmail, time, ...subjectRest] = record.split('\0')
+    if (!oid || !OID_RE.test(oid.trim()) || time === undefined) continue
+    entries.push({
+      oid: oid.trim(),
+      parents: parseParentOids(parentsRaw ?? ''),
+      authorName: authorName ?? '',
+      authorEmail: authorEmail ?? '',
+      time: Number(time) || 0,
+      subject: subjectRest.join('\0').replace(/\r$/, ''),
+    })
+  }
+  return entries
+}
+
+const REF_KIND_ORDER: Record<BranchGraphRefKind, number> = {
+  head: 0,
+  local: 1,
+  remote: 2,
+  tag: 3,
+}
+
+function compareGraphRefs(a: BranchGraphRef, b: BranchGraphRef): number {
+  if (a.current !== b.current) return a.current ? -1 : 1
+  const kindDiff = REF_KIND_ORDER[a.kind] - REF_KIND_ORDER[b.kind]
+  if (kindDiff !== 0) return kindDiff
+  return a.name.localeCompare(b.name)
+}
+
+/**
+ * Parses `git for-each-ref --format=%(refname)%00%(objectname)%00%(*objectname)%00%(symref)%00`
+ * for `refs/heads`, `refs/remotes`, and `refs/tags`, grouping refs by their target commit OID.
+ */
+export function parseBranchGraphRefs(
+  output: string,
+  currentBranch: string | null,
+  detachedHeadOid: string | null,
+): Map<string, BranchGraphRef[]> {
+  const byOid = new Map<string, BranchGraphRef[]>()
+  const pushRef = (oid: string, ref: BranchGraphRef): void => {
+    const list = byOid.get(oid)
+    if (list) list.push(ref)
+    else byOid.set(oid, [ref])
+  }
+
+  for (const rawRecord of output.split(/\0\r?\n/)) {
+    const record = rawRecord.replace(/^\r?\n+/, '')
+    if (!record) continue
+    const [refname = '', oid = '', peeledOid = '', symref = ''] = record.split('\0')
+    if (symref !== '') continue
+    const targetOid = (peeledOid || oid).trim()
+    if (!OID_RE.test(targetOid)) continue
+
+    if (refname.startsWith('refs/heads/')) {
+      const name = refname.slice('refs/heads/'.length)
+      pushRef(targetOid, { name, kind: 'local', current: name === currentBranch })
+    } else if (refname.startsWith('refs/remotes/')) {
+      const name = refname.slice('refs/remotes/'.length)
+      pushRef(targetOid, { name, kind: 'remote', current: false })
+    } else if (refname.startsWith('refs/tags/')) {
+      const name = refname.slice('refs/tags/'.length)
+      pushRef(targetOid, { name, kind: 'tag', current: false })
+    }
+  }
+
+  if (detachedHeadOid && OID_RE.test(detachedHeadOid)) {
+    pushRef(detachedHeadOid, { name: 'HEAD', kind: 'head', current: true })
+  }
+
+  for (const list of byOid.values()) list.sort(compareGraphRefs)
+  return byOid
 }
 
 export interface AuthoredLogLine extends LogLine {

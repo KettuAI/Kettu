@@ -223,6 +223,124 @@ export function useDeletedGitPaths(projectPath: string): ReadonlySet<string> {
 // A commit never changes, so its details are kept for the session.
 const details = new Map<string, Promise<CommitDetails>>()
 
+// Immutable commit file diffs, bounded so inspecting large histories stays light.
+interface CachedCommitFileDiff {
+  load: Promise<FileDiff>
+  value?: FileDiff
+}
+const commitFileDiffCache = new Map<string, CachedCommitFileDiff>()
+
+function commitFileDiffKey(
+  projectPath: string,
+  oid: string,
+  file: Pick<ChangedFile, 'path' | 'oldPath'>,
+): string {
+  return `${projectPath}\0${oid}\0${file.path}\0${file.oldPath ?? ''}`
+}
+
+function rememberCommitFileDiff(key: string, entry: CachedCommitFileDiff): void {
+  if (commitFileDiffCache.has(key)) commitFileDiffCache.delete(key)
+  commitFileDiffCache.set(key, entry)
+  while (commitFileDiffCache.size > MAX_CACHED_DIFFS) {
+    const oldest = commitFileDiffCache.keys().next().value
+    if (oldest === undefined || oldest === key) break
+    commitFileDiffCache.delete(oldest)
+  }
+}
+
+/** Loads one file's diff in an immutable commit against its first parent, cached per session. */
+export function loadCommitFileDiff(
+  projectPath: string,
+  oid: string,
+  file: Pick<ChangedFile, 'path' | 'oldPath'>,
+  force = false,
+): Promise<FileDiff> {
+  const key = commitFileDiffKey(projectPath, oid, file)
+  const cached = commitFileDiffCache.get(key)
+  if (!force && cached) {
+    rememberCommitFileDiff(key, cached)
+    return cached.load
+  }
+  const load = host('git.fileDiff', {
+    projectPath,
+    path: file.path,
+    oldPath: file.oldPath,
+    ref: oid,
+  })
+  const entry: CachedCommitFileDiff = { load }
+  rememberCommitFileDiff(key, entry)
+  load.then(
+    (value) => {
+      if (commitFileDiffCache.get(key) === entry) entry.value = value
+    },
+    () => {
+      if (commitFileDiffCache.get(key) === entry) commitFileDiffCache.delete(key)
+    },
+  )
+  return load
+}
+
+/** Clears cached commit details and commit file diffs; intended for tests. */
+export function clearCommitCaches(): void {
+  details.clear()
+  commitFileDiffCache.clear()
+}
+
+/** Loads one file's read-only diff for a specific commit while `enabled`. */
+export function useCommitFileDiff(
+  projectPath: string,
+  oid: string,
+  file: Pick<ChangedFile, 'path' | 'oldPath'>,
+  enabled: boolean,
+): FileDiffState {
+  const key = commitFileDiffKey(projectPath, oid, file)
+  const [attempt, setAttempt] = useState(0)
+  const forceNext = useRef(false)
+  const [state, setState] = useState<Loaded<FileDiff> & { key: string }>(() => ({
+    data: commitFileDiffCache.get(key)?.value ?? null,
+    error: null,
+    key,
+  }))
+
+  useEffect(() => {
+    if (!enabled) return
+    let live = true
+    const force = forceNext.current
+    forceNext.current = false
+    loadCommitFileDiff(projectPath, oid, file, force).then(
+      (data) => live && setState({ data, error: null, key }),
+      (error: unknown) =>
+        live &&
+        setState((s) => ({
+          data: s.key === key ? s.data : (commitFileDiffCache.get(key)?.value ?? null),
+          error: errorMessage(error),
+          key,
+        })),
+    )
+    return () => {
+      live = false
+    }
+    // `file` fields are captured in `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key, attempt])
+
+  const retry = useCallback(() => {
+    forceNext.current = true
+    setState((s) => ({ ...s, error: null }))
+    setAttempt((n) => n + 1)
+  }, [])
+
+  const cachedValue = commitFileDiffCache.get(key)?.value ?? null
+  if (state.key !== key) {
+    return { data: cachedValue, error: null, retry }
+  }
+  return {
+    data: state.data ?? cachedValue,
+    error: state.error,
+    retry,
+  }
+}
+
 export function loadCommit(projectPath: string, oid: string): Promise<CommitDetails> {
   const key = `${projectPath}\0${oid}`
   let load = details.get(key)

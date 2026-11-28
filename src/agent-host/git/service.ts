@@ -36,6 +36,7 @@ import { createCoalescer } from './coalesce'
 import { readCommitContext } from './commit-context'
 import { readPullRequestContext } from './pull-request-context'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
+import { readBranchGraph } from './graph'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
 import { CommandError, createExec, failureText, FETCH_TIMEOUT_MS, type Exec } from './exec'
 import {
@@ -1188,6 +1189,13 @@ export function createGitService(
         readRemotes(exec, status.repo.root),
       ])
       return { branches, remoteBranches, remotes }
+    },
+
+    async graph(projectPath, options) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo) throw new Error(t('git.notRepository'))
+      return readBranchGraph(exec, status.repo.root, options)
     },
 
     async pullRequest(url) {

@@ -96,7 +96,7 @@ export default function GitPane({ panel, projectPath }: { panel: string; project
               </TabsList>
             </PaneContext>
             <div className="flex min-h-0 flex-1 flex-col px-2.5 pt-2 pb-2.5">
-              <PaneTop status={status} />
+              <PaneTop status={status} panel={panel} />
               {status.stale && (
                 <div className="pb-2">
                   <Note icon={Alert02Icon} tone="warn">

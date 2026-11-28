@@ -111,6 +111,7 @@ import type {
   MemoryScope,
 } from './memory'
 import type {
+  BranchGraphPage,
   BranchList,
   ChangedFile,
   CommitDetails,
@@ -2030,6 +2031,11 @@ export interface HostContract {
     result: FileDiff
   }
   'git.branches': { params: { projectPath: string }; result: BranchList }
+  // Read-only paginated commit graph across branches, tags, and HEAD, in topological order.
+  'git.graph': {
+    params: { projectPath: string; limit?: number; skip?: number }
+    result: BranchGraphPage
+  }
   // Switches to a local branch, or creates it from HEAD and switches to it.
   'git.switchBranch': {
     params: { projectPath: string; branch: string; create: boolean }
@@ -2730,6 +2736,7 @@ export const HOST_METHODS = [
   'git.incoming',
   'git.fileDiff',
   'git.branches',
+  'git.graph',
   'git.switchBranch',
   'git.publishBranch',
   'git.commitChanges',

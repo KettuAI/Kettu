@@ -48,6 +48,7 @@ const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pan
 const BoardPane = lazy(() => import('@renderer/features/board/board-pane'))
 const SideChatPane = lazy(() => import('@renderer/features/side-chat/side-chat-rail'))
 const GitPane = lazy(() => import('@renderer/features/git/pane/git-pane'))
+const BranchGraphPane = lazy(() => import('@renderer/features/git/pane/branch-graph-pane'))
 const PluginPane = lazy(() => import('@renderer/features/plugin-views/plugin-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
@@ -307,6 +308,8 @@ export function SidePanelArea({
                         <DocPane projectPath={projectPath} panel={panel} />
                       ) : held === 'git' ? (
                         <GitPane panel={panel} projectPath={projectPath} />
+                      ) : held === 'gitGraph' ? (
+                        <BranchGraphPane panel={panel} projectPath={projectPath} />
                       ) : held === 'browser' ? (
                         <BrowserPane panel={panel} maximized={maximized} />
                       ) : held === 'devices' ? (

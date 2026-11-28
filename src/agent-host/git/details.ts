@@ -38,7 +38,7 @@ export async function readCommitDetails(
   const show = (...args: string[]): Promise<ExecResult> =>
     git(exec, cwd, ['show', '--no-show-signature', '--encoding=UTF-8', ...args, oid, '--'])
   const [header, names, numbers] = await Promise.all([
-    show('-s', '--format=%H%x00%an%x00%ae%x00%at%x00%B'),
+    show('-s', '--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%B'),
     show('--format=', '-z', '-M', '--diff-merges=first-parent', '--name-status'),
     show('--format=', '-z', '-M', '--diff-merges=first-parent', '--numstat'),
   ])
@@ -50,6 +50,7 @@ export async function readCommitDetails(
   )
   return {
     oid: parsed.oid,
+    parents: parsed.parents,
     subject: parsed.subject,
     body: parsed.body,
     authorName: parsed.authorName,

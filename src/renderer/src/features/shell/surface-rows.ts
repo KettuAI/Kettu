@@ -8,6 +8,7 @@ import {
   DashboardSquare02Icon,
   Folder01Icon,
   GitBranchIcon,
+  GitForkIcon,
   ShapesIcon,
 } from '@hugeicons/core-free-icons'
 import { useMemo } from 'react'
@@ -39,6 +40,7 @@ import {
   toggleSidePane,
   toggleTerminal,
   useViewStore,
+  type SingleTab,
 } from '@renderer/stores/view'
 
 export type SurfaceRowId =
@@ -53,12 +55,13 @@ export type SurfaceRowId =
   | 'computer'
 
 /** The icon of each kind, on its tab, in the list and on the bar. */
-export const SURFACE_ICON: Record<SurfaceRowId, IconSvgElement> = {
+export const SURFACE_ICON: Record<SurfaceRowId | SingleTab, IconSvgElement> = {
   terminal: ComputerTerminal01Icon,
   browser: BrowserIcon,
   devices: ComputerPhoneSyncIcon,
   files: Folder01Icon,
   git: GitBranchIcon,
+  gitGraph: GitForkIcon,
   board: DashboardSquare02Icon,
   sideChat: BubbleChatQuestionIcon,
   requests: REQUESTS_ICON,

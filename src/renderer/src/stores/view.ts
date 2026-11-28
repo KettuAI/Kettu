@@ -133,6 +133,7 @@ export type SidePane =
   | 'terminal'
   | 'files'
   | 'git'
+  | 'gitGraph'
   | 'browser'
   | 'devices'
   | 'surfaces'
@@ -201,6 +202,7 @@ export function docKey(tab: Pick<DocTab, 'kind' | 'id'>): string {
 const SINGLE_TABS: readonly SidePane[] = [
   'files',
   'git',
+  'gitGraph',
   'board',
   'sideChat',
   'requests',
@@ -1429,6 +1431,32 @@ export function addSideTab(panel: string, tab: SingleTab): void {
   useViewStore.setState((s) => {
     const sideTabs = withTab(s.sideTabs, panel, tab)
     return sideTabs === s.sideTabs ? s : { sideTabs }
+  })
+}
+
+/**
+ * Opens or focuses a one-per-session tab. When opened from inside the panel for the first time,
+ * places it directly after the currently selected tab so related views stay grouped.
+ */
+export function openSingleTab(
+  panel: string,
+  tab: SingleTab,
+  { fromPanel = false }: { fromPanel?: boolean } = {},
+): void {
+  useViewStore.setState((s) => {
+    const alreadyOpen = !!s.sideTabs[panel]?.includes(tab)
+    const key = `${tab}:`
+    const order = s.sideOrder[panel] ?? []
+    const after = !alreadyOpen && fromPanel ? order.indexOf(selectedKeys.get(panel) ?? '') : -1
+    return {
+      sidePane: withPane(s.sidePane, panel, tab),
+      sideTabs: withTab(s.sideTabs, panel, tab),
+      sidePaneMaximized: s.sidePane[panel] ? s.sidePaneMaximized : false,
+      ...(after >= 0 &&
+        !order.includes(key) && {
+          sideOrder: { ...s.sideOrder, [panel]: order.toSpliced(after + 1, 0, key) },
+        }),
+    }
   })
 }
 

@@ -1,6 +1,7 @@
 // The git service's interface, as the rest of the agent host uses it.
 
 import type {
+  BranchGraphPage,
   BranchList,
   ChangedFile,
   CommitDetails,
@@ -110,6 +111,8 @@ export interface GitServiceApi {
   ): Promise<FileDiff>
   /** The local branches and the remotes; rejects outside a repository. */
   branches(projectPath: string): Promise<BranchList>
+  /** Read-only paginated commit history graph across branches, tags, and HEAD. */
+  graph(projectPath: string, options?: { limit?: number; skip?: number }): Promise<BranchGraphPage>
   /** Details for a pull request chip; `url` matches GITHUB_PULL_REQUEST_URL. */
   pullRequest(url: string): Promise<PullRequest>
   /** Details for an issue reference; `url` matches GITHUB_ISSUE_URL. */
