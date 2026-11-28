@@ -3,6 +3,7 @@ import * as requestLog from '@shared/log/requests'
 import { currentPrimitives } from '@shared/remote/primitives'
 import {
   DEFAULT_CHOICES,
+  LIVE_ACTIVITY_V2,
   decodeSealed,
   openPush,
   parsePushRequest,
@@ -148,7 +149,7 @@ describe('sending a push', () => {
     const t = await setup([200], {
       target: {
         apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
-        activity: { start: startToken },
+        activity: { start: startToken, version: LIVE_ACTIVITY_V2 },
       },
     })
     t.sender.send({
@@ -183,7 +184,7 @@ describe('sending a push', () => {
     const tPrivate = await setup([200], {
       target: {
         apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
-        activity: { start: startToken },
+        activity: { start: startToken, version: LIVE_ACTIVITY_V2 },
       },
       choices: { ...DEFAULT_CHOICES, details: false },
     })
@@ -575,5 +576,371 @@ describe('sending a push', () => {
     const openedBody = (await openPush(envelope, device))!
     const parsed = JSON.parse(new TextDecoder().decode(openedBody.body)) as PushContent
     expect(parsed.at).toBe(10_000)
+  })
+
+  it('drops non-waiting Live Activity pushes for legacy devices and notifies activityStartNotSent', async () => {
+    const startToken = 'b2'.repeat(32)
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    const requests: string[] = []
+    const notSent: PushJob[] = []
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push: {
+          target: {
+            apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+            activity: { start: startToken },
+          },
+          choices: DEFAULT_CHOICES,
+        },
+      }),
+      unregistered: () => {},
+      activityStartNotSent: (dropped) => notSent.push(dropped),
+      log: () => {},
+      fetch: async (_input, init) => {
+        requests.push(init!.body as string)
+        return Response.json({ ok: true }, { status: 200 })
+      },
+    })
+
+    const runningStart: PushJob = {
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 0,
+      sessionId: 's1',
+      title: 'Running task',
+      payload: { kind: 'running', sessionId: 's1', title: 'Running task' },
+    }
+    sender.send(runningStart)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(requests).toEqual([])
+    expect(notSent).toEqual([runningStart])
+    sender.stop()
+  })
+
+  it('does not abort an in-flight Live Activity end when a new start arrives, and delivers end before start', async () => {
+    const startToken = 'b2'.repeat(32)
+    const oldUpdateToken = 'c3'.repeat(32)
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    const push: DevicePush = {
+      target: {
+        apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+        activity: { start: startToken, update: oldUpdateToken, version: LIVE_ACTIVITY_V2 },
+      },
+      choices: DEFAULT_CHOICES,
+    }
+
+    const events: { token: string; event: string; aborted: boolean }[] = []
+    let releaseEnd: () => void = () => {}
+    const endInFlight = new Promise<void>((resolve) => {
+      releaseEnd = resolve
+    })
+    let endStarted: () => void = () => {}
+    const waitEndStarted = new Promise<void>((resolve) => {
+      endStarted = resolve
+    })
+    let startCompleted: () => void = () => {}
+    const waitStartCompleted = new Promise<void>((resolve) => {
+      startCompleted = resolve
+    })
+
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push,
+      }),
+      unregistered: () => {},
+      log: () => {},
+      retry: { firstMs: 5, maxMs: 10, attempts: 3 },
+      fetch: async (_input, init) => {
+        const parsed = parsePushRequest(init!.body as string)!
+        const signal = init!.signal!
+        const pushEvent = parsed.push.type === 'liveactivity' ? parsed.push.event : parsed.push.type
+        if (pushEvent === 'end') {
+          endStarted()
+          await endInFlight
+          events.push({ token: parsed.token, event: pushEvent, aborted: signal.aborted })
+          return Response.json({ ok: true }, { status: 200 })
+        }
+        events.push({ token: parsed.token, event: pushEvent, aborted: signal.aborted })
+        startCompleted()
+        return Response.json({ ok: true }, { status: 200 })
+      },
+    })
+
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+    await waitEndStarted
+
+    // Simulate dropActivityToken clearing update while `end` is still in flight, then a new `start`.
+    push.target = {
+      apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+      activity: { start: startToken, version: LIVE_ACTIVITY_V2 },
+    }
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 1,
+      sessionId: 's2',
+      title: 'New request',
+      payload: { kind: 'waiting', count: 1, sessionId: 's2', title: 'New request' },
+    })
+
+    // Give the event loop a tick to verify `start` stays queued behind the in-flight `end`.
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    expect(events).toEqual([])
+
+    releaseEnd()
+    await waitStartCompleted
+    sender.stop()
+
+    expect(events).toEqual([
+      { token: oldUpdateToken, event: 'end', aborted: false },
+      { token: startToken, event: 'start', aborted: false },
+    ])
+  })
+
+  it('keeps in-flight end alive when cancel("activity") drops a queued start and reports activityStartNotSent', async () => {
+    const startToken = 'b2'.repeat(32)
+    const oldUpdateToken = 'c3'.repeat(32)
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    const delivered: string[] = []
+    const notSent: PushJob[] = []
+    let releaseEnd: () => void = () => {}
+    const endGate = new Promise<void>((resolve) => {
+      releaseEnd = resolve
+    })
+    let endStarted: () => void = () => {}
+    const waitEndStarted = new Promise<void>((resolve) => {
+      endStarted = resolve
+    })
+    let endDone: () => void = () => {}
+    const waitEndDone = new Promise<void>((resolve) => {
+      endDone = resolve
+    })
+
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push: {
+          target: {
+            apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+            activity: { start: startToken, update: oldUpdateToken, version: LIVE_ACTIVITY_V2 },
+          },
+          choices: DEFAULT_CHOICES,
+        },
+      }),
+      unregistered: () => {},
+      activityStartNotSent: (dropped) => notSent.push(dropped),
+      log: () => {},
+      fetch: async (_input, init) => {
+        const parsed = parsePushRequest(init!.body as string)!
+        const event = parsed.push.type === 'liveactivity' ? parsed.push.event : parsed.push.type
+        if (event === 'end') {
+          endStarted()
+          await endGate
+          expect(init!.signal!.aborted).toBe(false)
+          delivered.push(`${event}:${parsed.token}`)
+          endDone()
+          return Response.json({ ok: true }, { status: 200 })
+        }
+        delivered.push(`${event}:${parsed.token}`)
+        return Response.json({ ok: true }, { status: 200 })
+      },
+    })
+
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+    await waitEndStarted
+
+    const queuedStart: PushJob = {
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'start',
+      count: 1,
+      sessionId: 's-cancel',
+      title: 'Brief wait',
+      payload: { kind: 'waiting', count: 1, sessionId: 's-cancel', title: 'Brief wait' },
+    }
+    sender.send(queuedStart)
+    sender.cancel('phone', 'activity')
+    expect(notSent).toEqual([queuedStart])
+
+    releaseEnd()
+    await waitEndDone
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    sender.stop()
+
+    expect(delivered).toEqual([`end:${oldUpdateToken}`])
+  })
+
+  it('coalesces a newer update over an in-flight update while preserving distinct end tokens', async () => {
+    const startToken = 'b2'.repeat(32)
+    const tokenA = 'c3'.repeat(32)
+    const tokenB = 'd4'.repeat(32)
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    let currentUpdateToken = tokenA
+    const delivered: { event: string; token: string; count?: number }[] = []
+    let releaseFirst: () => void = () => {}
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let firstStarted: () => void = () => {}
+    const waitFirstStarted = new Promise<void>((resolve) => {
+      firstStarted = resolve
+    })
+    let allDone: () => void = () => {}
+    const waitAllDone = new Promise<void>((resolve) => {
+      allDone = resolve
+    })
+
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push: {
+          target: {
+            apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+            activity: { start: startToken, update: currentUpdateToken, version: LIVE_ACTIVITY_V2 },
+          },
+          choices: DEFAULT_CHOICES,
+        },
+      }),
+      unregistered: () => {},
+      log: () => {},
+      retry: { firstMs: 5, maxMs: 10, attempts: 2 },
+      fetch: async (_input, init) => {
+        const parsed = parsePushRequest(init!.body as string)!
+        const event = parsed.push.type === 'liveactivity' ? parsed.push.event : parsed.push.type
+        if (delivered.length === 0 && event === 'update') {
+          firstStarted()
+          await firstGate
+          if (init!.signal!.aborted) throw new DOMException('Aborted', 'AbortError')
+        }
+        const envelope = decodeSealed(parsed.push.sealed)!
+        const openedBody = (await openPush(envelope, device))!
+        const content = JSON.parse(new TextDecoder().decode(openedBody.body)) as PushContent
+        delivered.push({
+          event,
+          token: parsed.token,
+          ...(content.kind === 'waiting' ? { count: content.count } : {}),
+        })
+        if (delivered.length === 3) allDone()
+        return Response.json({ ok: true }, { status: 200 })
+      },
+    })
+
+    // First update gets superseded by a newer update before it completes.
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'update',
+      count: 1,
+      sessionId: 's1',
+      title: 'One',
+      payload: { kind: 'waiting', count: 1, sessionId: 's1', title: 'One' },
+    })
+    await waitFirstStarted
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'update',
+      count: 2,
+      sessionId: 's1',
+      title: 'Two',
+      payload: { kind: 'waiting', count: 2, sessionId: 's1', title: 'Two' },
+    })
+    releaseFirst()
+
+    // Wait for update(count: 2) to finish, then queue two distinct `end` tokens back-to-back.
+    await expect.poll(() => delivered.length).toBe(1)
+    expect(delivered[0]).toEqual({ event: 'update', token: tokenA, count: 2 })
+
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+    // Duplicate end for tokenA is deduplicated without aborting.
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+    // A second end for tokenB is preserved alongside tokenA's end.
+    currentUpdateToken = tokenB
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+
+    await waitAllDone
+    sender.stop()
+    expect(delivered).toEqual([
+      { event: 'update', token: tokenA, count: 2 },
+      { event: 'end', token: tokenA, count: 0 },
+      { event: 'end', token: tokenB, count: 0 },
+    ])
   })
 })

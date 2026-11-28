@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { HostActivitySnapshot } from '@shared/host-control'
-import { DEFAULT_CHOICES, type DevicePush } from '@shared/remote/push'
+import { DEFAULT_CHOICES, LIVE_ACTIVITY_V2, type DevicePush } from '@shared/remote/push'
 import { Notifier, type PushJob } from './notifier'
 
 const TOKEN = 'a1'.repeat(32)
@@ -16,7 +16,7 @@ function makeDevice(
     push: {
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
       choices: { ...DEFAULT_CHOICES, onlyAway: false },
       ...overrides,
@@ -31,7 +31,7 @@ describe('Notifier Live Activity 全状态调度', () => {
       const device = makeDevice({
         target: {
           apns: { token: TOKEN, environment: 'sandbox' },
-          activity: { start: START_TOKEN },
+          activity: { start: START_TOKEN, version: LIVE_ACTIVITY_V2 },
         },
       })
       const jobs: PushJob[] = []
@@ -88,7 +88,11 @@ describe('Notifier Live Activity 全状态调度', () => {
       })
 
       // 模拟设备回传 activityUpdate token 后，更高优先级的 waiting 覆盖 running
-      device.push.target!.activity = { start: START_TOKEN, update: UPDATE_TOKEN }
+      device.push.target!.activity = {
+        start: START_TOKEN,
+        update: UPDATE_TOKEN,
+        version: LIVE_ACTIVITY_V2,
+      }
       notifier.attention({
         kind: 'permission',
         sessionId: 'main-1',
@@ -157,7 +161,7 @@ describe('Notifier Live Activity 全状态调度', () => {
         choices: { ...DEFAULT_CHOICES, onlyAway: true },
         target: {
           apns: { token: TOKEN, environment: 'sandbox' },
-          activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+          activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
         },
       })
       const jobs: PushJob[] = []

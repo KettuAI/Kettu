@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HostActivitySnapshot } from '@shared/host-control'
-import { DEFAULT_CHOICES, type DevicePush } from '@shared/remote/push'
+import {
+  DEFAULT_CHOICES,
+  LIVE_ACTIVITY_V1,
+  LIVE_ACTIVITY_V2,
+  type DevicePush,
+} from '@shared/remote/push'
 import { Notifier, type PushJob } from './notifier'
 
 const TOKEN = 'a1'.repeat(32)
@@ -24,7 +29,7 @@ function makeDevice(
     push: {
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN },
+        activity: { start: START_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
       choices: { ...DEFAULT_CHOICES, onlyAway: false },
       ...overrides,
@@ -101,7 +106,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     const device = makeDevice({
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -203,7 +208,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     const device = makeDevice({
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -257,7 +262,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     const device = makeDevice({
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -304,7 +309,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     const device = makeDevice({
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -363,7 +368,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     const device = makeDevice({
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -404,7 +409,7 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
       choices: { ...DEFAULT_CHOICES, onlyAway: true },
       target: {
         apns: { token: TOKEN, environment: 'sandbox' },
-        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN, version: LIVE_ACTIVITY_V2 },
       },
     })
     const jobs: PushJob[] = []
@@ -446,6 +451,233 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     vi.advanceTimersByTime(20)
     expect(jobs).toHaveLength(2)
     expect(jobs[1]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+    notifier.stop()
+  })
+
+  it('sends only waiting and end Live Activity pushes to legacy devices without v2 capability', () => {
+    vi.useFakeTimers()
+    const legacy = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN },
+      },
+    })
+    const legacyV1 = makeDevice(
+      {
+        target: {
+          apns: { token: TOKEN, environment: 'sandbox' },
+          activity: { start: START_TOKEN, version: LIVE_ACTIVITY_V1 },
+        },
+        choices: { ...DEFAULT_CHOICES, onlyAway: false, liveActivityProgress: true },
+      },
+      'phone-v1',
+    )
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [legacy, legacyV1],
+      showing: () => false,
+      foreground: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    // Running, error, limit and turn-ended states must send zero activity pushes to legacy devices.
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-run',
+          agentId: 'claude-code',
+          title: 'Running task',
+          turnStartedAt: now,
+          parentId: null,
+        },
+      ],
+      error: [
+        {
+          sessionId: 's-err',
+          agentId: 'codex',
+          title: 'Errored task',
+          endedAt: now,
+        },
+      ],
+      ended: [
+        {
+          sessionId: 's-done',
+          agentId: 'claude-code',
+          title: 'Done task',
+          endedAt: now,
+        },
+      ],
+      limit: {
+        agentId: 'claude-code',
+        label: '5-hour',
+        resetsAt: now + 60_000,
+      },
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs.filter((j) => j.type === 'activity')).toEqual([])
+
+    // Waiting permission request triggers a legacy-compatible waiting start with count > 0.
+    notifier.attention({
+      kind: 'permission',
+      sessionId: 's-run',
+      title: 'Running task',
+      body: 'Wants to run pnpm test',
+      requestId: 'req-1',
+      inFront: false,
+      devices: [],
+    })
+    notifier.setWaiting({ 's-run': ['req-1'] })
+    vi.advanceTimersByTime(20)
+    const startJobs = jobs.filter((j) => j.type === 'activity')
+    expect(startJobs).toHaveLength(2)
+    for (const startJob of startJobs) {
+      expect(startJob).toMatchObject({
+        type: 'activity',
+        action: 'start',
+        count: 1,
+        payload: { kind: 'waiting', count: 1, sessionId: 's-run' },
+      })
+    }
+
+    // Once the device reports an update token and waiting clears, legacy devices get `end`
+    // even while the session is still running (never a v2 `running` update).
+    legacy.push.target!.activity = { start: START_TOKEN, update: UPDATE_TOKEN }
+    legacyV1.push.target!.activity = {
+      start: START_TOKEN,
+      update: UPDATE_TOKEN,
+      version: LIVE_ACTIVITY_V1,
+    }
+    notifier.setWaiting({})
+    vi.advanceTimersByTime(20)
+    const endJobs = jobs.filter((j) => j.type === 'activity' && j.action === 'end')
+    expect(endJobs).toHaveLength(2)
+    for (const endJob of endJobs) {
+      expect(endJob).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+    }
+
+    // Re-validating a non-waiting job against a legacy device returns false.
+    expect(
+      notifier.isJobValid({
+        deviceId: legacy.id,
+        subject: 'activity',
+        type: 'activity',
+        action: 'start',
+        count: 0,
+        sessionId: 's-run',
+        title: 'Running task',
+        payload: { kind: 'running', sessionId: 's-run', title: 'Running task' },
+      }),
+    ).toBe(false)
+
+    notifier.stop()
+  })
+
+  it('respects liveActivityProgress opt-out on v2 devices and resumes when re-enabled', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      choices: { ...DEFAULT_CHOICES, onlyAway: false, liveActivityProgress: false },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-run',
+          agentId: 'claude-code',
+          title: 'Opted-out running task',
+          turnStartedAt: Date.now(),
+          parentId: null,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toEqual([])
+
+    device.push.choices = { ...device.push.choices, liveActivityProgress: true }
+    notifier.deviceChanged()
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'start',
+      payload: { kind: 'running', sessionId: 's-run' },
+    })
+
+    notifier.stop()
+  })
+
+  it('does not spam push-to-start while awaiting update token, and recovers if start was not sent', () => {
+    vi.useFakeTimers()
+    const device = makeDevice()
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-1',
+          agentId: 'claude-code',
+          title: 'Step 1',
+          turnStartedAt: now,
+          plan: { done: 1, total: 3, current: 'Step 1' },
+          parentId: null,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+
+    // Subsequent updates while still awaiting the update token must not fire extra push-to-start bursts.
+    for (let step = 2; step <= 4; step++) {
+      notifier.setActivity({
+        ...EMPTY_ACTIVITY,
+        running: [
+          {
+            sessionId: 's-1',
+            agentId: 'claude-code',
+            title: `Step ${step}`,
+            turnStartedAt: now,
+            plan: { done: step, total: 4, current: `Step ${step}` },
+            parentId: null,
+          },
+        ],
+      })
+      vi.advanceTimersByTime(20)
+    }
+    expect(jobs).toHaveLength(1)
+
+    // When PushSender confirms the start was never sent to APNs, awaitingToken clears so a new start works.
+    notifier.activityStartNotSent(jobs[0]!)
+    notifier.deviceChanged()
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({ type: 'activity', action: 'start' })
+
+    // A stale callback for the earlier start job must not clear the newer start's awaitingToken.
+    notifier.activityStartNotSent(jobs[0]!)
+    notifier.deviceChanged()
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(2)
 
     notifier.stop()
   })

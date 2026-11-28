@@ -348,8 +348,9 @@ export class DeviceNotifications {
         const push = devices.push(id)
         return device && push ? { publicKey: device.publicKey, push } : null
       },
-      unregistered: (deviceId, token) => void this.unregistered(deviceId, token),
+      unregistered: (deviceId, token, value) => void this.unregistered(deviceId, token, value),
       shouldSend: (job) => this.notifier.isJobValid(job),
+      activityStartNotSent: (job) => this.notifier.activityStartNotSent(job),
       log: options.log,
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.retry ? { retry: options.retry } : {}),
@@ -386,11 +387,15 @@ export class DeviceNotifications {
       },
       foreground: options.foreground,
       send: (job) => {
+        const spentUpdateToken =
+          job.type === 'activity' && job.action === 'end'
+            ? devices.push(job.deviceId)?.target?.activity?.update
+            : undefined
         this.sender.send(job)
         this.sendWeb(job)
-        // An ended activity's token is spent; the next activity brings its own.
-        if (job.type === 'activity' && job.action === 'end') {
-          void this.dropActivityToken(job.deviceId)
+        // An ended activity's token is spent; only clear the exact token handed to the end push.
+        if (spentUpdateToken) {
+          void this.dropActivityToken(job.deviceId, spentUpdateToken)
         }
       },
       cancel: (deviceId, key) => this.sender.cancel(deviceId, key),
@@ -409,6 +414,9 @@ export class DeviceNotifications {
         apns: Boolean(target),
         activityStart: Boolean(target?.activity?.start),
         activityUpdate: Boolean(target?.activity?.update),
+        ...(target?.activity?.version === undefined
+          ? {}
+          : { activityVersion: target.activity.version }),
       },
       web: push?.web
         ? { endpoint: push.web.endpoint, withdrawn: withdrawn ? [...withdrawn.values()] : [] }
@@ -562,10 +570,22 @@ export class DeviceNotifications {
     this.notifier.deviceChanged()
   }
 
-  private async unregistered(deviceId: string, token: PushTokenKind): Promise<void> {
+  private async unregistered(
+    deviceId: string,
+    token: PushTokenKind,
+    tokenValue?: string,
+  ): Promise<void> {
     const { devices } = this.options
     const push = devices.push(deviceId)
     if (!push?.target) return
+    // Ignore stale 410s from an older token that has already been replaced.
+    if (token === 'device' && tokenValue && push.target.apns.token !== tokenValue) return
+    if (token === 'activity-start' && tokenValue && push.target.activity?.start !== tokenValue) {
+      return
+    }
+    if (token === 'activity-update' && tokenValue && push.target.activity?.update !== tokenValue) {
+      return
+    }
     // A dead device token ends every push to it; a dead activity token only that activity's.
     const target =
       token === 'device'
@@ -581,10 +601,11 @@ export class DeviceNotifications {
     this.notifier.deviceChanged()
   }
 
-  private async dropActivityToken(deviceId: string): Promise<void> {
+  private async dropActivityToken(deviceId: string, spentToken?: string): Promise<void> {
     const { devices } = this.options
     const push = devices.push(deviceId)
-    if (!push?.target?.activity?.update) return
+    const current = push?.target?.activity?.update
+    if (!push?.target || !current || (spentToken && current !== spentToken)) return
     const target = withoutEmptyActivity({
       ...push.target,
       activity: { ...push.target.activity, update: undefined },
@@ -593,14 +614,19 @@ export class DeviceNotifications {
   }
 }
 
-/** A target without the Live Activity tokens that are gone, and without the object when none is left. */
+/** A target without the Live Activity tokens that are gone, preserving capability metadata. */
 function withoutEmptyActivity(target: NonNullable<DevicePush['target']>): DevicePush['target'] {
   const start = target.activity?.start
   const update = target.activity?.update
+  const version = target.activity?.version
   const { apns } = target
-  if (!start && !update) return { apns }
+  if (!start && !update && version === undefined) return { apns }
   return {
     apns,
-    activity: { ...(start ? { start } : {}), ...(update ? { update } : {}) },
+    activity: {
+      ...(start ? { start } : {}),
+      ...(update ? { update } : {}),
+      ...(version === undefined ? {} : { version }),
+    },
   }
 }
