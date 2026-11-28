@@ -801,7 +801,7 @@ function wholeNumber(o: Args, key: string, min: number, max = Number.MAX_SAFE_IN
 }
 
 function optionalNumber(o: Args, key: string, min: number, max?: number): number | undefined {
-  return o[key] === undefined ? undefined : wholeNumber(o, key, min, max)
+  return o[key] === undefined || o[key] === null ? undefined : wholeNumber(o, key, min, max)
 }
 
 function title(o: Args): string {
@@ -815,7 +815,7 @@ function title(o: Args): string {
 
 /** The declaration a write gives, at the current runtime; undefined when it gives none. */
 function declaration(o: Args): Declaration | undefined {
-  if (o.capabilities === undefined) return undefined
+  if (o.capabilities === undefined || o.capabilities === null) return undefined
   const parsed = parseDeclaration(o.capabilities)
   if ('problem' in parsed) throw invalid(`capabilities ${parsed.problem}.`)
   return { capabilities: parsed, runtime: RUNTIME_VERSION }
@@ -867,7 +867,7 @@ function checkedPath(value: unknown, label: string): string {
 /** The files a call names, with `html` as the entry page's text. */
 function fileSpecs(o: Args, update: boolean): FileSpec[] {
   const specs: FileSpec[] = []
-  if (o.files !== undefined) {
+  if (o.files !== undefined && o.files !== null) {
     const value = o.files
     if (!Array.isArray(value) || value.length === 0 || value.length > VERSION_FILES) {
       throw invalid(`files must be a list of 1 to ${VERSION_FILES} files.`)
@@ -880,16 +880,16 @@ function fileSpecs(o: Args, update: boolean): FileSpec[] {
       const label = `files[${i}] (${path})`
       if (named.has(path)) throw invalid(`${label}: the path is named twice.`)
       named.add(path)
-      const given = keys.slice(1).filter((key) => entry[key] !== undefined)
+      const given = keys.slice(1).filter((key) => entry[key] !== undefined && entry[key] !== null)
       if (given.length !== 1) {
         throw invalid(
           `${label}: give exactly one of ${update ? 'content, source or remove' : 'content or source'}.`,
         )
       }
-      if (entry.remove !== undefined) {
+      if (entry.remove !== undefined && entry.remove !== null) {
         if (entry.remove !== true) throw invalid(`${label}: remove must be true.`)
         specs.push({ path, remove: true })
-      } else if (entry.content !== undefined) {
+      } else if (entry.content !== undefined && entry.content !== null) {
         if (typeof entry.content !== 'string') throw invalid(`${label}: content must be text.`)
         const bytes = Buffer.byteLength(entry.content, 'utf8')
         if (bytes > INLINE_FILE_BYTES) throw tooLarge(label, bytes, INLINE_FILE_BYTES)
@@ -903,7 +903,7 @@ function fileSpecs(o: Args, update: boolean): FileSpec[] {
       }
     })
   }
-  if (o.html !== undefined) {
+  if (o.html !== undefined && o.html !== null) {
     if (specs.some((spec) => spec.path === ARTIFACT_ENTRY)) {
       throw invalid(`Give ${ARTIFACT_ENTRY} in html or in files, not in both.`)
     }
@@ -925,7 +925,10 @@ function edits(o: Args): Edit[] {
   }
   return value.map((item: unknown, i) => {
     const edit = args(item, ['path', 'old_text', 'new_text'])
-    const path = edit.path === undefined ? ARTIFACT_ENTRY : checkedPath(edit.path, `Edit ${i + 1}`)
+    const path =
+      edit.path === undefined || edit.path === null
+        ? ARTIFACT_ENTRY
+        : checkedPath(edit.path, `Edit ${i + 1}`)
     if (typeof edit.old_text !== 'string' || edit.old_text.length === 0) {
       throw invalid(`Edit ${i + 1}: old_text must be text that is not empty.`)
     }
@@ -1466,7 +1469,7 @@ export class ArtifactTools {
   private async create(caller: Caller, o: Args): Promise<CallToolResult> {
     const declared = declaration(o)
     const input = { title: title(o), note: note(o), ...(declared ? { declaration: declared } : {}) }
-    if (o.html === undefined && o.files === undefined) {
+    if ((o.html === undefined || o.html === null) && (o.files === undefined || o.files === null)) {
       throw invalid(
         `Give html, or files with ${ARTIFACT_ENTRY} or a canvas's ${CANVAS_FILE} among them.`,
       )
@@ -1498,7 +1501,8 @@ export class ArtifactTools {
   private async read(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
     const version = optionalNumber(o, 'version', 1)
-    const asked = o.path === undefined ? null : checkedPath(o.path, 'read_artifact')
+    const asked =
+      o.path === undefined || o.path === null ? null : checkedPath(o.path, 'read_artifact')
     const offset = optionalNumber(o, 'offset', 0) ?? 0
     const limit = optionalNumber(o, 'limit', 1, MAX_READ_CHARS) ?? READ_CHARS
     const reader = this.turn(caller)
@@ -1580,10 +1584,10 @@ export class ArtifactTools {
   private async update(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
     const changes = ['html', 'files', 'edits', 'capabilities', 'canvas'].filter(
-      (key) => o[key] !== undefined,
+      (key) => o[key] !== undefined && o[key] !== null,
     )
     const { store } = this.deps
-    if (o.title !== undefined) {
+    if (o.title !== undefined && o.title !== null) {
       if (changes.length > 0) {
         throw invalid(
           'Give a title alone to rename; html, files, edits, capabilities and canvas make a new ' +
@@ -1615,15 +1619,15 @@ export class ArtifactTools {
         'Give html, files, edits, capabilities or canvas for a new version, or a title alone to rename.',
       )
     }
-    if (o.base_version === undefined) {
+    if (o.base_version === undefined || o.base_version === null) {
       throw invalid('base_version is needed with html, files, edits, capabilities or canvas.')
     }
     const declared = declaration(o)
     const baseVersion = wholeNumber(o, 'base_version', 1)
     const versionNote = note(o)
     const specs = fileSpecs(o, true)
-    const list = o.edits === undefined ? [] : edits(o)
-    const ops = o.canvas === undefined ? null : canvasOps(o, caller.sessionId)
+    const list = o.edits === undefined || o.edits === null ? [] : edits(o)
+    const ops = o.canvas === undefined || o.canvas === null ? null : canvasOps(o, caller.sessionId)
     if (
       ops &&
       (specs.some((spec) => spec.path === CANVAS_FILE) || list.some((e) => e.path === CANVAS_FILE))
@@ -1653,7 +1657,7 @@ export class ArtifactTools {
           versionNote,
           specs,
           list,
-          html: o.html !== undefined,
+          html: o.html !== undefined && o.html !== null,
           canvas,
           ops,
         }),
@@ -1731,7 +1735,11 @@ export class ArtifactTools {
   }
 
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {
-    if (o.query !== undefined && (typeof o.query !== 'string' || longer(o.query, QUERY_CHARS))) {
+    if (
+      o.query !== undefined &&
+      o.query !== null &&
+      (typeof o.query !== 'string' || longer(o.query, QUERY_CHARS))
+    ) {
       throw invalid(`query must be text of at most ${QUERY_CHARS} characters.`)
     }
     const query = typeof o.query === 'string' ? folded(o.query.trim()) : ''
@@ -1823,7 +1831,7 @@ export class ArtifactTools {
 
   private async comments(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    if (o.resolved !== undefined && typeof o.resolved !== 'boolean') {
+    if (o.resolved !== undefined && o.resolved !== null && typeof o.resolved !== 'boolean') {
       throw invalid('resolved must be true or false.')
     }
     const reader = this.turn(caller)
@@ -1924,7 +1932,7 @@ export class ArtifactTools {
 
   /** The template `o.template` names, or null when it names none; it must be of the type given. */
   private async templateOf(o: Args): Promise<PluginTemplate | null> {
-    if (o.template === undefined) return null
+    if (o.template === undefined || o.template === null) return null
     const id = typeof o.template === 'string' ? o.template : ''
     const found = (await this.deps.templates?.list())?.find((template) => template.id === id)
     if (!found || !this.types.get(found.type)) {
@@ -1933,7 +1941,7 @@ export class ArtifactTools {
           'list_artifact_types lists them.',
       )
     }
-    if (o.type !== undefined && o.type !== found.type) {
+    if (o.type !== undefined && o.type !== null && o.type !== found.type) {
       throw invalid(`The template ${found.id} makes a ${found.type}; give that as type.`)
     }
     return found
@@ -1985,7 +1993,7 @@ export class ArtifactTools {
       title: page.title,
     }))
     let text = type.guidance
-    if (o.reference !== undefined) {
+    if (o.reference !== undefined && o.reference !== null) {
       const reference = typeof o.reference === 'string' ? o.reference : ''
       if (!Object.hasOwn(type.references, reference)) {
         throw invalid(
@@ -2018,7 +2026,7 @@ export class ArtifactTools {
     const template = await this.templateOf(o)
     const name = template ? template.type : this.typeOf(o)
     const input = { title: title(o), note: note(o) }
-    if (o.files === undefined && !template) {
+    if ((o.files === undefined || o.files === null) && !template) {
       throw invalid(`Give files, ${CONTENT_ENTRIES[name]} among them.`)
     }
     const given = fileSpecs(o, false)

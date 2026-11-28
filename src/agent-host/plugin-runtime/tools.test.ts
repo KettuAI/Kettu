@@ -22,10 +22,22 @@ describe('the arguments of a plugin tool', () => {
     expect(checkToolArguments(SCHEMA, { query: 'clock', limit: 3, exact: true })).toEqual({
       value: { query: 'clock', limit: 3, exact: true },
     })
+    expect(
+      checkToolArguments(SCHEMA, {
+        query: 'clock',
+        mode: null,
+        limit: null,
+        ratio: null,
+        exact: null,
+      }),
+    ).toEqual({
+      value: { query: 'clock' },
+    })
   })
 
   it.each([
     [undefined, 'The argument "query" is required.'],
+    [{ query: null }, 'The argument "query" is required.'],
     [[], 'The arguments must be an object.'],
     [{ query: 'a', other: 1 }, 'Unknown argument "other".'],
     [{ query: 1 }, 'The argument "query" must be a string.'],

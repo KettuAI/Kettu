@@ -42,6 +42,8 @@ interface TrayPanelStore {
   reviewing: Reviewed | null
   /** Counts the panel's openings, so each one starts afresh. */
   shown: number
+  /** Whether the panel is currently shown (or measuring for its initial show). */
+  visible: boolean
   /** The session whose request under review was settled somewhere else first. */
   answeredElsewhere: string | null
 }
@@ -61,6 +63,7 @@ export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
   remote: null,
   reviewing: null,
   shown: 0,
+  visible: true,
   answeredElsewhere: null,
 }))
 
@@ -72,7 +75,12 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 let answering: string | null = null
 
 function visible(): boolean {
-  return document.visibilityState === 'visible'
+  return useTrayPanelStore.getState().visible && document.visibilityState === 'visible'
+}
+
+function clearScheduledReads(): void {
+  for (const timer of timers.values()) clearTimeout(timer)
+  timers.clear()
 }
 
 /**
@@ -257,10 +265,17 @@ export async function initTrayPanel(): Promise<() => void> {
     useTrayPanelStore.setState((state) => ({
       reviewing: null,
       shown: state.shown + 1,
+      visible: true,
       answeredElsewhere: null,
     }))
+    readListed()
     readLimits()
   })
+  const unsubHidden =
+    api.tray.onHidden?.(() => {
+      clearScheduledReads()
+      useTrayPanelStore.setState({ visible: false })
+    }) ?? (() => {})
   document.addEventListener('visibilitychange', readListed)
   const [remote, hostAgents] = await Promise.all([
     api.remote.status(),
@@ -274,11 +289,13 @@ export async function initTrayPanel(): Promise<() => void> {
     hostAgents: hostAgentsUpdated ? state.hostAgents : hostAgents,
   }))
   return () => {
+    clearScheduledReads()
     unsubEvents()
     unsubConnection()
     unsubRemote()
     unsubHostAgents()
     unsubShown()
+    unsubHidden()
     document.removeEventListener('visibilitychange', readListed)
   }
 }

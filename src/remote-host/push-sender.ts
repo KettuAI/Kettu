@@ -38,6 +38,8 @@ const RETRY: PushRetry = { firstMs: 1000, maxMs: 60_000, attempts: 6 }
 
 /** How long one request to the gateway may take. */
 const REQUEST_TIMEOUT_MS = 15_000
+/** 灵动岛非结束类推送（start/update）超过该时长仍未送达网关则放弃重试，防止延迟回弹旧状态。 */
+const MAX_TRANSIENT_ACTIVITY_AGE_MS = 45_000
 
 /** Which of a device's tokens a push went to, which Apple may say is gone. */
 export type PushTokenKind = 'device' | 'activity-start' | 'activity-update'
@@ -55,6 +57,8 @@ export interface PushSenderOptions {
   device(id: string): { publicKey: string; push: DevicePush } | null
   /** Apple no longer takes one of the device's tokens. */
   unregistered(deviceId: string, token: PushTokenKind): void
+  /** 每次发送或重试前二次校验任务是否仍有效（例如审批尚未在桌面端解决）；返回 false 则直接放弃。 */
+  shouldSend?(job: PushJob, ageMs: number): boolean
   log: LogFn
   fetch?: typeof fetch
   now?: () => number
@@ -66,9 +70,11 @@ interface Entry {
   /** What a newer push replaces: the subject's notification, or the Live Activity. */
   key: string
   token: { kind: PushTokenKind; token: string; environment: ApnsEnvironment }
-  /** 推送入队时刻（毫秒），用于统计从入队到网关接收的总耗时。 */
+  /** 推送入队时刻（毫秒），同时作为密文负载的真实事件时间戳与耗时统计基准。 */
   queuedAt: number
   cancelled: boolean
+  /** 用于在新推送取代或主动取消时立即中止在途请求与退避等待。 */
+  abort: AbortController
 }
 
 /** Why a try failed: to try again, maybe after a wait the gateway asked for, or to give up. */
@@ -91,6 +97,8 @@ const REFUSALS: readonly string[] = [
 
 export class PushSender {
   private readonly queues = new Map<string, Entry[]>()
+  /** 每台设备当前正在发送或退避重试中的在途条目，支持被同键新推送立即中止。 */
+  private readonly active = new Map<string, Entry>()
   private readonly running = new Set<string>()
   private readonly retry: PushRetry
   private readonly now: () => number
@@ -123,16 +131,46 @@ export class PushSender {
     }
     this.signedOutLogged = false
     const key = job.type === 'activity' ? 'activity' : `tag:${job.subject}`
+    this.cancel(job.deviceId, key)
     const queue = this.queues.get(job.deviceId) ?? []
-    for (const entry of queue) if (entry.key === key) entry.cancelled = true
-    queue.push({ job, key, token, queuedAt: this.now(), cancelled: false })
+    queue.push({
+      job,
+      key,
+      token,
+      queuedAt: this.now(),
+      cancelled: false,
+      abort: new AbortController(),
+    })
     this.queues.set(job.deviceId, queue)
     void this.run(job.deviceId)
+  }
+
+  /** 立即取消指定设备上同键的排队条目与正在发送/退避重试中的在途条目。 */
+  cancel(deviceId: string, key: string): void {
+    const queue = this.queues.get(deviceId)
+    if (queue) {
+      for (const entry of queue) {
+        if (entry.key === key) {
+          entry.cancelled = true
+          entry.abort.abort()
+        }
+      }
+    }
+    const current = this.active.get(deviceId)
+    if (current?.key === key) {
+      current.cancelled = true
+      current.abort.abort()
+    }
   }
 
   /** Ends every wait; what is queued is dropped. */
   stop(): void {
     this.stopped = true
+    for (const entry of this.active.values()) {
+      entry.cancelled = true
+      entry.abort.abort()
+    }
+    this.active.clear()
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
     this.queues.clear()
@@ -155,37 +193,62 @@ export class PushSender {
   }
 
   private async deliver(deviceId: string, entry: Entry): Promise<void> {
-    for (let attempt = 1; ; attempt++) {
-      if (entry.cancelled || this.stopped) return
-      const failure = await this.attempt(deviceId, entry, attempt).catch(
-        (error: unknown): Failure => ({
-          retry: true,
-          afterMs: null,
-          reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
-        }),
-      )
-      if (!failure) return
-      if (!failure.retry) return
-      if (attempt >= this.retry.attempts) {
-        this.options.log(
-          'warn',
-          `Gave up a notification for device ${deviceId} after ${attempt} tries: ${failure.reason}`,
+    this.active.set(deviceId, entry)
+    try {
+      for (let attempt = 1; ; attempt++) {
+        if (entry.cancelled || this.stopped) return
+        const ageMs = Math.max(0, this.now() - entry.queuedAt)
+        // 瞬时灵动岛推送（start/update）若在重试期已明显过时，直接放弃以免回弹旧卡片。
+        if (
+          entry.job.type === 'activity' &&
+          entry.job.action !== 'end' &&
+          ageMs > MAX_TRANSIENT_ACTIVITY_AGE_MS
+        ) {
+          return
+        }
+        if (this.options.shouldSend && !this.options.shouldSend(entry.job, ageMs)) return
+        const failure = await this.attempt(deviceId, entry, attempt).catch(
+          (error: unknown): Failure => {
+            if (entry.cancelled || this.stopped || entry.abort.signal.aborted) {
+              return { retry: false }
+            }
+            return {
+              retry: true,
+              afterMs: null,
+              reason: (error as Error)?.name === 'TimeoutError' ? 'no answer' : 'unreachable',
+            }
+          },
         )
-        return
+        if (!failure) return
+        if (!failure.retry || entry.cancelled || this.stopped) return
+        if (attempt >= this.retry.attempts) {
+          this.options.log(
+            'warn',
+            `Gave up a notification for device ${deviceId} after ${attempt} tries: ${failure.reason}`,
+          )
+          return
+        }
+        const backoff = Math.min(this.retry.maxMs, this.retry.firstMs * 2 ** (attempt - 1))
+        await this.wait(Math.min(this.retry.maxMs, failure.afterMs ?? backoff), entry.abort.signal)
       }
-      const backoff = Math.min(this.retry.maxMs, this.retry.firstMs * 2 ** (attempt - 1))
-      await this.wait(Math.min(this.retry.maxMs, failure.afterMs ?? backoff))
+    } finally {
+      if (this.active.get(deviceId) === entry) this.active.delete(deviceId)
     }
   }
 
-  private wait(ms: number): Promise<void> {
+  private wait(ms: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.resolve()
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
+      const done = (): void => {
+        clearTimeout(timer)
         this.timers.delete(timer)
+        signal.removeEventListener('abort', done)
         resolve()
-      }, ms)
+      }
+      const timer = setTimeout(done, ms)
       timer.unref?.()
       this.timers.add(timer)
+      signal.addEventListener('abort', done, { once: true })
     })
   }
 
@@ -200,7 +263,8 @@ export class PushSender {
     if (!device || !accessToken) return { retry: false }
     const devicePublicKey = publicKeyBytes(device.publicKey)
     if (!devicePublicKey) return { retry: false }
-    const push = await this.gatewayPush(entry.job, device.push, devicePublicKey)
+    const push = await this.gatewayPush(entry.job, device.push, devicePublicKey, entry.queuedAt)
+    if (entry.cancelled || this.stopped) return { retry: false }
     if (!push) {
       this.options.log('warn', `A notification for device ${deviceId} is too long to send`)
       return { retry: false }
@@ -213,12 +277,13 @@ export class PushSender {
       push,
     })
     const headers = await pushRequestHeaders(key, url, hostId, body, accessToken)
+    if (entry.cancelled || this.stopped) return { retry: false }
     const sentAt = this.now()
     const response = await this.fetch(`${url}${PUSH_PATH}`, {
       method: 'POST',
       headers,
       body,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), entry.abort.signal]),
     })
     if (response.ok) {
       const acceptedAt = this.now()
@@ -253,6 +318,7 @@ export class PushSender {
     job: PushJob,
     push: DevicePush,
     devicePublicKey: Uint8Array,
+    at: number,
   ): Promise<GatewayPush | null> {
     const { hostId, key } = this.options
     const details = push.choices.details
@@ -261,7 +327,7 @@ export class PushSender {
       v: 1 as const,
       host: hostId,
       hostName: this.options.hostName(),
-      at: this.now(),
+      at,
       tag,
     }
     const seal = async (content: PushContent): Promise<string | null> => {

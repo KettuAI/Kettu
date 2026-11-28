@@ -716,8 +716,10 @@ export class McpTools {
 
   /** The agents an added server goes to. */
   private agentsArg(value: unknown): MarketServer['agents'] {
-    if (value === undefined) return 'all'
-    if (!Array.isArray(value) || value.length === 0) {
+    if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
+      return 'all'
+    }
+    if (!Array.isArray(value)) {
       throw new Refusal('agents must be a list of agent ids, or left out for every agent.')
     }
     const ids = [...new Set(value.map((id) => this.agentOf(id)))]
@@ -727,13 +729,15 @@ export class McpTools {
 
   private async planAdd(input: unknown): Promise<Plan> {
     const o = fields(input, ['catalog', 'config', 'name', 'agents'])
-    if ((o.catalog === undefined) === (o.config === undefined)) {
+    const hasCatalog = o.catalog !== undefined && o.catalog !== null
+    const hasConfig = o.config !== undefined && o.config !== null
+    if (hasCatalog === hasConfig) {
       throw new Refusal('Give either catalog or config, not both.')
     }
     const kept = this.deps.servers()
     const agents = this.agentsArg(o.agents)
     let server: MarketServer
-    if (o.catalog !== undefined) {
+    if (hasCatalog) {
       const id = text(o, 'catalog', SERVER_CHARS)
       const existing = kept.find((s) => s.id === id)
       if (existing) {
@@ -816,7 +820,7 @@ export class McpTools {
       )
       delete server.importedFrom
     }
-    if (o.name !== undefined) {
+    if (o.name !== undefined && o.name !== null) {
       const name = text(o, 'name', 48)
       if (!MARKET_NAME.test(name) || name === 'kettu') {
         throw new Refusal(
@@ -901,13 +905,17 @@ export class McpTools {
       const c = fields(change, ['server', 'on', 'agent', 'project', 'tool'])
       const base = this.serverOf(c)
       if (typeof c.on !== 'boolean') throw new Refusal('on must be true or false.')
-      const named = ['agent', 'project', 'tool'].filter((key) => c[key] !== undefined)
+      const named = ['agent', 'project', 'tool'].filter(
+        (key) => c[key] !== undefined && c[key] !== null,
+      )
       if (named.length > 1) {
         throw new Refusal('Name at most one of agent, project and tool in each switch.')
       }
       let target: McpSwitchTarget = { kind: 'server' }
-      if (c.agent !== undefined) target = { kind: 'agent', agentId: this.agentOf(c.agent) }
-      if (c.project !== undefined) {
+      if (c.agent !== undefined && c.agent !== null) {
+        target = { kind: 'agent', agentId: this.agentOf(c.agent) }
+      }
+      if (c.project !== undefined && c.project !== null) {
         const given = text(c, 'project', PATH_CHARS)
         const path = await this.deps.project(given)
         if (path === null) {
@@ -917,7 +925,7 @@ export class McpTools {
         }
         target = { kind: 'project', path }
       }
-      if (c.tool !== undefined) {
+      if (c.tool !== undefined && c.tool !== null) {
         const tool = text(c, 'tool', TOOL_CHARS)
         const tools = this.deps.insight(base.id)?.tools ?? null
         if (tools === null) {

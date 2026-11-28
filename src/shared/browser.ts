@@ -53,7 +53,9 @@ export const MAX_PAGE_SIDE = 2560
 
 /** The size `browser_resize`'s arguments ask for, or what is wrong with them. */
 export function pageSizeOf(args: Record<string, unknown>): PageSize | { error: string } {
-  const { size, width, height } = args
+  const size = args.size === null ? undefined : args.size
+  const width = args.width === null ? undefined : args.width
+  const height = args.height === null ? undefined : args.height
   if (size !== undefined) {
     if (width !== undefined || height !== undefined) {
       return { error: 'Give size, or width and height, not both.' }

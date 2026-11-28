@@ -49,6 +49,13 @@ describe('device tool arguments', () => {
       y: 40,
       long: false,
     })
+    expect(actionOf('device_tap', { ref: null, x: 20, y: 40, long: null })).toEqual({
+      type: 'tap',
+      x: 20,
+      y: 40,
+      long: false,
+    })
+    expect(actionOf('device_logs', { lines: null })).toEqual({ type: 'logs', lines: 200 })
   })
 
   it('refuses what could reach a command line as a flag or another command', () => {

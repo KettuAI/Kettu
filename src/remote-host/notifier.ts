@@ -136,6 +136,8 @@ export interface NotifierOptions {
   /** Whether the device is connected and in front, so it shows a notice in the app instead. */
   foreground?(deviceId: string): boolean
   send(job: PushJob): void
+  /** 取消指定设备仍在排队或退避重试中的同键推送（例如未收到 updateToken 前已过期的 start）。 */
+  cancel?(deviceId: string, key: string): void
   /** How long a device's notifications of one subject wait to merge into one. */
   mergeMs?: number
 }
@@ -157,6 +159,8 @@ export interface DeviceNotice {
 const MERGE_MS = 1000
 const ERROR_ACTIVITY_MS = 15 * 60_000
 const ENDED_ACTIVITY_MS = 2 * 60_000
+/** 已发 push-to-start 但状态提前归零时，等待设备回传 updateToken 以补发 end 的最长保留窗口。 */
+const PENDING_END_TTL_MS = 5 * 60_000
 /** Node.js setTimeout caps delays at 2^31 - 1 ms (~24.8 days); chain longer waits. */
 const MAX_ACTIVITY_TIMER_MS = 2_147_483_647
 
@@ -177,7 +181,13 @@ interface Told {
 
 interface Activity {
   running: boolean
+  /** 最近一次实际发出给网关的状态指纹，供设备回传 updateToken 后判定是否需补发更新。 */
   fingerprint: string
+  /** 已发 push-to-start 但尚未收到设备回传 updateToken。 */
+  awaitingToken?: boolean
+  /** 在收到 updateToken 前状态已归零，等设备回传 updateToken 后立即补发 end，防止孤儿灵动岛。 */
+  pendingEnd?: boolean
+  pendingEndAt?: number
 }
 
 /** Whether a push reaches the device: through APNs or Web Push. */
@@ -341,7 +351,12 @@ export class Notifier {
   setPresent(present: boolean): void {
     const was = this.present
     this.present = present
-    if (present || was !== true) return
+    if (present) {
+      // 用户回到电脑前：重算灵动岛，让开启 onlyAway 的后台设备及时收尾并停止远程更新。
+      if (was !== true) this.activitiesChanged()
+      return
+    }
+    if (was !== true) return
     for (const device of this.options.devices()) {
       for (const [subject, attention] of this.open) {
         const what = this.told.get(device.id)?.get(subject)
@@ -350,6 +365,35 @@ export class Notifier {
       }
     }
     this.activitiesChanged()
+  }
+
+  /** 在推送真正发往网关前二次核验其是否仍有效，避免重试或排队延迟后回弹已解决的请求。 */
+  isJobValid(job: PushJob): boolean {
+    const device = this.options.devices().find((entry) => entry.id === job.deviceId)
+    if (!device || !reachable(device.push)) return false
+    // 撤回通知与结束灵动岛属于清理动作，始终允许送达。
+    if (job.type === 'background') return true
+    if (job.type === 'activity' && job.action === 'end') return true
+    const { choices } = device.push
+    if (this.held(choices)) return false
+    if (job.type === 'alert') {
+      const { event } = job
+      if (event.kind === 'permission') {
+        const ids = this.waiting.get(event.sessionId)
+        if (!ids) return false
+        return event.requestId === undefined || ids.has(event.requestId)
+      }
+      if (event.kind === 'turn-ended' || event.kind === 'error' || event.kind === 'routine-ended') {
+        return this.open.has(job.subject)
+      }
+      return true
+    }
+    if (job.action === 'start' && this.options.foreground?.(job.deviceId)) return false
+    const current = this.pickActivityPayload(choices)
+    if (!current) return false
+    const isWaitingJob = job.payload ? job.payload.kind === 'waiting' : job.count > 0
+    if (isWaitingJob && current.kind !== 'waiting') return false
+    return true
   }
 
   /** Tells every device that wants notices about devices, but `except`. */
@@ -657,15 +701,30 @@ export class Notifier {
 
   private updateActivity(deviceId: string): void {
     const device = this.options.devices().find((entry) => entry.id === deviceId)
-    const state = this.activities.get(deviceId) ?? { running: false, fingerprint: '' }
+    let state = this.activities.get(deviceId)
+    if (
+      state?.pendingEnd &&
+      state.pendingEndAt !== undefined &&
+      Date.now() - state.pendingEndAt > PENDING_END_TTL_MS
+    ) {
+      this.activities.delete(deviceId)
+      state = undefined
+    }
     const target = device?.push.target
     const tokens = target?.activity
     const choices = device?.push.choices
     const enabled = Boolean(target && choices && (tokens?.start || tokens?.update))
-    const payload = enabled && choices ? this.pickActivityPayload(choices) : null
-    // Once a device reports an update token (e.g., started locally before backgrounding),
-    // the host takes over subsequent updates and dismissal.
-    const hasLiveActivity = state.running || Boolean(tokens?.update)
+    const held = Boolean(choices && this.held(choices))
+    const inForeground = Boolean(this.options.foreground?.(deviceId))
+    // 开启「仅在我离开时通知」且用户正在电脑前时，主机不再向手机推送远程灵动岛更新；
+    // 若手机处于前台由 App 自行维护本地活动则不干扰，若在后台则按无内容收尾。
+    if (held && inForeground) {
+      if (state?.awaitingToken) this.options.cancel?.(deviceId, ACTIVITY_SUBJECT)
+      return
+    }
+    const payload = enabled && choices && !held ? this.pickActivityPayload(choices) : null
+    // 一旦设备回传 updateToken 或主机已发出 start，即视为存在待维护的活动生命周期。
+    const hasLiveActivity = Boolean(state?.running || state?.awaitingToken || tokens?.update)
 
     const send = (action: 'start' | 'update' | 'end', next: LiveActivityPayload | null): void =>
       this.options.send({
@@ -682,26 +741,54 @@ export class Notifier {
     if (payload) {
       const fingerprint = JSON.stringify(payload)
       if (!hasLiveActivity) {
-        if (
-          !tokens?.start ||
-          !canStartActivity(payload) ||
-          this.held(choices!) ||
-          this.options.foreground?.(deviceId)
-        ) {
+        if (!tokens?.start || !canStartActivity(payload) || inForeground) {
           return
         }
         send('start', payload)
-      } else {
-        if (state.running && fingerprint === state.fingerprint) return
-        if (!tokens?.update) return
-        send('update', payload)
+        this.activities.set(deviceId, {
+          running: true,
+          fingerprint,
+          awaitingToken: true,
+          pendingEnd: false,
+        })
+        return
       }
+      // 刚发出 start 但尚未收到设备回传 updateToken：不重复 start，保留已发指纹等待回传后按需补发 update。
+      if (!tokens?.update) {
+        this.activities.set(deviceId, {
+          running: true,
+          fingerprint: state?.fingerprint ?? fingerprint,
+          awaitingToken: true,
+          pendingEnd: false,
+        })
+        return
+      }
+      if (state?.running && !state.pendingEnd && fingerprint === state.fingerprint) {
+        if (state.awaitingToken) {
+          this.activities.set(deviceId, { running: true, fingerprint })
+        }
+        return
+      }
+      send('update', payload)
       this.activities.set(deviceId, { running: true, fingerprint })
       return
     }
 
     if (!hasLiveActivity) return
-    if (tokens?.update) send('end', null)
-    this.activities.delete(deviceId)
+    if (tokens?.update) {
+      send('end', null)
+      this.activities.delete(deviceId)
+      return
+    }
+    // 刚发 push-to-start 尚未拿到 updateToken 就无待展示状态：先中止在途 start，并记 pendingEnd，
+    // 待设备把该活动的 updateToken 上报回来后立即补发 end，避免孤儿灵动岛残留。
+    this.options.cancel?.(deviceId, ACTIVITY_SUBJECT)
+    this.activities.set(deviceId, {
+      running: false,
+      fingerprint: state?.fingerprint ?? '',
+      awaitingToken: true,
+      pendingEnd: true,
+      pendingEndAt: state?.pendingEndAt ?? Date.now(),
+    })
   }
 }

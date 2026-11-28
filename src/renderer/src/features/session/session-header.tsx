@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   AiChat02Icon,
   ArrowLeft01Icon,
@@ -22,7 +23,7 @@ import { useStepSessionTitle } from '@renderer/features/tasks/use-task'
 import { BranchNavigator } from './branch-navigator'
 import { PlanChip } from './plan-chip'
 import { SessionFamilyMenu } from './session-family-menu'
-import { resolveSessionFamily } from './session-family-model'
+import { buildSessionFamily, selectSessionFamilyMembers } from './session-family-model'
 import { ViewersChip } from './viewers-chip'
 import { WorktreeBarChip } from './worktree/worktree-tag'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -86,7 +87,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
  * renames and which drags its pane, then its More menu, the branch's pull request, the agent's plan
  * and who else has it in front; the pane buttons at the right.
  */
-export function SessionHeader({
+export const SessionHeader = memo(function SessionHeader({
   summary,
   session,
 }: {
@@ -95,10 +96,12 @@ export function SessionHeader({
 }) {
   const { t: ts } = useTranslation('session')
   const { t: tt } = useTranslation('tasks')
-  const sessionsById = useSessionsStore((s) => s.byId)
+  const familyMembers = useSessionsStore(
+    useShallow((s) => selectSessionFamilyMembers(s.byId, summary.id)),
+  )
   const family = useMemo(
-    () => resolveSessionFamily(sessionsById, summary.id),
-    [sessionsById, summary.id],
+    () => buildSessionFamily(familyMembers, summary.id),
+    [familyMembers, summary.id],
   )
   const routine = useRoutinesStore((s) =>
     summary.routine ? s.byId[summary.routine.routineId] : undefined,
@@ -205,7 +208,7 @@ export function SessionHeader({
       />
     </TopBar>
   )
-}
+})
 
 /**
  * The title: a click renames it, and a press drags its pane to another place. Out of focus its text

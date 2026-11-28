@@ -102,15 +102,17 @@ export function gatewayInput(input: unknown): GatewayInput {
   const extra = Object.keys(o).find((key) => !['tool', 'server', 'arguments'].includes(key))
   if (extra !== undefined) return { error: `Unknown argument ${extra}.` }
   if (typeof o.tool !== 'string' || o.tool === '') return { error: 'tool must be a tool name.' }
-  if (o.server !== undefined && (typeof o.server !== 'string' || o.server === '')) {
+  const serverValue = o.server === null ? undefined : o.server
+  if (serverValue !== undefined && (typeof serverValue !== 'string' || serverValue === '')) {
     return { error: 'server must be the name of an MCP server.' }
   }
-  const server = typeof o.server === 'string' ? { server: o.server } : {}
-  if (o.arguments === undefined) return { tool: o.tool, ...server }
-  if (!isObject(o.arguments)) {
+  const server = typeof serverValue === 'string' ? { server: serverValue } : {}
+  const argsValue = o.arguments === null ? undefined : o.arguments
+  if (argsValue === undefined) return { tool: o.tool, ...server }
+  if (!isObject(argsValue)) {
     return { error: 'arguments must be an object of the tool’s arguments, {} when it takes none.' }
   }
-  return { tool: o.tool, ...server, arguments: o.arguments }
+  return { tool: o.tool, ...server, arguments: argsValue }
 }
 
 /** A tool a search can find: Kettu's own without a server, or one of a server's. */

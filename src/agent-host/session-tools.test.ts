@@ -810,6 +810,7 @@ function reading(opts: { lastReply?: string | null; history?: RenderedTurn[] } =
   ]
   const deps = {
     info: (id: string) => sessions.find((item) => item.id === id) ?? null,
+    list: () => sessions,
     lastReply: vi.fn(async () => opts.lastReply ?? null),
     history: vi.fn(async () => opts.history ?? []),
     mode: async () => null,
@@ -984,5 +985,27 @@ describe('read_session_history', () => {
     expect(data.turns[0]!.text).toContain(finalReply)
     expect(data.turns[0]!.text).toContain('[... earlier steps omitted ...]')
     expect(text(out)).toContain(finalReply)
+  })
+
+  it('treats null optional arguments as omitted across session tools', async () => {
+    const { tools: t } = reading({ lastReply: 'hello' })
+    const got = await t.call(caller, 'get_session', {
+      id: null,
+      reply_offset: null,
+      reply_limit: null,
+    })
+    expect(got.isError).toBeUndefined()
+    const listed = await t.call(caller, 'list_sessions', {
+      query: null,
+      include_archived: null,
+      limit: null,
+    })
+    expect(listed.isError).toBeUndefined()
+    const history = await t.call(caller, 'read_session_history', {
+      id: null,
+      before_turn: null,
+      limit: null,
+    })
+    expect(history.isError).toBeUndefined()
   })
 })

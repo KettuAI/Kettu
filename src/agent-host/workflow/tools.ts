@@ -570,7 +570,7 @@ export class WorkflowTools {
   private async create(sessionId: string, input: unknown): Promise<CallToolResult> {
     const o = objectOf(input, ['yaml', 'keep'])
     const yaml = text(o, 'yaml', WORKFLOW_FILE_BYTES, true)!
-    if (o.keep !== undefined && typeof o.keep !== 'boolean') {
+    if (o.keep !== undefined && o.keep !== null && typeof o.keep !== 'boolean') {
       throw new WorkflowToolError('invalid', 'keep must be true or false.')
     }
     if (!this.deps.agentOf(sessionId)) {

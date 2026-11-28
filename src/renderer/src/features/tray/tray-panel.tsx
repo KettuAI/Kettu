@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft01Icon,
   Cancel01Icon,
@@ -133,6 +133,7 @@ export function TrayPanel() {
   const content = useRef<HTMLDivElement>(null)
   const reviewing = useTrayPanelStore((s) => s.reviewing)
   const shown = useTrayPanelStore((s) => s.shown)
+  const visible = useTrayPanelStore((s) => s.visible)
   const summary = useTrayPanelStore((s) =>
     reviewing ? s.sessions[reviewing.sessionId] : undefined,
   )
@@ -147,6 +148,7 @@ export function TrayPanel() {
   // Each opening reports it at once, since main shows the panel only then and a hidden page's
   // observer stays idle.
   useLayoutEffect(() => {
+    if (!visible) return
     const element = content.current
     if (!element) return
     const report = () => trayApi().tray.resize(Math.ceil(element.offsetHeight))
@@ -154,7 +156,16 @@ export function TrayPanel() {
     observer.observe(element)
     report()
     return () => observer.disconnect()
-  }, [shown])
+  }, [shown, visible])
+
+  if (!visible) {
+    return (
+      <div
+        aria-label={t('label')}
+        className="h-screen overflow-y-auto rounded-2xl bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-foreground shadow-[inset_0_0_0_1px_var(--panel-highlight)]"
+      />
+    )
+  }
 
   return (
     <div
@@ -211,28 +222,29 @@ function List() {
     open({ kind: 'session', sessionId: id })
   }
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      // A held key repeats into the view it opened, which must never answer for the user.
-      if (passes(event) || event.repeat) return
-      const mod = event.metaKey || event.ctrlKey
-      if (mod && event.key.toLowerCase() === 'n') open({ kind: 'new-session' })
-      else if (mod && event.key.toLowerCase() === 'o') open({ kind: 'app' })
-      else if (mod && event.key === ',') open({ kind: 'settings' })
-      else if (event.key === 'Escape') trayApi().tray.hide()
-      else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        const at = highlight ? items.indexOf(highlight) : -1
-        const step = event.key === 'ArrowDown' ? 1 : -1
-        const next = items[(at + step + items.length) % items.length]
-        if (next) setHighlight(next)
-      } else if (event.key === 'Enter' && highlight && items.includes(highlight)) {
-        activate(highlight)
-      } else return
-      event.preventDefault()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    // A held key repeats into the view it opened, which must never answer for the user.
+    if (passes(event) || event.repeat) return
+    const mod = event.metaKey || event.ctrlKey
+    if (mod && event.key.toLowerCase() === 'n') open({ kind: 'new-session' })
+    else if (mod && event.key.toLowerCase() === 'o') open({ kind: 'app' })
+    else if (mod && event.key === ',') open({ kind: 'settings' })
+    else if (event.key === 'Escape') trayApi().tray.hide()
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const at = highlight ? items.indexOf(highlight) : -1
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      const next = items[(at + step + items.length) % items.length]
+      if (next) setHighlight(next)
+    } else if (event.key === 'Enter' && highlight && items.includes(highlight)) {
+      activate(highlight)
+    } else return
+    event.preventDefault()
   })
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const row = (summary: SessionSummary, mark: ReactNode, line: string, action?: ReactNode) => (
     <SessionRow

@@ -381,6 +381,8 @@ export interface AgentRuntime {
 /** What the session layer tells the agents, and hears back. */
 export interface AgentSessionHooks {
   liveSessions(agentId: AgentId): number
+  /** Connected sessions excluding un-adopted prepared drafts; falls back to `liveSessions`. */
+  activeSessions?(agentId: AgentId): number
   agentExited(agentId: AgentId, info: ExitInfo): void
   signedIn(agentId: AgentId): void
   /** The agent's sign-in or account changed: release idle live sessions and defer busy ones. */
@@ -586,6 +588,12 @@ class Slot {
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
+  /** Earliest timestamp for the next non-forced limits read after a transient failure. */
+  limitsNextReadAt = 0
+  /** Consecutive non-permanent limits read failures for exponential backoff. */
+  limitsFailures = 0
+  /** Current auth mode cannot read plan limits (e.g. non-ChatGPT Codex provider). */
+  limitsUnsupported = false
   signInEndRun: Promise<void> | null = null
   signInEndReadAt = 0
   /** Why the last limits read failed; null once one succeeds. */
@@ -807,6 +815,17 @@ function accountIdentityChanged(before: AccountSnapshot, after: AccountSnapshot)
  */
 function throughGateway(slot: Slot): boolean {
   return slot.account?.kind === 'gateway'
+}
+
+/** Codex only exposes rate limits for ChatGPT subscriptions, never for API-key accounts. */
+function codexWithoutChatGptAuth(slot: Slot): boolean {
+  return slot.def.id === 'codex' && slot.account?.kind === 'api_key'
+}
+
+/** Whether a limits-read error reflects an auth mode that cannot read plan limits until auth changes. */
+function isPermanentLimitsError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /chatgpt authentication required/i.test(message)
 }
 
 /** A state detection gives a harness that cannot run, for the reason it found. */
@@ -2673,8 +2692,18 @@ export class AgentManager {
   startLimitReads(): void {
     if (this.limitsTimer || this.stopped) return
     this.limitsTimer = setInterval(() => {
+      const now = Date.now()
+      const activeCount = this.hooks.activeSessions ?? this.hooks.liveSessions
       for (const slot of this.slots.values()) {
-        if (!slot.runtime || this.hooks.liveSessions(slot.id) === 0) continue
+        if (!slot.runtime || activeCount(slot.id) === 0) continue
+        if (
+          throughGateway(slot) ||
+          codexWithoutChatGptAuth(slot) ||
+          slot.limitsUnsupported ||
+          now < slot.limitsNextReadAt
+        ) {
+          continue
+        }
         this.refreshLimits(slot.id).catch((error: unknown) => {
           const message = (error as Error).message
           this.deps.diagnostics.log('warn', `${slot.name}: the plan limits read failed: ${message}`)
@@ -4129,6 +4158,7 @@ export class AgentManager {
         }
         this.emit(slot)
         if (accountIdentityChanged(before, accountSnapshot(slot))) {
+          this.resetLimitsBackoff(slot)
           void this.hooks.accountChanged(slot.id)
         }
       },
@@ -4162,6 +4192,12 @@ export class AgentManager {
     // A gateway has no plan: windows kept from a sign-in before it would show as its limits.
     if (throughGateway(slot)) slot.limits.clear()
     slot.signIn = named.kind === 'none' ? 'required' : 'signed-in'
+    if (
+      before?.kind !== slot.account?.kind ||
+      accountIdentityChanged(beforeSnapshot, accountSnapshot(slot))
+    ) {
+      this.resetLimitsBackoff(slot)
+    }
     this.emit(slot)
     if (accountIdentityChanged(beforeSnapshot, accountSnapshot(slot))) {
       void this.hooks.accountChanged(slot.id)
@@ -4362,16 +4398,23 @@ export class AgentManager {
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
     const force = options?.force === true
+    if (force) this.resetLimitsBackoff(slot)
     // A forced read is how a finished sign-in clears "required": the last failure must not stick.
     if (!slot.runtime && slot.h.detection?.state !== 'available') return
     if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
-    if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
+    const now = Date.now()
+    if (!force && (slot.limitsUnsupported || now < slot.limitsNextReadAt)) return
+    if (!force && now - slot.limitsReadAt < this.timings.limitsMs) return
     slot.limitsRun = this.afterOpenings(slot)
       .then(() => this.limitedRead(slot, this.readLimits(slot, force)))
       .then(
-        () => this.limitsReadEnded(slot, null),
+        () => {
+          this.resetLimitsBackoff(slot)
+          this.limitsReadEnded(slot, null)
+        },
         (error: unknown) => {
+          this.noteLimitsFailure(slot, error)
           this.limitsReadEnded(slot, agentError(error).message)
           throw error
         },
@@ -4380,6 +4423,23 @@ export class AgentManager {
         slot.limitsRun = null
       })
     return slot.limitsRun
+  }
+
+  private resetLimitsBackoff(slot: Slot): void {
+    slot.limitsFailures = 0
+    slot.limitsNextReadAt = 0
+    slot.limitsUnsupported = false
+  }
+
+  private noteLimitsFailure(slot: Slot, error: unknown): void {
+    if (isPermanentLimitsError(error)) {
+      slot.limitsUnsupported = true
+      slot.limitsNextReadAt = 0
+      return
+    }
+    slot.limitsFailures++
+    const wait = Math.min(this.timings.limitsBackgroundMs * 2 ** (slot.limitsFailures - 1), HOUR_MS)
+    slot.limitsNextReadAt = Date.now() + wait
   }
 
   /**
@@ -4509,6 +4569,18 @@ export class AgentManager {
       return
     }
     if (!connection.readLimits) return
+    if (throughGateway(slot)) {
+      const now = Date.now()
+      slot.limitsReadAt = now
+      slot.limitsError = null
+      slot.limits.clear()
+      this.emit(slot)
+      return
+    }
+    if (!force && codexWithoutChatGptAuth(slot)) {
+      slot.limitsUnsupported = true
+      return
+    }
     let limits: PlanLimit[]
     try {
       limits = await connection.readLimits()
@@ -6058,6 +6130,7 @@ export class AgentManager {
     slot.account = null
     slot.limits.clear()
     slot.limitsReadAt = 0
+    this.resetLimitsBackoff(slot)
     slot.limitsError = null
     slot.resets = null
     slot.resetsError = null

@@ -231,7 +231,7 @@ function args(name: string, input: unknown): Args {
 }
 
 function layerOf(o: Args, fallback: MemoryLayer | null): MemoryLayer | null {
-  if (o.layer === undefined) return fallback
+  if (o.layer === undefined || o.layer === null) return fallback
   if (o.layer !== 'project' && o.layer !== 'global') {
     throw invalid('layer must be project or global.')
   }
@@ -247,7 +247,7 @@ function idOf(o: Args): string {
 
 function field(o: Args, key: string, required: boolean): string | undefined {
   const value = o[key]
-  if (value === undefined && !required) return undefined
+  if ((value === undefined || value === null) && !required) return undefined
   if (typeof value !== 'string') throw invalid(`${key} must be a string.`)
   return value
 }
@@ -257,7 +257,7 @@ function day(at: number): string {
 }
 
 function offsetOf(o: Args): number {
-  if (o.offset === undefined) return 0
+  if (o.offset === undefined || o.offset === null) return 0
   if (typeof o.offset !== 'number' || !Number.isInteger(o.offset) || o.offset < 0) {
     throw invalid('offset must be a whole number, 0 or more.')
   }

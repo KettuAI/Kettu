@@ -154,16 +154,51 @@ function compareSiblingOrder(a: SessionSummary, b: SessionSummary): number {
   return a.id.localeCompare(b.id)
 }
 
+const EMPTY_FAMILY_MEMBERS: readonly SessionSummary[] = Object.freeze([])
+
+const childrenIndexCache = new WeakMap<
+  Readonly<Record<string, SessionSummary>>,
+  Map<string, SessionSummary[]>
+>()
+
+/** Cached `parentId -> sorted children` lookup per `byId` reference so standalone sessions resolve in O(1). */
+function childrenIndexOf(
+  byId: Readonly<Record<string, SessionSummary>>,
+): Map<string, SessionSummary[]> {
+  let index = childrenIndexCache.get(byId)
+  if (index) return index
+  index = new Map<string, SessionSummary[]>()
+  for (const candidate of Object.values(byId)) {
+    if (!candidate.parentId) continue
+    let list = index.get(candidate.parentId)
+    if (!list) {
+      list = []
+      index.set(candidate.parentId, list)
+    }
+    list.push(candidate)
+  }
+  for (const list of index.values()) {
+    if (list.length > 1) list.sort(compareSiblingOrder)
+  }
+  childrenIndexCache.set(byId, index)
+  return index
+}
+
 /**
- * Resolves the session family containing `currentId`: walks up `parentId` to the root, then lists
- * the root and its descendants in creation order (DFS). Returns null for standalone sessions.
+ * Selects only the summaries belonging to `currentId`'s family (or a shared empty array for
+ * standalone sessions). Used with `useShallow` so unrelated session updates do not re-render
+ * `SessionHeader`.
  */
-export function resolveSessionFamily(
+export function selectSessionFamilyMembers(
   byId: Readonly<Record<string, SessionSummary>>,
   currentId: string,
-): SessionFamily | null {
+): readonly SessionSummary[] {
   const current = byId[currentId]
-  if (!current) return null
+  if (!current) return EMPTY_FAMILY_MEMBERS
+
+  const childrenByParent = childrenIndexOf(byId)
+  const hasParent = Boolean(current.parentId && byId[current.parentId])
+  if (!hasParent && !childrenByParent.has(current.id)) return EMPTY_FAMILY_MEMBERS
 
   const ancestors = new Set<string>([current.id])
   let root = current
@@ -181,9 +216,38 @@ export function resolveSessionFamily(
     return true
   }
 
+  const out: SessionSummary[] = []
+  const visited = new Set<string>()
+  const visit = (node: SessionSummary): void => {
+    if (visited.has(node.id)) return
+    visited.add(node.id)
+    out.push(node)
+    const kids = childrenByParent.get(node.id)
+    if (!kids) return
+    for (const child of kids) {
+      if (includeMember(child)) visit(child)
+    }
+  }
+  visit(root)
+
+  return out.length <= 1 ? EMPTY_FAMILY_MEMBERS : out
+}
+
+/** Builds a `SessionFamily` from the pre-selected family member summaries. */
+export function buildSessionFamily(
+  summaries: readonly SessionSummary[],
+  currentId: string,
+): SessionFamily | null {
+  if (summaries.length <= 1) return null
+  const byId: Record<string, SessionSummary> = {}
+  for (const item of summaries) byId[item.id] = item
+  const current = byId[currentId]
+  if (!current) return null
+
+  const root = summaries[0]!
   const childrenByParent = new Map<string, SessionSummary[]>()
-  for (const candidate of Object.values(byId)) {
-    if (!candidate.parentId || !includeMember(candidate)) continue
+  for (const candidate of summaries) {
+    if (!candidate.parentId || !(candidate.parentId in byId)) continue
     let list = childrenByParent.get(candidate.parentId)
     if (!list) {
       list = []
@@ -192,7 +256,7 @@ export function resolveSessionFamily(
     list.push(candidate)
   }
   for (const list of childrenByParent.values()) {
-    list.sort(compareSiblingOrder)
+    if (list.length > 1) list.sort(compareSiblingOrder)
   }
 
   const members: SessionFamilyMember[] = []
@@ -228,6 +292,18 @@ export function resolveSessionFamily(
     childCount: members.length - 1,
     activity: summarizeFamilyActivity(members),
   }
+}
+
+/**
+ * Resolves the session family containing `currentId`: walks up `parentId` to the root, then lists
+ * the root and its descendants in creation order (DFS). Returns null for standalone sessions.
+ */
+export function resolveSessionFamily(
+  byId: Readonly<Record<string, SessionSummary>>,
+  currentId: string,
+): SessionFamily | null {
+  const members = selectSessionFamilyMembers(byId, currentId)
+  return buildSessionFamily(members, currentId)
 }
 
 /** Whether `usage` carries valid numeric token totals (explicit `0` counts as known). */

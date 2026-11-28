@@ -37,12 +37,31 @@ describe('browser_navigate forward_ports arguments', () => {
   })
 
   it.each([
+    { url: 'https://example.com/', forward_ports: [] },
+    { url: 'https://example.com/', forward_ports: null },
+    { url: 'http://localhost:3100/', forward_ports: [] },
+    { url: 'http://localhost:3100/', forward_ports: null },
+  ])('treats empty or null forward_ports as omitted for %j', async (input) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_navigate', input)
+    expect(result.isError).toBeUndefined()
+    expect(call).toHaveBeenCalledOnce()
+    expect(call.mock.calls[0][0]).toMatchObject({
+      tool: 'browser_navigate',
+      args: { url: input.url },
+    })
+    expect('forward_ports' in call.mock.calls[0][0].args).toBe(false)
+  })
+
+  it.each([
     [{ url: 'https://example.com/', forward_ports: [8080] }, /local dev server URL/],
-    [{ url: 'http://localhost:3100/', forward_ports: [] }, /1 to 8 TCP ports/],
     [
       { url: 'http://localhost:3100/', forward_ports: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
       /1 to 8 TCP ports/,
     ],
+    [{ url: 'http://localhost:3100/', forward_ports: '8080' }, /1 to 8 TCP ports/],
+    [{ url: 'http://localhost:3100/', forward_ports: 8080 }, /1 to 8 TCP ports/],
+    [{ url: 'http://localhost:3100/', forward_ports: {} }, /1 to 8 TCP ports/],
     [{ url: 'http://localhost:3100/', forward_ports: [0] }, /1 to 65535/],
     [{ url: 'http://localhost:3100/', forward_ports: [65536] }, /1 to 65535/],
     [{ url: 'http://localhost:3100/', forward_ports: [8080.5] }, /1 to 65535/],
@@ -82,15 +101,35 @@ describe('browser_tabs arguments', () => {
   })
 
   it.each([
+    [{ action: 'list', index: 0 }, { action: 'list' }],
+    [{ action: 'list', index: null }, { action: 'list' }],
+    [{ action: 'new', index: 0 }, { action: 'new' }],
+    [{ action: 'new', index: null }, { action: 'new' }],
+    [{ action: 'close', index: null }, { action: 'close' }],
+  ])('ignores omitted or irrelevant index for %j and forwards %j', async (input, args) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, 'browser_tabs', input)
+    expect(result.isError).toBeUndefined()
+    expect(call).toHaveBeenCalledOnce()
+    expect(call.mock.calls[0][0]).toMatchObject({
+      sessionId: 's1',
+      tool: 'browser_tabs',
+      args,
+    })
+    expect('index' in call.mock.calls[0][0].args).toBe(false)
+  })
+
+  it.each([
     [{}, /action must be/],
     [{ action: 'open' }, /action must be/],
     [{ action: 'select' }, /index is needed/],
+    [{ action: 'select', index: null }, /index is needed/],
     [{ action: 'select', index: -1 }, /whole number/],
     [{ action: 'select', index: 1.5 }, /whole number/],
     [{ action: 'select', index: '1' }, /whole number/],
+    [{ action: 'close', index: -1 }, /whole number/],
     [{ action: 'close', index: 50 }, /whole number/],
-    [{ action: 'list', index: 0 }, /select and close/],
-    [{ action: 'new', index: 0 }, /select and close/],
+    [{ action: 'close', index: '0' }, /whole number/],
     [{ action: 'new', url: 'https://example.com/' }, /Unknown argument url/],
   ])('refuses %j before main sees it', async (input, message) => {
     const { service, call } = tools()
@@ -115,6 +154,11 @@ describe('browser_resize arguments', () => {
       { width: 320, height: 2560 },
       { width: 320, height: 2560 },
     ],
+    [{ size: 'phone', width: null, height: null }, { size: 'phone' }],
+    [
+      { size: null, width: 1440, height: 900 },
+      { width: 1440, height: 900 },
+    ],
   ])('forwards %j to main as %j', async (input, args) => {
     const { service, call } = tools()
     const result = await service.call(caller, 'browser_resize', input)
@@ -124,8 +168,10 @@ describe('browser_resize arguments', () => {
 
   it.each([
     [{}, /Give size/],
+    [{ size: null, width: null, height: null }, /Give size/],
     [{ size: 'watch' }, /desktop, tablet or phone/],
     [{ size: 'phone', width: 390 }, /not both/],
+    [{ size: 'phone', width: 390, height: null }, /not both/],
     [{ width: 1440 }, /width and height must both/],
     [{ width: 319, height: 800 }, /320 to 2560/],
     [{ width: 1280, height: 2561 }, /320 to 2560/],
@@ -135,6 +181,58 @@ describe('browser_resize arguments', () => {
   ])('refuses %j before main sees it', async (input, message) => {
     const { service, call } = tools()
     const result = await service.call(caller, 'browser_resize', input)
+    expect(result.structuredContent).toMatchObject({ code: 'invalid' })
+    expect(String((result.content[0] as { text: string }).text)).toMatch(message)
+    expect(call).not.toHaveBeenCalled()
+  })
+})
+
+describe('strict-schema null optional arguments across browser tools', () => {
+  it.each([
+    ['browser_click', { ref: 'e1', element: null, double: null, button: null }, { ref: 'e1' }],
+    [
+      'browser_type',
+      { ref: 'e2', text: 'hello', element: null, submit: null, slowly: null },
+      { ref: 'e2', text: 'hello' },
+    ],
+    ['browser_scroll', { direction: 'down', ref: null, amount: null }, { direction: 'down' }],
+    [
+      'browser_select_option',
+      { ref: 'e3', values: ['opt'], element: null },
+      { ref: 'e3', values: ['opt'] },
+    ],
+    ['browser_take_screenshot', { ref: null, full_page: null }, {}],
+    ['browser_wait_for', { text: 'Ready', text_gone: null, time: null }, { text: 'Ready' }],
+    ['browser_wait_for', { text: null, text_gone: null, time: 2 }, { time: 2 }],
+    ['browser_console_messages', { since_navigation: null }, {}],
+    ['browser_network_requests', { since_navigation: null }, {}],
+    ['browser_evaluate', { function: '() => 1', ref: null }, { function: '() => 1' }],
+  ] as const)('omits null optional fields on %s', async (tool, input, expected) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, tool, input)
+    expect(result.isError).toBeUndefined()
+    expect(call).toHaveBeenCalledOnce()
+    expect(call.mock.calls[0][0]).toMatchObject({ tool, args: expected })
+    expect(Object.keys(call.mock.calls[0][0].args).sort()).toEqual(Object.keys(expected).sort())
+  })
+
+  it.each([
+    ['browser_navigate', { url: null }, /url is needed/],
+    ['browser_click', { ref: null }, /ref is needed/],
+    ['browser_type', { ref: 'e1', text: null }, /text is needed/],
+    ['browser_press_key', { key: null }, /key is needed/],
+    ['browser_scroll', { direction: null }, /direction must be/],
+    [
+      'browser_wait_for',
+      { text: null, text_gone: null, time: null },
+      /Give text, text_gone or time/,
+    ],
+    ['browser_evaluate', { function: null }, /function is needed/],
+    ['browser_ask_user', { step: 'other', reason: null }, /reason is needed/],
+  ] as const)('still rejects missing/null required fields on %s', async (tool, input, message) => {
+    const { service, call } = tools()
+    const result = await service.call(caller, tool, input)
+    expect(result.isError).toBe(true)
     expect(result.structuredContent).toMatchObject({ code: 'invalid' })
     expect(String((result.content[0] as { text: string }).text)).toMatch(message)
     expect(call).not.toHaveBeenCalled()

@@ -208,9 +208,12 @@ export function PlanRing() {
           {balance ? (
             <span className="tabular text-small text-secondary">{balanceText(balance, units)}</span>
           ) : (
-            // Rings always show the share used, so a fuller ring is always nearer the limit.
             <PlanRings
-              rings={windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
+              rings={windows.map((w) => ({
+                id: w.id,
+                percent: shownPercent(w.percent, view),
+                level: w.level,
+              }))}
               size={20}
               {...ringSizes(windows.length)}
               track="neutral"

@@ -676,4 +676,23 @@ describe('AgentEntry and TurnStatus unified streaming indicator', () => {
     expect(statusLabel()?.textContent).toBe('control:status.asks.sign_in')
     expect(hasClass(statusLabel()!, 'ks-status__label--shimmer')).toBe(false)
   })
+
+  it('renders composited glint overlays without duplicating label textContent', () => {
+    setThreadState([STREAMING_AGENT])
+    renderTurn(true)
+    const answerGlint = findAll(container, (n) => hasClass(n, 'ui-ansc__glint'))
+    expect(answerGlint).toHaveLength(1)
+    expect(answerGlint[0]!.getAttribute('data-text')).toBe('正在回复')
+    expect(answerGlint[0]!.textContent).toBe('')
+    expect(answerLabelText()).toBe('正在回复')
+
+    flushSync(() => {
+      setThreadState([STREAMING_AGENT, SUBAGENT_CARD])
+    })
+    const statusGlint = findAll(container, (n) => hasClass(n, 'ks-status__glint'))
+    expect(statusGlint).toHaveLength(1)
+    expect(statusGlint[0]!.getAttribute('data-text')).toBe('处理中')
+    expect(statusGlint[0]!.textContent).toBe('')
+    expect(statusLabel()?.textContent).toBe('处理中')
+  })
 })

@@ -140,3 +140,74 @@ it('covers a used-up window with extra usage until an event says it is over', as
   await window.until(() => fiveHour()?.extraUsage === undefined && fiveHour()?.state === 'ok')
   expect(fiveHour()).toMatchObject({ usedPercent: 12, state: 'ok' })
 })
+
+it('backs off background limit reads after failures while still honoring forced refreshes', async () => {
+  const host = await startTestHost({
+    agentEnv: { FAKE_AGENT_USAGE: 'unreadable' },
+    agentTimings: { limitsMs: 10, limitsBackgroundMs: 100 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  // First failure puts the agent into backoff; a non-forced refresh immediately after returns
+  // without issuing another failing read, while force:true bypasses the backoff.
+  await expect(
+    window.request('agents.refreshLimits', { agentId: 'fake-agent', force: true }),
+  ).rejects.toThrow()
+  await expect(
+    window.request('agents.refreshLimits', { agentId: 'fake-agent' }),
+  ).resolves.toBeUndefined()
+  await expect(
+    window.request('agents.refreshLimits', { agentId: 'fake-agent', force: true }),
+  ).rejects.toThrow()
+})
+
+it('skips background limit polling when an agent only has un-adopted prepared sessions', async () => {
+  const host = await startTestHost({
+    agentEnv: { FAKE_AGENT_USAGE: 'unreadable' },
+    agentTimings: { limitsMs: 10, limitsBackgroundMs: 40 },
+  })
+  hosts.push(host)
+  const window = host.connect()
+  const prepared = await window.request('sessions.prepare', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  expect(prepared.prepared).toBeDefined()
+
+  await new Promise((resolve) => setTimeout(resolve, 160))
+  expect(fakeStatus(window)?.limitsError).toBeUndefined()
+})
+
+it('excludes stale and archived sessions from activitySummaries while keeping live and recent ones', async () => {
+  const host = await startTestHost()
+  hosts.push(host)
+  const window = host.connect()
+  const { id: liveId } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(liveId)
+  await window.untilStatus(liveId, 'ready')
+
+  const { id: archivedId } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.request('sessions.archive', { sessionId: archivedId })
+
+  const now = Date.now()
+  const active = host.host.sessions.activitySummaries(now)
+  expect(active.map((s) => s.id)).toContain(liveId)
+  expect(active.map((s) => s.id)).not.toContain(archivedId)
+
+  // Advancing `now` past the 30-minute window drops closed old records while keeping live sessions.
+  const future = host.host.sessions.activitySummaries(now + 60 * 60_000)
+  expect(future.map((s) => s.id)).toContain(liveId)
+})

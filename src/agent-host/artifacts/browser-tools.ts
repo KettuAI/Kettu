@@ -584,7 +584,7 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
   }
   const text = (key: string, required: boolean, max = MAX_TEXT_CHARS): string | undefined => {
     const given = o[key]
-    if (given === undefined) {
+    if (given === undefined || given === null) {
       if (required) throw invalid(`${key} is needed.`)
       return undefined
     }
@@ -595,13 +595,13 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
   }
   const flag = (key: string): boolean | undefined => {
     const given = o[key]
-    if (given === undefined) return undefined
+    if (given === undefined || given === null) return undefined
     if (typeof given !== 'boolean') throw invalid(`${key} must be true or false.`)
     return given
   }
   const ref = (required: boolean): string | undefined => {
     const given = o.ref
-    if (given === undefined) {
+    if (given === undefined || given === null) {
       if (required) throw invalid('ref is needed.')
       return undefined
     }
@@ -616,12 +616,13 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
       const url = text('url', true, 8_192)!
       if (url.trim() === '') throw invalid('url must not be empty.')
       args.url = url
-      if (o.forward_ports !== undefined) {
-        if (
-          !Array.isArray(o.forward_ports) ||
-          o.forward_ports.length === 0 ||
-          o.forward_ports.length > MAX_COMPANION_FORWARDS
-        ) {
+      // Strict-schema models often populate optional arrays with null or []; treat both as omitted.
+      if (
+        o.forward_ports !== undefined &&
+        o.forward_ports !== null &&
+        !(Array.isArray(o.forward_ports) && o.forward_ports.length === 0)
+      ) {
+        if (!Array.isArray(o.forward_ports) || o.forward_ports.length > MAX_COMPANION_FORWARDS) {
           throw invalid(`forward_ports must list 1 to ${MAX_COMPANION_FORWARDS} TCP ports.`)
         }
         if (!o.forward_ports.every(isBrowserForwardPort)) {
@@ -636,11 +637,12 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     }
     case 'browser_click': {
       args.ref = ref(true)
-      if (o.element !== undefined) args.element = text('element', false, 200)
+      const element = text('element', false, 200)
+      if (element !== undefined) args.element = element
       const double = flag('double')
       if (double !== undefined) args.double = double
-      if (o.button !== undefined) {
-        if (!['left', 'right', 'middle'].includes(String(o.button))) {
+      if (o.button !== undefined && o.button !== null) {
+        if (typeof o.button !== 'string' || !['left', 'right', 'middle'].includes(o.button)) {
           throw invalid('button must be left, right or middle.')
         }
         args.button = o.button
@@ -650,7 +652,8 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     case 'browser_type': {
       args.ref = ref(true)
       args.text = text('text', true)!
-      if (o.element !== undefined) args.element = text('element', false, 200)
+      const element = text('element', false, 200)
+      if (element !== undefined) args.element = element
       const submit = flag('submit')
       if (submit !== undefined) args.submit = submit
       const slowly = flag('slowly')
@@ -666,11 +669,14 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     case 'browser_scroll': {
       const element = ref(false)
       if (element !== undefined) args.ref = element
-      if (!['up', 'down', 'left', 'right'].includes(String(o.direction))) {
+      if (
+        typeof o.direction !== 'string' ||
+        !['up', 'down', 'left', 'right'].includes(o.direction)
+      ) {
         throw invalid('direction must be up, down, left or right.')
       }
       args.direction = o.direction
-      if (o.amount !== undefined) {
+      if (o.amount !== undefined && o.amount !== null) {
         if (typeof o.amount !== 'number' || !(o.amount > 0) || o.amount > 50) {
           throw invalid('amount must be a number of screens from 0 to 50.')
         }
@@ -680,7 +686,8 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     }
     case 'browser_select_option': {
       args.ref = ref(true)
-      if (o.element !== undefined) args.element = text('element', false, 200)
+      const element = text('element', false, 200)
+      if (element !== undefined) args.element = element
       if (!Array.isArray(o.values) || o.values.length === 0 || o.values.length > MAX_VALUES) {
         throw invalid(`values must list 1 to ${MAX_VALUES} option values.`)
       }
@@ -702,7 +709,7 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
       const gone = text('text_gone', false)
       if (waiting !== undefined) args.text = waiting
       if (gone !== undefined) args.text_gone = gone
-      if (o.time !== undefined) {
+      if (o.time !== undefined && o.time !== null) {
         if (typeof o.time !== 'number' || !Number.isFinite(o.time) || o.time < 0 || o.time > 30) {
           throw invalid('time must be 0 to 30 seconds.')
         }
@@ -732,7 +739,12 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
         throw invalid('action must be list, new, select or close.')
       }
       args.action = o.action
-      if (o.index !== undefined) {
+      // Strict-schema models often populate optional `index` with 0 or null; ignore it for actions
+      // that never address a tab by index.
+      if (o.action === 'list' || o.action === 'new') {
+        break
+      }
+      if (o.index !== undefined && o.index !== null) {
         if (
           typeof o.index !== 'number' ||
           !Number.isInteger(o.index) ||
@@ -740,9 +752,6 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
           o.index >= MAX_SESSION_TABS
         ) {
           throw invalid(`index must be a whole number from 0 to ${MAX_SESSION_TABS - 1}.`)
-        }
-        if (o.action === 'list' || o.action === 'new') {
-          throw invalid(`index is for select and close, not ${String(o.action)}.`)
         }
         args.index = o.index
       } else if (o.action === 'select') {

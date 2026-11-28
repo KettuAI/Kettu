@@ -755,37 +755,49 @@
 .ks-status__label {
   position: relative;
 }
-/* Matches AIAnswer's writing shimmer so active turn status shares the same motion language. */
-.ks-status__label--shimmer::after {
-  content: attr(data-text);
-  content: attr(data-text) / '';
+/* Composited transform-only sweep (matching ToolCallCard's Glint) so active turn status avoids
+   per-frame main-thread background-position repaints while preserving the label's textContent. */
+.ks-status__glint {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  user-select: none;
+  mask: linear-gradient(90deg, transparent 38%, black 50%, transparent 62%) center / 300% 100%
+    no-repeat;
+  animation: ks-status-glint 1.6s linear infinite;
+}
+.ks-status__glint::after {
+  content: attr(data-text);
+  content: attr(data-text) / '';
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: transparent;
-  background: linear-gradient(90deg, transparent 38%, var(--thread-shimmer) 50%, transparent 62%)
-    100% 0 / 300% 100% no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: ks-status-sweep 1.6s linear infinite;
-  pointer-events: none;
+  color: var(--thread-shimmer);
+  animation: ks-status-glint-back 1.6s linear infinite;
 }
-@keyframes ks-status-sweep {
+@keyframes ks-status-glint {
   from {
-    background-position: 100% 0;
+    transform: translateX(-100%);
   }
   to {
-    background-position: 0% 0;
+    transform: translateX(100%);
+  }
+}
+@keyframes ks-status-glint-back {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ks-status__label--shimmer::after {
+  .ks-status__glint {
     display: none;
   }
 }
-:root[data-reduce-motion='always'] .ks-status__label--shimmer::after {
+:root[data-reduce-motion='always'] .ks-status__glint {
   display: none;
 }
 @keyframes ks-fade-in {

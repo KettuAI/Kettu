@@ -171,6 +171,14 @@ describe('fitViewport & page size helpers', () => {
       height: 768,
       mobile: false,
     })
+    expect(pageSizeOf({ size: 'phone', width: null, height: null })).toEqual(PAGE_SIZES.phone)
+    expect(pageSizeOf({ size: null, width: 1024, height: 768 })).toEqual({
+      name: 'custom',
+      width: 1024,
+      height: 768,
+      mobile: false,
+    })
+    expect('error' in pageSizeOf({ size: null, width: null, height: null })).toBe(true)
     expect('error' in pageSizeOf({ size: 'fit' })).toBe(true)
     expect(samePageSize(PAGE_SIZES.desktop, { ...PAGE_SIZES.desktop })).toBe(true)
     expect(samePageSize(PAGE_SIZES.desktop, null)).toBe(false)

@@ -953,3 +953,15 @@ describe('lineChanges', () => {
     expect(lineChanges('', 'x\n')).toEqual({ added: 1, removed: 0 })
   })
 })
+
+describe('strict-schema null optional arguments', () => {
+  it('treats null optional fields as omitted on marketplace_check', async () => {
+    const h = harness()
+    const checked = await h.tools.call(caller(), MARKET_CHECK, {
+      path: 'skills/changelog-writer',
+      workflow: null,
+      from_task: null,
+    })
+    expect(checked.isError).toBeUndefined()
+  })
+})
