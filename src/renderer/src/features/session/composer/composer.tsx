@@ -8,6 +8,7 @@ import {
   QUEUED_COMMENTS_TEXT,
   type AgentId,
   type ConfigOption,
+  type QueuedPrompt,
   type SessionView,
   type UserContent,
 } from '@shared/thread'
@@ -100,6 +101,7 @@ import { useSlashCommands } from './use-slash-commands'
 import { useBoxText, usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
+import { inFlightQueuedSend, resolveEmptyComposerQueueSend, runQueuedSendNow } from '../queue-send'
 import { limitsForModel } from '@shared/plan-limits'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 
@@ -672,6 +674,15 @@ export function Composer({
     host('sessions.cancel', { sessionId }).catch((e: unknown) => setError(errorMessage(e)))
   }
 
+  const sendQueuedNow = (item: QueuedPrompt) => {
+    const request = runQueuedSendNow(sessionId, item.id, () =>
+      host('sessions.sendNow', { sessionId, itemId: item.id }),
+    )
+    if (!request) return
+    setError(null)
+    request.catch((e: unknown) => setError(errorMessage(e)))
+  }
+
   // Add and send in the selection box sends what this composer holds, the new comment included.
   const paneId = usePane()?.paneId ?? null
   const sendFromReply = useEffectEvent(() => {
@@ -711,7 +722,7 @@ export function Composer({
     return true
   }
 
-  const onKeyDown = (event: KeyboardEvent) => {
+  const onKeyDown = (event: KeyboardEvent, state?: { popoverOpen: boolean }) => {
     if (onCycleKeys(event, cycle)) {
       event.preventDefault()
       return
@@ -731,19 +742,51 @@ export function Composer({
       return
     }
     if (event.key !== 'Enter') return
+    if (event.isComposing || event.keyCode === 229) return
     const now = live()
     // With nothing written, Enter and Mod+Enter answer the waiting card, as its buttons show.
+    const waitingCard = firstWaiting(sessionId)
     const cardKey = isMod(event) ? 'confirm' : event.metaKey || event.ctrlKey ? null : 'enter'
     if (
       !editingSuggestion &&
       !now.holds &&
       !event.shiftKey &&
       !event.altKey &&
-      !event.isComposing &&
       cardKey &&
+      waitingCard &&
       pressWaitingCard(sessionId, cardKey)
     ) {
       event.preventDefault()
+      return
+    }
+    const queuedTarget = resolveEmptyComposerQueueSend({
+      event,
+      sendKey,
+      runningSend,
+      mac: isMac,
+      status,
+      waitingBackground: session.waitingBackground,
+      queue: session.queue,
+      holdsMessage: now.holds || selection !== null,
+      disabled: box.disabled,
+      heldOutside,
+      mustSwitch,
+      pendingSwitch: pending !== null,
+      activeDelegate: activeDelegate !== null,
+      editingSuggestion: editingSuggestion !== null,
+      hasWaitingCard: waitingCard !== null,
+      popoverOpen:
+        state?.popoverOpen ||
+        box.artifactPickerOpen ||
+        box.delegatePickerOpen ||
+        choosingAgent ||
+        modelMenuOpen ||
+        crossHostOpen,
+      inFlightItemId: inFlightQueuedSend(sessionId),
+    })
+    if (queuedTarget) {
+      event.preventDefault()
+      sendQueuedNow(queuedTarget)
       return
     }
     const primary =

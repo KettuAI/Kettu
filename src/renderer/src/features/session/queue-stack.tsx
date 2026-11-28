@@ -23,12 +23,16 @@ import type {
 import { emitAppEvent } from '@renderer/app/events'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
+import { formatShortcut } from '@renderer/lib/platform'
 import { useClock } from '@renderer/lib/use-now'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { restoreAttachments } from './composer/attachments'
+import { composerRunState } from './composer/composer-state'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { openSessionReport, sessionReportDisplay, useSender } from './entries/session-report'
+import { firstSendableQueuedPrompt, isQueuedPromptSendable, runQueuedSendNow } from './queue-send'
 
 function promptText(item: QueuedPrompt): string {
   return item.content
@@ -78,8 +82,17 @@ export function QueueStack({
   const steering = useAgentsStore(
     (s) => !!agentsOn(s, hostId).byId[session.agentId]?.capabilities.steering,
   )
+  const phone = usePhoneWindow()
   const { queue, queuePaused, status } = session
   const running = status === 'running' || status === 'awaiting_permission'
+  const runState = composerRunState({
+    status,
+    waitingBackground: session.waitingBackground,
+    heldOutside: session.heldOutside === true,
+  })
+  const firstSendable = firstSendableQueuedPrompt(queue)
+  const canHintShortcut =
+    !phone && !session.heldOutside && runState.activeRunning && !runState.awaiting
   const sessionId = session.id
   const n = queue.length
   const root = useRef<HTMLDivElement>(null)
@@ -185,8 +198,12 @@ export function QueueStack({
     onError(null)
     request.catch((e: unknown) => onError(errorMessage(e)))
   }
-  const sendNow = (item: QueuedPrompt) =>
-    act(host('sessions.sendNow', { sessionId, itemId: item.id }))
+  const sendNow = (item: QueuedPrompt) => {
+    const request = runQueuedSendNow(sessionId, item.id, () =>
+      host('sessions.sendNow', { sessionId, itemId: item.id }),
+    )
+    if (request) act(request)
+  }
   const edit = (item: QueuedPrompt) =>
     act(
       host('sessions.unqueue', { sessionId, itemId: item.id }).then(() => {
@@ -360,10 +377,13 @@ export function QueueStack({
               <Glyph icon={ArrowUp01Icon} size={12} />
             </span>
             <span className="kettu-queue__actions">
-              {running && (
+              {running && isQueuedPromptSendable(item) && (
                 <QueueAction
                   label={t('queue.sendNow')}
                   tip={t(steering ? 'queue.steer' : 'queue.stopAndSend')}
+                  shortcut={
+                    canHintShortcut && firstSendable?.id === item.id ? 'Mod+Enter' : undefined
+                  }
                   onClick={() => sendNow(item)}
                 >
                   <ReturnGlyph />
@@ -439,11 +459,13 @@ export function QueueReportRow({ from, ended }: { from: FromSession; ended: From
 function QueueAction({
   label,
   tip = label,
+  shortcut,
   onClick,
   children,
 }: {
   label: string
   tip?: string
+  shortcut?: string
   onClick: () => void
   children: ReactNode
 }) {
@@ -452,7 +474,10 @@ function QueueAction({
       <TooltipTrigger render={<button type="button" aria-label={label} onClick={onClick} />}>
         {children}
       </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
+      <TooltipContent>
+        {tip}
+        {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
+      </TooltipContent>
     </Tooltip>
   )
 }
