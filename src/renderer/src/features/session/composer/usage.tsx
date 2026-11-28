@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
   Database02Icon,
-  MoreHorizontalIcon,
   RefreshIcon,
   Timer02Icon,
 } from '@hugeicons/core-free-icons'
@@ -15,11 +14,6 @@ import {
   type ContextEstimates,
   type ContextReport,
 } from '@shared/context'
-import { changedCount, type McpRunState, type SessionMcpServer } from '@shared/mcp-insight'
-import {
-  McpToolChangesDialog,
-  McpToolChangesTag,
-} from '@renderer/features/marketplace/mcp-tool-changes'
 import type { LastRequest } from '@shared/model-requests'
 import {
   cacheHitOf,
@@ -37,12 +31,6 @@ import {
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
@@ -75,14 +63,13 @@ import {
 } from '@renderer/lib/format'
 import { errorMessage, host, sessionHost } from '@renderer/lib/host'
 import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit'
+import { menuCollisionPadding } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
-import { openMarketplace, toggleSidePane } from '@renderer/stores/view'
-import { itemKey } from '@renderer/features/marketplace/model'
-import { ItemTile } from '@renderer/features/marketplace/tiles'
+import { toggleSidePane } from '@renderer/stores/view'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
 import { readsModelRequests } from '@renderer/features/requests/support'
 import { useSessionView } from '@renderer/features/session/use-thread'
@@ -416,8 +403,6 @@ export function ContextButton({
   const { t } = useTranslation('composer')
   const limitView = useLimitView()
   const [open, setOpen] = useState(false)
-  // The review dialog lives outside the popover, which would otherwise stack over it.
-  const [reviewing, setReviewing] = useState<SessionMcpServer | null>(null)
   // The tray names a limit only from 70% on; below that it stays in the popover.
   const nearest = warningLimit(holding)
   const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
@@ -459,174 +444,117 @@ export function ContextButton({
     }
   }
   return (
-    <>
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger
-          render={
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={
+              usage
+                ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', {
+                    percent,
+                  })
+                : t('usage.title')
+            }
+            title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
+            className="ui-as-tray-link kettu-tray-link--meter"
+          />
+        }
+      >
+        {warning && (
+          <span
+            key={`${warning.window}-${warning.usedPercent}`}
+            className="kettu-tray-limit"
+            data-level={LIMIT_METER[limitLevel(warning)]}
+          >
+            {limitShort(warning)}{' '}
+            {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
+          </span>
+        )}
+        {usage && (
+          <>
+            <MeterRing share={share} level={METER[tone]} />
+            <span className="tabular kettu-tray-meter__percent">
+              {read?.error && '≈'}
+              <Trans
+                t={t}
+                i18nKey="usage.contextShort"
+                values={{ percent }}
+                components={{ word: <span className="kettu-tray-meter__word" /> }}
+              />
+            </span>
+          </>
+        )}
+      </PopoverTrigger>
+      {/* A long list scrolls above the tray rather than flipping the card beside it. */}
+      <PopoverContent
+        side="top"
+        align="end"
+        sideOffset={8}
+        collisionPadding={menuCollisionPadding}
+        collisionAvoidance={{ fallbackAxisSide: 'none' }}
+        className="kettu-pop max-h-[calc(var(--available-height)-8px)] w-80 overflow-y-auto overscroll-contain"
+      >
+        <div className="kettu-ctx">
+          {shown && (
+            <ContextPart
+              sessionId={sessionId}
+              agentId={agentId}
+              usage={shown}
+              idle={idle}
+              reports={reports}
+              live={live}
+              report={read}
+              managed={pushed !== undefined && direct}
+              model={model}
+              subagent={subagent}
+            />
+          )}
+          {showEstimates && (
+            <ContextEstimatePart
+              key={`${sessionId}/${agentId}`}
+              sessionId={sessionId}
+              closed={closed}
+              agentName={agentName}
+            />
+          )}
+          <UsageLines sessionId={sessionId} usage={shown} />
+          <McpChangedNotice sessionId={sessionId} idle={idle} />
+          {readsModelRequests(agentId) && (
             <button
               type="button"
-              aria-label={
-                usage
-                  ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', {
-                      percent,
-                    })
-                  : t('usage.title')
-              }
-              title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
-              className="ui-as-tray-link kettu-tray-link--meter"
-            />
-          }
-        >
-          {warning && (
-            <span
-              key={`${warning.window}-${warning.usedPercent}`}
-              className="kettu-tray-limit"
-              data-level={LIMIT_METER[limitLevel(warning)]}
-            >
-              {limitShort(warning)}{' '}
-              {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
-            </span>
-          )}
-          {usage && (
-            <>
-              <MeterRing share={share} level={METER[tone]} />
-              <span className="tabular kettu-tray-meter__percent">
-                {read?.error && '≈'}
-                <Trans
-                  t={t}
-                  i18nKey="usage.contextShort"
-                  values={{ percent }}
-                  components={{ word: <span className="kettu-tray-meter__word" /> }}
-                />
-              </span>
-            </>
-          )}
-        </PopoverTrigger>
-        {/* A long list scrolls above the tray rather than flipping the card beside it. */}
-        <PopoverContent
-          side="top"
-          align="end"
-          sideOffset={8}
-          collisionAvoidance={{ fallbackAxisSide: 'none' }}
-          className="kettu-pop max-h-(--available-height) w-80 overflow-y-auto"
-        >
-          <div className="kettu-ctx">
-            {shown && (
-              <ContextPart
-                sessionId={sessionId}
-                agentId={agentId}
-                usage={shown}
-                idle={idle}
-                reports={reports}
-                live={live}
-                report={read}
-                managed={pushed !== undefined && direct}
-                model={model}
-                subagent={subagent}
-              />
-            )}
-            {showEstimates && (
-              <ContextEstimatePart
-                key={`${sessionId}/${agentId}`}
-                sessionId={sessionId}
-                closed={closed}
-                agentName={agentName}
-              />
-            )}
-            <UsageLines sessionId={sessionId} usage={shown} />
-            <McpServersPart
-              sessionId={sessionId}
-              idle={idle}
-              onLeave={() => setOpen(false)}
-              review={(server) => {
+              className="kettu-ctx__link"
+              onClick={() => {
                 setOpen(false)
-                setReviewing(server)
+                toggleSidePane(sessionId, 'requests', true)
               }}
-            />
-            {readsModelRequests(agentId) && (
-              <button
-                type="button"
-                className="kettu-ctx__link"
-                onClick={() => {
-                  setOpen(false)
-                  toggleSidePane(sessionId, 'requests', true)
-                }}
-              >
-                <span className="kettu-ctx__link-name">
-                  <Glyph icon={REQUESTS_ICON} size={14} />
-                  {t('usage.everyRequest')}
-                </span>
-                <Glyph icon={ArrowRight01Icon} size={13} />
-              </button>
-            )}
-            {subscribed && <PlanLimits limits={limits} holding={holding} account={account} />}
-          </div>
-        </PopoverContent>
-      </Popover>
-      {reviewing && (
-        <McpToolChangesDialog
-          server={{ id: reviewing.serverId, title: reviewing.title }}
-          changes={reviewing.changes ?? null}
-          open
-          onOpenChange={(next) => {
-            if (!next) setReviewing(null)
-          }}
-        />
-      )}
-    </>
+            >
+              <span className="kettu-ctx__link-name">
+                <Glyph icon={REQUESTS_ICON} size={14} />
+                {t('usage.everyRequest')}
+              </span>
+              <Glyph icon={ArrowRight01Icon} size={13} />
+            </button>
+          )}
+          {subscribed && limits.length > 0 && (
+            <PlanLimits limits={limits} holding={holding} account={account} />
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
 const NO_NAMES: string[] = []
 
-/**
- * The library servers the session's agent was handed, each with its state, tools and what it
- * takes per turn, then what changed in the library since its agent attached, with Use now.
- */
-function McpServersPart({
-  sessionId,
-  idle,
-  onLeave,
-  review,
-}: {
-  sessionId: string
-  idle: boolean
-  onLeave: () => void
-  review: (server: SessionMcpServer) => void
-}) {
+/** Minimal notice shown only when library MCP servers changed after the session attached. */
+function McpChangedNotice({ sessionId, idle }: { sessionId: string; idle: boolean }) {
   const { t } = useTranslation('composer')
   const changed = useThreadsStore(
     (s) => s.replicas[sessionId]?.state?.session.mcpChanged ?? NO_NAMES,
   )
-  const [servers, setServers] = useState<SessionMcpServer[] | null>(null)
   const [applying, setApplying] = useState(false)
-  const read = useCallback(() => {
-    host('sessions.mcpServers', { sessionId })
-      .then(setServers)
-      .catch(() => setServers([]))
-  }, [sessionId])
-  useEffect(read, [read])
-  const act = (server: SessionMcpServer, action: 'reconnect' | 'off' | 'on') => {
-    host('sessions.mcpServer', { sessionId, serverId: server.serverId, action })
-      .catch((error: unknown) =>
-        toast(
-          t('usage.mcp.actionFailed', { name: server.title, error: errorMessage(error) }),
-          undefined,
-          { tone: 'warning' },
-        ),
-      )
-      .finally(read)
-  }
-  const page = (server: SessionMcpServer | null) => {
-    onLeave()
-    const hostId = sessionHost(sessionId)
-    openMarketplace(
-      server
-        ? { item: itemKey({ kind: 'mcp', id: server.serverId }), hostId }
-        : { tab: 'mcp', hostId },
-    )
-  }
-  if (changed.length === 0 && (servers === null || servers.length === 0)) return null
+  if (changed.length === 0) return null
   const use = () => {
     setApplying(true)
     host('sessions.applyMcp', { sessionId })
@@ -639,174 +567,20 @@ function McpServersPart({
   }
   return (
     <section className="kettu-ctx__mcp">
-      <div className="kettu-ctx__mcp-head">
-        <span className="kettu-ctx__title">
-          {t('usage.mcp.title')}
-          {servers && servers.length > 0 && (
-            <span className="kettu-ctx__mcp-count">{servers.length}</span>
-          )}
-        </span>
-        <button type="button" className="kettu-ctx__mcp-manage" onClick={() => page(null)}>
-          {t('usage.mcp.manage')}
+      <div className="kettu-ctx__mcp-notice" role="status">
+        <span>{t('usage.mcp.changed', { names: changed.join(', '), count: changed.length })}</span>
+        <button
+          type="button"
+          className="kettu-ctx__mcp-use"
+          disabled={applying || !idle}
+          title={idle ? undefined : t('usage.mcp.afterTurn')}
+          onClick={use}
+        >
+          {applying && <Spinner className="size-3" />}
+          {t('usage.mcp.useNow')}
         </button>
       </div>
-      {servers && servers.length > 0 && (
-        <ul className="kettu-ctx__mcp-list">
-          {servers.map((server) => (
-            <McpServerRow
-              key={server.serverId}
-              server={server}
-              act={(action) => act(server, action)}
-              open={() => page(server)}
-              review={() => review(server)}
-            />
-          ))}
-        </ul>
-      )}
-      {changed.length > 0 && (
-        <div className="kettu-ctx__mcp-notice" role="status">
-          <span>
-            {t('usage.mcp.changed', { names: changed.join(', '), count: changed.length })}
-          </span>
-          <button
-            type="button"
-            className="kettu-ctx__mcp-use"
-            disabled={applying || !idle}
-            title={idle ? undefined : t('usage.mcp.afterTurn')}
-            onClick={use}
-          >
-            {applying && <Spinner className="size-3" />}
-            {t('usage.mcp.useNow')}
-          </button>
-        </div>
-      )}
     </section>
-  )
-}
-
-/** A server's state in a few words, the reason itself for one that failed. */
-function mcpStateText(
-  state: McpRunState,
-  t: ReturnType<typeof useTranslation<'composer'>>['t'],
-): string {
-  switch (state.state) {
-    case 'running':
-      return t('usage.mcp.state.running')
-    case 'idle':
-      return t('usage.mcp.state.idle')
-    case 'starting':
-      return t('usage.mcp.state.starting')
-    case 'needs-sign-in':
-      return t('usage.mcp.state.signIn')
-    case 'by-agent':
-      return t('usage.mcp.state.byAgent')
-    case 'error':
-      return state.reason
-  }
-}
-
-function McpServerRow({
-  server,
-  act,
-  open,
-  review,
-}: {
-  server: SessionMcpServer
-  act: (action: 'reconnect' | 'off' | 'on') => void
-  open: () => void
-  review: () => void
-}) {
-  const { t } = useTranslation('composer')
-  const { state } = server
-  // A server of the folder has no server page, so its held changes are reviewed from here.
-  const held =
-    server.project && server.changes?.guard === 'hold' && changedCount(server.changes) > 0
-      ? server.changes
-      : null
-  const facts = server.off
-    ? t('usage.mcp.offHere')
-    : [
-        mcpStateText(state, t),
-        server.tools !== null ? t('usage.mcp.tools', { count: server.tools }) : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-  const tone = server.off
-    ? 'off'
-    : state.state === 'error'
-      ? 'error'
-      : state.state === 'needs-sign-in'
-        ? 'warn'
-        : state.state === 'running'
-          ? 'on'
-          : 'idle'
-  return (
-    <li className="kettu-ctx__mcp-row" data-off={server.off ? '' : undefined}>
-      <ItemTile
-        size="small"
-        subject={{ kind: 'mcp', id: server.serverId, brand: null, site: server.site }}
-      />
-      <span className="kettu-ctx__mcp-name">
-        <span className="kettu-ctx__mcp-title" title={server.title}>
-          {server.name}
-          {server.project && (
-            <span className="kettu-ctx__mcp-project">{t('usage.mcp.project')}</span>
-          )}
-        </span>
-        {held ? (
-          <span className="kettu-ctx__mcp-held" title={facts}>
-            <McpToolChangesTag changes={held} />
-          </span>
-        ) : (
-          <span className="kettu-ctx__mcp-facts" data-tone={tone} title={facts}>
-            {facts}
-          </span>
-        )}
-      </span>
-      {!server.off && server.tokens !== null && (
-        <span className="kettu-ctx__mcp-tokens">
-          {t('usage.mcp.perTurn', { tokens: tokens(server.tokens) })}
-        </span>
-      )}
-      {server.off ? (
-        <button type="button" className="kettu-ctx__mcp-act" onClick={() => act('on')}>
-          {t('usage.mcp.turnOn')}
-        </button>
-      ) : held ? (
-        <button type="button" className="kettu-ctx__mcp-act" onClick={review}>
-          {t('usage.mcp.review')}
-        </button>
-      ) : state.state === 'needs-sign-in' && !server.project ? (
-        <button type="button" className="kettu-ctx__mcp-act" onClick={open}>
-          {t('usage.mcp.signIn')}
-        </button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                className="kettu-ctx__mcp-more"
-                aria-label={t('usage.mcp.more', { name: server.name })}
-              />
-            }
-          >
-            <Glyph icon={MoreHorizontalIcon} size={14} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem disabled={!server.routed} onClick={() => act('reconnect')}>
-              {t('usage.mcp.reconnect')}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!server.routed} onClick={() => act('off')}>
-              {t('usage.mcp.turnOff')}
-            </DropdownMenuItem>
-            {!server.project && (
-              <DropdownMenuItem onClick={open}>{t('usage.mcp.openPage')}</DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </li>
   )
 }
 
@@ -1550,6 +1324,7 @@ function PlanLimits({
 }) {
   const { t } = useTranslation(['composer', 'common'])
   const view = useLimitView()
+  if (limits.length === 0) return null
   const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   const nextView = view === 'left' ? 'used' : 'left'
   const nextLabel = t(nextView === 'left' ? 'common:planView.left' : 'common:planView.used')
