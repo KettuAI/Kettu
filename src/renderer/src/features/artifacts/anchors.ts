@@ -5,7 +5,7 @@
 import type { CommentAnchor, CommentThread } from '@shared/artifact-comments'
 import { snippet } from '@shared/artifact-runtime/page-messages'
 import { i18n } from '@renderer/lib/i18n'
-import type { Picked } from './editor'
+import type { Picked, PickedGroup } from './editor'
 import type { ShownVersion } from './use-artifact'
 
 /** The anchor of a pick in the version shown: its page by number and name, and its element. */
@@ -21,6 +21,21 @@ export function anchorOf(picked: Picked, shown: ShownVersion): CommentAnchor {
     text: selection.text,
     missing: false,
   }
+}
+
+/** The anchors of a marquee multi-selection group in the version shown. */
+export function anchorsOfGroup(group: PickedGroup, shown: ShownVersion): CommentAnchor[] {
+  const page = group.page === null ? null : (shown.canvas?.pages[group.page] ?? null)
+  const pageInfo = page ? { number: page.number, name: page.name } : null
+  return group.selections.map((selection) => ({
+    version: shown.version,
+    path: selection.path,
+    page: pageInfo,
+    offset: selection.src,
+    tag: selection.tag,
+    text: selection.text,
+    missing: false,
+  }))
 }
 
 /** "General › button “Save changes”", or the page alone, or the element alone. */
@@ -89,23 +104,32 @@ export function commentsPrompt(
   ].join('\n\n')
 }
 
-/** The user's message with the element they selected beside the session. */
+/** The user's message with the element(s) they selected beside the session. */
 export function selectionPrompt(
   text: string,
   selected: { artifactId: string; title: string; anchor: CommentAnchor; others?: CommentAnchor[] },
 ): string {
-  const data = [
-    `artifact: "${snippet(selected.title)}"`,
-    dataLine(selected.anchor),
-    ...(selected.others ?? []).map(dataLine),
-  ]
+  const all = [selected.anchor, ...(selected.others ?? [])]
+  const multi = all.length > 1
+  const data = multi
+    ? [
+        `artifact: "${snippet(selected.title)}"`,
+        ...all.map((item, i) => `${i + 1}. ${dataLine(item)}`),
+      ]
+    : [`artifact: "${snippet(selected.title)}"`, dataLine(selected.anchor)]
   const mark = boundary([text, ...data])
   return [
     text,
-    i18n.t('artifacts:prompt.selection', {
-      id: selected.artifactId,
-      version: selected.anchor.version,
-    }),
+    multi
+      ? i18n.t('artifacts:prompt.selections', {
+          count: all.length,
+          id: selected.artifactId,
+          version: selected.anchor.version,
+        })
+      : i18n.t('artifacts:prompt.selection', {
+          id: selected.artifactId,
+          version: selected.anchor.version,
+        }),
     i18n.t('artifacts:prompt.data', { mark }),
     block(mark, data),
   ].join('\n\n')

@@ -9,6 +9,7 @@ import {
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { FrameLink } from './frame-link'
+import { unionRects } from './pop-place-layout'
 
 /** How long a page has to say where an element lies. */
 const LOCATE_WAIT_MS = 2000
@@ -41,6 +42,16 @@ export interface Picked {
   box: ViewportBox | null
 }
 
+/** Multiple elements selected together via marquee drag on one page; null page for a single page. */
+export interface PickedGroup {
+  /** Monotonic group id; stays stable when removing individual chips so popover drafts survive. */
+  id: number
+  page: number | null
+  selections: PageSelection[]
+  /** Initial union highlight bounding box in window coordinates, when reported. */
+  box: ViewportBox | null
+}
+
 /** A comment pin clicked in a page: its number, the canvas page it is on and where. */
 export interface PinClick {
   n: number
@@ -53,6 +64,8 @@ export interface PinClick {
 export interface EditorState {
   mode: EditorMode
   picked: Picked | null
+  /** Multiple elements selected via marquee drag in select mode; mutually exclusive with `picked`. */
+  pickedGroup: PickedGroup | null
   /** The pin last clicked, whose thread opens beside it, until something else is picked. */
   pin: PinClick | null
   /** The picked element's text is being typed in place. */
@@ -68,6 +81,10 @@ export interface EditorFrame {
   leave(): void
   /** Picks the element at a spot of the page; `at` is the pointer's place in the window. */
   pick(x: number, y: number, at: { x: number; y: number }): void
+  /** Updates the live marquee selection rectangle in page pixels; null cancels it. */
+  marquee(rect: PageBox | null): void
+  /** Commits the marquee selection rectangle in page pixels. */
+  marqueeCommit(rect: PageBox): void
   /** The frame loaded a page, which needs driving again. */
   loaded(): void
   /** Starts driving the frame, until `release`; it may open again after. */
@@ -113,15 +130,24 @@ function pinColors(): PinColors {
  * in one of them and the comment pins on each page, and the preview of an edit on the picked one.
  */
 export class ArtifactEditor {
-  private state: EditorState = { mode: null, picked: null, pin: null, typing: false }
+  private state: EditorState = {
+    mode: null,
+    picked: null,
+    pickedGroup: null,
+    pin: null,
+    typing: false,
+  }
   private readonly typedListeners = new Set<(text: string, done: boolean) => void>()
   private readonly listeners = new Set<() => void>()
   private readonly anchorListeners = new Set<() => void>()
   private readonly frames = new Set<EditorFrame>()
   private pins: (page: number | null) => Pin[] = () => []
   private pickedBy: EditorFrame | null = null
+  private groupSeq = 0
   private pointing: { frame: EditorFrame; x: number; y: number } | null = null
   private pointFrame = 0
+  private marqueePending: { frame: EditorFrame; rect: PageBox } | null = null
+  private marqueeFrame = 0
   private wanted: { page: number | null; src: number } | null = null
   private anchorSpec: AnchorTrackSpec | null = null
   private anchorContainer: HTMLElement | null = null
@@ -149,39 +175,47 @@ export class ArtifactEditor {
     let lastPick: { x: number; y: number } | null = null
     const locating = new Map<number, (box: PageBox | null) => void>()
     const frame: EditorFrame = {
-      link: new FrameLink(this.origin, (selection, { located, pin, pinBox, typed, anchor }) => {
-        if (located) {
-          locating.get(located.src)?.(located.box)
-          locating.delete(located.src)
-          return
-        }
-        if (anchor) {
-          if (this.anchorFrame === frame) this.updateAnchor(frame, anchor.box)
-          return
-        }
-        if (pin !== undefined) {
-          if (this.state.mode) {
-            this.set({
-              pin: {
-                n: pin,
-                page: frame.page,
-                point: lastPick,
-                box: pinBox ? frame.link.viewportBox(pinBox) : null,
-              },
-            })
+      link: new FrameLink(
+        this.origin,
+        (selection, { selections, located, pin, pinBox, typed, anchor }) => {
+          if (located) {
+            locating.get(located.src)?.(located.box)
+            locating.delete(located.src)
+            return
           }
+          if (anchor) {
+            if (this.anchorFrame === frame) this.updateAnchor(frame, anchor.box)
+            return
+          }
+          if (pin !== undefined) {
+            if (this.state.mode) {
+              this.set({
+                pin: {
+                  n: pin,
+                  page: frame.page,
+                  point: lastPick,
+                  box: pinBox ? frame.link.viewportBox(pinBox) : null,
+                },
+              })
+            }
+            lastPick = null
+            return
+          }
+          if (typed) {
+            if (this.pickedBy !== frame) return
+            if (typed.done) this.set({ typing: false })
+            for (const listener of this.typedListeners) listener(typed.text, typed.done)
+            return
+          }
+          if (selections) {
+            lastPick = null
+            this.pickedMany(frame, selections)
+            return
+          }
+          this.picked(frame, selection, lastPick)
           lastPick = null
-          return
-        }
-        if (typed) {
-          if (this.pickedBy !== frame) return
-          if (typed.done) this.set({ typing: false })
-          for (const listener of this.typedListeners) listener(typed.text, typed.done)
-          return
-        }
-        this.picked(frame, selection, lastPick)
-        lastPick = null
-      }),
+        },
+      ),
       locate: (src) =>
         new Promise((resolve) => {
           locating.get(src)?.(null)
@@ -252,6 +286,39 @@ export class ArtifactEditor {
         lastPick = at
         frame.link.post({ v: RUNTIME_VERSION, kind: 'select-pick', x, y })
       },
+      marquee: (rect) => {
+        if (rect === null) {
+          if (this.marqueePending?.frame === frame) this.marqueePending = null
+          if (this.marqueeFrame) {
+            cancelAnimationFrame(this.marqueeFrame)
+            this.marqueeFrame = 0
+          }
+          frame.link.post({ v: RUNTIME_VERSION, kind: 'select-marquee', rect: null })
+          return
+        }
+        this.marqueePending = { frame, rect }
+        if (this.marqueeFrame) return
+        this.marqueeFrame = requestAnimationFrame(() => {
+          this.marqueeFrame = 0
+          const pending = this.marqueePending
+          this.marqueePending = null
+          if (!pending) return
+          pending.frame.link.post({
+            v: RUNTIME_VERSION,
+            kind: 'select-marquee',
+            rect: pending.rect,
+            commit: false,
+          })
+        })
+      },
+      marqueeCommit: (rect) => {
+        if (this.marqueePending?.frame === frame) this.marqueePending = null
+        if (this.marqueeFrame) {
+          cancelAnimationFrame(this.marqueeFrame)
+          this.marqueeFrame = 0
+        }
+        frame.link.post({ v: RUNTIME_VERSION, kind: 'select-marquee', rect, commit: true })
+      },
       loaded: () => {
         frame.link.loaded()
       },
@@ -264,7 +331,10 @@ export class ArtifactEditor {
       release: () => {
         this.frames.delete(frame)
         frame.link.dispose()
-        if (this.pickedBy === frame) this.pickedBy = null
+        if (this.pickedBy === frame) {
+          this.pickedBy = null
+          if (this.state.pickedGroup) this.set({ pickedGroup: null })
+        }
         if (this.anchorFrame === frame) {
           this.anchorFrame = null
           this.anchorRawBox = null
@@ -310,7 +380,11 @@ export class ArtifactEditor {
 
   setMode(mode: EditorMode): void {
     if (mode === this.state.mode) return
-    if (mode === null || this.state.mode === null) {
+    if (
+      mode === null ||
+      this.state.mode === null ||
+      (mode !== 'select' && this.state.pickedGroup)
+    ) {
       // Entering a mode lets go of nothing asked for meanwhile.
       const wanted = mode ? this.wanted : null
       this.clearPick()
@@ -326,7 +400,7 @@ export class ArtifactEditor {
       this.set({ pin: null })
       return true
     }
-    if (!this.state.picked) return false
+    if (!this.state.picked && !this.state.pickedGroup) return false
     this.clearPick()
     return true
   }
@@ -336,6 +410,39 @@ export class ArtifactEditor {
     const src = this.state.picked?.selection.src
     if (!this.pickedBy || src === null || src === undefined) return Promise.resolve(null)
     return this.pickedBy.locate(src)
+  }
+
+  /** Where the marquee-picked elements lie in their page, in document pixels, for cropped screenshots. */
+  async locatePickedGroup(): Promise<PageBox[]> {
+    const group = this.state.pickedGroup
+    const frame = this.pickedBy
+    if (!group || !frame) return []
+    const srcs = group.selections
+      .map((s) => s.src)
+      .filter((src): src is number => src !== null && src !== undefined)
+    if (srcs.length === 0) return []
+    const located = await Promise.all(srcs.map((src) => frame.locate(src)))
+    return located.filter((box): box is PageBox => box !== null)
+  }
+
+  /** Removes a single element from the active marquee selection by index, syncing iframe highlights. */
+  removeFromPickedGroup(index: number): void {
+    const group = this.state.pickedGroup
+    if (!group || index < 0 || index >= group.selections.length) return
+    const next = group.selections.filter((_, i) => i !== index)
+    if (next.length === 0) {
+      this.clearPick()
+      return
+    }
+    this.pickedBy?.link.post({ v: RUNTIME_VERSION, kind: 'select-remove', index })
+    const box = this.pickedBy ? this.unionViewportBox(this.pickedBy, next) : null
+    this.set({
+      pickedGroup: {
+        ...group,
+        selections: next,
+        box,
+      },
+    })
   }
 
   /** Scrolls the element at `src` into view in the frames that show `page`. */
@@ -493,6 +600,46 @@ export class ArtifactEditor {
     }
   }
 
+  private unionViewportBox(
+    frame: EditorFrame,
+    selections: readonly PageSelection[],
+  ): ViewportBox | null {
+    const boxes: ViewportBox[] = []
+    for (const item of selections) {
+      if (!item.box) continue
+      const mapped = frame.link.viewportBox(item.box)
+      if (mapped) boxes.push(mapped)
+    }
+    return unionRects(boxes)
+  }
+
+  private pickedMany(frame: EditorFrame, selections: PageSelection[]): void {
+    if (this.state.mode !== 'select') return
+    this.wanted = null
+    if (this.pickedBy && this.pickedBy !== frame) {
+      this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'select-source', src: null })
+    }
+    frame.link.forget('select-source')
+    if (selections.length === 0) {
+      this.pickedBy = null
+      this.set({ picked: null, pickedGroup: null, pin: null, typing: false })
+      return
+    }
+    const box = this.unionViewportBox(frame, selections)
+    this.pickedBy = frame
+    this.set({
+      picked: null,
+      pickedGroup: {
+        id: ++this.groupSeq,
+        page: frame.page,
+        selections,
+        box,
+      },
+      pin: null,
+      typing: false,
+    })
+  }
+
   private picked(
     frame: EditorFrame,
     selection: PageSelection | null,
@@ -523,15 +670,21 @@ export class ArtifactEditor {
             box: box ?? (again ? was!.box : null),
           }
         : null,
+      pickedGroup: null,
       pin: null,
       // The same element picked again, by a double click's second click, keeps being typed.
       typing: again && this.state.typing,
     })
   }
 
-  /** Lets go of the picked element, putting back any preview on it. */
+  /** Lets go of the picked element or marquee selection, putting back any preview on it. */
   clearPick(): void {
     this.wanted = null
+    if (this.marqueeFrame) {
+      cancelAnimationFrame(this.marqueeFrame)
+      this.marqueeFrame = 0
+    }
+    this.marqueePending = null
     if (this.pickedBy) {
       if (this.state.typing) {
         this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'text-edit', on: false })
@@ -540,7 +693,9 @@ export class ArtifactEditor {
       this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'select-source', src: null })
     }
     this.pickedBy = null
-    if (this.state.picked || this.state.typing) this.set({ picked: null, typing: false })
+    if (this.state.picked || this.state.pickedGroup || this.state.typing) {
+      this.set({ picked: null, pickedGroup: null, typing: false })
+    }
   }
 
   /** Shows a style and a text on the picked element, in its page only; nothing is written. */
@@ -558,6 +713,8 @@ export class ArtifactEditor {
 
   dispose(): void {
     cancelAnimationFrame(this.pointFrame)
+    cancelAnimationFrame(this.marqueeFrame)
+    this.marqueePending = null
     this.anchorSpec = null
     this.anchorContainer = null
     this.anchorFrame = null
@@ -579,7 +736,13 @@ function boxesEqual(a: ViewportBox | null, b: ViewportBox | null): boolean {
   )
 }
 
-const IDLE: EditorState = { mode: null, picked: null, pin: null, typing: false }
+const IDLE: EditorState = {
+  mode: null,
+  picked: null,
+  pickedGroup: null,
+  pin: null,
+  typing: false,
+}
 const idle = (): EditorState => IDLE
 const noChanges = (): (() => void) => () => {}
 

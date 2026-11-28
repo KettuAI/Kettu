@@ -33,6 +33,7 @@ import {
 import type { CanvasLayout, PlacedPage } from './canvas'
 import type { CanvasControls } from './canvas-controls'
 import { useEditorFrame, useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
+import { exceededMarqueeThreshold, normalizeMarqueeRect } from './marquee-drag'
 import { framePageUrl } from './use-artifact'
 import { BarButton } from './viewer-parts'
 import { LightBand } from './viewer-states'
@@ -883,21 +884,103 @@ export function PickLayer({
   mode: 'select' | 'comment'
   onDone?: () => void
 }) {
-  const local = (event: React.PointerEvent) => {
+  const drag = useRef<{
+    pointerId: number
+    startClient: { x: number; y: number }
+    startLocal: { x: number; y: number }
+    dragging: boolean
+  } | null>(null)
+  const suppressClick = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      if (drag.current?.dragging) frame.marquee(null)
+      drag.current = null
+      suppressClick.current = false
+    }
+  }, [frame, mode])
+
+  const measure = (event: {
+    currentTarget: EventTarget & HTMLElement
+    clientX: number
+    clientY: number
+  }) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    return { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+    return {
+      x: (event.clientX - rect.left) / scale,
+      y: (event.clientY - rect.top) / scale,
+      bounds: { width: rect.width / scale, height: rect.height / scale },
+    }
   }
+
   return (
     <div
       aria-hidden
-      className={cn('absolute inset-0', mode === 'comment' ? 'cursor-crosshair' : 'cursor-default')}
-      onPointerMove={(event) => {
-        const at = local(event)
-        frame.point(at.x, at.y)
+      className={cn(
+        'absolute inset-0 select-none',
+        mode === 'comment' ? 'cursor-crosshair' : 'cursor-default',
+      )}
+      onPointerDown={(event) => {
+        suppressClick.current = false
+        if (mode !== 'select' || event.button !== 0) return
+        const at = measure(event)
+        drag.current = {
+          pointerId: event.pointerId,
+          startClient: { x: event.clientX, y: event.clientY },
+          startLocal: { x: at.x, y: at.y },
+          dragging: false,
+        }
+        event.currentTarget.setPointerCapture?.(event.pointerId)
       }}
-      onPointerLeave={() => frame.leave()}
+      onPointerMove={(event) => {
+        const at = measure(event)
+        const active = drag.current
+        if (!active || mode !== 'select') {
+          frame.point(at.x, at.y)
+          return
+        }
+        if (
+          !active.dragging &&
+          exceededMarqueeThreshold(active.startClient, { x: event.clientX, y: event.clientY })
+        ) {
+          active.dragging = true
+          frame.leave()
+        }
+        if (active.dragging) {
+          frame.marquee(normalizeMarqueeRect(active.startLocal, at, at.bounds))
+        }
+      }}
+      onPointerUp={(event) => {
+        const active = drag.current
+        drag.current = null
+        if (!active || mode !== 'select') return
+        if (event.currentTarget.hasPointerCapture?.(active.pointerId)) {
+          event.currentTarget.releasePointerCapture?.(active.pointerId)
+        }
+        if (!active.dragging) return
+        const at = measure(event)
+        suppressClick.current = true
+        frame.marqueeCommit(normalizeMarqueeRect(active.startLocal, at, at.bounds))
+        onDone?.()
+      }}
+      onPointerCancel={(event) => {
+        const active = drag.current
+        drag.current = null
+        if (!active) return
+        if (event.currentTarget.hasPointerCapture?.(active.pointerId)) {
+          event.currentTarget.releasePointerCapture?.(active.pointerId)
+        }
+        if (active.dragging) frame.marquee(null)
+      }}
+      onPointerLeave={() => {
+        if (!drag.current?.dragging) frame.leave()
+      }}
       onClick={(event) => {
-        const at = local(event as unknown as React.PointerEvent)
+        if (suppressClick.current) {
+          suppressClick.current = false
+          return
+        }
+        const at = measure(event)
         frame.pick(at.x, at.y, { x: event.clientX, y: event.clientY })
         onDone?.()
       }}

@@ -17,6 +17,7 @@ import type { TFunction } from 'i18next'
 import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { NO_SESSION } from '@shared/artifacts'
+import { emitAppEvent } from '@renderer/app/events'
 import { Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
@@ -64,7 +65,7 @@ import {
   openSessionWithArtifact,
   useViewStore,
 } from '@renderer/stores/view'
-import { anchorOf } from './anchors'
+import { anchorOf, anchorsOfGroup } from './anchors'
 import { useArtifactHostConnected, useArtifactHostName, useArtifactShares } from './artifact-host'
 import { useArtifactWalk } from '@renderer/stores/artifact-walk'
 import { useChangeWalk } from './use-change-walk'
@@ -316,14 +317,29 @@ export default function ArtifactViewer(place: ViewerPlace) {
   // What is picked beside a session is the context its composer offers, until something else is.
   const projectPath = panel?.projectPath ?? null
   useEffect(() => {
-    if (!projectPath || editing.mode !== 'select' || !editing.picked || !shown) return
+    if (!projectPath || editing.mode !== 'select' || !shown) return
+    if (editing.pickedGroup && editing.pickedGroup.selections.length > 0) {
+      const anchors = anchorsOfGroup(editing.pickedGroup, shown)
+      if (anchors[0]) {
+        setPaneSelection({
+          projectPath,
+          artifactId: id,
+          title,
+          anchor: anchors[0],
+          others: anchors.slice(1),
+        })
+        emitAppEvent({ kind: 'focus-composer' })
+      }
+      return
+    }
+    if (!editing.picked) return
     setPaneSelection({
       projectPath,
       artifactId: id,
       title,
       anchor: anchorOf(editing.picked, shown),
     })
-  }, [projectPath, editing.mode, editing.picked, shown, id, title])
+  }, [projectPath, editing.mode, editing.picked, editing.pickedGroup, shown, id, title])
   const choosePage = useCallback(
     (index: number) => {
       const page = shown?.canvas?.pages[index]

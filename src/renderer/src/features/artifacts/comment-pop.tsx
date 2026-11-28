@@ -59,6 +59,8 @@ export function ToolPop({
   clip = null,
   liveAnchor = null,
   onReturnToAnchor = null,
+  offscreenNote,
+  backLabel,
   inline = false,
   width = POP_W,
   label,
@@ -74,6 +76,10 @@ export function ToolPop({
   liveAnchor?: LiveAnchor | null
   /** Scrolls the anchored element back into view when the popover docks at a viewport edge. */
   onReturnToAnchor?: (() => void) | null
+  /** Custom status line shown when the tracked anchor scrolls out of view. */
+  offscreenNote?: string
+  /** Custom action label for scrolling back to the tracked anchor. */
+  backLabel?: string
   /** Laid out by what holds it, as under a document's block, instead of placed beside `at`. */
   inline?: boolean
   width?: number
@@ -109,11 +115,11 @@ export function ToolPop({
         <div className="k-vt-pop__dock" data-edge={offscreen}>
           <span className="k-vt-pop__dock-note">
             <Icon icon={OFFSCREEN_ICON[offscreen]} size={13} />
-            <span>{t('comments.anchorOffscreen')}</span>
+            <span>{offscreenNote ?? t('comments.anchorOffscreen')}</span>
           </span>
           <button type="button" className="k-vt-pop__dock-back" onClick={onReturnToAnchor}>
             <Icon icon={Location01Icon} size={13} />
-            <span>{t('comments.backToAnchor')}</span>
+            <span>{backLabel ?? t('comments.backToAnchor')}</span>
           </button>
         </div>
       )}

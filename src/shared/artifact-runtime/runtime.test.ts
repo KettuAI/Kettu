@@ -472,6 +472,180 @@ describe('artifact runtime select-pick behavior', () => {
     })
     nowSpy.mockRestore()
   })
+
+  it('supports marquee preview, commit, union anchor tracking on scroll, item removal, and ignores marquee in comment mode', () => {
+    let card1Rect: FakeRect = {
+      left: 40,
+      top: 60,
+      right: 240,
+      bottom: 180,
+      width: 200,
+      height: 120,
+    }
+    let card2Rect: FakeRect = {
+      left: 260,
+      top: 100,
+      right: 460,
+      bottom: 260,
+      width: 200,
+      height: 160,
+    }
+    const card3Rect: FakeRect = {
+      left: 500,
+      top: 100,
+      right: 700,
+      bottom: 260,
+      width: 200,
+      height: 160,
+    }
+
+    const section = makeFakeElement('section', 'm:5', '', {
+      left: 20,
+      top: 40,
+      right: 720,
+      bottom: 300,
+      width: 700,
+      height: 260,
+    })
+    const card1 = makeFakeElement('article', 'm:10', 'Card 1', card1Rect, section)
+    const card2 = makeFakeElement('article', 'm:25', 'Card 2', card2Rect, section)
+    const card3 = makeFakeElement('article', 'm:40', 'Card 3', card3Rect, section)
+    card1.getBoundingClientRect = () => card1Rect
+    card2.getBoundingClientRect = () => card2Rect
+    section.children.push(card1, card2, card3)
+    section.childElementCount = 3
+
+    const { sent, postDrive, dispatchWindow, flushRaf } = mountRuntime({
+      parent: card1,
+      child: card2,
+      hitAt: () => card1,
+    })
+
+    // Attach section to fake document.body so findMarqueeElements discovers it.
+    ;(document.body as unknown as { children: FakeElement[] }).children = [section]
+    vi.stubGlobal('getComputedStyle', (el?: unknown) => ({
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      pointerEvents: 'auto',
+      color: 'rgb(0, 0, 0)',
+      backgroundColor:
+        el === card1 || el === card2 || el === card3 ? 'rgb(240, 240, 240)' : 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+      borderTopWidth: '0px',
+      borderTopStyle: 'none',
+      fontSize: '14px',
+      fontWeight: '400',
+      textAlign: 'left',
+      paddingTop: '0px',
+      paddingRight: '0px',
+      paddingBottom: '0px',
+      paddingLeft: '0px',
+      borderTopLeftRadius: '0px',
+    }))
+
+    // In comment mode, marquee commands are ignored completely.
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-mode',
+      mode: 'comment',
+      channel: 'channel-0001',
+      accent: '#0060e2',
+    })
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-marquee',
+      rect: { x: 30, y: 50, width: 450, height: 220 },
+      commit: true,
+    })
+    expect(sent).toHaveLength(0)
+
+    // Switch to select mode and preview a marquee sweep (no message sent during preview).
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-mode',
+      mode: 'select',
+      channel: 'channel-0001',
+      accent: '#0060e2',
+    })
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-marquee',
+      rect: { x: 30, y: 50, width: 450, height: 220 },
+      commit: false,
+    })
+    flushRaf()
+    expect(sent).toHaveLength(0)
+
+    // Commit marquee: reports card1 and card2 without the outer section container.
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-marquee',
+      rect: { x: 30, y: 50, width: 450, height: 220 },
+      commit: true,
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      kind: 'select',
+      selection: null,
+      selections: [
+        { src: 10, tag: 'article', text: 'Card 1', box: { x: 40, y: 60, width: 200, height: 120 } },
+        {
+          src: 25,
+          tag: 'article',
+          text: 'Card 2',
+          box: { x: 260, y: 100, width: 200, height: 160 },
+        },
+      ],
+    })
+
+    // Start anchor tracking with target: 'picked' -> reports the union box of card1 + card2.
+    sent.length = 0
+    postDrive({
+      v: RUNTIME_VERSION,
+      kind: 'select-anchor',
+      channel: 'channel-0001',
+      target: 'picked',
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      anchor: {
+        box: { x: 40, y: 60, width: 420, height: 200 },
+        viewport: { width: 800, height: 600 },
+      },
+    })
+
+    // Scrolling updates the live union anchor bounds dynamically.
+    sent.length = 0
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 100)
+    card1Rect = { left: 40, top: -240, right: 240, bottom: -120, width: 200, height: 120 }
+    card2Rect = { left: 260, top: -200, right: 460, bottom: -40, width: 200, height: 160 }
+    dispatchWindow('scroll')
+    flushRaf()
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      anchor: { box: { x: 40, y: -240, width: 420, height: 200 } },
+    })
+
+    // Removing index 0 shrinks the tracked union box to card2 alone immediately.
+    sent.length = 0
+    nowSpy.mockReturnValue(Date.now() + 200)
+    postDrive({ v: RUNTIME_VERSION, kind: 'select-remove', index: 0 })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({
+      anchor: { box: { x: 260, y: -200, width: 200, height: 160 } },
+    })
+
+    // Back-to-selection scrolls the remaining element into view smoothly.
+    postDrive({ v: RUNTIME_VERSION, kind: 'select-scroll-anchor', target: 'picked' })
+    expect(card2.scrollIntoView).toHaveBeenCalledWith({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'smooth',
+    })
+
+    nowSpy.mockRestore()
+  })
 })
 
 interface FakeRect {
@@ -488,6 +662,8 @@ interface FakeElement {
   innerText: string
   textContent: string
   childElementCount: number
+  children: FakeElement[]
+  childNodes: Array<{ nodeType: number; nodeValue?: string }>
   parentElement: FakeElement | null
   isConnected: boolean
   getAttribute: (name: string) => string | null
@@ -511,6 +687,8 @@ function makeFakeElement(
     innerText: text,
     textContent: text,
     childElementCount: 0,
+    children: [],
+    childNodes: text ? [{ nodeType: 3, nodeValue: text }] : [],
     parentElement: parent,
     isConnected: true,
     getAttribute: (name) => attrs.get(name) ?? null,

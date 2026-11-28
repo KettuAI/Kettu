@@ -15,6 +15,7 @@ import {
 import { capabilityNamespace, type CapabilityTransport } from './capabilities'
 import { DECK_REPORT_EVENT } from './deck-sheet'
 import { DOC_REPORT_EVENT } from './document-sheet'
+import { findMarqueeElements, unionPageBoxes } from './marquee'
 import {
   RUNTIME_PATH,
   RUNTIME_VERSION,
@@ -274,6 +275,8 @@ export function start(config: RuntimeConfig): void {
   let layer: ShadowRoot | null = null
   let hoverBox: HTMLElement | null = null
   let pickedBox: HTMLElement | null = null
+  let multiLayer: HTMLElement | null = null
+  let marqueeBox: HTMLElement | null = null
   let label: HTMLElement | null = null
   let pinLayer: HTMLElement | null = null
 
@@ -289,6 +292,8 @@ export function start(config: RuntimeConfig): void {
         '.box{position:fixed;box-sizing:border-box;border-radius:3px;display:none}' +
         '.hover{border:1.5px dashed var(--accent)}' +
         '.picked{border:2px solid var(--accent);box-shadow:0 0 0 1px rgb(255 255 255 / 60%)}' +
+        '.marquee{position:fixed;box-sizing:border-box;border-radius:3px;display:none;' +
+        'border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}' +
         '.label{position:fixed;display:none;padding:1px 6px;border-radius:4px;' +
         'background:var(--accent);color:white;font:500 11px/16px system-ui,sans-serif;white-space:nowrap}' +
         '.pin{position:fixed;box-sizing:border-box;width:20px;height:20px;border-radius:50%;' +
@@ -306,10 +311,13 @@ export function start(config: RuntimeConfig): void {
       hoverBox.className = 'box hover'
       pickedBox = document.createElement('div')
       pickedBox.className = 'box picked'
+      multiLayer = document.createElement('div')
+      marqueeBox = document.createElement('div')
+      marqueeBox.className = 'marquee'
       label = document.createElement('div')
       label.className = 'label'
       pinLayer = document.createElement('div')
-      layer.append(style, pinLayer, hoverBox, pickedBox, label)
+      layer.append(style, pinLayer, multiLayer, hoverBox, pickedBox, marqueeBox, label)
     }
     host.style.setProperty('--accent', accent)
     for (const [name, value] of Object.entries(pinColors)) host.style.setProperty(name, value)
@@ -330,6 +338,9 @@ export function start(config: RuntimeConfig): void {
   }
   let hovered: Element | null = null
   let picked: Element | null = null
+  let pickedMany: Element[] = []
+  let marqueeRect: PageBox | null = null
+  let marqueeHits: Element[] = []
   let keepScroll = false
   let passKeys = false
   let pins: Pin[] = []
@@ -364,12 +375,46 @@ export function start(config: RuntimeConfig): void {
     return sourceElement(target)
   }
 
+  function pickedManyUnionBox(): PageBox | null {
+    if (pickedMany.length === 0) return null
+    const boxes: PageBox[] = []
+    for (const el of pickedMany) {
+      const box = rectBox(el)
+      if (box) boxes.push(box)
+    }
+    return unionPageBoxes(boxes)
+  }
+
+  function anchorCenterElementForMany(): Element | null {
+    const union = pickedManyUnionBox()
+    if (!union) return pickedMany.find((el) => el.isConnected) ?? null
+    const cx = union.x + union.width / 2
+    const cy = union.y + union.height / 2
+    let best: Element | null = null
+    let bestDist = Infinity
+    for (const el of pickedMany) {
+      const box = rectBox(el)
+      if (!box) continue
+      const dx = box.x + box.width / 2 - cx
+      const dy = box.y + box.height / 2 - cy
+      const dist = dx * dx + dy * dy
+      if (dist < bestDist) {
+        bestDist = dist
+        best = el
+      }
+    }
+    return best
+  }
+
   function snapHalf(n: number): number {
     return Math.round(n * 2) / 2
   }
 
   function anchorSnapshot(): { report: AnchorRectReport; key: string } {
-    const box = rectBox(resolveAnchorElement(anchorTarget))
+    const box =
+      anchorTarget === 'picked' && pickedMany.length > 0
+        ? pickedManyUnionBox()
+        : rectBox(resolveAnchorElement(anchorTarget))
     const viewport = { width: window.innerWidth, height: window.innerHeight }
     const key = box
       ? `${snapHalf(box.x)},${snapHalf(box.y)},${snapHalf(box.width)},${snapHalf(box.height)}|${viewport.width},${viewport.height}`
@@ -478,23 +523,62 @@ export function start(config: RuntimeConfig): void {
     return rect
   }
 
+  function drawMulti(elements: readonly Element[], kind: 'hover' | 'picked'): void {
+    const connected = elements.filter((el) => el.isConnected)
+    while (multiLayer!.children.length > connected.length) multiLayer!.lastChild!.remove()
+    connected.forEach((element, i) => {
+      let box = multiLayer!.children[i] as HTMLElement | undefined
+      if (!box) {
+        box = document.createElement('div')
+        multiLayer!.append(box)
+      }
+      box.className = `box ${kind}`
+      place(box, element)
+    })
+  }
+
   function draw(): void {
     frame = 0
-    const showing = (mode !== null && (hovered !== null || picked !== null)) || pins.length > 0
+    const marqueeActive = mode === 'select' && marqueeRect !== null
+    const multiActive = mode === 'select' && pickedMany.length > 0
+    const showing =
+      (mode !== null && (hovered !== null || picked !== null || multiActive || marqueeActive)) ||
+      pins.length > 0
     if (!showing) {
       host?.remove()
       return
     }
     overlay()
-    place(hoverBox!, mode && hovered !== picked ? hovered : null)
-    const rect = place(pickedBox!, mode ? picked : null)
-    if (rect && picked) {
-      label!.style.display = 'block'
-      label!.textContent = picked.localName
-      label!.style.left = `${Math.max(0, rect.left - 2)}px`
-      label!.style.top = `${Math.max(0, rect.top - 22)}px`
-    } else {
+    if (marqueeActive && marqueeRect) {
+      marqueeBox!.style.display = 'block'
+      marqueeBox!.style.left = `${marqueeRect.x}px`
+      marqueeBox!.style.top = `${marqueeRect.y}px`
+      marqueeBox!.style.width = `${marqueeRect.width}px`
+      marqueeBox!.style.height = `${marqueeRect.height}px`
+      drawMulti(marqueeHits, 'hover')
+      place(hoverBox!, null)
+      place(pickedBox!, null)
       label!.style.display = 'none'
+    } else {
+      marqueeBox!.style.display = 'none'
+      if (multiActive) {
+        drawMulti(pickedMany, 'picked')
+        place(hoverBox!, hovered && !pickedMany.includes(hovered) ? hovered : null)
+        place(pickedBox!, null)
+        label!.style.display = 'none'
+      } else {
+        drawMulti([], 'picked')
+        place(hoverBox!, mode && hovered !== picked ? hovered : null)
+        const rect = place(pickedBox!, mode ? picked : null)
+        if (rect && picked) {
+          label!.style.display = 'block'
+          label!.textContent = picked.localName
+          label!.style.left = `${Math.max(0, rect.left - 2)}px`
+          label!.style.top = `${Math.max(0, rect.top - 22)}px`
+        } else {
+          label!.style.display = 'none'
+        }
+      }
     }
     drawPins()
     if (anchorTarget !== null) sendAnchorReport(false)
@@ -690,6 +774,19 @@ export function start(config: RuntimeConfig): void {
     else void request(message).catch(() => {})
   }
 
+  function reportMany(selections: PageSelection[]): void {
+    const message: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'select',
+      channel,
+      selection: null,
+      selections,
+    }
+    if (config.transport === 'port') viaPort(message)
+    else void request(message).catch(() => {})
+  }
+
   function resetPreview(): void {
     if (!original) return
     const { element, style, text } = original
@@ -705,8 +802,15 @@ export function start(config: RuntimeConfig): void {
     original = { element, style: element.getAttribute('style'), text: null }
   }
 
+  function clearMarquee(): void {
+    marqueeRect = null
+    marqueeHits = []
+  }
+
   function pick(element: Element | null, tell: boolean): void {
     if (picked !== element) resetPreview()
+    clearMarquee()
+    pickedMany = []
     picked = element
     if (tell) report(element ? describe(element) : null)
     if (anchorTarget === 'picked') scheduleAnchorSync()
@@ -762,6 +866,9 @@ export function start(config: RuntimeConfig): void {
           hovered = null
           stopTyping(true)
           pick(null, false)
+        } else if (mode !== 'select') {
+          clearMarquee()
+          pickedMany = []
         }
         redraw()
         return
@@ -792,6 +899,64 @@ export function start(config: RuntimeConfig): void {
         if (typing && typing.element.contains(element)) return
         stopTyping(true)
         pick(element, true)
+        return
+      }
+      case 'select-marquee': {
+        if (mode !== 'select') return
+        const raw = message.rect
+        if (raw === null) {
+          clearMarquee()
+          redraw()
+          return
+        }
+        if (
+          !raw ||
+          typeof raw !== 'object' ||
+          !Number.isFinite(raw.x) ||
+          !Number.isFinite(raw.y) ||
+          !Number.isFinite(raw.width) ||
+          !Number.isFinite(raw.height)
+        ) {
+          return
+        }
+        const rect: PageBox = {
+          x: raw.width < 0 ? raw.x + raw.width : raw.x,
+          y: raw.height < 0 ? raw.y + raw.height : raw.y,
+          width: Math.abs(raw.width),
+          height: Math.abs(raw.height),
+        }
+        const hits = findMarqueeElements(
+          document,
+          rect,
+          { width: window.innerWidth, height: window.innerHeight },
+          typeof getComputedStyle === 'function' ? getComputedStyle : null,
+          host,
+        )
+        if (message.commit !== true) {
+          hovered = null
+          marqueeRect = rect
+          marqueeHits = hits
+          redraw()
+          return
+        }
+        stopTyping(true)
+        resetPreview()
+        clearMarquee()
+        hovered = null
+        picked = null
+        pickedMany = hits
+        if (hits.length > 0) reportMany(hits.map(describe))
+        else report(null)
+        if (anchorTarget === 'picked') scheduleAnchorSync()
+        redraw()
+        return
+      }
+      case 'select-remove': {
+        if (mode !== 'select' || !Number.isInteger(message.index)) return
+        if (message.index < 0 || message.index >= pickedMany.length) return
+        pickedMany.splice(message.index, 1)
+        redraw()
+        if (anchorTarget === 'picked') sendAnchorReport(true)
         return
       }
       case 'select-reveal': {
@@ -849,7 +1014,10 @@ export function start(config: RuntimeConfig): void {
           (typeof message.target === 'number' && Number.isSafeInteger(message.target))
             ? message.target
             : anchorTarget
-        const element = resolveAnchorElement(target)
+        const element =
+          target === 'picked' && pickedMany.length > 0
+            ? anchorCenterElementForMany()
+            : resolveAnchorElement(target)
         if (element && element.isConnected) {
           element.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' })
           redraw()

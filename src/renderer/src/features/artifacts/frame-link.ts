@@ -24,8 +24,11 @@ const PICKS_PER_SECOND = 20
 /** The anchor bounds updates a frame may report each second over its port while scrolling. */
 const ANCHOR_UPDATES_PER_SECOND = 70
 
-/** What a select message carries besides the pick: a located element, a pin, typed text, or live anchor bounds. */
-export type PickExtra = Pick<SelectMessage, 'located' | 'pin' | 'pinBox' | 'typed' | 'anchor'>
+/** What a select message carries besides a single pick: multi-selection, located element, pin, typed text, or live anchor bounds. */
+export type PickExtra = Pick<
+  SelectMessage,
+  'selections' | 'located' | 'pin' | 'pinBox' | 'typed' | 'anchor'
+>
 type PickListener = (selection: PageSelection | null, extra: PickExtra) => void
 type KeyListener = (key: PageKey) => void
 type DocListener = (report: DocReport) => void
@@ -62,6 +65,7 @@ function deliver(origin: string, message: SelectMessage): void {
   else if (message.deck) entry.deck()?.(message.deck)
   else
     entry.listener(message.selection, {
+      selections: message.selections,
       located: message.located,
       pin: message.pin,
       pinBox: message.pinBox,
