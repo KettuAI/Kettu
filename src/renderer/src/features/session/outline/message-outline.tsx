@@ -7,9 +7,11 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
+import { Copy01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   DropdownMenu,
@@ -20,8 +22,15 @@ import {
 import { GlideHighlight } from '@renderer/components/glide-highlight'
 import { HoverCard, HoverCardContent } from '@renderer/components/ui/hover-card'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { MenuGlyph } from '@renderer/features/shell/glyph'
 import { askFindMatch, useFindStore } from '@renderer/stores/find'
 import type { ThreadJumps } from '../thread'
+import {
+  copyOutlinePrompt,
+  hasCopyablePrompt,
+  loadedPromptText,
+  resolvePromptText,
+} from './copy-prompt'
 import {
   dashCount,
   dashOf,
@@ -83,6 +92,34 @@ interface ListPlace {
   scroll: number
 }
 
+interface VirtualAnchor {
+  getBoundingClientRect: () => DOMRect
+}
+
+function pointAnchor(x: number, y: number): VirtualAnchor {
+  const rect = {
+    x,
+    y,
+    left: x,
+    top: y,
+    right: x,
+    bottom: y,
+    width: 0,
+    height: 0,
+    toJSON: () => ({ x, y, left: x, top: y, right: x, bottom: y, width: 0, height: 0 }),
+  } as DOMRect
+  return { getBoundingClientRect: () => rect }
+}
+
+interface PromptMenuState {
+  entryId: string
+  anchor: VirtualAnchor
+  /** Full prompt text once known, or null while fetching an unloaded page entry. */
+  text: string | null
+  /** True when the message is known to have no copyable text or links. */
+  empty: boolean
+}
+
 /**
  * The message outline: a rail of dashes at the thread's left edge, one per user message with the
  * reading position marked. It spreads when the pointer comes onto it and opens the list of them
@@ -131,8 +168,35 @@ export const MessageOutline = memo(function MessageOutline({
   const listReading = finds ? finds.current : readingIndex
 
   const [open, setOpen] = useState(false)
+  const [promptMenuOpen, setPromptMenuOpen] = useState(false)
+  const [promptMenu, setPromptMenu] = useState<PromptMenuState | null>(null)
+  const [trackedSessionId, setTrackedSessionId] = useState(sessionId)
 
-  const onOpenChange = (next: boolean): void => {
+  const menuOpen = useRef(false)
+  const onList = useRef(false)
+  const menuFetch = useRef<{ entryId: string; promise: Promise<string> } | null>(null)
+  const menuSeq = useRef(0)
+
+  if (trackedSessionId !== sessionId) {
+    setTrackedSessionId(sessionId)
+    if (promptMenuOpen) setPromptMenuOpen(false)
+    if (promptMenu !== null) setPromptMenu(null)
+  }
+
+  useEffect(
+    () => () => {
+      menuOpen.current = false
+      menuFetch.current = null
+      menuSeq.current++
+    },
+    [sessionId],
+  )
+
+  const onOpenChange = (next: boolean, details?: { cancel?: () => void }): void => {
+    if (!next && menuOpen.current) {
+      details?.cancel?.()
+      return
+    }
     setOpen(next)
     if (next) opened()
   }
@@ -208,13 +272,87 @@ export const MessageOutline = memo(function MessageOutline({
     foldTimer.current = setTimeout(() => setAnchor(null), FOLD_AFTER_MS)
   }
   const closeList = (): void => {
+    if (menuOpen.current) return
     clearTimeout(closeTimer.current)
+    onList.current = false
     setListOpen(false)
     if (!onRail.current) fold()
   }
   const leaveList = (): void => {
+    if (menuOpen.current) return
     clearTimeout(closeTimer.current)
     closeTimer.current = setTimeout(closeList, LIST_CLOSE_MS)
+  }
+
+  const openPromptMenu = (event: ReactMouseEvent, row: OutlineRow, index: number): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    clearTimeout(closeTimer.current)
+    clearTimeout(foldTimer.current)
+    point(index)
+    menuOpen.current = true
+    const seq = ++menuSeq.current
+    const anchor = pointAnchor(event.clientX, event.clientY)
+    const loaded = loadedPromptText(sessionId, row.entryId)
+    if (loaded !== null) {
+      menuFetch.current = null
+      setPromptMenu({
+        entryId: row.entryId,
+        anchor,
+        text: loaded,
+        empty: !hasCopyablePrompt(loaded),
+      })
+      setPromptMenuOpen(true)
+      return
+    }
+    if (row.label.trim() === '') {
+      menuFetch.current = null
+      setPromptMenu({
+        entryId: row.entryId,
+        anchor,
+        text: '',
+        empty: true,
+      })
+      setPromptMenuOpen(true)
+      return
+    }
+    const promise = resolvePromptText(sessionId, row.entryId)
+    menuFetch.current = { entryId: row.entryId, promise }
+    setPromptMenu({
+      entryId: row.entryId,
+      anchor,
+      text: null,
+      empty: false,
+    })
+    setPromptMenuOpen(true)
+    void promise
+      .then((resolved) => {
+        if (menuSeq.current !== seq) return
+        setPromptMenu((current) =>
+          current && current.entryId === row.entryId
+            ? { ...current, text: resolved, empty: !hasCopyablePrompt(resolved) }
+            : current,
+        )
+      })
+      .catch(() => {})
+  }
+
+  const onPromptMenuOpenChange = (next: boolean, details?: { reason?: string }): void => {
+    if (next) return
+    menuOpen.current = false
+    menuFetch.current = null
+    menuSeq.current++
+    setPromptMenuOpen(false)
+    if (details?.reason === 'outside-press') {
+      if (!onList.current && !onRail.current) {
+        closeList()
+        setOpen(false)
+      }
+      return
+    }
+    if (listOpen && !onList.current && !onRail.current) {
+      leaveList()
+    }
   }
 
   const jump = (row: OutlineRow): void => {
@@ -238,7 +376,19 @@ export const MessageOutline = memo(function MessageOutline({
     closeList()
   }
 
-  if (rows.length < 2 || !room || height === 0) return null
+  const visible = rows.length >= 2 && room && height > 0
+  if (!visible && promptMenuOpen) {
+    setPromptMenuOpen(false)
+  }
+  useEffect(() => {
+    if (!visible) {
+      menuOpen.current = false
+      menuFetch.current = null
+      menuSeq.current++
+    }
+  }, [visible])
+
+  if (!visible) return null
   const dashes = dashCount(rows.length, height)
   // While a find is open the current match stands for where the reader is.
   const readingDash = finds ? -1 : dashOf(readingIndex, rows.length, dashes)
@@ -288,6 +438,7 @@ export const MessageOutline = memo(function MessageOutline({
   }
   const onPointerLeave = (): void => {
     onRail.current = false
+    if (menuOpen.current) return
     if (!listOpen) return fold()
     leaveList()
   }
@@ -357,6 +508,7 @@ export const MessageOutline = memo(function MessageOutline({
                 waiting={waiting === row.entryId}
                 hits={finds?.counts[i] ?? null}
                 onJump={() => choose(i)}
+                onContextMenu={(event) => openPromptMenu(event, row, i)}
               />
             ))}
           </DropdownMenuContent>
@@ -364,7 +516,11 @@ export const MessageOutline = memo(function MessageOutline({
       </div>
       <HoverCard
         open={listOpen}
-        onOpenChange={(next) => {
+        onOpenChange={(next, details) => {
+          if (!next && menuOpen.current) {
+            details?.cancel?.()
+            return
+          }
           if (!next) closeList()
         }}
       >
@@ -377,8 +533,14 @@ export const MessageOutline = memo(function MessageOutline({
           sideOffset={4}
           className="relative w-70 overflow-y-auto p-1.25"
           style={{ maxHeight: maxList }}
-          onPointerEnter={() => clearTimeout(closeTimer.current)}
-          onPointerLeave={leaveList}
+          onPointerEnter={() => {
+            onList.current = true
+            clearTimeout(closeTimer.current)
+          }}
+          onPointerLeave={() => {
+            onList.current = false
+            if (!menuOpen.current) leaveList()
+          }}
         >
           <GlideHighlight />
           {rows.map((row, i) => (
@@ -391,8 +553,11 @@ export const MessageOutline = memo(function MessageOutline({
               data-hits={finds && finds.counts[i]! > 0 ? '' : undefined}
               data-quiet={finds?.counts[i] === 0 || undefined}
               className="ks-outline__item relative flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg text-left outline-hidden select-none"
-              onPointerEnter={() => point(i)}
+              onPointerEnter={() => {
+                if (!menuOpen.current) point(i)
+              }}
               onClick={() => choose(i)}
+              onContextMenu={(event) => openPromptMenu(event, row, i)}
             >
               <span className="min-w-0 flex-1 truncate">
                 {row.label || t('thread.outline.noText')}
@@ -408,6 +573,38 @@ export const MessageOutline = memo(function MessageOutline({
           ))}
         </HoverCardContent>
       </HoverCard>
+      <DropdownMenu open={promptMenuOpen} onOpenChange={onPromptMenuOpenChange}>
+        <DropdownMenuContent
+          anchor={promptMenu?.anchor}
+          side="right"
+          align="start"
+          alignOffset={4}
+          sideOffset={0}
+        >
+          <DropdownMenuItem
+            disabled={!promptMenu || promptMenu.empty}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (!promptMenu || promptMenu.empty) return
+              const prefetched =
+                promptMenu.text !== null
+                  ? promptMenu.text
+                  : menuFetch.current?.entryId === promptMenu.entryId
+                    ? menuFetch.current.promise
+                    : undefined
+              void copyOutlinePrompt(
+                sessionId,
+                promptMenu.entryId,
+                t('thread.outline.copiedPrompt'),
+                prefetched,
+              )
+            }}
+          >
+            <MenuGlyph icon={Copy01Icon} />
+            {t('thread.outline.copyPrompt')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   )
 })
@@ -418,6 +615,7 @@ function OutlineItem({
   waiting,
   hits,
   onJump,
+  onContextMenu,
 }: {
   label: string
   reading: boolean
@@ -425,18 +623,20 @@ function OutlineItem({
   /** How many matches of an open find the turn holds; null without one. */
   hits: number | null
   onJump: () => void
+  onContextMenu: (event: ReactMouseEvent) => void
 }) {
   const { t } = useTranslation('session')
   return (
     <DropdownMenuItem
       closeOnClick={false}
       onClick={onJump}
+      onContextMenu={onContextMenu}
       data-reading={reading || undefined}
       data-hits={hits ? '' : undefined}
       data-quiet={hits === 0 || undefined}
       className="ks-outline__item"
     >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label || t('thread.outline.noText')}</span>
       {waiting ? (
         <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
       ) : hits ? (

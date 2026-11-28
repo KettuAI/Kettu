@@ -37,6 +37,17 @@ vi.mock('@renderer/components/ui/spinner', () => ({
   Spinner: () => null,
 }))
 
+vi.mock('@renderer/features/shell/glyph', () => ({
+  MenuGlyph: () => null,
+}))
+
+vi.mock('./copy-prompt', () => ({
+  copyOutlinePrompt: vi.fn(),
+  hasCopyablePrompt: () => true,
+  loadedPromptText: () => null,
+  resolvePromptText: vi.fn(),
+}))
+
 vi.mock('@renderer/stores/find', () => ({
   askFindMatch: vi.fn(),
   useFindStore: (selector: (state: { shown: Record<string, undefined> }) => unknown) =>
