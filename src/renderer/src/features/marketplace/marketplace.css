@@ -245,6 +245,17 @@
 .k-mkt-stale > button {
   flex: none;
 }
+.k-mkt-stale > .k-mkt-stale__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.k-mkt-stale__failure {
+  display: block;
+  margin-top: 2px;
+  color: var(--attention);
+}
 
 /* What could not be read, quietly over the sections */
 .k-mkt-notes {

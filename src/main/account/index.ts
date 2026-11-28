@@ -82,7 +82,13 @@ export class NotSignedIn extends Error {
 export class Account {
   private access: { token: string; expiresAt: number } | null = null
   private refreshing: Promise<string> | null = null
-  private signingIn: Loopback | null = null
+  private signingIn: {
+    loopback: Loopback
+    url: string | null
+    opening: boolean
+    exchanging: boolean
+  } | null = null
+  private startingSignIn = false
   private signedOut: { reason: SignedOutReason | null; failure: SignInFailure | null } = {
     reason: null,
     failure: null,
@@ -209,10 +215,38 @@ export class Account {
    * the loopback port later, and the status follows.
    */
   async signIn(): Promise<AccountStatus> {
-    if (this.signingIn || this.stored || !this.options.cloud()) return this.status()
+    if (this.stored) {
+      this.options.log.debug('Ignored sign-in: already signed in')
+      return this.status()
+    }
+    if (!this.options.cloud()) {
+      this.options.log.info('Ignored sign-in: Kettu cloud services are off')
+      return this.status()
+    }
+    if (this.startingSignIn) return this.status()
+    if (this.signingIn) {
+      const active = this.signingIn
+      if (active.opening || active.exchanging || !active.url) return this.status()
+      active.opening = true
+      try {
+        await this.options.openBrowser(active.url)
+      } catch (error) {
+        this.options.log.error('Could not open the browser to sign in', error)
+        if (this.signingIn === active) {
+          this.signingIn = null
+          active.loopback.close()
+          return this.fail('local')
+        }
+        return this.status()
+      } finally {
+        active.opening = false
+      }
+      return this.status()
+    }
     const pkce = newPkce()
     const state = newState()
     let loopback: Loopback
+    this.startingSignIn = true
     try {
       loopback = await listenLoopback({
         state,
@@ -221,10 +255,36 @@ export class Account {
     } catch (error) {
       this.options.log.error('Could not listen for the sign-in to come back', error)
       return this.fail('local')
+    } finally {
+      this.startingSignIn = false
     }
-    this.signingIn = loopback
+    if (this.stored || !this.options.cloud()) {
+      loopback.close()
+      return this.status()
+    }
+    const active = { loopback, url: null as string | null, opening: true, exchanging: false }
+    this.signingIn = active
     this.signedOut = { reason: null, failure: null }
     this.emit()
+    let info: ClientInfo
+    try {
+      info = await this.options.clientInfo()
+    } catch (error) {
+      this.options.log.error('Could not gather client info to sign in', error)
+      active.opening = false
+      if (this.signingIn === active) {
+        this.signingIn = null
+        loopback.close()
+        return this.fail('local')
+      }
+      return this.status()
+    }
+    if (this.signingIn !== active || !this.options.cloud()) {
+      active.opening = false
+      if (this.signingIn === active) this.cancelSignIn()
+      else loopback.close()
+      return this.status()
+    }
     const url = new URL(this.page('/signin/app/'))
     url.search = new URLSearchParams({
       client_id: DESKTOP_CLIENT,
@@ -232,25 +292,32 @@ export class Account {
       code_challenge: pkce.challenge,
       code_challenge_method: 'S256',
       state,
-      client_info: JSON.stringify(await this.options.clientInfo()),
+      client_info: JSON.stringify(info),
     }).toString()
+    active.url = url.href
     try {
       await this.options.openBrowser(url.href)
     } catch (error) {
       this.options.log.error('Could not open the browser to sign in', error)
-      this.signingIn = null
-      loopback.close()
-      return this.fail('local')
+      if (this.signingIn === active) {
+        this.signingIn = null
+        loopback.close()
+        return this.fail('local')
+      }
+      return this.status()
+    } finally {
+      active.opening = false
     }
+    if (this.signingIn !== active) return this.status()
     void loopback.result.then((result) => this.cameBack(loopback, result, pkce.verifier))
     return this.status()
   }
 
   cancelSignIn(): void {
-    const loopback = this.signingIn
-    if (!loopback) return
+    const active = this.signingIn
+    if (!active) return
     this.signingIn = null
-    loopback.close()
+    active.loopback.close()
     this.emit()
   }
 
@@ -340,12 +407,13 @@ export class Account {
     result: Awaited<Loopback['result']>,
     verifier: string,
   ): Promise<void> {
-    if (this.signingIn !== loopback) return
+    if (this.signingIn?.loopback !== loopback) return
     // Kettu's services were turned off while the browser had the sign-in page.
     if (!this.options.cloud()) {
       this.cancelSignIn()
       return
     }
+    this.signingIn.exchanging = true
     switch (result.kind) {
       case 'closed':
         return
@@ -387,7 +455,7 @@ export class Account {
       })
       const me = await api.me(tokens.accessToken)
       // Cancelled while the code was exchanged: the new sign-in is ended at once.
-      if (this.signingIn !== loopback) throw new SignedOut()
+      if (this.signingIn?.loopback !== loopback) throw new SignedOut()
       await this.keep(tokens, me)
     } catch (error) {
       if (tokens) void api.revoke(DESKTOP_CLIENT, tokens.refreshToken).catch(() => undefined)

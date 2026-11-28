@@ -39,10 +39,16 @@ import { count, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
-import { signIn, useAccountStore } from '@renderer/stores/account'
+import { useCloudOffHere } from '@renderer/features/settings/use-cloud-off-here'
+import { cancelSignIn, signIn, useAccountStore } from '@renderer/stores/account'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
-import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
+import {
+  openMarketplace,
+  openSettings,
+  openSettingsRow,
+  type MarketplaceTab,
+} from '@renderer/stores/view'
 import { RunSettings } from './run-settings'
 import {
   installSkill,
@@ -262,14 +268,54 @@ function useCommunityListing(id: string, fresh = false) {
 }
 
 /**
- * The Community section's line while the host is signed out, or signed in with Kettu's services
- * off, with what gets it there on this computer.
+ * The Community section's line while Kettu's services are off, the host is signed out, or a
+ * browser sign-in is waiting, with what gets it there on this computer.
  */
 export function CommunitySignedOut() {
-  const { t } = useTranslation('marketplace')
+  const { t } = useTranslation(['marketplace', 'settings'])
   const { hostId } = useHostScope()
-  const signedIn = useAccountStore((s) => s.status?.state === 'signed-in')
+  const cloudOff = useCloudOffHere()
+  const status = useAccountStore((s) => s.status)
   const here = hostId === null && !isWeb
+  if (cloudOff) {
+    return (
+      <QuietNote
+        action={
+          here ? (
+            <Button
+              size="md"
+              variant="ghost"
+              onClick={() => openSettingsRow('general', null, 'cloud')}
+            >
+              {t('community.openSettings')}
+            </Button>
+          ) : undefined
+        }
+      >
+        {t('community.servicesOff')}
+      </QuietNote>
+    )
+  }
+  if (here && status?.state === 'signing-in') {
+    return (
+      <QuietNote
+        action={
+          <span className="k-mkt-stale__actions">
+            <Button size="md" variant="ghost" onClick={() => void signIn()}>
+              {t('community.openAgain')}
+            </Button>
+            <Button size="md" variant="ghost" onClick={() => void cancelSignIn()}>
+              {t('settings:account.cancel')}
+            </Button>
+          </span>
+        }
+      >
+        {t('settings:account.waitingHint')}
+      </QuietNote>
+    )
+  }
+  const signedIn = status?.state === 'signed-in'
+  const failure = status?.state === 'signed-out' ? status.failure : null
   return (
     <QuietNote
       action={
@@ -286,7 +332,12 @@ export function CommunitySignedOut() {
         ) : undefined
       }
     >
-      {here && signedIn ? t('community.servicesOff') : t('community.signedOut')}
+      {t('community.signedOut')}
+      {here && failure && (
+        <span role="alert" className="k-mkt-stale__failure">
+          {t(`settings:account.failures.${failure}`)}
+        </span>
+      )}
     </QuietNote>
   )
 }
