@@ -51,7 +51,7 @@ export interface SettingsFile {
   general: {
     language: LanguageSetting
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
-    sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
+    sendKey: 'enter' | 'mod-enter' // Shift+Enter adds a new line for 'enter'; Enter does for 'mod-enter'
     runningSend: RunningSend // what sending while a turn runs does; the other shortcut flips it
     restoreLastSession: boolean
     newSessionList: NewSessionList // what New session lists under the input

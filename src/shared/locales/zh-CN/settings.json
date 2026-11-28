@@ -60,8 +60,10 @@
     },
     "sendKey": {
       "name": "发送快捷键",
-      "description": "另一个按键用于换行。",
-      "keywords": "回车 换行 输入框 enter newline composer"
+      "description": "选 Enter 发送时按 Shift+Enter 换行，否则按 Enter 换行。",
+      "descriptionEnter": "按 Shift+Enter 换行。",
+      "descriptionModEnter": "按 Enter 换行。",
+      "keywords": "回车 换行 输入框 enter shift newline composer"
     },
     "runningSend": {
       "name": "运行中发送消息",

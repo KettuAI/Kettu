@@ -140,6 +140,7 @@ import {
 } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
+import { sendKeyDescription } from './send-key-text'
 import {
   AccountNote,
   AccountRow,
@@ -210,6 +211,7 @@ function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>
 export function useGeneralSection(): SectionDef {
   const { t } = useTranslation('settings')
   const input = group('input', t('general.groups.input'))
+  const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   // Devices reach the computer only while Kettu runs, so remote access holds it on.
   const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
   const sessions = group('sessions', t('general.groups.sessions'), {
@@ -244,6 +246,7 @@ export function useGeneralSection(): SectionDef {
       {
         id: 'send-key',
         setting: 'general.send-key',
+        description: sendKeyDescription(t, sendKey),
         group: input,
         render: () => <SendKey />,
       },
