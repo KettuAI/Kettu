@@ -1626,11 +1626,9 @@
 :root[data-installed-theme],
 [data-installed-theme] [data-theme] {
   --fill-ink: var(--text-primary);
-  /* affectUI's answer: the prose a step softer than the ink, which bold text keeps. */
-  --prose-text: color-mix(in srgb, var(--text-primary) 84%, var(--bg-app));
   --thread-ink: var(--text-primary);
   --thread-text: var(--text-secondary);
-  --thread-prose: var(--text-secondary);
+  --thread-prose: var(--text-primary);
   --thread-quiet: var(--text-tertiary);
   --thread-muted: var(--text-tertiary);
   --thread-faint: var(--text-disabled);

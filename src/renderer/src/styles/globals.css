@@ -482,8 +482,8 @@
     'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
     system-ui, sans-serif;
   --face-source-serif-4:
-    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
-    'Noto Sans CJK SC', ui-serif, Georgia, serif;
+    'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
+    serif;
   --face-jetbrains-mono:
     'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', ui-monospace, monospace;
