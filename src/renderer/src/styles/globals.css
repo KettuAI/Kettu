@@ -1205,6 +1205,32 @@
   }
 }
 
+/* Pause infinite decorative animations while the page is hidden (minimized / another Space / hidden panel). */
+:root[data-page-hidden] {
+  & .animate-pulse,
+  & .animate-spin,
+  & .animate-attention,
+  & .animate-breathe,
+  & .shimmer,
+  & [data-caret],
+  & [data-turn-dots] circle,
+  & [data-jump-dots] circle,
+  & .ks-status__glint,
+  & .ks-status__glint::after,
+  & .ui-ansc__glint,
+  & .ui-ansc__glint::after,
+  & .ui-ansc__mark-big,
+  & .ui-ansc__mark-small,
+  & .ui-ansc__caret,
+  & .ui-tcc__glint,
+  & .ui-tcc__glint > span,
+  & .ui-tcc__spinner,
+  & .ui-shm,
+  & .ui-shm-text {
+    animation-play-state: paused !important;
+  }
+}
+
 /* Another color mode (lib/color-mode.ts): every color changes in the same frame, so elements' own
    transitions wait, except a segmented control's thumb, still sliding to the mode just picked.
    The window cross-fades from the old colors; with reduced motion too, as opacity remains. */

@@ -646,6 +646,8 @@ export interface IpcEventContract {
   'sign-ins:changed': BroughtSite[]
   /** To the menu bar panel: it came forward. */
   'tray:shown': null
+  /** To the menu bar panel: it was hidden, so it can pause animations and timers. */
+  'tray:hidden': null
   /** To the menu bar panel: another connected host's agents changed. */
   'tray:host-agents-changed': TrayHostAgents[]
 }

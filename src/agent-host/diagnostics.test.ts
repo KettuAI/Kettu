@@ -126,4 +126,75 @@ describe('Diagnostics traffic', () => {
     const message = { id: 2, method: 'turn/start', params: { input: [{ text: 'hi' }] } }
     expect(JSON.parse(recorded(message))).toEqual(message)
   })
+
+  it('coalesces consecutive streaming delta messages when verbose and mirrorTraffic are off', () => {
+    let time = 1_000
+    const diagnostics = new Diagnostics({ now: () => ++time })
+    diagnostics.traffic('claude-code', 'out', { method: 'query', sessionId: 's1' })
+    for (let i = 0; i < 50; i++) {
+      diagnostics.traffic('claude-code', 'in', {
+        type: 'stream_event',
+        event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'abcd' } },
+      })
+    }
+    diagnostics.traffic('claude-code', 'in', { type: 'result', subtype: 'success' })
+
+    const records = diagnostics.agentRecords('claude-code').traffic
+    expect(records).toHaveLength(3)
+    expect(records[0]!.message).toEqual({ method: 'query', sessionId: 's1' })
+    expect(records[1]!.message).toEqual({
+      coalesced: true,
+      kind: 'stream_event/text_delta',
+      count: 50,
+      chars: 200,
+      startedAt: 1_002,
+      endedAt: 1_051,
+    })
+    expect(records[2]!.message).toEqual({ type: 'result', subtype: 'success' })
+  })
+
+  it('coalesces ACP and Codex streaming deltas and flushes them on export', () => {
+    let time = 2_000
+    const diagnostics = new Diagnostics({ now: () => ++time })
+    for (let i = 0; i < 4; i++) {
+      diagnostics.traffic('codex', 'in', {
+        method: 'item/agentMessage/delta',
+        params: { delta: 'hi!' },
+      })
+    }
+    for (let i = 0; i < 3; i++) {
+      diagnostics.traffic('codex', 'in', {
+        method: 'session/update',
+        params: { update: { sessionUpdate: 'agent_message_chunk', content: { text: 'xy' } } },
+      })
+    }
+
+    const records = diagnostics.agentRecords('codex').traffic
+    expect(records).toHaveLength(2)
+    expect(records[0]!.message).toMatchObject({
+      coalesced: true,
+      kind: 'item/agentMessage/delta',
+      count: 4,
+      chars: 12,
+    })
+    expect(records[1]!.message).toMatchObject({
+      coalesced: true,
+      kind: 'session/update/agent_message_chunk',
+      count: 3,
+      chars: 6,
+    })
+  })
+
+  it('preserves individual streaming deltas when mirrorTraffic is enabled', () => {
+    const lines: string[] = []
+    const diagnostics = new Diagnostics({ mirrorTraffic: true, write: (line) => lines.push(line) })
+    const delta = {
+      type: 'stream_event',
+      event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'a' } },
+    }
+    diagnostics.traffic('claude-code', 'in', delta)
+    diagnostics.traffic('claude-code', 'in', delta)
+    expect(lines).toHaveLength(2)
+    expect(diagnostics.agentRecords('claude-code').traffic).toHaveLength(2)
+  })
 })

@@ -105,7 +105,10 @@ export class TrayPanel {
 
   hide(): void {
     this.stopWaiting()
-    if (this.window && !this.window.isDestroyed() && this.window.isVisible()) this.window.hide()
+    if (this.window && !this.window.isDestroyed() && this.window.isVisible()) {
+      this.window.hide()
+      this.window.webContents.send('tray:hidden', null)
+    }
   }
 
   open(target: TrayTarget): void {

@@ -2,10 +2,13 @@ import '@renderer/styles/globals.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { followPageVisibility } from '@renderer/lib/page-visibility'
 import { initSettings } from '@renderer/stores/settings'
 import { initThemes } from '@renderer/stores/themes'
 import { initTrayPanel } from '@renderer/stores/tray-panel'
 import { TrayRoot } from './tray-panel'
+
+followPageVisibility()
 
 // As the window does, the first render waits for the language, the text size and the colors.
 Promise.all([initSettings(), initThemes(), initTrayPanel()])

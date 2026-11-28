@@ -226,6 +226,9 @@ export async function findHolder(
   const names = await readdir(folder).catch(() => [])
   for (const name of names) {
     if (!/^\d+\.json$/.test(name)) continue
+    // Each file is named `<pid>.json`; skip exited PIDs before reading and parsing the file.
+    const filePid = Number(name.slice(0, -5))
+    if (!Number.isInteger(filePid) || filePid <= 0 || !isAlive(filePid)) continue
     let entry: unknown
     try {
       entry = JSON.parse(await readFile(path.join(folder, name), 'utf8'))
@@ -237,7 +240,7 @@ export async function findHolder(
     if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) continue
     const entrypoint = stringOr(entry.entrypoint)
     if (entrypoint?.startsWith('sdk')) continue
-    if (!isAlive(pid)) continue
+    if (pid !== filePid && !isAlive(pid)) continue
     return { pid, entrypoint, busy: entry.status === 'busy' }
   }
   return null

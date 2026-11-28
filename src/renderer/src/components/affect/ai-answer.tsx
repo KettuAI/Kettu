@@ -470,6 +470,7 @@ export function AIAnswer({
               {mark ?? <AssistantMark />}
               <span key={label} className={finished ? "ui-ansc__label-text" : "ui-ansc__label-text ui-ansc__shimmer"} data-text={label}>
                 {label}
+                {!finished && <span className="ui-ansc__glint" aria-hidden="true" data-text={label} />}
               </span>
             </div>
 
@@ -867,7 +868,7 @@ a.ui-ansc__source:hover { background: var(--ui-ansc-wash); }
 .ui-ansc[data-phase="writing"] .ui-ansc__mark-big { animation: ui-ansc-breathe 1.4s ease-in-out infinite; }
 .ui-ansc[data-phase="reading"] .ui-ansc__mark-small,
 .ui-ansc[data-phase="writing"] .ui-ansc__mark-small { animation: ui-ansc-twinkle 1.4s ease-in-out infinite; }
-.ui-ansc__label-text { position: relative; animation: ui-ansc-fade 320ms var(--ui-ansc-ease) both; }
+.ui-ansc__label-text { position: relative; overflow: hidden; animation: ui-ansc-fade 320ms var(--ui-ansc-ease) both; }
 .ui-ansc[data-phase="done"] .ui-ansc__label-text,
 .ui-ansc[data-phase="stopped"] .ui-ansc__label-text { color: var(--ui-ansc-text); }
 
@@ -1051,19 +1052,22 @@ a.ui-ansc__source:hover { background: var(--ui-ansc-wash); }
 }
 .ui-ansc__reasons button:hover { color: var(--ui-ansc-ink); background: var(--ui-ansc-fill); }
 
-/* Shimmer over the working label – a darker band runs through the gray text */
-.ui-ansc__shimmer::after {
-  content: attr(data-text);
-  content: attr(data-text) / "";
+/* Shimmer over the working label – transform-only masked sweep so it runs on the compositor */
+.ui-ansc__glint {
   position: absolute;
   inset: 0;
-  white-space: nowrap;
-  color: transparent;
-  background: linear-gradient(90deg, transparent 38%, var(--ui-ansc-shine) 50%, transparent 62%) 100% 0 / 300% 100% no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: ui-ansc-sweep 1.6s linear infinite;
   pointer-events: none;
+  user-select: none;
+  mask: linear-gradient(90deg, transparent 38%, black 50%, transparent 62%) center / 300% 100% no-repeat;
+  animation: ui-ansc-glint 1.6s linear infinite;
+}
+.ui-ansc__glint::after {
+  content: attr(data-text);
+  content: attr(data-text) / "";
+  display: block;
+  white-space: nowrap;
+  color: var(--ui-ansc-shine);
+  animation: ui-ansc-glint-back 1.6s linear infinite;
 }
 
 @keyframes ui-ansc-word { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: none; } }
@@ -1074,7 +1078,8 @@ a.ui-ansc__source:hover { background: var(--ui-ansc-wash); }
 @keyframes ui-ansc-pulse { 50% { opacity: 0.3; } }
 @keyframes ui-ansc-breathe { 50% { transform: scale(0.86); } }
 @keyframes ui-ansc-twinkle { 0%, 100% { opacity: 1; transform: none; } 50% { opacity: 0.3; transform: scale(0.6) rotate(45deg); } }
-@keyframes ui-ansc-sweep { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@keyframes ui-ansc-glint { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes ui-ansc-glint-back { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
 
 /* Narrow (phones) */
 @container (max-width: 480px) {

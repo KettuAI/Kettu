@@ -1652,6 +1652,7 @@ export class SessionManager {
     this.now = deps.now ?? Date.now
     deps.agents.hooks = {
       liveSessions: (agentId) => this.connectedCount(agentId),
+      activeSessions: (agentId) => this.connectedCount(agentId, false),
       agentExited: (agentId, info) => this.agentExited(agentId, info),
       signedIn: (agentId) => this.agentSignedIn(agentId),
       accountChanged: (agentId) => this.accountChanged(agentId),
@@ -1848,9 +1849,10 @@ export class SessionManager {
     return out
   }
 
-  private connectedCount(agentId: AgentId): number {
+  private connectedCount(agentId: AgentId, includePrepared = true): number {
     let count = 0
     for (const live of this.live.values()) {
+      if (!includePrepared && live.prepared) continue
       if (live.record.agentId === agentId && CONNECTED.has(live.thread.session.status)) count++
     }
     return count
@@ -1951,6 +1953,32 @@ export class SessionManager {
         out.push(summary)
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  /**
+   * Unarchived non-prepared session summaries that can contribute to the host live-activity
+   * snapshot (live sessions, sessions with waiting suggestion cards, or sessions active within the
+   * 30-minute activity window). Avoids rebuilding summaries and git PR lookups for old history.
+   */
+  activitySummaries(now: number): SessionSummary[] {
+    const cutoff = now - 30 * 60_000
+    const seen = new Set<string>()
+    const out: SessionSummary[] = []
+    for (const [id, live] of this.live) {
+      if (live.prepared || live.record.archivedAt !== undefined) continue
+      if (!this.isListedOrigin(live.record.origin)) continue
+      seen.add(id)
+      out.push(this.summary(id))
+    }
+    for (const [id, record] of this.records) {
+      if (seen.has(id) || record.archivedAt !== undefined) continue
+      if (!this.isListedOrigin(record.origin)) continue
+      const waiting = (this.deps.cards?.waiting(id) ?? 0) > 0
+      const recentTurn = record.lastTurn !== undefined && record.lastTurn.endedAt >= cutoff
+      if (!waiting && !recentTurn && record.updatedAt < cutoff) continue
+      out.push(this.summary(id))
+    }
+    return out
   }
 
   /**

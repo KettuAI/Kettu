@@ -7,12 +7,14 @@ import enSession from '@shared/locales/en/session.json'
 import zhSession from '@shared/locales/zh-CN/session.json'
 import { hostOfPath, onHost } from '@renderer/lib/host-paths'
 import {
+  buildSessionFamily,
   familyMemberStatus,
   fetchFamilyUsages,
   mergeFamilyUsageSources,
   resolveSessionFamily,
   rollupFamilyUsage,
   selectFamilyMember,
+  selectSessionFamilyMembers,
   type MemberUsageState,
 } from './session-family-model'
 
@@ -786,5 +788,25 @@ describe('SessionHeader & SessionFamilyPopoverContent rendering', () => {
     const enKeys = flattenBaseKeys(enSession.sessionFamily as Record<string, unknown>)
     const zhKeys = flattenBaseKeys(zhSession.sessionFamily as Record<string, unknown>)
     expect([...zhKeys].sort()).toEqual([...enKeys].sort())
+  })
+
+  it('keeps selectSessionFamilyMembers stable across unrelated session updates', () => {
+    const solo = makeSession({ id: 'solo', title: 'Solo' })
+    const other1 = makeSession({ id: 'other', title: 'Other', updatedAt: 10 })
+    const other2 = makeSession({ id: 'other', title: 'Other', updatedAt: 20 })
+
+    const soloBefore = selectSessionFamilyMembers({ solo, other: other1 }, 'solo')
+    const soloAfter = selectSessionFamilyMembers({ solo, other: other2 }, 'solo')
+    expect(soloBefore).toBe(soloAfter)
+    expect(soloBefore).toEqual([])
+    expect(buildSessionFamily(soloAfter, 'solo')).toBeNull()
+
+    const parent = makeSession({ id: 'p1', createdAt: 1 })
+    const child = makeSession({ id: 'c1', parentId: 'p1', createdAt: 2 })
+    const familyBefore = selectSessionFamilyMembers({ p1: parent, c1: child, other: other1 }, 'p1')
+    const familyAfter = selectSessionFamilyMembers({ p1: parent, c1: child, other: other2 }, 'p1')
+    expect(familyBefore).toEqual(familyAfter)
+    expect(familyBefore.every((item, i) => item === familyAfter[i])).toBe(true)
+    expect(buildSessionFamily(familyAfter, 'p1')?.childCount).toBe(1)
   })
 })

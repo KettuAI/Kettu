@@ -4752,7 +4752,7 @@ export class AgentHost {
   private reportActivity(): void {
     if (this.stopping) return
     const now = Date.now()
-    const summaries = this.sessions.list().filter((s) => s.archivedAt === null && !s.prepared)
+    const summaries = this.sessions.activitySummaries(now)
 
     const running: HostActivityRunning[] = []
     const error: HostActivityRecent[] = []

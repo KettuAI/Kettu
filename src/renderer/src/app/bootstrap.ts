@@ -24,6 +24,7 @@ import {
 import { whenHostHas } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isHosted, isWeb, platform } from '@renderer/lib/platform'
+import { followPageVisibility } from '@renderer/lib/page-visibility'
 import { initAccount, useAccountStore } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initDevices } from '@renderer/stores/devices'
@@ -574,6 +575,7 @@ export function bootstrap(): Promise<unknown> {
   // detection and `gh auth status` can take seconds.
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)
 
+  followPageVisibility()
   window.addEventListener('focus', refreshShownProject)
   document.addEventListener('visibilitychange', () => syncReferences(true))
   return Promise.allSettled([settingsReady, themesReady])

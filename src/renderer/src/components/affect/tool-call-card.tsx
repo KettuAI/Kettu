@@ -4,15 +4,19 @@
 import {
   Children,
   isValidElement,
+  memo,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type Key,
+  type MutableRefObject,
   type ReactElement,
   type ReactNode,
 } from "react";
+import { isPageHidden, subscribePageVisibility } from "@renderer/lib/page-visibility";
 
 /*
  * Tool Call Card (Clean) – one tool call of an AI agent, in a single self-contained file.
@@ -197,8 +201,8 @@ export function ToolCallCard({
     }
   }
 
-  const measured = useStopwatch(status === "running", startedAt, false);
-  const ms = !time ? null : status === "running" ? (measured ?? 0) : (duration ?? measured);
+  // Remember the latest elapsed reading across status key remounts without re-rendering the card.
+  const measuredRef = useRef<number | null>(null);
 
   const announce = L.announce(name, status, error);
   const glint = shine && status === "running";
@@ -258,9 +262,15 @@ export function ToolCallCard({
           )}
           {status === "error" && <ErrorIcon />}
           {status === "cancelled" && <CancelIcon />}
-          <span className="ui-tcc__time">
-            {status === "error" ? L.failed : status === "cancelled" ? L.cancelled : ms != null ? formatMs(ms, status === "running") : null}
-          </span>
+          <ToolCardTime
+            status={status}
+            time={time}
+            startedAt={startedAt}
+            duration={duration}
+            measuredRef={measuredRef}
+            failedLabel={L.failed}
+            cancelledLabel={L.cancelled}
+          />
         </span>
         {chevron === "after" && <Chevron />}
       </button>
@@ -346,9 +356,12 @@ export function ToolCallGroup({
     (min, c) => (c.status === "running" && c.startedAt != null && (min == null || c.startedAt < min) ? c.startedAt : min),
     undefined,
   );
-  const measured = useStopwatch(running, since, true);
   const sum = calls.length && calls.every((c) => c.duration != null) ? calls.reduce((t, c) => t + (c.duration ?? 0), 0) : null;
-  const ms = !time ? null : running ? measured : (duration ?? sum ?? measured);
+  const groupTimeRef = useRef<{ base: number; start: number | null; measured: number | null }>({
+    base: 0,
+    start: null,
+    measured: null,
+  });
 
   const count = L.used(calls.length);
   const title = running ? runningLabel : (label ?? count);
@@ -395,7 +408,15 @@ export function ToolCallGroup({
             {running && <Glint>{title}</Glint>}
           </span>
           {!running && failed > 0 && <span className="ui-tcc-group__failed">· {L.failedCount(failed)}</span>}
-          {ms != null && <span className="ui-tcc-group__time">· {formatMs(ms, running)}</span>}
+          {time && (
+            <ToolGroupTime
+              running={running}
+              since={since}
+              duration={duration}
+              sum={sum}
+              stateRef={groupTimeRef}
+            />
+          )}
         </span>
         {chevron === "after" && <Chevron />}
       </button>
@@ -474,8 +495,19 @@ export function ToolCallAction({ label, onClick, children }: { label: string; on
 
 const OPEN_MAX = 640;
 
-function CodeSection({ label, value, cap, labels }: { label: string; value: unknown; cap: number; labels: ToolCallLabels }) {
-  const { text, json } = toText(value);
+const CodeSection = memo(function CodeSection({
+  label,
+  value,
+  cap,
+  labels,
+}: {
+  label: string;
+  value: unknown;
+  cap: number;
+  labels: ToolCallLabels;
+}) {
+  const { text, json } = useMemo(() => toText(value), [value]);
+  const highlighted = useMemo(() => (json ? highlight(text) : text), [json, text]);
   const pre = useRef<HTMLPreElement>(null);
   const [full, setFull] = useState(false);
   const [height, setHeight] = useState(0);
@@ -508,7 +540,7 @@ function CodeSection({ label, value, cap, labels }: { label: string; value: unkn
         // Open, a very long block stops at a few screens and scrolls inside – no 200,000px card
         style={capped ? { maxHeight: full ? Math.min(height, OPEN_MAX) : cap } : undefined}
       >
-        <code>{json ? highlight(text) : text}</code>
+        <code>{highlighted}</code>
       </pre>
       {capped && (
         <button type="button" className="ui-tcc__more" aria-expanded={full} onClick={() => setFull(!full)}>
@@ -517,7 +549,7 @@ function CodeSection({ label, value, cap, labels }: { label: string; value: unkn
       )}
     </div>
   );
-}
+});
 
 function CopyButton({ text, label, copiedLabel }: { text: string; label: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false);
@@ -592,29 +624,174 @@ function WrenchIcon() {
 
 /* ---------- Helpers ---------- */
 
-/** Live ms while running, the final value after. accumulate = add up several running stretches. */
-function useStopwatch(running: boolean, startedAt: number | undefined, accumulate: boolean) {
-  const start = useRef<number | null>(null);
-  const base = useRef(0);
-  const [ms, setMs] = useState<number | null>(null);
+/** Next delay until `formatMs(elapsed, true)` changes: 100ms below 1m, 1s below 1h, 1m below 1d. */
+function nextStopwatchDelay(elapsed: number): number {
+  const safe = Math.max(0, elapsed);
+  if (safe < 60_000) return 100 - (safe % 100) + 5;
+  if (safe < 3_600_000) return 1000 - (safe % 1000) + 5;
+  if (safe < 86_400_000) return 60_000 - (safe % 60_000) + 50;
+  return 3_600_000 - (safe % 3_600_000) + 500;
+}
+
+/**
+ * Isolated leaf timer for ToolCallCard so live stopwatch ticks never re-render the card body or
+ * its CodeSections, and `time={false}` starts no timer at all.
+ */
+const ToolCardTime = memo(function ToolCardTime({
+  status,
+  time,
+  startedAt,
+  duration,
+  measuredRef,
+  failedLabel,
+  cancelledLabel,
+}: {
+  status: ToolCallStatus;
+  time: boolean;
+  startedAt: number | undefined;
+  duration: number | undefined;
+  measuredRef: MutableRefObject<number | null>;
+  failedLabel: string;
+  cancelledLabel: string;
+}) {
+  const active = time && status === "running";
+  const [ms, setMs] = useState<number | null>(() => {
+    if (!active) return measuredRef.current;
+    return startedAt != null ? Math.max(0, Date.now() - startedAt) : 0;
+  });
+
   useEffect(() => {
+    if (!active) return;
+    const origin = startedAt ?? Date.now();
+    let timer: number | null = null;
+    const stop = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const update = () => {
+      const elapsed = Math.max(0, Date.now() - origin);
+      measuredRef.current = elapsed;
+      setMs(elapsed);
+      return elapsed;
+    };
+    const schedule = (elapsed: number) => {
+      if (isPageHidden()) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        schedule(update());
+      }, nextStopwatchDelay(elapsed));
+    };
+    const initial = update();
+    schedule(initial);
+    const unsubVisibility = subscribePageVisibility((hidden) => {
+      if (hidden) {
+        stop();
+      } else {
+        stop();
+        schedule(update());
+      }
+    });
+    return () => {
+      stop();
+      unsubVisibility();
+      measuredRef.current = Math.max(0, Date.now() - origin);
+    };
+  }, [active, startedAt, measuredRef]);
+
+  const shown = !time ? null : status === "running" ? (ms ?? 0) : (duration ?? measuredRef.current);
+  return (
+    <span className="ui-tcc__time">
+      {status === "error"
+        ? failedLabel
+        : status === "cancelled"
+          ? cancelledLabel
+          : shown != null
+            ? formatMs(shown, status === "running")
+            : null}
+    </span>
+  );
+});
+
+/**
+ * Isolated leaf timer for ToolCallGroup so live stopwatch ticks never re-render the group or walk
+ * `Children.toArray(children)` on every tick.
+ */
+const ToolGroupTime = memo(function ToolGroupTime({
+  running,
+  since,
+  duration,
+  sum,
+  stateRef,
+}: {
+  running: boolean;
+  since: number | undefined;
+  duration: number | undefined;
+  sum: number | null;
+  stateRef: MutableRefObject<{ base: number; start: number | null; measured: number | null }>;
+}) {
+  const [ms, setMs] = useState<number | null>(() => {
+    const state = stateRef.current;
+    if (running) {
+      const origin = since ?? state.start ?? Date.now();
+      return state.base + Math.max(0, Date.now() - origin);
+    }
+    return state.measured;
+  });
+
+  useEffect(() => {
+    const state = stateRef.current;
     if (!running) {
-      if (start.current !== null) {
-        base.current += Date.now() - start.current;
-        start.current = null;
-        setMs(base.current);
+      if (state.start !== null) {
+        state.base += Math.max(0, Date.now() - state.start);
+        state.start = null;
+        state.measured = state.base;
+        setMs(state.measured);
       }
       return;
     }
-    if (!accumulate) base.current = 0;
-    start.current = startedAt ?? Date.now();
-    const tick = () => setMs(base.current + Date.now() - (start.current ?? Date.now()));
-    tick();
-    const t = window.setInterval(tick, 100);
-    return () => window.clearInterval(t);
-  }, [running, startedAt, accumulate]);
-  return ms;
-}
+    state.start = since ?? state.start ?? Date.now();
+    let timer: number | null = null;
+    const stop = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const update = () => {
+      const elapsed = state.base + Math.max(0, Date.now() - (state.start ?? Date.now()));
+      state.measured = elapsed;
+      setMs(elapsed);
+      return elapsed;
+    };
+    const schedule = (elapsed: number) => {
+      if (isPageHidden()) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        schedule(update());
+      }, nextStopwatchDelay(elapsed));
+    };
+    const initial = update();
+    schedule(initial);
+    const unsubVisibility = subscribePageVisibility((hidden) => {
+      if (hidden) {
+        stop();
+      } else {
+        stop();
+        schedule(update());
+      }
+    });
+    return () => {
+      stop();
+      unsubVisibility();
+    };
+  }, [running, since, stateRef]);
+
+  const shown = running ? ms : (duration ?? sum ?? ms);
+  if (shown == null) return null;
+  return <span className="ui-tcc-group__time">· {formatMs(shown, running)}</span>;
+});
 
 /** 0.4s, 12.3s, 2m 05s, 3h 12m, 2d 4h – the live timer always shows tenths below a minute */
 function formatMs(ms: number, live: boolean) {

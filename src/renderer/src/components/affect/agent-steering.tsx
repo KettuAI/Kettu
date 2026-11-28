@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { isPageHidden, subscribePageVisibility } from "@renderer/lib/page-visibility";
 
 /*
  * Agent Steering – steer an agent while it works, without stopping it, in a single self-contained file.
@@ -91,29 +92,53 @@ const clock = (time: number) => {
 const seconds = (time: number) => (!Number.isFinite(time) ? "" : time < 60_000 ? `${(Math.max(0, time) / 1000).toFixed(1)}s` : clock(time));
 const count = new Intl.NumberFormat("en");
 
-// One shared tick for every clock on the page – only the clocks render again, not the whole plan
-const ticker = { subs: new Set<() => void>(), id: 0 };
-const useNow = (live: boolean) => {
+/** Next delay until the formatted clock changes, pausing while the page is hidden. */
+const nextElapsedDelay = (elapsed: number, tenths: boolean) => {
+  const safe = Math.max(0, elapsed);
+  if (tenths && safe < 60_000) return 100 - (safe % 100) + 5;
+  if (safe < 3_600_000) return 1000 - (safe % 1000) + 5;
+  if (safe < 86_400_000) return 60_000 - (safe % 60_000) + 50;
+  return 3_600_000 - (safe % 3_600_000) + 500;
+};
+
+/** Time since `from`, ticking at the precision `format` displays and pausing while hidden. */
+const Elapsed = ({ from, live, format }: { from: number; live: boolean; format: (time: number) => string }) => {
+  const tenths = format === seconds;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;
-    const tick = () => setNow(Date.now());
-    tick();
-    ticker.subs.add(tick);
-    if (!ticker.id) ticker.id = window.setInterval(() => ticker.subs.forEach((f) => f()), 100);
-    return () => {
-      ticker.subs.delete(tick);
-      if (!ticker.subs.size) {
-        window.clearInterval(ticker.id);
-        ticker.id = 0;
+    let timer: number | null = null;
+    const stop = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
       }
     };
-  }, [live]);
-  return now;
-};
-/** Time since `from`, ticking while `live` – stops where it is when the run pauses or ends */
-const Elapsed = ({ from, live, format }: { from: number; live: boolean; format: (time: number) => string }) => {
-  const now = useNow(live);
+    const schedule = () => {
+      if (isPageHidden()) return;
+      const elapsed = Math.max(0, Date.now() - from);
+      timer = window.setTimeout(() => {
+        timer = null;
+        setNow(Date.now());
+        schedule();
+      }, nextElapsedDelay(elapsed, tenths));
+    };
+    setNow(Date.now());
+    schedule();
+    const unsubVisibility = subscribePageVisibility((hidden) => {
+      if (hidden) {
+        stop();
+      } else {
+        setNow(Date.now());
+        stop();
+        schedule();
+      }
+    });
+    return () => {
+      stop();
+      unsubVisibility();
+    };
+  }, [live, from, tenths]);
   return <>{format(now - from)}</>;
 };
 const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
