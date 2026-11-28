@@ -13,6 +13,9 @@ export const TOTAL_REFILL_MS = 2_000
 /** Handshakes waiting at once; one that never finishes holds its slot only until the hello timeout. */
 export const MAX_IN_FLIGHT = 16
 
+/** Handshakes one source may have waiting at once, so a single peer cannot exhaust the pool. */
+export const MAX_IN_FLIGHT_PER_SOURCE = 4
+
 /** How long a connection the host ends waits for the device to end its side before it is cut. */
 export const CLOSE_GRACE_MS = 5_000
 
@@ -24,17 +27,22 @@ interface Bucket {
 export interface HandshakeLimitsOptions {
   /** Milliseconds on a clock that only goes forward. */
   now?: () => number
+  /** Handshakes one source may have waiting at once; defaults to MAX_IN_FLIGHT_PER_SOURCE. */
+  maxInFlightPerSource?: number
 }
 
 /** Token buckets for the handshakes of direct connections. */
 export class HandshakeLimits {
   private readonly sources = new Map<string, Bucket>()
+  private readonly inFlightBySource = new Map<string, number>()
   private total: Bucket
   private waiting = 0
   private readonly now: () => number
+  private readonly maxInFlightPerSource: number
 
   constructor(options: HandshakeLimitsOptions = {}) {
     this.now = options.now ?? (() => performance.now())
+    this.maxInFlightPerSource = options.maxInFlightPerSource ?? MAX_IN_FLIGHT_PER_SOURCE
     this.total = { tokens: TOTAL_BURST, at: this.now() }
   }
 
@@ -49,8 +57,10 @@ export class HandshakeLimits {
    */
   admit(address: string): (() => void) | null {
     if (this.waiting >= MAX_IN_FLIGHT) return null
-    const now = this.now()
     const source = sourceOf(address)
+    const sourceWaiting = this.inFlightBySource.get(source) ?? 0
+    if (sourceWaiting >= this.maxInFlightPerSource) return null
+    const now = this.now()
     const own = this.sources.get(source)
     const ownTokens = own ? level(own, SOURCE_BURST, SOURCE_REFILL_MS, now) : SOURCE_BURST
     const totalTokens = level(this.total, TOTAL_BURST, TOTAL_REFILL_MS, now)
@@ -59,11 +69,15 @@ export class HandshakeLimits {
     this.sources.set(source, { tokens: ownTokens - 1, at: now })
     this.forgetFull(now)
     this.waiting++
+    this.inFlightBySource.set(source, sourceWaiting + 1)
     let settled = false
     return () => {
       if (settled) return
       settled = true
       this.waiting--
+      const remaining = (this.inFlightBySource.get(source) ?? 1) - 1
+      if (remaining <= 0) this.inFlightBySource.delete(source)
+      else this.inFlightBySource.set(source, remaining)
     }
   }
 
