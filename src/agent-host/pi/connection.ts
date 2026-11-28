@@ -20,6 +20,8 @@ import {
   type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
+  type RewindPoint,
+  type RewoundSession,
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
@@ -49,7 +51,9 @@ import {
   activeBranch,
   blockText,
   forkEntry,
+  rewindEntry,
   SessionMapper,
+  TIMESTAMP_REF_PREFIX,
   tokenTotals,
   toolPath,
   writesFile,
@@ -114,6 +118,8 @@ interface Turn {
   started: boolean
   /** Started by pi itself between Kettu's turns, such as for a message left in its queue. */
   own: boolean
+  /** Reports the user prompt's timestamp reference once pi echoes it, for edit-from-here rewind. */
+  sent?: (ref: string) => void
 }
 
 interface Proc {
@@ -350,6 +356,8 @@ export class PiConnection implements AgentConnection {
         deleteSession: true,
         forkSession: true,
         forkAtMessage: true,
+        // Pi cuts conversation history natively via RPC `fork`; disk file edits stay untouched.
+        rewind: true,
         ownTitles: null,
         logout: false,
         steering: this.since(STEERING_SINCE),
@@ -538,6 +546,64 @@ export class PiConnection implements AgentConnection {
     this.sessions.set(session.id, session)
     if (copy.file && copy.file !== session.file) {
       await removeSessionFile(copy.file).catch(() => {})
+    }
+  }
+
+  /**
+   * Cuts before the user message `point` names using Pi's native RPC `fork`, which copies only the
+   * active branch prefix into a new session file while leaving the original untouched and keeping
+   * disk files as they are. When nothing precedes the message, returns an empty id so the host
+   * starts a fresh session on the next send.
+   */
+  async rewindSession(
+    sessionId: string,
+    cwd: string,
+    point: RewindPoint,
+    title: string | null,
+  ): Promise<RewoundSession> {
+    this.assertOpen()
+    const existing = this.sessions.get(sessionId)
+    if (existing?.turn) {
+      throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
+    }
+    const sourceCwd = existing?.cwd ?? cwd
+    if (existing) await this.closeSession(sessionId)
+    const source = await this.fileOf(sessionId, sourceCwd)
+    if (!source) {
+      throw new AgentRequestError('agent_error', t('rewind.noPoint'))
+    }
+    const temp = this.blank(cwd, {})
+    temp.id = sessionId
+    const proc = await this.launch(temp, { kind: 'resume', file: source })
+    temp.proc = proc
+    try {
+      await proc.ready
+      const history = await proc.rpc.request<{ entries: PiEntry[]; leafId: string | null }>({
+        type: 'get_entries',
+      })
+      const target = rewindEntry(activeBranch(history.entries ?? [], history.leafId ?? null), point)
+      if (!target) {
+        throw new AgentRequestError('agent_error', t('rewind.noPoint'))
+      }
+      if (!target.hasPriorHistory) return { sessionId: '' }
+      const forked = await proc.rpc.request<{ cancelled?: boolean }>({
+        type: 'fork',
+        entryId: target.entry.id,
+      })
+      if (forked?.cancelled) {
+        throw new AgentRequestError('agent_error', t('pi.fork.cancelled'))
+      }
+      const state = await proc.rpc.request<PiState>({ type: 'get_state' })
+      this.named(temp, state)
+      const name = title?.trim()
+      if (name) {
+        await proc.rpc.request({ type: 'set_session_name', name }).catch(() => {})
+      }
+      return { sessionId: temp.id }
+    } catch (error) {
+      throw this.startError(error, proc)
+    } finally {
+      await this.stop(temp, proc)
     }
   }
 
@@ -847,6 +913,7 @@ export class PiConnection implements AgentConnection {
     own: boolean,
     resolve: Turn['resolve'],
     reject: Turn['reject'],
+    sent?: (ref: string) => void,
   ): Turn {
     const turn: Turn = {
       resolve,
@@ -857,19 +924,24 @@ export class PiConnection implements AgentConnection {
       stop: null,
       started: false,
       own,
+      ...(sent ? { sent } : {}),
     }
     session.turn = turn
     return turn
   }
 
-  async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
+  async prompt(
+    sessionId: string,
+    prompt: readonly PromptBlock[],
+    sent?: (ref: string) => void,
+  ): Promise<PromptResult> {
     const session = this.requireSession(sessionId)
     if (session.turn) throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
     const proc = await this.ready(session)
     const { message, images } = promptMessage(prompt)
     const command = images.length === 0 ? parseCommand(message) : null
     if (command) return this.runCommand(session, proc, command)
-    return this.run(session, proc, message, images)
+    return this.run(session, proc, message, images, sent)
   }
 
   private async run(
@@ -877,11 +949,14 @@ export class PiConnection implements AgentConnection {
     proc: Proc,
     text: string,
     images: readonly PiImage[],
+    sent?: (ref: string) => void,
   ): Promise<PromptResult> {
     session.cancelling = false
     const done = new Promise<PromptResult>((resolve, reject) => {
-      this.newTurn(session, false, resolve, reject)
+      this.newTurn(session, false, resolve, reject, sent)
     })
+    // Avoid unhandled rejection if the connection closes before `prompt` returns.
+    done.catch(() => {})
     const turn = session.turn!
     try {
       const answer = await proc.rpc.request<{ disposition?: PiDisposition } | undefined>({
@@ -1077,6 +1152,9 @@ export class PiConnection implements AgentConnection {
       case 'extension_ui_request':
         if (this.uiRequest(session, proc, event)) return
         break
+      case 'message_start':
+        this.noteUserRef(session, event.message)
+        break
       case 'message_update': {
         const call = event.assistantMessageEvent.toolCall
         if (event.assistantMessageEvent.type === 'toolcall_end' && call) {
@@ -1085,6 +1163,7 @@ export class PiConnection implements AgentConnection {
         break
       }
       case 'message_end':
+        this.noteUserRef(session, event.message)
         if (this.replied(session, event.message)) return
         break
       case 'tool_execution_start':
@@ -1118,6 +1197,15 @@ export class PiConnection implements AgentConnection {
     turn.started = true
     session.cancelling = false
     this.deliver(session.id, () => agentTurn('started'))
+  }
+
+  /** Records the turn's prompt timestamp once pi echoes it, ignoring later steered prompts. */
+  private noteUserRef(session: Session, message: PiMessage): void {
+    if (message.role !== 'user' || typeof message.timestamp !== 'number') return
+    const report = session.turn?.sent
+    if (!report) return
+    session.turn!.sent = undefined
+    report(`${TIMESTAMP_REF_PREFIX}${message.timestamp}`)
   }
 
   /** What a reply adds to its turn; true for a session whose replies are only collected. */

@@ -23,7 +23,9 @@ import {
   activeBranch,
   forkEntry,
   mcpTool,
+  rewindEntry,
   SessionMapper,
+  TIMESTAMP_REF_PREFIX,
   tokenTotals,
   toolFacts,
   typedText,
@@ -499,6 +501,7 @@ describe('a replay of stored entries', () => {
     ])
     expect(entries[0]).toMatchObject({
       content: [{ type: 'text', text: 'Reply with exactly: pong' }],
+      agentRef: 'd1fed4b3',
     })
   })
 
@@ -629,5 +632,101 @@ describe('where a fork that ends at a reply starts', () => {
     const last = branch.at(-1)!
     const point = { messageId: `${last.message!.timestamp}-0`, text: 'x', occurrence: 1 }
     expect(forkEntry(branch, point)).toEqual({ found: true, entryId: null })
+  })
+})
+
+describe('where an edit from a message cuts', () => {
+  const branch = activeBranch(stored.entries as PiEntry[], stored.leafId)
+  const users = branch.filter((entry) => entry.type === 'message' && entry.message?.role === 'user')
+
+  it('matches by replayed entry id and live timestamp reference', () => {
+    const second = users[1]!
+    expect(rewindEntry(branch, { ref: second.id, text: 'unrelated', occurrence: 1 })).toEqual({
+      entry: second,
+      hasPriorHistory: true,
+    })
+    expect(
+      rewindEntry(branch, {
+        ref: `${TIMESTAMP_REF_PREFIX}${second.message!.timestamp}`,
+        text: 'unrelated',
+        occurrence: 1,
+      }),
+    ).toEqual({ entry: second, hasPriorHistory: true })
+  })
+
+  it('marks the first user message as having no prior conversation even after metadata entries', () => {
+    const first = users[0]!
+    expect(rewindEntry(branch, { ref: first.id, text: '', occurrence: 1 })).toEqual({
+      entry: first,
+      hasPriorHistory: false,
+    })
+  })
+
+  it('falls back to matching prompt text and occurrence, including wrapped guide and skill prompts', () => {
+    const wrapped: PiEntry[] = [
+      {
+        type: 'message',
+        id: 'u1',
+        parentId: null,
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '<kettu-guide>\nGuide\n</kettu-guide>\n\ncheck src' }],
+        },
+      },
+      {
+        type: 'message',
+        id: 'a1',
+        parentId: 'u1',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+      },
+      {
+        type: 'message',
+        id: 'u2',
+        parentId: 'a1',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: '<skill name="lint" location="/s/lint/SKILL.md">\nBody\n</skill>\n\ncheck src',
+            },
+          ],
+        },
+      },
+    ]
+    expect(rewindEntry(wrapped, { ref: null, text: 'check src', occurrence: 1 })).toEqual({
+      entry: wrapped[0],
+      hasPriorHistory: false,
+    })
+    expect(rewindEntry(wrapped, { ref: null, text: 'check src', occurrence: 2 })).toEqual({
+      entry: wrapped[2],
+      hasPriorHistory: true,
+    })
+    expect(
+      rewindEntry(wrapped, { ref: null, text: '/skill:lint check src', occurrence: 1 }),
+    ).toEqual({
+      entry: wrapped[2],
+      hasPriorHistory: true,
+    })
+    expect(rewindEntry(wrapped, { ref: null, text: 'missing', occurrence: 1 })).toBeNull()
+  })
+
+  it('ignores abandoned branches outside the active branch', () => {
+    const tree: PiEntry[] = [
+      { type: 'message', id: 'u1', parentId: null, message: { role: 'user', content: 'first' } },
+      {
+        type: 'message',
+        id: 'abandoned',
+        parentId: 'u1',
+        message: { role: 'user', content: 'old' },
+      },
+      { type: 'message', id: 'kept', parentId: 'u1', message: { role: 'user', content: 'new' } },
+    ]
+    const active = activeBranch(tree, 'kept')
+    expect(rewindEntry(active, { ref: 'abandoned', text: 'old', occurrence: 1 })).toBeNull()
+    expect(rewindEntry(active, { ref: 'kept', text: 'new', occurrence: 1 })).toEqual({
+      entry: tree[2],
+      hasPriorHistory: true,
+    })
   })
 })

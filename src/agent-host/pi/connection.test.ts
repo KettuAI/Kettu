@@ -515,11 +515,18 @@ describe('starting a session', () => {
 describe('a turn', () => {
   it('shows the reply and resolves with its tokens once pi settled', async () => {
     const { connection, spawned, cwd } = await connect()
+    const init = await connection.initialize()
+    expect(init.capabilities.rewind).toBe(true)
+    expect(init.capabilities.rewindFiles).toBeUndefined()
     const { sessionId } = await connection.newSession(cwd)
     const seen = watch()
     connection.register(sessionId, seen.target)
     spawned[0]!.runs.push(reply)
-    const result = await connection.prompt(sessionId, text('Reply with exactly: pong'))
+    const refs: string[] = []
+    const result = await connection.prompt(sessionId, text('Reply with exactly: pong'), (ref) =>
+      refs.push(ref),
+    )
+    expect(refs).toEqual(['ts:1795102903349'])
     expect(result).toEqual({
       stopReason: 'end_turn',
       tokens: { total: 3216, input: 2956, output: 4, thought: 0, cacheRead: 256, cacheWrite: 0 },
@@ -864,6 +871,120 @@ describe('sessions pi keeps', () => {
     // The whole copy the fork started as is gone; the source is untouched.
     await expect(stat(copy)).rejects.toThrow()
     expect((await stat(source)).isFile()).toBe(true)
+  })
+
+  it('rewinds before a middle user message with native fork, keeping the source file intact', async () => {
+    const setup = await connect({
+      script: (pi, index) => {
+        if (index !== 1) return
+        pi.handlers.get_entries = () => stored
+        pi.handlers.fork = (command) => {
+          pi.state = {
+            ...pi.state,
+            sessionId: 'pi-rewound',
+            sessionFile: path.join(setup.agentDir, 'sessions', 'x', 't_pi-rewound.jsonl'),
+          }
+          return { text: String(command.entryId), cancelled: false }
+        }
+        pi.handlers.set_session_name = () => undefined
+      },
+    })
+    const { connection, spawned, cwd } = setup
+    const source = await sessionFile(setup, 'pi-session-1')
+    await connection.resumeSession('pi-session-1', cwd)
+    await connection.closeSession('pi-session-1')
+
+    const rewoundFile = path.join(setup.agentDir, 'sessions', 'x', 't_pi-rewound.jsonl')
+    await mkdir(path.dirname(rewoundFile), { recursive: true })
+    await writeFile(
+      rewoundFile,
+      `${JSON.stringify({ type: 'session', version: 3, id: 'pi-rewound', cwd })}\n`,
+    )
+
+    const target = stored.entries.find((entry) =>
+      JSON.stringify(entry).includes('Read notes.txt with the read tool'),
+    )!
+    const cut = await connection.rewindSession(
+      'pi-session-1',
+      cwd,
+      { ref: `ts:${target.message!.timestamp}`, text: 'Read notes.txt', occurrence: 1 },
+      'Fix notes',
+    )
+    expect(cut).toEqual({ sessionId: 'pi-rewound' })
+    expect(spawned[1]!.options.args.slice(-2)).toEqual(['--session', source])
+    expect(spawned[1]!.sent('fork')[0]).toMatchObject({ entryId: target.id })
+    expect(spawned[1]!.sent('set_session_name')[0]).toMatchObject({ name: 'Fix notes' })
+    expect(spawned[1]!.exitCode).toBe(0)
+    // Source file stays untouched, and resuming the rewound session opens its new file.
+    expect((await stat(source)).isFile()).toBe(true)
+    await connection.resumeSession('pi-rewound', cwd)
+    expect(spawned[2]!.options.args.slice(-2)).toEqual(['--session', rewoundFile])
+  })
+
+  it('returns an empty session id without forking when rewinding the first user message', async () => {
+    const setup = await connect({
+      script: (pi) => {
+        pi.handlers.get_entries = () => stored
+      },
+    })
+    const { connection, spawned, cwd } = setup
+    await sessionFile(setup, 'pi-session-1')
+    const first = stored.entries.find((entry) =>
+      JSON.stringify(entry).includes('Reply with exactly: pong'),
+    )!
+    const cut = await connection.rewindSession(
+      'pi-session-1',
+      cwd,
+      { ref: first.id, text: 'Reply with exactly: pong', occurrence: 1 },
+      null,
+    )
+    expect(cut).toEqual({ sessionId: '' })
+    expect(spawned[0]!.sent('fork')).toEqual([])
+    expect(spawned[0]!.exitCode).toBe(0)
+  })
+
+  it('fails cleanly when the rewind target is missing or an extension cancels the fork', async () => {
+    const setup = await connect({
+      script: (pi, index) => {
+        pi.handlers.get_entries = () => stored
+        if (index === 1) {
+          pi.handlers.fork = () => ({ cancelled: true })
+        }
+      },
+    })
+    const { connection, spawned, cwd } = setup
+    await expect(
+      connection.rewindSession(
+        'missing-session',
+        cwd,
+        { ref: null, text: 'anything', occurrence: 1 },
+        null,
+      ),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+
+    await sessionFile(setup, 'pi-session-1')
+    await expect(
+      connection.rewindSession(
+        'pi-session-1',
+        cwd,
+        { ref: 'not-in-branch', text: 'does not exist', occurrence: 1 },
+        null,
+      ),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    expect(spawned[0]!.exitCode).toBe(0)
+
+    const second = stored.entries.find((entry) =>
+      JSON.stringify(entry).includes('Read notes.txt with the read tool'),
+    )!
+    await expect(
+      connection.rewindSession(
+        'pi-session-1',
+        cwd,
+        { ref: second.id, text: 'Read notes.txt', occurrence: 1 },
+        null,
+      ),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    expect(spawned[1]!.exitCode).toBe(0)
   })
 })
 

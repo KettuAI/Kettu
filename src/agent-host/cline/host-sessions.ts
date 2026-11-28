@@ -3,7 +3,7 @@
 // mode makes one, so a session nobody prompted leaves nothing in Cline's store. Nothing here
 // reports usage: the SDK is given no telemetry service.
 
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'
 import {
   ERROR,
@@ -24,6 +24,8 @@ import {
   type PromptParams,
   type QuestionParams,
   type QuestionResult,
+  type RewindParams,
+  type RewindResult,
   type SetParams,
   type SetResult,
   type SignInParams,
@@ -73,6 +75,16 @@ const AUTH_ERRORS = [
 const TOOL_NAME_LIMIT = 64
 /** The input a compaction by hand shrinks toward for a model no catalog sizes, as Cline's CLI. */
 const FALLBACK_INPUT_TOKENS = 64_000
+/** Synthetic user-role notices inserted by Cline's runtime that do not count as user turns. */
+const SYNTHETIC_USER_KINDS: ReadonlySet<string> = new Set([
+  'auto_compaction',
+  'compaction_budget_emergency',
+  'completion_reminder',
+  'loop_detection_notice',
+  'manual_compaction',
+  'mistake_stop_notice',
+  'recovery_notice',
+])
 
 /**
  * The input a model takes, which Cline compacts against: a catalog that names it beside the whole
@@ -89,7 +101,7 @@ export class HostError extends Error {
     readonly code: number,
     message: string,
     // The process cannot translate, so the agent host words a refusal it names by reason.
-    readonly reason?: 'signIn' | 'betweenTurns' | 'compactionOff',
+    readonly reason?: 'signIn' | 'betweenTurns' | 'compactionOff' | 'noPoint' | 'compacted',
   ) {
     super(message)
   }
@@ -138,6 +150,54 @@ function isAuthError(message: string): boolean {
   return AUTH_ERRORS.some((pattern) => text.includes(pattern))
 }
 
+/** Extracts user-visible text from a persisted Cline message. */
+function messageText(message: SdkMessage): string {
+  if (typeof message.content === 'string') return message.content
+  if (!Array.isArray(message.content)) return ''
+  return message.content
+    .flatMap((item) => {
+      const block =
+        typeof item === 'object' && item !== null
+          ? (item as { type?: unknown; text?: unknown })
+          : null
+      return block?.type === 'text' && typeof block.text === 'string' ? [block.text] : []
+    })
+    .join('\n')
+}
+
+/** Fallback user-run span when an older or stand-in SDK does not export `getUserRunSpan`. */
+function fallbackUserRunSpan(message: SdkMessage): number {
+  if (message.role !== 'user') return 0
+  const meta = message.metadata
+  if (meta?.displayOnly === true) return 0
+  const kind = typeof meta?.kind === 'string' ? meta.kind : undefined
+  const stored = meta?.userRunSpan
+  const span =
+    typeof stored === 'number' && Number.isInteger(stored) && stored >= 0 ? stored : undefined
+  if (kind === 'compaction' || kind === 'compaction_summary') return span ?? 1
+  if (span !== undefined) return span
+  if (kind && SYNTHETIC_USER_KINDS.has(kind)) return 0
+  if (typeof message.content === 'string') return message.content.trim() ? 1 : 0
+  if (!Array.isArray(message.content)) return 0
+  let hasToolResult = false
+  let hasMedia = false
+  let hasText = false
+  for (const item of message.content) {
+    const block =
+      typeof item === 'object' && item !== null
+        ? (item as { type?: unknown; text?: unknown })
+        : null
+    if (!block) continue
+    if (block.type === 'tool_result' || block.type === 'tool-result') hasToolResult = true
+    else if (block.type === 'image' || block.type === 'file') hasMedia = true
+    else if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+      hasText = true
+    }
+  }
+  if (hasToolResult && !hasText) return 0
+  return hasText || hasMedia ? 1 : 0
+}
+
 /** The name the model calls an MCP tool by, as Cline's own transform makes it. */
 export function mcpToolName(serverName: string, toolName: string): string {
   const raw = `${serverName}__${toolName}`
@@ -173,6 +233,8 @@ export class Host {
         return this.steer(params as PromptParams)
       case METHOD.compact:
         return this.compact((params as { sessionId: string }).sessionId)
+      case METHOD.rewind:
+        return this.rewind(params as RewindParams)
       case METHOD.cancel:
         return this.cancel((params as { sessionId: string }).sessionId)
       case METHOD.set:
@@ -496,6 +558,10 @@ export class Host {
     session.fatal = null
     try {
       const core = await this.ensureCore(session)
+      const before = core.readLiveMessages
+        ? await core.readLiveMessages(session.id).catch(() => [])
+        : await core.readMessages(session.id).catch(() => [])
+      const userRef = String(this.countUserRuns(before) + 1)
       const result = await core.send({
         sessionId: session.id,
         prompt: params.text,
@@ -515,6 +581,7 @@ export class Host {
       return {
         finishReason,
         model: result?.model?.id ?? session.settings.model,
+        userRef,
         usage: usage
           ? {
               inputTokens: usage.inputTokens ?? 0,
@@ -627,6 +694,182 @@ export class Host {
       session.running = false
       session.compacting = null
     }
+  }
+
+  private userRunSpan(message: SdkMessage): number {
+    return this.sdk.getUserRunSpan ? this.sdk.getUserRunSpan(message) : fallbackUserRunSpan(message)
+  }
+
+  private countUserRuns(messages: readonly SdkMessage[]): number {
+    let total = 0
+    for (const message of messages) total += this.userRunSpan(message)
+    return total
+  }
+
+  /**
+   * Cuts a Cline session before the selected user run by writing a new persisted session seeded
+   * with the canonical prefix via `initialMessages`. Leaves the original session intact and never
+   * touches workspace files.
+   */
+  private async rewind(params: RewindParams): Promise<RewindResult> {
+    const existing = this.sessions.get(params.sessionId)
+    if (existing?.running) throw new HostError(ERROR.failed, 'A turn is already running')
+    const store = await this.store()
+    const messages = existing?.core
+      ? existing.core.readLiveMessages
+        ? await existing.core.readLiveMessages(params.sessionId)
+        : await existing.core.readMessages(params.sessionId)
+      : (existing?.messages ?? (await store.readMessages(params.sessionId).catch(() => [])))
+    if (messages.length === 0) {
+      throw new HostError(ERROR.failed, 'The message is not in the session history', 'noPoint')
+    }
+
+    const runs: {
+      index: number
+      firstRun: number
+      runCount: number
+      span: number
+      text: string
+    }[] = []
+    let cursor = 0
+    for (let index = 0; index < messages.length; index++) {
+      const message = messages[index]!
+      const span = this.userRunSpan(message)
+      if (span < 1) continue
+      const firstRun = cursor + 1
+      cursor += span
+      runs.push({ index, firstRun, runCount: cursor, span, text: messageText(message) })
+    }
+
+    const line = params.text.trim()
+    let target: (typeof runs)[number] | undefined
+    const refNumber =
+      params.ref !== null && /^\d+$/.test(params.ref) ? Number.parseInt(params.ref, 10) : null
+    if (refNumber !== null && refNumber >= 1) {
+      const byRef = runs.find((run) => run.firstRun <= refNumber && refNumber <= run.runCount)
+      if (byRef) {
+        if (byRef.span !== 1) {
+          throw new HostError(
+            ERROR.failed,
+            `Cannot fork before run ${refNumber} because it is folded into a compacted message`,
+            'compacted',
+          )
+        }
+        if (line === '' || byRef.text.includes(line)) target = byRef
+      }
+    }
+    if (!target) {
+      let seen = 0
+      for (const run of runs) {
+        if (line !== '' && !run.text.includes(line)) continue
+        if (++seen === params.occurrence) {
+          target = run
+          break
+        }
+      }
+    }
+    if (!target) {
+      throw new HostError(ERROR.failed, 'The message is not in the session history', 'noPoint')
+    }
+    if (target.span !== 1) {
+      throw new HostError(
+        ERROR.failed,
+        `Cannot fork before run ${target.runCount} because it is folded into a compacted message`,
+        'compacted',
+      )
+    }
+
+    let trimmed: SdkMessage[]
+    try {
+      trimmed = this.sdk.trimMessagesBeforeUserRun
+        ? this.sdk.trimMessagesBeforeUserRun(messages, target.runCount)
+        : messages.slice(0, target.index)
+    } catch (error) {
+      const text = messageOf(error)
+      throw new HostError(
+        ERROR.failed,
+        text,
+        /folded into a compacted/i.test(text) ? 'compacted' : 'noPoint',
+      )
+    }
+    if (trimmed.length === 0) return { sessionId: '' }
+
+    const row = await store.get(params.sessionId).catch(() => undefined)
+    const provider =
+      existing?.settings.provider ?? row?.provider ?? this.lastProvider() ?? DEFAULT_PROVIDER
+    const model = existing?.settings.model ?? row?.model ?? (await this.models(provider)).model
+    const mode = existing?.settings.mode ?? 'act'
+    const thinking = existing?.settings.thinking ?? this.thinks(provider)
+    const cwd = params.cwd || existing?.cwd || row?.cwd || process.cwd()
+    const newSessionId = `${Date.now()}_${randomBytes(4).toString('hex')}_kettu`
+
+    const compactionSource = existing?.core ?? store
+    const priorCompaction = await compactionSource
+      .readSessionCompactionState(params.sessionId)
+      .catch(() => undefined)
+    let initialCompactionState: unknown
+    if (priorCompaction) {
+      const projected = this.sdk.projectSessionCompactionState(priorCompaction, trimmed)
+      if (projected) {
+        initialCompactionState = this.sdk.createSessionCompactionState({
+          sourceMessages: trimmed,
+          compactedMessages: projected,
+          conversationId: newSessionId,
+          systemPrompt: (priorCompaction as { system_prompt?: string }).system_prompt,
+        })
+      }
+    }
+
+    const sessionMetadata = this.sdk.createForkSessionMetadata?.({
+      metadata: row?.metadata ?? null,
+      forkedFromSessionId: params.sessionId,
+      forkedAt: new Date().toISOString(),
+      source: 'cli',
+      beforeRunCount: target.runCount,
+    })
+
+    const saved = this.settings.getProviderSettings(provider)
+    const effort = saved?.reasoning?.effort
+    const core = await this.sdk.ClineCore.create({ clientName: 'kettu', backendMode: 'local' })
+    try {
+      const systemPrompt = this.sdk.getClineDefaultSystemPrompt({
+        ide: 'Kettu',
+        workspaceRoot: cwd,
+        workspaceName: path.basename(cwd),
+        metadata: await this.sdk.buildWorkspaceMetadata(cwd),
+        ...(existing?.instructions ? { rules: existing.instructions } : {}),
+        mode,
+        providerId: provider,
+        platform: process.platform,
+        planModeSwitchTool: false,
+      })
+      await core.start({
+        source: 'cli',
+        interactive: true,
+        config: {
+          sessionId: newSessionId,
+          providerId: provider,
+          modelId: model,
+          apiKey: this.sdk.getPersistedProviderApiKey(provider, saved) ?? '',
+          systemPrompt,
+          mode,
+          thinking,
+          ...(thinking && effort && effort !== 'none' ? { reasoningEffort: effort } : {}),
+          enableTools: false,
+          enableSpawnAgent: false,
+          enableAgentTeams: false,
+          cwd,
+          workspaceRoot: cwd,
+          compaction: this.compacts(),
+        },
+        initialMessages: trimmed,
+        ...(initialCompactionState ? { initialCompactionState } : {}),
+        ...(sessionMetadata ? { sessionMetadata } : {}),
+      })
+    } finally {
+      await core.dispose('kettu_rewind').catch(() => {})
+    }
+    return { sessionId: newSessionId }
   }
 
   private async steer(params: PromptParams): Promise<SteerResult> {

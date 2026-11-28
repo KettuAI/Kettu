@@ -171,6 +171,8 @@ export interface PromptParams {
 export interface TurnResult {
   finishReason: string
   model: string | null
+  /** 1-based user run index recorded for edit-from-here rewind. */
+  userRef?: string
   usage: {
     inputTokens: number
     outputTokens: number
@@ -178,6 +180,19 @@ export interface TurnResult {
     cacheWriteTokens: number
     cost: number | null
   } | null
+}
+
+export interface RewindParams {
+  sessionId: string
+  cwd: string
+  ref: string | null
+  text: string
+  occurrence: number
+}
+
+export interface RewindResult {
+  /** New forked session id carrying messages before the edited prompt, or '' when none precede it. */
+  sessionId: string
 }
 
 /** What a compaction the user asked for came to. */
@@ -251,6 +266,7 @@ export const METHOD = {
   prompt: 'session/prompt',
   steer: 'session/steer',
   compact: 'session/compact',
+  rewind: 'session/rewind',
   cancel: 'session/cancel',
   set: 'session/set',
   close: 'session/close',

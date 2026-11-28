@@ -614,6 +614,7 @@
     "title": "从这里重新编辑？",
     "body_other": "这条消息和它之后的对话都会拿掉，一共 {{count}} 轮。消息回到输入框。",
     "files_other": "之后改过的 {{count}} 个文件保持原样",
+    "filesStay": "之后的文件改动保持原样",
     "filesBack": "之后改过的文件会退回原样，放回原处可以恢复",
     "stopsTurn": "会停掉正在跑的一轮",
     "stopsTasks_other": "会停掉 {{count}} 个后台任务",

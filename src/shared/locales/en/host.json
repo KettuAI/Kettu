@@ -1263,6 +1263,9 @@
       "command": "Compact the session’s context",
       "nothing": "There’s nothing to compact yet.",
       "off": "Context compaction is turned off in Cline’s own settings."
+    },
+    "rewind": {
+      "compacted": "This message was folded into an earlier compaction and cannot be edited from"
     }
   },
   "question": {

@@ -43,7 +43,17 @@ class FakeCore {
   async start(input: SdkStartInput): Promise<{ sessionId: string }> {
     this.started = input
     this.messages = [...(input.initialMessages ?? [])]
-    return { sessionId: String(input.config.sessionId) }
+    const sessionId = String(input.config.sessionId)
+    if (this.messages.length > 0) {
+      this.world.stored[sessionId] = [...this.messages]
+      this.world.rows[sessionId] = {
+        sessionId,
+        provider: String(input.config.providerId ?? 'anthropic'),
+        model: String(input.config.modelId ?? 'model-a'),
+        cwd: String(input.config.cwd ?? '/work/app'),
+      }
+    }
+    return { sessionId }
   }
 
   async send(input: {
@@ -100,8 +110,8 @@ class FakeCore {
   async readMessages(sessionId: string): Promise<SdkMessage[]> {
     return this.started ? this.messages : (this.world.stored[sessionId] ?? [])
   }
-  async readSessionCompactionState(): Promise<unknown> {
-    return undefined
+  async readSessionCompactionState(sessionId: string): Promise<unknown> {
+    return this.world.compactionStates?.[sessionId]
   }
   async updateSessionCompactionState(
     _sessionId: string,
@@ -125,6 +135,10 @@ interface World {
   lastUsed: string | null
   rows: Record<string, { sessionId: string; provider: string; model: string; cwd: string }>
   stored: Record<string, SdkMessage[]>
+  compactionStates?: Record<
+    string,
+    { sourceCount: number; messages: SdkMessage[]; system_prompt?: string }
+  >
   /** The compaction the user chose in Cline; undefined for one who never chose. */
   compaction?: 'basic' | 'agentic' | 'off'
   script: Script
@@ -207,7 +221,13 @@ function fakeSdk(w: World): Sdk {
       `mode=${String(options.mode)} rules=${String(options.rules ?? '')}`,
     buildWorkspaceMetadata: async () => '',
     readCompactionModeGlobally: () => w.compaction,
-    projectSessionCompactionState: () => undefined,
+    projectSessionCompactionState: (state, messages) => {
+      const s = state as { sourceCount?: number; messages?: SdkMessage[] } | undefined
+      if (!s || typeof s.sourceCount !== 'number' || s.sourceCount > messages.length) {
+        return undefined
+      }
+      return [...(s.messages ?? []), ...messages.slice(s.sourceCount)]
+    },
     createSessionCompactionState: (input) => ({ kept: input }),
     toProviderConfig: (settings) => ({ fromSettings: settings }),
     // Like the SDK's, a pass says when it starts and ends; it is undefined for a config that
@@ -334,6 +354,7 @@ describe('Cline host sessions', () => {
     expect(result).toEqual({
       finishReason: 'completed',
       model: 'model-a',
+      userRef: '1',
       usage: {
         inputTokens: 10,
         outputTokens: 2,
@@ -600,6 +621,146 @@ describe('Cline host sessions', () => {
       host.serve(METHOD.prompt, { sessionId: 'none', text: 'x', images: [], files: [] }),
     ).rejects.toMatchObject({ code: ERROR.noSession })
     await expect(host.serve('nope', {})).rejects.toBeInstanceOf(HostError)
+  })
+
+  it('rewinds a session to a trimmed fork, leaving the source intact, and handles first-turn rewind', async () => {
+    const history: SdkMessage[] = [
+      { role: 'user', content: 'first prompt' },
+      { role: 'assistant', content: 'first reply' },
+      { role: 'user', content: 'second prompt' },
+      { role: 'assistant', content: 'second reply' },
+      { role: 'user', content: 'third prompt' },
+      { role: 'assistant', content: 'third reply' },
+    ]
+    const w = world({
+      rows: {
+        s1: { sessionId: 's1', provider: 'anthropic', model: 'model-a', cwd: '/work/app' },
+      },
+      stored: { s1: [...history] },
+    })
+    const { host } = setup(w)
+
+    // Middle message: creates a new persisted session seeded with the prefix before run 2.
+    const mid = (await host.serve(METHOD.rewind, {
+      sessionId: 's1',
+      cwd: '/work/app',
+      ref: '2',
+      text: 'second prompt',
+      occurrence: 1,
+    })) as { sessionId: string }
+    expect(mid.sessionId).toMatch(/^\d+_[0-9a-f]{8}_kettu$/)
+    expect(mid.sessionId).not.toBe('s1')
+    expect(w.stored[mid.sessionId]).toEqual(history.slice(0, 2))
+    expect(w.stored.s1).toEqual(history)
+    const forkCore = w.cores.at(-1)!
+    expect(forkCore.started?.config).toMatchObject({
+      sessionId: mid.sessionId,
+      enableTools: false,
+      enableSpawnAgent: false,
+      enableAgentTeams: false,
+    })
+    expect(forkCore.disposed).toBe('kettu_rewind')
+
+    // First message: returns empty session id without creating a new core.
+    const coresBefore = w.cores.length
+    const first = (await host.serve(METHOD.rewind, {
+      sessionId: 's1',
+      cwd: '/work/app',
+      ref: '1',
+      text: 'first prompt',
+      occurrence: 1,
+    })) as { sessionId: string }
+    expect(first).toEqual({ sessionId: '' })
+    expect(w.cores).toHaveLength(coresBefore)
+  })
+
+  it('falls back to text + occurrence when ref is shifted and preserves or drops compaction state accurately', async () => {
+    const history: SdkMessage[] = [
+      { role: 'user', content: 'alpha' },
+      { role: 'assistant', content: 'r1' },
+      { role: 'user', content: 'steered note' },
+      { role: 'user', content: 'beta' },
+      { role: 'assistant', content: 'r2' },
+      { role: 'user', content: 'gamma' },
+      { role: 'assistant', content: 'r3' },
+    ]
+    const w = world({
+      rows: { s1: { sessionId: 's1', provider: 'anthropic', model: 'model-a', cwd: '/work/app' } },
+      stored: { s1: history },
+      compactionStates: {
+        s1: {
+          sourceCount: 5,
+          messages: [{ role: 'user', content: 'summary of alpha+beta' }],
+          system_prompt: 'sys',
+        },
+      },
+    })
+    const { host } = setup(w)
+
+    // Rewinding after the compaction boundary preserves projected compaction state rebound to new id.
+    const afterCompaction = (await host.serve(METHOD.rewind, {
+      sessionId: 's1',
+      cwd: '/work/app',
+      ref: '3', // shifted by the steered note; text matching still finds 'gamma' (run 4)
+      text: 'gamma',
+      occurrence: 1,
+    })) as { sessionId: string }
+    expect(w.stored[afterCompaction.sessionId]).toEqual(history.slice(0, 5))
+    expect(w.cores.at(-1)!.started?.initialCompactionState).toEqual({
+      kept: expect.objectContaining({
+        conversationId: afterCompaction.sessionId,
+        systemPrompt: 'sys',
+      }),
+    })
+
+    // Rewinding before the compaction boundary drops the stale compaction state.
+    const beforeCompaction = (await host.serve(METHOD.rewind, {
+      sessionId: 's1',
+      cwd: '/work/app',
+      ref: null,
+      text: 'beta',
+      occurrence: 1,
+    })) as { sessionId: string }
+    expect(w.stored[beforeCompaction.sessionId]).toEqual(history.slice(0, 3))
+    expect(w.cores.at(-1)!.started?.initialCompactionState).toBeUndefined()
+  })
+
+  it('refuses rewind when the message is missing or folded into a compacted summary', async () => {
+    const w = world({
+      rows: { s1: { sessionId: 's1', provider: 'anthropic', model: 'model-a', cwd: '/work/app' } },
+      stored: {
+        s1: [
+          {
+            role: 'user',
+            content: 'compacted summary of turns 1-2',
+            metadata: { kind: 'compaction_summary', userRunSpan: 2 },
+          },
+          { role: 'user', content: 'turn 3' },
+          { role: 'assistant', content: 'reply 3' },
+        ],
+      },
+    })
+    const { host } = setup(w)
+
+    await expect(
+      host.serve(METHOD.rewind, {
+        sessionId: 's1',
+        cwd: '/work/app',
+        ref: '1',
+        text: 'turn 1',
+        occurrence: 1,
+      }),
+    ).rejects.toMatchObject({ code: ERROR.failed, reason: 'compacted' })
+
+    await expect(
+      host.serve(METHOD.rewind, {
+        sessionId: 's1',
+        cwd: '/work/app',
+        ref: null,
+        text: 'nonexistent',
+        occurrence: 1,
+      }),
+    ).rejects.toMatchObject({ code: ERROR.failed, reason: 'noPoint' })
   })
 })
 
