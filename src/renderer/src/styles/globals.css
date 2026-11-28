@@ -646,6 +646,9 @@
   ::highlight(reply-comment-hover) {
     background-color: var(--comment-mark-hover);
   }
+  ::highlight(file-note) {
+    background-color: var(--comment-mark);
+  }
   input,
   textarea,
   [contenteditable] {

@@ -1,6 +1,12 @@
 import { Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { fileQuote, selectedPassage } from './file-quote'
+import {
+  clipPassageText,
+  fileNoteMessage,
+  fileQuote,
+  formatPassageLines,
+  selectedPassage,
+} from './file-quote'
 
 const doc = Text.of(['one', '  two', 'three', '', 'five'])
 const at = (line: number, column = 0) => doc.line(line).from + column
@@ -58,5 +64,45 @@ describe('fileQuote', () => {
     expect(quote.length).toBeLessThan(2100)
     expect(quote.endsWith('\n…\n```')).toBe(true)
     expect(quote).toContain('`a.txt#L1-400`')
+  })
+})
+
+describe('formatPassageLines, clipPassageText, and fileNoteMessage', () => {
+  it('formats single-line, multi-line, and prose line badges cleanly', () => {
+    expect(formatPassageLines(null)).toBeNull()
+    expect(formatPassageLines([12, 12])).toBe('L12')
+    expect(formatPassageLines([12, 18])).toBe('L12\u2013L18')
+  })
+
+  it('clips oversized excerpts at line boundaries consistently with fileQuote', () => {
+    const short = 'const x = 1\nconst y = 2'
+    expect(clipPassageText(short)).toBe(short)
+
+    const long = Array.from({ length: 400 }, (_, i) => `line ${i}`).join('\n')
+    const clipped = clipPassageText(long)
+    expect(clipped.length).toBeLessThan(2050)
+    expect(clipped.endsWith('\n…')).toBe(true)
+  })
+
+  it('reuses fileQuote to attach only the selected excerpt together with the note', () => {
+    const passage = selectedPassage(doc, at(2), at(4))!
+    const message = fileNoteMessage('src/example.ts', passage, '  Please simplify this branch.  ')
+    expect(message).toBe(
+      '`src/example.ts#L2-3`\n```ts startLine=2\n  two\nthree\n```\n\nPlease simplify this branch.',
+    )
+    expect(message).not.toContain('one')
+    expect(message).not.toContain('five')
+  })
+
+  it('formats single-line and rendered Markdown notes without duplicating blank lines', () => {
+    expect(fileNoteMessage('Makefile', { lines: [4, 4], text: 'all:' }, 'Add test target')).toBe(
+      '`Makefile#L4`\n```text startLine=4\nall:\n```\n\nAdd test target',
+    )
+    expect(fileNoteMessage('README.md', { lines: null, text: 'Old intro' }, 'Clarify setup')).toBe(
+      '`README.md`\n> Old intro\n\nClarify setup',
+    )
+    expect(fileNoteMessage('Makefile', { lines: [4, 4], text: 'all:' }, '   ')).toBe(
+      fileQuote('Makefile', { lines: [4, 4], text: 'all:' }),
+    )
   })
 })
