@@ -9,6 +9,7 @@
 import { addLogSecret } from '@shared/log/process-log'
 import { randomBytes } from 'node:crypto'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
+import { deflateRawSync } from 'node:zlib'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { HostMethod, HostResult } from '@shared/agent-host'
 import { errorAnswer, messageHeader } from '@shared/artifact-capabilities'
@@ -20,7 +21,7 @@ import type { PortChannel } from '@shared/port-channel'
 import { isPortError, type PortError } from '@shared/port-rpc'
 import type { ActivityActor, NewActivity } from '@shared/remote/activity'
 import { forbiddenToDevices } from '@shared/remote/allow-list'
-import { Channel, type ChannelMessage } from '@shared/remote/channel'
+import { Channel, MAX_MESSAGE, type ChannelMessage } from '@shared/remote/channel'
 import {
   normalizeDeviceName,
   otherAccount,
@@ -67,6 +68,7 @@ import {
   negotiate,
   parseHello,
   parsePromote,
+  RESPONSE_STREAM_FEATURE,
   RESUME_MS,
   RESUME_VERSION,
   SESSION_LIST_DELTA_FEATURE,
@@ -81,6 +83,7 @@ import {
   type Hello,
   type HostRenamed,
   type Renamed,
+  type ResponseStream,
   type Standby,
   type TerminalAccess,
   type Welcome,
@@ -100,6 +103,7 @@ import {
   isUploadRef,
   MAX_MEDIA_STREAMS,
   MAX_UPLOADS,
+  STREAMED_RESPONSE_BYTES,
   type MediaReadResult,
   type StreamCancel,
   type StreamRef,
@@ -637,6 +641,8 @@ class DeviceConnection {
   device: PairedDevice | null = null
   /** Whether the device's hello said it reads `relay.regions`. */
   readsRegions = false
+  /** 客户端是否在 hello 中声明支持超过 64 KiB 的大响应走字节流分块传输。 */
+  responseStream = false
   /** The removed device whose key the handshake named, told why at its hello. */
   private removed: RemovedDevice | null = null
   private state: ConnectionState = 'handshake'
@@ -913,6 +919,7 @@ class DeviceConnection {
     if (!hello) return this.failPairing('invalid')
     clearTimeout(this.timer)
     this.readsRegions = hello.features?.includes(REGIONS_CHANNEL_FEATURE) === true
+    this.responseStream = hello.features?.includes(RESPONSE_STREAM_FEATURE) === true
     const version = negotiate(hello.protocol)
     if (typeof version !== 'number') return this.failPairing(version)
     const joining = this.pairing !== null || this.discovery !== null
@@ -1176,6 +1183,8 @@ class DeviceSession {
   /** Whether the last welcome named the regions, and whether the device reads them. */
   private regionsOffered = false
   private readsRegions = false
+  /** 设备当前连接是否支持 `response-stream` 大响应流式分块传输。 */
+  private responseStream = false
   /** What the device last heard of the regions, and when; and the send held back meanwhile. */
   private regionsSent: { shape: string; rtts: string; at: number } | null = null
   private regionsTimer: ReturnType<typeof setTimeout> | null = null
@@ -1535,6 +1544,7 @@ class DeviceSession {
     if (this.resumable) this.token = this.server.issueToken(this, this.token)
     this.regionsOffered = this.server.options.regions?.offered() === true
     this.readsRegions = this.regionsOffered && connection.readsRegions
+    this.responseStream = connection.responseStream
     const welcome: Welcome = {
       type: 'welcome',
       protocol: this.version,
@@ -1544,6 +1554,7 @@ class DeviceSession {
         LOAD_FEATURE,
         TOOL_OUTPUT_APPEND_FEATURE,
         SESSION_LIST_DELTA_FEATURE,
+        RESPONSE_STREAM_FEATURE,
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
           ? [PUSH_FEATURE, WEB_PUSH_FEATURE]
           : []),
@@ -1983,12 +1994,51 @@ class DeviceSession {
 
   /** A message from the agent host on its way to the device, a result's binary values as streams. */
   private toDevice(data: unknown): void {
-    const response = data as { type?: unknown; result?: unknown }
+    const response = data as { type?: unknown; id?: unknown; result?: unknown }
     const binary =
       typeof data === 'object' && data !== null && response.type === 'response'
         ? findPlaces(response as Record<string, unknown>, 'result', isBinary)
         : []
-    if (binary.length === 0) return this.send(data)
+    if (binary.length === 0) {
+      // 客户端支持 response-stream 时，超过 64 KiB 的纯 JSON 回答改走字节流分块发送，避免阻塞高优控制帧。
+      if (
+        this.responseStream &&
+        typeof data === 'object' &&
+        data !== null &&
+        response.type === 'response' &&
+        typeof response.id === 'number' &&
+        response.result !== undefined
+      ) {
+        const json = JSON.stringify(response.result)
+        if (json !== undefined) {
+          const raw = Buffer.from(json, 'utf8')
+          if (raw.length > STREAMED_RESPONSE_BYTES) {
+            if (raw.length > MAX_MESSAGE) {
+              return this.send({
+                type: 'error',
+                id: response.id,
+                error: { code: 'internal', message: t('remote.answerTooLong') },
+              })
+            }
+            const deflated = deflateRawSync(raw)
+            const useDeflate = deflated.length < raw.length
+            const payload = useDeflate ? deflated : raw
+            const { stream } = this.downloads.open(bytesSource(payload))
+            const header: ResponseStream = {
+              type: 'response.stream',
+              id: response.id,
+              stream,
+              size: payload.length,
+              ...(useDeflate ? { encoding: 'deflate' } : {}),
+            }
+            this.send(header)
+            this.downloads.start(stream)
+            return
+          }
+        }
+      }
+      return this.send(data)
+    }
     const streams = binary.map(({ holder, key }) => {
       const bytes = bytesOf(holder[key] as ArrayBuffer | ArrayBufferView)
       const { stream } = this.downloads.open(bytesSource(bytes))
@@ -2025,7 +2075,10 @@ class DeviceSession {
   private traceFor(value: unknown): OutboxTrace | undefined {
     if (typeof value !== 'object' || value === null) return undefined
     const msg = value as Record<string, unknown>
-    if ((msg.type === 'response' || msg.type === 'error') && typeof msg.id === 'number') {
+    if (
+      (msg.type === 'response' || msg.type === 'response.stream' || msg.type === 'error') &&
+      typeof msg.id === 'number'
+    ) {
       const pending = this.pendingRequests.get(msg.id)
       if (!pending) return undefined
       this.pendingRequests.delete(msg.id)

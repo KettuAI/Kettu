@@ -580,6 +580,7 @@ function entryOf(
     typeof value === 'object' &&
     value !== null &&
     ((value as { type?: unknown }).type === 'response' ||
+      (value as { type?: unknown }).type === 'response.stream' ||
       (value as { type?: unknown }).type === 'error')
   const sessionId = batch?.sessionId ?? trace?.sessionId ?? eventSessionId(value)
   return {
@@ -626,7 +627,7 @@ function classifyPriority(
   }
   const { type, event } = value as { type?: unknown; event?: unknown }
   if (typeof type === 'string' && HIGH_CONTROL_TYPES.has(type)) return 'high'
-  if (type === 'response' || type === 'error') {
+  if (type === 'response' || type === 'response.stream' || type === 'error') {
     if (size <= smallMessageBytes) return 'high'
     return size > BULK_MESSAGE_BYTES ? 'bulk' : 'normal'
   }

@@ -231,7 +231,7 @@ describe('a paired device', () => {
       type: 'welcome',
       protocol: 1,
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
-      features: ['bytes', 'load', 'tool-output-append', 'session-list-delta'],
+      features: ['bytes', 'load', 'tool-output-append', 'session-list-delta', 'response-stream'],
       role: 'owner',
       device: { id: t.phone.id, name: 'Phone' },
       terminal: false,
@@ -443,6 +443,7 @@ describe("a device's notifications", () => {
         'load',
         'tool-output-append',
         'session-list-delta',
+        'response-stream',
         'push',
         'web-push',
         'standby',
@@ -475,7 +476,14 @@ describe("a device's notifications", () => {
     const older = await t.connect(undefined, { protocol: { min: 1, max: 3 } })
     expect(await older.first).toMatchObject({
       protocol: 3,
-      features: ['bytes', 'load', 'tool-output-append', 'session-list-delta', 'standby'],
+      features: [
+        'bytes',
+        'load',
+        'tool-output-append',
+        'session-list-delta',
+        'response-stream',
+        'standby',
+      ],
     })
     await expect(ask(older, 'notifications.get', undefined)).rejects.toMatchObject({
       code: 'unavailable',
@@ -483,7 +491,14 @@ describe("a device's notifications", () => {
     const plain = await setup()
     const device = await plain.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
     expect(await device.first).toMatchObject({
-      features: ['bytes', 'load', 'tool-output-append', 'session-list-delta', 'standby'],
+      features: [
+        'bytes',
+        'load',
+        'tool-output-append',
+        'session-list-delta',
+        'response-stream',
+        'standby',
+      ],
     })
     await expect(ask(device, 'notifications.set', { target })).rejects.toMatchObject({
       code: 'unavailable',

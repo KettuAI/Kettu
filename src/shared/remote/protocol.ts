@@ -81,6 +81,24 @@ export const LOAD_FEATURE = 'load'
  */
 export const SESSION_LIST_DELTA_FEATURE = 'session-list-delta'
 
+/**
+ * 大响应流式分块传输能力：客户端在 hello 中声明后，超过 64 KiB 的纯 JSON RPC 回答
+ * 改以 `response.stream` 控制头配合 `bytes` 字节流与 `stream.end` 分块发送，避免阻塞高优控制帧与实时补丁；
+ * 未声明的旧客户端仍接收常规单条 `response`。
+ */
+export const RESPONSE_STREAM_FEATURE = 'response-stream'
+
+/** 大响应走字节流分块发送时的控制头消息。 */
+export interface ResponseStream {
+  type: 'response.stream'
+  id: number
+  stream: number
+  /** 字节流传输的精确字节数（压缩后长度或原始 UTF-8 长度）。 */
+  size: number
+  /** 可选压缩算法：`'deflate'` 为 RFC 1951 raw deflate，缺省为未压缩 UTF-8 JSON。 */
+  encoding?: 'deflate'
+}
+
 /** The most features a hello names that the host reads. */
 const MAX_FEATURES = 16
 
