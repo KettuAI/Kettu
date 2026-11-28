@@ -159,6 +159,8 @@ export interface SettingsFile {
     relay: boolean
     // Host-selected official relay region ids; null picks automatically by measured latency.
     relayRegions: string[] | null
+    // Client-side preferred relay node for connecting to remote hosts ('auto', 'official:<id>', or 'own:<origin>').
+    relayPreference: string
     // Whether the owner's own relay is enabled alongside or instead of the Kettu relay.
     ownRelayEnabled: boolean
     // The owner's own relay, kept while turned off; its access key is kept apart, like the host's
@@ -428,6 +430,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     terminal: false,
     relay: true,
     relayRegions: null,
+    relayPreference: 'auto',
     ownRelayEnabled: false,
     ownRelay: null,
     discoverable: true,
@@ -529,6 +532,8 @@ export interface SettingsPatch {
     relay?: RelayChoice | boolean
     // Explicit official relay region ids for the host, or null for automatic selection.
     relayRegions?: string[] | null
+    // Client-side preferred relay node ('auto', 'official:<id>', or 'own:<origin>').
+    relayPreference?: string
     // Enables or disables the saved own relay without touching the official relay toggle.
     ownRelayEnabled?: boolean
     discoverable?: boolean

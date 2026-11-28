@@ -30,12 +30,14 @@ import {
   hostRegions,
   isRegionId,
   parseRelayPrefer,
+  parseRelayPreference,
   parseRelayRegions,
   parseSignedRegionList,
   verifyRegionList,
   type ListedRegion,
   type RankedRegion,
   type RelayPreferMessage,
+  type RelayPreference,
   type RelayRegionsMessage,
   type SignedRegionList,
 } from '@shared/remote/relay-regions'
@@ -109,6 +111,8 @@ export interface RemoteRegionsOptions {
   timesChanged(prefer: boolean): void
   /** Explicit host-selected region ids; null or absent uses automatic RTT-ranked selection. */
   selectedRegions?: readonly string[] | null
+  /** Initial serialized client relay preference (`'auto'`, `'official:<id>'`, `'own:<origin>'`). */
+  relayPreference?: string
   /** Live host-to-region RTT from an active control socket, when available. */
   hostLegRtt?(url: string): number | null
   /** Measured RTTs or available regions changed, so the host's status report should refresh. */
@@ -192,7 +196,7 @@ export class RemoteRegions {
         }
       },
       measured: (region, rtt) => {
-        if (!options.device) return
+        if (!options.device || !this.isOfficialRegion(region)) return
         if (rtt === null) this.stats.connected(region.id, false)
         else this.stats.sample(region.id, rtt)
       },
@@ -203,6 +207,7 @@ export class RemoteRegions {
       source: this.source,
       times: this.times,
       pinned: true,
+      preference: parseRelayPreference(options.relayPreference),
       now: this.now,
     })
     this.stats = new RelayStats({
@@ -376,6 +381,123 @@ export class RemoteRegions {
     this.selectedRegions = normalized
     this.replan()
     this.options.statusChanged?.()
+  }
+
+  /** Current client-side relay preference. */
+  getPreference(): RelayPreference {
+    return this.devices.getPreference()
+  }
+
+  /** Updates the client-side relay preference; returns true when the effective preference changed. */
+  setPreference(next: RelayPreference): boolean {
+    if (!this.devices.setPreference(next)) return false
+    const prefer = this.preferMessage()
+    this.sentPrefer = prefer ? `${prefer.regions.join(',')} ${prefer.list.payload}` : ''
+    return true
+  }
+
+  /** Last measured device-to-own-relay RTT for `origin`, or null when unmeasured. */
+  ownRtt(origin: string): number | null {
+    return this.times.rtt({ url: origin })
+  }
+
+  /** Measures device-to-own-relay RTT via unauthenticated `GET /v1/ping` (honoring `pin`). */
+  async measureOwnRelays(relays: readonly RelayRegion[], all = false): Promise<void> {
+    if (this.stopped || relays.length === 0) return
+    const targets: RelayRegion[] = []
+    const seen = new Set<string>()
+    for (const relay of relays) {
+      if (seen.has(relay.url)) continue
+      seen.add(relay.url)
+      targets.push({ id: 'own', url: relay.url, ...(relay.pin ? { pin: relay.pin } : {}) })
+    }
+    await this.times.measure(targets, all)
+  }
+
+  /** Forces a fresh RTT probe across all official regions (when signed in) and known own relays. */
+  async measureClientRelays(ownRelays: readonly RelayRegion[] = []): Promise<void> {
+    if (this.stopped) return
+    const targets: RelayRegion[] = []
+    const seen = new Set<string>()
+    if (this.running) {
+      if (this.features === null) await this.readFeatures()
+      if (this.features?.includes(REGIONS_FEATURE) && this.source.list === null) {
+        this.source.start()
+        await this.source.refresh()
+      }
+      const listed = this.measurableRegions()
+      const official = listed.length > 0 ? listed : [{ id: 'main', url: this.options.main }]
+      for (const region of official) {
+        if (seen.has(region.url)) continue
+        seen.add(region.url)
+        targets.push(region)
+      }
+    }
+    for (const own of ownRelays) {
+      if (seen.has(own.url)) continue
+      seen.add(own.url)
+      targets.push({ id: 'own', url: own.url, ...(own.pin ? { pin: own.pin } : {}) })
+    }
+    if (targets.length === 0) return
+    await this.times.measure(targets, true)
+    if (this.running) {
+      this.replan()
+      this.options.statusChanged?.()
+    }
+  }
+
+  /** All selectable official relay regions with device-measured RTTs. */
+  officialNodes(): {
+    id: string
+    url: string
+    name?: string
+    names?: Record<string, string>
+    rtt: number | null
+  }[] {
+    if (!this.running) return []
+    const own = this.source.list
+    if (!own) {
+      return [
+        { id: 'main', url: this.options.main, rtt: this.times.rtt({ url: this.options.main }) },
+      ]
+    }
+    const result: {
+      id: string
+      url: string
+      name?: string
+      names?: Record<string, string>
+      rtt: number | null
+    }[] = []
+    const listedMain = own.regions.find((region) => region.url === this.options.main)
+    result.push({
+      id: listedMain?.id ?? 'main',
+      url: this.options.main,
+      ...(listedMain?.name !== undefined ? { name: listedMain.name } : {}),
+      ...(listedMain?.names ? { names: listedMain.names } : {}),
+      rtt: this.times.rtt({ url: this.options.main }),
+    })
+    for (const region of own.regions) {
+      if (region.state !== 'active' || region.url === this.options.main) continue
+      if (result.some((item) => item.url === region.url || item.id === region.id)) continue
+      result.push({
+        id: region.id,
+        url: region.url,
+        name: region.name,
+        ...(region.names ? { names: region.names } : {}),
+        rtt: this.times.rtt(region),
+      })
+    }
+    return result
+  }
+
+  /** Whether `region` belongs to Kettu's official relays (excluded from stats when self-hosted). */
+  private isOfficialRegion(region: RelayRegion): boolean {
+    if (region.id === 'own') return false
+    return (
+      region.url === this.options.main ||
+      this.ids.has(region.url) ||
+      (this.source.list?.regions.some((entry) => entry.url === region.url) ?? false)
+    )
   }
 
   /** Refreshes the signed region list when needed and forces a fresh RTT probe of all regions. */
@@ -620,6 +742,14 @@ export class RemoteRegions {
   drained(url: string): void {
     this.devices.drain(url)
     this.regionFailed()
+  }
+
+  /** The id the signed list or relay info gives the region at `url`, or null. */
+  regionId(url: string): string | null {
+    const id =
+      this.ids.get(url) ?? this.source.list?.regions.find((region) => region.url === url)?.id
+    if (id && isRegionId(id)) return id
+    return url === this.options.main ? 'main' : null
   }
 
   /** The name the signed list gives the region at `url`, or null. */

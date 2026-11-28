@@ -32,6 +32,7 @@ import type {
 } from './remote/discovery'
 import type { HostAdminEvent, HostAdminMethod, JoinedDevice, JoinedVia } from './remote/host-admin'
 import type {
+  ClientRelayNodes,
   HostPairingState,
   HostStatus,
   SshAddress,
@@ -764,6 +765,11 @@ export type MainToRemoteHost =
   | { type: 'remote-host:relay-retry' }
   // Measures latency to every official relay region; answered by remote-host:relay-measured.
   | { type: 'remote-host:relay-measure'; requestId: number }
+  // Updates the desktop client's preferred relay node for connecting to remote hosts.
+  | { type: 'remote-host:relay-preference'; preference: string }
+  // Measures latency to every official region and known own relay for the client; answered by
+  // remote-host:relay-measured.
+  | { type: 'remote-host:hosts-measure-relays'; requestId: number }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the
   // connections to other hosts go on. Answered by remote-host:stop-serving once the device files
   // are written for the last time, which main then reads and changes itself.
@@ -873,6 +879,8 @@ export interface RelayInit {
   own?: OwnRelayInit | null
   /** Explicit host-selected official relay region ids, or null/absent for automatic selection. */
   regions?: string[] | null
+  /** Serialized client-side relay preference (`'auto'`, `'official:<id>'`, or `'own:<origin>'`). */
+  preference?: string
 }
 
 /** What the remote host reports to main, for Settings. */
@@ -943,8 +951,8 @@ export type RemoteHostToMain =
   | { type: 'remote-host:device-joined'; device: JoinedDevice; via: JoinedVia }
   // The answer to remote-host:add-reverse-host: this computer's device, or null when it could not.
   | { type: 'remote-host:reverse-host'; requestId: number; grant: ReverseGrant | null }
-  // The known hosts and their connections, whenever they change.
-  | { type: 'remote-host:hosts'; hosts: HostStatus[] }
+  // The known hosts, their connections, and client relay node snapshots, whenever they change.
+  | { type: 'remote-host:hosts'; hosts: HostStatus[]; relayNodes?: ClientRelayNodes }
   | { type: 'remote-host:host-pairing'; pairId: number; pairing: HostPairingState }
   // A port for a host's device session, which carries the host protocol; answered by
   // remote-host:host-port.

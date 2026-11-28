@@ -459,6 +459,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       setAddresses: () => unsupported('connect to other hosts'),
       remove: () => unsupported('connect to other hosts'),
       retry: () => unsupported('connect to other hosts'),
+      measureRelays: () => unsupported('connect to other hosts'),
       updateSsh: () => unsupported('connect to other hosts'),
       changeSsh: () => unsupported('connect to other hosts'),
       reconnect: () => unsupported('connect to other hosts'),

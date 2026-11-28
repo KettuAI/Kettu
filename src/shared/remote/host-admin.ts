@@ -67,7 +67,17 @@ export const HOST_SETTING_KEYS = {
   updates: 'all',
   diagnostics: 'all',
   usage: ['fromComputer'],
-  remote: 'all',
+  remote: [
+    'enabled',
+    'name',
+    'direct',
+    'terminal',
+    'relay',
+    'relayRegions',
+    'ownRelayEnabled',
+    'ownRelay',
+    'discoverable',
+  ],
 } as const satisfies Partial<Record<keyof SettingsFile, 'all' | readonly string[]>>
 
 /**
@@ -108,7 +118,7 @@ export interface HostSettingsPart {
    */
   remote: Omit<
     SettingsFile['remote'],
-    'relay' | 'relayRegions' | 'ownRelay' | 'ownRelayEnabled'
+    'relay' | 'relayRegions' | 'relayPreference' | 'ownRelay' | 'ownRelayEnabled'
   > & {
     relay: boolean
     relayRegions?: SettingsFile['remote']['relayRegions']
@@ -159,8 +169,12 @@ export function hostSettingsPart(file: SettingsFile): HostSettingsPart {
 }
 
 /** The host's remote section as a client keeps it, from a host of any version. */
-function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['remote'] {
-  if (!part) return structuredClone(DEFAULT_SETTINGS.remote)
+function remoteOf(
+  part: HostSettingsPart['remote'] | undefined,
+  localPreference: string,
+): SettingsFile['remote'] {
+  if (!part)
+    return { ...structuredClone(DEFAULT_SETTINGS.remote), relayPreference: localPreference }
   const { relayChoice, relay, relayRegions, ownRelay, ownRelayEnabled, ...rest } = part
   const hasDual = ownRelayEnabled !== undefined
   const official = hasDual
@@ -182,6 +196,7 @@ function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['r
     ...structuredClone(rest),
     relay: official,
     relayRegions: selectedRegions && selectedRegions.length > 0 ? selectedRegions : null,
+    relayPreference: localPreference,
     ownRelayEnabled: ownOn,
     ownRelay: ownRelay ?? null,
   }
@@ -237,7 +252,10 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
   for (const [section, keys] of Object.entries(HOST_SETTING_KEYS) as [string, Keys][]) {
     const value = (part as unknown as Record<string, unknown>)[section]
     if (section === 'remote') {
-      next.remote = remoteOf(value as HostSettingsPart['remote'] | undefined)
+      next.remote = remoteOf(
+        value as HostSettingsPart['remote'] | undefined,
+        file.remote.relayPreference,
+      )
       continue
     }
     if (section === 'diagnostics') {

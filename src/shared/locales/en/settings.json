@@ -1727,6 +1727,22 @@
       "bothRelaysAt": "Kettu relay & {{host}}",
       "noRelay": "No relay · direct only"
     },
+    "relayNodes": {
+      "group": "Relay nodes",
+      "description": "Choose which relay node this device prefers when connecting to remote hosts.",
+      "keywords": "relay node region speed latency test auto own server",
+      "note": "Local network connections are always preferred over relays when available.",
+      "ownLabel": "Your relay",
+      "auto": {
+        "name": "Automatic",
+        "description": "Picks the fastest relay region by measured latency",
+        "descriptionBoth": "Picks the fastest path across official and own relays"
+      },
+      "state": {
+        "inUse": "In use",
+        "standby": "Standing by"
+      }
+    },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
       "unknown_host": "{{name}} is no longer in this computer’s list."

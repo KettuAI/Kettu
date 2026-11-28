@@ -113,6 +113,7 @@ import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import { DirectSwitch, DiscoverableSwitch } from './remote-relay'
 import { RelayCard, RelayNote } from './remote-relay-choice'
+import { ClientRelayNodesCard, ClientRelayNodesMeasureButton } from './client-relay-nodes'
 import { relayInUse } from './relay-text'
 import {
   AddDeviceButton,
@@ -1165,8 +1166,21 @@ export function useArchivedSection(): SectionDef {
 function useWebHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const host = useWebHostStore((s) => s.host)
+  const relayNodes = useWebHostStore((s) => s.relayNodes)
+  const setRelayPreference = useWebHostStore((s) => s.setRelayPreference)
+  const measureRelays = useWebHostStore((s) => s.measureRelays)
   const name = host?.name ?? ''
   const online = host?.connection.state === 'online'
+  const showRelayNodes =
+    isHosted && relayNodes !== null && (relayNodes.official.length > 0 || relayNodes.own.length > 0)
+  const relayNodesGroup = showRelayNodes
+    ? group('relay-nodes', t('hosts.relayNodes.group'), {
+        actions: measureRelays ? (
+          <ClientRelayNodesMeasureButton onMeasure={measureRelays} />
+        ) : undefined,
+        note: <GroupNote>{t('hosts.relayNodes.note')}</GroupNote>,
+      })
+    : null
   return {
     id: 'hosts',
     title: t('sections.hosts'),
@@ -1191,6 +1205,24 @@ function useWebHostsSection(): SectionDef {
         layout: 'custom',
         render: () => (host ? <WebHostRow host={host} /> : <HostsLoading />),
       },
+      ...(showRelayNodes && relayNodesGroup
+        ? ([
+            {
+              id: 'relay-nodes',
+              setting: 'hosts.relay-nodes',
+              group: relayNodesGroup,
+              layout: 'custom' as const,
+              render: () => (
+                <ClientRelayNodesCard
+                  nodes={relayNodes}
+                  onSelect={(next) => {
+                    setRelayPreference?.(next)
+                  }}
+                />
+              ),
+            },
+          ] satisfies RowDef[])
+        : []),
       {
         id: 'device-name',
         setting: 'hosts.device-name',
@@ -1236,6 +1268,7 @@ export function useHostsSection(): SectionDef {
 function useDesktopHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const status = useHostsStore((s) => s.status)
+  const relayPreference = useSettingsStore((s) => s.settings.remote.relayPreference)
   const discovered = useDiscoveredHosts()
   const cloudOff = useCloudOff()
   // Read when Settings opens: the computer's model is read only then.
@@ -1298,6 +1331,30 @@ function useDesktopHostsSection(): SectionDef {
       group: list,
       layout: 'custom',
       render: () => <HostsLoading />,
+    })
+  }
+  const relayNodes = status?.relayNodes
+  if (relayNodes && (relayNodes.official.length > 0 || relayNodes.own.length > 0)) {
+    const relayNodesGroup = group('relay-nodes', t('hosts.relayNodes.group'), {
+      actions: (
+        <ClientRelayNodesMeasureButton onMeasure={() => window.kettu.hosts.measureRelays()} />
+      ),
+      note: <GroupNote>{t('hosts.relayNodes.note')}</GroupNote>,
+    })
+    rows.push({
+      id: 'relay-nodes',
+      setting: 'hosts.relay-nodes',
+      group: relayNodesGroup,
+      layout: 'custom',
+      render: () => (
+        <ClientRelayNodesCard
+          nodes={relayNodes}
+          preference={relayPreference}
+          onSelect={async (next) => {
+            await window.kettu.settings.update({ remote: { relayPreference: next } })
+          }}
+        />
+      ),
     })
   }
   const account = group('account-hosts', t('hosts.account.group'), {

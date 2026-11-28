@@ -1210,6 +1210,64 @@ describe('the relay a host uses', () => {
       withHostSettings(structuredClone(DEFAULT_SETTINGS), withoutField).remote.relayRegions,
     ).toBeNull()
   })
+
+  it('validates, normalizes, and keeps remote.relayPreference strictly on the client', async () => {
+    // Missing field in older settings.json defaults to 'auto' without problems.
+    await save({ version: 1, remote: { relay: true } })
+    expect((await SettingsStore.load(dir)).get().remote.relayPreference).toBe('auto')
+
+    // Valid values normalize cleanly on load (trailing slash stripped for own relay origins).
+    await save({ version: 1, remote: { relayPreference: 'official:gz-1' } })
+    expect((await SettingsStore.load(dir)).get().remote.relayPreference).toBe('official:gz-1')
+
+    await save({ version: 1, remote: { relayPreference: 'own:https://relay.example.com:8443/' } })
+    expect((await SettingsStore.load(dir)).get().remote.relayPreference).toBe(
+      'own:https://relay.example.com:8443',
+    )
+
+    // Invalid stored values fall back safely to 'auto'.
+    for (const bad of ['garbage', 'official:BAD_ID', 'own:http://bad/path', 42, null]) {
+      await save({ version: 1, remote: { relayPreference: bad } })
+      expect((await SettingsStore.load(dir)).get().remote.relayPreference).toBe('auto')
+    }
+
+    // Patch validation normalizes valid preferences and rejects malformed ones.
+    const before = structuredClone(DEFAULT_SETTINGS)
+    const official = mergeSettings(
+      before,
+      validateSettingsPatch({ remote: { relayPreference: 'official:sh-1' } }),
+    )
+    expect(official.remote.relayPreference).toBe('official:sh-1')
+
+    const own = mergeSettings(
+      official,
+      validateSettingsPatch({ remote: { relayPreference: 'own:https://relay.example.com/' } }),
+    )
+    expect(own.remote.relayPreference).toBe('own:https://relay.example.com')
+
+    const auto = mergeSettings(own, validateSettingsPatch({ remote: { relayPreference: 'auto' } }))
+    expect(auto.remote.relayPreference).toBe('auto')
+
+    for (const bad of [
+      '',
+      'garbage',
+      'official:BAD_ID',
+      'own:https://relay.example.com/p',
+      null,
+      1,
+    ]) {
+      expect(() => validateSettingsPatch({ remote: { relayPreference: bad } })).toThrow()
+    }
+
+    // Client-only boundary: never sent in hostSettingsPart, split to client, preserved by withHostSettings.
+    const patch = validateSettingsPatch({ remote: { relayPreference: 'official:gz-1' } })
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    const hostPart = hostSettingsPart(own)
+    expect('relayPreference' in hostPart.remote).toBe(false)
+    expect(withHostSettings(own, hostSettingsPart(before)).remote.relayPreference).toBe(
+      'own:https://relay.example.com',
+    )
+  })
 })
 
 describe('sending while a turn is running', () => {

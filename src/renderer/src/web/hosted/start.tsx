@@ -462,6 +462,13 @@ async function showApp(
       }),
     }
   }
+  const currentRelayUrl = (): string | null => {
+    const key = linked?.currentRoute?.key ?? null
+    return key?.startsWith('relay ') ? key.slice('relay '.length) : null
+  }
+  const syncRelayNodes = (): void => {
+    useWebHostStore.setState({ relayNodes: relays.snapshot(currentRelayUrl()) })
+  }
   await launchApp(
     {
       dial: relayDial(shown.relay, () => relays.token(), missed, relays),
@@ -470,6 +477,8 @@ async function showApp(
           .endpoints(shown.relay.id, namedRelays(shown.relay))
           .slice(0, MAX_ROUTES)
           .map(({ url }) => routeTo(url)),
+      preferredRelay: () => relays.preferredRouteKey(shown.relay.id, namedRelays(shown.relay)),
+      onRoute: () => syncRelayNodes(),
       features: HOSTED_FEATURES,
       key: device.key,
       hostKey: shown.hostKey,
@@ -522,10 +531,12 @@ async function showApp(
       virtualFrames: true,
       overrides: (link) => {
         linked = link
-        relaysOf(account).attach(link, shown.relay)
+        relays.attach(link, shown.relay)
         problems.follow(link)
+        relays.onChanged(() => syncRelayNodes())
         // Kept, folded away, until a welcome under this account brings it back.
         link.onState((state) => {
+          syncRelayNodes()
           if (state.kind !== 'stopped' || state.reason !== 'other_account') return
           shown = { ...shown, otherAccount: true }
           keep({
@@ -534,7 +545,15 @@ async function showApp(
           })
           problems.report('other_account')
         })
-        useWebHostStore.setState(othersOf(kept, shown, accountId))
+        useWebHostStore.setState({
+          ...othersOf(kept, shown, accountId),
+          relayNodes: relays.snapshot(currentRelayUrl()),
+          setRelayPreference: (preference) => {
+            relays.setPreference(preference)
+            link.recheckRoutes()
+          },
+          measureRelays: () => relays.refreshSpeeds(),
+        })
         return {
           hosted: true,
           account: accountApi,

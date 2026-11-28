@@ -45,7 +45,12 @@ import {
   type HostRelay,
 } from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
-import { REGION_KEYS_ENV, regionKeys } from '@shared/remote/relay-regions'
+import {
+  REGION_KEYS_ENV,
+  parseRelayPreference,
+  regionKeys,
+  serializeRelayPreference,
+} from '@shared/remote/relay-regions'
 import type { Transport } from '@shared/remote/transport'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import type { DirectSettings } from '@shared/settings'
@@ -174,6 +179,7 @@ export function startRemoteHost(
   let relayUrl: string | null = null
   let relayEnabled = false
   let relayRegions: string[] | null = null
+  let relayPreference = 'auto'
   let relayToken: string | null = null
   let relayOnlyToken: string | null = null
   /** What the relays get: the relay token, or the access token where they take no other. */
@@ -622,6 +628,7 @@ export function startRemoteHost(
       name: () => hostName,
       account: () => account,
       openMainPort: deps.openMainPort,
+      relayPreference,
       ...(relayUrl
         ? {
             relay: {
@@ -634,7 +641,13 @@ export function startRemoteHost(
           }
         : {}),
       changed: () => {
-        if (ready) send({ type: 'remote-host:hosts', hosts: started.list() })
+        if (ready) {
+          send({
+            type: 'remote-host:hosts',
+            hosts: started.list(),
+            relayNodes: started.relayNodes(),
+          })
+        }
       },
       pairing: (pairId, pairing) => send({ type: 'remote-host:host-pairing', pairId, pairing }),
       reverse: {
@@ -667,7 +680,11 @@ export function startRemoteHost(
     started.start()
     const report = (): void => {
       ready = true
-      send({ type: 'remote-host:hosts', hosts: started.list() })
+      send({
+        type: 'remote-host:hosts',
+        hosts: started.list(),
+        relayNodes: started.relayNodes(),
+      })
     }
     return { client: started, report }
   }
@@ -689,6 +706,7 @@ export function startRemoteHost(
       relayRegions = Array.isArray(message.relay.regions)
         ? message.relay.regions.filter((id): id is string => typeof id === 'string')
         : null
+      relayPreference = serializeRelayPreference(parseRelayPreference(message.relay.preference))
       relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
       const relayOnly = message.relay.relayToken
       relayOnlyToken = relayToken && typeof relayOnly === 'string' ? relayOnly : null
@@ -732,6 +750,7 @@ export function startRemoteHost(
         hostChanged: () => live?.server.regionsChanged(),
         timesChanged: (prefer) => client?.regionsChanged(prefer),
         selectedRegions: relayRegions,
+        relayPreference,
         hostLegRtt: (url) =>
           live?.relay.current?.legs().find((leg) => leg.url === url)?.hostRtt ?? null,
         statusChanged: () => live?.server.options.changed(),
@@ -945,6 +964,30 @@ export function startRemoteHost(
         const started = withRunning(async () => {
           try {
             await regions?.measureNow()
+          } finally {
+            done()
+          }
+        })
+        if (!started) done()
+        break
+      }
+      case 'remote-host:relay-preference': {
+        const next = serializeRelayPreference(parseRelayPreference(message.preference))
+        relayPreference = next
+        withRunning(() => {
+          if (client) client.setRelayPreference(next)
+          else regions?.setPreference(parseRelayPreference(next))
+        })
+        break
+      }
+      case 'remote-host:hosts-measure-relays': {
+        const { requestId } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const done = (): void => send({ type: 'remote-host:relay-measured', requestId })
+        const started = withRunning(async () => {
+          try {
+            if (client) await client.measureRelays()
+            else await regions?.measureClientRelays()
           } finally {
             done()
           }

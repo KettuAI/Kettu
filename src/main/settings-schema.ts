@@ -66,7 +66,11 @@ import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { isRelayPin, ownRelayProblem } from '@shared/remote/own-relay'
 import { MAX_REGIONS } from '@shared/remote/relay'
-import { isRegionId } from '@shared/remote/relay-regions'
+import {
+  isRegionId,
+  parseRelayPreference,
+  serializeRelayPreference,
+} from '@shared/remote/relay-regions'
 import { isStartedLimit, STARTED_LIMIT_MAX, STARTED_LIMIT_MIN } from '@shared/started-sessions'
 import { THEME_ID } from '@shared/themes'
 import { WORKING_STEP_LIMITS } from '@shared/workflow'
@@ -1183,6 +1187,18 @@ function checkRelayRegions(value: unknown, path: string): string | null {
   return null
 }
 
+/** Validates `remote.relayPreference`: `'auto'`, `'official:<id>'`, or `'own:<origin>'`. */
+function checkRelayPreference(value: unknown, path: string): string | null {
+  if (typeof value !== 'string') {
+    return `"${path}" must be "auto", "official:<id>", or "own:<origin>"`
+  }
+  const trimmed = value.trim()
+  if (trimmed === 'auto') return null
+  return parseRelayPreference(trimmed).kind === 'automatic'
+    ? `"${path}" must be "auto", "official:<id>", or "own:<origin>"`
+    : null
+}
+
 /** `remote` in a patch. */
 function checkRemote(value: unknown, problems: string[]): void {
   if (!isRecord(value)) {
@@ -1196,6 +1212,9 @@ function checkRemote(value: unknown, problems: string[]): void {
       }
     } else if (key === 'relayRegions') {
       const problem = checkRelayRegions(fieldValue, 'remote.relayRegions')
+      if (problem) problems.push(problem)
+    } else if (key === 'relayPreference') {
+      const problem = checkRelayPreference(fieldValue, 'remote.relayPreference')
       if (problem) problems.push(problem)
     } else if (
       key === 'enabled' ||
@@ -1492,8 +1511,17 @@ export function mergeSettings(
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct, terminal, relay, relayRegions, ownRelayEnabled, discoverable } =
-      patch.remote
+    const {
+      enabled,
+      name,
+      direct,
+      terminal,
+      relay,
+      relayRegions,
+      relayPreference,
+      ownRelayEnabled,
+      discoverable,
+    } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
@@ -1511,6 +1539,9 @@ export function mergeSettings(
     }
     if (relayRegions !== undefined) {
       next.remote.relayRegions = relayRegions === null ? null : normalizeRelayRegions(relayRegions)
+    }
+    if (relayPreference !== undefined) {
+      next.remote.relayPreference = serializeRelayPreference(parseRelayPreference(relayPreference))
     }
     if (ownRelayEnabled !== undefined) {
       // Only an own relay that passed its check has an address to turn on.
@@ -1909,6 +1940,9 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   read(raw.relayRegions, 'remote.relayRegions', checkRelayRegions, () => {
     remote.relayRegions =
       raw.relayRegions === null ? null : normalizeRelayRegions(raw.relayRegions as string[])
+  })
+  read(raw.relayPreference, 'remote.relayPreference', checkRelayPreference, () => {
+    remote.relayPreference = serializeRelayPreference(parseRelayPreference(raw.relayPreference))
   })
   read(raw.ownRelay, 'remote.ownRelay', isOwnRelaySettings, () => {
     remote.ownRelay = raw.ownRelay as OwnRelaySettings | null
