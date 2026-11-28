@@ -1709,6 +1709,22 @@
       "bothRelaysAt": "Kettu 中继与 {{host}}",
       "noRelay": "无中继 · 仅直连"
     },
+    "relayNodes": {
+      "group": "中继节点",
+      "description": "选择此设备连接远程电脑时优先使用的中继节点。",
+      "keywords": "中继 节点 区域 延迟 测速 自动 自建 relay node region latency",
+      "note": "局域网直连可用时始终优先于中继。",
+      "ownLabel": "自建中继",
+      "auto": {
+        "name": "自动",
+        "description": "按实测延迟自动选择最快的官方中继区域",
+        "descriptionBoth": "在官方中继与自建中继之间按延迟自动择优"
+      },
+      "state": {
+        "inUse": "使用中",
+        "standby": "待命"
+      }
+    },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
       "unknown_host": "这台电脑的列表里已经没有 {{name}} 了。"

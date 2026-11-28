@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Platform } from '@shared/platform'
 import type { HostInfo } from '@shared/remote/host-admin'
-import type { HostConnection } from '@shared/remote/hosts'
+import type { ClientRelayNodes, HostConnection } from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
 
 // The host the web client connects to, the one that served its page, as Settings shows it. The web
@@ -51,6 +51,12 @@ interface WebHostStore {
   others: OtherWebHost[]
   /** How many of the hosted client's hosts belong to another account, folded away. */
   otherAccount: number
+  /** Client-side relay nodes and preference in hosted web sessions; null outside hosted mode. */
+  relayNodes: ClientRelayNodes | null
+  /** Updates the hosted web client's preferred relay node and triggers route re-evaluation. */
+  setRelayPreference: ((preference: string) => void) | null
+  /** Re-probes latency across all selectable relay nodes in hosted web sessions. */
+  measureRelays: (() => Promise<void>) | null
 }
 
 export const useWebHostStore = create<WebHostStore>()(() => ({
@@ -59,4 +65,7 @@ export const useWebHostStore = create<WebHostStore>()(() => ({
   actions: null,
   others: [],
   otherAccount: 0,
+  relayNodes: null,
+  setRelayPreference: null,
+  measureRelays: null,
 }))

@@ -21,6 +21,7 @@ import {
   type RegionList,
 } from './relay-regions'
 import { decodeRelayBytes } from './relay'
+import { DeviceRegions, RegionSource, RegionTimes } from './region-source'
 import { parseRelayRegionStatuses, parseRelayStatuses } from './relay-host'
 import { RelayStats, localDay, reportBody } from './relay-report'
 import { relayReport } from './status'
@@ -522,5 +523,113 @@ describe('多语言区域名称解析与回退', () => {
     expect(localizedRegionName('Shanghai', names, 'en-US')).toBe('Shanghai')
     expect(localizedRegionName('Shanghai', names, 'ja-JP')).toBe('Shanghai')
     expect(localizedRegionName('Shanghai', undefined, 'zh-CN')).toBe('Shanghai')
+  })
+})
+
+describe('DeviceRegions relay preference', () => {
+  const HK = 'https://hk-1.relay.kettu.sh'
+  const SH = 'https://203.0.113.7:7443'
+
+  async function setupDeviceRegions(options: {
+    pinned: boolean
+    rtts?: Record<string, number>
+  }): Promise<DeviceRegions> {
+    let clock = 1_000
+    const source = new RegionSource({
+      main: MAIN,
+      keys: KEYS,
+      saved: { signed: v.signed, etag: null, serial: v.list.serial },
+      fetchList: async () => ({ status: 304, etag: null, body: null }),
+      changed: () => {},
+      log: () => {},
+      now: () => clock,
+    })
+    await source.load()
+    const rtts = options.rtts ?? {}
+    const times = new RegionTimes({
+      ping: async (region) => {
+        const ms = rtts[region.url]
+        if (ms === undefined) throw new Error('unreachable')
+        clock += ms
+      },
+      concurrency: 1,
+      changed: () => {},
+      now: () => clock,
+    })
+    const devices = new DeviceRegions({
+      source,
+      times,
+      pinned: options.pinned,
+      now: () => clock,
+    })
+    await times.measure(devices.ownRegions(), true)
+    await devices.received('host-1', {
+      type: 'relay.regions',
+      list: v.signed,
+      regions: [
+        { id: 'main', rtt: 150 },
+        { id: 'hk-1', rtt: 10 },
+        { id: 'sh-1', rtt: 40 },
+      ],
+    })
+    return devices
+  }
+
+  it('moves the preferred official region to index 0 while keeping drained handling sane', async () => {
+    const devices = await setupDeviceRegions({
+      pinned: true,
+      rtts: { [MAIN]: 100, [HK]: 10, [SH]: 40 },
+    })
+
+    // Automatic ranks by total RTT: hk-1 (20), sh-1 (80), main (250).
+    expect(devices.getPreference()).toEqual({ kind: 'automatic' })
+    expect(devices.ranked('host-1')?.map((r) => r.id)).toEqual(['hk-1', 'sh-1', 'main'])
+
+    // Selecting sh-1 moves sh-1 ahead of the faster hk-1.
+    expect(devices.setPreference({ kind: 'official', id: 'sh-1' })).toBe(true)
+    expect(devices.setPreference({ kind: 'official', id: 'sh-1' })).toBe(false)
+    expect(devices.ranked('host-1')?.map((r) => r.id)).toEqual(['sh-1', 'hk-1', 'main'])
+
+    // Selecting main moves the main URL first.
+    expect(devices.setPreference({ kind: 'official', id: 'main' })).toBe(true)
+    expect(devices.ranked('host-1')?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
+
+    // Own preference keeps standard RTT ranking for official regions.
+    expect(devices.setPreference({ kind: 'own', origin: 'https://own.example.com' })).toBe(true)
+    expect(devices.ranked('host-1')?.map((r) => r.id)).toEqual(['hk-1', 'sh-1', 'main'])
+
+    // A draining preferred region still sorts behind healthy regions.
+    expect(devices.setPreference({ kind: 'official', id: 'sh-1' })).toBe(true)
+    devices.drain(SH)
+    expect(devices.ranked('host-1')?.map((r) => r.id)).toEqual(['hk-1', 'main', 'sh-1'])
+  })
+
+  it('places a preferred active region first in relay.prefer and omits pinned regions in browsers', async () => {
+    const desktop = await setupDeviceRegions({
+      pinned: true,
+      rtts: { [MAIN]: 100, [HK]: 10, [SH]: 80 },
+    })
+    expect(desktop.prefer()?.regions).toEqual(['hk-1', 'sh-1'])
+
+    desktop.setPreference({ kind: 'official', id: 'sh-1' })
+    expect(desktop.prefer()?.regions).toEqual(['sh-1', 'hk-1'])
+
+    // Selecting main leaves relay.prefer on the fastest regional picks.
+    desktop.setPreference({ kind: 'official', id: 'main' })
+    expect(desktop.prefer()?.regions).toEqual(['hk-1', 'sh-1'])
+
+    // Unmeasured preferred region is still announced first so hosts sign in to it.
+    const unmeasured = await setupDeviceRegions({ pinned: true, rtts: {} })
+    expect(unmeasured.prefer()).toBeNull()
+    unmeasured.setPreference({ kind: 'official', id: 'sh-1' })
+    expect(unmeasured.prefer()?.regions).toEqual(['sh-1'])
+
+    // In browsers (pinned=false), a pinned IP-only region is never announced in relay.prefer.
+    const browser = await setupDeviceRegions({
+      pinned: false,
+      rtts: { [MAIN]: 100, [HK]: 10 },
+    })
+    browser.setPreference({ kind: 'official', id: 'sh-1' })
+    expect(browser.prefer()?.regions).toEqual(['hk-1', 'main'])
   })
 })

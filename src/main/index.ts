@@ -854,6 +854,7 @@ async function start(): Promise<void> {
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
     otherAccount: remoteHost.otherAccountHosts,
+    ...(remoteHost.relayNodes ? { relayNodes: remoteHost.relayNodes } : {}),
   })
   // What an agent's settings tools read beyond the file: counts, and the account as Settings shows
   // it. A secret goes only as whether it is set.
@@ -1007,6 +1008,7 @@ async function start(): Promise<void> {
       ...relayChoiceInit(settings.get().remote, cloudOn(), ownRelayKey),
       regions: settings.get().remote.relayRegions,
     }),
+    relayPreference: () => settings.get().remote.relayPreference,
     useOwnRelay: (input) =>
       useOwnRelay(input, {
         key: () => ownRelayKey,
@@ -1391,6 +1393,7 @@ async function start(): Promise<void> {
       remoteHost.directChanged()
       remoteHost.terminalChanged()
       remoteHost.relayChanged()
+      remoteHost.relayPreferenceChanged()
       remoteHost.discoverableChanged()
       relayToken.update()
       void remoteHost.setEnabled(next.remote.enabled)

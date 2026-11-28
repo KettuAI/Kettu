@@ -6,7 +6,14 @@ import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceName } from './device'
 import { isAccountId, type DirectAddress } from './protocol'
 import { parseHostRelay, relayOrigin, type HostRelay } from './relay'
-import { isRegionName, parseRegionNames } from './relay-regions'
+import {
+  MAX_LISTED_REGIONS,
+  isRegionId,
+  isRegionName,
+  parseRegionNames,
+  parseRelayPreference,
+  serializeRelayPreference,
+} from './relay-regions'
 import { parseTranscript, type PairTranscript } from './discovery'
 
 /** How long pairing waits for a finished handshake before the host counts as unreachable. */
@@ -168,6 +175,31 @@ const RELAY_PROBLEMS: readonly string[] = [
   'signed_out',
 ]
 
+/** An official relay region selectable by the client, with measured RTT and live usage state. */
+export interface ClientRelayOfficialNode {
+  id: string
+  url: string
+  name?: string
+  names?: Record<string, string>
+  rtt: number | null
+  inUse: boolean
+}
+
+/** A self-hosted own relay known from paired hosts, with measured RTT and live usage state. */
+export interface ClientRelayOwnNode {
+  origin: string
+  rtt: number | null
+  inUse: boolean
+}
+
+/** Client-side relay selection snapshot for Settings › Hosts on desktop and hosted web. */
+export interface ClientRelayNodes {
+  /** Serialized `RelayPreference` (`'auto'`, `'official:<id>'`, or `'own:<origin>'`). */
+  preference: string
+  official: ClientRelayOfficialNode[]
+  own: ClientRelayOwnNode[]
+}
+
 /** Settings › Hosts as main puts it together. */
 export interface HostsStatus {
   /** This computer, first in the list. */
@@ -183,6 +215,8 @@ export interface HostsStatus {
    * out; absent from a main before accounts were kept.
    */
   otherAccount?: number
+  /** Client-side relay nodes, measured RTTs, live usage flags, and active preference. */
+  relayNodes?: ClientRelayNodes
 }
 
 /** Why adding a machine over SSH added no host. */
@@ -498,6 +532,61 @@ export function parseHostStatus(value: unknown): HostStatus | null {
   const host = parseKnownHost(value)
   const connection = parseConnection((value as { connection?: unknown } | null)?.connection)
   return host && connection ? { ...host, connection } : null
+}
+
+const isRtt = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 60_000
+
+/** Client relay nodes snapshot as the remote host reports it, checked where it crosses a process. */
+export function parseClientRelayNodes(value: unknown): ClientRelayNodes | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const fields = value as Record<string, unknown>
+  if (
+    typeof fields.preference !== 'string' ||
+    !Array.isArray(fields.official) ||
+    !Array.isArray(fields.own)
+  ) {
+    return null
+  }
+  const official: ClientRelayOfficialNode[] = []
+  for (const raw of fields.official.slice(0, MAX_LISTED_REGIONS * 2)) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+    const entry = raw as Record<string, unknown>
+    if (
+      !isRegionId(entry.id) ||
+      typeof entry.url !== 'string' ||
+      relayOrigin(entry.url) !== entry.url
+    ) {
+      return null
+    }
+    if (entry.name !== undefined && !isRegionName(entry.name)) return null
+    const names = parseRegionNames(entry.names)
+    if (names === null) return null
+    if (entry.rtt !== null && !isRtt(entry.rtt)) return null
+    if (typeof entry.inUse !== 'boolean') return null
+    official.push({
+      id: entry.id,
+      url: entry.url,
+      ...(entry.name !== undefined ? { name: entry.name } : {}),
+      ...(names ? { names } : {}),
+      rtt: entry.rtt,
+      inUse: entry.inUse,
+    })
+  }
+  const own: ClientRelayOwnNode[] = []
+  for (const raw of fields.own.slice(0, 100)) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+    const entry = raw as Record<string, unknown>
+    if (typeof entry.origin !== 'string' || relayOrigin(entry.origin) !== entry.origin) return null
+    if (entry.rtt !== null && !isRtt(entry.rtt)) return null
+    if (typeof entry.inUse !== 'boolean') return null
+    own.push({ origin: entry.origin, rtt: entry.rtt, inUse: entry.inUse })
+  }
+  return {
+    preference: serializeRelayPreference(parseRelayPreference(fields.preference)),
+    official,
+    own,
+  }
 }
 
 const FAILURES: readonly string[] = [

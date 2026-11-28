@@ -981,6 +981,16 @@ const ENTRIES = {
     kind: 'list',
     on: (ctx) => ctx.desktop && ctx.cloud,
   },
+  'hosts.relay-nodes': {
+    section: 'hosts',
+    row: 'relay-nodes',
+    group: 'hosts.relayNodes.group',
+    name: 'hosts.relayNodes.group',
+    description: 'hosts.relayNodes.description',
+    keywords: 'hosts.relayNodes.keywords',
+    part: 'desktop',
+    kind: 'info',
+  },
   // The web client's own page: the host that served it, and this browser's name there.
   'hosts.web-host': {
     section: 'hosts',

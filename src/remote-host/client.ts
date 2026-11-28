@@ -48,6 +48,9 @@ import {
   foldedHost,
   PAIR_HOST_TIMEOUT_MS,
   sameSshAddress,
+  type ClientRelayNodes,
+  type ClientRelayOfficialNode,
+  type ClientRelayOwnNode,
   type HostConnection,
   type RelayProblem,
   type HostPairingFailure,
@@ -75,13 +78,17 @@ import {
   relayList,
   trustedRelay,
   type HostRelay,
+  type RelayRegion,
 } from '@shared/remote/relay'
 import { dialRelay, type RelayAttempt, type RelayEndpoint } from '@shared/remote/relay-device'
 import {
   REGIONS_CHANNEL_FEATURE,
   parseRelayOwn,
+  parseRelayPreference,
+  serializeRelayPreference,
   type RankedRegion,
   type RelayPreferMessage,
+  type RelayPreference,
 } from '@shared/remote/relay-regions'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import {
@@ -210,10 +217,30 @@ export interface ClientRegions {
    * with a relay token or where the main relay takes none, else the main relay alone.
    */
   allowed(urls: string[]): string[]
+  /** The id the signed list gives the region at `url`, or null. */
+  regionId?(url: string): string | null
   /** The name the signed list gives the region at `url`, or null. */
   regionName?(url: string): string | null
-  /** 返回签名清单中指定 `url` 区域的多语言名称映射，未配置时返回 null。 */
+  /** Localized name map for the region at `url` from the signed list, or null. */
   regionNames?(url: string): Record<string, string> | null
+  /** Current client-side relay preference. */
+  getPreference?(): RelayPreference
+  /** Updates the client-side relay preference; returns true when it changed. */
+  setPreference?(next: RelayPreference): boolean
+  /** Last measured device-to-own-relay RTT for `origin`, or null when unmeasured. */
+  ownRtt?(origin: string): number | null
+  /** Measures device-to-own-relay RTT for self-hosted relays without sending Kettu tokens. */
+  measureOwnRelays?(relays: readonly RelayRegion[], all?: boolean): Promise<void>
+  /** Forces a fresh RTT probe across all official regions and known own relays. */
+  measureClientRelays?(ownRelays?: readonly RelayRegion[]): Promise<void>
+  /** All selectable official relay regions with device-measured RTTs. */
+  officialNodes?(): {
+    id: string
+    url: string
+    name?: string
+    names?: Record<string, string>
+    rtt: number | null
+  }[]
 }
 
 /** The Kettu relay, as this computer reaches hosts through it. */
@@ -271,6 +298,8 @@ export interface HostClientOptions {
   connect?: Connect
   /** The relay; absent, hosts are reached directly alone. */
   relay?: RelayClient
+  /** Initial client-side relay preference (`'auto'`, `'official:<id>'`, or `'own:<origin>'`). */
+  relayPreference?: RelayPreference | string
   /** How long a try has to finish a handshake. */
   timeoutMs?: number
   /** The same through SSH. */
@@ -842,14 +871,16 @@ class HostLink {
 
   /**
    * Tries the host's other paths, each to a finished handshake, and moves the session to the best
-   * when it is clearly faster than the one it is on.
+   * when it is clearly faster than the one it is on. Respects manual relay preference while always
+   * allowing direct LAN routes to win over relays.
    */
   private async compareNow(failing: boolean): Promise<boolean> {
     const session = this.session
     const host = this.host
     if (this.closed || this.taking || !session?.open || !host || host.ssh) return false
     if (!this.resumable || this.resumeToken === null) return false
-    const candidates = this.candidates(host, session.via)
+    const preferred = this.preferredRelayUrl(host)
+    const candidates = this.candidates(host, session.via, failing)
     const standby = this.standby?.standby ? this.standby : null
     if (candidates.length === 0 && !standby) return false
     const { options } = this.client
@@ -872,14 +903,35 @@ class HostLink {
       return false
     }
     const current: PathRef = { key: pathKey(session.via), relay: 'relay' in session.via }
+    let move: PathRef | null = null
+    let target: (typeof opened)[number] | null = null
     const kept: PathRef[] = standby
       ? [{ key: pathKey(standby.via), relay: 'relay' in standby.via }]
       : []
-    const ranked = rankPaths([current, ...kept, ...opened], this.times)
-    // Off a failing path, the best of the others will do.
-    const best = failing ? ranked.find((path) => path !== current) : ranked[0]
-    const move = best && shouldMove(current, best, this.times, failing) ? best : null
-    const target = opened.find((path) => path === move) ?? null
+    if (!failing && preferred !== null) {
+      // Direct LAN always wins over relay; when already on direct or on the selected relay,
+      // background comparisons never move to another relay node.
+      const directOpened = opened.filter((path) => !path.relay)
+      if (directOpened.length > 0) {
+        const rankedDirect = rankPaths([current, ...directOpened], this.times)
+        const bestDirect = rankedDirect[0]
+        if (bestDirect && shouldMove(current, bestDirect, this.times, false)) {
+          move = bestDirect
+          target = directOpened.find((path) => path === bestDirect) ?? null
+        }
+      }
+      if (!target && 'relay' in session.via && session.via.relay !== preferred) {
+        // Switching to the manually chosen reachable relay bypasses MOVE_RATIO immediately.
+        target = opened.find((path) => 'relay' in path.via && path.via.relay === preferred) ?? null
+        move = target
+      }
+    } else {
+      const ranked = rankPaths([current, ...kept, ...opened], this.times)
+      // Off a failing path, the best of the others will do.
+      const best = failing ? ranked.find((path) => path !== current) : ranked[0]
+      move = best && shouldMove(current, best, this.times, failing) ? best : null
+      target = opened.find((path) => path === move) ?? null
+    }
     for (const path of opened) if (path !== target) path.channel.close()
     if (target) {
       this.move(target.channel, target.via)
@@ -895,7 +947,7 @@ class HostLink {
    * The paths to try beside `current`: the other direct addresses, the relay without a standby,
    * and from the relay the regions that may be clearly faster.
    */
-  private candidates(host: KnownHost, current: Via): Candidate[] {
+  private candidates(host: KnownHost, current: Via, failing = false): Candidate[] {
     const list: Candidate[] = []
     for (const address of host.addresses) {
       if ('address' in current && addressKey(address) === addressKey(current.address)) continue
@@ -907,7 +959,10 @@ class HostLink {
         }),
       })
     }
-    if ('relay' in current) return [...list, ...this.regionCandidates(host, current.relay)]
+    if ('relay' in current) {
+      return [...list, ...this.regionCandidates(host, current.relay, failing)]
+    }
+    if (!failing && this.preferredRelayUrl(host) !== null) return list
     const relay = this.standby ? null : this.relayRoute(host)
     if (typeof relay === 'function') {
       list.push({
@@ -923,15 +978,33 @@ class HostLink {
 
   /**
    * The host's other ranked regions for a session on the relay at `current`: the best two whose
-   * whole path's round trip, as timed to each leg, is unknown or may be clearly faster.
+   * whole path's round trip, as timed to each leg, is unknown or may be clearly faster. Under a
+   * manual relay preference, stays locked on the chosen relay or probes only that chosen relay.
    */
-  private regionCandidates(host: KnownHost, current: string): Candidate[] {
+  private regionCandidates(host: KnownHost, current: string, failing = false): Candidate[] {
+    const preferred = this.preferredRelayUrl(host)
+    const routes = this.client.regionRoutes(host.relay, this.id, (url, leave) =>
+      this.regionDrained(url, leave),
+    )
+    if (!failing && preferred !== null) {
+      if (current === preferred) return []
+      const chosen = routes.find((entry) => entry.url === preferred)
+      if (!chosen) return []
+      return [
+        {
+          key: pathKey({ relay: chosen.url }),
+          open: async (signal) => {
+            const joined = await chosen.route(signal)
+            return { transport: joined.transport, via: { relay: joined.relay } }
+          },
+        },
+      ]
+    }
     const now = this.times.rtt(pathKey({ relay: current }))
-    return this.client
-      .regionRoutes(host.relay, this.id, (url, leave) => this.regionDrained(url, leave))
+    return routes
       .filter(
         ({ url, rtt }) =>
-          url !== current && (rtt === null || now === null || rtt <= now * MOVE_RATIO),
+          url !== current && (failing || rtt === null || now === null || rtt <= now * MOVE_RATIO),
       )
       .slice(0, MAX_REGION_CANDIDATES)
       .map(({ url, route }) => ({
@@ -941,6 +1014,40 @@ class HostLink {
           return { transport: joined.transport, via: { relay: joined.relay } }
         },
       }))
+  }
+
+  /** Target relay URL when a manual relay preference matches a route on `host`; null otherwise. */
+  private preferredRelayUrl(host: KnownHost): string | null {
+    return this.client.preferredRelayUrl(host.relay, this.id)
+  }
+
+  /** The client's manual relay preference changed: switch paths right away when applicable. */
+  preferenceChanged(): void {
+    if (this.closed) return
+    const session = this.session
+    if (session?.open) {
+      if ('relay' in session.via) {
+        this.compareSoon(0)
+        return
+      }
+      // Keep the direct connection, but rotate any standby relay socket to the newly preferred node.
+      const host = this.host
+      const preferred = host ? this.preferredRelayUrl(host) : null
+      if (
+        this.standby &&
+        preferred !== null &&
+        'relay' in this.standby.via &&
+        this.standby.via.relay !== preferred
+      ) {
+        this.standby.close()
+        this.standby = null
+        void this.joinStandby(session)
+      }
+      return
+    }
+    if (!this.trying && !this.stoppedFor('removed', 'update_client', 'other_account')) {
+      this.retry()
+    }
   }
 
   /** The route through the host's relay regions, best first, which leaves a draining one. */
@@ -2275,6 +2382,7 @@ export class HostClient {
     string,
     { url: string; pin?: string; hostRtt: number | null }
   >()
+  private relayPreference: RelayPreference
   private stopped = false
   private networkTimer: ReturnType<typeof setInterval> | null = null
   private network = ''
@@ -2297,6 +2405,37 @@ export class HostClient {
           signal,
         }))
     this.retryDelay = options.retryDelay ?? retryDelay
+    this.relayPreference =
+      options.relayPreference !== undefined
+        ? typeof options.relayPreference === 'string'
+          ? parseRelayPreference(options.relayPreference)
+          : options.relayPreference
+        : (options.relay?.regions?.getPreference?.() ?? { kind: 'automatic' })
+    if (options.relayPreference !== undefined) {
+      options.relay?.regions?.setPreference?.(this.relayPreference)
+    }
+  }
+
+  /** Current client-side relay preference. */
+  getRelayPreference(): RelayPreference {
+    return this.relayPreference
+  }
+
+  /**
+   * Updates the client-side relay preference, syncs `DeviceRegions`, notifies online hosts via
+   * `relay.prefer`, and triggers immediate route re-evaluation across links.
+   */
+  setRelayPreference(next: RelayPreference | string): void {
+    const parsed = typeof next === 'string' ? parseRelayPreference(next) : next
+    const same = serializeRelayPreference(parsed) === serializeRelayPreference(this.relayPreference)
+    this.relayPreference = parsed
+    this.options.relay?.regions?.setPreference?.(parsed)
+    if (same) return
+    for (const link of this.links.values()) {
+      link.sendPreference()
+      link.preferenceChanged()
+    }
+    this.options.changed()
   }
 
   /** Records or clears the own-relay metadata pushed by `relay.own` for a host. */
@@ -2304,14 +2443,107 @@ export class HostClient {
     hostId: string,
     own: { url: string; pin?: string; hostRtt: number | null } | null,
   ): void {
-    if (own) this.ownRelays.set(hostId, own)
-    else this.ownRelays.delete(hostId)
+    const before = this.ownRelays.get(hostId) ?? null
+    if (own) {
+      this.ownRelays.set(hostId, own)
+      void this.options.relay?.regions?.measureOwnRelays?.([
+        { id: 'own', url: own.url, ...(own.pin ? { pin: own.pin } : {}) },
+      ])
+    } else {
+      this.ownRelays.delete(hostId)
+    }
+    if (before?.url !== own?.url || before?.pin !== own?.pin) {
+      this.options.changed()
+    }
+  }
+
+  /** Deduplicated own relays known from paired hosts (stored metadata plus live `relay.own`). */
+  knownOwnRelays(): RelayRegion[] {
+    const main = this.options.relay?.main
+    const byUrl = new Map<string, RelayRegion>()
+    const currentAccount = this.account()
+    for (const host of this.options.hosts.list()) {
+      if (host.removed || foldedHost(host, currentAccount)) continue
+      const live = this.ownRelays.get(host.id)
+      const stored = main && host.relay ? hostOwnRelay(host.relay, main) : null
+      const candidate = live ?? stored
+      if (!candidate) continue
+      const existing = byUrl.get(candidate.url)
+      if (!existing || (!existing.pin && candidate.pin)) {
+        byUrl.set(candidate.url, {
+          id: 'own',
+          url: candidate.url,
+          ...(candidate.pin ? { pin: candidate.pin } : {}),
+        })
+      }
+    }
+    return [...byUrl.values()]
+  }
+
+  /** End-to-end RTT estimate (`hostRtt + deviceRtt`) for a host's own relay when both legs are known. */
+  private ownRelayTotalRtt(hostId: string | undefined, origin: string): number | null {
+    const deviceRtt = this.options.relay?.regions?.ownRtt?.(origin) ?? null
+    const hostRtt = hostId ? (this.ownRelays.get(hostId)?.hostRtt ?? null) : null
+    return deviceRtt !== null && hostRtt !== null ? deviceRtt + hostRtt : null
+  }
+
+  /** Resolves the effective own relay endpoint for `relay` / `hostId`, if any. */
+  private ownRelayFor(
+    relay: HostRelay,
+    hostId: string | undefined,
+    main: string,
+  ): { url: string; pin?: string } | null {
+    const declared = hostOwnRelay(relay, main)
+    if (declared) return declared
+    const live = hostId ? this.ownRelays.get(hostId) : undefined
+    return live ? { url: live.url, ...(live.pin ? { pin: live.pin } : {}) } : null
+  }
+
+  /** Resolves the URL of an official region id from ranked entries, signed list, or main origin. */
+  private officialUrlForId(
+    id: string,
+    ranked: readonly RankedRegion[],
+    main: string,
+  ): string | null {
+    const inRanked = ranked.find((region) => region.id === id)
+    if (inRanked) return inRanked.url
+    if (id === 'main') return main
+    const listed = this.options.relay?.regions?.officialNodes?.().find((node) => node.id === id)
+    return listed?.url ?? null
   }
 
   /**
-   * How to reach a host through its relays (official and/or own): prefers the route that joined
-   * last, tries own relays strictly with no token, and returns `signed_out` when only official
-   * relays exist while signed out.
+   * Target relay URL when a manual relay preference matches an available route on `relay`, or null
+   * in automatic mode or when the chosen node does not apply to this host.
+   */
+  preferredRelayUrl(relay: HostRelay | undefined, hostId: string): string | null {
+    const client = this.options.relay
+    const pref = this.relayPreference
+    if (!relay || !client || pref.kind === 'automatic') return null
+    if (pref.kind === 'own') {
+      const own = this.ownRelayFor(relay, hostId, client.main)
+      return own?.url === pref.origin ? own.url : null
+    }
+    if (!client.token()) return null
+    const hasOfficial = relay.urls.some((url) => trustedRelay(url, client.main))
+    if (!hasOfficial) return null
+    const ranked = this.relayRegions(hostId) ?? []
+    const targetUrl = this.officialUrlForId(pref.id, ranked, client.main)
+    if (!targetUrl) return null
+    const named = [...new Set([...relay.urls, client.main])].filter((url) =>
+      trustedRelay(url, client.main),
+    )
+    const allowed = client.regions ? client.regions.allowed(named) : named
+    if (ranked.some((region) => region.url === targetUrl) || allowed.includes(targetUrl)) {
+      return targetUrl
+    }
+    return null
+  }
+
+  /**
+   * How to reach a host through its relays (official and/or own): honors `relayPreference`, ranks
+   * official regions and own relay by total RTT in automatic mode, tries own relays strictly with
+   * `token: null`, and returns `signed_out` when only official relays exist while signed out.
    */
   relayRoute(
     relay: HostRelay | undefined,
@@ -2321,10 +2553,11 @@ export class HostClient {
   ): RelayRoute | RelayProblem | null {
     const client = this.options.relay
     if (!relay || !client) return null
-    const own = hostOwnRelay(relay, client.main)
+    const own = this.ownRelayFor(relay, hostId, client.main)
     const token = client.token()
     const hasOfficial = relay.urls.some((url) => trustedRelay(url, client.main))
-    const officialEndpoints: RelayEndpoint[] = []
+    const ranked = token && hasOfficial && hostId ? (this.relayRegions(hostId) ?? []) : []
+    const officialEndpoints: { endpoint: RelayEndpoint; rtt: number | null }[] = []
     if (token && hasOfficial) {
       // The account's token goes only to the project's relays, whatever a code or a host names.
       const named = [...new Set([...relay.urls, client.main])].filter((url) =>
@@ -2332,33 +2565,77 @@ export class HostClient {
       )
       const urls = client.regions ? client.regions.allowed(named) : named
       if (last && urls.includes(last)) urls.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
-      const ranked = hostId ? (this.relayRegions(hostId) ?? []) : []
-      officialEndpoints.push(
-        ...ranked.map((region) =>
-          region.pin ? { url: region.url, pin: region.pin, token } : { url: region.url, token },
-        ),
-        ...urls
-          .filter((url) => !ranked.some((region) => region.url === url))
-          .map((url) => ({ url, token })),
-      )
+      for (const region of ranked) {
+        officialEndpoints.push({
+          endpoint: region.pin
+            ? { url: region.url, pin: region.pin, token }
+            : { url: region.url, token },
+          rtt: region.rtt,
+        })
+      }
+      for (const url of urls) {
+        if (ranked.some((region) => region.url === url)) continue
+        officialEndpoints.push({ endpoint: { url, token }, rtt: null })
+      }
     }
+    // Own relays NEVER receive Kettu account or relay tokens.
     const ownEndpoint: RelayEndpoint | null = own
       ? { url: own.url, ...(own.pin ? { pin: own.pin } : {}), token: null }
       : null
     if (!ownEndpoint && officialEndpoints.length === 0) {
       return !token && hasOfficial ? 'signed_out' : null
     }
-    const endpoints: RelayEndpoint[] = ownEndpoint
-      ? last === ownEndpoint.url
-        ? [ownEndpoint, ...officialEndpoints]
-        : [...officialEndpoints, ownEndpoint]
-      : officialEndpoints
+
+    const pref = this.relayPreference
+    const officialList = officialEndpoints.map((entry) => entry.endpoint)
+    let endpoints: RelayEndpoint[]
+    if (pref.kind === 'own' && ownEndpoint && ownEndpoint.url === pref.origin) {
+      endpoints = [ownEndpoint, ...officialList]
+    } else if (pref.kind === 'official') {
+      const targetUrl = this.officialUrlForId(pref.id, ranked, client.main)
+      const orderedOfficial = [...officialList]
+      if (targetUrl) {
+        const index = orderedOfficial.findIndex((entry) => entry.url === targetUrl)
+        if (index > 0) {
+          const chosen = orderedOfficial[index]!
+          orderedOfficial.splice(index, 1)
+          orderedOfficial.unshift(chosen)
+        }
+      }
+      endpoints = ownEndpoint ? [...orderedOfficial, ownEndpoint] : orderedOfficial
+    } else if (ownEndpoint && officialEndpoints.length > 0) {
+      const ownTotalRtt = this.ownRelayTotalRtt(hostId, ownEndpoint.url)
+      const hasAnyRtt =
+        ownTotalRtt !== null || officialEndpoints.some((entry) => entry.rtt !== null)
+      if (hasAnyRtt) {
+        const combined = [
+          ...officialEndpoints.map((entry, order) => ({
+            endpoint: entry.endpoint,
+            rtt: entry.rtt,
+            order,
+          })),
+          { endpoint: ownEndpoint, rtt: ownTotalRtt, order: officialEndpoints.length },
+        ]
+        combined.sort((a, b) => {
+          if (a.rtt !== null && b.rtt !== null && a.rtt !== b.rtt) return a.rtt - b.rtt
+          if (a.rtt === null && b.rtt !== null) return 1
+          if (a.rtt !== null && b.rtt === null) return -1
+          return a.order - b.order
+        })
+        endpoints = combined.map((entry) => entry.endpoint)
+      } else {
+        endpoints =
+          last === ownEndpoint.url ? [ownEndpoint, ...officialList] : [...officialList, ownEndpoint]
+      }
+    } else {
+      endpoints = ownEndpoint ? [ownEndpoint] : officialList
+    }
     return this.relayVia(relay.id, null, endpoints, drained)
   }
 
   /**
    * A route through each of a host's ranked official regions plus its own relay (when configured),
-   * best first, for background path comparison.
+   * ordered by `relayPreference` and end-to-end RTT, for background path comparison.
    */
   regionRoutes(
     relay: HostRelay | undefined,
@@ -2368,8 +2645,9 @@ export class HostClient {
     const client = this.options.relay
     if (!relay || !client) return []
     const token = client.token()
-    const ranked = token ? (this.relayRegions(hostId) ?? []) : []
-    const routes: { url: string; rtt: number | null; route: RelayRoute }[] = ranked.map(
+    const hasOfficial = relay.urls.some((url) => trustedRelay(url, client.main))
+    const ranked = token && hasOfficial ? (this.relayRegions(hostId) ?? []) : []
+    const officialEntries: { url: string; rtt: number | null; route: RelayRoute }[] = ranked.map(
       (region) => ({
         url: region.url,
         rtt: region.rtt,
@@ -2381,20 +2659,132 @@ export class HostClient {
         ),
       }),
     )
-    const own = hostOwnRelay(relay, client.main)
-    if (own && !routes.some((entry) => entry.url === own.url)) {
-      const ownEndpoint: RelayEndpoint = {
-        url: own.url,
-        ...(own.pin ? { pin: own.pin } : {}),
-        token: null,
+    if (token && hasOfficial) {
+      const named = [...new Set([...relay.urls, client.main])].filter((url) =>
+        trustedRelay(url, client.main),
+      )
+      const allowed = client.regions ? client.regions.allowed(named) : named
+      for (const url of allowed) {
+        if (officialEntries.some((entry) => entry.url === url)) continue
+        officialEntries.push({
+          url,
+          rtt: null,
+          route: this.relayVia(relay.id, null, [{ url, token }], drained),
+        })
       }
-      routes.push({
-        url: own.url,
+    }
+    const own = this.ownRelayFor(relay, hostId, client.main)
+    const ownEntry: { url: string; rtt: number | null; route: RelayRoute } | null =
+      own && !officialEntries.some((entry) => entry.url === own.url)
+        ? {
+            url: own.url,
+            rtt: this.ownRelayTotalRtt(hostId, own.url),
+            route: this.relayVia(
+              relay.id,
+              null,
+              [{ url: own.url, ...(own.pin ? { pin: own.pin } : {}), token: null }],
+              drained,
+            ),
+          }
+        : null
+
+    const pref = this.relayPreference
+    if (pref.kind === 'own' && ownEntry && ownEntry.url === pref.origin) {
+      return [ownEntry, ...officialEntries]
+    }
+    if (pref.kind === 'official') {
+      const targetUrl = this.officialUrlForId(pref.id, ranked, client.main)
+      const orderedOfficial = [...officialEntries]
+      if (targetUrl) {
+        const index = orderedOfficial.findIndex((entry) => entry.url === targetUrl)
+        if (index > 0) {
+          const chosen = orderedOfficial[index]!
+          orderedOfficial.splice(index, 1)
+          orderedOfficial.unshift(chosen)
+        }
+      }
+      return ownEntry ? [...orderedOfficial, ownEntry] : orderedOfficial
+    }
+    if (!ownEntry) return officialEntries
+    const combined = [
+      ...officialEntries.map((entry, order) => ({ entry, order })),
+      { entry: ownEntry, order: officialEntries.length },
+    ]
+    combined.sort((a, b) => {
+      const x = a.entry.rtt
+      const y = b.entry.rtt
+      if (x !== null && y !== null && x !== y) return x - y
+      if (x === null && y !== null) return 1
+      if (x !== null && y === null) return -1
+      return a.order - b.order
+    })
+    return combined.map(({ entry }) => entry)
+  }
+
+  /** Client-side relay selection snapshot for Settings › Hosts. */
+  relayNodes(): ClientRelayNodes {
+    const activeUrls = new Set<string>()
+    for (const link of this.links.values()) {
+      if (link.connection.state === 'online' && 'relay' in link.connection) {
+        activeUrls.add(link.connection.relay)
+      }
+    }
+    const client = this.options.relay
+    const listed = client?.regions?.officialNodes?.() ?? []
+    const official: ClientRelayOfficialNode[] = listed.map((node) => ({
+      ...node,
+      inUse: activeUrls.has(node.url),
+    }))
+    if (official.length === 0 && client && client.token() !== null) {
+      official.push({
+        id: 'main',
+        url: client.main,
         rtt: null,
-        route: this.relayVia(relay.id, null, [ownEndpoint], drained),
+        inUse: activeUrls.has(client.main),
       })
     }
-    return routes
+    for (const link of this.links.values()) {
+      if (
+        link.connection.state !== 'online' ||
+        !('relay' in link.connection) ||
+        link.connection.own
+      ) {
+        continue
+      }
+      const url = link.connection.relay
+      if (official.some((node) => node.url === url)) continue
+      const id = client?.regions?.regionId?.(url) ?? (url === client?.main ? 'main' : null)
+      if (!id) continue
+      official.push({
+        id,
+        url,
+        ...(link.connection.region !== undefined ? { name: link.connection.region } : {}),
+        ...(link.connection.regionNames ? { names: link.connection.regionNames } : {}),
+        rtt: null,
+        inUse: true,
+      })
+    }
+    const own: ClientRelayOwnNode[] = this.knownOwnRelays().map((relay) => ({
+      origin: relay.url,
+      rtt: client?.regions?.ownRtt?.(relay.url) ?? null,
+      inUse: activeUrls.has(relay.url),
+    }))
+    return {
+      preference: serializeRelayPreference(this.relayPreference),
+      official,
+      own,
+    }
+  }
+
+  /** Re-probes all official regions and known hosts' own relays, then notifies listeners. */
+  async measureRelays(): Promise<void> {
+    const ownRelays = this.knownOwnRelays()
+    if (this.options.relay?.regions?.measureClientRelays) {
+      await this.options.relay.regions.measureClientRelays(ownRelays)
+    } else if (ownRelays.length > 0) {
+      await this.options.relay?.regions?.measureOwnRelays?.(ownRelays, true)
+    }
+    this.options.changed()
   }
 
   /**
@@ -2416,6 +2806,7 @@ export class HostClient {
       link.regionsChanged()
       this.options.regionsChanged?.(link.id)
     }
+    this.options.changed()
   }
 
   /**
@@ -2490,6 +2881,10 @@ export class HostClient {
   /** Starts a connection to each known host, and watches the network for a change. */
   start(): void {
     for (const host of this.options.hosts.list()) this.linkFor(host.id).start()
+    const ownRelays = this.knownOwnRelays()
+    if (ownRelays.length > 0) {
+      void this.options.relay?.regions?.measureOwnRelays?.(ownRelays)
+    }
     const every =
       this.options.networkCheckMs === undefined ? NETWORK_CHECK_MS : this.options.networkCheckMs
     if (every === null || this.networkTimer) return

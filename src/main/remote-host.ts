@@ -35,9 +35,11 @@ import {
   type PortDevice,
 } from '@shared/remote/device'
 import {
+  parseClientRelayNodes,
   parseHostPairingState,
   parseHostStatus,
   parseSshManageResult,
+  type ClientRelayNodes,
   type HostPairingState,
   type HostStatus,
   type SshAddress,
@@ -100,6 +102,8 @@ export interface RemoteHostDeps {
    * explicit official relay regions (or null for automatic), and the owner's own relay.
    */
   relay(): { enabled: boolean; own: OwnRelayInit | null; regions?: string[] | null }
+  /** Serialized client-side relay preference (`'auto'`, `'official:<id>'`, or `'own:<origin>'`). */
+  relayPreference?(): string
   /** Checks the owner's own relay and switches to it once it passed. */
   useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
   /** Whether devices of the account find this computer on the relay, as the setting is now. */
@@ -200,6 +204,8 @@ export class RemoteHost {
   private terminal: boolean | null = null
   /** The relay, as the running process was last told, in JSON. */
   private relayOn: string | null = null
+  /** The client relay preference, as the running process was last told. */
+  private relayPreferenceOn: string | null = null
   /** Whether devices of the account find this computer, as the running process was last told. */
   private discoverableOn: boolean | null = null
   /** The account, as the running process was last told. */
@@ -226,6 +232,7 @@ export class RemoteHost {
   private launchRead: Promise<void> | null = null
   private known = false
   private hostList: HostStatus[] | null = null
+  private relayNodesState: ClientRelayNodes | undefined = undefined
   private readonly hostPorts = new Map<string, MessagePortMain>()
   private readonly askers = new Map<number, PairingListener>()
   private nextCode = 1
@@ -293,6 +300,11 @@ export class RemoteHost {
   /** How many known hosts belong to another account than the one signed in to now. */
   get otherAccountHosts(): number {
     return this.hostList?.filter(folded).length ?? 0
+  }
+
+  /** Client-side relay selection snapshot from the running remote host, when reported. */
+  get relayNodes(): ClientRelayNodes | undefined {
+    return this.relayNodesState
   }
 
   /** The device key is kept in a file only the user can read, without the system's encryption. */
@@ -368,6 +380,15 @@ export class RemoteHost {
       })
     ) {
       this.relayOn = sent
+    }
+  }
+
+  /** Tells the process when the desktop client's relay preference changed; each start reads it. */
+  relayPreferenceChanged(): void {
+    const preference = this.deps.relayPreference?.() ?? 'auto'
+    if (preference === this.relayPreferenceOn) return
+    if (this.host?.post({ type: 'remote-host:relay-preference', preference })) {
+      this.relayPreferenceOn = preference
     }
   }
 
@@ -518,6 +539,15 @@ export class RemoteHost {
     if (!this.serving || !this.host) return
     await this.request(
       (requestId) => ({ type: 'remote-host:relay-measure', requestId }),
+      MEASURE_TIMEOUT_MS,
+    )
+  }
+
+  /** Measures latency to every official region and known hosts' own relays for the client. */
+  async measureClientRelays(): Promise<void> {
+    if (!this.host) return
+    await this.request(
+      (requestId) => ({ type: 'remote-host:hosts-measure-relays', requestId }),
       MEASURE_TIMEOUT_MS,
     )
   }
@@ -994,12 +1024,15 @@ export class RemoteHost {
   ): NonNullable<Extract<MainToRemoteHost, { type: 'remote-host:init' }>['relay']> {
     const relay = this.deps.relay()
     this.relayOn = JSON.stringify(relay)
+    const preference = this.deps.relayPreference?.() ?? 'auto'
+    this.relayPreferenceOn = preference
     const key = serving ? this.relayIdentity?.privateKey : undefined
     return {
       url: this.deps.relayUrl,
       enabled: relay.enabled,
       own: relay.own,
       regions: relay.regions ?? null,
+      preference,
       token: this.token,
       relayToken: this.relayToken,
       ...(key ? { key } : {}),
@@ -1044,6 +1077,7 @@ export class RemoteHost {
     this.latest = null
     this.serving = false
     this.hostList = null
+    this.relayNodesState = undefined
     this.lost()
     await host.stop(undefined, { type: 'remote-host:shutdown', reason })
   }
@@ -1077,6 +1111,13 @@ export class RemoteHost {
           ? { ...entry, connection: { state: 'offline' } }
           : entry,
       ) ?? null
+    if (this.relayNodesState) {
+      this.relayNodesState = {
+        ...this.relayNodesState,
+        official: this.relayNodesState.official.map((node) => ({ ...node, inUse: false })),
+        own: this.relayNodesState.own.map((node) => ({ ...node, inUse: false })),
+      }
+    }
     for (const answer of [...this.requests.values()]) answer(null)
     this.deps.changed?.()
     this.deps.hostsChanged?.()
@@ -1200,6 +1241,10 @@ export class RemoteHost {
         if (hosts.some((entry) => entry === null)) {
           log.warn('Ignored a hosts report with a host that is not one')
           break
+        }
+        if (message.relayNodes !== undefined) {
+          const parsedNodes = parseClientRelayNodes(message.relayNodes)
+          if (parsedNodes) this.relayNodesState = parsedNodes
         }
         this.hostList = hosts as HostStatus[]
         const known = this.hostList.length > 0

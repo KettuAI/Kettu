@@ -24,6 +24,10 @@ export interface LaunchOptions {
   dial: Dial
   /** The routes to the host the link races and moves between; `dial` alone when absent. */
   routes?: () => LinkRoute[]
+  /** Manually selected relay route key (`relay <url>`), or null in automatic mode. */
+  preferredRelay?: () => string | null
+  /** Called whenever the active session's route changes. */
+  onRoute?: (route: LinkRoute | null) => void
   key: KeyPair
   hostKey: Uint8Array
   /** The names this browser kept from the last welcome, shown until the next one. */
@@ -66,6 +70,8 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     routes:
       options.routes ??
       (() => [{ key: 'host', relay: options.address === null, dial: options.dial }]),
+    ...(options.preferredRelay ? { preferredRelay: options.preferredRelay } : {}),
+    ...(options.onRoute ? { onRoute: options.onRoute } : {}),
     hostKey: options.hostKey,
     key: options.key,
     hello: withFeatures(hello(options.client, undefined, options.account), options.features ?? []),

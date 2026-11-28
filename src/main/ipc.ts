@@ -994,6 +994,7 @@ export function registerIpcHandlers({
     remoteHost.removeHost(hostIdArg(id)) ? null : 'unknown_host',
   )
   handle('hosts:retry', 0, () => remoteHost.resume())
+  handle('hosts:measure-relays', 0, () => remoteHost.measureClientRelays())
   const manageSsh = (id: unknown, action: SshManageAction): Promise<SshManageResult> =>
     remoteHost.manageSshHost(hostIdArg(id), action)
   handle('hosts:update-ssh', 1, (_, id) => manageSsh(id, { kind: 'update' }))

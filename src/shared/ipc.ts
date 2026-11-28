@@ -517,6 +517,8 @@ export interface IpcInvokeContract {
   'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
   // Tries the hosts not connected now, without waiting for the next try.
   'hosts:retry': { args: []; result: void }
+  // Measures latency to all official relay regions and known hosts' own relays on demand.
+  'hosts:measure-relays': { args: []; result: void }
   // A host added over SSH, from its page, over SSH: installs this computer's version there,
   // moves it to another address of the same machine, tries it now, or uninstalls Kettu there and
   // forgets it here.
@@ -941,6 +943,8 @@ export interface KettuApi {
     remove(id: string): Promise<'unknown_host' | null>
     /** Tries the hosts not connected now, without waiting for the next try. */
     retry(): Promise<void>
+    /** Measures latency to all official relay regions and known hosts' own relays. */
+    measureRelays(): Promise<void>
     /** Installs this computer's version on a host added over SSH, then connects to it again. */
     updateSsh(id: string): Promise<SshManageResult>
     /** Reaches a host added over SSH at another address, once it reaches the same daemon there. */

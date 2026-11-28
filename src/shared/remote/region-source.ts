@@ -7,6 +7,7 @@
 import { pingPath, regionsPath, type RelayRegion } from './relay'
 import {
   MEASURE_EVERY_MS,
+  PREFERRED_REGIONS,
   REGIONS_CHECK_MS,
   REGIONS_RETRY_GAP_MS,
   RegionSerial,
@@ -15,12 +16,14 @@ import {
   fastestRegions,
   parseSignedRegionList,
   rankRegions,
+  serializeRelayPreference,
   verifyRegionList,
   type HostLegRegion,
   type ListedRegion,
   type RankedRegion,
   type RegionList,
   type RelayPreferMessage,
+  type RelayPreference,
   type RelayRegionsMessage,
   type SignedRegionList,
 } from './relay-regions'
@@ -276,6 +279,8 @@ export interface DeviceRegionsOptions {
   times: RegionTimes
   /** Whether regions with a pin may be used: never in a browser. */
   pinned: boolean
+  /** Initial client relay preference; defaults to automatic fastest-path selection. */
+  preference?: RelayPreference
   /** How long a region that said it drains is tried last. */
   drainedMs?: number
   now?: () => number
@@ -286,9 +291,25 @@ export class DeviceRegions {
   private readonly hosts = new Map<string, HostLegRegion[]>()
   private readonly drained = new Map<string, number>()
   private readonly now: () => number
+  private preference: RelayPreference
 
   constructor(readonly options: DeviceRegionsOptions) {
     this.now = options.now ?? Date.now
+    this.preference = options.preference ?? { kind: 'automatic' }
+  }
+
+  /** Current client relay preference. */
+  getPreference(): RelayPreference {
+    return this.preference
+  }
+
+  /** Updates the client relay preference; returns true when the effective value changed. */
+  setPreference(next: RelayPreference): boolean {
+    if (serializeRelayPreference(this.preference) === serializeRelayPreference(next)) {
+      return false
+    }
+    this.preference = next
+    return true
   }
 
   /**
@@ -323,7 +344,22 @@ export class DeviceRegions {
     const now = this.now()
     const ranked = rankRegions(regions, (region) => this.options.times.rtt(region))
     const drained = (region: RelayRegion): boolean => (this.drained.get(region.url) ?? 0) > now
-    return [...ranked.filter((region) => !drained(region)), ...ranked.filter(drained)]
+    const active = ranked.filter((region) => !drained(region))
+    const draining = ranked.filter(drained)
+    if (this.preference.kind === 'official') {
+      const targetId = this.preference.id
+      const index = active.findIndex(
+        (region) =>
+          region.id === targetId ||
+          (targetId === 'main' && region.url === this.options.source.main),
+      )
+      if (index > 0) {
+        const chosen = active[index]!
+        active.splice(index, 1)
+        active.unshift(chosen)
+      }
+    }
+    return [...active, ...draining]
   }
 
   /** A region said it drains: tried last for a while. */
@@ -335,14 +371,30 @@ export class DeviceRegions {
     this.hosts.delete(host)
   }
 
-  /** What to tell a host: this device's fastest regions with its list, once it has timed them. */
+  /** What to tell a host: this device's preferred or fastest regions with its list. */
   prefer(): RelayPreferMessage | null {
     const { list, signed } = this.options.source
     if (!list || !signed) return null
-    const regions = fastestRegions(list, (region) => this.options.times.rtt(region), {
+    const fastest = fastestRegions(list, (region) => this.options.times.rtt(region), {
       pinned: this.options.pinned,
     })
-    return regions.length > 0 ? { type: 'relay.prefer', regions, list: signed } : null
+    if (this.preference.kind === 'official' && this.preference.id !== 'main') {
+      const targetId = this.preference.id
+      const chosen = list.regions.find(
+        (region) =>
+          region.id === targetId &&
+          region.state === 'active' &&
+          (this.options.pinned || !region.pin),
+      )
+      if (chosen) {
+        const regions = [chosen.id, ...fastest.filter((id) => id !== chosen.id)].slice(
+          0,
+          PREFERRED_REGIONS,
+        )
+        return { type: 'relay.prefer', regions, list: signed }
+      }
+    }
+    return fastest.length > 0 ? { type: 'relay.prefer', regions: fastest, list: signed } : null
   }
 
   /** The regions of this device's own list worth timing: active and probe, usable here. */

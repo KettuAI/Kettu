@@ -209,6 +209,7 @@ const api: KettuApi = {
     setAddresses: (id, addresses) => invoke('hosts:set-addresses', id, addresses),
     remove: (id) => invoke('hosts:remove', id),
     retry: () => invoke('hosts:retry'),
+    measureRelays: () => invoke('hosts:measure-relays'),
     updateSsh: (id) => invoke('hosts:update-ssh', id),
     changeSsh: (id, address) => invoke('hosts:change-ssh', id, address),
     reconnect: (id) => invoke('hosts:reconnect', id),

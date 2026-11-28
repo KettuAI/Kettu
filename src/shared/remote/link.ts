@@ -247,6 +247,14 @@ export interface HostLinkOptions {
   dial: Dial
   /** The routes to race and move between, read at each try; `dial` alone, without a relay, when absent. */
   routes?: () => LinkRoute[]
+  /**
+   * Key of the user-selected relay route when manual relay preference is active, or null in
+   * automatic mode. When set, background comparisons stay on the preferred relay (while direct
+   * routes still win over relays) and move directly to it when on a different relay.
+   */
+  preferredRelay?: () => string | null
+  /** Called whenever the active session's route changes (welcomed on a route or disconnected). */
+  onRoute?: (route: LinkRoute | null) => void
   hostKey: Uint8Array
   key: KeyPair
   hello: Hello
@@ -309,6 +317,25 @@ export class HostLink {
     return this.current
   }
 
+  /** The route carrying the active session, or null while disconnected. */
+  get currentRoute(): LinkRoute | null {
+    return this.session?.route ?? null
+  }
+
+  /** Triggers an immediate route comparison (or reconnect try) after a relay preference change. */
+  recheckRoutes(): void {
+    if (this.stopped || this.connecting || this.taking) return
+    if (this.session) {
+      this.compareSoon(0)
+      return
+    }
+    if (this.timer && (!this.options.visible || this.options.visible())) {
+      clearTimeout(this.timer)
+      this.timer = null
+      void this.connect()
+    }
+  }
+
   start(): void {
     const adopted = this.options.adopt
     if (adopted) {
@@ -340,6 +367,10 @@ export class HostLink {
     this.acks.pause()
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.session?.channel.close()
+    if (this.session) {
+      this.session = null
+      this.options.onRoute?.(null)
+    }
     this.aside?.close()
     this.aside = null
   }
@@ -471,7 +502,24 @@ export class HostLink {
       ? { token: this.resumeToken, received: this.acks.received }
       : null
     try {
-      ;({ opened, route } = await this.race(this.routes()))
+      const routes = this.routes()
+      const preferred = this.options.preferredRelay?.() ?? null
+      const primary =
+        preferred !== null
+          ? routes.filter((entry) => !entry.relay || entry.key === preferred)
+          : routes
+      const fallback =
+        preferred !== null && primary.length > 0 && primary.length < routes.length
+          ? routes.filter((entry) => entry.relay && entry.key !== preferred)
+          : []
+      try {
+        ;({ opened, route } = await this.race(primary.length > 0 ? primary : routes))
+      } catch (primaryError) {
+        if (this.stopped || fallback.length === 0 || primaryError instanceof HandshakeDropped) {
+          throw primaryError
+        }
+        ;({ opened, route } = await this.race(fallback))
+      }
       // Said on the winner alone, so a losing route never spends the token.
       void opened.channel
         .send(resume ? { ...this.options.hello, resume } : this.options.hello)
@@ -571,6 +619,7 @@ export class HostLink {
     this.resumeToken = welcome.resume ?? null
     this.session = session
     this.failures = 0
+    this.options.onRoute?.(route)
     for (const message of later.splice(0)) {
       if (message.kind === 'json') this.receive(session, message.value)
       else this.receiveBytes(session, message.stream, message.data)
@@ -601,6 +650,7 @@ export class HostLink {
     session.keepalive?.stop()
     if (this.session !== session) return
     this.session = null
+    this.options.onRoute?.(null)
     this.acks.pause()
     const reason = session.closing
     if (stops(reason)) {
@@ -643,13 +693,21 @@ export class HostLink {
 
   /**
    * Opens the other routes to a finished handshake each, for their round trips, and moves the
-   * session to the best when it is clearly faster than the one it is on.
+   * session to the best when it is clearly faster than the one it is on. Respects a manually
+   * selected relay route while keeping direct routes preferred over any relay.
    */
   private async compareNow(failing: boolean): Promise<boolean> {
     const session = this.session
     if (this.stopped || this.connecting || this.taking || !session) return false
     if (!resumable(session) || this.resumeToken === null) return false
-    const others = this.routes().filter((route) => route.key !== session.route.key)
+    const preferred = this.options.preferredRelay?.() ?? null
+    const allOthers = this.routes().filter((route) => route.key !== session.route.key)
+    const others =
+      !failing && preferred !== null
+        ? !session.route.relay || session.route.key === preferred
+          ? allOthers.filter((route) => !route.relay)
+          : allOthers.filter((route) => !route.relay || route.key === preferred)
+        : allOthers
     if (others.length === 0) return false
     this.compares.started()
     const probed = await Promise.all(others.map((route) => this.probe(route)))
@@ -659,13 +717,37 @@ export class HostLink {
       else this.times.failed(path.key)
     }
     const current = { key: session.route.key, relay: session.route.relay }
-    const ranked: { key: string; relay: boolean }[] = rankPaths([current, ...opened], this.times)
-    // Off a failing route, the best of the others will do.
-    const best = opened.find(
-      (path) => path === (failing ? ranked.find((r) => r !== current) : ranked[0]),
-    )
     const moving = this.session === session && !this.taking && !this.stopped
-    const target = moving && best && shouldMove(current, best, this.times, failing) ? best : null
+    let target: (LinkRoute & { opened: Opened }) | null = null
+    if (moving) {
+      if (!failing && preferred !== null) {
+        const directOpened = opened.filter((path) => !path.relay)
+        if (directOpened.length > 0) {
+          const rankedDirect: { key: string; relay: boolean }[] = rankPaths(
+            [current, ...directOpened],
+            this.times,
+          )
+          const bestDirect = directOpened.find((path) => path === rankedDirect[0])
+          if (bestDirect && shouldMove(current, bestDirect, this.times, false)) {
+            target = bestDirect
+          }
+        }
+        if (!target && session.route.relay && session.route.key !== preferred) {
+          // Manual switch to a different reachable relay bypasses MOVE_RATIO so selection applies immediately.
+          target = opened.find((path) => path.key === preferred) ?? null
+        }
+      } else {
+        const ranked: { key: string; relay: boolean }[] = rankPaths(
+          [current, ...opened],
+          this.times,
+        )
+        // Off a failing route, the best of the others will do.
+        const best = opened.find(
+          (path) => path === (failing ? ranked.find((r) => r !== current) : ranked[0]),
+        )
+        target = best && shouldMove(current, best, this.times, failing) ? best : null
+      }
+    }
     for (const path of opened) if (path !== target) path.opened.channel.close()
     if (!target) return false
     await this.move(target.opened, target)
