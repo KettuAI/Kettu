@@ -12,7 +12,7 @@ import type { Transport } from '@shared/remote/transport'
 import type { DirectSettings } from '@shared/settings'
 import type { LogFn } from '../agent-host/storage'
 import { directAddresses, findAddresses, type Interfaces } from './addresses'
-import { CLOSE_GRACE_MS, HandshakeLimits } from './limits'
+import { CLOSE_GRACE_MS, HandshakeLimits, sourceOf } from './limits'
 import type { RemoteServer } from './server'
 import { streamTransport } from './stream-transport'
 import { WebServer } from './web'
@@ -28,6 +28,9 @@ const FIRST_BYTES_TIMEOUT_MS = 10_000
 
 /** Connections waiting for their first bytes at once; more are cut. */
 export const MAX_UNREAD = 64
+
+/** Unread connections one source may hold at once, so a single peer cannot starve others. */
+export const MAX_UNREAD_PER_SOURCE = 8
 
 const SOCKET_OPTIONS = { noDelay: true, keepAlive: true, keepAliveInitialDelay: KEEPALIVE_MS }
 
@@ -57,6 +60,7 @@ export class DirectListener {
   private readonly sockets = new Set<Socket>()
   /** Connections that have sent nothing yet. */
   private readonly unread = new Set<Socket>()
+  private readonly unreadBySource = new Map<string, number>()
   private readonly limits: HandshakeLimits
   private readonly web: WebServer
   private timer: ReturnType<typeof setInterval> | null = null
@@ -173,19 +177,31 @@ export class DirectListener {
   /** Waits for a connection's first bytes, which say whether it is a channel or a browser's. */
   private take(socket: Socket): void {
     socket.on('error', () => {})
+    if (socket.destroyed) return
     this.sockets.add(socket)
     socket.once('close', () => this.sockets.delete(socket))
-    if (this.unread.size >= MAX_UNREAD) {
+    const source = socket.remoteAddress ? sourceOf(socket.remoteAddress) : null
+    const sourceCount = source !== null ? (this.unreadBySource.get(source) ?? 0) : 0
+    if (
+      this.unread.size >= MAX_UNREAD ||
+      (source !== null && sourceCount >= MAX_UNREAD_PER_SOURCE)
+    ) {
       socket.destroy()
       this.options.server.refusedOne()
       return
     }
     this.unread.add(socket)
+    if (source !== null) this.unreadBySource.set(source, sourceCount + 1)
     const timeout = this.options.firstBytesTimeoutMs ?? FIRST_BYTES_TIMEOUT_MS
     const timer = setTimeout(() => socket.destroy(), timeout)
     const read = (): void => {
       clearTimeout(timer)
-      this.unread.delete(socket)
+      if (!this.unread.delete(socket)) return
+      if (source !== null) {
+        const remaining = (this.unreadBySource.get(source) ?? 1) - 1
+        if (remaining <= 0) this.unreadBySource.delete(source)
+        else this.unreadBySource.set(source, remaining)
+      }
       socket.off('data', first)
       socket.off('close', read)
     }

@@ -21,14 +21,20 @@ import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import { FRAME_PATH } from './frames'
-import { CLOSE_GRACE_MS, type HandshakeLimits } from './limits'
+import { CLOSE_GRACE_MS, sourceOf, type HandshakeLimits } from './limits'
 import type { RemoteServer } from './server'
 
-/** How long an HTTP connection has for a request's headers, at first and after each response. */
+/** How long an HTTP connection has for its first request's headers. */
+const FIRST_REQUEST_TIMEOUT_MS = 5_000
+
+/** How long an idle keep-alive HTTP connection has for the next request's headers. */
 const REQUEST_TIMEOUT_MS = 10_000
 
 /** HTTP connections at once: a few for each browser loading the client. More are cut. */
-const MAX_HTTP_CONNECTIONS = 64
+export const MAX_HTTP_CONNECTIONS = 64
+
+/** HTTP connections one source may hold at once, so a single peer cannot starve others. */
+export const MAX_HTTP_CONNECTIONS_PER_SOURCE = 12
 
 /** How often a WebSocket is pinged; one that did not answer the ping before is cut. */
 const PING_MS = 30_000
@@ -144,6 +150,11 @@ interface WebFile {
   type: string
 }
 
+interface HttpConnection {
+  timer: ReturnType<typeof setTimeout> | null
+  source: string | null
+}
+
 export interface WebServerOptions {
   /** The folder of the web client's built files, or null in a build without one. */
   root: string | null
@@ -161,8 +172,9 @@ export interface WebServerOptions {
 export class WebServer {
   private readonly http: Server
   private readonly sockets: WebSocketServer
-  /** HTTP connections, each with the timer that cuts it while it waits for a request. */
-  private readonly connections = new Map<Socket, ReturnType<typeof setTimeout> | null>()
+  /** HTTP connections, each with its source and the timer that cuts it while it waits for a request. */
+  private readonly connections = new Map<Socket, HttpConnection>()
+  private readonly connectionsBySource = new Map<string, number>()
   private files: Promise<Map<string, WebFile> | null> | null = null
   private viewerFiles: Promise<Map<string, WebFile> | null> | null = null
 
@@ -187,10 +199,19 @@ export class WebServer {
 
   /** Answers a connection whose first bytes, still unread, are an HTTP request. */
   take(socket: Socket): void {
-    if (this.connections.size >= MAX_HTTP_CONNECTIONS) return void socket.destroy()
-    this.connections.set(socket, null)
+    if (socket.destroyed) return
+    const source = socket.remoteAddress ? sourceOf(socket.remoteAddress) : null
+    const sourceCount = source !== null ? (this.connectionsBySource.get(source) ?? 0) : 0
+    if (
+      this.connections.size >= MAX_HTTP_CONNECTIONS ||
+      (source !== null && sourceCount >= MAX_HTTP_CONNECTIONS_PER_SOURCE)
+    ) {
+      return void socket.destroy()
+    }
+    this.connections.set(socket, { timer: null, source })
+    if (source !== null) this.connectionsBySource.set(source, sourceCount + 1)
     socket.once('close', () => this.forget(socket))
-    this.wait(socket)
+    this.wait(socket, FIRST_REQUEST_TIMEOUT_MS)
     this.http.emit('connection', socket)
   }
 
@@ -199,25 +220,31 @@ export class WebServer {
     for (const socket of this.connections.keys()) socket.destroy()
   }
 
-  private wait(socket: Socket): void {
-    if (!this.connections.has(socket)) return
-    clearTimeout(this.connections.get(socket) ?? undefined)
-    const timeout = this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
-    this.connections.set(
-      socket,
-      setTimeout(() => socket.destroy(), timeout),
-    )
+  private wait(socket: Socket, defaultTimeout = REQUEST_TIMEOUT_MS): void {
+    const entry = this.connections.get(socket)
+    if (!entry) return
+    clearTimeout(entry.timer ?? undefined)
+    const timeout = this.options.requestTimeoutMs ?? defaultTimeout
+    entry.timer = setTimeout(() => socket.destroy(), timeout)
   }
 
   private stopWaiting(socket: Socket): void {
-    if (!this.connections.has(socket)) return
-    clearTimeout(this.connections.get(socket) ?? undefined)
-    this.connections.set(socket, null)
+    const entry = this.connections.get(socket)
+    if (!entry) return
+    clearTimeout(entry.timer ?? undefined)
+    entry.timer = null
   }
 
   private forget(socket: Socket): void {
-    clearTimeout(this.connections.get(socket) ?? undefined)
+    const entry = this.connections.get(socket)
+    if (!entry) return
+    clearTimeout(entry.timer ?? undefined)
     this.connections.delete(socket)
+    if (entry.source !== null) {
+      const remaining = (this.connectionsBySource.get(entry.source) ?? 1) - 1
+      if (remaining <= 0) this.connectionsBySource.delete(entry.source)
+      else this.connectionsBySource.set(entry.source, remaining)
+    }
   }
 
   private respond(request: IncomingMessage, response: ServerResponse): void {
