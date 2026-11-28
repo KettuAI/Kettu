@@ -11,6 +11,7 @@ import { PLUGIN_SETTING_CHARS } from './plugins'
 import {
   APP_ICONS,
   cjkFontKey,
+  CONVERSATION_WIDTHS,
   isFontFamilyName,
   MAX_FONT_FAMILY_CHARS,
   type UserFontRole,
@@ -662,6 +663,22 @@ const ENTRIES = {
   'appearance.font-prose-cjk': userCjkFont('prose'),
   'appearance.font-code': userFont('code'),
   'appearance.font-code-cjk': userCjkFont('code'),
+  'appearance.conversation-width': {
+    section: 'appearance',
+    row: 'conversation-width',
+    group: 'appearance.groups.conversation',
+    name: 'appearance.conversationWidth.name',
+    description: 'appearance.conversationWidth.description',
+    keywords: 'appearance.conversationWidth.keywords',
+    part: 'desktop',
+    access: 'change',
+    ...pick(
+      'appearance',
+      'conversationWidth',
+      (file) => file.appearance.conversationWidth,
+      choices(CONVERSATION_WIDTHS, (width) => `appearance.conversationWidth.${width}`),
+    ),
+  },
   'appearance.sidebar-hover': {
     section: 'appearance',
     row: 'sidebar-hover',

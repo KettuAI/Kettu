@@ -2,8 +2,13 @@
 
 /* The session view: the thread's column, which the composer under it keeps to. */
 .ks-session {
-  /* The width the user dragged the column to, else the text size's. */
-  --thread-column: var(--thread-column-set, calc(48 * var(--prose-size) + 8px));
+  /* The default width for the chosen Appearance preset, scaled with the prose size. */
+  --thread-column-preset: calc(48 * var(--prose-size) + 8px);
+  /* The width the user dragged the column to, else the chosen preset's. */
+  --thread-column: var(--thread-column-set, var(--thread-column-preset));
+}
+:root[data-conversation-width='wide'] .ks-session {
+  --thread-column-preset: calc(72 * var(--prose-size) + 8px);
 }
 /* The thread sets its prose, tables and code on its own size; the column keeps the composer's. */
 .ks-thread {

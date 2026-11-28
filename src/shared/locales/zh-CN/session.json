@@ -1044,7 +1044,12 @@
       "docs": "Codex 配置文档"
     },
     "width": {
-      "label": "调整内容宽度"
+      "label": "调整内容宽度",
+      "hint": "拖动调整宽度，双击恢复{{preset}}宽度",
+      "presets": {
+        "standard": "标准",
+        "wide": "宽版"
+      }
     },
     "outline": {
       "label_other": "大纲，{{count}} 条消息",

@@ -3,12 +3,14 @@ import {
   DEFAULT_SETTINGS,
   isFontFamilyName,
   USER_FONT_ROLES,
+  type ConversationWidth,
   type SettingsFile,
   type UserFonts,
 } from '@shared/settings'
 import { showColorMode } from '@renderer/lib/color-mode'
 import { applyLanguage } from '@renderer/lib/i18n'
 import { useSettingsStore, type SettingsStore } from './settings-store'
+import { setThreadWidth } from './thread-width'
 
 export { useSettingsStore, type SettingsStore }
 
@@ -29,12 +31,18 @@ export function applyUserFonts(root: HTMLElement, fonts: UserFonts): void {
   }
 }
 
+/** Applies the selected conversation width preset onto `:root`. */
+export function applyConversationWidth(root: HTMLElement, width: ConversationWidth): void {
+  root.dataset.conversationWidth = width
+}
+
 function applyAppearance(settings: SettingsFile, fade = false): void {
   const root = document.documentElement
-  const { theme, textSize, reduceMotion, zoom, fonts } = settings.appearance
+  const { theme, textSize, conversationWidth, reduceMotion, zoom, fonts } = settings.appearance
   const dark = theme === 'dark' || (theme === 'system' && (darkQuery?.matches ?? false))
   showColorMode(dark ? 'dark' : 'light', fade)
   root.dataset.textSize = textSize
+  applyConversationWidth(root, conversationWidth)
   root.dataset.reduceMotion = reduceMotion
   root.style.setProperty('--zoom', String(zoom))
   applyUserFonts(root, fonts)
@@ -54,6 +62,13 @@ export async function initSettings(): Promise<void> {
     // The settings read at launch replace the defaults at once; later changes fade.
     if (state.settings.appearance !== previous.settings.appearance) {
       applyAppearance(state.settings, previous.loaded)
+    }
+    // Switching the preset after launch clears any prior drag override so it takes effect at once.
+    if (
+      previous.loaded &&
+      state.settings.appearance.conversationWidth !== previous.settings.appearance.conversationWidth
+    ) {
+      setThreadWidth(null)
     }
     if (state.settings.general.language !== previous.settings.general.language) {
       applyLanguage(state.settings.general.language)

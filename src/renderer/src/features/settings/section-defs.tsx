@@ -157,6 +157,7 @@ import {
   CloseSidePanelWithLastTab,
   ColorMode,
   ConfirmLinks,
+  ConversationWidth,
   DataFolderActions,
   DetailedRecords,
   LogsFolderActions,
@@ -449,6 +450,12 @@ export function useAppearanceSection(): SectionDef {
           render: () => null,
         },
       ]),
+      {
+        id: 'conversation-width',
+        setting: 'appearance.conversation-width',
+        group: group('conversation', t('appearance.groups.conversation')),
+        render: () => <ConversationWidth />,
+      },
       {
         id: 'sidebar-hover',
         setting: 'appearance.sidebar-hover',

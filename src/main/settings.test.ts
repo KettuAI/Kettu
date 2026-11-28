@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
-import { APP_ICONS, DEFAULT_SETTINGS } from '@shared/settings'
+import { APP_ICONS, CONVERSATION_WIDTHS, DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
 import {
   effectiveDirect,
@@ -1210,6 +1210,43 @@ describe('prompt cache drop notice setting', () => {
 
     for (const bad of ['true', 1, null, []]) {
       expect(() => validateSettingsPatch({ thread: { promptCacheDropNotice: bad } })).toThrow()
+    }
+  })
+})
+
+describe('conversation width preset', () => {
+  it('defaults to standard for fresh and legacy files, accepts valid presets, and sanitizes invalid values', async () => {
+    expect((await SettingsStore.load(dir)).get().appearance.conversationWidth).toBe('standard')
+    await save({ version: 1, appearance: { textSize: 'large' } })
+    expect((await SettingsStore.load(dir)).get().appearance.conversationWidth).toBe('standard')
+
+    for (const preset of CONVERSATION_WIDTHS) {
+      await save({ version: 1, appearance: { conversationWidth: preset } })
+      expect((await SettingsStore.load(dir)).get().appearance.conversationWidth).toBe(preset)
+    }
+    for (const bad of ['full', 'narrow', '', 1200, null, {}]) {
+      await save({ version: 1, appearance: { conversationWidth: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.conversationWidth).toBe('standard')
+    }
+  })
+
+  it('validates, merges, persists and keeps the preset on the client', async () => {
+    const patch = validateSettingsPatch({ appearance: { conversationWidth: 'wide' } })
+    expect(patch).toEqual({ appearance: { conversationWidth: 'wide' } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.appearance.conversationWidth).toBe('wide')
+    expect(splitSettingsPatch(patch)).toEqual({ host: null, client: patch })
+    expect(
+      withHostSettings(next, hostSettingsPart(DEFAULT_SETTINGS)).appearance.conversationWidth,
+    ).toBe('wide')
+
+    const store = await SettingsStore.load(dir)
+    store.update(patch)
+    await store.flush()
+    expect((await SettingsStore.load(dir)).get().appearance.conversationWidth).toBe('wide')
+
+    for (const bad of ['full', 'compact', '', 1088, null, []]) {
+      expect(() => validateSettingsPatch({ appearance: { conversationWidth: bad } })).toThrow()
     }
   })
 })

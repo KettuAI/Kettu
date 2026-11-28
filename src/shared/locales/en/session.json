@@ -1080,7 +1080,12 @@
       "docs": "Codex config docs"
     },
     "width": {
-      "label": "Resize the content width"
+      "label": "Resize the content width",
+      "hint": "Drag to resize. Double-click to reset to {{preset}} width.",
+      "presets": {
+        "standard": "Standard",
+        "wide": "Wide"
+      }
     },
     "outline": {
       "label_one": "Outline, {{count}} message",
