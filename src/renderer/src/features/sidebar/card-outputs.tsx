@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SessionOutputs, SessionSummary } from '@shared/agent-host'
 import type { ArtifactSummary } from '@shared/artifacts'
@@ -79,6 +79,15 @@ export function CardOutputs({
   outputs: SessionOutputs | null
   onOpen?: () => void
 }) {
+  const [fromLoading, setFromLoading] = useState(() => outputs === null)
+  const [trackedId, setTrackedId] = useState(summary.id)
+  if (trackedId !== summary.id) {
+    setTrackedId(summary.id)
+    setFromLoading(outputs === null)
+  } else if (outputs === null && !fromLoading) {
+    setFromLoading(true)
+  }
+
   if (!outputs) {
     return (
       <div className="flex flex-col gap-2 px-3.5 pb-3" aria-hidden>
@@ -87,16 +96,18 @@ export function CardOutputs({
       </div>
     )
   }
-  return <Made summary={summary} outputs={outputs} onOpen={onOpen} />
+  return <Made summary={summary} outputs={outputs} fadeIn={fromLoading} onOpen={onOpen} />
 }
 
 function Made({
   summary,
   outputs,
+  fadeIn,
   onOpen,
 }: {
   summary: SessionSummary
   outputs: SessionOutputs
+  fadeIn: boolean
   onOpen?: () => void
 }) {
   const { t } = useTranslation('sidebar')
@@ -105,13 +116,18 @@ function Made({
   const refs = useMemo(() => referencesOf(summary, outputs), [summary, outputs])
   const tiles = artifacts.slice(0, TILES)
   const rows = refs.slice(0, ROWS)
+  const reveal = fadeIn
+    ? 'motion-safe:animate-[card-outputs-in_var(--duration-base)_var(--ease-standard)_both]'
+    : undefined
   if (tiles.length === 0 && rows.length === 0) {
     const reply = outputs.reply && plain(outputs.reply)
     if (!reply) return null
-    return <p className="mx-3.5 mb-3 line-clamp-3 text-small text-secondary">{reply}</p>
+    return (
+      <p className={cn('mx-3.5 mb-3 line-clamp-3 text-small text-secondary', reveal)}>{reply}</p>
+    )
   }
   return (
-    <div className="flex flex-col gap-3 px-3.5 pb-3">
+    <div className={cn('flex flex-col gap-3 px-3.5 pb-3', reveal)}>
       {tiles.length > 0 && (
         <div className="flex flex-col gap-0.5">
           {/* One artifact takes the whole width, so the card has no empty half. */}
@@ -194,6 +210,7 @@ function ArtifactTile({
         openArtifact(id)
       }}
       className="k-art group flex min-w-0 flex-col gap-1.5 text-left outline-none"
+      data-compact=""
       data-kind={kind ?? undefined}
     >
       <span className="k-art__panel rounded-[10px]! p-[7px]!">
@@ -262,7 +279,7 @@ function ReferenceRow({
     <a
       {...sessionLinkProps(reference.url, sessionId, { onOpen })}
       tabIndex={-1}
-      className="-mx-1.5 flex h-6 min-w-0 items-center gap-2 rounded-md px-1.5 text-small no-underline outline-none hover:bg-hover"
+      className="-mx-1.5 flex h-6 min-w-0 items-center gap-2 rounded-md px-1.5 text-small no-underline outline-none transition-colors duration-(--duration-fast) hover:bg-hover"
     >
       <ReferenceIcon kind={reference.kind} data={data} size={14} />
       <span className="shrink-0 font-medium text-primary tabular-nums">{label}</span>

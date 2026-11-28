@@ -27,7 +27,7 @@
   grid-template-columns: minmax(0, 1fr);
   width: 100%;
   padding: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line, var(--border-subtle));
   border-radius: 20px;
   background: var(--bg-surface);
   box-shadow: var(--artifact-card-shadow);
@@ -38,14 +38,14 @@
     box-shadow 220ms ease;
 }
 .k-art:is(:hover, [data-held]) .k-art__open {
-  border-color: var(--line-strong);
+  border-color: var(--line-strong, var(--shell-line-strong));
   box-shadow: var(--artifact-card-shadow-hover);
 }
 .k-art__open:focus-visible {
-  border-color: var(--line-strong);
+  border-color: var(--line-strong, var(--shell-line-strong));
   box-shadow:
     var(--artifact-card-shadow),
-    0 0 0 2px var(--accent-soft);
+    0 0 0 2px var(--accent-soft, var(--shell-accent-soft));
 }
 /* A deleted card's dust is drawn over it from its own pixels (features/artifacts/card-dust.ts);
    only its shadow, which lies outside what is read, fades while the sweep passes. */
@@ -73,7 +73,7 @@
   font-size: 13px;
   line-height: 20px;
   font-weight: 500;
-  color: var(--strong);
+  color: var(--strong, var(--shell-strong));
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -92,7 +92,7 @@
 .k-art__shared {
   display: flex;
   flex: none;
-  color: var(--faint);
+  color: var(--faint, var(--shell-faint));
 }
 /* The card's 20px corner less its 6px rim. */
 .k-art__panel {
@@ -101,8 +101,8 @@
   overflow: hidden;
   padding: 12px;
   border-radius: 14px;
-  background: var(--subtle);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--subtle, var(--shell-subtle));
+  box-shadow: inset 0 0 0 1px var(--line, var(--border-subtle));
   isolation: isolate;
 }
 .k-art__glow {
@@ -183,11 +183,11 @@
   aspect-ratio: 16 / 10;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
   transition:
-    transform 420ms var(--ease),
-    box-shadow 420ms var(--ease);
+    transform 420ms var(--ease, var(--ease-out-quint)),
+    box-shadow 420ms var(--ease, var(--ease-out-quint));
 }
 .k-art__page .k-th {
   border-radius: inherit;
@@ -197,6 +197,9 @@
   transform: translateY(-3px);
   box-shadow: var(--artifact-page-lift);
 }
+.k-art[data-compact]:hover .k-art__page {
+  transform: translateY(-2px);
+}
 .k-art[data-gone] .k-th {
   opacity: 0.72;
   filter: grayscale(0.85);
@@ -205,7 +208,8 @@
   .k-art .k-art__glow i {
     animation: none;
   }
-  .k-art:hover .k-art__page {
+  .k-art:hover .k-art__page,
+  .k-art[data-compact]:hover .k-art__page {
     transform: none;
   }
 }
@@ -213,7 +217,8 @@
   & .k-art .k-art__glow i {
     animation: none;
   }
-  & .k-art:hover .k-art__page {
+  & .k-art:hover .k-art__page,
+  & .k-art[data-compact]:hover .k-art__page {
     transform: none;
   }
 }
@@ -234,11 +239,11 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--chip);
-  color: var(--muted);
+  background: var(--chip, var(--shell-chip));
+  color: var(--shell-muted);
   transform: scale(0.8);
   transition:
-    transform 320ms var(--ease),
+    transform 320ms var(--ease, var(--ease-out-quint)),
     background-color 160ms ease,
     color 160ms ease;
 }
@@ -247,8 +252,8 @@
   transform: none;
 }
 .k-art__more-btn:hover {
-  background: var(--chip-hover);
-  color: var(--ink);
+  background: var(--chip-hover, var(--shell-chip-hover));
+  color: var(--ink, var(--shell-ink));
 }
 .k-art__more .ui-as-menu {
   width: 232px;
@@ -267,14 +272,14 @@
 }
 .k-art__time[data-writing] {
   font-weight: 500;
-  color: var(--ink);
+  color: var(--ink, var(--shell-ink));
 }
 .k-art__note {
   overflow: hidden;
   margin: 1px -29px 0 0;
   font-size: 12px;
   line-height: 17px;
-  color: var(--muted);
+  color: var(--shell-muted);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -313,22 +318,26 @@
 /* Open beside the thread: pressed into the page, a gray fill and a firmer edge, the glow up. */
 .k-art[data-open] .k-art__open,
 .k-art[data-open]:is(:hover, [data-held]) .k-art__open {
-  border-color: var(--edge-active);
-  background: color-mix(in srgb, var(--ink) 4.5%, var(--bg-surface));
+  border-color: var(--edge-active, var(--shell-edge-active));
+  background: color-mix(in srgb, var(--ink, var(--shell-ink)) 4.5%, var(--bg-surface));
   box-shadow: var(--artifact-card-pressed);
 }
 .k-art[data-open] .k-art__panel {
-  background: color-mix(in srgb, var(--ink) 3%, var(--subtle));
+  background: color-mix(
+    in srgb,
+    var(--ink, var(--shell-ink)) 3%,
+    var(--subtle, var(--shell-subtle))
+  );
 }
 .k-art[data-open] .k-art__glow i {
   opacity: var(--artifact-glow-hover);
 }
 .k-art[data-open] .k-art__who .k-art-faces.ui-agc {
-  --ui-agc-tray: color-mix(in srgb, var(--ink) 4.5%, var(--bg-surface));
+  --ui-agc-tray: color-mix(in srgb, var(--ink, var(--shell-ink)) 4.5%, var(--bg-surface));
 }
 /* Deleted: the words step back, Restore on the panel's corner. */
 .k-art[data-gone] .k-art__name {
-  color: var(--muted);
+  color: var(--shell-muted);
 }
 .k-art[data-gone] .k-art__mark {
   opacity: 0.5;
@@ -424,11 +433,11 @@
   aspect-ratio: 16 / 10;
   overflow: hidden;
   border-radius: 4px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
   transition:
-    transform 420ms var(--ease),
-    box-shadow 420ms var(--ease);
+    transform 420ms var(--ease, var(--ease-out-quint)),
+    box-shadow 420ms var(--ease, var(--ease-out-quint));
 }
 .k-art__sheet .k-th {
   border-radius: 0;
@@ -448,7 +457,7 @@
 }
 .k-art:hover .k-art__sheet[data-behind] {
   transform: translateY(-5px);
-  box-shadow: var(--card-shadow);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
 }
 @media (prefers-reduced-motion: reduce) {
   .k-art:hover .k-art__sheet,
@@ -528,7 +537,7 @@
   width: 84px;
   font-size: 11.5px;
   line-height: 15px;
-  color: var(--muted);
+  color: var(--shell-muted);
   text-align: left;
   outline: none;
   pointer-events: auto;
@@ -539,12 +548,12 @@
   height: 52px;
   overflow: hidden;
   border-radius: 5px;
-  background: var(--card);
-  box-shadow: 0 0 0 1px var(--line-strong);
+  background: var(--shell-card);
+  box-shadow: 0 0 0 1px var(--line-strong, var(--shell-line-strong));
   transition: box-shadow 160ms ease;
 }
 .k-art__frame-pic[data-blank] {
-  background: var(--subtle);
+  background: var(--subtle, var(--shell-subtle));
 }
 .k-art__frame-pic img {
   position: absolute;
@@ -557,15 +566,15 @@
   transition: color 160ms ease;
 }
 .k-art__frame:hover .k-art__frame-pic {
-  box-shadow: 0 0 0 1px var(--edge-active);
+  box-shadow: 0 0 0 1px var(--edge-active, var(--shell-edge-active));
 }
 .k-art__frame:hover .k-art__frame-name {
-  color: var(--ink);
+  color: var(--ink, var(--shell-ink));
 }
 .k-art__frame:focus-visible .k-art__frame-pic {
   box-shadow:
-    0 0 0 1px var(--line-strong),
-    0 0 0 3px var(--accent-soft);
+    0 0 0 1px var(--line-strong, var(--shell-line-strong)),
+    0 0 0 3px var(--accent-soft, var(--shell-accent-soft));
 }
 .k-art__frame[data-on] .k-art__frame-pic {
   box-shadow:
@@ -573,7 +582,7 @@
     0 0 0 4px var(--control-on-tint);
 }
 .k-art__frame[data-on] .k-art__frame-name {
-  color: var(--ink);
+  color: var(--ink, var(--shell-ink));
 }
 .k-art__frame-more {
   display: grid;
@@ -582,16 +591,16 @@
   width: 52px;
   height: 52px;
   border-radius: 5px;
-  background: var(--subtle);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--subtle, var(--shell-subtle));
+  box-shadow: inset 0 0 0 1px var(--line, var(--border-subtle));
   font-size: 12px;
-  color: var(--muted);
+  color: var(--shell-muted);
 }
 .k-art__changed-label {
   flex: none;
   font-size: 12px;
   line-height: 24px;
-  color: var(--muted);
+  color: var(--shell-muted);
   white-space: nowrap;
 }
 .k-art__chip {
@@ -603,10 +612,10 @@
   height: 24px;
   padding: 0 8px 0 6px;
   border-radius: 7px;
-  background: var(--subtle);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--subtle, var(--shell-subtle));
+  box-shadow: inset 0 0 0 1px var(--line, var(--border-subtle));
   font: 12px/1 var(--font-mono);
-  color: var(--text);
+  color: var(--text, var(--shell-text));
 }
 .k-art__chip[data-words] {
   padding: 0 9px;
@@ -650,18 +659,18 @@
   height: 60px;
   padding: 7px 8px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--card) 70%, var(--subtle));
-  box-shadow: 0 0 0 1px var(--line-strong);
+  background: color-mix(in srgb, var(--shell-card) 70%, var(--subtle, var(--shell-subtle)));
+  box-shadow: 0 0 0 1px var(--line-strong, var(--shell-line-strong));
 }
 .k-art__blank i {
   height: 3px;
   border-radius: 2px;
-  background: var(--line-strong);
+  background: var(--line-strong, var(--shell-line-strong));
 }
 .k-art__blank i:first-child {
   width: 60%;
   height: 4px;
-  background: color-mix(in srgb, var(--faint) 45%, transparent);
+  background: color-mix(in srgb, var(--faint, var(--shell-faint)) 45%, transparent);
 }
 .k-art__blank i:last-child {
   width: 70%;
@@ -674,7 +683,7 @@
   padding-right: 110px;
 }
 .k-art[data-form='deleted'] .k-art__name {
-  color: var(--muted);
+  color: var(--shell-muted);
 }
 .k-art[data-form='deleted'] .k-art__more {
   top: 24px;
@@ -703,8 +712,8 @@
   height: 100%;
   overflow: hidden;
   border-radius: 9px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
 }
 .k-th--image img {
   display: block;
@@ -719,10 +728,10 @@
 }
 .k-th--image > i {
   position: absolute;
-  box-shadow: 0 0 0 0.5px var(--line);
+  box-shadow: 0 0 0 0.5px var(--line, var(--border-subtle));
 }
 .k-th--loading {
-  background: var(--chip);
+  background: var(--chip, var(--shell-chip));
   box-shadow: none;
 }
 .k-th b {
@@ -731,19 +740,19 @@
   font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--strong);
+  color: var(--strong, var(--shell-strong));
 }
 .k-th__line {
   display: block;
   height: 4px;
   border-radius: 2px;
-  background: var(--chip);
+  background: var(--chip, var(--shell-chip));
 }
 .k-th--doc {
   display: flex;
   justify-content: center;
   padding-top: 12px;
-  background: var(--frame);
+  background: var(--frame, var(--shell-frame));
   box-shadow: none;
 }
 .k-th__page {
@@ -754,8 +763,8 @@
   height: 120%;
   padding: 12px 12px 0;
   border-radius: 4px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
 }
 .k-th__page b {
   margin-bottom: 4px;
@@ -777,7 +786,7 @@
 .k-th--slide {
   display: grid;
   place-items: center;
-  background: var(--frame);
+  background: var(--frame, var(--shell-frame));
   box-shadow: none;
 }
 .k-th__slide {
@@ -789,7 +798,7 @@
   padding: 10px 12px;
   border-radius: 5px;
   background: var(--t);
-  box-shadow: var(--card-shadow);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
   color: var(--sketch-on-accent);
 }
 .k-th__slide b {
@@ -822,13 +831,13 @@
   display: flex;
   gap: 6px;
   padding: 8px 10px;
-  box-shadow: inset 0 -0.5px 0 var(--line);
+  box-shadow: inset 0 -0.5px 0 var(--line, var(--border-subtle));
 }
 .k-th__nav i {
   width: 16px;
   height: 4px;
   border-radius: 2px;
-  background: var(--chip);
+  background: var(--chip, var(--shell-chip));
 }
 .k-th__nav i:first-child {
   width: 10px;
@@ -859,11 +868,14 @@
 .k-th__cards i {
   height: 26px;
   border-radius: 4px;
-  background: var(--chip);
+  background: var(--chip, var(--shell-chip));
 }
 .k-th--canvas {
-  background-color: var(--frame);
-  background-image: radial-gradient(var(--line-strong) 0.8px, transparent 0.8px);
+  background-color: var(--frame, var(--shell-frame));
+  background-image: radial-gradient(
+    var(--line-strong, var(--shell-line-strong)) 0.8px,
+    transparent 0.8px
+  );
   background-size: 9px 9px;
   box-shadow: none;
 }
@@ -872,8 +884,8 @@
   width: 24%;
   height: 58%;
   border-radius: 4px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
 }
 .k-th__frame::before {
   content: '';
@@ -893,7 +905,7 @@
   bottom: 14%;
   height: 4px;
   border-radius: 2px;
-  background: var(--chip);
+  background: var(--chip, var(--shell-chip));
 }
 .k-th__wire {
   position: absolute;
@@ -916,14 +928,14 @@
   height: 7px;
   margin: 0 6px 1px 0;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--shell-accent);
   vertical-align: middle;
 }
 .k-art__hit {
   margin: 0 -1px;
   padding: 0 1px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--shell-accent) 16%, transparent);
   color: inherit;
 }
 /* The line keeps its parts whole and drops the count, then the version, when it runs short; More
@@ -957,11 +969,11 @@
   height: 20px;
   padding: 0 7px;
   border-radius: 6px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  background: var(--shell-card);
+  box-shadow: var(--card-shadow, var(--shell-card-shadow));
   font-size: 11px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--ink, var(--shell-ink));
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -977,7 +989,7 @@
   pointer-events: none;
 }
 .k-art__comments svg {
-  color: var(--accent);
+  color: var(--shell-accent);
 }
 .k-tile-flip {
   display: block;
@@ -1006,21 +1018,21 @@
 .k-tile-flip__bar i {
   flex: 1;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink, var(--shell-ink)) 14%, transparent);
 }
 .k-tile-flip__bar i[data-on] {
-  background: var(--ink);
+  background: var(--ink, var(--shell-ink));
 }
 .k-tile-flip__bar[data-track] {
   border-radius: 1px;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink, var(--shell-ink)) 14%, transparent);
 }
 .k-tile-flip__bar[data-track] i {
   position: absolute;
   top: 0;
   bottom: 0;
   min-width: 6px;
-  background: var(--ink);
+  background: var(--ink, var(--shell-ink));
 }
 /* A canvas's frames side by side on its dot ground, which is light in either theme. */
 .k-tile-frames {
@@ -1054,7 +1066,7 @@
 }
 /* A deck: its front slide over the edges of two more. */
 .k-tile-deck {
-  background: color-mix(in oklab, var(--ink) 3.5%, var(--card));
+  background: color-mix(in oklab, var(--ink, var(--shell-ink)) 3.5%, var(--shell-card));
 }
 .k-tile-deck__slide {
   position: absolute;
@@ -1064,7 +1076,7 @@
   border-radius: 3px;
   background: var(--canvas);
   box-shadow:
-    0 0 0 0.5px var(--line),
+    0 0 0 0.5px var(--line, var(--border-subtle)),
     0 4px 10px -4px color-mix(in oklab, var(--canvas-ink) 20%, transparent);
 }
 .k-tile-deck__slide[data-depth='2'] {
@@ -1086,7 +1098,7 @@
   opacity: 0.8;
 }
 .k-tile-deck__slide:not(:has(img)) {
-  background: color-mix(in oklab, var(--ink) 5%, var(--card));
+  background: color-mix(in oklab, var(--ink, var(--shell-ink)) 5%, var(--shell-card));
 }
 /* A frame drawn on its own: across the tile, from its top. */
 .k-art__frame-pic img.k-art__frame-own {

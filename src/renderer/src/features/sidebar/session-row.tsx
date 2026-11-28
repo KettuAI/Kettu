@@ -61,6 +61,7 @@ import { runSessionMenuAccelerator } from './session-menu-model'
 import { WorktreeRowMark } from '@renderer/features/session/worktree/worktree-tag'
 import { PrBadge } from './pr-badge'
 import { SubagentBadge } from './subagent-badge'
+import { prefetchOutputs } from './use-outputs'
 import { useRenaming } from './use-renaming'
 
 /**
@@ -385,6 +386,7 @@ export const SessionRow = memo(function SessionRow({
                 <HoverCardTrigger
                   delay={600}
                   closeDelay={150}
+                  onPointerEnter={() => void prefetchOutputs(summary)}
                   render={<ContextMenuTrigger render={button} />}
                 />
                 <HoverCardContent

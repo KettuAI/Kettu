@@ -59,6 +59,7 @@ import { RowBody, RowEnd, SessionIndicator } from './session-indicator'
 import { sessionPullRequests } from './session-prs'
 import { INDENT_PAD, NESTED_STEP, ROW_PAD, TreeLine } from './session-row'
 import { PullRequestsBadge } from './pr-badge'
+import { prefetchOutputs } from './use-outputs'
 import { useRenaming } from './use-renaming'
 
 /** Ring segments grow in this long after a task starts, as its row takes its session's place. */
@@ -562,7 +563,12 @@ function StepHover({
   const [open, setOpen] = useState(false)
   return (
     <HoverCard open={open} onOpenChange={setOpen}>
-      <HoverCardTrigger delay={600} closeDelay={150} render={button} />
+      <HoverCardTrigger
+        delay={600}
+        closeDelay={150}
+        onPointerEnter={() => void prefetchOutputs(summary)}
+        render={button}
+      />
       <HoverCardContent
         side="right"
         align="start"
