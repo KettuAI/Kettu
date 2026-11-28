@@ -381,9 +381,6 @@
     "noResets": "{{agent}} has no reset to use on this sign-in",
     "resetSignInExpired": "{{agent}}’s sign-in has expired, so nothing was used. Run it once so it renews its sign-in, then try again.",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
-    "antigravitySignedOut": "{{agent}} is signed out. Sign in again in a terminal to read its plan limits.",
-    "antigravityLimitsFailed": "{{agent}} could not read its plan limits: {{error}}",
-    "antigravityNoPlan": "{{agent}} named no Google plan, so it has no plan limits to read. If you use it with a Google account, sign in again in a terminal.",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
     "initializeFailed": "{{agent}} failed to initialize: {{reason}}",
     "hostStopping": "{{agent}} was not started: the host is stopping.",
@@ -470,10 +467,6 @@
     "noConfigFolder": "{{agent}} has no configuration folder",
     "noSettingsFile": "{{agent}} has no settings file",
     "noProgram": "{{name}} was installed without a program to run.",
-    "antigravity": {
-      "noAnswer": "agy /{{command}} gave no answer within {{seconds}} s",
-      "noJson": "agy /{{command}} exited with code {{code}} and no JSON reply"
-    },
     "protocolVersion": "{{agent}} speaks an unsupported protocol version ({{version}}).",
     "theAgent": "The agent",
     "noSignInPage": "The agent gave no sign-in page",

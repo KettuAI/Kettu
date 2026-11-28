@@ -261,7 +261,7 @@ describe('Google Antigravity refusing a session though agy holds a Google sign-i
     expect(authenticated).toEqual([])
   })
 
-  it('opens New session again and reads the plan limits once it signed agy in', async () => {
+  it('opens New session again without polling plan limits once it signed agy in', async () => {
     const setup = await manager(true)
     const { agents, opened, root } = setup
     const { sessions, ready } = await newSession(setup)
@@ -273,7 +273,7 @@ describe('Google Antigravity refusing a session though agy holds a Google sign-i
 
     await vi.waitFor(() => expect(ready()).toHaveLength(1))
     expect(opened).toEqual([root, root])
-    expect(limits.mock.calls).toEqual([['antigravity', { force: true }]])
+    expect(limits).not.toHaveBeenCalled()
     // The window's next ask takes the one opened for it.
     const again = await sessions.prepare({ agentId: 'antigravity', projectPath: root }, 'window')
     expect(again.id).toBe(ready()[0]!.id)

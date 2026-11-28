@@ -378,9 +378,6 @@
     "noResets": "{{agent}} 的这个登录没有可用的重置卡",
     "resetSignInExpired": "{{agent}} 的登录已过期，没有使用重置卡。请先运行一次让它续期，再重试。",
     "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
-    "antigravitySignedOut": "{{agent}} 已登出。请在终端里重新登录，才能读取套餐限额。",
-    "antigravityLimitsFailed": "{{agent}} 没能读出套餐限额：{{error}}",
-    "antigravityNoPlan": "{{agent}} 没有报出 Google 套餐，所以没有可读的套餐限额。如果你用的是 Google 账号，请在终端里重新登录。",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
     "initializeFailed": "{{agent}} 初始化失败：{{reason}}",
     "hostStopping": "{{agent}} 没有启动：Kettu 正在停止。",
@@ -466,10 +463,6 @@
     "noConfigFolder": "{{agent}} 没有配置文件夹",
     "noSettingsFile": "{{agent}} 没有设置文件",
     "noProgram": "{{name}} 已安装，但没有可运行的程序。",
-    "antigravity": {
-      "noAnswer": "agy /{{command}} 没有在 {{seconds}} 秒内给出回复",
-      "noJson": "agy /{{command}} 已退出，退出码 {{code}}，没有 JSON 回复"
-    },
     "protocolVersion": "{{agent}} 使用了不支持的协议版本（{{version}}）。",
     "theAgent": "智能体",
     "noSignInPage": "智能体没有给出登录页面",

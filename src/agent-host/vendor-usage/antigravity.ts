@@ -1,26 +1,18 @@
-// Google Antigravity's plan and plan limits.
+// Google Antigravity's plan tier and sign-in metadata.
 //
-// The plan: agy's ACP mode names it in the `_meta` of its answers to `authenticate`,
-// `session/new`, `session/load` and `session/resume` when signed in with Google, and declares
+// agy's ACP mode names the plan in the `_meta` of its answers to `authenticate`, `session/new`,
+// `session/load` and `session/resume` when signed in with Google, and declares
 // `_meta.antigravity.tier` in `initialize`:
 // `{ antigravity: { tier: { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri } } }`.
 //
-// The limits: `agy acp` has no `/usage` command, so it would send one to the model. agy's print
-// mode answers its read-only `/usage` and `/credits` itself, with its own sign-in, in no
-// conversation and with no model request (1.5.9): `agy -p "/usage" --output-format json` gives
-// `command.data.groups[]`, each `{ name, description: 'Models within this group: ...', buckets }`
-// with `{ window: 'weekly' | '5h', remaining_fraction, reset_time }`, and `/credits` gives
-// `command.data.remaining_credits`.
+// Kettu does not poll Antigravity's `/usage` or `/credits` commands; plan tier metadata comes only
+// from normal ACP responses and local auth-state inspection.
 
 import path from 'node:path'
-import type { PlanLimit, ProviderBalance } from '@shared/agent-host'
-import { balance, number, object, percentLimit, time, type VendorUsage } from './common'
+import { object } from './common'
 
 /** The version the plan was checked on, as agy names it in `initialize`; later ones keep it. */
 export const ANTIGRAVITY_TIER_VERSION = '1.5.9'
-
-/** The version agy's `/usage` and `/credits` replies were checked on; later ones keep them. */
-export const ANTIGRAVITY_USAGE_VERSION = '1.5.9'
 
 const answerTier = (meta: unknown) => object(object(object(meta)?.antigravity)?.tier)
 
@@ -32,8 +24,8 @@ export function antigravityTier(meta: unknown): string | null {
 }
 
 /**
- * 从套餐元数据中识别 Ultra 档位倍率（`5x` / `20x`），未命中时返回 null。
- * 用于填充账户卡片与账号菜单的 `AgentAccount.tier` 徽标。
+ * Extracts the Ultra tier multiplier (`5x` / `20x`) from `_meta.antigravity.tier`, or null when
+ * none matches. Populates `AgentAccount.tier` badges on account cards and menus.
  */
 export function antigravityTierMultiple(meta: unknown): string | null {
   const tier = answerTier(meta)
@@ -67,19 +59,8 @@ export function antigravityTierSignIn(meta: unknown): 'oauth-personal' | 'oauth-
   return null
 }
 
-/** The sign-ins agy reads plan limits for: Google and Gemini Enterprise. */
+/** Sign-in methods backed by a Google or Gemini Enterprise plan rather than an API console. */
 export const ANTIGRAVITY_PLAN_SIGN_INS: readonly string[] = ['oauth-personal', 'oauth-business']
-
-/**
- * What a plan limits read does for a sign-in: run agy's `/usage` on a Google or Gemini Enterprise
- * sign-in; nothing on an API key or a cloud project, whose usage is in Google AI Studio or Google
- * Cloud; and on one Kettu does not know, find it out first, since a signed-out agy answers
- * `/usage` by opening a browser to sign in.
- */
-export function antigravityLimitsRead(method: string | null): 'read' | 'none' | 'unknown' {
-  if (method === null) return 'unknown'
-  return ANTIGRAVITY_PLAN_SIGN_INS.includes(method) ? 'read' : 'none'
-}
 
 /** Where agy 1.5.9 keeps the sign-in method its ACP mode uses, under the home folder. */
 export function antigravityAuthStateFile(home: string): string {
@@ -112,102 +93,4 @@ export function antigravitySignIn(input: {
   key: boolean
 }): string | null {
   return input.answered ?? (input.key ? 'gemini-api-key' : input.file)
-}
-
-const WINDOWS: Readonly<Record<string, { window: string; label: string }>> = {
-  '5h': { window: 'five_hour', label: '5-hour' },
-  five_hour: { window: 'five_hour', label: '5-hour' },
-  weekly: { window: 'seven_day', label: 'Weekly' },
-  '7d': { window: 'seven_day', label: 'Weekly' },
-}
-
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000
-
-const slug = (name: string): string =>
-  name
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .join('_')
-
-/** The `command.data` of a successful print-mode reply to `command`; null for any other reply. */
-function commandData(reply: unknown, command: string): Record<string, unknown> | null {
-  const body = object(reply)
-  const ran = object(body?.command)
-  if (body?.status !== 'SUCCESS' || ran?.name !== command) return null
-  return object(ran.data)
-}
-
-/** The error of a failed print-mode reply, as agy words it; null for any other reply. */
-export function replyError(reply: unknown): string | null {
-  const body = object(reply)
-  if (body?.status !== 'ERROR') return null
-  return typeof body.error === 'string' && body.error.trim() ? body.error.trim() : 'failed'
-}
-
-/**
- * The quota groups' windows in agy's `/usage` reply, each window per group as
- * `five_hour_<group>` or `seven_day_<group>` with the group's models; null for a reply that is not
- * a successful `/usage`. No groups is no limits; a window or value Kettu does not know gives none.
- */
-export function parseAntigravityUsage(reply: unknown, now: number): VendorUsage | null {
-  const data = commandData(reply, 'usage')
-  if (!data) return null
-  const groups = Array.isArray(data.groups) ? data.groups : []
-  const limits: PlanLimit[] = []
-  for (const value of groups) {
-    const group = object(value)
-    const name = typeof group?.name === 'string' ? group.name.trim() : ''
-    if (!group || !name) continue
-    const listed =
-      typeof group.description === 'string'
-        ? /^Models within this group:\s*(.+)$/i.exec(group.description.trim())
-        : null
-    const models = (listed?.[1] ?? '')
-      .split(',')
-      .map((model) => model.trim())
-      .filter(Boolean)
-    for (const item of Array.isArray(group.buckets) ? group.buckets : []) {
-      const bucket = object(item)
-      if (!bucket) continue
-      const resetsAt = typeof bucket.reset_time === 'string' ? time(bucket.reset_time) : null
-      const rawWindow = typeof bucket.window === 'string' ? bucket.window.trim().toLowerCase() : ''
-      const kind =
-        rawWindow !== ''
-          ? WINDOWS[rawWindow]
-          : resetsAt !== null
-            ? resetsAt <= now + SIX_HOURS_MS
-              ? WINDOWS['5h']
-              : WINDOWS.weekly
-            : undefined
-      if (!kind) continue
-
-      const rawLeft = bucket.remaining_fraction
-      let left = number(rawLeft)
-      // Proto3 序列化在剩余配额为 0 时可能省略默认值字段；当显式 disabled 或仅有未来重置时间时按 0% 剩余处理。
-      if (left === null) {
-        const omitted = rawLeft === undefined || rawLeft === null
-        if (bucket.disabled === true || (omitted && resetsAt !== null && resetsAt > now)) {
-          left = 0
-        }
-      }
-      if (left === null || left < 0 || left > 1) continue
-
-      const limit = percentLimit(
-        `${kind.window}_${slug(name)}`,
-        `${kind.label} · ${name}`,
-        100 - left * 100,
-        now,
-        resetsAt,
-      )
-      limits.push(models.length > 0 ? { ...limit, models: [...models] } : limit)
-    }
-  }
-  return { limits, balances: [] }
-}
-
-/** The G1 credits left in agy's `/credits` reply; null for a reply that is not one. */
-export function parseAntigravityCredits(reply: unknown): ProviderBalance | null {
-  const left = number(commandData(reply, 'credits')?.remaining_credits)
-  return left === null || left < 0 ? null : balance('G1 credits', left, 'credits')
 }
