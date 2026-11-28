@@ -125,6 +125,8 @@ export interface ChangedFile {
 
 export interface CommitDetails {
   oid: string
+  /** Parent commit OIDs in git's order (empty for root commits, 2+ for merges). Absent on older hosts. */
+  parents?: string[]
   subject: string
   body: string // the message after the subject line, trimmed
   authorName: string
@@ -132,6 +134,47 @@ export interface CommitDetails {
   authoredAt: number
   files: ChangedFile[]
 }
+
+export type BranchGraphRefKind = 'head' | 'local' | 'remote' | 'tag'
+
+/** A branch, tag, or detached HEAD label pointing at a commit in the branch graph. */
+export interface BranchGraphRef {
+  name: string
+  kind: BranchGraphRefKind
+  /** True for the currently checked-out local branch or detached HEAD. */
+  current: boolean
+}
+
+/** One commit node in a paginated repository branch graph. */
+export interface BranchGraphCommit {
+  oid: string
+  shortOid: string
+  parents: string[]
+  subject: string
+  authorName: string
+  authorEmail: string
+  authoredAt: number
+  refs: BranchGraphRef[]
+}
+
+/** One page of repository commit history across branches, in topological order. */
+export interface BranchGraphPage {
+  commits: BranchGraphCommit[]
+  /** Current HEAD commit OID, or null when the repository has no commits yet. */
+  headOid: string | null
+  /** Currently checked-out local branch name, or null when detached or unborn. */
+  currentBranch: string | null
+  /** True when HEAD points directly to a commit rather than a local branch. */
+  detached: boolean
+  /** True when older commits exist beyond this page. */
+  hasMore: boolean
+  /** Offset to pass as `skip` when loading the next page of older commits. */
+  nextSkip: number
+}
+
+export const GIT_GRAPH_DEFAULT_LIMIT = 80
+export const GIT_GRAPH_MAX_LIMIT = 200
+export const GIT_GRAPH_MAX_SKIP = 100_000
 
 /** The two sides of one file's change; a side is null where the file does not exist. */
 export interface FileDiff {

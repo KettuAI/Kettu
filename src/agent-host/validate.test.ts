@@ -1603,6 +1603,36 @@ describe('computer use requests', () => {
     rejects(() => posix['git.pullRequestDraft']({ projectPath: 'p', base: 'main' }))
   })
 
+  it('validates git.graph projectPath and bounded integer pagination', () => {
+    expect(posix['git.graph']({ projectPath: '/p' })).toEqual({ projectPath: '/p' })
+    expect(posix['git.graph']({ projectPath: '/p', limit: 50, skip: 100, extra: true })).toEqual({
+      projectPath: '/p',
+      limit: 50,
+      skip: 100,
+    })
+    expect(posix['git.graph']({ projectPath: '/p', limit: 1, skip: 0 })).toEqual({
+      projectPath: '/p',
+      limit: 1,
+      skip: 0,
+    })
+    expect(posix['git.graph']({ projectPath: '/p', limit: 200, skip: 100_000 })).toEqual({
+      projectPath: '/p',
+      limit: 200,
+      skip: 100_000,
+    })
+    rejects(() => posix['git.graph']({}))
+    rejects(() => posix['git.graph']({ projectPath: 'relative/path' }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', limit: 0 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', limit: -5 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', limit: 201 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', limit: 12.5 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', limit: '50' }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', skip: -1 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', skip: 100_001 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', skip: 1.5 }))
+    rejects(() => posix['git.graph']({ projectPath: '/p', skip: '0' }))
+  })
+
   it('takes what became of a drafted problem report', () => {
     const sent = { kind: 'sent', reportId: 'R-7K2F' }
     expect(

@@ -126,6 +126,7 @@
       "devices": "Mobile device",
       "files": "Files",
       "git": "Git",
+      "gitGraph": "Branch graph",
       "board": "Board",
       "sideChat": "Side chat",
       "requests": "Requests",

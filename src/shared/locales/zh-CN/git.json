@@ -116,6 +116,7 @@
     "openInPane": "在 Git 窗格里打开"
   },
   "pane": {
+    "branchGraph": "分支图",
     "more": "更多",
     "copyBranch": "复制分支名",
     "openRepository": "在 GitHub 上打开仓库",
@@ -579,5 +580,26 @@
     "loose": "{{branch}} 有冲突，请解决。",
     "looseIn": "{{branch}} 在这些文件里有冲突：{{files}}，请解决。",
     "rebase": "{{branch}} 和 {{upstream}} 各自有了新提交，请把 {{branch}} 变基到 {{upstream}}，并解决冲突。"
+  },
+  "graph": {
+    "title": "分支图",
+    "listLabel": "提交历史分支图",
+    "refresh": "刷新分支图",
+    "readOnly": "只读",
+    "loadedCount_one": "{{count}} 个提交",
+    "loadedCount_other": "{{count}} 个提交",
+    "loadedMoreCount": "{{count}}+ 个提交",
+    "loadMore": "加载更多提交",
+    "loadingMore": "正在加载更多提交…",
+    "loadFailed": "无法加载分支图。",
+    "emptyTitle": "还没有提交",
+    "emptyText": "仓库产生提交后，提交历史、分叉和合并会显示在这里。",
+    "noChangedFiles": "这个提交没有文件改动。",
+    "parent": "父提交",
+    "parents": "父提交",
+    "rootCommit": "初始提交",
+    "jumpToParent": "跳转到父提交 {{oid}}",
+    "closeDetails": "关闭提交详情",
+    "moreRefs": "+{{count}}"
   }
 }

@@ -7,6 +7,7 @@ import {
   Download04Icon,
   GitBranchIcon,
   GitCommitIcon,
+  GitForkIcon,
   LinkSquare02Icon,
   MagicWand01Icon,
   MoreHorizontalIcon,
@@ -35,10 +36,11 @@ import { continueCommand } from '../next-step'
 import { branchName, fetchedText, isLinkedWorktree } from '../popover-keys'
 import { pushNow, runStep } from '../steps'
 import { planSync, PUSHING, stepOf } from '../sync'
+import { openBranchGraph } from './open-pane'
 import { ActionBtn, Note } from './pane-ui'
 
-/** The branch, its worktree and an operation stopped midway. */
-export function PaneTop({ status }: { status: GitStatus }) {
+/** The branch, its worktree, an operation stopped midway, and the Branch graph entry. */
+export function PaneTop({ status, panel }: { status: GitStatus; panel: string }) {
   const { t } = useTranslation('git')
   const [switching, setSwitching] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
@@ -76,6 +78,16 @@ export function PaneTop({ status }: { status: GitStatus }) {
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
+      <Button
+        variant="outline"
+        size="xs"
+        data-git-branch-graph=""
+        onClick={() => openBranchGraph(panel)}
+        className="ml-auto h-7 shrink-0 gap-1.5 rounded-lg px-2 text-control font-medium text-secondary hover:text-primary"
+      >
+        <Glyph icon={GitForkIcon} size={13} className="text-tertiary" />
+        <span>{t('pane.branchGraph')}</span>
+      </Button>
       <BranchSwitcher
         status={status}
         open={switching}

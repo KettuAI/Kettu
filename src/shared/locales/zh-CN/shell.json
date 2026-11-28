@@ -126,6 +126,7 @@
       "devices": "移动设备",
       "files": "文件",
       "git": "Git",
+      "gitGraph": "分支图",
       "board": "看板",
       "sideChat": "侧聊",
       "requests": "请求",

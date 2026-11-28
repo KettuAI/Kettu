@@ -5521,6 +5521,8 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.fileDiff(p, path, oldPath, ref)),
       'git.branches': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.branches(p)),
+      'git.graph': ({ projectPath, limit, skip }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.graph(p, { limit, skip })),
       'git.switchBranch': ({ projectPath, branch, create }) =>
         this.gitProjectCall(projectPath, (g, p) => g.switchBranch(p, branch, create)),
       'git.publishBranch': ({ projectPath, remote }) =>

@@ -116,6 +116,7 @@
     "openInPane": "Open in the Git pane"
   },
   "pane": {
+    "branchGraph": "Branch graph",
     "more": "More",
     "copyBranch": "Copy branch name",
     "openRepository": "Open repository on GitHub",
@@ -594,5 +595,26 @@
     "loose": "{{branch}} has conflicts. Please resolve them.",
     "looseIn": "{{branch}} has conflicts in {{files}}. Please resolve them.",
     "rebase": "{{branch}} and {{upstream}} have each gained commits. Please rebase {{branch}} onto {{upstream}} and resolve any conflicts."
+  },
+  "graph": {
+    "title": "Branch graph",
+    "listLabel": "Commit history graph",
+    "refresh": "Refresh branch graph",
+    "readOnly": "Read-only",
+    "loadedCount_one": "{{count}} commit",
+    "loadedCount_other": "{{count}} commits",
+    "loadedMoreCount": "{{count}}+ commits",
+    "loadMore": "Load more commits",
+    "loadingMore": "Loading more commits…",
+    "loadFailed": "Couldn’t load the branch graph.",
+    "emptyTitle": "No commits yet",
+    "emptyText": "Commits, branches and merges will show up here once this repository has history.",
+    "noChangedFiles": "No file changes in this commit.",
+    "parent": "Parent",
+    "parents": "Parents",
+    "rootCommit": "Initial commit",
+    "jumpToParent": "Select parent commit {{oid}}",
+    "closeDetails": "Close commit details",
+    "moreRefs": "+{{count}}"
   }
 }
