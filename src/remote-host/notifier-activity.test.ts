@@ -150,7 +150,7 @@ describe('Notifier Live Activity 全状态调度', () => {
     }
   })
 
-  it('当 iPhone 本地已启动灵动岛并上报 update token 时，主机即使在电脑前也能持续 update 与 end', () => {
+  it('开启 onlyAway 且人在电脑前时停止远程更新并收尾后台灵动岛；关闭 onlyAway 则始终实时推送', () => {
     vi.useFakeTimers()
     try {
       const device = makeDevice({
@@ -164,12 +164,13 @@ describe('Notifier Live Activity 全状态调度', () => {
       const notifier = new Notifier({
         devices: () => [device],
         showing: () => false,
+        foreground: () => false,
         send: (job) => jobs.push(job),
         mergeMs: 10,
       })
       notifier.setPresent(true)
       const now = Date.now()
-      notifier.setActivity({
+      const runningSnap: HostActivitySnapshot = {
         running: [
           {
             sessionId: 's-1',
@@ -183,14 +184,97 @@ describe('Notifier Live Activity 全状态调度', () => {
         ended: [],
         limit: null,
         waitingMeta: {},
+      }
+      notifier.setActivity(runningSnap)
+      vi.advanceTimersByTime(20)
+      // 人在电脑前且开启 onlyAway，后台残留的灵动岛直接发 end 收尾，不推新的远程更新。
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+      // 模拟结束发送后释放旧 token，再有审批请求也不会推给后台手机。
+      device.push.target!.activity = { start: START_TOKEN }
+      notifier.attention({
+        kind: 'permission',
+        sessionId: 's-1',
+        title: 'Refactor widgets',
+        body: 'Wants to run pnpm test',
+        requestId: 'req-1',
+        inFront: false,
+        devices: [],
       })
+      notifier.setWaiting({ 's-1': ['req-1'] })
       vi.advanceTimersByTime(20)
       expect(jobs).toHaveLength(1)
-      expect(jobs[0]).toMatchObject({
+
+      // 用户关掉 onlyAway（始终实时推送）后，即便人在电脑前也会立刻推 start。
+      device.push.choices = { ...device.push.choices, onlyAway: false }
+      notifier.deviceChanged()
+      vi.advanceTimersByTime(20)
+      expect(jobs).toHaveLength(2)
+      expect(jobs[1]).toMatchObject({
         type: 'activity',
-        action: 'update',
-        payload: { kind: 'running', sessionId: 's-1' },
+        action: 'start',
+        count: 1,
+        payload: { kind: 'waiting', sessionId: 's-1', requestId: 'req-1' },
       })
+      notifier.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('发出 push-to-start 尚未收到 updateToken 前请求已解决时，立即取消在途 start 并在回传 token 后补发 end', () => {
+    vi.useFakeTimers()
+    try {
+      const device = makeDevice({
+        choices: { ...DEFAULT_CHOICES, onlyAway: false },
+        target: {
+          apns: { token: TOKEN, environment: 'sandbox' },
+          activity: { start: START_TOKEN },
+        },
+      })
+      const jobs: PushJob[] = []
+      const cancelled: { deviceId: string; key: string }[] = []
+      const notifier = new Notifier({
+        devices: () => [device],
+        showing: () => false,
+        foreground: () => false,
+        send: (job) => jobs.push(job),
+        cancel: (deviceId, key) => cancelled.push({ deviceId, key }),
+        mergeMs: 10,
+      })
+
+      notifier.attention({
+        kind: 'permission',
+        sessionId: 's-fast',
+        title: 'Quick confirm',
+        body: 'Wants to run ls',
+        requestId: 'req-fast',
+        inFront: false,
+        devices: [],
+      })
+      notifier.setWaiting({ 's-fast': ['req-fast'] })
+      vi.advanceTimersByTime(20)
+      expect(jobs.filter((j) => j.type === 'activity')).toHaveLength(1)
+      expect(jobs.find((j) => j.type === 'activity')).toMatchObject({ action: 'start' })
+
+      // 桌面端立刻选完卡片，但此时 iPhone 尚未上报 updateToken。
+      notifier.setWaiting({})
+      vi.advanceTimersByTime(20)
+      expect(cancelled).toContainEqual({ deviceId: 'phone', key: 'activity' })
+      // 尚未收到 updateToken 时发不出 end，也不应丢失 pendingEnd 状态。
+      expect(jobs.filter((j) => j.type === 'activity')).toHaveLength(1)
+      expect(
+        notifier.isJobValid(jobs.find((j) => j.type === 'activity')!),
+      ).toBe(false)
+
+      // 几秒后 iPhone 收到刚才已飞出的 push-to-start 并回传 updateToken，主机立即补发 end 清理孤儿岛。
+      device.push.target!.activity = { start: START_TOKEN, update: UPDATE_TOKEN }
+      notifier.deviceChanged()
+      vi.advanceTimersByTime(20)
+      const activityJobs = jobs.filter((j) => j.type === 'activity')
+      expect(activityJobs).toHaveLength(2)
+      expect(activityJobs[1]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
       notifier.stop()
     } finally {
       vi.useRealTimers()

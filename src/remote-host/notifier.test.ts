@@ -396,4 +396,57 @@ describe('Notifier Live Activity push guards and expiry cleanup', () => {
     vi.advanceTimersByTime(20 * 60_000)
     expect(jobs).toHaveLength(1)
   })
+
+  it('用户回到电脑前时对开启 onlyAway 的后台设备收尾，但不干扰正在前台查看的手机', () => {
+    vi.useFakeTimers()
+    let inForeground = false
+    const device = makeDevice({
+      choices: { ...DEFAULT_CHOICES, onlyAway: true },
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: () => inForeground,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    // 离开电脑时，后台手机正常更新运行中灵动岛。
+    notifier.setPresent(false)
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-1',
+          agentId: 'codex',
+          title: 'Run checks',
+          turnStartedAt: Date.now(),
+          parentId: null,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({ type: 'activity', action: 'update' })
+
+    // 手机切到前台时用户回到电脑前：不误发 end 干扰本地灵动岛。
+    inForeground = true
+    notifier.setPresent(true)
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+
+    // 手机退到后台后，主机自动对残留活动发 end 收尾。
+    inForeground = false
+    notifier.deviceChanged()
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+    notifier.stop()
+  })
 })

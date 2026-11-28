@@ -349,6 +349,7 @@ export class DeviceNotifications {
         return device && push ? { publicKey: device.publicKey, push } : null
       },
       unregistered: (deviceId, token) => void this.unregistered(deviceId, token),
+      shouldSend: (job) => this.notifier.isJobValid(job),
       log: options.log,
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.retry ? { retry: options.retry } : {}),
@@ -392,6 +393,7 @@ export class DeviceNotifications {
           void this.dropActivityToken(job.deviceId)
         }
       },
+      cancel: (deviceId, key) => this.sender.cancel(deviceId, key),
       ...(options.mergeMs === undefined ? {} : { mergeMs: options.mergeMs }),
     })
   }
