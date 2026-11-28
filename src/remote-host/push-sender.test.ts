@@ -450,4 +450,127 @@ describe('sending a push', () => {
     expect(content).not.toHaveProperty('sessionId')
     expect(content).not.toHaveProperty('requestId')
   })
+
+  it('新推送取代正在退避重试中的同键旧推送时，立即中止旧重试并直接发送最新推送', async () => {
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    const sent: string[] = []
+    let firstAttemptDone: () => void = () => {}
+    const waitedFirst = new Promise<void>((resolve) => (firstAttemptDone = resolve))
+    let secondSent: () => void = () => {}
+    const finished = new Promise<void>((resolve) => (secondSent = resolve))
+
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push: {
+          target: {
+            apns: { token: DEVICE_TOKEN, environment: 'sandbox' },
+            activity: { start: 'b2'.repeat(32), update: 'c3'.repeat(32) },
+          },
+          choices: DEFAULT_CHOICES,
+        },
+      }),
+      unregistered: () => {},
+      log: () => {},
+      // 设长退避，验证新推送无需等旧退避超时即可立即中断并发送。
+      retry: { firstMs: 30_000, maxMs: 60_000, attempts: 3 },
+      fetch: async (_input, init) => {
+        const body = init!.body as string
+        sent.push(body)
+        if (sent.length === 1) {
+          firstAttemptDone()
+          return Response.json({ error: 'apns' }, { status: 502 })
+        }
+        secondSent()
+        return Response.json({ ok: true }, { status: 200 })
+      },
+    })
+
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'update',
+      count: 1,
+      sessionId: 's1',
+      title: 'Old waiting',
+      payload: { kind: 'waiting', count: 1, sessionId: 's1', title: 'Old waiting' },
+    })
+    await waitedFirst
+    // 稍微让出事件循环，使旧任务进入 30s 退避等待。
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    sender.send({
+      deviceId: 'phone',
+      subject: 'activity',
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+    await finished
+    sender.stop()
+
+    expect(sent).toHaveLength(2)
+    expect(parsePushRequest(sent[0]!)!.push).toMatchObject({ type: 'liveactivity', event: 'update' })
+    expect(parsePushRequest(sent[1]!)!.push).toMatchObject({ type: 'liveactivity', event: 'end' })
+  })
+
+  it('发送前 shouldSend 返回 false 时放弃重试，且密文 at 保留入队时刻不被重试刷新', async () => {
+    let clock = 10_000
+    let stillValid = true
+    const key = await importRelayKey(await newRelaySeed())
+    const hostId = await relayHostId(key.publicKey)
+    const device = await currentPrimitives().generateKeyPair(false)
+    const bodies: string[] = []
+    let firstDone: () => void = () => {}
+    const waitedFirst = new Promise<void>((resolve) => (firstDone = resolve))
+
+    const sender = new PushSender({
+      url: URL,
+      key,
+      hostId,
+      hostName: () => 'Studio',
+      token: () => ACCESS_TOKEN,
+      device: () => ({
+        publicKey: Buffer.from(device.publicKey).toString('base64'),
+        push: {
+          target: { apns: { token: DEVICE_TOKEN, environment: 'sandbox' } },
+          choices: DEFAULT_CHOICES,
+        },
+      }),
+      unregistered: () => {},
+      shouldSend: () => stillValid,
+      log: () => {},
+      now: () => clock,
+      retry: { firstMs: 5, maxMs: 10, attempts: 3 },
+      fetch: async (_input, init) => {
+        bodies.push(init!.body as string)
+        clock += 5000
+        stillValid = false
+        firstDone()
+        return Response.json({ error: 'apns' }, { status: 502 })
+      },
+    })
+
+    sender.send(job)
+    await waitedFirst
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    sender.stop()
+
+    // 第一次失败后请求已失效，不应发起第二次重试。
+    expect(bodies).toHaveLength(1)
+    const envelope = decodeSealed(parsePushRequest(bodies[0]!)!.push.sealed)!
+    const openedBody = (await openPush(envelope, device))!
+    const parsed = JSON.parse(new TextDecoder().decode(openedBody.body)) as PushContent
+    expect(parsed.at).toBe(10_000)
+  })
 })
