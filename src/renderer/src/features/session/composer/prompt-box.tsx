@@ -149,7 +149,7 @@ export function PromptBox({
   /** Called after a delegation recipient is picked from the popover. */
   onDelegateSelect?: (target: DelegateTarget) => void
   /** A key the popovers left to the composer, which calls preventDefault on one it takes. */
-  onKeyDown: (event: KeyboardEvent) => void
+  onKeyDown: (event: KeyboardEvent, state?: { popoverOpen: boolean }) => void
 }) {
   const { t } = useTranslation('composer')
   const { draft, projectPath, disabled, source, attachments, update, editor, setCaret } = box
@@ -495,7 +495,7 @@ export function PromptBox({
       box.moveHistory(event.key === 'ArrowDown')
     )
       return true
-    onKeyDown(event)
+    onKeyDown(event, { popoverOpen: open })
     return event.defaultPrevented
   }
   useOverlayPresence(open, { dismissible: true })

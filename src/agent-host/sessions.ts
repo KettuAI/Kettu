@@ -1234,10 +1234,22 @@ function planProgress({ order, byId }: ThreadState): PlanProgress | null {
     const { items } = entry
     if (items.length === 0) return null
     const index = items.findIndex((item) => item.status === 'in_progress')
+    let lastDoneIndex = -1
+    for (let j = items.length - 1; j >= 0; j--) {
+      if (items[j]!.status === 'completed') {
+        lastDoneIndex = j
+        break
+      }
+    }
     return {
       done: items.filter((item) => item.status === 'completed').length,
       total: items.length,
       current: index === -1 ? null : { index, text: firstLine(items[index]!.content) },
+      ...(lastDoneIndex === -1
+        ? {}
+        : {
+            lastCompleted: { index: lastDoneIndex, text: firstLine(items[lastDoneIndex]!.content) },
+          }),
     }
   }
   return null

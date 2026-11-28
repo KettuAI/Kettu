@@ -350,7 +350,7 @@ export interface HostActivityRunning {
   phase?: string
   /** 当前正在执行的工具类型，用于匹配锁屏实时活动状态槽图标。 */
   activityKind?: string
-  plan?: { done: number; total: number; current?: string }
+  plan?: { done: number; total: number; current?: string; lastCompleted?: string }
   parentId?: string | null
 }
 
