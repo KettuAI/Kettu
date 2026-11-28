@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { activeBrowserControl } from '@shared/browser'
 import { duration, tokens } from '@renderer/lib/format'
+import { isPageHidden, subscribePageVisibility } from '@renderer/lib/page-visibility'
 import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { deviceInUse, useDevicesStore } from '@renderer/stores/devices'
@@ -26,17 +27,37 @@ function TurnClock({ since }: { since: number }) {
   useTranslation()
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const stop = () => {
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
     // Just past each whole second, so a timer that fires late never skips one.
     const schedule = () => {
+      if (isPageHidden()) return
       const delay = 1000 - (Math.max(0, Date.now() - since) % 1000) + 5
       timer = setTimeout(() => {
+        timer = null
         setNow(Date.now())
         schedule()
       }, delay)
     }
+    const unsubVisibility = subscribePageVisibility((hidden) => {
+      if (hidden) {
+        stop()
+      } else {
+        setNow(Date.now())
+        stop()
+        schedule()
+      }
+    })
     schedule()
-    return () => clearTimeout(timer)
+    return () => {
+      stop()
+      unsubVisibility()
+    }
   }, [since])
   const elapsed = Math.max(0, now - since)
   return <span className="tabular">{duration(elapsed - (elapsed % 1000))}</span>
@@ -158,6 +179,7 @@ export const TurnStatus = memo(function TurnStatus({
         data-text={!waiting ? text : undefined}
       >
         {text}
+        {!waiting && <span className="ks-status__glint" aria-hidden="true" data-text={text} />}
       </span>
     </div>
   )

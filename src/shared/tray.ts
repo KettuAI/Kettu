@@ -89,6 +89,8 @@ export interface TrayPanelApi {
     resize(height: number): void
     /** The panel came forward, so the page reads again and starts at its list. */
     onShown(listener: () => void): () => void
+    /** The panel hid, so the page can unmount live animations and pause timers. */
+    onHidden?(listener: () => void): () => void
     /** Other connected hosts' agents, for picking each account's newest plan limit reading. */
     hostAgents(): Promise<TrayHostAgents[]>
     onHostAgentsChanged(listener: (hosts: TrayHostAgents[]) => void): () => void

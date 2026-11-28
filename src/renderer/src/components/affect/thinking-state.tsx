@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { handleSessionLinkAuxClick, handleSessionLinkClick, useLinkSessionId } from "@renderer/features/session/open-link";
+import { isPageHidden, subscribePageVisibility } from "@renderer/lib/page-visibility";
 
 /*
  * Thinking State (Clean) – the "working…" panel of an AI chat, in a single self-contained file.
@@ -282,13 +283,47 @@ const format = (secs: number) => {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 };
 
-/** The live clock in the header – ticks on its own */
+/** The live clock in the header – ticks on whole-second/minute boundaries and pauses while hidden */
 function Elapsed({ since }: { since: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
+    let timer: number | null = null;
+    const stop = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const schedule = () => {
+      if (isPageHidden()) return;
+      const elapsed = Math.max(0, Date.now() - since);
+      const delay =
+        elapsed < 3_600_000
+          ? 1000 - (elapsed % 1000) + 5
+          : elapsed < 86_400_000
+            ? 60_000 - (elapsed % 60_000) + 50
+            : 3_600_000 - (elapsed % 3_600_000) + 500;
+      timer = window.setTimeout(() => {
+        timer = null;
+        setNow(Date.now());
+        schedule();
+      }, delay);
+    };
+    const unsubVisibility = subscribePageVisibility((hidden) => {
+      if (hidden) {
+        stop();
+      } else {
+        setNow(Date.now());
+        stop();
+        schedule();
+      }
+    });
+    schedule();
+    return () => {
+      stop();
+      unsubVisibility();
+    };
+  }, [since]);
   return <>{format((now - since) / 1000)}</>;
 }
 

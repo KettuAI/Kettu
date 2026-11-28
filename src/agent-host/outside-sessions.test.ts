@@ -239,6 +239,22 @@ describe('findHolder', () => {
     await expect(findHolder(folder, SESSION, (pid) => pid !== 202)).resolves.toBeNull()
   })
 
+  it('checks the filename PID before reading dead session files', async () => {
+    // Write a dead-PID filename whose JSON payload claims a different, alive PID: checking the
+    // filename PID first skips opening and parsing the stale file altogether.
+    await writeFile(
+      path.join(folder, '301.json'),
+      JSON.stringify({ pid: 9999, sessionId: SESSION, entrypoint: 'cli', status: 'idle' }),
+    )
+    const checked: number[] = []
+    const found = await findHolder(folder, SESSION, (pid) => {
+      checked.push(pid)
+      return pid === 9999
+    })
+    expect(found).toBeNull()
+    expect(checked).toEqual([301])
+  })
+
   it('has none when the folder is missing', async () => {
     await expect(findHolder(path.join(folder, 'missing'), SESSION, () => true)).resolves.toBeNull()
   })

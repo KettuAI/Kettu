@@ -1,26 +1,55 @@
 import { useSyncExternalStore } from 'react'
+import { isPageHidden, subscribePageVisibility } from './page-visibility'
 
-/** A clock that ticks only while something listens; the first listener reads the time afresh. */
+/**
+ * A clock that ticks only while something listens and the page is visible; the first listener and
+ * any visibility restore read the time afresh immediately.
+ */
 function makeClock(period: number) {
   let now = Date.now()
   const listeners = new Set<() => void>()
   let timer: ReturnType<typeof setInterval> | undefined
+  let stopVisibility: (() => void) | undefined
+
+  const emit = (): void => {
+    now = Date.now()
+    for (const l of listeners) l()
+  }
+
+  const startTimer = (): void => {
+    if (timer || listeners.size === 0 || isPageHidden()) return
+    timer = setInterval(emit, period)
+  }
+
+  const stopTimer = (): void => {
+    if (!timer) return
+    clearInterval(timer)
+    timer = undefined
+  }
+
   return {
     subscribe(listener: () => void): () => void {
+      const first = listeners.size === 0
       listeners.add(listener)
-      if (!timer) {
+      if (first) {
         // Nothing ticked while nobody listened; React reads the time again after subscribing.
         now = Date.now()
-        timer = setInterval(() => {
-          now = Date.now()
-          for (const l of listeners) l()
-        }, period)
+        stopVisibility = subscribePageVisibility((hidden) => {
+          if (hidden) {
+            stopTimer()
+          } else {
+            emit()
+            startTimer()
+          }
+        })
+        startTimer()
       }
       return () => {
         listeners.delete(listener)
         if (!listeners.size) {
-          clearInterval(timer)
-          timer = undefined
+          stopTimer()
+          stopVisibility?.()
+          stopVisibility = undefined
         }
       }
     },

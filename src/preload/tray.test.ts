@@ -83,4 +83,21 @@ describe('tray preload contract', () => {
     }
     expect(received).toEqual([sample])
   })
+
+  it('wires tray.onHidden to the tray:hidden channel', () => {
+    let hiddenCalls = 0
+    const unsub = exposed.api!.tray.onHidden!(() => {
+      hiddenCalls++
+    })
+    for (const listener of ipcListeners.get('tray:hidden') ?? []) {
+      listener({}, null)
+    }
+    expect(hiddenCalls).toBe(1)
+
+    unsub()
+    for (const listener of ipcListeners.get('tray:hidden') ?? []) {
+      listener({}, null)
+    }
+    expect(hiddenCalls).toBe(1)
+  })
 })

@@ -33,6 +33,16 @@ interface StoredTraffic {
   json: string
 }
 
+interface PendingStreamDelta {
+  direction: 'in' | 'out'
+  method: string | null
+  kind: string
+  startedAt: number
+  endedAt: number
+  count: number
+  chars: number
+}
+
 export interface AgentEvent {
   at: number
   event: string
@@ -53,6 +63,8 @@ class AgentBuffers {
   readonly trafficFile: SideLog
   // The end of the last stderr chunk, until its line ends.
   partial = ''
+  // Adjacent high-frequency streaming text/thought deltas coalesced while verbose logging is off.
+  pendingDelta: PendingStreamDelta | null = null
 
   constructor(agentId: AgentId) {
     this.stderrFile = sideLog('agent', `agent-${agentId}`)
@@ -64,6 +76,53 @@ function methodOf(message: unknown): string | null {
   if (typeof message !== 'object' || message === null) return null
   const method = (message as { method?: unknown }).method
   return typeof method === 'string' ? method : null
+}
+
+/**
+ * Recognizes high-frequency token/chunk streaming notifications whose individual payloads would
+ * otherwise trigger hundreds of `JSON.stringify` allocations per second and evict control-plane
+ * RPCs from the traffic ring buffer.
+ */
+function streamDeltaInfo(message: unknown): { kind: string; chars: number } | null {
+  if (!isRecord(message)) return null
+  // Claude Code SDK partial stream events (`includePartialMessages: true`).
+  if (message.type === 'stream_event' && isRecord(message.event)) {
+    const event = message.event
+    if (event.type === 'content_block_delta') {
+      const delta = isRecord(event.delta) ? event.delta : null
+      const deltaType = typeof delta?.type === 'string' ? delta.type : 'delta'
+      const text =
+        typeof delta?.text === 'string'
+          ? delta.text
+          : typeof delta?.thinking === 'string'
+            ? delta.thinking
+            : typeof delta?.partial_json === 'string'
+              ? delta.partial_json
+              : ''
+      return { kind: `stream_event/${deltaType}`, chars: text.length }
+    }
+    return null
+  }
+  const method = typeof message.method === 'string' ? message.method : null
+  if (!method || 'id' in message) return null
+  // ACP token chunks inside `session/update`.
+  if (method === 'session/update' && isRecord(message.params) && isRecord(message.params.update)) {
+    const update = message.params.update
+    const kind = update.sessionUpdate
+    if (kind === 'agent_message_chunk' || kind === 'agent_thought_chunk') {
+      const content = isRecord(update.content) ? update.content : null
+      const chars = typeof content?.text === 'string' ? content.text.length : 0
+      return { kind: `session/update/${kind}`, chars }
+    }
+    return null
+  }
+  // Codex item streaming deltas (e.g. `item/agentMessage/delta`, `item/reasoning/summaryTextDelta`).
+  if (/^item\/.+\/(?:delta|.*Delta)$/.test(method)) {
+    const params = isRecord(message.params) ? message.params : null
+    const chars = typeof params?.delta === 'string' ? params.delta.length : 0
+    return { kind: method, chars }
+  }
+  return null
 }
 
 const REDACTED = '<redacted>'
@@ -160,7 +219,59 @@ export class Diagnostics {
     return buffers
   }
 
+  private flushPendingDelta(buffers: AgentBuffers): void {
+    const pending = buffers.pendingDelta
+    if (!pending) return
+    buffers.pendingDelta = null
+    const json = JSON.stringify({
+      coalesced: true,
+      kind: pending.kind,
+      count: pending.count,
+      chars: pending.chars,
+      startedAt: pending.startedAt,
+      endedAt: pending.endedAt,
+    })
+    buffers.traffic.push(
+      {
+        at: pending.startedAt,
+        direction: pending.direction,
+        method: pending.method,
+        size: json.length,
+        json,
+      },
+      json.length,
+    )
+  }
+
   traffic(agentId: AgentId, direction: 'in' | 'out', message: unknown): void {
+    const buffers = this.buffers(agentId)
+    const verbose = verboseRecords()
+    if (!verbose && !this.options.mirrorTraffic) {
+      const delta = streamDeltaInfo(message)
+      if (delta) {
+        const now = this.now()
+        const method = methodOf(message)
+        const pending = buffers.pendingDelta
+        if (pending && pending.direction === direction && pending.kind === delta.kind) {
+          pending.count++
+          pending.chars += delta.chars
+          pending.endedAt = now
+          return
+        }
+        this.flushPendingDelta(buffers)
+        buffers.pendingDelta = {
+          direction,
+          method,
+          kind: delta.kind,
+          startedAt: now,
+          endedAt: now,
+          count: 1,
+          chars: delta.chars,
+        }
+        return
+      }
+    }
+    this.flushPendingDelta(buffers)
     let json: string
     try {
       json = JSON.stringify(redacted(message)) ?? 'null'
@@ -179,9 +290,8 @@ export class Diagnostics {
       size,
       json: stored,
     }
-    const buffers = this.buffers(agentId)
     buffers.traffic.push(record, stored.length)
-    if (verboseRecords()) {
+    if (verbose) {
       buffers.trafficFile.write('traffic', record.method ?? 'message', {
         direction,
         size,
@@ -295,6 +405,7 @@ export class Diagnostics {
     events: AgentEvent[]
   } {
     const buffers = this.buffers(agentId)
+    this.flushPendingDelta(buffers)
     return {
       traffic: buffers.traffic.toArray().map((record) => ({
         at: record.at,

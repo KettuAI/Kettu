@@ -99,6 +99,8 @@ interface FakeTrayEnv {
   emitAgentEvent(event: HostEvent): void
   emitConnection(state: PortConnectionState): void
   emitHostAgents(hosts: TrayHostAgents[]): void
+  emitShown(): void
+  emitHidden(): void
   resolveInitialHostAgents(hosts: TrayHostAgents[]): void
 }
 
@@ -112,6 +114,8 @@ function installFakeTrayEnv(
   let agentEventListener: ((event: HostEvent) => void) | null = null
   let connectionListener: ((state: PortConnectionState) => void) | null = null
   let hostAgentsListener: ((hosts: TrayHostAgents[]) => void) | null = null
+  let shownListener: (() => void) | null = null
+  let hiddenListener: (() => void) | null = null
   let resolveHostAgents!: (hosts: TrayHostAgents[]) => void
   const hostAgentsPromise = options.deferHostAgents
     ? new Promise<TrayHostAgents[]>((resolve) => {
@@ -153,7 +157,18 @@ function installFakeTrayEnv(
       quit: vi.fn(),
       hide: vi.fn(),
       resize: vi.fn(),
-      onShown: () => () => {},
+      onShown: (listener) => {
+        shownListener = listener
+        return () => {
+          if (shownListener === listener) shownListener = null
+        }
+      },
+      onHidden: (listener) => {
+        hiddenListener = listener
+        return () => {
+          if (hiddenListener === listener) hiddenListener = null
+        }
+      },
       hostAgents: vi.fn(() => hostAgentsPromise),
       onHostAgentsChanged: (listener) => {
         hostAgentsListener = listener
@@ -175,6 +190,8 @@ function installFakeTrayEnv(
     emitAgentEvent: (event) => agentEventListener?.(event),
     emitConnection: (state) => connectionListener?.(state),
     emitHostAgents: (hosts) => hostAgentsListener?.(hosts),
+    emitShown: () => shownListener?.(),
+    emitHidden: () => hiddenListener?.(),
     resolveInitialHostAgents: (hosts) => resolveHostAgents(hosts),
   }
 }
@@ -374,5 +391,18 @@ describe('initTrayPanel cross-host plan limits', () => {
     dispose = await init
 
     expect(useTrayPanelStore.getState().hostAgents[0]!.agents[0]!.limits[0]!.usedPercent).toBe(84)
+  })
+
+  it('tracks tray visibility from onHidden and onShown so hidden panels pause active UI', async () => {
+    const env = installFakeTrayEnv()
+    dispose = await initTrayPanel()
+    expect(useTrayPanelStore.getState().visible).toBe(true)
+
+    env.emitHidden()
+    expect(useTrayPanelStore.getState().visible).toBe(false)
+
+    env.emitShown()
+    expect(useTrayPanelStore.getState().visible).toBe(true)
+    expect(useTrayPanelStore.getState().shown).toBe(1)
   })
 })
