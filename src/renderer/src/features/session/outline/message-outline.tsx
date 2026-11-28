@@ -33,37 +33,10 @@ import {
 } from './rail'
 import { useJumpToMessage } from './use-jump'
 import { useOutline, type OutlineRow } from './use-outline'
+import { useRailBox } from './use-rail-box'
 
-// Less room than this between the viewport's edge and the column's text hides the rail.
-const ROOM_PX = 40
 // A first row focused this soon after opening was focused by the keyboard opening.
 const KEYBOARD_FOCUS_MS = 500
-
-/** The viewport's height, and whether the column leaves the rail its room. */
-function useRailBox(
-  viewport: RefObject<HTMLElement | null>,
-  content: RefObject<HTMLElement | null>,
-): { height: number; room: boolean } {
-  const [box, setBox] = useState({ height: 0, room: false })
-  useEffect(() => {
-    const view = viewport.current
-    const column = content.current
-    if (!view || !column) return
-    const measure = (): void => {
-      const inset = Number.parseFloat(getComputedStyle(column).paddingLeft) || 0
-      const text = column.getBoundingClientRect().left + inset - view.getBoundingClientRect().left
-      const next = { height: view.clientHeight, room: text >= ROOM_PX }
-      setBox((current) =>
-        current.height === next.height && current.room === next.room ? current : next,
-      )
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(view)
-    return () => observer.disconnect()
-  }, [viewport, content])
-  return box
-}
 
 // How long the pointer stays on the rail before the list opens, so passing over it opens nothing.
 const LIST_AFTER_MS = 150

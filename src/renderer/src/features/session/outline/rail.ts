@@ -1,5 +1,22 @@
 // The rail's geometry and the reading position, apart from React so they can be tested.
 
+// .ks-outline spans 0..36px from the viewport's left edge (hovered dashes reach 34px), and
+// .ks-width-grip[data-side='left'] sits at column.left + 16px with a 14px hit zone (9..23px).
+export const RAIL_WIDTH_PX = 36
+export const RAIL_CLEARANCE_PX = 4
+export const ROOM_PX = RAIL_WIDTH_PX + RAIL_CLEARANCE_PX
+export const LEFT_GRIP_INSET_PX = 9
+
+/**
+ * Whether the space left of the thread column fits the outline rail without crowding or
+ * overlapping either the column's text or the left width grip's hit zone.
+ */
+export function hasRailRoom(columnLeft: number, inset: number): boolean {
+  const safeInset = Number.isFinite(inset) ? Math.max(0, inset) : 0
+  const nearest = columnLeft + Math.min(safeInset, LEFT_GRIP_INSET_PX)
+  return nearest >= ROOM_PX
+}
+
 const DASH_HEIGHT = 2
 // The dashes' pitch at rest, and while the pointer is on the rail, where each is a row to hover.
 export const REST_PITCH = 5
