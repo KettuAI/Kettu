@@ -2015,8 +2015,16 @@
       "left": "还能用 {{time}}",
       "minutes": "{{m}} 分钟",
       "hoursMinutes": "{{h}} 小时 {{m}} 分钟",
+      "powerLabel": "功耗 {{watts}}",
+      "cpuPower": "CPU {{watts}}",
+      "cpuPowerLabel": "CPU 功耗 {{watts}}",
+      "systemPowerDetail": "整机功耗 {{watts}}",
+      "cpuPowerDetail": "CPU 功耗 {{watts}}",
+      "batteryPowerCharging": "电池充电 {{watts}}",
+      "batteryPowerDischarging": "电池放电 {{watts}}",
+      "batteryPowerIdle": "电池功率 {{watts}}",
       "old": "更新 {{name}} 上的 Kettu 后，这里才能显示它的负载。",
-      "note": "只读这几项总数：CPU、内存、磁盘、网络和电池，而且只在你看着时读。它们只在 {{name}} 和你自己的设备之间端到端加密地传，不留存，Kettu 的服务器也收不到。"
+      "note": "只读这几项总数：CPU、内存、磁盘、网络、功耗和电池，而且只在你看着时读。它们只在 {{name}} 和你自己的设备之间端到端加密地传，不留存，Kettu 的服务器也收不到。"
     }
   },
   "remote": {

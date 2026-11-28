@@ -2,8 +2,10 @@
 // CPU from the cores' times, memory as idle release reads it, the free space of the fullest volume
 // that holds a project or Kettu's data, disk reads and writes (IOKit's block storage statistics on
 // macOS, `/proc/diskstats` on Linux), network traffic (`netstat` over the `en*` interfaces on
-// macOS, `/proc/net/dev` over those backed by a device on Linux, `netstat -e` on Windows) and the
-// battery (`pmset` on macOS, `/sys/class/power_supply` on Linux, only whether it is on battery on
+// macOS, `/proc/net/dev` over those backed by a device on Linux, `netstat -e` on Windows),
+// unprivileged power consumption (`AppleSmartBattery` on macOS, Intel/AMD RAPL and
+// `/sys/class/power_supply` on Linux, `root/wmi` `BatteryStatus` on Windows) and the battery
+// (`pmset` on macOS, `/sys/class/power_supply` on Linux, only whether it is on battery on
 // Windows). A daemon in a container reads its cgroup v2 CPU, memory and disk activity and its own
 // network. On macOS a volume's free space adds the purgeable space Finder counts as available,
 // which `statfs` leaves out.
@@ -12,7 +14,7 @@ import { execFile } from 'node:child_process'
 import { access, readdir, readFile, readlink, stat, statfs } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { HostBattery, HostLoad } from '@shared/host-load'
+import type { HostBattery, HostBatteryPowerState, HostLoad, HostPowerLoad } from '@shared/host-load'
 import type { MemoryState } from '@shared/idle-release'
 import type { Platform } from '@shared/platform'
 import { readMemory, type MemoryReading } from '../idle-release'
@@ -290,6 +292,7 @@ export interface PowerSupply {
   charge_now?: string
   charge_full?: string
   current_now?: string
+  voltage_now?: string
 }
 
 /** The batteries and mains of `/sys/class/power_supply` as one battery; null with no battery. */
@@ -356,6 +359,7 @@ const SUPPLY_FILES = [
   'charge_now',
   'charge_full',
   'current_now',
+  'voltage_now',
 ] as const
 
 async function readSupplies(): Promise<PowerSupply[]> {
@@ -375,9 +379,415 @@ async function readSupplies(): Promise<PowerSupply[]> {
   )
 }
 
-function run(file: string, args: string[]): Promise<string> {
+// Power sensor upper sanity ceiling (2,000 W) to discard corrupted or sentinel sensor readings.
+const MAX_SANE_WATTS = 2_000
+const MAX_SANE_MILLIWATTS = MAX_SANE_WATTS * 1_000
+const INT64_SIGN_BIT = 0x8000_0000_0000_0000n
+const UINT64_MOD = 0x1_0000_0000_0000_0000n
+const UINT64_MAX = 0xffff_ffff_ffff_ffffn
+// Windows ACPI BatteryStatus uses 0xFFFFFFFF (and high-bit values) as BATTERY_UNKNOWN_RATE.
+const WINDOWS_UNKNOWN_RATE = 0x8000_0000
+const POWER_TIMEOUT_MS = 3_000
+
+const roundWatts = (watts: number): number => {
+  const rounded = Math.round(watts * 10) / 10
+  return rounded === 0 ? 0 : rounded
+}
+
+function saneWatts(value: number | null, allowZero: boolean): number | null {
+  if (value === null || !Number.isFinite(value)) return null
+  if (allowZero ? value < 0 : value <= 0) return null
+  if (value > MAX_SANE_WATTS) return null
+  return roundWatts(value)
+}
+
+function buildHostPowerLoad(input: {
+  systemWatts: number | null
+  cpuWatts: number | null
+  batteryWatts: number | null
+  batteryState?: HostBatteryPowerState
+}): HostPowerLoad | null {
+  const systemWatts = saneWatts(input.systemWatts, false)
+  const cpuWatts = saneWatts(input.cpuWatts, false)
+  const batteryWatts = saneWatts(input.batteryWatts, true)
+  if (systemWatts === null && cpuWatts === null && batteryWatts === null) return null
+  return {
+    systemWatts,
+    cpuWatts,
+    batteryWatts,
+    ...(batteryWatts !== null && input.batteryState ? { batteryState: input.batteryState } : {}),
+  }
+}
+
+/**
+ * Parses a signed 64-bit integer from IOKit output, converting unsigned two's-complement 64-bit
+ * representations (e.g. `18446744073709550116` -> `-1500`) back to signed JS integers.
+ */
+export function parseSignedInt64(raw: string | undefined): number | null {
+  if (raw === undefined) return null
+  const trimmed = raw.trim()
+  if (!/^-?\d+$/.test(trimmed)) return null
+  let value: bigint
+  try {
+    value = BigInt(trimmed)
+  } catch {
+    return null
+  }
+  if (value > UINT64_MAX || value < -INT64_SIGN_BIT) return null
+  if (value >= INT64_SIGN_BIT) value -= UINT64_MOD
+  const asNumber = Number(value)
+  return Number.isSafeInteger(asNumber) ? asNumber : null
+}
+
+function macTopField(text: string, key: string): string | undefined {
+  return new RegExp(`^\\s+"${key}"\\s*=\\s*([^\\r\\n]+)`, 'm').exec(text)?.[1]?.trim()
+}
+
+function macBool(raw: string | undefined): boolean | null {
+  if (raw === 'Yes') return true
+  if (raw === 'No') return false
+  return null
+}
+
+function macDictField(dict: string, key: string): number | null {
+  const raw = new RegExp(`"${key}"\\s*=\\s*(-?\\d+)`).exec(dict)?.[1]
+  return parseSignedInt64(raw)
+}
+
+/**
+ * Parses `ioreg -rc AppleSmartBattery -d 1` into unprivileged whole-system and battery power
+ * readings in watts. Returns null on desktop Macs without `AppleSmartBattery` or when no reliable
+ * power reading is present.
+ *
+ * - `systemWatts`: populated from `PowerTelemetryData.SystemLoad` (mW -> W), or from
+ *   `PowerTelemetryData.SystemPowerIn` only when external power is connected and the battery is
+ *   confirmed idle (never conflated with charging input or battery discharge alone).
+ * - `batteryWatts` / `batteryState`: computed from top-level `Voltage` (mV) * signed
+ *   `InstantAmperage` (mA, falling back to `Amperage`), falling back to
+ *   `PowerTelemetryData.BatteryPower` (mW).
+ */
+export function parseAppleSmartBattery(text: string): HostPowerLoad | null {
+  if (!text.trim()) return null
+  const batteryInstalled = macBool(macTopField(text, 'BatteryInstalled'))
+  const externalConnected = macBool(macTopField(text, 'ExternalConnected'))
+  const isCharging = macBool(macTopField(text, 'IsCharging'))
+  const telemetry = /^\s+"PowerTelemetryData"\s*=\s*\{([^}]*)\}/m.exec(text)?.[1] ?? null
+
+  let batteryWatts: number | null = null
+  let batteryState: HostBatteryPowerState | undefined
+  if (batteryInstalled !== false) {
+    const voltageMv =
+      parseSignedInt64(macTopField(text, 'Voltage')) ??
+      parseSignedInt64(macTopField(text, 'AppleRawBatteryVoltage'))
+    const amperageMa =
+      parseSignedInt64(macTopField(text, 'InstantAmperage')) ??
+      parseSignedInt64(macTopField(text, 'Amperage'))
+    let signedBatteryWatts: number | null = null
+    if (voltageMv !== null && voltageMv > 0 && amperageMa !== null) {
+      signedBatteryWatts = (voltageMv * amperageMa) / 1_000_000
+    } else if (telemetry !== null) {
+      const telemetryBatteryMw = macDictField(telemetry, 'BatteryPower')
+      if (telemetryBatteryMw !== null && Math.abs(telemetryBatteryMw) <= MAX_SANE_MILLIWATTS) {
+        signedBatteryWatts = telemetryBatteryMw / 1_000
+      }
+    }
+    if (signedBatteryWatts !== null && Math.abs(signedBatteryWatts) <= MAX_SANE_WATTS) {
+      const magnitude = roundWatts(Math.abs(signedBatteryWatts))
+      batteryWatts = magnitude
+      if (magnitude === 0) batteryState = 'idle'
+      else batteryState = signedBatteryWatts > 0 ? 'charging' : 'discharging'
+    }
+  }
+
+  let systemWatts: number | null = null
+  if (telemetry !== null) {
+    const systemLoadMw = macDictField(telemetry, 'SystemLoad')
+    if (systemLoadMw !== null && systemLoadMw > 0 && systemLoadMw <= MAX_SANE_MILLIWATTS) {
+      systemWatts = systemLoadMw / 1_000
+    } else {
+      const systemPowerInMw = macDictField(telemetry, 'SystemPowerIn')
+      if (
+        systemPowerInMw !== null &&
+        systemPowerInMw > 0 &&
+        systemPowerInMw <= MAX_SANE_MILLIWATTS &&
+        externalConnected === true &&
+        isCharging !== true &&
+        batteryState === 'idle'
+      ) {
+        systemWatts = systemPowerInMw / 1_000
+      }
+    }
+  }
+
+  return buildHostPowerLoad({
+    systemWatts,
+    cpuWatts: null,
+    batteryWatts,
+    batteryState,
+  })
+}
+
+/** One Linux RAPL package domain counter reading, in microjoules. */
+export interface RaplPackage {
+  energyUj: number
+  maxEnergyRangeUj: number | null
+}
+
+/** Snapshot of all readable top-level Linux RAPL CPU package domains at one instant. */
+export interface RaplSample {
+  at: number
+  packages: Map<string, RaplPackage>
+}
+
+/** Filesystem hooks for reading `/sys/class/powercap`, injectable for tests. */
+export interface RaplFs {
+  readdir(dir: string): Promise<string[]>
+  readFile(file: string, encoding: 'utf8'): Promise<string>
+}
+
+const DEFAULT_RAPL_FS: RaplFs = {
+  readdir: (dir) => readdir(dir),
+  readFile: (file, encoding) => readFile(file, encoding),
+}
+
+async function readRaplDomains(
+  root: string,
+  entries: string[],
+  fs: RaplFs,
+): Promise<Map<string, RaplPackage>> {
+  const packages = new Map<string, RaplPackage>()
+  await Promise.all(
+    entries.map(async (entry) => {
+      const dir = path.join(root, entry)
+      const [nameText, energyText, maxText] = await Promise.all([
+        fs.readFile(path.join(dir, 'name'), 'utf8').catch(() => undefined),
+        fs.readFile(path.join(dir, 'energy_uj'), 'utf8').catch(() => undefined),
+        fs.readFile(path.join(dir, 'max_energy_range_uj'), 'utf8').catch(() => undefined),
+      ])
+      // Only include CPU package domains (exclude platform domains like `psys` to avoid double counting).
+      const name = nameText?.trim()
+      if (name && !/^package-\d+$/.test(name)) return
+      const energyUj = num(energyText?.trim())
+      if (energyUj === null) return
+      const maxRange = num(maxText?.trim())
+      packages.set(entry, {
+        energyUj,
+        maxEnergyRangeUj: maxRange !== null && maxRange > 0 ? maxRange : null,
+      })
+    }),
+  )
+  return packages
+}
+
+/**
+ * Reads top-level Linux RAPL CPU package counters under `/sys/class/powercap`.
+ * Prefers `intel-rapl:<n>` and falls back to `intel-rapl-mmio:<n>` only when no MSR domain is
+ * readable, never summing both. Silently returns null on missing directories or `EACCES`.
+ */
+export async function readRaplSample(
+  root = '/sys/class/powercap',
+  at = Date.now(),
+  fs: RaplFs = DEFAULT_RAPL_FS,
+): Promise<RaplSample | null> {
+  const names = await fs.readdir(root).catch(() => null)
+  if (!names) return null
+  const msr = names.filter((name) => /^intel-rapl:\d+$/.test(name))
+  let packages = msr.length > 0 ? await readRaplDomains(root, msr, fs) : new Map()
+  if (packages.size === 0) {
+    const mmio = names.filter((name) => /^intel-rapl-mmio:\d+$/.test(name))
+    if (mmio.length > 0) packages = await readRaplDomains(root, mmio, fs)
+  }
+  return packages.size > 0 ? { at, packages } : null
+}
+
+/**
+ * Computes CPU package power in watts between two consecutive Linux RAPL energy snapshots.
+ * Returns null on the first sample (`from` missing), non-positive elapsed time, counter resets
+ * without a valid `max_energy_range_uj`, or zero energy delta.
+ */
+export function raplWatts(
+  from: RaplSample | null | undefined,
+  to: RaplSample | null | undefined,
+): number | null {
+  if (!from || !to) return null
+  const seconds = (to.at - from.at) / 1_000
+  if (!(seconds > 0)) return null
+  let totalDeltaUj = 0
+  let shared = 0
+  for (const [key, after] of to.packages) {
+    const before = from.packages.get(key)
+    if (!before) continue
+    let deltaUj = after.energyUj - before.energyUj
+    if (deltaUj < 0) {
+      const maxRange = after.maxEnergyRangeUj ?? before.maxEnergyRangeUj
+      if (
+        maxRange !== null &&
+        maxRange > 0 &&
+        before.energyUj <= maxRange &&
+        after.energyUj <= maxRange
+      ) {
+        deltaUj = maxRange - before.energyUj + after.energyUj
+      } else {
+        return null
+      }
+    }
+    totalDeltaUj += deltaUj
+    shared++
+  }
+  if (shared === 0 || !(totalDeltaUj > 0)) return null
+  return saneWatts(totalDeltaUj / 1_000_000 / seconds, false)
+}
+
+/**
+ * Extracts battery charge/discharge power from Linux `/sys/class/power_supply` files using
+ * `power_now` (µW) or `voltage_now` (µV) * `current_now` (µA). Returns null when no battery
+ * exposes a power or voltage/current reading.
+ */
+export function parseSuppliesPower(
+  supplies: PowerSupply[],
+): { batteryWatts: number; batteryState: HostBatteryPowerState } | null {
+  const batteries = supplies.filter((supply) => supply.type.trim() === 'Battery')
+  if (batteries.length === 0) return null
+  const signedNum = (text: string | undefined): number | null => {
+    if (text === undefined) return null
+    const trimmed = text.trim()
+    if (!/^-?\d+$/.test(trimmed)) return null
+    const value = Number(trimmed)
+    return Number.isSafeInteger(value) ? value : null
+  }
+  const mains = supplies.filter((supply) => supply.type.trim() === 'Mains')
+  const onMains = mains.some((supply) => supply.online?.trim() === '1')
+
+  let netWatts = 0
+  let measured = 0
+  for (const battery of batteries) {
+    let rawWatts: number | null = null
+    const powerUw = signedNum(battery.power_now)
+    if (powerUw !== null) {
+      rawWatts = powerUw / 1_000_000
+    } else {
+      const voltageUv = signedNum(battery.voltage_now)
+      const currentUa = signedNum(battery.current_now)
+      if (voltageUv !== null && voltageUv > 0 && currentUa !== null) {
+        rawWatts = (voltageUv * currentUa) / 1_000_000_000_000
+      }
+    }
+    if (rawWatts === null || Math.abs(rawWatts) > MAX_SANE_WATTS) continue
+
+    const status = battery.status?.trim() ?? ''
+    const magnitude = Math.abs(rawWatts)
+    if (status === 'Charging') {
+      netWatts += magnitude
+      measured++
+    } else if (status === 'Discharging') {
+      netWatts -= magnitude
+      measured++
+    } else if (status === 'Full' || status === 'Not charging') {
+      if (roundWatts(magnitude) === 0) {
+        measured++
+      } else if (rawWatts < 0) {
+        netWatts -= magnitude
+        measured++
+      } else {
+        netWatts += magnitude
+        measured++
+      }
+    } else if (roundWatts(magnitude) === 0) {
+      measured++
+    } else if (rawWatts < 0) {
+      netWatts -= magnitude
+      measured++
+    } else if (mains.length > 0 && !onMains) {
+      netWatts -= magnitude
+      measured++
+    }
+  }
+  if (measured === 0) return null
+  const batteryWatts = saneWatts(Math.abs(netWatts), true)
+  if (batteryWatts === null) return null
+  const batteryState: HostBatteryPowerState =
+    batteryWatts === 0 ? 'idle' : netWatts > 0 ? 'charging' : 'discharging'
+  return { batteryWatts, batteryState }
+}
+
+function validWinRateMw(value: unknown): number | null {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value >= WINDOWS_UNKNOWN_RATE ||
+    value > MAX_SANE_MILLIWATTS
+  ) {
+    return null
+  }
+  return value
+}
+
+/**
+ * Parses JSON output from Windows `root/wmi` `BatteryStatus` (`ChargeRate` / `DischargeRate` in
+ * mW) into unprivileged battery power readings. Returns null when no battery or no valid rate is
+ * reported (including `BATTERY_UNKNOWN_RATE` sentinels such as `0xFFFFFFFF`).
+ */
+export function parseWindowsBatteryPower(text: string): HostPowerLoad | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+  const rows = Array.isArray(parsed) ? parsed : [parsed]
+  let netMw = 0
+  let measured = 0
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) continue
+    const entry = row as Record<string, unknown>
+    const charging = entry.Charging === true
+    const discharging = entry.Discharging === true
+    const chargeMw = validWinRateMw(entry.ChargeRate)
+    const dischargeMw = validWinRateMw(entry.DischargeRate)
+    if (charging && !discharging) {
+      if (chargeMw === null) continue
+      netMw += chargeMw
+      measured++
+    } else if (discharging && !charging) {
+      if (dischargeMw === null) continue
+      netMw -= dischargeMw
+      measured++
+    } else if (!charging && !discharging) {
+      if (chargeMw === 0 && (dischargeMw === 0 || dischargeMw === null)) {
+        measured++
+      } else if (dischargeMw === 0 && chargeMw === null) {
+        measured++
+      } else if (chargeMw !== null && chargeMw > 0 && (dischargeMw === null || dischargeMw === 0)) {
+        netMw += chargeMw
+        measured++
+      } else if (dischargeMw !== null && dischargeMw > 0 && (chargeMw === null || chargeMw === 0)) {
+        netMw -= dischargeMw
+        measured++
+      }
+    }
+  }
+  if (measured === 0) return null
+  const batteryWatts = saneWatts(Math.abs(netMw) / 1_000, true)
+  if (batteryWatts === null) return null
+  const batteryState: HostBatteryPowerState =
+    batteryWatts === 0 ? 'idle' : netMw > 0 ? 'charging' : 'discharging'
+  return buildHostPowerLoad({
+    systemWatts: null,
+    cpuWatts: null,
+    batteryWatts,
+    batteryState,
+  })
+}
+
+const WINDOWS_BATTERY_STATUS_PS =
+  'Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus -ErrorAction SilentlyContinue | Select-Object Charging,Discharging,ChargeRate,DischargeRate | ConvertTo-Json -Compress'
+
+function run(file: string, args: string[], timeout = 5_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: 5_000, windowsHide: true }, (error, stdout) =>
+    execFile(file, args, { timeout, windowsHide: true }, (error, stdout) =>
       error ? reject(error) : resolve(stdout),
     )
   })
@@ -531,17 +941,21 @@ export interface SystemReaderDeps {
   /** Whether the computer runs on battery, as main says on Windows; null when unknown. */
   onBattery(): boolean | null
   readMemory?: (platform: Platform) => Promise<MemoryReading>
+  readSupplies?: () => Promise<PowerSupply[]>
+  readRapl?: () => Promise<RaplSample | null>
+  readCommand?: (file: string, args: string[], timeoutMs?: number) => Promise<string>
   log(level: 'warn', message: string): void
 }
 
-/** The counters a load is measured between: the CPU's, the disks' and the network's. */
+/** The counters a load is measured between: the CPU's, the disks', the network's and RAPL's. */
 export interface LoadSample {
   cpu: CpuSample
   io: Counters | null
   network: Counters | null
+  rapl?: RaplSample | null
 }
 
-/** Reads the whole computer; only the purgeable space and the battery are kept, until `forget`. */
+/** Reads the whole computer; only the purgeable space and cached battery/power probes are kept, until `forget`. */
 export class SystemReader {
   private readonly mounts: Mounts
   private container: Promise<ContainerLimits | null> | null = null
@@ -551,6 +965,10 @@ export class SystemReader {
   private purgeableAt = 0
   private purgeableRead: Promise<void> | null = null
   private batteryRead: { at: number; battery: Promise<HostBattery | null> } | null = null
+  private macBatteryPowerAbsent = false
+  private raplUnavailable = false
+  private winPowerUnavailable = false
+  private winPowerRead: { at: number; power: Promise<HostPowerLoad | null> } | null = null
 
   constructor(private readonly deps: SystemReaderDeps) {
     this.mounts = new Mounts(deps.platform)
@@ -565,26 +983,37 @@ export class SystemReader {
     this.purgeable.clear()
     this.purgeableAt = 0
     this.batteryRead = null
+    this.macBatteryPowerAbsent = false
+    this.raplUnavailable = false
+    this.winPowerUnavailable = false
+    this.winPowerRead = null
   }
 
   /** The counters now. */
   async sample(): Promise<LoadSample> {
-    const [cpu, io, network] = await Promise.all([
+    const [cpu, io, network, rapl] = await Promise.all([
       this.cpuSample(),
       this.counters('io', () => this.ioValues()),
       this.counters('network', () => this.networkValues()),
+      this.raplSample(),
     ])
-    return { cpu, io, network }
+    return { cpu, io, network, ...(rapl ? { rapl } : {}) }
   }
 
   /** The load between two samples, and the rest as it is now. */
   async read(from: LoadSample, to: LoadSample): Promise<HostLoad> {
     const limits = await this.limits()
-    const [memory, disk, battery] = await Promise.all([
+    const [memory, disk, batteryAndPower] = await Promise.all([
       this.memory(limits),
       this.disk(),
-      limits ? Promise.resolve(null) : this.recentBattery(),
+      limits
+        ? Promise.resolve<{ battery: HostBattery | null; power: HostPowerLoad | null }>({
+            battery: null,
+            power: null,
+          })
+        : this.batteryAndPower(from, to),
     ])
+    const { battery, power } = batteryAndPower
     const io = from.io && to.io ? counterRates(from.io, to.io) : null
     const network = from.network && to.network ? counterRates(from.network, to.network) : null
     return {
@@ -598,6 +1027,7 @@ export class SystemReader {
       ...(io ? { io: { readPerSecond: io[0], writePerSecond: io[1] } } : {}),
       ...(network ? { network: { receivePerSecond: network[0], sendPerSecond: network[1] } } : {}),
       ...(battery ? { battery } : {}),
+      ...(power ? { power } : {}),
       ...(limits ? { container: true as const } : {}),
     }
   }
@@ -642,7 +1072,7 @@ export class SystemReader {
     }
     if (platform === 'darwin') {
       return parseIoreg(
-        await run('/usr/sbin/ioreg', [
+        await this.exec('/usr/sbin/ioreg', [
           '-c',
           'IOBlockStorageDriver',
           '-r',
@@ -663,7 +1093,7 @@ export class SystemReader {
   /** The network's counters, a container's its own since `/proc/net/dev` follows its namespace. */
   private async networkValues(): Promise<Map<string, [number, number]> | null> {
     const { platform } = this.deps
-    if (platform === 'darwin') return parseNetstat(await run('/usr/sbin/netstat', ['-ibn']))
+    if (platform === 'darwin') return parseNetstat(await this.exec('/usr/sbin/netstat', ['-ibn']))
     if (platform === 'linux') {
       const text = await readFile('/proc/net/dev', 'utf8')
       if (await this.limits()) return parseNetDev(text)
@@ -673,7 +1103,9 @@ export class SystemReader {
     }
     if (platform === 'win32') {
       const system = process.env.SystemRoot ?? 'C:\\Windows'
-      return parseNetstatE(await run(path.win32.join(system, 'System32', 'netstat.exe'), ['-e']))
+      return parseNetstatE(
+        await this.exec(path.win32.join(system, 'System32', 'netstat.exe'), ['-e']),
+      )
     }
     return null
   }
@@ -757,6 +1189,101 @@ export class SystemReader {
     }
   }
 
+  private exec(file: string, args: string[], timeoutMs?: number): Promise<string> {
+    return (this.deps.readCommand ?? run)(file, args, timeoutMs)
+  }
+
+  private async raplSample(): Promise<RaplSample | null> {
+    if (this.deps.platform !== 'linux' || this.raplUnavailable) return null
+    if (await this.limits()) return null
+    const sample = await (this.deps.readRapl ?? (() => readRaplSample()))().catch(() => null)
+    if (!sample) this.raplUnavailable = true
+    return sample
+  }
+
+  private async batteryAndPower(
+    from: LoadSample,
+    to: LoadSample,
+  ): Promise<{ battery: HostBattery | null; power: HostPowerLoad | null }> {
+    if (this.deps.platform === 'linux') {
+      const supplies = await (this.deps.readSupplies ?? readSupplies)().catch(
+        () => [] as PowerSupply[],
+      )
+      const battery = parseSupplies(supplies)
+      const batteryPower = parseSuppliesPower(supplies)
+      const cpuWatts = raplWatts(from.rapl, to.rapl)
+      const power = buildHostPowerLoad({
+        systemWatts: null,
+        cpuWatts,
+        batteryWatts: batteryPower?.batteryWatts ?? null,
+        batteryState: batteryPower?.batteryState,
+      })
+      return { battery, power }
+    }
+    const [battery, power] = await Promise.all([
+      this.recentBattery(),
+      this.deps.platform === 'darwin'
+        ? this.macPower()
+        : this.deps.platform === 'win32'
+          ? this.recentWindowsPower()
+          : Promise.resolve(null),
+    ])
+    return { battery, power }
+  }
+
+  private async macPower(): Promise<HostPowerLoad | null> {
+    if (this.macBatteryPowerAbsent) return null
+    try {
+      const text = await this.exec(
+        '/usr/sbin/ioreg',
+        ['-rc', 'AppleSmartBattery', '-d', '1'],
+        POWER_TIMEOUT_MS,
+      )
+      if (!text.includes('AppleSmartBattery')) {
+        this.macBatteryPowerAbsent = true
+        return null
+      }
+      return parseAppleSmartBattery(text)
+    } catch {
+      return null
+    }
+  }
+
+  private recentWindowsPower(): Promise<HostPowerLoad | null> {
+    if (this.winPowerUnavailable) return Promise.resolve(null)
+    const now = Date.now()
+    if (!this.winPowerRead || now - this.winPowerRead.at >= BATTERY_MS) {
+      this.winPowerRead = { at: now, power: this.windowsPower() }
+    }
+    return this.winPowerRead.power
+  }
+
+  private async windowsPower(): Promise<HostPowerLoad | null> {
+    const system = process.env.SystemRoot ?? 'C:\\Windows'
+    const powershell = path.win32.join(
+      system,
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe',
+    )
+    try {
+      const text = await this.exec(
+        powershell,
+        ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_BATTERY_STATUS_PS],
+        POWER_TIMEOUT_MS,
+      )
+      if (!text.trim()) {
+        this.winPowerUnavailable = true
+        return null
+      }
+      return parseWindowsBatteryPower(text)
+    } catch {
+      this.winPowerUnavailable = true
+      return null
+    }
+  }
+
   private recentBattery(): Promise<HostBattery | null> {
     const now = Date.now()
     if (!this.batteryRead || now - this.batteryRead.at >= BATTERY_MS) {
@@ -768,8 +1295,9 @@ export class SystemReader {
   private async battery(): Promise<HostBattery | null> {
     try {
       if (this.deps.platform === 'darwin')
-        return parsePmset(await run('/usr/bin/pmset', ['-g', 'batt']))
-      if (this.deps.platform === 'linux') return parseSupplies(await readSupplies())
+        return parsePmset(await this.exec('/usr/bin/pmset', ['-g', 'batt']))
+      if (this.deps.platform === 'linux')
+        return parseSupplies(await (this.deps.readSupplies ?? readSupplies)())
     } catch (error) {
       this.warnOnce('battery', `Could not read the battery: ${(error as Error).message}`)
       return null

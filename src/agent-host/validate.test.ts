@@ -56,6 +56,15 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.idleRelease']({ fallback: ['2.1.325'] }))
   })
 
+  it('takes no parameters for host.load.watch and host.load.unwatch', () => {
+    for (const method of ['host.load.watch', 'host.load.unwatch'] as const) {
+      expect(posix[method](undefined)).toBeUndefined()
+      expect(posix[method]({})).toBeUndefined()
+      expect(windows[method](undefined)).toBeUndefined()
+      rejects(() => posix[method]({ power: true }))
+    }
+  })
+
   it('takes a bounded list of session ids for the running work ending them would stop', () => {
     expect(posix['sessions.runningWork']({ sessionIds: ['a', 'b'], other: 1 })).toEqual({
       sessionIds: ['a', 'b'],
