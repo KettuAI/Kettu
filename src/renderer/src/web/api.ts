@@ -575,15 +575,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       dismiss: () => done(admin('updates.dismiss')),
       onChanged: (listener) => adminEvent('updates.changed', (event) => listener(event.status)),
     },
-    // Computer use drives the apps of the computer the desktop app runs on.
+    // Computer use drives the apps of the host; paired devices can only read its status.
     computer: {
-      status: async () => ({
-        driver: false,
-        accessibility: null,
-        screenRecording: null,
-        sessionType: null,
-        desktop: null,
-      }),
+      status: () => admin('computer.status'),
       requestPermission: () => unsupported('use the computer'),
       // The app's icon lies on the host, which the page cannot read; the label shows a generic one.
       appIcon: async () => null,

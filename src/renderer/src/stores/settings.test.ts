@@ -341,3 +341,112 @@ describe('WebSettings host cloud.enabled sync', () => {
     expect(loaded.cloud.enabled).toBe(true)
   })
 })
+
+describe('WebSettings host computerUse sync', () => {
+  function fakeLink(initialPart: HostSettingsPart) {
+    let adminListener: ((event: HostAdminEvent) => void) | null = null
+    let stateListener: ((state: LinkState) => void) | null = null
+    const request = vi.fn(async (method: string) => {
+      if (method === 'settings.get') return initialPart
+      throw new Error(`Unexpected method: ${method}`)
+    })
+    const link: SettingsLink = {
+      request,
+      onAdminEvent: (listener) => {
+        adminListener = listener
+        return () => {
+          adminListener = null
+        }
+      },
+      onState: (listener) => {
+        stateListener = listener
+        return () => {
+          stateListener = null
+        }
+      },
+    }
+    return {
+      link,
+      request,
+      emitConnected: () =>
+        stateListener?.({ kind: 'connected' } as unknown as Extract<
+          LinkState,
+          { kind: 'connected' }
+        >),
+      emitAdmin: (event: HostAdminEvent) => adminListener?.(event),
+    }
+  }
+
+  it('reads computerUse from settings.get, follows settings.changed live, ignores browser storage, and rejects writes', async () => {
+    // Stale browser storage cannot force computerUse on.
+    const storage = memoryStorage({
+      'kettu.settings': JSON.stringify({
+        computerUse: {
+          enabled: true,
+          allowedApps: [{ id: 'com.fake.App', name: 'Fake' }],
+        },
+      }),
+    })
+    const web = new WebSettings(storage)
+    expect(web.current().computerUse).toEqual(DEFAULT_SETTINGS.computerUse)
+
+    const hostOn = structuredClone(DEFAULT_SETTINGS)
+    hostOn.computerUse = {
+      enabled: true,
+      allowedApps: [{ id: 'com.apple.Safari', name: 'Safari' }],
+      pauseOnUse: false,
+      stopShortcut: 'Control+Alt+Command+K',
+    }
+    const partOn = hostSettingsPart(hostOn)
+
+    const fake = fakeLink(partOn)
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.computerUse).toEqual(hostOn.computerUse)
+
+    // Live updates on the host propagate through settings.changed.
+    const hostOff = structuredClone(DEFAULT_SETTINGS)
+    fake.emitAdmin({ type: 'settings.changed', settings: hostSettingsPart(hostOff) })
+    expect(web.current().computerUse).toEqual(DEFAULT_SETTINGS.computerUse)
+
+    // Saving a client setting never persists computerUse into browser localStorage.
+    await web.update({ appearance: { codeSize: 'large' } })
+    expect(JSON.parse(storage.getItem('kettu.settings') ?? '{}')).not.toHaveProperty('computerUse')
+
+    // Attempting to update read-only computerUse locally is rejected without calling the host.
+    await expect(web.update({ computerUse: { enabled: true } })).rejects.toThrow(/computerUse/)
+    expect(fake.request).toHaveBeenCalledTimes(1)
+  })
+
+  it('defaults computerUse to off when an older host omits it from settings.get', async () => {
+    const olderPart = hostSettingsPart(DEFAULT_SETTINGS)
+    delete olderPart.computerUse
+
+    const web = new WebSettings(memoryStorage())
+    const fake = fakeLink(olderPart)
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.computerUse).toEqual(DEFAULT_SETTINGS.computerUse)
+  })
+
+  it('keeps computer-use visible in webClusters', async () => {
+    vi.doMock('@renderer/lib/platform', () => ({
+      isHosted: false,
+      isWeb: true,
+    }))
+    const { webClusters } = await import('@renderer/features/settings/web-sections')
+    const computerUse: SectionDef = {
+      id: 'computer-use',
+      title: 'Computer use',
+      description: 'Read-only host state',
+      icon: PaintBoardIcon,
+      rows: [{ id: 'enabled', setting: 'computer-use.enabled', render: () => null }],
+    }
+    const filtered = webClusters([[computerUse]])
+    expect(filtered[0]?.[0]?.id).toBe('computer-use')
+  })
+})

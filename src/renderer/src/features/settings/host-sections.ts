@@ -19,6 +19,7 @@ export const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'artifacts',
   'sharing',
   'terminal',
+  'computer-use',
   'remote',
   'advanced',
 ])

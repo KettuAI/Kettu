@@ -3,6 +3,7 @@
 // desktop app's main process or the daemon, which runs it with the checks of the local page.
 
 import type { ThumbnailPage, ThumbnailPart } from '../artifacts'
+import { isComputerApp, isStopShortcut, type ComputerUseStatus } from '../computer-use'
 import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
 import type { MarketKeysPatch, MarketKeyState } from '../marketplace'
@@ -71,6 +72,7 @@ export const HOST_SETTING_KEYS = {
  */
 export const READ_ONLY_HOST_SETTING_KEYS = {
   cloud: ['enabled'],
+  computerUse: 'all',
 } as const satisfies Partial<Record<keyof SettingsFile, 'all' | readonly string[]>>
 
 /** The host's part of the settings file. */
@@ -107,6 +109,11 @@ export interface HostSettingsPart {
    * as on. Read-only for paired devices.
    */
   cloud?: Pick<SettingsFile['cloud'], 'enabled'>
+  /**
+   * Computer use settings of the host; absent from older hosts and from hosts without computer
+   * use (such as the daemon), which default to off. Read-only for paired devices.
+   */
+  computerUse?: SettingsFile['computerUse']
 }
 
 type Keys = 'all' | readonly string[]
@@ -154,6 +161,29 @@ function cloudOf(part: HostSettingsPart['cloud'] | undefined): SettingsFile['clo
     : structuredClone(DEFAULT_SETTINGS.cloud)
 }
 
+/** The host's computer use section as a client keeps it, from a host of any version. */
+function computerUseOf(
+  part: HostSettingsPart['computerUse'] | undefined,
+): SettingsFile['computerUse'] {
+  if (!part || typeof part.enabled !== 'boolean') {
+    return structuredClone(DEFAULT_SETTINGS.computerUse)
+  }
+  return {
+    enabled: part.enabled,
+    allowedApps: Array.isArray(part.allowedApps)
+      ? part.allowedApps.filter(isComputerApp).map((app) => ({ id: app.id, name: app.name }))
+      : [],
+    pauseOnUse:
+      typeof part.pauseOnUse === 'boolean'
+        ? part.pauseOnUse
+        : DEFAULT_SETTINGS.computerUse.pauseOnUse,
+    stopShortcut:
+      typeof part.stopShortcut === 'string' && isStopShortcut(part.stopShortcut)
+        ? part.stopShortcut
+        : DEFAULT_SETTINGS.computerUse.stopShortcut,
+  }
+}
+
 /** A client's settings file with the host's part in place of its own. */
 export function withHostSettings(file: SettingsFile, part: HostSettingsPart): SettingsFile {
   const next = structuredClone(file) as unknown as Record<string, unknown>
@@ -174,6 +204,7 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
     next[section] = { ...own, ...(value as object) }
   }
   next.cloud = cloudOf(part.cloud)
+  next.computerUse = computerUseOf(part.computerUse)
   return next as unknown as SettingsFile
 }
 
@@ -262,6 +293,12 @@ export interface HostInfo extends AppInfo {
   pinnedModels?: boolean
   /** Listing a Windows host's drives, with `paths.drives`; absent from hosts before it. */
   drives?: boolean
+  /**
+   * Reading the host's computer use state (`computer.status` and read-only `computerUse` in
+   * `settings.get`), which the desktop app has and the daemon does not; absent from hosts before
+   * it.
+   */
+  computerUse?: boolean
   /**
    * What the host's agent host keeps of its artifacts beyond the versions, as its requests and
    * fields name them; absent from hosts before any of them.
@@ -396,6 +433,8 @@ export interface HostAdminContract {
     result: UpdateStatus
   }
   'updates.dismiss': { params: undefined; result: null }
+  /** Read-only computer use status of the host (driver and system permissions). */
+  'computer.status': { params: undefined; result: ComputerUseStatus }
   'themes.get': { params: undefined; result: HostThemes }
   /** Installs a theme file the device read, named `file`, or names the theme it would replace. */
   'themes.add': {
@@ -489,6 +528,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'updates.restart': true,
   'updates.confirm': true,
   'updates.dismiss': true,
+  'computer.status': true,
   'themes.get': true,
   'themes.add': true,
   'themes.replace': true,

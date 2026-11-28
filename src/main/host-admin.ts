@@ -4,6 +4,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { ComputerUseStatus } from '@shared/computer-use'
 import type { AdminAnswer, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { MarketKeyState } from '@shared/marketplace'
@@ -216,6 +217,8 @@ export interface HostAdminDeps {
   sharing: AdminSharing | null
   /** Null where Kettu is not updated from Settings, as under the daemon. */
   updates: AdminUpdates | null
+  /** Read-only computer use status of this host; null where unavailable, as under the daemon. */
+  computerStatus?: (() => Promise<ComputerUseStatus>) | null
   /** Optional per-device host update permission check beyond paired-owner membership. */
   canUpdateDevice?: (deviceId: string) => boolean
   themes: AdminThemes
@@ -406,6 +409,7 @@ export class HostAdmin {
     // The file keeps the desktop app's default, which a host that always serves never reads.
     if (this.deps.remoteAlwaysOn) part.remote.enabled = true
     if (this.deps.cloudAlwaysOn) part.cloud = { enabled: true }
+    if (!this.deps.computerStatus) delete part.computerUse
     return part
   }
 
@@ -717,6 +721,12 @@ export class HostAdmin {
       case 'updates.dismiss':
         this.updates().dismiss()
         return null
+      case 'computer.status': {
+        if (!this.deps.computerStatus) {
+          throw new AdminError('unavailable', t('hostAdmin.noComputerUse'))
+        }
+        return this.deps.computerStatus()
+      }
       case 'themes.get':
         await this.deps.themes.refresh()
         return this.deps.themes.hostThemes()
