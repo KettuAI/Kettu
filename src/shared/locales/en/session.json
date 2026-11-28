@@ -2131,5 +2131,15 @@
     "showRows": "Show the switches",
     "undo": "Undo",
     "undoLabel": "Undo the change to {{name}}"
+  },
+  "thoughtTranslation": {
+    "translate": "Translate",
+    "translating": "Translating…",
+    "original": "Original",
+    "translation": "Translation",
+    "translated": "Translated",
+    "switchLabel": "Thinking summary language view",
+    "failed": "Translation failed",
+    "empty": "No translation was returned."
   }
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { HOST_METHODS, REMOVED_PLUGIN_METHODS } from '@shared/agent-host'
+import {
+  HOST_METHODS,
+  REMOVED_PLUGIN_METHODS,
+  THOUGHT_TRANSLATE_MAX_CHARS,
+} from '@shared/agent-host'
 import { createValidators, promptContent } from './validate'
 
 const posix = createValidators('darwin')
@@ -2017,6 +2021,54 @@ describe('worktree requests', () => {
         sessionId: 's',
         toolIds: ['t:1'],
         expectedDigests: [{ path: 'a.ts', exists: true, sha256: sha, size: -1 }],
+      }),
+    )
+  })
+
+  it('validates sessions.translateThought payloads strictly', () => {
+    expect(
+      posix['sessions.translateThought']({
+        sessionId: 's1',
+        entryId: 'm:1#thought',
+        text: 'Inspecting files.',
+        language: 'zh-CN',
+        extra: true,
+      }),
+    ).toEqual({
+      sessionId: 's1',
+      entryId: 'm:1#thought',
+      text: 'Inspecting files.',
+      language: 'zh-CN',
+    })
+    rejects(() =>
+      posix['sessions.translateThought']({
+        sessionId: 's1',
+        entryId: 'm:1#thought',
+        text: '   \n  ',
+        language: 'zh-CN',
+      }),
+    )
+    rejects(() =>
+      posix['sessions.translateThought']({
+        sessionId: 's1',
+        entryId: 'm:1#thought',
+        text: 'x'.repeat(THOUGHT_TRANSLATE_MAX_CHARS + 1),
+        language: 'zh-CN',
+      }),
+    )
+    rejects(() =>
+      posix['sessions.translateThought']({
+        sessionId: 's1',
+        entryId: 'm:1#thought',
+        text: 'Inspecting files.',
+        language: 'zh_CN; rm -rf /',
+      }),
+    )
+    rejects(() =>
+      posix['sessions.translateThought']({
+        sessionId: 's1',
+        text: 'Inspecting files.',
+        language: 'en',
       }),
     )
   })

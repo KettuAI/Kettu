@@ -13,14 +13,12 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { loadFullEntry } from '@renderer/stores/threads'
-import { Clamp } from '../clamp'
-import { Markdown } from '../markdown'
-import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { toolMedia } from '../media/named'
 import { useEntry } from '../use-thread'
 import { commandOutput, toolLabel } from './helpers'
 import { fenceBody, numberedRead } from './read-code'
 import { ShellBlock } from './shell-block'
+import { ThoughtSummaryView } from './thought-translation'
 import { useToolCallLabels } from './tool-call-model'
 import { ContentBlock, ToolMedia } from './tool-parts'
 import { useDiffStats } from './use-diff-stats'
@@ -184,18 +182,12 @@ export const ThoughtBody = memo(function ThoughtBody({
   const entry = useEntry(sessionId, entryId, 'thought')
   if (!entry) return null
   return (
-    <div data-selectable="" className="text-muted-foreground">
-      <SessionIdContext value={sessionId}>
-        <EntryIdContext value={entryId}>
-          <Clamp maxHeight={180} buttonClassName="-mx-1.5">
-            <Markdown
-              markdown={entry.markdown}
-              streaming={entry.streaming}
-              className="markdown-muted markdown-thought"
-            />
-          </Clamp>
-        </EntryIdContext>
-      </SessionIdContext>
-    </div>
+    <ThoughtSummaryView
+      sessionId={sessionId}
+      entryId={entryId}
+      markdown={entry.markdown}
+      streaming={entry.streaming}
+      maxHeight={180}
+    />
   )
 })

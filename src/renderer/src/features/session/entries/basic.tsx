@@ -31,7 +31,6 @@ import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { Clamp } from '../clamp'
 import { ConfirmedLink } from '../link-confirm'
 import { Markdown } from '../markdown'
 import { ReplyContext } from '../markdown/live'
@@ -54,6 +53,7 @@ import { SentCommandNote } from './sent-command'
 import { FromSessionCard, KettuCard, ReportLine } from './session-origin'
 import { turnEndTagText } from './turn-end'
 import { TurnEndTag } from './turn-end-tag'
+import { ThoughtSummaryView } from './thought-translation'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
 export interface EntryProps {
@@ -240,20 +240,14 @@ export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: E
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <div className={cn('text-muted-foreground', animation)} data-selectable="">
-      <SessionIdContext value={sessionId}>
-        <EntryIdContext value={entryId}>
-          {/* Four of its lines at the default text size. */}
-          <Clamp maxHeight={90} buttonClassName="-mx-1.5">
-            <Markdown
-              markdown={entry.markdown}
-              streaming={entry.streaming}
-              className="markdown-muted markdown-thought"
-            />
-          </Clamp>
-        </EntryIdContext>
-      </SessionIdContext>
-    </div>
+    <ThoughtSummaryView
+      sessionId={sessionId}
+      entryId={entryId}
+      markdown={entry.markdown}
+      streaming={entry.streaming}
+      maxHeight={90}
+      className={animation}
+    />
   )
 })
 
