@@ -15,6 +15,7 @@ import {
 } from '@shared/remote/pairing'
 import { loadPlatformPrimitives } from '@shared/remote/primitives'
 import { devicePlatform, pageAddress } from './api'
+import { installStaleChunkReload, stripRefreshQueryParam } from './cache-refresh'
 import { browserDevice, deviceName } from './device-name'
 import { launchApp } from './launch'
 import { channelUrl, dialWebSocket } from '@shared/remote/link'
@@ -34,6 +35,9 @@ function storage(kind: 'localStorage' | 'sessionStorage'): Storage | null {
   }
 }
 
+stripRefreshQueryParam()
+installStaleChunkReload()
+
 const settings = new WebSettings(storage('localStorage'))
 const browser = browserDevice(navigator.userAgent)
 const client = { kind: 'web', version: __KETTU_VERSION__, platform: browser.system || 'Web' }
@@ -44,6 +48,7 @@ window.kettu = {
   client: 'web',
   ...(__KETTU_HOSTED__ ? { hosted: true } : {}),
   ...(__KETTU_RELAY_BUILD__ ? { relayPage: true } : {}),
+  clientVersion: __KETTU_VERSION__,
   systemLocale: matchLocale(navigator.languages),
   settings: {
     get: async () => settings.get(),

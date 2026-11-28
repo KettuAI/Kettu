@@ -16,6 +16,7 @@ import type { Paired, PairProgress } from '@shared/remote/pair'
 import type { Transport } from '@shared/remote/transport'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import { useWebHostStore } from '@renderer/stores/web-host'
+import { installStaleChunkReload, stripRefreshQueryParam } from '../cache-refresh'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
 import type { PairingNotice } from '../pairing-page'
@@ -89,6 +90,8 @@ function dialHere(relay: HostRelay): Dial {
 }
 
 export async function startRelayPage(base: RelayPageBase): Promise<void> {
+  stripRefreshQueryParam()
+  installStaleChunkReload()
   const payload =
     location.pathname === BROWSER_PAIRING_PATH ? parseBrowserPairingLink(location.href) : null
   const [device, hosts] = await Promise.all([

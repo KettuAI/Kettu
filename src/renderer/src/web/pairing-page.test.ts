@@ -226,5 +226,25 @@ describe('PairingView hosted account discovery', () => {
     expect(directHtml).not.toContain('Pair with a link instead')
     expect(directHtml).toContain('id="pairing-link"')
     expect(directHtml).toContain('http://…/pair#…')
+    expect(directHtml).toContain('Refresh web cache')
+  })
+
+  it('offers a direct Refresh web cache action when pairing fails due to an outdated page', () => {
+    const discoveryOutdated = renderView({
+      discoveryPairing: {
+        host: STUDIO,
+        progress: { state: 'failed', reason: 'update_client' },
+        added: false,
+      },
+    })
+    expect(discoveryOutdated).toContain('This page is older than Kettu on Studio Mac.')
+    expect(discoveryOutdated).toContain('Refresh web cache')
+
+    const linkOutdated = renderView({
+      hosted: undefined,
+      progress: { state: 'failed', reason: 'update_client' },
+    })
+    expect(linkOutdated).toContain('This page is older than Kettu on the computer.')
+    expect(linkOutdated).toContain('Refresh web cache')
   })
 })

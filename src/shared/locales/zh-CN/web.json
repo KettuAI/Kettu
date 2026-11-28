@@ -83,6 +83,12 @@
     "updated": "电脑上的 Kettu 更新了。",
     "reload": "刷新"
   },
+  "cache": {
+    "refresh": "刷新网页缓存",
+    "refreshing": "正在刷新…",
+    "hint": "保留已配对电脑与登录状态。",
+    "version": "网页端 {{version}}"
+  },
   "copiedPath": "已复制 {{path}}",
   "path": {
     "project": {

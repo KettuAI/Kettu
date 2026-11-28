@@ -62,6 +62,7 @@ import {
   JoinWeChat,
   NewIssue,
   NoUpdates,
+  RefreshWebCache,
   UpdateRow,
 } from './about-section'
 import { AppIconTiles } from './app-icon-section'
@@ -1153,6 +1154,7 @@ export function useAboutSection(): SectionDef {
   const updatable = useHostHas('updates')
   const githubOnly = useGitHubOnly()
   const cloudOffHere = useCloudOffHere()
+  const web = group('web', t('about.groups.web'))
   const updates = group('updates', t('about.groups.updates'))
   const contact = group('contact', t('about.groups.contact'))
   return {
@@ -1162,6 +1164,16 @@ export function useAboutSection(): SectionDef {
     icon: InformationCircleIcon,
     hero: <AboutHero info={info} />,
     rows: [
+      ...(isWeb
+        ? ([
+            {
+              id: 'web-cache',
+              setting: 'about.web-cache',
+              group: web,
+              render: () => <RefreshWebCache />,
+            },
+          ] satisfies RowDef[])
+        : []),
       {
         id: 'update',
         setting: 'about.update',

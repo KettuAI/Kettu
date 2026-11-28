@@ -7,10 +7,11 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
-import { hasBand } from '@renderer/lib/platform'
+import { hasBand, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
 import { openReport } from '@renderer/stores/report'
+import { RefreshCacheButton } from '@renderer/web/refresh-cache-action'
 import { Glyph } from './glyph'
 import { useHostAwaySaid } from './host-notice'
 
@@ -89,6 +90,7 @@ export function HostBanner() {
                   )}
                   {t('hostBanner.restart')}
                 </Button>
+                {isWeb && <RefreshCacheButton variant="quiet" size="xs" className="rounded-full" />}
                 <Button
                   variant="quiet"
                   size="xs"

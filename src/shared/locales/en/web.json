@@ -83,6 +83,12 @@
     "updated": "Kettu on the computer was updated.",
     "reload": "Reload"
   },
+  "cache": {
+    "refresh": "Refresh web cache",
+    "refreshing": "Refreshing…",
+    "hint": "Keeps paired computers and sign-in intact.",
+    "version": "Web {{version}}"
+  },
   "copiedPath": "Copied {{path}}",
   "path": {
     "project": {

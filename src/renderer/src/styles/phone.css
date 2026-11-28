@@ -127,6 +127,9 @@
   :root .kettu-settings .kettu-settings__body .k-back {
     display: none;
   }
+  :root .kettu-settings .k-about {
+    flex-wrap: wrap;
+  }
 }
 
 /* Menus, popovers and lists stay inside the screen, and dialogs inside its height

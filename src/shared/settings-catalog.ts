@@ -2009,6 +2009,18 @@ const ENTRIES = {
   },
 
   // ---- About
+  // Browser-only action to pull fresh static web assets without clearing pairing or sign-in state.
+  'about.web-cache': {
+    section: 'about',
+    row: 'web-cache',
+    group: 'about.groups.web',
+    name: 'about.webCache.name',
+    description: 'about.webCache.description',
+    keywords: 'about.webCache.keywords',
+    part: 'desktop',
+    kind: 'action',
+    on: () => false,
+  },
   'about.update': {
     section: 'about',
     row: 'update',

@@ -283,7 +283,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     hostPlatform: () => hostSystem ?? devicePlatform(navigator),
     systemLocale: matchLocale(navigator.languages),
     app: {
-      // The web client is the host's own build, so its version is the host's.
+      // Info of the connected host computer; the browser's own bundle version is `clientVersion`.
       getInfo: () => hostInfo(),
       // Links open in this browser itself, which the page cannot name.
       defaultBrowser: async () => ({ name: null, icon: null }),
