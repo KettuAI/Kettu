@@ -19,6 +19,7 @@ import {
 import {
   hostSettingsPart,
   isHostAdminMethod,
+  readOnlyHostKeys,
   splitSettingsPatch,
   type DeviceReport,
   type HostAdminEvent,
@@ -237,6 +238,8 @@ export interface HostAdminDeps {
   submitReport?: (ref: string) => Promise<ReportSubmitResult>
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
+  /** Kettu's cloud services have no switch on this host, as under the daemon, so they stay on. */
+  cloudAlwaysOn?: boolean
   /** Tells every owner's device but `except`, or only `deviceId`. */
   send(event: HostAdminEvent, deviceId: string | null, except?: string): void
 }
@@ -402,6 +405,7 @@ export class HostAdmin {
     const part = hostSettingsPart(file)
     // The file keeps the desktop app's default, which a host that always serves never reads.
     if (this.deps.remoteAlwaysOn) part.remote.enabled = true
+    if (this.deps.cloudAlwaysOn) part.cloud = { enabled: true }
     return part
   }
 
@@ -466,15 +470,20 @@ export class HostAdmin {
         return this.hostPart()
       case 'settings.update': {
         const { patch } = fields(params)
-        const { client } = splitSettingsPatch(fields(patch) as SettingsPatch)
+        const record = fields(patch)
+        const readOnly = readOnlyHostKeys(record)
+        if (readOnly.length > 0) {
+          throw invalid(`Only the host itself can change these settings: ${readOnly.join(', ')}`)
+        }
+        const { client } = splitSettingsPatch(record as SettingsPatch)
         if (client) {
           const keys = Object.keys(client).join(', ')
           throw invalid(`A device keeps these settings itself, not the host: ${keys}`)
         }
-        if (this.deps.remoteAlwaysOn && (patch as SettingsPatch).remote?.enabled === false) {
+        if (this.deps.remoteAlwaysOn && (record as SettingsPatch).remote?.enabled === false) {
           throw invalid(t('hostAdmin.remoteAlwaysOn'))
         }
-        settings.update(patch)
+        settings.update(record)
         return this.hostPart()
       }
       case 'settings.addAgent': {

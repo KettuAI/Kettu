@@ -5,8 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import enSettings from '@shared/locales/en/settings.json'
 import zhSettings from '@shared/locales/zh-CN/settings.json'
 import { CODE_SIZES, DEFAULT_SETTINGS, USER_FONT_ROLES } from '@shared/settings'
+import {
+  hostSettingsPart,
+  type HostAdminEvent,
+  type HostSettingsPart,
+} from '@shared/remote/host-admin'
+import type { LinkState } from '@shared/remote/link'
 import type { SectionDef } from '@renderer/features/settings/model'
-import { WebSettings } from '@renderer/web/settings'
+import { WebSettings, type SettingsLink } from '@renderer/web/settings'
 import { applyAppearance, applyCodeSize, applyUserFonts } from './settings'
 
 function fakeRoot() {
@@ -250,5 +256,88 @@ describe('code font size appearance, web persistence and CSS tokens', () => {
     expect(zhSettings.appearance.codeSize.small).toBe('小')
     expect(zhSettings.appearance.codeSize.default).toBe('默认')
     expect(zhSettings.appearance.codeSize.large).toBe('大')
+  })
+})
+
+describe('WebSettings host cloud.enabled sync', () => {
+  function fakeLink(initialPart: HostSettingsPart) {
+    let adminListener: ((event: HostAdminEvent) => void) | null = null
+    let stateListener: ((state: LinkState) => void) | null = null
+    const request = vi.fn(async (method: string) => {
+      if (method === 'settings.get') return initialPart
+      throw new Error(`Unexpected method: ${method}`)
+    })
+    const link: SettingsLink = {
+      request,
+      onAdminEvent: (listener) => {
+        adminListener = listener
+        return () => {
+          adminListener = null
+        }
+      },
+      onState: (listener) => {
+        stateListener = listener
+        return () => {
+          stateListener = null
+        }
+      },
+    }
+    return {
+      link,
+      request,
+      emitConnected: () =>
+        stateListener?.({ kind: 'connected' } as unknown as Extract<
+          LinkState,
+          { kind: 'connected' }
+        >),
+      emitAdmin: (event: HostAdminEvent) => adminListener?.(event),
+    }
+  }
+
+  it('reads cloud.enabled from settings.get, follows settings.changed live, and ignores browser storage', async () => {
+    // Stale browser storage cannot force cloud.enabled off.
+    const storage = memoryStorage({
+      'kettu.settings': JSON.stringify({ cloud: { enabled: false } }),
+    })
+    const web = new WebSettings(storage)
+    expect(web.current().cloud.enabled).toBe(true)
+
+    const hostOff = structuredClone(DEFAULT_SETTINGS)
+    hostOff.cloud.enabled = false
+    const partOff = hostSettingsPart(hostOff)
+
+    const changes: boolean[] = []
+    web.onChanged((next) => changes.push(next.cloud.enabled))
+
+    const fake = fakeLink(partOff)
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.cloud.enabled).toBe(false)
+    expect(changes).toEqual([false])
+
+    // Live toggle on the host propagates immediately through settings.changed.
+    const partOn = hostSettingsPart(DEFAULT_SETTINGS)
+    fake.emitAdmin({ type: 'settings.changed', settings: partOn })
+    expect(web.current().cloud.enabled).toBe(true)
+    expect(changes).toEqual([false, true])
+
+    // Saving a client setting does not persist cloud into browser localStorage.
+    await web.update({ appearance: { codeSize: 'large' } })
+    expect(JSON.parse(storage.getItem('kettu.settings') ?? '{}')).not.toHaveProperty('cloud')
+  })
+
+  it('defaults cloud.enabled to true when an older host omits cloud from settings.get', async () => {
+    const olderPart = hostSettingsPart(DEFAULT_SETTINGS)
+    delete olderPart.cloud
+
+    const web = new WebSettings(memoryStorage())
+    const fake = fakeLink(olderPart)
+    web.attach(fake.link)
+    fake.emitConnected()
+
+    const loaded = await web.get()
+    expect(loaded.cloud.enabled).toBe(true)
   })
 })

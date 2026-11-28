@@ -169,6 +169,15 @@ export function hostScope(hostId: string): HostScope {
   return other.scope
 }
 
+/**
+ * Whether Kettu's cloud services are off on `hostId` (null for this computer's host, or the
+ * connected host in the web client). Defaults to false until a remote host reports otherwise.
+ */
+export function useHostCloudOff(hostId: string | null): boolean {
+  const scope = hostId === null ? LOCAL_SCOPE : hostScope(hostId)
+  return scope.useSettingsStore((s) => !s.settings.cloud.enabled)
+}
+
 /** One of another host's events, for its scope, if Settings has shown it. */
 export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent): void {
   const other = scopes.get(hostId)

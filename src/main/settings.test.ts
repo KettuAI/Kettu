@@ -2,7 +2,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
+import {
+  hostSettingsPart,
+  readOnlyHostKeys,
+  splitSettingsPatch,
+  withHostSettings,
+} from '@shared/remote/host-admin'
 import { APP_ICONS, CODE_SIZES, CONVERSATION_WIDTHS, DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
 import {
@@ -1288,5 +1293,37 @@ describe('code font size setting', () => {
     for (const bad of ['medium', 'tiny', '', 14, null, []]) {
       expect(() => validateSettingsPatch({ appearance: { codeSize: bad } })).toThrow()
     }
+  })
+})
+
+describe('host cloud setting exposure to paired devices', () => {
+  it('includes cloud.enabled in hostSettingsPart as read-only and defaults missing older parts to on', () => {
+    const cloudOff = structuredClone(DEFAULT_SETTINGS)
+    cloudOff.cloud.enabled = false
+    const cloudOn = structuredClone(DEFAULT_SETTINGS)
+    cloudOn.cloud.enabled = true
+
+    const offPart = hostSettingsPart(cloudOff)
+    const onPart = hostSettingsPart(cloudOn)
+    expect(offPart.cloud).toEqual({ enabled: false })
+    expect(onPart.cloud).toEqual({ enabled: true })
+
+    // Remote host cloud.enabled overrides the viewer's local setting in either direction.
+    expect(withHostSettings(cloudOn, offPart).cloud).toEqual({ enabled: false })
+    expect(withHostSettings(cloudOff, onPart).cloud).toEqual({ enabled: true })
+
+    // An older host omits cloud from settings.get; treat it as on rather than inheriting local off.
+    const olderPart = structuredClone(offPart)
+    delete olderPart.cloud
+    expect(withHostSettings(cloudOff, olderPart).cloud).toEqual({ enabled: true })
+
+    // Paired devices never treat cloud as a writable host setting.
+    expect(splitSettingsPatch({ cloud: { enabled: false } })).toEqual({
+      host: null,
+      client: { cloud: { enabled: false } },
+    })
+    expect(readOnlyHostKeys({ cloud: { enabled: false } })).toEqual(['cloud'])
+    expect(readOnlyHostKeys({ cloud: {} })).toEqual(['cloud'])
+    expect(readOnlyHostKeys({ git: { backgroundFetch: true } })).toEqual([])
   })
 })

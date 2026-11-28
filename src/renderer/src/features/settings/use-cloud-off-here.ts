@@ -1,9 +1,6 @@
-import { useCloudOff } from '@renderer/lib/cloud'
 import { useHostScope } from '@renderer/stores/host-scope'
 
-/** Whether the host section shows this computer while its Kettu cloud is off. */
+/** Whether the host shown by the current host scope has Kettu's cloud services turned off. */
 export function useCloudOffHere(): boolean {
-  const { hostId } = useHostScope()
-  const off = useCloudOff()
-  return off && hostId === null
+  return useHostScope().useSettingsStore((s) => !s.settings.cloud.enabled)
 }

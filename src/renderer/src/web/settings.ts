@@ -4,6 +4,7 @@
 
 import {
   HOST_SETTING_KEYS,
+  READ_ONLY_HOST_SETTING_KEYS,
   splitSettingsPatch,
   withHostSettings,
   type HostAdminEvent,
@@ -50,7 +51,13 @@ const CLIENT_KEYS: Partial<Record<Section, readonly string[]>> = Object.fromEntr
     }
     const host = (HOST_SETTING_KEYS as Partial<Record<Section, 'all' | readonly string[]>>)[section]
     if (host === 'all') return []
-    const keys = Object.keys(DEFAULT_SETTINGS[section]).filter((key) => !host?.includes(key))
+    const readOnly = (
+      READ_ONLY_HOST_SETTING_KEYS as Partial<Record<Section, 'all' | readonly string[]>>
+    )[section]
+    if (readOnly === 'all') return []
+    const keys = Object.keys(DEFAULT_SETTINGS[section]).filter(
+      (key) => !host?.includes(key) && !readOnly?.includes(key),
+    )
     return keys.length > 0 ? [[section, keys]] : []
   }),
 )

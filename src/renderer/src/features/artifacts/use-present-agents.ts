@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import type { ArtifactPiece } from '@shared/artifacts'
 import { agentName } from '@renderer/stores/agents'
-import { useCloudOff } from '@renderer/lib/cloud'
+import { useHostCloudOff } from '@renderer/stores/host-scope'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { artifactHost } from '@renderer/lib/host'
 import { artifactSharing } from './artifact-host'
@@ -92,8 +92,8 @@ const VISITORS_EVERY_MS = 30_000
  * null when it is not published there or nobody can say.
  */
 export function useVisitors(id: string, asking = true): number | null {
-  // Self-hosted, nothing asks Kettu's service.
-  const cloudOff = useCloudOff() && artifactHost(id) === null
+  // When the artifact's host turned Kettu cloud off, nothing asks Kettu's service.
+  const cloudOff = useHostCloudOff(artifactHost(id))
   const published = artifactSharing(id).useSharingStore(
     (s) =>
       s.status?.published.some((p) => p.id === id && p.target === 'kettu' && !p.otherAccount) ??

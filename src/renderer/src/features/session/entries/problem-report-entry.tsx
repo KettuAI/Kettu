@@ -5,11 +5,11 @@ import type { ReportRequest } from '@shared/report'
 import type { ProblemReportEntry as Entry } from '@shared/thread'
 import { toast } from '@renderer/components/ui/toast'
 import { recordAction } from '@renderer/lib/action-log'
-import { useCloudOff } from '@renderer/lib/cloud'
 import { host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
 import { useAccountStore } from '@renderer/stores/account'
+import { useHostCloudOff } from '@renderer/stores/host-scope'
 import { openReport } from '@renderer/stores/report'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { NOT_SUBMITTED, prepare, submit } from '../../report/report-flow'
@@ -42,8 +42,8 @@ export const ProblemReportEntry = memo(function ProblemReportEntry({
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
   const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
   const signedIn = useAccountStore((s) => s.status?.state === 'signed-in')
-  // Self-hosted, reports are only saved: nothing goes to Kettu.
-  const cloudOff = useCloudOff()
+  // When the target host turned Kettu cloud off, reports are only saved: nothing goes to Kettu.
+  const cloudOff = useHostCloudOff(hostId)
   if (!entry) return null
 
   // This computer's sign-in is known here; another host answers for its own.
