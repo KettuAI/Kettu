@@ -1292,6 +1292,55 @@
       "models_other": "{{count}} models",
       "unread": "Shows once {{name}} has started.",
       "hint": "{{name}} signs in to each provider itself: Add provider opens {{name}} in a terminal, where /login signs in to a subscription or an API key is set. Kettu never sees the credentials."
+    },
+    "capabilities": {
+      "title": "Integration capabilities",
+      "summary": "{{supported}} supported · {{partial}} partial · {{unavailable}} unavailable",
+      "status": {
+        "supported": "Supported",
+        "partial": "Partial",
+        "unavailable": "Unavailable"
+      },
+      "reason": {
+        "upstream": "Upstream limit",
+        "kettu": "Not yet in Kettu"
+      },
+      "items": {
+        "steering": "Mid-turn steering",
+        "rewind": "Edit from here",
+        "fileRewind": "File rewind on edit",
+        "fork": "Session forking",
+        "imageInput": "Image input",
+        "mcp": "MCP servers",
+        "contextBreakdown": "Context breakdown",
+        "usageHistory": "Usage & cost tracking",
+        "planLimits": "Plan limits & account",
+        "sideChat": "Side chat",
+        "workflowsAndRoutines": "Workflows & routines"
+      },
+      "notes": {
+        "acpNoForkAtMessage": "Full-session fork only; ACP does not carry a message fork point",
+        "acpNoRewind": "ACP does not provide a session rewind method",
+        "acpStdioAlwaysHttpDepends": "Stdio always works; HTTP MCP depends on the ACP adapter",
+        "acpStdioOnlyNoHttp": "Stdio only; adapter does not advertise HTTP MCP",
+        "agyNoSilentDelete": "Antigravity keeps prompted sessions in history after closing",
+        "clineModelRequestsOnly": "Session model requests are tracked; Usage page history is not wired yet",
+        "clineSdkOnly": "Available in Cline SDK mode only (not on ACP fallback or compacted sessions)",
+        "codexEstimatesOnly": "Skills and MCP definition estimates only; no full category breakdown",
+        "codexPaginatedThreadsOnly": "Paginated threads only; legacy rollout threads cannot revert",
+        "deepseekBalanceOnly": "Reads account route and balance; billed by use with no plan limit windows",
+        "dependsOnAcpAdapter": "Depends on what the ACP adapter advertises at startup",
+        "limitsAdministratorManaged": "Managed by an administrator",
+        "limitsHarnessDoesNotOffer": "The harness does not expose plan usage",
+        "limitsModelProviderManaged": "Managed by each model provider",
+        "limitsNotYetSupported": "Plan usage reader is not integrated in Kettu yet",
+        "limitsVendorDisallows": "Vendor does not allow third-party apps to read plan usage",
+        "noSilentSessionDelete": "Harness cannot delete temporary side-chat sessions silently",
+        "piExtensionRequired": "Wired through Kettu's Pi extension (requires Pi 1.0+)",
+        "piNoPermissionPrompts": "Pi does not prompt for tool permissions to enforce scopes",
+        "routinesOnlyNoWorkflows": "Routine permission modes are mapped; workflow steps are not enabled yet",
+        "sideChatHiddenCopyOnly": "Answers in a hidden session with a copied conversation summary"
+      }
     }
   },
   "about": {

@@ -109,6 +109,7 @@ import {
   Skel,
 } from './controls'
 import { AutoCompactRows } from './auto-compact-rows'
+import { AgentCapabilitiesGroup } from './agent-capabilities'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { CodebuddySettingsRows } from './codebuddy-settings-rows'
 import { FavoriteModelsGroup } from './favorite-models'
@@ -1082,6 +1083,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         <FavoriteModelsGroup key={status.id} status={status} />
 
         <ConfigurationGroup status={status} />
+
+        <AgentCapabilitiesGroup status={status} />
 
         <DangerGroup status={status} />
       </div>
