@@ -49,6 +49,18 @@ export interface ChannelOptions {
   rekeyInterval?: number
 }
 
+/** 通道发送选项：高优消息（如 ping/pong）可越过尚未开始加密写帧的普通大消息。 */
+export interface ChannelSendOptions {
+  priority?: 'high' | 'normal'
+}
+
+interface PendingSend {
+  kind: number
+  body: Uint8Array
+  resolve: () => void
+  reject: (error: unknown) => void
+}
+
 const utf8 = new TextDecoder('utf-8', { fatal: true })
 
 // WebCrypto and Blob take views of an ArrayBuffer; nothing here holds a SharedArrayBuffer.
@@ -167,7 +179,10 @@ export class Channel {
   private readonly handlers: ChannelHandlers
   private readonly rekeyBytes: number
   private readonly rekeyInterval: number
-  private sending: Promise<void> = Promise.resolve()
+  /** 待加密写帧的高优与普通发送队列，当前正在传输的消息始终完整写完不交错。 */
+  private readonly highQueue: PendingSend[] = []
+  private readonly normalQueue: PendingSend[] = []
+  private flushing = false
   private receiving: Promise<void> = Promise.resolve()
   private error: Error | null = null
   private sentOnKey = 0
@@ -185,12 +200,38 @@ export class Channel {
    * Sends a message after every one sent before it, and resolves once its last frame is written.
    * A message that cannot be sent rejects without ending the channel.
    */
-  async send(message: ChannelMessage): Promise<void> {
+  async send(message: ChannelMessage, options?: ChannelSendOptions): Promise<void> {
     if (this.error) throw this.error
     const { kind, body } = encode(message)
-    const sent = this.sending.then(() => this.transmit(kind, body))
-    this.sending = sent.catch(() => {})
-    return sent
+    return new Promise<void>((resolve, reject) => {
+      const queue = options?.priority === 'high' ? this.highQueue : this.normalQueue
+      queue.push({ kind, body, resolve, reject })
+      void this.drainSendQueue()
+    })
+  }
+
+  /** 串行消费发送队列：每条消息完整写完所有帧后，优先取出高优队列中的控制消息。 */
+  private async drainSendQueue(): Promise<void> {
+    if (this.flushing) return
+    this.flushing = true
+    try {
+      for (;;) {
+        const next = this.highQueue.shift() ?? this.normalQueue.shift()
+        if (!next) break
+        if (this.error) {
+          next.reject(this.error)
+          continue
+        }
+        try {
+          await this.transmit(next.kind, next.body)
+          next.resolve()
+        } catch (error) {
+          next.reject(error)
+        }
+      }
+    } finally {
+      this.flushing = false
+    }
   }
 
   /**

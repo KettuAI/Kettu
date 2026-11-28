@@ -13,8 +13,16 @@ import { coalescePatches, type Patch } from '@shared/thread'
 export interface OutboxLimits {
   /** Messages written and not acknowledged, past which the next ones wait. */
   inFlight: number
+  /** 在途未确认字节上限，超出后普通与大块消息等待设备确认释放窗口。 */
+  inFlightBytes: number
+  /** 高优小消息在普通字节窗口被大消息占满时可额外使用的在途预留字节预算。 */
+  highPriorityReserveBytes: number
+  /** 认定为高优小消息的单条字节阈值（小回答与小补丁批次）。 */
+  smallMessageBytes: number
   /** Messages waiting, past which the patches among them are dropped. */
   queued: number
+  /** 排队总字节上限，超出后丢弃待发补丁并下发 resync。 */
+  queuedBytes: number
   /** Messages waiting or not acknowledged, past which the device cannot keep up at all. */
   kept: number
   /** Bytes of patches that merge into one batch at most. */
@@ -23,10 +31,17 @@ export interface OutboxLimits {
 
 export const OUTBOX_LIMITS: OutboxLimits = {
   inFlight: 256,
+  inFlightBytes: 512 * 1024,
+  highPriorityReserveBytes: 64 * 1024,
+  smallMessageBytes: 16 * 1024,
   queued: 1024,
+  queuedBytes: 8 * 1024 * 1024,
   kept: 4096,
   mergedBytes: 256 * 1024,
 }
+
+/** 视为大块消息的字节阈值，高于该值的 JSON 回答排入低优大块通道。 */
+const BULK_MESSAGE_BYTES = 64 * 1024
 
 /** Stream bytes a device of version 2 may have on their way before downloads wait. */
 export const IN_FLIGHT_BYTES = 1024 * 1024
@@ -41,6 +56,8 @@ export type OutboxTrace =
   | {
       kind: 'answer'
       method: string
+      /** 回答所属会话 ID（若该请求作用于特定会话，防止同会话补丁越过自身回答）。 */
+      sessionId?: string
       /** 请求完成解密的时刻（毫秒）。 */
       startedAt: number
       error?: string
@@ -86,11 +103,19 @@ interface Batch {
   patches: Patch[]
 }
 
+type Priority = 'high' | 'normal' | 'bulk'
+
 interface Entry {
   message: ChannelMessage
   /** A JSON message's length as text, or a bytes message's bytes. */
   size: number
   stream: boolean
+  /** 调度优先级：高优小消息可在遵守会话顺序前提下越过排队的普通/大块消息。 */
+  priority: Priority
+  /** 所属会话 ID（补丁或作用于某会话的回答），用于禁止同会话补丁越过自身回答。 */
+  sessionId: string | null
+  /** 是否为针对设备请求的回答（response/error）。 */
+  isAnswer: boolean
   /** Its number once written, counted from 1. */
   seq: number
   /** A `session.patches` event's batch, which later ones of its session may merge into. */
@@ -122,6 +147,10 @@ export class Outbox {
   private queuedOther = 0
   /** 当前排队中尚未开始写出的总字节数。 */
   private queuedBytes = 0
+  /** 已写出但尚未收到设备确认的总字节数。 */
+  private unackedBytes = 0
+  /** 已写出但尚未确认的高优消息字节数（计入高优预留窗口）。 */
+  private unackedHighBytes = 0
   /** 已交给 channel.send 但最后一帧尚未写完的总字节数。 */
   private writingBytes = 0
   private written = 0
@@ -132,6 +161,7 @@ export class Outbox {
   private lastPatches = Number.NEGATIVE_INFINITY
   private paceTimer: ReturnType<typeof setTimeout> | null = null
   private overflowAt: number
+  private overflowBytesAt: number
   private readonly drains = new Set<() => void>()
   private readonly flushes = new Set<() => void>()
   /** Without acknowledgements, the latest message given to the channel. */
@@ -142,6 +172,7 @@ export class Outbox {
     this.limits = { ...OUTBOX_LIMITS, ...options.limits }
     this.now = options.now ?? Date.now
     this.overflowAt = this.limits.queued
+    this.overflowBytesAt = this.limits.queuedBytes
   }
 
   /**
@@ -218,7 +249,9 @@ export class Outbox {
       this.sending = sent.catch(() => {})
       return sent
     }
-    this.enqueue(entryOf(message, size, trace ?? null, enqueuedAt, aheadBytes))
+    this.enqueue(
+      entryOf(message, size, trace ?? null, enqueuedAt, aheadBytes, this.limits.smallMessageBytes),
+    )
     return Promise.resolve()
   }
 
@@ -238,6 +271,10 @@ export class Outbox {
     let freed = false
     while (done < this.unacked.length && this.unacked[done]!.seq <= received) {
       const entry = this.unacked[done++]!
+      this.unackedBytes = Math.max(0, this.unackedBytes - entry.size)
+      if (entry.priority === 'high') {
+        this.unackedHighBytes = Math.max(0, this.unackedHighBytes - entry.size)
+      }
       if (entry.stream) {
         this.streamBytes -= entry.size
         freed = true
@@ -295,6 +332,8 @@ export class Outbox {
     this.unacked = []
     this.queuedOther = 0
     this.queuedBytes = 0
+    this.unackedBytes = 0
+    this.unackedHighBytes = 0
     this.writingBytes = 0
     this.streamBytes = 0
     this.wake()
@@ -307,7 +346,9 @@ export class Outbox {
     this.queuedBytes += entry.size
     if (!entry.batch) this.queuedOther++
     if (entry.stream) this.streamBytes += entry.size
-    if (this.queued.length > this.overflowAt) this.overflow()
+    if (this.queued.length > this.overflowAt || this.queuedBytes > this.overflowBytesAt) {
+      this.overflow()
+    }
     if (this.queued.length + this.unacked.length > this.limits.kept) {
       return this.options.overflowed()
     }
@@ -330,6 +371,12 @@ export class Outbox {
       waiting.size += size
       waiting.merged += 1
       if (!waiting.trace && trace) waiting.trace = trace
+      waiting.priority = classifyPriority(
+        waiting.message,
+        waiting.size,
+        waiting.batch,
+        this.limits.smallMessageBytes,
+      )
       this.queuedBytes += size
       return true
     }
@@ -357,7 +404,15 @@ export class Outbox {
       const resync: Resync = { type: 'resync' }
       const size = JSON.stringify(resync).length
       kept.push({
-        ...entryOf({ kind: 'json', value: resync }, size, null, this.now(), 0),
+        ...entryOf(
+          { kind: 'json', value: resync },
+          size,
+          null,
+          this.now(),
+          0,
+          this.limits.smallMessageBytes,
+        ),
+        priority: 'high',
         resync: true,
       })
     }
@@ -366,26 +421,96 @@ export class Outbox {
     if (dropped > 0) this.options.dropped(dropped)
     // What is left stays until the device reads it, so the next look waits for twice as much.
     this.overflowAt = Math.max(this.limits.queued, this.queued.length * 2)
+    this.overflowBytesAt = Math.max(this.limits.queuedBytes, this.queuedBytes * 2)
   }
 
   private pump(): void {
     const connection = this.connection
     if (!connection || this.closed || !this.options.acks) return
     while (this.queued.length > 0 && this.unacked.length < this.limits.inFlight) {
-      if (this.queuedOther === 0 && this.paceMs > 0) {
+      const picked = this.pickNextIndex()
+      if (picked === 'pace') {
         const due = this.lastPatches + this.paceMs - this.now()
         if (due > 0) return this.schedulePace(due)
+        continue
       }
-      const entry = this.queued.shift()!
+      if (picked < 0) break
+      const [entry] = this.queued.splice(picked, 1)
+      if (!entry) break
       this.queuedBytes = Math.max(0, this.queuedBytes - entry.size)
       if (entry.batch) this.lastPatches = this.now()
       else this.queuedOther--
       entry.message = finished(entry)
       entry.seq = ++this.written
       this.unacked.push(entry)
+      this.unackedBytes += entry.size
+      if (entry.priority === 'high') this.unackedHighBytes += entry.size
       this.transmit(connection, entry)
     }
     if (this.queued.length <= this.limits.queued) this.overflowAt = this.limits.queued
+    if (this.queuedBytes <= this.limits.queuedBytes) this.overflowBytesAt = this.limits.queuedBytes
+  }
+
+  /**
+   * 按字节预算与优先级挑选下一条可写出的排队消息：
+   * - 高优小消息可越过前面排队的大块/普通消息，但绝不打破同会话补丁顺序、不越过同会话回答、不越过 resync 与同 stateKey 状态；
+   * - 当普通字节窗口被在途大消息占满时，高优小消息仍可使用独立的预留字节预算穿透发送；
+   * - 通道完全空闲（unacked 为空）时允许任意单条超大消息发出，避免饥饿。
+   */
+  private pickNextIndex(): number | 'pace' {
+    const paceBlocked =
+      this.queuedOther === 0 && this.paceMs > 0 && this.lastPatches + this.paceMs - this.now() > 0
+
+    // 1. 优先扫描高优消息（允许合法插队，或在普通窗口已满时使用高优预留窗口）
+    for (let i = 0; i < this.queued.length; i++) {
+      const entry = this.queued[i]!
+      if (entry.priority !== 'high') continue
+      if (entry.batch && paceBlocked) continue
+      if (!this.fitsByteWindow(entry)) continue
+      if (i > 0 && !this.canOvertake(i, entry)) continue
+      return i
+    }
+
+    // 2. 没有可立即发出的高优消息时，按队首 FIFO 尝试发送普通/大块消息
+    const head = this.queued[0]
+    if (!head) return -1
+    if (head.batch && paceBlocked) return 'pace'
+    if (this.fitsByteWindow(head)) return 0
+    return paceBlocked ? 'pace' : -1
+  }
+
+  /** 检查该消息是否满足当前在途字节流控窗口（通道空闲必放行，高优可使用独立预留额度）。 */
+  private fitsByteWindow(entry: Entry): boolean {
+    if (this.unacked.length === 0) return true
+    if (this.unackedBytes + entry.size <= this.limits.inFlightBytes) return true
+    if (
+      entry.priority === 'high' &&
+      this.unackedHighBytes + entry.size <= this.limits.highPriorityReserveBytes
+    ) {
+      return true
+    }
+    return false
+  }
+
+  /** 检查位于队列 `index` 处的高优消息是否可以安全越过其前面的全部排队消息。 */
+  private canOvertake(index: number, entry: Entry): boolean {
+    for (let i = 0; i < index; i++) {
+      const earlier = this.queued[i]!
+      // 补丁绝不越过 resync 屏障，也不越过同会话更早的补丁、回答或任何同会话消息
+      if (entry.batch) {
+        if (earlier.resync) return false
+        if (earlier.sessionId !== null && earlier.sessionId === entry.batch.sessionId) return false
+      }
+      // 同一会话的回答之间保持 FIFO；同会话回答不越过该会话更早的同状态或回答
+      if (entry.isAnswer && entry.sessionId !== null) {
+        if (earlier.isAnswer && earlier.sessionId === entry.sessionId) return false
+      }
+      // 相同状态键（例如同一会话的两条 session.summary）严格保序，防止旧状态覆盖新状态
+      if (entry.key !== null && earlier.key === entry.key) return false
+      // resync 屏障不越过它前面的高优控制消息
+      if (entry.resync && earlier.priority === 'high') return false
+    }
+    return true
   }
 
   private transmit(connection: OutboxConnection, entry: Entry): void {
@@ -447,14 +572,25 @@ function entryOf(
   trace: OutboxTrace | null,
   enqueuedAt: number,
   queuedBytes: number,
+  smallMessageBytes: number,
 ): Entry {
   const value = message.kind === 'json' ? message.value : null
+  const batch = batchOf(value)
+  const isAnswer =
+    typeof value === 'object' &&
+    value !== null &&
+    ((value as { type?: unknown }).type === 'response' ||
+      (value as { type?: unknown }).type === 'error')
+  const sessionId = batch?.sessionId ?? trace?.sessionId ?? eventSessionId(value)
   return {
     message,
     size,
     stream: message.kind === 'bytes',
+    priority: classifyPriority(message, size, batch, smallMessageBytes),
+    sessionId,
+    isAnswer,
     seq: 0,
-    batch: batchOf(value),
+    batch,
     key: stateKey(value),
     resync: false,
     trace,
@@ -463,6 +599,73 @@ function entryOf(
     merged: 1,
     recorded: false,
   }
+}
+
+/** 通道控制类高优消息类型。 */
+const HIGH_CONTROL_TYPES: ReadonlySet<string> = new Set([
+  'resync',
+  'relay',
+  'addresses',
+  'terminal',
+  'renamed',
+  'host.renamed',
+  'notifications.withdrawn',
+])
+
+/** 根据消息种类与大小判定发件箱调度优先级。 */
+function classifyPriority(
+  message: ChannelMessage,
+  size: number,
+  batch: Batch | null,
+  smallMessageBytes: number,
+): Priority {
+  if (message.kind === 'bytes') return 'bulk'
+  const value = message.value
+  if (typeof value !== 'object' || value === null) {
+    return size > BULK_MESSAGE_BYTES ? 'bulk' : 'normal'
+  }
+  const { type, event } = value as { type?: unknown; event?: unknown }
+  if (typeof type === 'string' && HIGH_CONTROL_TYPES.has(type)) return 'high'
+  if (type === 'response' || type === 'error') {
+    if (size <= smallMessageBytes) return 'high'
+    return size > BULK_MESSAGE_BYTES ? 'bulk' : 'normal'
+  }
+  if (batch !== null) {
+    if (size <= smallMessageBytes) return 'high'
+    return size > BULK_MESSAGE_BYTES ? 'bulk' : 'normal'
+  }
+  if (type === 'event' && typeof event === 'object' && event !== null) {
+    const ev = event as Record<string, unknown>
+    if (ev.type === 'workflows.suggestion' || ev.type === 'session.removed') return 'high'
+    if (ev.type === 'session.summary' && typeof ev.summary === 'object' && ev.summary !== null) {
+      const summary = ev.summary as { permissionCount?: unknown; attention?: unknown }
+      if (
+        (typeof summary.permissionCount === 'number' && summary.permissionCount > 0) ||
+        summary.attention === 'permission'
+      ) {
+        return 'high'
+      }
+    }
+  }
+  return size > BULK_MESSAGE_BYTES ? 'bulk' : 'normal'
+}
+
+/** 提取事件体中绑定的会话 ID（供未显式传入 trace 时兜底保持同会话顺序）。 */
+function eventSessionId(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { type, event } = value as { type?: unknown; event?: unknown }
+  if (type !== 'event' || typeof event !== 'object' || event === null) return null
+  const ev = event as Record<string, unknown>
+  if (typeof ev.sessionId === 'string') return ev.sessionId
+  if (
+    ev.type === 'session.summary' &&
+    typeof ev.summary === 'object' &&
+    ev.summary !== null &&
+    typeof (ev.summary as { id?: unknown }).id === 'string'
+  ) {
+    return (ev.summary as { id: string }).id
+  }
+  return null
 }
 
 /** The message an entry sends: a merged batch says the first seq it covers. */

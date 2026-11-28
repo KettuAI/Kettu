@@ -398,4 +398,40 @@ describe('Channel', () => {
       1, 2, 3, 4,
     ])
   })
+
+  it('高优控制消息越过排队等待加密的普通消息发出且不破坏首条进行中消息', async () => {
+    const { device, host } = await pair()
+    // `side()` 已在 ciphers.send.encrypt 上挂过 spy，这里直接调用原型原始实现避免递归自调用。
+    const proto = Object.getPrototypeOf(device.ciphers.send) as CipherState
+    const origEncrypt = proto.encrypt.bind(device.ciphers.send)
+    let releaseFirst!: () => void
+    let calls = 0
+    vi.spyOn(device.ciphers.send, 'encrypt').mockImplementation(async (plaintext) => {
+      calls += 1
+      if (calls === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirst = resolve
+        })
+      }
+      return origEncrypt(plaintext)
+    })
+
+    const p1 = device.channel.send({ kind: 'json', value: { tag: 'first-in-flight' } })
+    const p2 = device.channel.send({ kind: 'json', value: { tag: 'queued-bulk' } })
+    const p3 = device.channel.send(
+      { kind: 'json', value: { type: 'pong' } },
+      { priority: 'high' },
+    )
+
+    releaseFirst()
+    await Promise.all([p1, p2, p3])
+    await deliver(device, host)
+
+    expect(host.errors).toEqual([])
+    expect(host.messages).toEqual([
+      { kind: 'json', value: { tag: 'first-in-flight' } },
+      { kind: 'json', value: { type: 'pong' } },
+      { kind: 'json', value: { tag: 'queued-bulk' } },
+    ])
+  })
 })

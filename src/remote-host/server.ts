@@ -1104,7 +1104,7 @@ class DeviceConnection {
 
   /** Sends on this connection, outside the session's numbered messages. */
   private sendNow(value: Ping | Pong): void {
-    this.channel?.send({ kind: 'json', value }).catch(() => {})
+    this.channel?.send({ kind: 'json', value }, { priority: 'high' }).catch(() => {})
   }
 
   private end(): void {
@@ -1142,8 +1142,11 @@ class DeviceSession {
   private closing: Promise<void> | null = null
   /** The id of the last request the device sent that was read here, which a resume reports. */
   private lastRequest = 0
-  /** 已解密、尚待写出回答最后一帧的设备请求，按请求 ID 记录方法名与解密时刻。 */
-  private readonly pendingRequests = new Map<number, { method: string; decryptedAt: number }>()
+  /** 已解密、尚待写出回答最后一帧的设备请求，按请求 ID 记录方法名、会话 ID 与解密时刻。 */
+  private readonly pendingRequests = new Map<
+    number,
+    { method: string; sessionId?: string; decryptedAt: number }
+  >()
   private readonly now: () => number
   private port: PortChannel | null
   private terminal: DeviceTerminal | null = null
@@ -1560,8 +1563,16 @@ class DeviceSession {
           const oldest = this.pendingRequests.keys().next().value
           if (oldest !== undefined) this.pendingRequests.delete(oldest)
         }
+        const reqParams = (value as { params?: unknown }).params
+        const reqSessionId =
+          typeof reqParams === 'object' &&
+          reqParams !== null &&
+          typeof (reqParams as { sessionId?: unknown }).sessionId === 'string'
+            ? (reqParams as { sessionId: string }).sessionId
+            : undefined
         this.pendingRequests.set(id, {
           method: typeof method === 'string' ? method : 'unknown',
+          ...(reqSessionId ? { sessionId: reqSessionId } : {}),
           decryptedAt: this.now(),
         })
       }
@@ -2010,6 +2021,7 @@ class DeviceSession {
       return {
         kind: 'answer',
         method: pending.method,
+        ...(pending.sessionId ? { sessionId: pending.sessionId } : {}),
         startedAt: pending.decryptedAt,
         ...(errorCode ? { error: errorCode } : {}),
       }
