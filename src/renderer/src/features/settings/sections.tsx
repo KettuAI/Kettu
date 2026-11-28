@@ -79,7 +79,7 @@ import { useOtherHost } from '@renderer/stores/hosts'
 import { homeStart } from '@renderer/web/host-path'
 import { askHostPath } from '@renderer/web/host-path-request'
 import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
-import { openReport, useReportStore } from '@renderer/stores/report'
+import { openReport } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { loadBrought } from '@renderer/stores/sign-ins'
@@ -1220,22 +1220,60 @@ export function ReportProblem() {
   )
 }
 
-/** Starts recording steps to reproduce; the top bar shows it until it stops. */
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+/** Starts or stops recording steps to reproduce on the shown host. */
 export function RecordSteps() {
   const { t } = useTranslation('settings')
-  const recording = useReportStore((s) => s.recording)
+  const scope = useHostScope()
+  const recording = scope.useDiagnosticsStore((s) => s.status?.recording ?? null)
+  const [now, setNow] = useState(() => Date.now())
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!recording) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [recording])
+  const toggle = () => {
+    setError(null)
+    setBusy(true)
+    if (recording) {
+      scope.api.diagnostics
+        .stopRecording()
+        .then(
+          (result) => {
+            if (scope.hostId !== null && result.span) {
+              void openReport({
+                hostId: scope.hostId,
+                origin: 'recording',
+                range: { kind: 'span', ...result.span },
+                extras: ['verbose'],
+              })
+            }
+          },
+          (e: unknown) => setError(errorMessage(e)),
+        )
+        .finally(() => setBusy(false))
+      return
+    }
+    setNow(Date.now())
+    scope.api.diagnostics
+      .startRecording()
+      .catch((e: unknown) => setError(errorMessage(e)))
+      .finally(() => setBusy(false))
+  }
   return (
     <>
       <ControlError error={error} />
-      <SetButton
-        disabled={recording !== null}
-        onClick={() => {
-          setError(null)
-          window.kettu.report.record(true).catch((e: unknown) => setError(errorMessage(e)))
-        }}
-      >
-        {t(recording ? 'advanced.record.recording' : 'advanced.record.start')}
+      {recording && (
+        <span className="k-value k-num">{formatElapsed(now - recording.startedAt)}</span>
+      )}
+      <SetButton loading={busy} onClick={toggle}>
+        {t(recording ? 'advanced.record.stop' : 'advanced.record.start')}
       </SetButton>
     </>
   )
@@ -1276,11 +1314,14 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 
 export function DetailedRecords({ label }: { label: string }) {
   const { t } = useTranslation('settings')
+  const scope = useHostScope()
+  const diagnostics = scope.useDiagnosticsStore((s) => s.status)
   const until = useSettings().diagnostics.verboseUntil
   const [apply, error] = useApply()
   const [now, setNow] = useState(() => Date.now())
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const on = until !== null && until > now
+  const canClearVerbose = diagnostics?.canClearVerbose ?? (!isWeb && scope.hostId === null)
   useEffect(() => {
     if (!on) return
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -1288,7 +1329,7 @@ export function DetailedRecords({ label }: { label: string }) {
   }, [on])
   const remove = () => {
     setDeleteError(null)
-    window.kettu.diagnostics.clearVerbose().then(
+    scope.api.diagnostics.clearVerbose().then(
       () => toast(t('advanced.detailedRecords.deleted')),
       (e: unknown) => setDeleteError(errorMessage(e)),
     )
@@ -1301,9 +1342,11 @@ export function DetailedRecords({ label }: { label: string }) {
           {t('advanced.detailedRecords.left', { count: Math.ceil((until - now) / HOUR_MS) })}
         </span>
       ) : (
-        <SetButton variant="ghost" onClick={remove}>
-          {t('advanced.detailedRecords.delete')}
-        </SetButton>
+        canClearVerbose && (
+          <SetButton variant="ghost" onClick={remove}>
+            {t('advanced.detailedRecords.delete')}
+          </SetButton>
+        )
       )}
       <SettingSwitch
         label={label}

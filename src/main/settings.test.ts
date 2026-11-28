@@ -1450,3 +1450,60 @@ describe('host computerUse setting exposure to paired devices', () => {
     expect(readOnlyHostKeys({ computerUse: {} })).toEqual(['computerUse'])
   })
 })
+
+describe('host diagnostics.verboseUntil exposure to paired devices', () => {
+  it('includes diagnostics.verboseUntil as a writable host setting and handles older or malformed parts safely', () => {
+    const until = Date.now() + 2 * 60 * 60 * 1000
+    const enabled = structuredClone(DEFAULT_SETTINGS)
+    enabled.diagnostics = { verboseUntil: until }
+    const disabled = structuredClone(DEFAULT_SETTINGS)
+
+    const onPart = hostSettingsPart(enabled)
+    const offPart = hostSettingsPart(disabled)
+    expect(onPart.diagnostics).toEqual({ verboseUntil: until })
+    expect(offPart.diagnostics).toEqual({ verboseUntil: null })
+
+    // Remote host diagnostics overrides the viewer's local diagnostics in either direction.
+    expect(withHostSettings(disabled, onPart).diagnostics).toEqual({ verboseUntil: until })
+    expect(withHostSettings(enabled, offPart).diagnostics).toEqual({ verboseUntil: null })
+
+    // An older host omits diagnostics from settings.get; fall back to off instead of local state.
+    const olderPart = structuredClone(onPart)
+    delete olderPart.diagnostics
+    expect(withHostSettings(enabled, olderPart).diagnostics).toEqual({ verboseUntil: null })
+
+    // Malformed payloads are sanitized to off.
+    const malformed = structuredClone(offPart)
+    malformed.diagnostics = { verboseUntil: -50 }
+    expect(withHostSettings(enabled, malformed).diagnostics).toEqual({ verboseUntil: null })
+
+    // Paired devices treat diagnostics.verboseUntil as a writable host setting.
+    expect(splitSettingsPatch({ diagnostics: { verboseUntil: until } })).toEqual({
+      host: { diagnostics: { verboseUntil: until } },
+      client: null,
+    })
+    expect(splitSettingsPatch({ diagnostics: { verboseUntil: null } })).toEqual({
+      host: { diagnostics: { verboseUntil: null } },
+      client: null,
+    })
+    expect(readOnlyHostKeys({ diagnostics: { verboseUntil: until } })).toEqual([])
+
+    // Patch validation allows null and times within a day, and rejects negative or far-future times.
+    expect(validateSettingsPatch({ diagnostics: { verboseUntil: until } })).toEqual({
+      diagnostics: { verboseUntil: until },
+    })
+    expect(validateSettingsPatch({ diagnostics: { verboseUntil: null } })).toEqual({
+      diagnostics: { verboseUntil: null },
+    })
+    for (const bad of [
+      -1,
+      Date.now() + 25 * 60 * 60 * 1000,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      'soon',
+      true,
+    ]) {
+      expect(() => validateSettingsPatch({ diagnostics: { verboseUntil: bad } })).toThrow()
+    }
+  })
+})

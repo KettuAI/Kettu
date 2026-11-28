@@ -778,7 +778,8 @@
       "description": "重现问题时打开详细记录，最长 30 分钟，结束后只报告这段时间。",
       "keywords": "复现 录制 详细记录 调试 reproduce verbose",
       "start": "开始录制",
-      "recording": "录制中…"
+      "recording": "录制中…",
+      "stop": "结束并报告"
     },
     "logs": {
       "name": "日志",
@@ -800,6 +801,15 @@
       "keywords": "调试 开发者工具 devtools inspector cdp 端口",
       "restart": "以调试模式重启…",
       "restartNormally": "正常重启",
+      "restarting": "正在重启…",
+      "restarted": "正在正常重启 {{host}}…",
+      "restartedGeneric": "正在正常重启 Kettu…",
+      "off": "已关闭",
+      "on": "已打开",
+      "localOnly": "调试模式只能在 {{host}} 上打开。",
+      "localOnlyGeneric": "调试模式只能在这台电脑本机上打开。",
+      "restartOnHost": "请在 {{host}} 上重启 Kettu 以关闭调试模式。",
+      "restartOnHostGeneric": "请在该电脑上重启 Kettu 以关闭调试模式。",
       "cdp": "DevTools Protocol",
       "pipe": "经管道",
       "cdpFailed": "没有打开，端口可能被占用",

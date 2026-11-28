@@ -711,6 +711,7 @@ const WHOLE_STATES: ReadonlySet<string> = new Set([
   'remote.changed',
   'sharing.changed',
   'updates.changed',
+  'diagnostics.changed',
   'themes.changed',
 ])
 

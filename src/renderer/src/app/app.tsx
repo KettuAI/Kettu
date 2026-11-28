@@ -133,7 +133,7 @@ export function App() {
             <InstallWindow />
           </Suspense>
         )}
-        <DebugRestartDialog />
+        {!isWeb && <DebugRestartDialog />}
         <ArtifactDialogs />
         <ArtifactConsentDialog />
         {cloud && <AutoPublishNotice />}

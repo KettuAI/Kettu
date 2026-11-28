@@ -117,6 +117,7 @@ const isVerboseUntil: Check = (value, path) =>
   value === null ||
   (typeof value === 'number' &&
     Number.isFinite(value) &&
+    value >= 0 &&
     value <= Date.now() + VERBOSE_FOR_MS + VERBOSE_SLACK_MS)
     ? null
     : `"${path}" must be null or a time within a day`

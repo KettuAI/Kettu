@@ -780,7 +780,8 @@
       "description": "Turns on detailed records while you repeat the problem, for up to 30 minutes, then opens a report of just that time.",
       "keywords": "reproduce verbose debug record",
       "start": "Start recording",
-      "recording": "Recording…"
+      "recording": "Recording…",
+      "stop": "Stop and report"
     },
     "logs": {
       "name": "Logs",
@@ -803,6 +804,15 @@
       "keywords": "debug developer tools devtools inspector cdp port",
       "restart": "Restart in debug mode…",
       "restartNormally": "Restart normally",
+      "restarting": "Restarting…",
+      "restarted": "Restarting {{host}} normally…",
+      "restartedGeneric": "Restarting Kettu normally…",
+      "off": "Off",
+      "on": "On",
+      "localOnly": "Debug mode can only be turned on from {{host}}.",
+      "localOnlyGeneric": "Debug mode can only be turned on on the computer itself.",
+      "restartOnHost": "Restart Kettu on {{host}} to turn debug mode off.",
+      "restartOnHostGeneric": "Restart Kettu on the computer itself to turn debug mode off.",
       "cdp": "DevTools Protocol",
       "pipe": "Over a pipe",
       "cdpFailed": "Not open; the port may be taken",

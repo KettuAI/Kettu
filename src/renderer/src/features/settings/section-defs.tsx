@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AiBrain01Icon,
   Archive01Icon,
@@ -12,7 +12,6 @@ import {
   PaintBoardIcon,
   PieChartIcon,
   ServerStack02Icon,
-  Setting07Icon,
   Settings02Icon,
   Share08Icon,
   UserCircleIcon,
@@ -42,7 +41,6 @@ import {
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { agentName, awaitsPackage, harnessStatuses, usableAgents } from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
-import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { findProjectForPath, useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -89,7 +87,6 @@ import { ArchivedSection } from './archived-section'
 import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
-import { DebugModeRow } from './debug-mode'
 import { FontFamily, FontsCard } from './font-family'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
@@ -161,10 +158,6 @@ import {
   ColorMode,
   ConfirmLinks,
   ConversationWidth,
-  DataFolderActions,
-  DetailedRecords,
-  LogsFolderActions,
-  DataFolderText,
   DefaultAgent,
   EffortControl,
   FontSize,
@@ -180,12 +173,8 @@ import {
   OpenLinksIn,
   OutlineSummaries,
   PromptCacheDropNotice,
-  Proxy,
-  RecordSteps,
   ReduceMotion,
   RememberedSitesList,
-  RemoveAll,
-  ReportProblem,
   RunningSend,
   SendKey,
   ShellPicker,
@@ -1071,81 +1060,6 @@ export function useBrowserSection(): SectionDef {
     description: isWeb ? t('pages.browserWeb') : t('pages.browser'),
     icon: Globe02Icon,
     rows,
-  }
-}
-
-export function useAdvancedSection(): SectionDef {
-  const { t } = useTranslation('settings')
-  const onHost = useHostContext()
-  const { hostId } = useHostScope()
-  const debugOn = useDebugStore((s) => s.status.on)
-  const data = group('data', t('advanced.groups.data'))
-  return {
-    id: 'advanced',
-    title: t('sections.advanced'),
-    description: t('pages.advanced', onHost),
-    icon: Setting07Icon,
-    rows: [
-      {
-        id: 'proxy',
-        setting: 'advanced.proxy',
-        group: group('network', t('advanced.groups.network')),
-        layout: 'block',
-        render: (text) => <Proxy label={text} />,
-      },
-      {
-        id: 'report',
-        setting: 'advanced.report',
-        group: data,
-        render: () => <ReportProblem />,
-      },
-      // The log files and their switch are this computer's; a host elsewhere keeps its own.
-      ...(isWeb || hostId !== null
-        ? []
-        : ([
-            {
-              id: 'logs',
-              setting: 'advanced.logs',
-              group: data,
-              render: () => <LogsFolderActions />,
-            },
-            {
-              id: 'record-steps',
-              setting: 'advanced.record-steps',
-              group: data,
-              render: () => <RecordSteps />,
-            },
-            {
-              id: 'detailed-records',
-              setting: 'advanced.detailed-records',
-              group: data,
-              render: () => <DetailedRecords label={t('advanced.detailedRecords.name')} />,
-            },
-            {
-              id: 'debug-mode',
-              setting: 'advanced.debug-mode',
-              description: debugOn
-                ? t('advanced.debugMode.descriptionOn')
-                : t('advanced.debugMode.description'),
-              group: data,
-              layout: 'block' as const,
-              render: (text: ReactNode) => <DebugModeRow text={text} />,
-            },
-          ] satisfies RowDef[])),
-      {
-        id: 'data-folder',
-        setting: 'advanced.data-folder',
-        rich: <DataFolderText />,
-        group: data,
-        render: () => <DataFolderActions />,
-      },
-      {
-        id: 'remove-sessions',
-        setting: 'advanced.remove-sessions',
-        group: group('danger', t('advanced.groups.danger')),
-        render: () => <RemoveAll />,
-      },
-    ],
   }
 }
 

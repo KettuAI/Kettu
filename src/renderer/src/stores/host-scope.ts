@@ -17,6 +17,8 @@ import {
   readOnlyHostKeys,
   splitSettingsPatch,
   withHostSettings,
+  type DiagnosticsStatus,
+  type DiagnosticsStopRecordingResult,
   type HostAdminEvent,
   type HostAdminMethod,
   type HostAdminParams,
@@ -38,6 +40,8 @@ import { host, hostAt, type HostRequest } from '@renderer/lib/host'
 import { folderOf, homeStart } from '@renderer/web/host-path'
 import { askHostPath, type HostPathPurpose } from '@renderer/web/host-path-request'
 import { createAgentsStore, useAgentsStore, type AgentsStoreHook } from './agents'
+import { useDebugStore } from './debug'
+import { useLocalDiagnosticsStore, type DiagnosticsStore } from './diagnostics'
 import { hostGitOf, loadGitTools, receiveGitTools, useGitStore } from './git'
 import { otherHosts, useHostsStore } from './hosts'
 import {
@@ -70,6 +74,13 @@ export interface ScopeApi {
   restart(process: 'agent' | 'terminal'): Promise<void>
   /** Read-only computer use status of the host (driver and system permissions). */
   computerStatus(): Promise<ComputerUseStatus>
+  /** Host diagnostics actions (recording, detailed records cleanup, normal restart). */
+  diagnostics: {
+    startRecording(): Promise<DiagnosticsStatus>
+    stopRecording(): Promise<DiagnosticsStopRecordingResult>
+    clearVerbose(): Promise<void>
+    restartNormally(): Promise<void>
+  }
   /** Sets or clears a variable an agent of the host starts with; the value is never read back. */
   setAgentEnv: KettuApi['marketplace']['setAgentEnv']
 }
@@ -91,6 +102,8 @@ export interface HostScope {
   loadGitTools(): Promise<void>
   /** What the host offers beyond its sessions, as it said; null until it has. */
   useInfoStore: ReadStore<{ info: HostInfo | null }>
+  /** The host's live diagnostics state (recording, debug mode and supported actions). */
+  useDiagnosticsStore: ReadStore<DiagnosticsStore>
   /** The Marketplace's reads of the host and what it is changing there. */
   useMarketplaceStore: MarketplaceStoreHook
   /** The host's MCP servers, Kettu's own among them, as Marketplace › Installed shows them. */
@@ -130,6 +143,37 @@ export const LOCAL_SCOPE: HostScope = {
     restart: (process) =>
       process === 'agent' ? window.kettu.agents.restart() : window.kettu.terminals.restart(),
     computerStatus: () => window.kettu.computer.status(),
+    diagnostics: {
+      startRecording: async () => {
+        const recording = await window.kettu.report.record(true)
+        const current = useLocalDiagnosticsStore.getState().status
+        return (
+          current ?? {
+            recording,
+            debug: useDebugStore.getState().status,
+            canRecord: true,
+            canClearVerbose: true,
+            canRestartNormally: true,
+          }
+        )
+      },
+      stopRecording: async () => {
+        await window.kettu.report.record(false)
+        const current = useLocalDiagnosticsStore.getState().status
+        return {
+          status: current ?? {
+            recording: null,
+            debug: useDebugStore.getState().status,
+            canRecord: true,
+            canClearVerbose: true,
+            canRestartNormally: true,
+          },
+          span: null,
+        }
+      },
+      clearVerbose: () => window.kettu.diagnostics.clearVerbose(),
+      restartNormally: () => window.kettu.debug.restart(false),
+    },
     setAgentEnv: (agentId, variable, value) =>
       window.kettu.marketplace.setAgentEnv(agentId, variable, value),
   },
@@ -141,6 +185,7 @@ export const LOCAL_SCOPE: HostScope = {
   useGitStore: gitToolsStore(null),
   loadGitTools: () => loadGitTools(null),
   useInfoStore: useWebHostStore,
+  useDiagnosticsStore: useLocalDiagnosticsStore,
   useMarketplaceStore,
   useMcpStore,
 }
@@ -158,6 +203,7 @@ interface OtherScope {
   remote: UseBoundStore<StoreApi<RemoteStore>>
   usage: UseBoundStore<StoreApi<{ status: UsageStatus | null }>>
   info: UseBoundStore<StoreApi<{ info: HostInfo | null }>>
+  diagnostics: UseBoundStore<StoreApi<DiagnosticsStore>>
   adminListeners: Set<(event: HostAdminEvent) => void>
 }
 
@@ -245,6 +291,8 @@ function adminEvent(other: OtherScope, event: HostAdminEvent): void {
   else if (event.type === 'remote.changed') other.remote.setState({ status: event.status })
   else if (event.type === 'sharing.changed') {
     other.scope.sharing.useSharingStore.setState({ status: event.status })
+  } else if (event.type === 'diagnostics.changed') {
+    other.diagnostics.setState({ status: event.status })
   }
   for (const listener of other.adminListeners) listener(event)
 }
@@ -263,9 +311,28 @@ async function load(other: OtherScope): Promise<void> {
     ),
     admin('host.info').then(async (info) => {
       other.info.setState({ info })
-      if (!info.sharing) return
-      const status = await admin('sharing.status')
-      scope.sharing.useSharingStore.setState({ status })
+      const extra: Promise<unknown>[] = []
+      if (info.sharing) {
+        extra.push(
+          admin('sharing.status').then((status) => {
+            scope.sharing.useSharingStore.setState({ status })
+          }),
+        )
+      }
+      if (info.diagnostics) {
+        extra.push(
+          admin('diagnostics.status').then((status) => {
+            other.diagnostics.setState({ status })
+          }),
+        )
+      } else {
+        other.diagnostics.setState({ status: null })
+      }
+      if (extra.length > 0) {
+        for (const result of await Promise.allSettled(extra)) {
+          if (result.status === 'rejected') console.warn('Could not read a host', result.reason)
+        }
+      }
     }),
     scope.useAgentsStore.getState().refresh(),
     admin('remote.status').then((status) => other.remote.setState({ status })),
@@ -329,6 +396,7 @@ function createScope(hostId: string): OtherScope {
   const remote = create<RemoteStore>()(() => ({ status: null }))
   const usage = create<{ status: UsageStatus | null }>()(() => ({ status: null }))
   const info = create<{ info: HostInfo | null }>()(() => ({ info: null }))
+  const diagnostics = create<DiagnosticsStore>()(() => ({ status: null }))
   const adminListeners = new Set<(event: HostAdminEvent) => void>()
   const listen = <T extends HostAdminEvent['type']>(
     type: T,
@@ -494,6 +562,20 @@ function createScope(hostId: string): OtherScope {
       },
       restart: (process) => done(admin('host.restart', { process })),
       computerStatus: () => admin('computer.status'),
+      diagnostics: {
+        startRecording: async () => {
+          const status = await admin('diagnostics.startRecording')
+          diagnostics.setState({ status })
+          return status
+        },
+        stopRecording: async () => {
+          const result = await admin('diagnostics.stopRecording')
+          diagnostics.setState({ status: result.status })
+          return result
+        },
+        clearVerbose: () => done(admin('diagnostics.clearVerbose')),
+        restartNormally: () => done(admin('diagnostics.restartNormally')),
+      },
       setAgentEnv: (agentId, variable, value) =>
         admin('marketplace.setAgentEnv', { agentId, variable, value }),
     },
@@ -505,12 +587,13 @@ function createScope(hostId: string): OtherScope {
     useGitStore: gitToolsStore(hostId),
     loadGitTools: () => loadGitTools(hostId),
     useInfoStore: info,
+    useDiagnosticsStore: diagnostics,
     useMarketplaceStore: createMarketplaceStore(request, (patch) =>
       admin('marketplace.setKeys', { patch }),
     ),
     useMcpStore: createMcpStore(request),
   }
-  return { scope, part, remote, usage, info, adminListeners }
+  return { scope, part, remote, usage, info, diagnostics, adminListeners }
 }
 
 /** Which host Settings' host sections show; null for this computer. */

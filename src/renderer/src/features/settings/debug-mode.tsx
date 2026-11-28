@@ -1,20 +1,54 @@
 import { useState, type ReactNode } from 'react'
 import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { DEBUG_OFF } from '@shared/debug'
+import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
-import { confirmDebugRestart, useDebugStore } from '@renderer/stores/debug'
-import { ControlError, IconAction, SetButton } from './controls'
+import { useHostContext } from '@renderer/lib/host-features'
+import { isWeb } from '@renderer/lib/platform'
+import { confirmDebugRestart } from '@renderer/stores/debug'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { ControlError, IconAction, Pill, SetButton } from './controls'
 import { BlockLine } from './rows'
 
 /**
- * Settings › Advanced's debug mode: Restart in debug mode while it is off; while it is on, each
- * port with a copy button, and Restart normally.
+ * Settings › Advanced's debug mode: on this computer, Restart in debug mode while it is off; on
+ * paired devices, turning debug mode on stays on the host itself while an active debug run shows
+ * its ports and (on desktop hosts) Restart normally.
  */
-export function DebugModeRow({ text }: { text: ReactNode }) {
+export function DebugModeRow({
+  text,
+  hostName: givenHostName,
+}: {
+  text: ReactNode
+  hostName?: string
+}) {
   const { t } = useTranslation('settings')
-  const status = useDebugStore((s) => s.status)
+  const scope = useHostScope()
+  const remote = isWeb || scope.hostId !== null
+  const contextHost = useHostContext().host ?? ''
+  const hostName = givenHostName ?? contextHost
+  const diagnostics = scope.useDiagnosticsStore((s) => s.status)
+  const status = diagnostics?.debug ?? DEBUG_OFF
+  const canRestartNormally = diagnostics?.canRestartNormally ?? !remote
   const [error, setError] = useState<string | null>(null)
+  const [restarting, setRestarting] = useState(false)
+
   if (!status.on) {
+    if (remote) {
+      return (
+        <>
+          <BlockLine text={text}>
+            <Pill>{t('advanced.debugMode.off')}</Pill>
+          </BlockLine>
+          <p className="k-subnote">
+            {t(hostName ? 'advanced.debugMode.localOnly' : 'advanced.debugMode.localOnlyGeneric', {
+              host: hostName,
+            })}
+          </p>
+        </>
+      )
+    }
     return (
       <BlockLine text={text}>
         <SetButton onClick={() => confirmDebugRestart()}>
@@ -23,32 +57,72 @@ export function DebugModeRow({ text }: { text: ReactNode }) {
       </BlockLine>
     )
   }
+
   const restart = () => {
     setError(null)
-    window.kettu.debug.restart(false).catch((e: unknown) => setError(errorMessage(e)))
+    setRestarting(true)
+    scope.api.diagnostics
+      .restartNormally()
+      .then(
+        () => {
+          if (remote) {
+            toast(
+              t(hostName ? 'advanced.debugMode.restarted' : 'advanced.debugMode.restartedGeneric', {
+                host: hostName,
+              }),
+            )
+          }
+        },
+        (e: unknown) => setError(errorMessage(e)),
+      )
+      .finally(() => setRestarting(false))
   }
+
   const cdpNote =
     status.cdp === 'pipe'
       ? t('advanced.debugMode.pipe')
       : status.cdp === 'failed'
         ? t('advanced.debugMode.cdpFailed')
         : undefined
+  const showCdp = status.cdp !== null || canRestartNormally
+  const showPorts = showCdp || status.inspectors.length > 0
+
   return (
     <>
       <BlockLine text={text}>
         <ControlError error={error} />
-        <SetButton onClick={restart}>{t('advanced.debugMode.restartNormally')}</SetButton>
+        {canRestartNormally ? (
+          <SetButton loading={restarting} onClick={restart}>
+            {t(restarting ? 'advanced.debugMode.restarting' : 'advanced.debugMode.restartNormally')}
+          </SetButton>
+        ) : (
+          <Pill tone="warning">{t('advanced.debugMode.on')}</Pill>
+        )}
       </BlockLine>
-      <ul className="k-inset k-list k-debug-ports">
-        <PortLine
-          name={t('advanced.debugMode.cdp')}
-          value={typeof status.cdp === 'number' ? `127.0.0.1:${status.cdp}` : null}
-          note={cdpNote}
-        />
-        {status.inspectors.map(({ name, url }) => (
-          <PortLine key={name} name={name} value={url} />
-        ))}
-      </ul>
+      {!canRestartNormally && (
+        <p className="k-subnote">
+          {t(
+            hostName
+              ? 'advanced.debugMode.restartOnHost'
+              : 'advanced.debugMode.restartOnHostGeneric',
+            { host: hostName },
+          )}
+        </p>
+      )}
+      {showPorts && (
+        <ul className="k-inset k-list k-debug-ports">
+          {showCdp && (
+            <PortLine
+              name={t('advanced.debugMode.cdp')}
+              value={typeof status.cdp === 'number' ? `127.0.0.1:${status.cdp}` : null}
+              note={cdpNote}
+            />
+          )}
+          {status.inspectors.map(({ name, url }) => (
+            <PortLine key={name} name={name} value={url} />
+          ))}
+        </ul>
+      )}
     </>
   )
 }
