@@ -638,11 +638,56 @@
   "changes": {
     "label": "改动",
     "files_other": "{{count}} 个文件有改动",
+    "undo": "撤销更改",
+    "undone": "已撤销",
+    "alreadyUndone": "这一轮的文件改动已撤销",
+    "undoBusy": "会话运行中，结束后可撤销",
     "review": "查看",
     "commit": "提交并创建 PR",
     "more_other": "再显示 {{count}} 个文件",
     "fewer": "收起",
     "openInFiles": "在文件面板中打开"
+  },
+  "undoTurn": {
+    "title": "撤销本轮更改",
+    "description": "核对受影响的文件与将要反向应用的改动。若任何改动与后来编辑冲突，整次操作不会写入任何文件。",
+    "confirm": "确认撤销",
+    "applying": "正在撤销…",
+    "recheck": "重新核对",
+    "applied_other": "已撤销 {{count}} 个文件的改动",
+    "alreadyUndone": "这一轮的文件改动已经撤销过了。",
+    "noChanges": "这一轮没有可撤销的文件改动记录。",
+    "errorTitle": "无法撤销本轮更改",
+    "staleTitle": "预览后文件有变化，已重新核对",
+    "staleBody": "为避免误覆盖，本次未写入任何文件。请核对以下已变化文件的最新状态后再确认：",
+    "conflictTitle_other": "有 {{count}} 个文件发生冲突，本次不会写入任何文件",
+    "conflictBody": "请先处理这些文件上的后续改动，再撤销本轮更改。",
+    "deleteHint": "这个文件是在本轮新建的，撤销后将被删除。",
+    "restoreHint": "这个文件是在本轮删除的，撤销后将被恢复。",
+    "action": {
+      "revert": "恢复修改",
+      "delete": "删除文件",
+      "restore": "恢复文件"
+    },
+    "status": {
+      "conflict": "冲突",
+      "unsupported": "无法撤销"
+    },
+    "reasons": {
+      "content_mismatch": "当前文件内容与后续编辑存在冲突。",
+      "ambiguous_match": "文件中有多处相同片段，无法唯一确定撤销位置。",
+      "modified_after_turn": "这个新建文件在本轮之后又被编辑过。",
+      "file_missing": "这个文件在磁盘上已不存在。",
+      "file_already_exists": "目标路径上已有同名文件，无法恢复被删文件。",
+      "missing_before_snapshot": "这次改动缺少修改前的完整记录，无法安全撤销。",
+      "replace_all_unsupported": "批量全文替换改动无法安全反向撤销。",
+      "binary_or_unreadable": "该文件为二进制文件或非有效 UTF-8 文本。",
+      "outside_workspace": "文件路径超出当前会话工作区范围。",
+      "symlink_not_allowed": "不允许通过符号链接撤销或删除文件。",
+      "directory_in_way": "目标路径当前是一个目录。",
+      "too_large": "文件过大，无法安全核对。",
+      "unsupported_operation": "暂不支持自动撤销此类文件操作。"
+    }
   },
   "queue": {
     "label": "排队中的消息：{{count}} 条",

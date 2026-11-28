@@ -1824,6 +1824,13 @@
     "nothing": "There is nothing to put back",
     "failed": "Could not go back to the edited message: {{reason}}"
   },
+  "turnUndo": {
+    "archived": "Restore the session to undo its file changes",
+    "busy": "Another undo is already running for this session",
+    "noWorkspace": "This session's working folder is no longer available",
+    "noEntries": "This turn's tool records are no longer in the session",
+    "crossTurn": "Undo can only target tool edits from a single turn"
+  },
   "usageRead": {
     "notSignedIn": "{{vendor}} is not signed in",
     "signInExpired": "{{vendor}}'s sign-in has expired",

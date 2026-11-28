@@ -5274,6 +5274,20 @@ export class AgentHost {
       'sessions.rewind': ({ sessionId, entryId, draft }) =>
         sessions.rewind(sessionId, entryId, draft),
       'sessions.putBack': ({ sessionId }) => sessions.putBack(sessionId),
+      'sessions.previewUndoTurn': ({ sessionId, toolIds }) =>
+        sessions.previewUndoTurn(sessionId, toolIds),
+      'sessions.undoTurn': async ({ sessionId, toolIds, expectedDigests }) => {
+        const { result, workDir } = await sessions.undoTurn(sessionId, toolIds, expectedDigests)
+        if (result.status === 'applied') {
+          this.fileWatches.notify(workDir)
+          const canonical = await realpath(workDir).catch(() => null)
+          if (canonical && canonical !== workDir) this.fileWatches.notify(canonical)
+          if (this.git) {
+            void this.git.status(canonical ?? workDir).catch(() => {})
+          }
+        }
+        return result
+      },
       'sessions.sideAsk': ({ sessionId, question, quote, agentId }) =>
         sessions.sideAsk(sessionId, question, quote ?? null, agentId ?? null),
       'sessions.sideStop': ({ sessionId }) => sessions.sideStop(sessionId),

@@ -24,6 +24,7 @@ import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } fr
 import { isControlOutcome, isSurfaceAccessDecision } from '@shared/control'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
+import type { TurnUndoFileDigest } from '@shared/turn-undo'
 import {
   isMemoryScope,
   MEMORY_BODY_CHARS,
@@ -140,6 +141,10 @@ import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
 
 const ID_CHARS = 256
 const ACP_ID_CHARS = 1_024
+const TURN_UNDO_TOOL_LIMIT = 500
+const TURN_UNDO_DIGEST_LIMIT = 1_000
+const TURN_UNDO_PATH_CHARS = 4_096
+const SHA256_HEX = /^[0-9a-f]{64}$/
 // Windows extended-length paths go up to 32,767 characters.
 const PATH_CHARS = 32_767
 const TEXT_CHARS = 4_096
@@ -2242,6 +2247,70 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), entryId: string(o, 'entryId', ACP_ID_CHARS), draft }
     },
     'sessions.putBack': session,
+    'sessions.previewUndoTurn': (params) => {
+      const o = fields(params)
+      if (!Array.isArray(o.toolIds) || o.toolIds.length === 0) {
+        throw invalidParams('toolIds must be a non-empty list')
+      }
+      if (o.toolIds.length > TURN_UNDO_TOOL_LIMIT) {
+        throw invalidParams(`toolIds must have at most ${TURN_UNDO_TOOL_LIMIT} items`)
+      }
+      const toolIds = o.toolIds.map((item, idx) => {
+        if (typeof item !== 'string' || item === '' || item.length > ACP_ID_CHARS) {
+          throw invalidParams(`toolIds[${idx}] must be a non-empty string`)
+        }
+        return item
+      })
+      return { sessionId: sessionId(o), toolIds }
+    },
+    'sessions.undoTurn': (params) => {
+      const o = fields(params)
+      if (!Array.isArray(o.toolIds) || o.toolIds.length === 0) {
+        throw invalidParams('toolIds must be a non-empty list')
+      }
+      if (o.toolIds.length > TURN_UNDO_TOOL_LIMIT) {
+        throw invalidParams(`toolIds must have at most ${TURN_UNDO_TOOL_LIMIT} items`)
+      }
+      const toolIds = o.toolIds.map((item, idx) => {
+        if (typeof item !== 'string' || item === '' || item.length > ACP_ID_CHARS) {
+          throw invalidParams(`toolIds[${idx}] must be a non-empty string`)
+        }
+        return item
+      })
+      if (!Array.isArray(o.expectedDigests)) {
+        throw invalidParams('expectedDigests must be a list')
+      }
+      if (o.expectedDigests.length > TURN_UNDO_DIGEST_LIMIT) {
+        throw invalidParams(`expectedDigests must have at most ${TURN_UNDO_DIGEST_LIMIT} items`)
+      }
+      const expectedDigests: TurnUndoFileDigest[] = o.expectedDigests.map((raw, idx) => {
+        const item = fields(raw)
+        if (
+          typeof item.path !== 'string' ||
+          item.path === '' ||
+          item.path.length > TURN_UNDO_PATH_CHARS ||
+          item.path.includes('\0')
+        ) {
+          throw invalidParams(`expectedDigests[${idx}].path must be a valid path string`)
+        }
+        if (typeof item.exists !== 'boolean') {
+          throw invalidParams(`expectedDigests[${idx}].exists must be a boolean`)
+        }
+        const sha256 = item.sha256
+        if (sha256 !== null && (typeof sha256 !== 'string' || !SHA256_HEX.test(sha256))) {
+          throw invalidParams(`expectedDigests[${idx}].sha256 must be a sha256 hex digest or null`)
+        }
+        const size = item.size
+        if (
+          size !== null &&
+          (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0)
+        ) {
+          throw invalidParams(`expectedDigests[${idx}].size must be a non-negative integer or null`)
+        }
+        return { path: item.path, exists: item.exists, sha256, size }
+      })
+      return { sessionId: sessionId(o), toolIds, expectedDigests }
+    },
     'sessions.sideAsk': (params) => {
       const o = fields(params)
       const question = string(o, 'question', SIDE_QUESTION_CHARS)

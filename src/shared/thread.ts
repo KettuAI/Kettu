@@ -1367,6 +1367,8 @@ export interface ToolEntry {
    * where the harness did not pass it on, such as Claude Code for a call that returned an error.
    */
   structured?: Record<string, unknown>
+  /** True once the file changes produced by this tool call have been undone via turn undo. */
+  undone?: boolean
 }
 
 export type ToolContent =
@@ -2069,6 +2071,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         isListOf(value.content, isToolContent) &&
         isListOf(value.locations, isRecord) &&
         (value.description === undefined || typeof value.description === 'string') &&
+        (value.undone === undefined || typeof value.undone === 'boolean') &&
         (value.permission == null ||
           (isRecord(value.permission) && isListOf(value.permission.options, isRecord)))
       )

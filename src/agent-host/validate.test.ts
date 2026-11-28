@@ -1893,4 +1893,52 @@ describe('worktree requests', () => {
     )
     rejects(() => posix['sessions.runCommand']({ sessionId: 's', command: 'ls' }))
   })
+
+  it('validates sessions.previewUndoTurn and sessions.undoTurn payloads strictly', () => {
+    const sha = 'a'.repeat(64)
+    expect(
+      posix['sessions.previewUndoTurn']({ sessionId: 's', toolIds: ['t:1', 't:2'], extra: 1 }),
+    ).toEqual({ sessionId: 's', toolIds: ['t:1', 't:2'] })
+    rejects(() => posix['sessions.previewUndoTurn']({ sessionId: 's', toolIds: [] }))
+    rejects(() => posix['sessions.previewUndoTurn']({ sessionId: 's', toolIds: [''] }))
+
+    expect(
+      posix['sessions.undoTurn']({
+        sessionId: 's',
+        toolIds: ['t:1'],
+        expectedDigests: [
+          { path: 'a.ts', exists: true, sha256: sha, size: 12, extra: true },
+          { path: 'b.ts', exists: false, sha256: null, size: null },
+        ],
+      }),
+    ).toEqual({
+      sessionId: 's',
+      toolIds: ['t:1'],
+      expectedDigests: [
+        { path: 'a.ts', exists: true, sha256: sha, size: 12 },
+        { path: 'b.ts', exists: false, sha256: null, size: null },
+      ],
+    })
+    rejects(() =>
+      posix['sessions.undoTurn']({
+        sessionId: 's',
+        toolIds: ['t:1'],
+        expectedDigests: [{ path: 'a.ts', exists: true, sha256: 'not-a-sha', size: 1 }],
+      }),
+    )
+    rejects(() =>
+      posix['sessions.undoTurn']({
+        sessionId: 's',
+        toolIds: ['t:1'],
+        expectedDigests: [{ path: 'a\0.ts', exists: true, sha256: sha, size: 1 }],
+      }),
+    )
+    rejects(() =>
+      posix['sessions.undoTurn']({
+        sessionId: 's',
+        toolIds: ['t:1'],
+        expectedDigests: [{ path: 'a.ts', exists: true, sha256: sha, size: -1 }],
+      }),
+    )
+  })
 })

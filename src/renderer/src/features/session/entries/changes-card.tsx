@@ -6,10 +6,12 @@ import {
   FolderOpenIcon,
   GitPullRequestIcon,
   Link01Icon,
+  Undo02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { isDiffContentItem, toolContentItems, type ToolEntry } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -48,6 +50,7 @@ import { turnChanges, type TurnChange } from '../turn-work'
 import { changeRowMenuModel, isChangeDeleted, type ChangeRowMenuModel } from './change-row-menu'
 import { DiffBlock } from './diff-block'
 import { PANEL } from './helpers'
+import { TurnUndoDialog } from './turn-undo-dialog'
 import { cachedStats, diffsSettled, useDiffStats } from './use-diff-stats'
 
 /** Files listed before the rest are folded away. */
@@ -84,6 +87,7 @@ export const ChangesCard = memo(function ChangesCard({
       return toolIds.map((id) => byId?.[id])
     }),
   )
+  const sessionStatus = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.status)
   const changes = useMemo(() => turnChanges(entries), [entries])
   const all = useMemo(() => changes.flatMap((change) => change.diffs), [changes])
   const totals = useDiffStats(all)
@@ -92,12 +96,34 @@ export const ChangesCard = memo(function ChangesCard({
   const settled = counted || diffsSettled(all)
   const ordered = useMemo(() => (counted ? byChangedLines(changes) : changes), [changes, counted])
   const [allShown, setAllShown] = useState(false)
+  const [undoOpen, setUndoOpen] = useState(false)
+  const [undoneLocally, setUndoneLocally] = useState(false)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
   const gitDeleted = useDeletedGitPaths(projectPath)
   const local = isLocalProject(projectPath)
   const previewable = useHtmlPreview(sessionId, projectPath)
+  const undoneFromEntries = useMemo(() => {
+    const diffTools = entries.filter(
+      (entry): entry is ToolEntry =>
+        entry?.kind === 'tool' &&
+        entry.status === 'completed' &&
+        toolContentItems(entry).some(isDiffContentItem),
+    )
+    return diffTools.length > 0 && diffTools.every((entry) => entry.undone === true)
+  }, [entries])
+  const undone = undoneLocally || undoneFromEntries
+  const busy =
+    sessionStatus === 'running' ||
+    sessionStatus === 'awaiting_permission' ||
+    sessionStatus === 'starting'
   if (changes.length === 0) return null
   const hidden = ordered.length - SHOWN
+  const undoLabel = undone ? t('changes.undone') : t('changes.undo')
+  const undoTitle = undone
+    ? t('changes.alreadyUndone')
+    : busy
+      ? t('changes.undoBusy')
+      : t('changes.undo')
 
   const deletedOf = (change: TurnChange): boolean =>
     isChangeDeleted({
@@ -139,39 +165,50 @@ export const ChangesCard = memo(function ChangesCard({
       <div className="ks-changes__head">
         <b>{t('changes.files', { count: changes.length })}</b>
         {totals && <Counts insertions={totals.insertions} deletions={totals.deletions} />}
-        {(first || committable.length > 0) && (
-          <span className="ks-changes__actions">
-            {first && (
-              <Button
-                variant="outline"
-                className="ks-btn"
-                aria-label={t('changes.review')}
-                title={t('changes.review')}
-                onClick={first}
-              >
-                <Icon icon={ViewIcon} size={14} />
-                <span className="ks-btn__label">{t('changes.review')}</span>
-              </Button>
-            )}
-            {committable.length > 0 && (
-              <Button
-                className="ks-btn ks-btn--solid"
-                aria-label={t('changes.commit')}
-                title={t('changes.commit')}
-                onClick={() =>
-                  openGitPane(projectPath, {
-                    tab: 'changes',
-                    commit: { only: committable, andPush: false },
-                    panel: sessionId,
-                  })
-                }
-              >
-                <Icon icon={GitPullRequestIcon} size={14} />
-                <span className="ks-btn__label">{t('changes.commit')}</span>
-              </Button>
-            )}
-          </span>
-        )}
+        {undone && <span className="ks-changes__undone">{t('changes.undone')}</span>}
+        <span className="ks-changes__actions">
+          <Button
+            variant="outline"
+            className="ks-btn"
+            disabled={busy || undone}
+            aria-label={undoLabel}
+            title={undoTitle}
+            data-changes-undo=""
+            onClick={() => setUndoOpen(true)}
+          >
+            <Icon icon={Undo02Icon} size={14} />
+            <span className="ks-btn__label">{undoLabel}</span>
+          </Button>
+          {first && (
+            <Button
+              variant="outline"
+              className="ks-btn"
+              aria-label={t('changes.review')}
+              title={t('changes.review')}
+              onClick={first}
+            >
+              <Icon icon={ViewIcon} size={14} />
+              <span className="ks-btn__label">{t('changes.review')}</span>
+            </Button>
+          )}
+          {committable.length > 0 && (
+            <Button
+              className="ks-btn ks-btn--solid"
+              aria-label={t('changes.commit')}
+              title={t('changes.commit')}
+              onClick={() =>
+                openGitPane(projectPath, {
+                  tab: 'changes',
+                  commit: { only: committable, andPush: false },
+                  panel: sessionId,
+                })
+              }
+            >
+              <Icon icon={GitPullRequestIcon} size={14} />
+              <span className="ks-btn__label">{t('changes.commit')}</span>
+            </Button>
+          )}
+        </span>
       </div>
       {(allShown ? ordered : ordered.slice(0, SHOWN)).map((change) => (
         <ChangeRow
@@ -197,6 +234,14 @@ export const ChangesCard = memo(function ChangesCard({
           {allShown ? t('changes.fewer') : t('changes.more', { count: hidden })}
         </button>
       )}
+      <TurnUndoDialog
+        open={undoOpen}
+        onOpenChange={setUndoOpen}
+        sessionId={sessionId}
+        projectPath={projectPath}
+        toolIds={toolIds}
+        onApplied={() => setUndoneLocally(true)}
+      />
     </section>
   )
 })
