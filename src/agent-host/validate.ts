@@ -132,6 +132,7 @@ import {
   parseParams as parseViewParams,
   ViewDataError,
 } from './plugin-runtime/view-data'
+import { validateProjectIcon, type ProjectIcon } from '@shared/project-icon'
 import { MAX_PROJECT_FOLDERS, PROJECT_NAME_MAX } from './projects'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
@@ -2040,10 +2041,21 @@ export function createValidators(platform: Platform): Validators {
           return item
         })
       }
+      let icon: ProjectIcon | null | undefined
+      if (o.icon !== undefined) {
+        if (o.icon === null) {
+          icon = null
+        } else {
+          const checked = validateProjectIcon(o.icon)
+          if (!checked.ok) throw invalidParams(checked.reason)
+          icon = checked.icon
+        }
+      }
       return {
         path,
         ...(name !== undefined ? { name } : {}),
         ...(folders !== undefined ? { folders } : {}),
+        ...(icon !== undefined ? { icon } : {}),
       }
     },
     'projects.remove': folder,

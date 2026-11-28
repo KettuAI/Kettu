@@ -24,7 +24,7 @@ import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { newSession, openProjectDialog } from '@renderer/app/actions'
 import { starFromPalette } from '@renderer/features/github-star/palette'
-import { FolderClosedMark, Icon } from '@renderer/components/affect/app-shell'
+import { Icon } from '@renderer/components/affect/app-shell'
 import {
   CommandMenu,
   type Command,
@@ -40,6 +40,7 @@ import { Dialog } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
 import { keyCaps } from '@renderer/features/shell/shortcuts'
+import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useOtherHosts } from '@renderer/stores/hosts'
 import { revealMessage } from '@renderer/stores/reveal'
@@ -436,7 +437,7 @@ function commandOf(entry: SearchEntry): Command {
         detail: entry.snippet,
       }
     case 'project':
-      return { ...base, logo: <FolderClosedMark /> }
+      return { ...base, logo: <ProjectMark icon={entry.icon} /> }
     case 'artifact':
       return { ...base, icon: <Icon icon={KIND_ICON[entry.artifactKind]} size={16} /> }
     case 'routine':

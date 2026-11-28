@@ -10,6 +10,7 @@ import type {
   VersionMoveReason,
 } from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
+import { parseProjectIcon, type ProjectIcon } from '@shared/project-icon'
 import type { SessionTaskRef } from '@shared/workflow'
 import {
   isAgentId,
@@ -346,6 +347,8 @@ export interface ProjectRecord {
   name: string
   /** Set when `name` was chosen by the user rather than derived from the folder basename. */
   customName?: true
+  /** Custom sidebar icon (built-in icon with optional color, or emoji). */
+  icon?: ProjectIcon
   /** Additional local source folders associated with this project (excluding `path`). */
   folders?: string[]
   addedAt: number
@@ -852,10 +855,12 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
           ),
         ]
       : []
+    const icon = parseProjectIcon(item.icon)
     projects.push({
       path: item.path,
       name: item.name,
       ...(item.customName === true ? { customName: true as const } : {}),
+      ...(icon ? { icon } : {}),
       ...(folders.length > 0 ? { folders } : {}),
       addedAt: item.addedAt,
       lastOpenedAt: item.lastOpenedAt,

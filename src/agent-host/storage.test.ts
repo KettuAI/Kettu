@@ -951,15 +951,17 @@ describe('the host files', () => {
     await first.add('/work/alpha/app')
     await first.add('/work/beta/app')
 
-    // Set a custom display name and associate an additional source folder.
+    // Set a custom display name, icon, and associate an additional source folder.
     const updated = await first.update(first.matchPrimary('/work/alpha/app'), {
       name: '  Client Portal  ',
       folders: ['/work/alpha/app', '/work/alpha/docs'],
+      icon: { kind: 'icon', value: 'terminal', color: 'blue' },
     })
     expect(updated).toMatchObject({
       path: '/work/alpha/app',
       name: 'Client Portal',
       customName: true,
+      icon: { kind: 'icon', value: 'terminal', color: 'blue' },
       folders: ['/work/alpha/app', '/work/alpha/docs'],
       missing: false,
     })
@@ -994,7 +996,7 @@ describe('the host files', () => {
 
     await first.flush()
 
-    // Reload from disk and verify custom name, folders, and missing-folder tracking persist.
+    // Reload from disk and verify custom name, icon, folders, and missing-folder tracking persist.
     existingDirs.delete('/work/alpha/docs')
     const second = registry(20)
     await second.load()
@@ -1003,32 +1005,53 @@ describe('the host files', () => {
       path: '/work/alpha/app',
       name: 'Client Portal',
       customName: true,
+      icon: { kind: 'icon', value: 'terminal', color: 'blue' },
       folders: ['/work/alpha/app', '/work/alpha/docs'],
       missingFolders: ['/work/alpha/docs'],
       missing: false,
     })
 
-    // Renaming still works even while an already-associated secondary folder is unmounted/missing.
+    // Updating name alone preserves the existing icon, and switching to emoji persists cleanly.
     const renamed = await second.update(second.matchPrimary('/work/alpha/app'), {
       name: 'Web Portal',
       folders: ['/work/alpha/app', '/work/alpha/docs'],
     })
     expect(renamed.name).toBe('Web Portal')
+    expect(renamed.icon).toEqual({ kind: 'icon', value: 'terminal', color: 'blue' })
     expect(renamed.folders).toEqual(['/work/alpha/app', '/work/alpha/docs'])
 
-    // Clearing the display name falls back to the primary folder basename, and removing the secondary
+    const emojified = await second.update(second.matchPrimary('/work/alpha/app'), {
+      icon: { kind: 'emoji', value: '🦊' },
+    })
+    expect(emojified.icon).toEqual({ kind: 'emoji', value: '🦊' })
+
+    // Invalid icon updates are rejected without mutating the existing record.
+    await expect(
+      second.update(second.matchPrimary('/work/alpha/app'), {
+        name: 'Should Not Stick',
+        icon: { kind: 'emoji', value: 'not-emoji' },
+      }),
+    ).rejects.toThrow(/emoji/)
+    expect(second.list().find((p) => p.path === '/work/alpha/app')).toMatchObject({
+      name: 'Web Portal',
+      icon: { kind: 'emoji', value: '🦊' },
+    })
+
+    // Clearing the display name and icon restores defaults, and removing the secondary
     // folder returns the project to single-folder representation.
     const reset = await second.update(second.matchPrimary('/work/alpha/app'), {
       name: '   ',
       folders: ['/work/alpha/app'],
+      icon: null,
     })
     expect(reset.name).toBe('app')
     expect(reset.customName).toBeUndefined()
+    expect(reset.icon).toBeUndefined()
     expect(reset.folders).toBeUndefined()
     expect(reset.missingFolders).toBeUndefined()
     await second.flush()
 
-    // Backwards-compatible parsing drops duplicates, self-references, and invalid entries cleanly.
+    // Backwards-compatible parsing drops duplicates, self-references, and invalid icon entries cleanly.
     expect(
       parseProjectsFile({
         projects: [
@@ -1036,9 +1059,17 @@ describe('the host files', () => {
             path: '/work/alpha/app',
             name: 'Client Portal',
             customName: true,
+            icon: { kind: 'icon', value: 'rocket', color: 'orange' },
             folders: ['/work/alpha/app', '/work/alpha/docs', '/work/alpha/docs', '', 42],
             addedAt: 1,
             lastOpenedAt: 2,
+          },
+          {
+            path: '/work/beta/app',
+            name: 'Beta',
+            icon: { kind: 'icon', value: 'nonexistent', color: 'blue' },
+            addedAt: 3,
+            lastOpenedAt: 4,
           },
         ],
       }),
@@ -1049,9 +1080,16 @@ describe('the host files', () => {
           path: '/work/alpha/app',
           name: 'Client Portal',
           customName: true,
+          icon: { kind: 'icon', value: 'rocket', color: 'orange' },
           folders: ['/work/alpha/docs'],
           addedAt: 1,
           lastOpenedAt: 2,
+        },
+        {
+          path: '/work/beta/app',
+          name: 'Beta',
+          addedAt: 3,
+          lastOpenedAt: 4,
         },
       ],
     })

@@ -334,6 +334,7 @@ function useProjectEntries(): SearchEntry[] {
           haystack: haystackOf(project.name, host, allPaths),
           at: project.lastOpenedAt,
           path: project.path,
+          ...(project.icon ? { icon: project.icon } : {}),
         }
       })
   }, [projects, byId, others, unknown, t, only])

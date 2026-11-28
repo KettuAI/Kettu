@@ -3,6 +3,7 @@
 import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { NoProject, Project } from '@shared/agent-host'
+import { validateProjectIcon, type ProjectIcon } from '@shared/project-icon'
 import { DEFAULT_WORKTREE_SETTINGS, type ProjectWorktreeSettings } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { invalidParams, notFound } from './errors'
@@ -24,6 +25,7 @@ export interface ProjectsDeps {
 export interface ProjectUpdate {
   name?: string | null
   folders?: string[]
+  icon?: ProjectIcon | null
 }
 
 async function isDirectory(value: string): Promise<boolean> {
@@ -84,6 +86,7 @@ export class Projects {
       path: record.path,
       name: record.name,
       ...(record.customName ? { customName: true as const } : {}),
+      ...(record.icon ? { icon: { ...record.icon } } : {}),
       ...(extra.length > 0 ? { folders: all } : {}),
       ...(missingFolders.length > 0 ? { missingFolders } : {}),
       missing: this.missing.get(this.key(record.path)) ?? false,
@@ -279,6 +282,17 @@ export class Projects {
       nextFolders = resolvedList.filter((folder) => this.key(folder) !== primaryKey)
     }
 
+    let nextIcon: ProjectIcon | null | undefined
+    if (changes.icon !== undefined) {
+      if (changes.icon === null) {
+        nextIcon = null
+      } else {
+        const checked = validateProjectIcon(changes.icon)
+        if (!checked.ok) throw invalidParams(checked.reason)
+        nextIcon = checked.icon
+      }
+    }
+
     if (changes.name !== undefined) {
       const trimmed = changes.name === null ? '' : changes.name.trim()
       if (trimmed.length > PROJECT_NAME_MAX) {
@@ -292,6 +306,11 @@ export class Projects {
         record.name = trimmed
         record.customName = true
       }
+    }
+
+    if (nextIcon !== undefined) {
+      if (nextIcon === null) delete record.icon
+      else record.icon = nextIcon
     }
 
     if (nextFolders !== undefined) {

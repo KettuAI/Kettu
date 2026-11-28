@@ -93,6 +93,15 @@
   --agent-rose: #c0466c;
   --agent-green: #4b8a39;
   --agent-slate: #66707e;
+  /* Preset colors for custom project icons in the sidebar and project pickers. */
+  --project-icon-red: #cf4237;
+  --project-icon-orange: #d45e16;
+  --project-icon-yellow: #b07908;
+  --project-icon-green: #2a854e;
+  --project-icon-blue: #246fd1;
+  --project-icon-purple: #7a56c4;
+  --project-icon-pink: #c44474;
+  --project-icon-slate: #626d7c;
   /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   /* Running work, in the ink's grays: blue is kept for data and code. */
@@ -799,6 +808,14 @@
     --agent-rose: #da6489;
     --agent-green: #6aac55;
     --agent-slate: #8d96a4;
+    --project-icon-red: #f07b72;
+    --project-icon-orange: #f5904c;
+    --project-icon-yellow: #e6b84c;
+    --project-icon-green: #5cc185;
+    --project-icon-blue: #68a6f8;
+    --project-icon-purple: #a98be8;
+    --project-icon-pink: #eb7ca4;
+    --project-icon-slate: #9aa4b2;
     --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
     --info: #aeb6c1;
     --warning: #d9b463;
@@ -1230,6 +1247,14 @@
   --agent-rose: #da6489;
   --agent-green: #6aac55;
   --agent-slate: #8d96a4;
+  --project-icon-red: #f07b72;
+  --project-icon-orange: #f5904c;
+  --project-icon-yellow: #e6b84c;
+  --project-icon-green: #5cc185;
+  --project-icon-blue: #68a6f8;
+  --project-icon-purple: #a98be8;
+  --project-icon-pink: #eb7ca4;
+  --project-icon-slate: #9aa4b2;
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   --info: #aeb6c1;
   --warning: #d9b463;

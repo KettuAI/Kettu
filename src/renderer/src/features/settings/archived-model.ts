@@ -1,4 +1,4 @@
-import type { Project, SessionSummary } from '@shared/agent-host'
+import type { Project, ProjectIcon, SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { basename, clockTime, mediumAgo } from '@renderer/lib/format'
 import { hostPath } from '@renderer/lib/host-paths'
@@ -30,6 +30,7 @@ export interface ArchivedEntry {
   title: string
   projectKey: string
   projectLabel: string
+  projectIcon?: ProjectIcon
   /** Worktree branch shown on the row when the session has one. */
   branch: string | null
   /** Branch text matched by search (worktree branch or last checked-out branch). */
@@ -49,6 +50,7 @@ export interface FacetOption {
   count: number
   /** True for the synthetic No project entry so it sorts after real projects when tied. */
   scratch?: boolean
+  icon?: ProjectIcon
 }
 
 export interface ArchivedGroup {
@@ -57,6 +59,7 @@ export interface ArchivedGroup {
   bucket?: ArchivedDateBucket
   projectKey?: string
   projectLabel?: string
+  projectIcon?: ProjectIcon
   scratch?: boolean
   entries: ArchivedEntry[]
 }
@@ -191,6 +194,7 @@ export function buildArchivedEntries(
       title: sessionTitle(summary),
       projectKey,
       projectLabel,
+      ...(owner?.icon ? { projectIcon: owner.icon } : {}),
       branch: worktreeBranch,
       searchBranch: worktreeBranch ?? summary.branch ?? null,
       parentTitle: parent ? sessionTitle(parent) : null,
@@ -256,6 +260,7 @@ export function projectFacets(
         label: entry.projectLabel,
         count: 1,
         scratch: entry.summary.scratch,
+        ...(entry.projectIcon ? { icon: entry.projectIcon } : {}),
       })
     }
   }
@@ -380,6 +385,7 @@ export function groupArchivedEntries(
         kind: 'project',
         projectKey: entry.projectKey,
         projectLabel: entry.projectLabel,
+        ...(entry.projectIcon ? { projectIcon: entry.projectIcon } : {}),
         scratch: entry.summary.scratch,
         entries: [],
       }

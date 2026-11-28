@@ -42,6 +42,8 @@ import type {
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type { HostLoad, HostLoadWatch } from './host-load'
 import type { IdleReleaseState } from './idle-release'
+import type { ProjectIcon } from './project-icon'
+export type { ProjectIcon, ProjectIconColor, ProjectIconName } from './project-icon'
 import type {
   AgentOwnPlugins,
   CatalogServer,
@@ -862,6 +864,8 @@ export interface Project {
   name: string
   /** True when `name` is a user-defined display name rather than the folder basename. */
   customName?: true
+  /** Custom sidebar icon (built-in icon with optional color, or emoji). Absent for the default folder. */
+  icon?: ProjectIcon
   /**
    * All associated source folders for the project, starting with `path`, when the project has
    * additional source folders. Absent for single-folder projects and on older hosts.
@@ -1479,7 +1483,7 @@ export interface HostContract {
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.update': {
-    params: { path: string; name?: string | null; folders?: string[] }
+    params: { path: string; name?: string | null; folders?: string[]; icon?: ProjectIcon | null }
     result: Project
   }
   'projects.remove': { params: { path: string }; result: void }

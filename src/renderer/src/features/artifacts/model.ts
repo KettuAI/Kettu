@@ -1,5 +1,6 @@
 // The Artifacts page's list: the filters, then the groups and their order.
 
+import type { ProjectIcon } from '@shared/agent-host'
 import {
   ARTIFACT_KEEP_DELETED_MS,
   type ArtifactSession,
@@ -97,7 +98,7 @@ export interface ListFilter {
 
 /** A group's heading; the page names it. */
 export type GroupKind =
-  | { kind: 'project'; path: string; name: string }
+  | { kind: 'project'; path: string; name: string; icon?: ProjectIcon }
   | { kind: 'no-project' }
   | { kind: 'session'; sessionId: string }
   | { kind: 'all' }
@@ -110,7 +111,7 @@ export interface Group {
 
 export interface ListContext {
   /** The sidebar's projects, in its order. */
-  projects: readonly { path: string; name: string }[]
+  projects: readonly { path: string; name: string; icon?: ProjectIcon }[]
   /** Names in the interface language, with numbers in numeric order. */
   collator: Intl.Collator
   opened: OpenedTimes
