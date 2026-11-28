@@ -1681,6 +1681,10 @@
     "draftNoAgent": "No agent is available to draft the description",
     "draftFailed": "{{agent}} could not draft the description: {{reason}}"
   },
+  "thought": {
+    "translateNoAgent": "No agent is available to translate this thinking summary; add one or turn one on in Settings",
+    "translateFailed": "{{agent}} could not translate this thinking summary: {{reason}}"
+  },
   "hostError": {
     "agentNoRequest": "The agent takes no such request",
     "noFolder": "This session has no folder to run in",
@@ -1702,7 +1706,8 @@
     "noRemoval": "the agent's hidden sessions cannot be removed without a trace",
     "noAnswer": "no answer within {{seconds}} s",
     "noCommitMessage": "its reply held no commit message",
-    "noPullRequestDraft": "its reply held no pull request title"
+    "noPullRequestDraft": "its reply held no pull request title",
+    "noTranslation": "its reply held no translation"
   },
   "threadDb": {
     "notOpen": "The thread database is not open",

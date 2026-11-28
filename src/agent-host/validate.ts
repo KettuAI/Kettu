@@ -5,6 +5,7 @@ import type { McpImportChoice } from '@shared/mcp-discovery'
 import { START_MODE_CHARS } from '@shared/agents'
 import {
   MAX_PINNED_MODELS,
+  THOUGHT_TRANSLATE_MAX_CHARS,
   type AgentInstallMethod,
   type HostMethod,
   type HostParams,
@@ -2203,6 +2204,21 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.outputs': session,
     'sessions.outlineTitles': session,
+    'sessions.translateThought': (params) => {
+      const o = fields(params)
+      const text = string(o, 'text', THOUGHT_TRANSLATE_MAX_CHARS)
+      if (text.trim() === '') throw invalidParams(t('validate.empty', { key: 'text' }))
+      const language = string(o, 'language', 35)
+      if (!/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(language)) {
+        throw invalidParams('language must be a language tag')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ACP_ID_CHARS),
+        text,
+        language,
+      }
+    },
     'sessions.watch': session,
     'sessions.unwatch': session,
     'sessions.show': (params) => {

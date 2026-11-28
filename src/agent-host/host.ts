@@ -167,6 +167,7 @@ import { writeCommitMessage } from './commit-message'
 import { writePullRequestDraft } from './pull-request-draft'
 import { lightTarget } from './light-model'
 import { reportDraftPrompt, writeReportDraft } from './report-draft'
+import { resolveThoughtTranslationTarget, translateThoughtSummary } from './thought-translation'
 import { Diagnostics } from './diagnostics'
 import { isDiskFullError } from './disk-full'
 import { HostError, invalidParams, notFound } from './errors'
@@ -691,6 +692,10 @@ export class AgentHost {
   private readonly mcpCheckStates = new Map<string, McpCheck>()
   /** The checks going now, by server id, which a second ask joins. */
   private readonly mcpChecking = new Map<string, Promise<McpCheck>>()
+  private readonly inFlightThoughtTranslations = new Map<
+    string,
+    Promise<{ translation: string; agent: string }>
+  >()
   /** When each server was last checked after a failed call. */
   private readonly failureChecks = new Map<string, number>()
   private readonly mcpInstallCalls = new Map<number, (error: string | null) => void>()
@@ -4298,6 +4303,67 @@ export class AgentHost {
     }
   }
 
+  /**
+   * Translates a displayed thinking summary for a session using its lightweight task model
+   * without modifying the stored thread entry. Concurrent identical requests share one run.
+   */
+  private translateThought(
+    params: HostParams<'sessions.translateThought'>,
+  ): Promise<{ translation: string; agent: string }> {
+    if (!this.sessions.has(params.sessionId)) {
+      return Promise.reject(notFound(t('session.notFound')))
+    }
+    const digest = createHash('sha256').update(params.text).digest('hex')
+    const key = `${params.sessionId}\0${params.entryId}\0${params.language}\0${digest}`
+    const existing = this.inFlightThoughtTranslations.get(key)
+    if (existing) return existing
+
+    const run = this.runThoughtTranslation(params).finally(() => {
+      if (this.inFlightThoughtTranslations.get(key) === run) {
+        this.inFlightThoughtTranslations.delete(key)
+      }
+    })
+    this.inFlightThoughtTranslations.set(key, run)
+    return run
+  }
+
+  private async runThoughtTranslation(
+    params: HostParams<'sessions.translateThought'>,
+  ): Promise<{ translation: string; agent: string }> {
+    const session = this.sessions.summary(params.sessionId)
+    const target = resolveThoughtTranslationTarget({
+      lightModel: this.settings.lightModel,
+      sessionAgentId: session.agentId,
+      sessionAgentAvailable:
+        this.agents.has(session.agentId) && !this.agents.isDisabled(session.agentId),
+      sessionModel: session.model,
+      preferredAgentId: this.preferredAgent(session.scratch ? null : session.projectPath),
+      fallbackLightAgentId: this.sessions.lightAgents()[0]?.agentId ?? null,
+    })
+    if (target === null) throw new HostError('agent_error', t('thought.translateNoAgent'))
+    const agent = this.agents.name(target.agentId)
+    try {
+      const runtime = await this.agents.ensureReady(target.agentId)
+      const dir = path.join(this.options.userDataPath, 'agent-reports')
+      await mkdir(dir, { recursive: true })
+      const translation = await translateThoughtSummary(runtime, {
+        dir,
+        text: params.text,
+        language: params.language,
+        model: target.model,
+        log: (line) => this.diagnostics.log('warn', line),
+      })
+      return { translation, agent }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.diagnostics.log(
+        'warn',
+        `${agent}: could not translate a thinking summary: ${logText(error)}`,
+      )
+      throw new HostError('agent_error', t('thought.translateFailed', { agent, reason }))
+    }
+  }
+
   /** A page's question to the agent, in a hidden session with no tools in the reports' folder. */
   private async answerQuestion(agent: SampleAgent, question: SampleQuestion): Promise<string> {
     const runtime = await this.agents.ensureReady(agent.id as AgentId)
@@ -5254,6 +5320,7 @@ export class AgentHost {
       'sessions.find': ({ sessionId, query }) => sessions.find(sessionId, query),
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
+      'sessions.translateThought': (params) => this.translateThought(params),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),

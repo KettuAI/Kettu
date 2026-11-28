@@ -190,6 +190,9 @@ import type {
   UserContent,
 } from './thread'
 
+/** Maximum characters of a displayed thinking summary accepted for translation. */
+export const THOUGHT_TRANSLATE_MAX_CHARS = 60_000
+
 export interface AttachmentBytes {
   mimeType: string
   bytes: ArrayBuffer
@@ -1862,6 +1865,17 @@ export interface HostContract {
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
   // Summarizes the messages without a title; empty while a summary of the session runs.
   'sessions.outlineTitles': { params: { sessionId: string }; result: { titles: OutlineTitle[] } }
+  // Translates a displayed thinking summary into `language` (a BCP 47 tag) using the lightweight
+  // task model without mutating the stored thread entry.
+  'sessions.translateThought': {
+    params: {
+      sessionId: string
+      entryId: string
+      text: string
+      language: string
+    }
+    result: { translation: string; agent: string }
+  }
   'sessions.watch': { params: { sessionId: string }; result: void }
   'sessions.unwatch': { params: { sessionId: string }; result: void }
   // The sessions a port shows in front, none for a page; a turn that ends out of view is unread.
@@ -2671,6 +2685,7 @@ export const HOST_METHODS = [
   'sessions.find',
   'sessions.outputs',
   'sessions.outlineTitles',
+  'sessions.translateThought',
   'sessions.watch',
   'sessions.unwatch',
   'sessions.show',

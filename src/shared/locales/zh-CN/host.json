@@ -1676,6 +1676,10 @@
     "draftNoAgent": "没有可用来起草描述的智能体",
     "draftFailed": "{{agent}} 没能起草描述：{{reason}}"
   },
+  "thought": {
+    "translateNoAgent": "没有可用来翻译思考摘要的智能体，请先在设置里添加或开启一个",
+    "translateFailed": "{{agent}} 没能翻译这段思考摘要：{{reason}}"
+  },
   "hostError": {
     "agentNoRequest": "这个智能体不接受这种请求",
     "noFolder": "这个会话没有可以运行命令的文件夹",
@@ -1697,7 +1701,8 @@
     "noRemoval": "这个智能体的隐藏会话无法不留痕迹地删除",
     "noAnswer": "{{seconds}} 秒内没有回答",
     "noCommitMessage": "它的回复里没有提交信息",
-    "noPullRequestDraft": "它的回复里没有 PR 标题"
+    "noPullRequestDraft": "它的回复里没有 PR 标题",
+    "noTranslation": "它的回复里没有译文"
   },
   "threadDb": {
     "notOpen": "对话数据库没有打开",

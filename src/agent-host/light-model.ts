@@ -1,5 +1,6 @@
 // Which agent and model the requests Kettu makes itself go to: session titles, branch names,
-// outline titles, commit messages and problem report drafts, as the user's setting says.
+// outline titles, commit messages, problem report drafts and thinking summary translations, as
+// the user's setting says.
 
 import type { LightModel } from '@shared/settings'
 import type { AgentId } from '@shared/thread'

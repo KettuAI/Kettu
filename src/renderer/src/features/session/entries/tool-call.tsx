@@ -3,6 +3,10 @@ import { useTranslation } from 'react-i18next'
 import type { ThreadEntry } from '@shared/thread'
 import { ToolCallCard, type ToolCallLabels } from '@renderer/components/affect/tool-call-card'
 import { cn } from '@renderer/lib/utils'
+import {
+  thoughtTranslationOf,
+  useThoughtTranslationsStore,
+} from '@renderer/stores/thought-translations'
 import { isFresh } from '@renderer/stores/threads'
 import { thoughtTitle, toolLabel } from './helpers'
 import { MemoryStep } from './memory-entry'
@@ -106,21 +110,46 @@ export function StepCard({
     return <MemoryStep sessionId={sessionId} entry={entry} card={facts} />
   }
   if (entry.kind === 'thought') {
-    return (
-      <ToolCallCard
-        {...facts}
-        name={t('summary.thought')}
-        summary={thoughtTitle(entry.markdown) ?? undefined}
-      >
-        {entry.markdown.trim() ? (
-          opened ? (
-            <ThoughtBody sessionId={sessionId} entryId={entry.id} />
-          ) : null
-        ) : (
-          false
-        )}
-      </ToolCallCard>
-    )
+    return <ThoughtStepCard sessionId={sessionId} entry={entry} facts={facts} opened={opened} />
   }
   return null
+}
+
+function ThoughtStepCard({
+  sessionId,
+  entry,
+  facts,
+  opened,
+}: {
+  sessionId: string
+  entry: Extract<ThreadEntry, { kind: 'thought' }>
+  facts: Omit<Parameters<typeof ToolCallCard>[0], 'name' | 'summary' | 'children'>
+  opened: boolean
+}) {
+  const { t, i18n } = useTranslation('session')
+  const language = i18n.language || 'en'
+  const record = useThoughtTranslationsStore((s) =>
+    thoughtTranslationOf(s.records, sessionId, entry.id, entry.markdown, language),
+  )
+  const showingTranslation =
+    !entry.streaming &&
+    record.status === 'translated' &&
+    record.view === 'translation' &&
+    record.translation !== null
+  const summarySource = showingTranslation ? record.translation! : entry.markdown
+  return (
+    <ToolCallCard
+      {...facts}
+      name={t('summary.thought')}
+      summary={thoughtTitle(summarySource) ?? undefined}
+    >
+      {entry.markdown.trim() ? (
+        opened ? (
+          <ThoughtBody sessionId={sessionId} entryId={entry.id} />
+        ) : null
+      ) : (
+        false
+      )}
+    </ToolCallCard>
+  )
 }

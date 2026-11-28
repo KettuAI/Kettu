@@ -2037,5 +2037,15 @@
     "showRows": "显示每一项",
     "undo": "撤销",
     "undoLabel": "撤销对 {{name}} 的修改"
+  },
+  "thoughtTranslation": {
+    "translate": "翻译",
+    "translating": "翻译中…",
+    "original": "原文",
+    "translation": "译文",
+    "translated": "译文",
+    "switchLabel": "思考摘要原文与译文切换",
+    "failed": "翻译失败",
+    "empty": "没有返回译文。"
   }
 }
