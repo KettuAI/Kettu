@@ -42,6 +42,7 @@ import {
 } from './commands'
 import { buildPiBranches, readPiSessionEntries, resolveEffectiveLeaf } from './branches'
 import { dialogOf } from './dialogs'
+import { PiExtensionUi } from './extension-ui'
 import {
   EXTENSION_SINCE,
   NAVIGATE_COMMAND,
@@ -180,6 +181,8 @@ interface Session {
   queued: number
   /** Dialogs waiting for the user, by pi's id for the request. */
   dialogs: Map<string, AbortController>
+  /** Ephemeral status entries and text widgets published by native Pi extensions. */
+  extensionUi: PiExtensionUi
   /** What the files of `write` calls held, by call. */
   befores: Map<string, { file: string; text: Promise<Before> }>
   /** The session's events are handled one after another. */
@@ -352,6 +355,7 @@ export class PiConnection implements AgentConnection {
       turn?.reject(new AgentRequestError('closed', 'Pi stopped'))
       this.endNavigations(session, 'Pi stopped')
       this.endDialogs(session)
+      this.clearExtensionUi(session)
       void this.stop(session)
     }
     this.resolveClosed()
@@ -441,6 +445,7 @@ export class PiConnection implements AgentConnection {
       navigations: new Map(),
       queued: 0,
       dialogs: new Map(),
+      extensionUi: new PiExtensionUi(),
       befores: new Map(),
       events: Promise.resolve(),
       collected: null,
@@ -463,7 +468,11 @@ export class PiConnection implements AgentConnection {
       throw failure
     }
     this.sessions.set(session.id, session)
-    if (!session.hidden) this.announceCommands(session, proc)
+    if (!session.hidden) {
+      const target = this.targets.get(session.id)
+      if (target) this.syncExtensionUi(session, target)
+      this.announceCommands(session, proc)
+    }
   }
 
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
@@ -888,6 +897,7 @@ export class PiConnection implements AgentConnection {
     turn?.resolve(this.result(turn, 'cancelled'))
     this.endNavigations(session, 'Pi stopped')
     this.endDialogs(session)
+    this.clearExtensionUi(session)
     await this.stop(session)
   }
 
@@ -958,13 +968,16 @@ export class PiConnection implements AgentConnection {
     this.targets.set(sessionId, target)
     this.unregistered.delete(sessionId)
     const early = this.pending.get(sessionId)
-    if (!early) return
-    this.pending.delete(sessionId)
-    this.pendingCount -= early.length
-    for (const map of early) {
-      const output = map(target.context())
-      if (output) target.apply(output)
+    if (early) {
+      this.pending.delete(sessionId)
+      this.pendingCount -= early.length
+      for (const map of early) {
+        const output = map(target.context())
+        if (output) target.apply(output)
+      }
     }
+    const session = this.sessions.get(sessionId)
+    if (session) this.syncExtensionUi(session, target)
   }
 
   unregister(sessionId: string, target?: SessionTarget): void {
@@ -1154,7 +1167,10 @@ export class PiConnection implements AgentConnection {
   /** Ends a session's process: a stop of its run, EOF, then the host's stop of its tree. */
   private async stop(session: Session, proc = session.proc): Promise<void> {
     if (!proc) return
-    if (session.proc === proc) session.proc = null
+    if (session.proc === proc) {
+      session.proc = null
+      this.clearExtensionUi(session)
+    }
     if (proc.stopping) return
     proc.stopping = true
     proc.rpc.end()
@@ -1163,7 +1179,10 @@ export class PiConnection implements AgentConnection {
   }
 
   private exited(session: Session, proc: Proc): void {
-    if (session.proc === proc) session.proc = null
+    if (session.proc === proc) {
+      session.proc = null
+      this.clearExtensionUi(session)
+    }
     session.treeNavReady = false
     session.befores.clear()
     this.endNavigations(session, 'Pi stopped')
@@ -1617,6 +1636,23 @@ export class PiConnection implements AgentConnection {
           session.treeNavReady = true
         } else if (request.statusKey === NAVIGATE_STATUS) {
           this.takeNavigationOutcome(session, request.statusText)
+        } else if (
+          !session.hidden &&
+          !proc.stopping &&
+          (session.proc === null || session.proc === proc) &&
+          session.extensionUi.apply(request)
+        ) {
+          this.pushExtensionUi(session)
+        }
+        return true
+      case 'setWidget':
+        if (
+          !session.hidden &&
+          !proc.stopping &&
+          (session.proc === null || session.proc === proc) &&
+          session.extensionUi.apply(request)
+        ) {
+          this.pushExtensionUi(session)
         }
         return true
       case 'notify':
@@ -1628,9 +1664,41 @@ export class PiConnection implements AgentConnection {
         void this.ask(session, proc, request)
         return true
       default:
-        // Widgets, titles and editor text belong to pi's terminal UI.
+        // Titles, editor text and unsupported TUI hooks stay out of the transcript.
         return true
     }
+  }
+
+  private pushExtensionUi(session: Session): void {
+    if (session.hidden || !session.id || this.sessions.get(session.id) !== session) return
+    const target = this.targets.get(session.id)
+    if (!target) return
+    target.apply({
+      patches: [{ op: 'session.update', changes: { extensionUi: session.extensionUi.snapshot() } }],
+      effects: [],
+    })
+  }
+
+  private syncExtensionUi(session: Session, target: SessionTarget): void {
+    if (session.hidden) return
+    const next = session.extensionUi.snapshot()
+    const current = target.context().thread.session.extensionUi ?? null
+    if (next === null && current === null) return
+    target.apply({
+      patches: [{ op: 'session.update', changes: { extensionUi: next } }],
+      effects: [],
+    })
+  }
+
+  private clearExtensionUi(session: Session): void {
+    if (!session.extensionUi.clear()) return
+    if (session.hidden || !session.id) return
+    const target = this.targets.get(session.id)
+    if (!target) return
+    target.apply({
+      patches: [{ op: 'session.update', changes: { extensionUi: null } }],
+      effects: [],
+    })
   }
 
   private async ask(session: Session, proc: Proc, request: PiUiRequest): Promise<void> {

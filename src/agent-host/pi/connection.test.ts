@@ -1446,3 +1446,224 @@ describe('native session branches', () => {
     expect(forkedEntryId).toBe('u2a')
   })
 })
+
+describe('extension status and widgets (#1837)', () => {
+  it('syncs fire-and-forget setStatus and setWidget updates, strips ANSI, ignores internal keys, and clears on empty', async () => {
+    const { connection, spawned, cwd } = await connect({
+      script: (pi) => {
+        // Extensions may publish status/widget during session_start before register() runs.
+        pi.send(
+          {
+            type: 'extension_ui_request',
+            id: 'kettu-scope',
+            method: 'setStatus',
+            statusKey: 'kettu.model-scope',
+            statusText: JSON.stringify({ models: ['example/small-model'] }),
+          },
+          {
+            type: 'extension_ui_request',
+            id: 'kettu-nav',
+            method: 'setStatus',
+            statusKey: NAVIGATE_READY_STATUS,
+            statusText: '1',
+          },
+          {
+            type: 'extension_ui_request',
+            id: 's-init',
+            method: 'setStatus',
+            statusKey: 'git',
+            statusText: '\x1b[32mmain\x1b[0m',
+          },
+          {
+            type: 'extension_ui_request',
+            id: 'w-init',
+            method: 'setWidget',
+            widgetKey: 'tasks',
+            widgetLines: ['\x1b[1mTasks\x1b[0m', '1/3 done'],
+            widgetPlacement: 'aboveEditor',
+          },
+        )
+      },
+    })
+    const { sessionId } = await connection.newSession(cwd)
+    const seen = watch()
+    connection.register(sessionId, seen.target)
+
+    // Startup status & widget arrive on register(), without internal kettu.* statuses.
+    expect(seen.thread().session.extensionUi).toEqual({
+      statuses: [{ key: 'git', text: 'main' }],
+      widgets: [{ key: 'tasks', lines: ['Tasks', '1/3 done'], placement: 'aboveEditor' }],
+    })
+
+    const pi = spawned[0]!
+    // Live updates, in-place replacement, belowEditor placement, and unsupported TUI hooks.
+    pi.send(
+      {
+        type: 'extension_ui_request',
+        id: 's-update',
+        method: 'setStatus',
+        statusKey: 'git',
+        statusText: 'feat/1837',
+      },
+      {
+        type: 'extension_ui_request',
+        id: 'w-below',
+        method: 'setWidget',
+        widgetKey: 'footer-note',
+        widgetLines: ['Watch mode active'],
+        widgetPlacement: 'belowEditor',
+      },
+      {
+        type: 'extension_ui_request',
+        id: 'title-1',
+        method: 'setTitle',
+        title: 'Ignored title',
+      },
+      {
+        type: 'extension_ui_request',
+        id: 'custom-1',
+        method: 'custom',
+      },
+    )
+    await tick()
+
+    expect(seen.thread().session.extensionUi).toEqual({
+      statuses: [{ key: 'git', text: 'feat/1837' }],
+      widgets: [
+        { key: 'tasks', lines: ['Tasks', '1/3 done'], placement: 'aboveEditor' },
+        { key: 'footer-note', lines: ['Watch mode active'], placement: 'belowEditor' },
+      ],
+    })
+    // Fire-and-forget: never send extension_ui_response, and keep transcript empty.
+    expect(pi.sent('extension_ui_response')).toEqual([])
+    expect(seen.entries()).toEqual([])
+
+    // Clearing all keys sets extensionUi back to null.
+    pi.send(
+      {
+        type: 'extension_ui_request',
+        id: 's-clear',
+        method: 'setStatus',
+        statusKey: 'git',
+        statusText: undefined,
+      },
+      {
+        type: 'extension_ui_request',
+        id: 'w-clear-1',
+        method: 'setWidget',
+        widgetKey: 'tasks',
+        widgetLines: undefined,
+      },
+      {
+        type: 'extension_ui_request',
+        id: 'w-clear-2',
+        method: 'setWidget',
+        widgetKey: 'footer-note',
+        widgetLines: [],
+      },
+    )
+    await tick()
+
+    expect(seen.thread().session.extensionUi).toBeNull()
+    expect(pi.sent('extension_ui_response')).toEqual([])
+  })
+
+  it('isolates extension UI across concurrent Pi sessions and clears on process exit or close', async () => {
+    const { connection, spawned, cwd } = await connect({
+      script: (pi, index) => {
+        pi.state = { ...pi.state, sessionId: `pi-session-${index + 1}` }
+      },
+    })
+    const first = await connection.newSession(cwd)
+    const second = await connection.newSession(cwd)
+    const seenA = watch()
+    const seenB = watch()
+    connection.register(first.sessionId, seenA.target)
+    connection.register(second.sessionId, seenB.target)
+
+    const piA = spawned[0]!
+    const piB = spawned[1]!
+
+    piA.send({
+      type: 'extension_ui_request',
+      id: 'a1',
+      method: 'setStatus',
+      statusKey: 'lint',
+      statusText: 'Session A: ok',
+    })
+    piB.send({
+      type: 'extension_ui_request',
+      id: 'b1',
+      method: 'setWidget',
+      widgetKey: 'summary',
+      widgetLines: ['Session B only'],
+    })
+    await tick()
+
+    expect(seenA.thread().session.extensionUi).toEqual({
+      statuses: [{ key: 'lint', text: 'Session A: ok' }],
+      widgets: [],
+    })
+    expect(seenB.thread().session.extensionUi).toEqual({
+      statuses: [],
+      widgets: [{ key: 'summary', lines: ['Session B only'], placement: 'aboveEditor' }],
+    })
+
+    // Unexpected exit of session A clears only A; B stays untouched.
+    piA.exit(1)
+    await tick()
+    expect(seenA.thread().session.extensionUi).toBeNull()
+    expect(seenB.thread().session.extensionUi).toEqual({
+      statuses: [],
+      widgets: [{ key: 'summary', lines: ['Session B only'], placement: 'aboveEditor' }],
+    })
+
+    // Closing session B clears B's live extension UI.
+    await connection.closeSession(second.sessionId)
+    expect(seenB.thread().session.extensionUi).toBeNull()
+  })
+
+  it('keeps hidden sessions silent and resyncs extension UI on target re-registration', async () => {
+    const { connection, spawned, cwd } = await connect({
+      script: (pi, index) => {
+        pi.state = { ...pi.state, sessionId: `pi-s-${index + 1}` }
+      },
+    })
+    const visible = await connection.newSession(cwd)
+    const hidden = await connection.newSession(cwd, { hidden: 'side' })
+    const seenVisible = watch()
+    const seenHidden = watch()
+    connection.register(visible.sessionId, seenVisible.target)
+    connection.register(hidden.sessionId, seenHidden.target)
+
+    spawned[0]!.send({
+      type: 'extension_ui_request',
+      id: 'v1',
+      method: 'setStatus',
+      statusKey: 'mode',
+      statusText: 'Watch',
+    })
+    spawned[1]!.send({
+      type: 'extension_ui_request',
+      id: 'h1',
+      method: 'setStatus',
+      statusKey: 'mode',
+      statusText: 'Should not show',
+    })
+    await tick()
+
+    expect(seenVisible.thread().session.extensionUi).toEqual({
+      statuses: [{ key: 'mode', text: 'Watch' }],
+      widgets: [],
+    })
+    expect(seenHidden.thread().session.extensionUi).toBeUndefined()
+
+    // A fresh target registering for the same live session receives current extensionUi immediately.
+    const reconnected = watch()
+    connection.register(visible.sessionId, reconnected.target)
+    expect(reconnected.thread().session.extensionUi).toEqual({
+      statuses: [{ key: 'mode', text: 'Watch' }],
+      widgets: [],
+    })
+  })
+})

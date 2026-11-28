@@ -7593,8 +7593,9 @@ export class SessionManager {
       // A session takes its connection only once it has attached, so its turn was never sent.
       const attaching = live.connection === null
       live.connection = null
-      // Its background work ended with its process.
+      // Its background work and ephemeral extension UI ended with its process.
       this.endBackground(live)
+      this.clearExtensionUi(live)
       live.agentTurn = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
@@ -9343,6 +9344,7 @@ export class SessionManager {
       lastRequest: undefined,
       cacheDrop: null,
       suggestion: null,
+      extensionUi: null,
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
         ? { sideChat: { ...live.thread.session.sideChat, route: this.sideRouteOf(agentId) } }
@@ -9365,6 +9367,7 @@ export class SessionManager {
     live.contextTimer = null
     this.contextRuns.delete(live.id)
     this.endBackground(live)
+    this.clearExtensionUi(live)
     live.agentTurn = false
     if (!connection) return
     connection.unregister(acpSessionId, live.target)
@@ -12462,6 +12465,13 @@ export class SessionManager {
       })
     }
     this.showStillRunning(live)
+  }
+
+  /** Ephemeral extension UI belongs to the live agent process and clears on teardown. */
+  private clearExtensionUi(live: Live): void {
+    if (live.thread.session.extensionUi) {
+      this.update(live, { extensionUi: null })
+    }
   }
 
   /** The commands that ran on past their turn in their calls stop with the agent's session. */

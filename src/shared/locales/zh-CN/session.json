@@ -2073,5 +2073,9 @@
       "summary": "分支摘要",
       "system": "会话节点"
     }
+  },
+  "extensionUi": {
+    "statusLabel": "扩展状态",
+    "widgetsLabel": "扩展部件"
   }
 }

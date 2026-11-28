@@ -248,6 +248,9 @@ export interface PiUiRequest {
   notifyType?: string
   statusKey?: string
   statusText?: string
+  widgetKey?: string
+  widgetLines?: unknown
+  widgetPlacement?: string
   /** Milliseconds after which pi answers a dialog by itself. */
   timeout?: number
 }
