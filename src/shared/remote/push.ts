@@ -363,12 +363,15 @@ export type PushEvent =
       diffRemoved?: number
       quickOptions?: LiveQuickOptions
     }
-  /** 实时活动运行中态：当前焦点会话、启动时刻与可选 Plan 进度。 */
+  /** 实时活动运行中态：当前焦点会话、启动时刻、实时阶段与可选 Plan 进度。 */
   | {
       kind: 'running'
       sessionId: string
       agentId?: string
       turnStartedAt?: number
+      phase?: string
+      activityKind?: string
+      runningCount?: number
       plan?: LiveActivityPlan
       project?: string
     }

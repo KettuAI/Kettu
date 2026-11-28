@@ -242,6 +242,10 @@ export function parseHostActivity(value: unknown): HostActivitySnapshot | null {
       turnStartedAt: r.turnStartedAt,
       ...(typeof r.project === 'string' && r.project ? { project: r.project.slice(0, 120) } : {}),
       ...(typeof r.body === 'string' && r.body ? { body: r.body.slice(0, 300) } : {}),
+      ...(typeof r.phase === 'string' && r.phase ? { phase: r.phase.slice(0, 40) } : {}),
+      ...(typeof r.activityKind === 'string' && r.activityKind
+        ? { activityKind: r.activityKind.slice(0, 40) }
+        : {}),
       ...(plan ? { plan } : {}),
       ...(typeof r.parentId === 'string' || r.parentId === null ? { parentId: r.parentId } : {}),
     })

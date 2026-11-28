@@ -48,6 +48,9 @@ export type LiveActivityPayload =
       body?: string
       agentId?: string
       turnStartedAt?: number
+      phase?: string
+      activityKind?: string
+      runningCount?: number
       plan?: LiveActivityPlan
       project?: string
     }
@@ -553,7 +556,10 @@ export class Notifier {
         title: top.title,
         agentId: top.agentId,
         turnStartedAt: top.turnStartedAt,
+        runningCount: activeRunning.length,
         ...(top.body ? { body: top.body } : {}),
+        ...(top.phase ? { phase: top.phase } : {}),
+        ...(top.activityKind ? { activityKind: top.activityKind } : {}),
         ...(top.plan ? { plan: top.plan } : {}),
         ...(top.project ? { project: top.project } : {}),
       }
