@@ -286,6 +286,13 @@
       "previewLabel": "Preview",
       "preview": "This is how replies and your messages read at this size. Inline code, like <code>settings.json</code>, looks like this."
     },
+    "conversationWidth": {
+      "name": "Conversation width",
+      "description": "Default width for the thread and composer. Drag the side edges to adjust, or double-click a handle to reset to this preset.",
+      "keywords": "width wide standard column thread measure layout 4k",
+      "standard": "Standard",
+      "wide": "Wide"
+    },
     "effortControl": {
       "name": "Effort",
       "description": "How the model menu and the agent menu show the effort levels.",
@@ -326,6 +333,7 @@
       "theme": "Theme",
       "appIcon": "App icon",
       "scale": "Zoom and text",
+      "conversation": "Conversation",
       "sidebar": "Sidebar",
       "motion": "Motion",
       "fonts": "Fonts",

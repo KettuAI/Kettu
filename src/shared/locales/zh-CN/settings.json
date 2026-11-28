@@ -285,6 +285,13 @@
       "previewLabel": "预览",
       "preview": "回复和你发送的消息在这个字号下就是这样。行内代码，比如 <code>settings.json</code>，是这样显示的。"
     },
+    "conversationWidth": {
+      "name": "会话宽度",
+      "description": "对话正文和输入框的默认宽度。仍可拖动两侧边缘调整，双击把手可重置为当前档位。",
+      "keywords": "会话宽度 宽度 宽版 标准 宽屏 满屏 大屏 4K width wide standard",
+      "standard": "标准",
+      "wide": "宽版"
+    },
     "effortControl": {
       "name": "思考强度",
       "description": "模型菜单和智能体菜单里思考强度的显示方式。",
@@ -325,6 +332,7 @@
       "theme": "主题",
       "appIcon": "应用图标",
       "scale": "缩放与文字",
+      "conversation": "会话",
       "sidebar": "侧边栏",
       "motion": "动态效果",
       "fonts": "字体",

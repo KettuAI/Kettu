@@ -650,6 +650,26 @@ export function TextSize({ label }: { label: ReactNode }) {
   )
 }
 
+export function ConversationWidth() {
+  const { t } = useTranslation('settings')
+  const value = useSettings().appearance.conversationWidth
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={t('appearance.conversationWidth.name')}
+        value={value}
+        options={[
+          { value: 'standard', label: t('appearance.conversationWidth.standard') },
+          { value: 'wide', label: t('appearance.conversationWidth.wide') },
+        ]}
+        onChange={(v) => apply({ appearance: { conversationWidth: v } })}
+      />
+    </>
+  )
+}
+
 export function ReduceMotion() {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.reduceMotion

@@ -151,6 +151,22 @@ describe('find_settings', () => {
     expect(file().appearance.appIcon).toBe('paper-sheets')
   })
 
+  it('finds and updates appearance.conversation-width in English and Chinese', async () => {
+    const { tools, file } = harness({ fullAccess: true })
+    const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'conversation width' })
+    expect(text(en)).toContain('appearance.conversation-width')
+    expect(text(en)).toContain('value: Standard')
+
+    setLocale('zh-CN')
+    const zh = await tools.call(CALLER, FIND_SETTINGS, { query: '会话宽度' })
+    expect(text(zh)).toContain('appearance.conversation-width')
+    expect(text(zh)).toContain('会话宽度 (Conversation width)')
+
+    const updated = await change(tools, [{ id: 'appearance.conversation-width', value: 'wide' }])
+    expect(updated.isError).toBeUndefined()
+    expect(file().appearance.conversationWidth).toBe('wide')
+  })
+
   it('finds and updates optional Chinese fonts independently of primary fonts in English and Chinese', async () => {
     const { tools, file } = harness({ fullAccess: true })
     const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'chinese font' })

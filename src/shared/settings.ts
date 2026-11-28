@@ -77,6 +77,7 @@ export interface SettingsFile {
     colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
     appIcon: AppIcon // the app's icon in the Dock, taskbar, windows and in-app brand marks
     textSize: 'small' | 'default' | 'large' // the composer: 14, 15 or 16 px; thread prose a pixel less
+    conversationWidth: ConversationWidth // default column width preset for the thread and composer
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
     sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
@@ -320,6 +321,14 @@ export function normalizeAppIcon(value: unknown): AppIcon | null {
   return isAppIcon(value) ? value : null
 }
 
+/** The default width presets for the conversation column (thread and composer). */
+export const CONVERSATION_WIDTHS = ['standard', 'wide'] as const
+export type ConversationWidth = (typeof CONVERSATION_WIDTHS)[number]
+
+export function isConversationWidth(value: unknown): value is ConversationWidth {
+  return (CONVERSATION_WIDTHS as readonly unknown[]).includes(value)
+}
+
 /** Chrome's page zoom steps from 80% to 150%. */
 export const ZOOM_LEVELS = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number]
@@ -361,6 +370,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     colorTheme: BUILTIN_THEME_ID,
     appIcon: 'kettu',
     textSize: 'default',
+    conversationWidth: 'standard',
     reduceMotion: 'system',
     zoom: 1.1,
     sidebarHover: true,

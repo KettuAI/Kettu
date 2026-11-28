@@ -7,10 +7,14 @@ import {
   type RefObject,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MIN_WIDTH, setThreadWidth } from '@renderer/stores/thread-width'
-
-// A key press changes the width this much, a Shift press four times as much.
-const STEP = 48
+import { useSettingsStore } from '@renderer/stores/settings'
+import {
+  dragThreadWidth,
+  MIN_WIDTH,
+  resetThreadWidth,
+  setThreadWidth,
+  stepThreadWidth,
+} from '@renderer/stores/thread-width'
 
 interface Size {
   /** The content's width now. */
@@ -49,7 +53,7 @@ function useSize(outer: RefObject<HTMLDivElement | null>, box: RefObject<HTMLDiv
 /**
  * Handles on the thread's two side edges that widen or narrow the content, the composer under it
  * included: drag one and the edge follows the pointer while the other mirrors it, since the column
- * is centred. Double-click or Home gives the text size's width back.
+ * is centred. Double-click or Home resets to the selected conversation width preset.
  */
 export function ThreadWidthGrips({ gutter }: { gutter: number }) {
   const outer = useRef<HTMLDivElement>(null)
@@ -65,8 +69,8 @@ export function ThreadWidthGrips({ gutter }: { gutter: number }) {
       <div ref={box} className="ks-thread__column relative mx-auto h-full w-full px-8">
         {size && size.most > MIN_WIDTH && (
           <>
-            <Grip side="left" size={size} />
-            <Grip side="right" size={size} />
+            <WidthGrip side="left" size={size} />
+            <WidthGrip side="right" size={size} />
           </>
         )}
       </div>
@@ -74,17 +78,13 @@ export function ThreadWidthGrips({ gutter }: { gutter: number }) {
   )
 }
 
-function Grip({ side, size }: { side: 'left' | 'right'; size: Size }) {
+export function WidthGrip({ side, size }: { side: 'left' | 'right'; size: Size }) {
   const { t } = useTranslation('session')
+  const preset = useSettingsStore((s) => s.settings.appearance.conversationWidth)
   // Where a drag started: the pointer's x and the width then, with the room measured then.
   const drag = useRef<{ x: number; from: Size } | null>(null)
   const [dragging, setDragging] = useState(false)
-  // The right edge moves with the pointer, the left against it.
-  const sign = side === 'right' ? 1 : -1
 
-  const setWidth = (wanted: number, most: number) => {
-    setThreadWidth(Math.round(Math.min(most, Math.max(Math.min(MIN_WIDTH, most), wanted))))
-  }
   const down = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -94,7 +94,9 @@ function Grip({ side, size }: { side: 'left' | 'right'; size: Size }) {
   const move = (event: PointerEvent<HTMLDivElement>) => {
     const current = drag.current
     if (current) {
-      setWidth(current.from.width + 2 * sign * (event.clientX - current.x), current.from.most)
+      setThreadWidth(
+        dragThreadWidth(current.from.width, current.from.most, side, event.clientX - current.x),
+      )
     }
   }
   const up = () => {
@@ -102,22 +104,24 @@ function Grip({ side, size }: { side: 'left' | 'right'; size: Size }) {
     setDragging(false)
   }
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Home') {
-      setThreadWidth(null)
+    const next = stepThreadWidth(size.width, size.most, side, event.key, event.shiftKey)
+    if (next === undefined) return
+    if (next === null) {
+      resetThreadWidth()
       return
     }
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
-    const step = (event.shiftKey ? 4 : 1) * STEP
-    const outward = event.key === (side === 'right' ? 'ArrowRight' : 'ArrowLeft')
-    setWidth(size.width + (outward ? step : -step), size.most)
+    setThreadWidth(next)
   }
+
+  const hint = t('thread.width.hint', { preset: t(`thread.width.presets.${preset}`) })
 
   return (
     <div
       role="separator"
       aria-orientation="vertical"
       aria-label={t('thread.width.label')}
+      title={hint}
       aria-valuenow={size.width}
       aria-valuemin={Math.min(MIN_WIDTH, size.most)}
       aria-valuemax={size.most}
@@ -129,7 +133,7 @@ function Grip({ side, size }: { side: 'left' | 'right'; size: Size }) {
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={up}
-      onDoubleClick={() => setThreadWidth(null)}
+      onDoubleClick={resetThreadWidth}
       onKeyDown={keyDown}
     />
   )
