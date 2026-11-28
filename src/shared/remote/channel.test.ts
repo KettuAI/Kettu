@@ -418,10 +418,7 @@ describe('Channel', () => {
 
     const p1 = device.channel.send({ kind: 'json', value: { tag: 'first-in-flight' } })
     const p2 = device.channel.send({ kind: 'json', value: { tag: 'queued-bulk' } })
-    const p3 = device.channel.send(
-      { kind: 'json', value: { type: 'pong' } },
-      { priority: 'high' },
-    )
+    const p3 = device.channel.send({ kind: 'json', value: { type: 'pong' } }, { priority: 'high' })
 
     releaseFirst()
     await Promise.all([p1, p2, p3])

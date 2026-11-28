@@ -6,14 +6,14 @@ import { relaySummary, type RemoteStatus } from '@shared/remote/status'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useCloudOffHere } from './use-cloud-off-here'
 
-/** Whether devices reach the host through the relay now: on, and signed in. */
+/** Whether devices may reach the host through at least one relay (official or own). */
 export function relayInUse(status: RemoteStatus | null): boolean {
-  return status?.relay?.state === 'on'
+  return status?.relay?.state === 'on' || Boolean(status?.relay?.own)
 }
 
 /**
  * What the status line says of the relay, or null when it adds nothing, as on this computer while
- * Kettu's cloud is off.
+ * Kettu's cloud is off and no own relay is active.
  */
 export function useRelayLine(status: RemoteStatus | null): {
   part: string | null
@@ -25,44 +25,71 @@ export function useRelayLine(status: RemoteStatus | null): {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const cloudOff = useCloudOffHere()
-  const own = status?.relay?.state === 'on' ? (status.relay.own ?? null) : null
-  // The owner's own relay is no service of Kettu's, so it shows in Local mode too.
-  const summary = cloudOff && !own ? null : relaySummary(status?.relay)
-  const failed = summary === 'failed' || summary === 'conflict'
-  const error = failed && status?.relay?.state === 'on' ? firstError(status.relay.relays) : null
+  const relay = status?.relay
+  const own = relay?.own ?? null
   const host = own ? relayHostName(own.url) : ''
+  const officialRelay = cloudOff ? undefined : relay
+  const officialStates =
+    officialRelay?.state === 'on' ? officialRelay.relays.map((r) => r.connection) : []
+  const ownConn = own?.connection ?? null
+
+  const officialConnected = officialStates.some((c) => c.state === 'connected')
+  const ownConnected = ownConn?.state === 'connected'
+
+  const officialError = officialRelay?.state === 'on' ? firstError(officialRelay.relays) : null
+  const ownError =
+    ownConn && (ownConn.state === 'retrying' || ownConn.state === 'refused') ? ownConn.error : null
+
+  const conflict =
+    officialStates.some((c) => c.state === 'conflict') || ownConn?.state === 'conflict'
+  const anyConnected = officialConnected || ownConnected
+  const anyConnecting =
+    !anyConnected &&
+    (officialStates.some((c) => c.state === 'connecting') ||
+      ownConn?.state === 'connecting' ||
+      (own !== null && ownConn === null && own.rtt === null))
+  const failed = !anyConnected && (conflict || officialError !== null || ownError !== null)
+  const problemIsOwnOnly =
+    own !== null && !officialError && (ownError !== null || ownConn?.state === 'conflict')
+  const error = ownError ?? officialError
   const group = errorGroup(error)
+
+  const summary = cloudOff && !own ? null : relaySummary(relay)
+  const part =
+    officialConnected && ownConnected
+      ? t('remote.status.relaysBoth', { host })
+      : ownConnected
+        ? t('remote.status.ownRelay', { host })
+        : officialConnected
+          ? t('remote.status.relay')
+          : null
+
   return {
-    part:
-      summary === 'connected'
-        ? own
-          ? t('remote.status.ownRelay', { host })
-          : t('remote.status.relay')
-        : null,
+    part,
     problem: failed
       ? {
-          text:
-            summary === 'conflict'
-              ? t('remote.relay.conflict')
-              : own
-                ? t('remote.relay.own.lineFailed', { host })
-                : t('remote.relay.failed'),
-          hint:
-            summary === 'conflict'
-              ? t('remote.relay.conflictHint', onHost)
-              : own && group === 'refused'
-                ? t('remote.relay.own.refusedHint')
-                : t(`remote.relay.errorHint.${group}`),
-          conflict: summary === 'conflict',
+          text: conflict
+            ? t('remote.relay.conflict')
+            : problemIsOwnOnly
+              ? t('remote.relay.own.lineFailed', { host })
+              : t('remote.relay.failed'),
+          hint: conflict
+            ? t('remote.relay.conflictHint', onHost)
+            : problemIsOwnOnly && group === 'refused'
+              ? t('remote.relay.own.refusedHint')
+              : t(`remote.relay.errorHint.${group}`),
+          conflict,
         }
       : null,
-    connecting:
-      summary !== 'connecting'
-        ? null
-        : own
-          ? t('remote.relay.own.connecting', { host })
-          : t('remote.relay.connecting'),
-    signInHint: summary === 'signed_out' ? t('remote.relay.signInHint', onHost) : null,
+    connecting: !anyConnecting
+      ? null
+      : own && officialStates.length === 0
+        ? t('remote.relay.own.connecting', { host })
+        : t('remote.relay.connecting'),
+    signInHint:
+      !cloudOff && officialRelay?.state === 'signed_out' && summary !== 'connected'
+        ? t('remote.relay.signInHint', onHost)
+        : null,
   }
 }
 

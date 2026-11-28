@@ -42,7 +42,7 @@ import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
 import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
-import type { RelayStatus } from './remote/relay-host'
+import type { RelayConnection, RelayStatus } from './remote/relay-host'
 import type {
   DirectSettings,
   HostSettings,
@@ -899,6 +899,8 @@ export interface OwnRelayStatus {
   rtt: number | null
   /** It serves the web client, which a browser pairs on. */
   web: boolean
+  /** Independent connection state of the own relay socket. */
+  connection?: RelayConnection
 }
 
 /** Direct connections, as the remote host runs them. */

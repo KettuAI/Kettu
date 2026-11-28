@@ -95,10 +95,7 @@ export function browserText(
 ): string {
   const links = payload.addresses.flatMap((address) => browserPairingLink(address, payload) ?? [])
   let text = ''
-  const relayLink =
-    ownRelayWeb && payload.relay?.urls[0] === ownRelayWeb
-      ? ownRelayPairingLink(payload, ownRelayWeb)
-      : null
+  const relayLink = ownRelayWeb && payload.relay ? ownRelayPairingLink(payload, ownRelayWeb) : null
   if (relayLink) {
     text +=
       'Or open this link in a browser on any network; your relay serves the web client:\n\n' +

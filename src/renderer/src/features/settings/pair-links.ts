@@ -30,11 +30,9 @@ export function browserLinks(
   const owned = new Set(own.map(addressKey))
   const found = payload.addresses.filter((address) => !owned.has(addressKey(address)))
   const theirs = payload.addresses.filter((address) => owned.has(addressKey(address)))
-  const hosted = cloud && !ownRelay ? hostedPairingLink(payload) : null
-  const relayed =
-    ownRelay?.web && payload.relay?.urls[0] === ownRelay.url
-      ? ownRelayPairingLink(payload, ownRelay.url)
-      : null
+  const hasOfficial = payload.relay?.urls.some((url) => url !== ownRelay?.url) ?? false
+  const hosted = cloud && (!ownRelay || hasOfficial) ? hostedPairingLink(payload) : null
+  const relayed = ownRelay?.web && payload.relay ? ownRelayPairingLink(payload, ownRelay.url) : null
   return [
     ...(hosted ? [{ address: new URL(HOSTED_WEB_URL).host, link: hosted }] : []),
     ...(relayed

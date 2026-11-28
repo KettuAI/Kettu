@@ -1705,14 +1705,16 @@
     "via": {
       "direct": "Direct",
       "directAt": "Direct · {{address}}",
-      "lan": "Same network",
-      "lanAt": "Same network · {{address}}",
+      "lan": "Local network",
+      "lanAt": "Local network · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
       "relay": "Kettu relay",
       "relayAt": "Kettu relay · {{region}}",
       "ownRelay": "Your relay",
       "ownRelayAt": "Your relay · {{host}}",
+      "bothRelays": "Kettu relay & your relay",
+      "bothRelaysAt": "Kettu relay & {{host}}",
       "noRelay": "No relay · direct only"
     },
     "failed": {
@@ -2124,9 +2126,10 @@
       "serviceKey": "This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "serviceKey_web": "{{host}}’s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "offLine": "Off",
-      "firewall": "Devices on the same network connect to it directly, so the system may ask once whether Kettu can accept incoming connections.",
+      "firewall": "Devices on your local network connect to it directly, so the system may ask once whether Kettu can accept incoming connections.",
       "relay": "reachable from anywhere",
-      "ownRelay": "through {{host}}"
+      "ownRelay": "through {{host}}",
+      "relaysBoth": "via Kettu relay & {{host}}"
     },
     "hostName": {
       "name": "This computer’s name",
@@ -2390,9 +2393,15 @@
       "signInHint": "Sign in to your Kettu account to reach this computer from anywhere. Direct connections still work.",
       "signInHint_web": "Sign in to a Kettu account on {{host}} to reach it from anywhere. Direct connections still work.",
       "group": "Relay",
-      "groupDescription": "How your devices reach this computer from other networks: the Kettu relay, a relay you run yourself, or none.",
-      "groupDescription_web": "How your devices reach {{host}} from other networks: the Kettu relay, a relay you run yourself, or none.",
-      "onlyKettu": "Only with the Kettu relay.",
+      "groupDescription": "How your devices reach this computer from other networks: Kettu’s official relay, a relay you run yourself, or both at once.",
+      "groupDescription_web": "How your devices reach {{host}} from other networks: Kettu’s official relay, a relay you run yourself, or both at once.",
+      "onlyKettu": "Only while the official Kettu relay is on.",
+      "official": {
+        "name": "Use official Kettu relay",
+        "description": "Run by Kettu using your Kettu account. Works alongside your own relay with automatic fastest-path switching.",
+        "description_web": "Run by Kettu using your Kettu account on {{host}}. Works alongside your own relay automatically.",
+        "descriptionLocal": "Unavailable in Local mode. Turn on Kettu services in General to use the official relay."
+      },
       "choice": {
         "kettu": {
           "name": "Kettu relay",
@@ -2414,12 +2423,12 @@
         }
       },
       "note": {
-        "switch": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect on the same network, or when you paste a new pairing link on the device.",
-        "own": "Only one relay at a time. Your Kettu account still sends this computer’s notifications to your iPhone.",
+        "switch": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect on your local network, or when you paste a new pairing link on the device.",
+        "own": "Your own relay works alone or alongside the official relay. Your Kettu account still sends this computer’s notifications to your iPhone.",
         "pinned": "The Kettu apps on computers, iPhones, iPads and Android phones reach it. Browsers can’t check a pinned certificate, so they need a relay with a domain.",
         "local": "In Local mode Kettu sends nothing to its own services. Your relay is yours, so it stays.",
-        "switch_web": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect to {{host}} on the same network, or when you paste a new pairing link on the device.",
-        "own_web": "Only one relay at a time. Your Kettu account still sends {{host}}’s notifications to your iPhone."
+        "switch_web": "Kettu checks the relay and the key before it switches. Devices online now move over at once; offline devices follow the next time they connect to {{host}} on your local network, or when you paste a new pairing link on the device.",
+        "own_web": "Your own relay works alone or alongside the official relay. Your Kettu account still sends {{host}}’s notifications to your iPhone."
       },
       "confirm": {
         "offTitle": "Switch to no relay?",
@@ -2442,6 +2451,10 @@
         "offlineBody_web_other": "Only devices online now learn the new relay right away. Offline devices will need a direct connection to {{host}} on the same network, or a new pairing link pasted on each device."
       },
       "own": {
+        "toggleName": "Use your own relay",
+        "toggleDescription": "A relay you run on your own server. Can stay on alongside the official relay, no Kettu account needed.",
+        "toggleDescriptionLocal": "A relay you run on your own server. Nothing goes to Kettu.",
+        "savedAt": "Saved: {{host}}. Turn on to use.",
         "address": "Address",
         "addressHint": "Paste the link the relay printed when it started; its key comes with it.",
         "pinnedHint": "Its certificate is pinned from the link, as for a relay at an IP address.",

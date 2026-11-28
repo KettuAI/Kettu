@@ -3,7 +3,7 @@
 
 import type { DirectStatus } from '../host-control'
 import type { PairedDevice } from './device'
-import type { RelayStatus } from './relay-host'
+import type { RelayConnection, RelayStatus } from './relay-host'
 
 /** A device not seen for this long is removed. */
 export const UNSEEN_DAYS = 90
@@ -55,17 +55,15 @@ export interface RemoteStatus {
 }
 
 /**
- * The Kettu relay as Settings shows it: `off` while Use the Kettu relay is, `signed_out` while
- * this computer is signed in to no Kettu account, and otherwise each relay's state, none while
- * remote access is off.
+ * Relay status as Settings shows it: `state` tracks the official Kettu relay (`off`, `signed_out`,
+ * or `on` with `relays`), while `own` carries the owner's own relay independently whenever active.
  */
 export type RelayReport =
-  | { state: 'off' }
-  | { state: 'signed_out' }
-  /** With `own` on the owner's own relay, the one entry of `relays`; older clients see a relay. */
+  | { state: 'off'; own?: OwnRelayReport }
+  | { state: 'signed_out'; own?: OwnRelayReport }
   | { state: 'on'; relays: RelayStatus[]; own?: OwnRelayReport }
 
-/** The owner's own relay as Settings shows it, while it is the one chosen. */
+/** The owner's own relay as Settings shows it while enabled. */
 export interface OwnRelayReport {
   url: string
   /** Its certificate is trusted by its pin alone, which browsers cannot check. */
@@ -78,48 +76,67 @@ export interface OwnRelayReport {
   web: boolean
   /** The access key's last four characters, for telling keys apart; never the key. */
   keyEnd: string | null
+  /** Independent connection state of the own relay socket. */
+  connection?: RelayConnection
 }
 
-/** The relay part of a host's report: the owner's own relay, the Kettu relay, or none. */
+/** The relay part of a host's report: the official Kettu relay and/or the owner's own relay. */
 export function relayReport(options: {
-  choice: 'kettu' | 'own' | 'off'
+  official: boolean
+  ownEnabled: boolean
   /** The Kettu relay may be used here: Kettu's services are on. */
   cloud: boolean
   signedIn: boolean
   relays: RelayStatus[]
   own: { url: string; pin: string | null } | null
-  ownStatus: { version: string | null; rtt: number | null; web: boolean } | null
+  ownStatus: {
+    version: string | null
+    rtt: number | null
+    web: boolean
+    connection?: RelayConnection
+  } | null
   keyEnd: string | null
 }): RelayReport {
-  const { choice, own } = options
-  if (choice === 'own' && own) {
-    return {
-      state: 'on',
-      relays: options.relays,
-      own: {
-        url: own.url,
-        pinned: own.pin !== null,
-        version: options.ownStatus?.version ?? null,
-        rtt: options.ownStatus?.rtt ?? null,
-        web: options.ownStatus?.web ?? false,
-        keyEnd: options.keyEnd,
-      },
-    }
+  const { official, ownEnabled, own } = options
+  const ownReport: OwnRelayReport | undefined =
+    ownEnabled && own
+      ? {
+          url: own.url,
+          pinned: own.pin !== null,
+          version: options.ownStatus?.version ?? null,
+          rtt: options.ownStatus?.rtt ?? null,
+          web: options.ownStatus?.web ?? false,
+          keyEnd: options.keyEnd,
+          ...(options.ownStatus?.connection ? { connection: options.ownStatus.connection } : {}),
+        }
+      : undefined
+  if (!official || !options.cloud) {
+    return ownReport ? { state: 'off', own: ownReport } : { state: 'off' }
   }
-  if (choice !== 'kettu' || !options.cloud) return { state: 'off' }
-  if (!options.signedIn) return { state: 'signed_out' }
-  return { state: 'on', relays: options.relays }
+  if (!options.signedIn) {
+    return ownReport ? { state: 'signed_out', own: ownReport } : { state: 'signed_out' }
+  }
+  return ownReport
+    ? { state: 'on', relays: options.relays, own: ownReport }
+    : { state: 'on', relays: options.relays }
 }
 
-/** The relay as one state: connected once any relay is, else how the others are doing. */
+/** The relay as one state: connected once any relay (official or own) is, else how the rest are doing. */
 export type RelaySummary = 'off' | 'signed_out' | 'connected' | 'connecting' | 'conflict' | 'failed'
 
 export function relaySummary(relay: RelayReport | undefined): RelaySummary | null {
   if (!relay) return null
-  if (relay.state !== 'on') return relay.state
-  const states = relay.relays.map(({ connection }) => connection.state)
+  const states: RelayConnection['state'][] = []
+  if (relay.state === 'on') {
+    for (const { connection } of relay.relays) states.push(connection.state)
+  }
+  if (relay.own?.connection) states.push(relay.own.connection.state)
+  if (states.length === 0 && relay.own) {
+    return relay.own.rtt !== null ? 'connected' : 'connecting'
+  }
   if (states.includes('connected')) return 'connected'
   if (states.includes('conflict')) return 'conflict'
   if (states.some((state) => state === 'retrying' || state === 'refused')) return 'failed'
-  return 'connecting'
+  if (states.length > 0) return 'connecting'
+  return relay.state === 'on' ? 'connecting' : relay.state
 }

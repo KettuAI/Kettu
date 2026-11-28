@@ -243,11 +243,19 @@ export function hostedPairingLink(payload: PairingPayload): string | null {
 
 /**
  * The link a browser opens a code on a relay the owner runs with: the web client that relay
- * serves at `origin`. Null for a pinned relay, whose certificate a browser cannot check.
+ * serves at `origin`. Null when no relay is present or when the relay is certificate-pinned.
  */
 export function ownRelayPairingLink(payload: PairingPayload, origin: string): string | null {
   if (!payload.relay || payload.relay.pin) return null
-  return `${origin}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
+  if (payload.relay.urls[0] === origin) {
+    return `${origin}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
+  }
+  const ownOnly: PairingPayload = {
+    ...payload,
+    version: PAIRING_VERSION,
+    relay: { id: payload.relay.id, urls: [origin] },
+  }
+  return `${origin}${BROWSER_PAIRING_PATH}#${encodePairing(ownOnly)}`
 }
 
 /**

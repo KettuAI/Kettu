@@ -17,6 +17,7 @@ export type HostFeature = keyof Pick<
   | 'drives'
   | 'ownRelay'
   | 'computerUse'
+  | 'dualRelay'
 >
 
 /**

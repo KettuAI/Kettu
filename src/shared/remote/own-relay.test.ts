@@ -96,19 +96,37 @@ describe('the owner’s own relay', () => {
     expect('token' in connectMessage(null)).toBe(false)
   })
 
-  it('gives the host its key only while the own relay is chosen', () => {
+  it('gives the host its official and own credentials independently', () => {
     const own = { url: RELAY, pin: null }
-    expect(relayChoiceInit({ relay: 'own', ownRelay: own }, false, KEY)).toEqual({
+    expect(
+      relayChoiceInit({ relay: false, ownRelayEnabled: true, ownRelay: own }, false, KEY),
+    ).toEqual({
       enabled: false,
       own: { url: RELAY, pin: null, key: KEY },
     })
-    expect(relayChoiceInit({ relay: 'own', ownRelay: own }, true, null).own).toBeNull()
-    expect(relayChoiceInit({ relay: 'kettu', ownRelay: own }, true, KEY)).toEqual({
+    expect(
+      relayChoiceInit({ relay: false, ownRelayEnabled: true, ownRelay: own }, true, null).own,
+    ).toBeNull()
+    expect(
+      relayChoiceInit({ relay: true, ownRelayEnabled: false, ownRelay: own }, true, KEY),
+    ).toEqual({
       enabled: true,
       own: null,
     })
-    // Local mode: the Kettu relay is not used even while chosen.
-    expect(relayChoiceInit({ relay: 'kettu', ownRelay: null }, false, KEY).enabled).toBe(false)
+    // Both enabled at once pass both configurations independently.
+    expect(
+      relayChoiceInit({ relay: true, ownRelayEnabled: true, ownRelay: own }, true, KEY),
+    ).toEqual({
+      enabled: true,
+      own: { url: RELAY, pin: null, key: KEY },
+    })
+    // Local mode: the Kettu relay is not used even while chosen, while the own relay stays active.
+    expect(
+      relayChoiceInit({ relay: true, ownRelayEnabled: true, ownRelay: own }, false, KEY),
+    ).toEqual({
+      enabled: false,
+      own: { url: RELAY, pin: null, key: KEY },
+    })
   })
 })
 

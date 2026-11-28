@@ -264,9 +264,7 @@ describe('Notifier Live Activity 全状态调度', () => {
       expect(cancelled).toContainEqual({ deviceId: 'phone', key: 'activity' })
       // 尚未收到 updateToken 时发不出 end，也不应丢失 pendingEnd 状态。
       expect(jobs.filter((j) => j.type === 'activity')).toHaveLength(1)
-      expect(
-        notifier.isJobValid(jobs.find((j) => j.type === 'activity')!),
-      ).toBe(false)
+      expect(notifier.isJobValid(jobs.find((j) => j.type === 'activity')!)).toBe(false)
 
       // 几秒后 iPhone 收到刚才已飞出的 push-to-start 并回传 updateToken，主机立即补发 end 清理孤儿岛。
       device.push.target!.activity = { start: START_TOKEN, update: UPDATE_TOKEN }

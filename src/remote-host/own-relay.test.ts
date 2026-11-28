@@ -8,8 +8,13 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FakeRelays } from '@shared/remote/fake-relay'
 import { generateKeyPair } from '@shared/remote/noise'
-import type { HostRelay } from '@shared/remote/relay'
-import { importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
+import {
+  hostOwnRelay,
+  importRelayKey,
+  newRelaySeed,
+  relayHostId,
+  type HostRelay,
+} from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import { ActivityLog } from './activity'
@@ -173,5 +178,135 @@ describe('a device of a host on its owner’s relay', () => {
     // The host leaves the old relay as soon as the move has gone out.
     t.relayHost.stop()
     await expect.poll(() => t.hosts.list()[0]?.relay).toEqual(next)
+  })
+})
+
+describe('a host offering both the official Kettu relay and its owner’s own relay', () => {
+  it('reaches the host via own relay without leaking tokens when official relay is unavailable or signed out', async () => {
+    const relays = new FakeRelays()
+    const officialToken = 'official-relay-token'
+    relays.accounts.set(officialToken, 'account')
+    relays.relay(OWN).useAccessKey(ACCESS_KEY)
+
+    const hostDir = tempDir()
+    const hostKey = await generateKeyPair()
+    const laptopKey = await generateKeyPair()
+    const relayKey = await importRelayKey(await newRelaySeed())
+    const relayId = await relayHostId(relayKey.publicKey)
+    const devices = await DeviceStore.load(hostDir, log)
+    await devices.add({
+      publicKey: Buffer.from(laptopKey.publicKey).toString('base64'),
+      name: 'Laptop',
+      kind: 'desktop',
+      platform: 'darwin',
+      model: '',
+    })
+    const mixedRelay: HostRelay = {
+      id: relayId,
+      urls: [MAIN],
+      own: { url: OWN },
+    }
+    const server: RemoteServer = new RemoteServer({
+      staticKey: hostKey,
+      devices,
+      activity: await ActivityLog.load(hostDir, log),
+      pairing: new PairingCodes({
+        hostKey: hostKey.publicKey,
+        addresses: () => [],
+        send: () => {},
+      }),
+      discovery: new DiscoveryRequests({ send: () => {} }),
+      host: { name: 'Studio', platform: 'darwin', version: '0.0.0-test' },
+      uploads: path.join(hostDir, 'uploads'),
+      openAgentPort: async () => memoryPorts()[0],
+      relay: () => mixedRelay,
+      changed: () => {},
+      log,
+    })
+    const officialHost = new RelayHost({
+      main: MAIN,
+      id: relayId,
+      key: relayKey,
+      openSocket: relays.openSocket,
+      fetchInfo: relays.fetchInfo,
+      accepted: (socket) =>
+        void webSocketTransport(socket, true).then((transport) =>
+          server.accept(transport, 'relay'),
+        ),
+      changed: () => {},
+      log,
+    })
+    const ownHost = new RelayHost({
+      main: OWN,
+      id: relayId,
+      key: relayKey,
+      own: { id: 'own', url: OWN },
+      openSocket: relays.openSocket,
+      fetchInfo: relays.fetchInfo,
+      accepted: (socket) =>
+        void webSocketTransport(socket, true).then((transport) =>
+          server.accept(transport, 'relay'),
+        ),
+      changed: () => {},
+      log,
+    })
+    officialHost.start()
+    ownHost.start()
+    officialHost.setToken('host-official-token')
+    ownHost.setToken(ACCESS_KEY)
+    cleanups.push(async () => {
+      officialHost.stop()
+      ownHost.stop()
+      await server.stop('stopping')
+    })
+
+    const hosts = await HostStore.load(tempDir(), log)
+    const host = (await hosts.add({
+      publicKey: Buffer.from(hostKey.publicKey).toString('base64'),
+      name: 'Studio',
+      platform: 'darwin',
+      version: '0.0.0-test',
+      addresses: [],
+      deviceName: 'Laptop',
+      relay: mixedRelay,
+    }))!
+    const client = new HostClient({
+      key: laptopKey,
+      hosts,
+      client: { kind: 'desktop', version: '1.0.0', platform: 'macOS 26.1' },
+      name: () => 'Laptop',
+      openMainPort: async () => memoryPorts()[0],
+      changed: () => {},
+      pairing: () => {},
+      log,
+      connect: async () => {
+        throw new Error('No route to the host')
+      },
+      relay: {
+        main: MAIN,
+        // Signed out / official disabled on client: must fall back cleanly to own relay with no token.
+        token: () => null,
+        openSocket: relays.openSocket,
+        fetchJson: relays.fetchJson,
+      },
+      timeoutMs: 5000,
+      networkCheckMs: null,
+    })
+    cleanups.push(() => client.stop())
+    await expect.poll(() => relays.relay(OWN).hosts.has(relayId), { timeout: 15_000 }).toBe(true)
+    expect(hostOwnRelay(mixedRelay, MAIN)).toEqual({ url: OWN })
+
+    client.start()
+    await expect
+      .poll(() => client.list().find((known) => known.id === host.id)?.connection.state, {
+        timeout: 15_000,
+      })
+      .toBe('online')
+    expect(client.list().find((known) => known.id === host.id)?.connection).toMatchObject({
+      state: 'online',
+      relay: OWN,
+      own: true,
+    })
+    expect(relays.relay(OWN).deviceTokens.every((sent) => sent === null)).toBe(true)
   })
 })

@@ -51,15 +51,16 @@ export function RelaySignIn() {
 }
 
 /**
- * Let devices on the account find this computer and ask to be added; only through the Kettu
- * relay, which names the computer to the account.
+ * Let devices on the account find this computer and ask to be added; only through the official
+ * Kettu relay, which names the computer to the account.
  */
 export function DiscoverableSwitch({ label }: { label: string }) {
   const { useSettingsStore } = useHostScope()
   const checked = useSettingsStore((s) => s.settings.remote.discoverable)
-  const ownRelay = useSettingsStore((s) => s.settings.remote.relay === 'own')
+  const officialOff = useSettingsStore((s) => !s.settings.remote.relay)
   const [apply, error] = useApply()
-  if (ownRelay) return <SettingSwitch label={label} checked={false} disabled onChange={() => {}} />
+  if (officialOff)
+    return <SettingSwitch label={label} checked={false} disabled onChange={() => {}} />
   return (
     <>
       <ControlError error={error} />
@@ -120,14 +121,14 @@ function RegionPill({ relay }: { relay: RelayStatus }) {
 }
 
 /**
- * Direct connections: the owner's choice while the relay is in use; held on otherwise, since
- * they are then the devices' only way.
+ * Direct connections: the owner's choice while at least one relay is in use; held on otherwise,
+ * since they are then the devices' only way.
  */
 export function DirectSwitch({ label }: { label: string }) {
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const enabled = useSettingsStore((s) => s.settings.remote.direct.enabled)
   const cloudOff = useCloudOffHere()
-  const own = useSettingsStore((s) => s.settings.remote.relay === 'own')
+  const own = useSettingsStore((s) => s.settings.remote.ownRelayEnabled)
   // Local mode keeps the owner's own relay, so only the Kettu relay is off there.
   const free = useRemoteStore((s) => relayInUse(s.status)) && (!cloudOff || own)
   const [apply, error] = useApply()

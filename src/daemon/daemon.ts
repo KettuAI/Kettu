@@ -287,9 +287,17 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       if (!parsed) return { ok: false, problem: 'address' }
       return useOwn({ url: parsed.url, key: parsed.key, pin: parsed.pin })
     },
-    'relay.set': async ({ choice }) => {
+    'relay.set': async ({ choice, official, own }) => {
       const running = starting()
-      changeSettings({ remote: { relay: choice } })
+      const remotePatch: { relay?: boolean; ownRelayEnabled?: boolean } = {}
+      if (choice === 'kettu') remotePatch.relay = true
+      if (choice === 'off') {
+        remotePatch.relay = false
+        remotePatch.ownRelayEnabled = false
+      }
+      if (official !== undefined) remotePatch.relay = official
+      if (own !== undefined) remotePatch.ownRelayEnabled = own
+      changeSettings({ remote: remotePatch })
       return running.relayReport()
     },
     'report.build': async ({ request }) =>
@@ -648,7 +656,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     }
     const current = settings.get().remote
     if (
-      current.relay === 'own' &&
+      current.ownRelayEnabled &&
       current.ownRelay?.url === parsed.url &&
       current.ownRelay.pin === parsed.pin &&
       accessKey === parsed.key

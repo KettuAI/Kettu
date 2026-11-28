@@ -999,83 +999,152 @@ describe('the pages the sidebar lists', () => {
 describe('the relay a host uses', () => {
   const own = { url: 'https://relay.example.com', pin: null }
 
-  it('reads a file from before the own relay, whose relay is a switch', async () => {
+  it('reads legacy boolean and enum relay settings and migrates them to independent toggles', async () => {
     await save({ version: 1, remote: { relay: true } })
-    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('kettu')
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: false,
+    })
     await save({ version: 1, remote: { relay: false } })
-    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('off')
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: false,
+      ownRelayEnabled: false,
+    })
+    await save({ version: 1, remote: { relay: 'kettu', ownRelay: own } })
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: false,
+      ownRelay: own,
+    })
   })
 
-  it('keeps the own relay with its address, and goes without a relay without one', async () => {
+  it('keeps the own relay with its address, supports both toggles on, and disables own without an address', async () => {
     await save({ version: 1, remote: { relay: 'own', ownRelay: own } })
     expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
-      relay: 'own',
+      relay: false,
+      ownRelayEnabled: true,
+      ownRelay: own,
+    })
+    await save({ version: 1, remote: { relay: true, ownRelayEnabled: true, ownRelay: own } })
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: true,
       ownRelay: own,
     })
     await save({ version: 1, remote: { relay: 'own' } })
-    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('off')
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: false,
+      ownRelayEnabled: false,
+    })
     // A Kettu address or plain http to another computer is never kept as the owner's relay.
     for (const url of ['https://relay.kettu.sh', 'http://203.0.113.7:8080']) {
       await save({ version: 1, remote: { relay: 'own', ownRelay: { url, pin: null } } })
       expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
-        relay: 'off',
+        relay: false,
+        ownRelayEnabled: false,
         ownRelay: null,
       })
     }
   })
 
-  it('takes the switch of older clients and the choice in a change', () => {
+  it('toggles official and own relays independently while still accepting legacy choice patches', () => {
     const before = structuredClone(DEFAULT_SETTINGS)
     expect(
-      mergeSettings(before, validateSettingsPatch({ remote: { relay: false } })).remote.relay,
-    ).toBe('off')
+      mergeSettings(before, validateSettingsPatch({ remote: { relay: false } })).remote,
+    ).toMatchObject({ relay: false, ownRelayEnabled: false })
     expect(
-      mergeSettings(before, validateSettingsPatch({ remote: { relay: true } })).remote.relay,
-    ).toBe('kettu')
+      mergeSettings(before, validateSettingsPatch({ remote: { relay: true } })).remote,
+    ).toMatchObject({ relay: true, ownRelayEnabled: false })
     expect(() => validateSettingsPatch({ remote: { relay: 'elsewhere' } })).toThrow()
-    // The own relay is chosen only once its check passed, which gives it its address.
+    // The own relay can only be enabled after its check saved an address.
+    expect(() =>
+      mergeSettings(before, validateSettingsPatch({ remote: { ownRelayEnabled: true } })),
+    ).toThrow()
     expect(() =>
       mergeSettings(before, validateSettingsPatch({ remote: { relay: 'own' } })),
     ).toThrow()
     expect(() => validateSettingsPatch({ remote: { ownRelay: own } })).toThrow()
+    // Saving a checked own relay preserves the official relay toggle.
     const checked = withOwnRelay(before, own)
-    expect(checked.remote).toMatchObject({ relay: 'own', ownRelay: own })
-    expect(
-      mergeSettings(checked, validateSettingsPatch({ remote: { relay: 'kettu' } })).remote,
-    ).toMatchObject({ relay: 'kettu', ownRelay: own })
+    expect(checked.remote).toMatchObject({ relay: true, ownRelayEnabled: true, ownRelay: own })
+    // Toggling official off leaves own relay on, and vice versa.
+    const ownOnly = mergeSettings(checked, validateSettingsPatch({ remote: { relay: false } }))
+    expect(ownOnly.remote).toMatchObject({ relay: false, ownRelayEnabled: true, ownRelay: own })
+    const officialOnly = mergeSettings(
+      checked,
+      validateSettingsPatch({ remote: { ownRelayEnabled: false } }),
+    )
+    expect(officialOnly.remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: false,
+      ownRelay: own,
+    })
     expect(() => withOwnRelay(before, { url: 'https://relay.kettu.sh', pin: null })).toThrow()
   })
 
-  it('holds direct connections on with no relay, and frees them on the own relay', () => {
+  it('holds direct connections on with no relay active, and frees them with either relay', () => {
     const on = structuredClone(DEFAULT_SETTINGS)
     on.remote.enabled = true
     on.remote.direct.enabled = false
-    expect(effectiveDirect({ ...on, remote: { ...on.remote, relay: 'off' } }, true).enabled).toBe(
-      true,
-    )
     expect(
-      effectiveDirect({ ...on, remote: { ...on.remote, relay: 'kettu' } }, false).enabled,
+      effectiveDirect(
+        { ...on, remote: { ...on.remote, relay: false, ownRelayEnabled: false } },
+        true,
+      ).enabled,
     ).toBe(true)
     expect(
-      effectiveDirect({ ...on, remote: { ...on.remote, relay: 'own', ownRelay: own } }, false)
-        .enabled,
+      effectiveDirect(
+        { ...on, remote: { ...on.remote, relay: true, ownRelayEnabled: false } },
+        false,
+      ).enabled,
+    ).toBe(true)
+    expect(
+      effectiveDirect(
+        { ...on, remote: { ...on.remote, relay: false, ownRelayEnabled: true, ownRelay: own } },
+        false,
+      ).enabled,
+    ).toBe(false)
+    expect(
+      effectiveDirect(
+        { ...on, remote: { ...on.remote, relay: true, ownRelayEnabled: true, ownRelay: own } },
+        true,
+      ).enabled,
     ).toBe(false)
   })
 
-  it('tells older clients a switch and newer ones the choice', () => {
+  it('sends both independent booleans plus a legacy fallback field to older clients', () => {
     const file = withOwnRelay(structuredClone(DEFAULT_SETTINGS), own)
-    const part = hostSettingsPart(file)
-    expect(part.remote).toMatchObject({ relay: false, relayChoice: 'own', ownRelay: own })
-    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), part).remote).toMatchObject({
-      relay: 'own',
+    const bothPart = hostSettingsPart(file)
+    expect(bothPart.remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: true,
+      relayChoice: 'kettu',
       ownRelay: own,
     })
-    // A host from before sends its switch alone.
-    const older = { ...part, remote: { ...part.remote, relay: true } }
+    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), bothPart).remote).toMatchObject({
+      relay: true,
+      ownRelayEnabled: true,
+      ownRelay: own,
+    })
+    // A host from before independent booleans sends relayChoice alone.
+    const legacyOwn = {
+      ...bothPart,
+      remote: { ...bothPart.remote, relay: false, relayChoice: 'own' as const },
+    }
+    delete legacyOwn.remote.ownRelayEnabled
+    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), legacyOwn).remote).toMatchObject({
+      relay: false,
+      ownRelayEnabled: true,
+      ownRelay: own,
+    })
+    // An even older host sends only boolean `relay`.
+    const older = { ...bothPart, remote: { ...bothPart.remote, relay: true } }
+    delete older.remote.ownRelayEnabled
     delete (older.remote as { relayChoice?: unknown }).relayChoice
     delete (older.remote as { ownRelay?: unknown }).ownRelay
     expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), older).remote).toMatchObject({
-      relay: 'kettu',
+      relay: true,
+      ownRelayEnabled: false,
       ownRelay: null,
     })
   })

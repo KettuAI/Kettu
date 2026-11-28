@@ -808,7 +808,8 @@ async function start(): Promise<void> {
       plainTextKey: status?.plainTextKey ?? false,
       direct: status?.direct ?? { state: 'off' },
       relay: relayReport({
-        choice: settings.get().remote.relay,
+        official: settings.get().remote.relay,
+        ownEnabled: settings.get().remote.ownRelayEnabled,
         cloud: cloudOn(),
         signedIn: signedIn(),
         relays: status?.relays ?? [],
@@ -1277,6 +1278,7 @@ async function start(): Promise<void> {
       remoteSwitch: true,
       remoteReset: true,
       ownRelay: true,
+      dualRelay: true,
       thumbnails: true,
       partThumbnails: true,
       pinnedModels: true,

@@ -128,8 +128,10 @@ export interface StartedRemoteHost {
 interface Serving {
   server: RemoteServer
   direct: DirectListener
-  /** The relay while Use the Kettu relay is on and the host has its key. */
+  /** The official Kettu relay switch; runs independently of any self-hosted relay. */
   relay: RelaySwitch
+  /** The owner's own relay switch; runs independently of the official Kettu relay. */
+  ownSwitch: RelaySwitch
   /** The host's id on the relays, null without its key. */
   relayId: string | null
   /** Under the daemon, the channels through SSH. */
@@ -176,17 +178,14 @@ export function startRemoteHost(
   /** What the relays get: the relay token, or the access token where they take no other. */
   const relayCredential = (): string | null =>
     relayToken === null ? null : (relayOnlyToken ?? relayToken)
-  // The owner's own relay, used in place of the Kettu relay while set, and what it said of itself.
+  // The owner's own relay runs independently alongside (or instead of) the Kettu relay.
   let ownRelay: OwnRelayInit | null = null
   let ownInfo: OwnRelayStatus | null = null
-  /** Whether the host signs in to a relay at all: the Kettu relay, or the owner's. */
-  const relayActive = (): boolean => ownRelay !== null || relayEnabled
-  /** What the relay in use gets: the own relay's access key, else the account's token. */
-  const relayCredentialNow = (): string | null => ownRelay?.key ?? relayCredential()
-  /** Which relay the settings ask for: the owner's, the Kettu relay or none. */
-  const relayTarget = (): string => JSON.stringify(ownRelay ?? (relayEnabled ? 'kettu' : null))
-  // What the running relay was made for, and the moves to another, one after another.
-  let relayFor = ''
+  const officialTarget = (): string => JSON.stringify(relayEnabled ? (relayUrl ?? 'kettu') : null)
+  const ownTarget = (): string => JSON.stringify(ownRelay)
+  // What the running relays were configured for, and serialized moves one after another.
+  let officialFor = ''
+  let ownFor = ''
   let relayMoves: Promise<void> = Promise.resolve()
   /** The own relay as main sent it, null for none or one that is not valid. */
   const ownOf = (value: unknown): OwnRelayInit | null => {
@@ -248,14 +247,34 @@ export function startRemoteHost(
     // domain alone, since only a signed list may bring one at an IP address; the owner's own
     // relay with its pin, which the code then carries.
     const onRelay = (): HostRelay | null => {
-      const current = relay.current
-      if (!current || !relayId) return null
-      if (ownRelay) {
-        return { id: relayId, urls: [ownRelay.url], ...(ownRelay.pin ? { pin: ownRelay.pin } : {}) }
+      if (!relayId) return null
+      const official =
+        relayEnabled && relay.current
+          ? relay.current.relays.filter((r) => !r.pin).map((r) => r.url)
+          : []
+      const ownEndpoint =
+        ownRelay && ownSwitch.current
+          ? { url: ownRelay.url, ...(ownRelay.pin ? { pin: ownRelay.pin } : {}) }
+          : undefined
+      if (!relayEnabled && !ownEndpoint) return null
+      // Expose own relay in `urls` only when no official relay is usable so legacy clients never
+      // receive a mixed list (and never send Kettu tokens to a self-hosted endpoint).
+      if ((!relayEnabled || !relayCredential()) && ownEndpoint) {
+        return {
+          id: relayId,
+          urls: [ownEndpoint.url],
+          ...(ownEndpoint.pin ? { pin: ownEndpoint.pin } : {}),
+          own: ownEndpoint,
+        }
       }
-      return relayEnabled
-        ? { id: relayId, urls: current.relays.filter((r) => !r.pin).map((r) => r.url) }
-        : null
+      if (relayEnabled && (official.length > 0 || ownEndpoint)) {
+        return {
+          id: relayId,
+          urls: official,
+          ...(ownEndpoint ? { own: ownEndpoint } : {}),
+        }
+      }
+      return null
     }
     const discovery = new DiscoveryRequests({
       send: (event) => {
@@ -277,13 +296,16 @@ export function startRemoteHost(
       refused: server.refused,
       direct: direct.status,
       ...(loopback ? { sshPort: loopback.port } : {}),
-      relays: relay.current && relayActive() && relayCredentialNow() ? relay.current.status : [],
-      ...(ownRelay && relay.current
+      relays: relay.current && relayEnabled && relayCredential() ? relay.current.status : [],
+      ...(ownRelay && ownSwitch.current
         ? {
             ownRelay: {
               version: ownInfo?.version ?? null,
               web: ownInfo?.web ?? false,
-              rtt: relay.current.legs()[0]?.hostRtt ?? null,
+              rtt: ownSwitch.current.legs()[0]?.hostRtt ?? null,
+              ...(ownSwitch.current.status[0]?.connection
+                ? { connection: ownSwitch.current.status[0].connection }
+                : {}),
             },
           }
         : {}),
@@ -316,17 +338,26 @@ export function startRemoteHost(
         notifications?.deviceJoined(device)
       },
       account: () => account,
-      ...(regions
-        ? {
-            regions: {
-              offered: () => regions?.offered ?? false,
-              message: () => regions?.regionsMessage(relay.current?.legs() ?? []) ?? null,
-              preferred: (deviceId: string, value: unknown) =>
-                void regions?.preferred(deviceId, value),
-              seen: (deviceId: string) => regions?.seen(deviceId),
-            },
-          }
-        : {}),
+      regions: {
+        offered: () => (relayEnabled ? (regions?.offered ?? false) : false),
+        message: () =>
+          relayEnabled ? (regions?.regionsMessage(relay.current?.legs() ?? []) ?? null) : null,
+        ownMessage: () =>
+          ownRelay && ownSwitch.current
+            ? {
+                type: 'relay.own',
+                own: {
+                  url: ownRelay.url,
+                  ...(ownRelay.pin ? { pin: ownRelay.pin } : {}),
+                  rtt: ownSwitch.current.legs()[0]?.hostRtt ?? null,
+                },
+              }
+            : { type: 'relay.own', own: null },
+        preferred: (deviceId: string, value: unknown) => {
+          if (relayEnabled) void regions?.preferred(deviceId, value)
+        },
+        seen: (deviceId: string) => regions?.seen(deviceId),
+      },
       notifications: () => notifications,
     })
     const notifications =
@@ -349,38 +380,7 @@ export function startRemoteHost(
     if (liveActivity) notifications?.setActivity(liveActivity)
     if (present !== null) notifications?.setPresent(present)
     const relay = new RelaySwitch(() => {
-      if (!relayKey || !relayId) return null
-      const own = ownRelay
-      if (own) {
-        // Read at each sign-in, since a relay that restarted may be another version or serve the
-        // web client now.
-        let signedIn = false
-        let ownHost: RelayHost | null = null
-        const ownChanged = (): void => {
-          const connected = ownHost?.status[0]?.connection.state === 'connected'
-          if (connected && !signedIn) void readOwnInfo(own, changed)
-          signedIn = connected
-          changed()
-        }
-        ownHost = new RelayHost({
-          main: own.url,
-          own: { id: 'own', url: own.url, ...(own.pin ? { pin: own.pin } : {}) },
-          id: relayId,
-          key: relayKey,
-          openSocket: openRelaySocket,
-          fetchInfo: fetchRelayInfo,
-          accepted: (socket) =>
-            void webSocketTransport(socket, true).then(
-              (transport) => server.accept(transport, 'relay'),
-              () => {},
-            ),
-          changed: ownChanged,
-          legsChanged: changed,
-          log,
-        })
-        return ownHost
-      }
-      if (!relayUrl) return null
+      if (!relayKey || !relayId || !relayUrl) return null
       const host = new RelayHost({
         main: relayUrl,
         id: relayId,
@@ -409,6 +409,41 @@ export function startRemoteHost(
       host.setPlan(regions?.plan() ?? null)
       return host
     })
+    const ownSwitch = new RelaySwitch(() => {
+      const own = ownRelay
+      if (!relayKey || !relayId || !own) return null
+      // Read at each sign-in, since a relay that restarted may be another version or serve the
+      // web client now.
+      let signedIn = false
+      let ownHost: RelayHost | null = null
+      const ownChanged = (): void => {
+        const connected = ownHost?.status[0]?.connection.state === 'connected'
+        if (connected && !signedIn) void readOwnInfo(own, changed)
+        signedIn = connected
+        changed()
+        server.ownRelayChanged()
+      }
+      ownHost = new RelayHost({
+        main: own.url,
+        own: { id: 'own', url: own.url, ...(own.pin ? { pin: own.pin } : {}) },
+        id: relayId,
+        key: relayKey,
+        openSocket: openRelaySocket,
+        fetchInfo: fetchRelayInfo,
+        accepted: (socket) =>
+          void webSocketTransport(socket, true).then(
+            (transport) => server.accept(transport, 'relay'),
+            () => {},
+          ),
+        changed: ownChanged,
+        legsChanged: () => {
+          changed()
+          server.ownRelayChanged()
+        },
+        log,
+      })
+      return ownHost
+    })
     const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
@@ -416,22 +451,27 @@ export function startRemoteHost(
     const loopback =
       sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
-    relay.set(relayActive(), relayCredentialNow())
-    relayFor = relayTarget()
+    relay.set(relayEnabled && relayUrl !== null, relayCredential())
+    ownSwitch.set(ownRelay !== null, ownRelay?.key ?? null)
+    officialFor = officialTarget()
+    ownFor = ownTarget()
     const report = (): void => {
       ready = true
       changed()
     }
     const ownHost = (): ReverseHost | null => {
+      if (!relayEnabled || !relayUrl) return null
       const served = onRelay()
       const profile = hostProfile(staticKey.publicKey, server.options.host.name, platform)
       if (!served || served.urls.length === 0 || !profile) return null
+      const official = served.urls.filter((url) => url === relayUrl || url.startsWith('https:'))
+      if (official.length === 0) return null
       return {
         relayId: served.id,
         publicKey,
         name: profile.name,
         platform,
-        relays: served.urls,
+        relays: official,
         // The owner's own relay at an IP address, which the other computer checks by its pin.
         ...(served.pin ? { pin: served.pin } : {}),
         version: appVersion,
@@ -441,6 +481,7 @@ export function startRemoteHost(
       server,
       direct,
       relay,
+      ownSwitch,
       relayId,
       loopback,
       notifications,
@@ -454,44 +495,63 @@ export function startRemoteHost(
   }
 
   /**
-   * The relay devices reach the host through once it moves: the owner's with its pin, the Kettu
-   * relay's main origin, whose regions the next welcome brings, or none.
+   * The relay payload devices reach the host through once a relay change applies: official
+   * origins when enabled with credentials, own relay alongside or alone, or null when both are off.
    */
-  function nextRelay(
-    { relayId }: Serving,
-    own: OwnRelayInit | null,
-    enabled: boolean,
-  ): HostRelay | null {
+  function nextRelay({ relayId }: Serving): HostRelay | null {
     if (!relayId) return null
-    if (own) return { id: relayId, urls: [own.url], ...(own.pin ? { pin: own.pin } : {}) }
-    if (enabled && relayUrl && relayCredential()) return { id: relayId, urls: [relayUrl] }
+    const official = relayEnabled && relayUrl && relayCredential() ? [relayUrl] : []
+    const ownEndpoint = ownRelay
+      ? { url: ownRelay.url, ...(ownRelay.pin ? { pin: ownRelay.pin } : {}) }
+      : undefined
+    if (!relayEnabled && !ownEndpoint) return null
+    if ((!relayEnabled || !relayCredential()) && ownEndpoint) {
+      return {
+        id: relayId,
+        urls: [ownEndpoint.url],
+        ...(ownEndpoint.pin ? { pin: ownEndpoint.pin } : {}),
+        own: ownEndpoint,
+      }
+    }
+    if (relayEnabled && (official.length > 0 || ownEndpoint)) {
+      return {
+        id: relayId,
+        urls: official,
+        ...(ownEndpoint ? { own: ownEndpoint } : {}),
+      }
+    }
     return null
   }
 
   /**
-   * Brings the relay in line with the settings. On a move the devices online hear the new relay,
-   * and the host leaves the one they use only once they have it, or after a short wait.
+   * Brings both relay switches in line with the settings independently. On any change, online
+   * devices receive the updated relay configuration before the affected socket shuts down.
    */
   function applyRelay(current: Serving): Promise<void> {
     relayMoves = relayMoves
       .then(async () => {
-        let target = relayTarget()
-        if (target !== relayFor) {
+        const nextOfficial = officialTarget()
+        const nextOwn = ownTarget()
+        if (nextOfficial !== officialFor || nextOwn !== ownFor) {
+          let targetOfficial = nextOfficial
+          let targetOwn = nextOwn
           for (;;) {
-            const enabled = ownRelay === null && relayEnabled
-            await within(
-              current.server.relayMoved(nextRelay(current, ownRelay, enabled)),
-              RELAY_MOVE_FLUSH_MS,
-            )
-            // Moved again meanwhile: the devices hear the latest before the host leaves.
-            if (relayTarget() === target) break
-            target = relayTarget()
+            await within(current.server.relayMoved(nextRelay(current)), RELAY_MOVE_FLUSH_MS)
+            const latestOfficial = officialTarget()
+            const latestOwn = ownTarget()
+            if (latestOfficial === targetOfficial && latestOwn === targetOwn) break
+            targetOfficial = latestOfficial
+            targetOwn = latestOwn
           }
-          current.relay.stop()
+          if (targetOfficial !== officialFor) current.relay.stop()
+          if (targetOwn !== ownFor) current.ownSwitch.stop()
         }
-        current.relay.set(relayActive(), relayCredentialNow())
-        relayFor = target
+        current.relay.set(relayEnabled && relayUrl !== null, relayCredential())
+        current.ownSwitch.set(ownRelay !== null, ownRelay?.key ?? null)
+        officialFor = officialTarget()
+        ownFor = ownTarget()
         applyDiscovery(current)
+        current.server.ownRelayChanged()
         current.server.options.changed()
       })
       .catch((error: unknown) => log('error', `Cannot move the relay: ${(error as Error).message}`))
@@ -512,14 +572,10 @@ export function startRemoteHost(
     }
   }
 
-  /** Takes discovery requests while discoverable, on the relay and signed in, and says so there. */
+  /** Takes discovery requests while discoverable on the official Kettu relay and signed in. */
   function applyDiscovery({ discovery, relay }: Serving): void {
     discovery.setEnabled(
-      discoverable &&
-        relay.current !== null &&
-        ownRelay === null &&
-        relayEnabled &&
-        relayCredential() !== null,
+      discoverable && relay.current !== null && relayEnabled && relayCredential() !== null,
     )
     relay.current?.profileChanged()
   }
@@ -533,6 +589,7 @@ export function startRemoteHost(
     current.notifications?.stop()
     current.discovery.setEnabled(false)
     current.relay.stop()
+    current.ownSwitch.stop()
     current.direct.stop()
     current.loopback?.stop()
     await current.server.stop(reason)
@@ -616,7 +673,7 @@ export function startRemoteHost(
     if (message.relay && typeof message.relay.url === 'string') {
       relayUrl = message.relay.url
       ownRelay = ownOf(message.relay.own)
-      relayEnabled = ownRelay === null && message.relay.enabled === true
+      relayEnabled = message.relay.enabled === true
       relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
       const relayOnly = message.relay.relayToken
       relayOnlyToken = relayToken && typeof relayOnly === 'string' ? relayOnly : null
@@ -773,9 +830,9 @@ export function startRemoteHost(
         break
       case 'remote-host:relay': {
         const own = message.own === undefined ? ownRelay : ownOf(message.own)
-        relayEnabled = own === null && message.enabled === true
+        relayEnabled = message.enabled === true
+        if (own !== ownRelay) ownInfo = null
         ownRelay = own
-        ownInfo = null
         regions?.update()
         withServing(applyRelay)
         break
@@ -831,9 +888,10 @@ export function startRemoteHost(
         const now = relayCredential()
         withRunning(() => regions?.update())
         withServing((current) => {
-          // The owner's relay takes its access key, whatever the account does.
-          if (!ownRelay) current.relay.current?.setToken(relayEnabled ? now : null)
+          // Only the official relay takes account/relay tokens; the own relay keeps its own key.
+          current.relay.current?.setToken(relayEnabled ? now : null)
           applyDiscovery(current)
+          if (ownRelay) void current.server.relayMoved(nextRelay(current))
         })
         // Hosts not reached for want of a sign-in are tried now.
         if (!had && now) withRunning(() => client?.resume())
@@ -850,7 +908,10 @@ export function startRemoteHost(
         break
       }
       case 'remote-host:relay-retry':
-        withServing(({ relay }) => relay.current?.retry())
+        withServing(({ relay, ownSwitch }) => {
+          relay.current?.retry()
+          ownSwitch.current?.retry()
+        })
         break
       case 'remote-host:terminal': {
         const allowed = message.allowed === true
@@ -977,9 +1038,10 @@ export function startRemoteHost(
       case 'remote-host:host-name':
         if (typeof message.name === 'string') {
           hostName = message.name
-          withServing(({ server: s, relay }) => {
+          withServing(({ server: s, relay, ownSwitch }) => {
             s.setHostName(message.name)
             relay.current?.profileChanged()
+            ownSwitch.current?.profileChanged()
           })
         }
         break

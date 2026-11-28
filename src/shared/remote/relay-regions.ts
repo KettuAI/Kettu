@@ -450,6 +450,12 @@ export interface RelayRegionsMessage {
   regions: { id: string; rtt: number | null }[]
 }
 
+/** Host to device: the host's enabled own relay endpoint and measured host-to-relay RTT. */
+export interface RelayOwnMessage {
+  type: 'relay.own'
+  own: { url: string; pin?: string; rtt: number | null } | null
+}
+
 /** Device to host: its fastest regions, and the list they are from. */
 export interface RelayPreferMessage {
   type: 'relay.prefer'
@@ -458,6 +464,33 @@ export interface RelayPreferMessage {
 }
 
 const isRtt = (value: unknown): value is number => isCount(value) && value <= 60_000
+
+/** Parses a `relay.own` message from the host, or null when malformed. */
+export function parseRelayOwn(value: unknown, main: string): RelayOwnMessage | null {
+  const fields = record(value)
+  if (fields?.type !== 'relay.own') return null
+  if (fields.own === null) return { type: 'relay.own', own: null }
+  const entry = record(fields.own)
+  if (!entry || typeof entry.url !== 'string') return null
+  const url = relayOrigin(entry.url)
+  if (url !== entry.url || trustedRelay(url, main)) return null
+  if (entry.rtt !== null && !isRtt(entry.rtt)) return null
+  const pin =
+    entry.pin === undefined
+      ? undefined
+      : isPin(entry.pin) && url.startsWith('https:')
+        ? entry.pin
+        : null
+  if (pin === null) return null
+  return {
+    type: 'relay.own',
+    own: {
+      url,
+      ...(pin !== undefined ? { pin } : {}),
+      rtt: entry.rtt,
+    },
+  }
+}
 
 /** A `relay.regions` as a device reads it, or null when it is not one. */
 export function parseRelayRegions(value: unknown): RelayRegionsMessage | null {

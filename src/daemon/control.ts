@@ -140,8 +140,11 @@ export interface ControlCalls {
   'relay.get': { params: undefined; result: RelayReport }
   /** Checks the owner's own relay from the link it printed, and uses it once the check passed. */
   'relay.use': { params: { link: string }; result: OwnRelayCheck }
-  /** Uses the Kettu relay, or no relay. */
-  'relay.set': { params: { choice: 'kettu' | 'off' }; result: RelayReport }
+  /** Enables or disables the official Kettu relay and/or the owner's own relay. */
+  'relay.set': {
+    params: { choice?: 'kettu' | 'off'; official?: boolean; own?: boolean }
+    result: RelayReport
+  }
   /**
    * What a computer adding this one over SSH connects with, after adding its `device`, whose key
    * came over the login, as a device of the owner's.
@@ -305,11 +308,24 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
     return { link }
   },
   'relay.set': (raw) => {
-    const { choice } = record(raw)
-    if (choice !== 'kettu' && choice !== 'off') {
+    const { choice, official, own } = record(raw)
+    if (choice !== undefined && choice !== 'kettu' && choice !== 'off') {
       throw new ControlError('invalid_params', 'choice must be kettu or off')
     }
-    return { choice }
+    if (official !== undefined && typeof official !== 'boolean') {
+      throw new ControlError('invalid_params', 'official must be a boolean')
+    }
+    if (own !== undefined && typeof own !== 'boolean') {
+      throw new ControlError('invalid_params', 'own must be a boolean')
+    }
+    if (choice === undefined && official === undefined && own === undefined) {
+      throw new ControlError('invalid_params', 'Name official, own or choice')
+    }
+    return {
+      ...(choice !== undefined ? { choice } : {}),
+      ...(official !== undefined ? { official } : {}),
+      ...(own !== undefined ? { own } : {}),
+    }
   },
   'account.reload': none,
   'terminal.set': (raw) => {

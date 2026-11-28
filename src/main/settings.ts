@@ -238,7 +238,7 @@ export class SettingsStore {
     return this.replace(withMovedAgent(this.current, agentId, configDir))
   }
 
-  /** The owner's own relay passed its check: it is the one in use from now on. */
+  /** The owner's own relay passed its check: save it and enable own relay independently. */
   useOwnRelay(own: OwnRelaySettings): SettingsFile {
     return this.replace(withOwnRelay(this.current, own))
   }

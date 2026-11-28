@@ -109,7 +109,11 @@ import {
   type StreamRef,
 } from '@shared/remote/streams'
 import { decodeRelayBytes, encodeRelayBytes, type HostRelay } from '@shared/remote/relay'
-import { REGIONS_CHANNEL_FEATURE, type RelayRegionsMessage } from '@shared/remote/relay-regions'
+import {
+  REGIONS_CHANNEL_FEATURE,
+  type RelayOwnMessage,
+  type RelayRegionsMessage,
+} from '@shared/remote/relay-regions'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
@@ -175,6 +179,8 @@ export interface ServerRegions {
   /** Whether the host holds a verified region list, which welcomes then name. */
   offered(): boolean
   message(): RelayRegionsMessage | null
+  /** Current enabled own-relay latency message, or null when off. */
+  ownMessage?(): RelayOwnMessage | null
   /** A device's `relay.prefer`, checked there. */
   preferred(deviceId: string, value: unknown): void
   /** A device connected, which keeps its preference. */
@@ -453,6 +459,11 @@ export class RemoteServer {
   /** The region list or the host's regions changed: the devices that read them hear it. */
   regionsChanged(): void {
     for (const session of this.sessions) session.regionsChanged()
+  }
+
+  /** The host's own relay endpoint or host-to-own-relay RTT changed. */
+  ownRelayChanged(): void {
+    for (const session of this.sessions) session.ownRelayChanged()
   }
 
   /** The host's new name: the devices connected now hear it, and the next welcomes carry it. */
@@ -1193,6 +1204,9 @@ class DeviceSession {
   /** What the device last heard of the regions, and when; and the send held back meanwhile. */
   private regionsSent: { shape: string; rtts: string; at: number } | null = null
   private regionsTimer: ReturnType<typeof setTimeout> | null = null
+  /** What the device last heard of the host's own relay, and any deferred RTT update timer. */
+  private ownRelaySent: { key: string; rtt: number | null; at: number } | null = null
+  private ownRelayTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private readonly server: RemoteServer,
@@ -1331,10 +1345,44 @@ class DeviceSession {
 
   /** After each welcome: a device that reads the regions hears them at once. */
   private welcomed(): void {
+    this.ownRelaySent = null
+    this.sendOwnRelay(true)
     if (!this.readsRegions) return
     this.server.options.regions?.seen(this.device.id)
     this.regionsSent = null
     this.sendRegions()
+  }
+
+  /** The host's own relay changed or measured a new round trip. */
+  ownRelayChanged(): void {
+    this.sendOwnRelay(false)
+  }
+
+  private sendOwnRelay(initial: boolean): void {
+    if (this.state !== 'open') return
+    const message = this.server.options.regions?.ownMessage?.() ?? null
+    if (!message) return
+    if (initial && message.own === null) return
+    if (!message.own && !this.ownRelaySent) return
+    const key = message.own ? `${message.own.url} ${message.own.pin ?? ''}` : 'none'
+    const rtt = message.own?.rtt ?? null
+    const now = (this.server.options.now ?? Date.now)()
+    const sent = this.ownRelaySent
+    if (sent?.key === key) {
+      if (sent.rtt === rtt || this.ownRelayTimer) return
+      const wait = sent.at + REGIONS_RTT_MS - now
+      if (wait > 0) {
+        this.ownRelayTimer = setTimeout(() => {
+          this.ownRelayTimer = null
+          this.sendOwnRelay(false)
+        }, wait)
+        return
+      }
+    }
+    if (this.ownRelayTimer) clearTimeout(this.ownRelayTimer)
+    this.ownRelayTimer = null
+    this.ownRelaySent = message.own ? { key, rtt, at: now } : null
+    this.send(message)
   }
 
   /** The regions changed: heard at once, or within a minute when only a round trip did. */
@@ -1364,6 +1412,8 @@ class DeviceSession {
     }
     if (this.regionsTimer) clearTimeout(this.regionsTimer)
     this.regionsTimer = null
+    if (this.ownRelayTimer) clearTimeout(this.ownRelayTimer)
+    this.ownRelayTimer = null
     this.regionsSent = { shape, rtts, at: now }
     this.send(message)
   }
@@ -1455,6 +1505,8 @@ class DeviceSession {
     this.awayTimer = null
     if (this.regionsTimer) clearTimeout(this.regionsTimer)
     this.regionsTimer = null
+    if (this.ownRelayTimer) clearTimeout(this.ownRelayTimer)
+    this.ownRelayTimer = null
     this.server.forgetToken(this.token)
     this.token = null
     this.outbox.close()
