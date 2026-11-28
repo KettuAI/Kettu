@@ -110,9 +110,13 @@ export interface Hello {
   type: 'hello'
   protocol: ProtocolRange
   client: {
-    /** `ios`, `web` or `desktop`. */
+    /** `ios`, `android`, `web` or `desktop`. */
     kind: string
     version: string
+    /**
+     * Human-readable OS name with version when known, as "macOS 27.0.1", "iOS 26.1",
+     * "Android 15", or "macOS" from a browser.
+     */
     platform: string
   }
   /** While pairing: the name the device suggests for itself and its model, as "iPhone 17 Pro". */

@@ -112,7 +112,7 @@ import { MarketUnauthorized, runMarketCall } from './market-api'
 import { computerModelForRun } from './system-model'
 import { ComputerOverlay } from './computer-overlay'
 import { computerAppIcon, computerUseStatus, serveComputerCapture } from './computer-use'
-import { systemReleaseForRun } from './system-name'
+import { devicePlatformForRun, systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
 import { answerSettingsCall } from './settings-call'
@@ -1023,7 +1023,7 @@ async function start(): Promise<void> {
     },
     relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
-    devicePlatform: systemReleaseForRun,
+    devicePlatform: devicePlatformForRun,
     hostsKnown: async () => {
       const read = await readJsonFile(join(userDataPath, ...HOSTS_FILE))
       const hosts = read.kind === 'ok' ? (read.value as { hosts?: unknown } | null)?.hosts : null

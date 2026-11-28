@@ -10,7 +10,8 @@ export const DEVICE_ID = /^[0-9a-f]{32}$/
 /** The longest name a device may have. */
 export const DEVICE_NAME_CHARS = 64
 
-const MAX_DEVICE_FIELD = 64
+/** The longest kind, platform or model string a device may carry. */
+export const MAX_DEVICE_FIELD = 64
 
 /** A device that may connect to the host. */
 export interface PairedDevice {
@@ -18,9 +19,12 @@ export interface PairedDevice {
   /** Its X25519 public key, in base64. */
   publicKey: string
   name: string
-  /** `ios`, `web` or `desktop`. */
+  /** `ios`, `android`, `web` or `desktop`. */
   kind: string
-  /** What the device runs, as "iOS 26.1". */
+  /**
+   * Human-readable OS name with version when known, as "macOS 27.0.1", "iOS 26.1", "Android 15",
+   * or "macOS" from a browser.
+   */
   platform: string
   /** The device's model, as "iPhone 17 Pro"; empty when it named none. */
   model: string
@@ -70,7 +74,7 @@ export function isDeviceName(value: unknown): value is string {
   return [...value].length <= DEVICE_NAME_CHARS && ![...value].some((char) => char < ' ')
 }
 
-/** A device's kind or platform: a short word. */
+/** A device's kind or platform: a short non-empty string. */
 export function isDeviceField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_DEVICE_FIELD
 }

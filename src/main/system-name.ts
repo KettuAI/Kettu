@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
-import type { Platform } from '@shared/platform'
+import { platformName, type Platform } from '@shared/platform'
+import { MAX_DEVICE_FIELD } from '@shared/remote/device'
 
 /** A `PRETTY_NAME` line's value, quoted or bare. */
 function prettyName(text: string): string | null {
@@ -16,11 +17,28 @@ export function systemRelease(
   version: string,
   osRelease: string | null,
 ): string {
-  if (platform === 'darwin') return `macOS ${version}`
-  if (platform === 'win32') return `Windows ${version}`
+  const trimmed = version.trim()
+  if (platform === 'darwin') return trimmed ? `macOS ${trimmed}` : 'macOS'
+  if (platform === 'win32') return trimmed ? `Windows ${trimmed}` : 'Windows'
   const release = platform === 'linux' && osRelease ? prettyName(osRelease) : null
   // A distribution's name carries its version; the kernel stands in when there is none.
-  return release ?? `${platform === 'linux' ? 'Linux' : platform} ${version}`
+  if (release) return release
+  const name = platform === 'linux' ? 'Linux' : platform
+  return trimmed ? `${name} ${trimmed}` : name
+}
+
+/**
+ * The canonical device platform sent in hello and pairing requests: `systemRelease`, normalized
+ * and capped to `MAX_DEVICE_FIELD` so long Linux `PRETTY_NAME` values still pass validation.
+ */
+export function devicePlatform(
+  platform: Platform,
+  version: string,
+  osRelease: string | null,
+): string {
+  const formatted = platformName(systemRelease(platform, version, osRelease))
+  const capped = formatted.slice(0, MAX_DEVICE_FIELD).trim()
+  return capped || platformName(platform) || platform
 }
 
 /** The system as a bug report names it: the system and its version, then the architecture. */
@@ -50,6 +68,12 @@ export async function systemNameForRun(): Promise<string> {
 export async function systemReleaseForRun(): Promise<string> {
   osReleaseForRun ??= readOsRelease()
   return systemRelease(process.platform, process.getSystemVersion(), await osReleaseForRun)
+}
+
+/** The canonical device platform for this run, read once per run like `systemReleaseForRun`. */
+export async function devicePlatformForRun(): Promise<string> {
+  osReleaseForRun ??= readOsRelease()
+  return devicePlatform(process.platform, process.getSystemVersion(), await osReleaseForRun)
 }
 
 /** The macOS version in a SystemVersion.plist, or null when it names none. */

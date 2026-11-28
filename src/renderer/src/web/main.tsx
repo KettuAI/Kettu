@@ -40,7 +40,7 @@ installStaleChunkReload()
 
 const settings = new WebSettings(storage('localStorage'))
 const browser = browserDevice(navigator.userAgent)
-const client = { kind: 'web', version: __KETTU_VERSION__, platform: browser.system || 'Web' }
+const client = { kind: 'web', version: __KETTU_VERSION__, platform: browser.platform }
 const root = document.getElementById('root')!
 
 window.kettu = {

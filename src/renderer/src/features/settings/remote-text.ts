@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next'
+import { platformFamily, platformName } from '@shared/platform'
 import {
   DEVICE_NAME_CHARS,
   type DeviceChangeFailure,
@@ -8,7 +9,6 @@ import { removalAt, UNSEEN_NOTICE_DAYS } from '@shared/remote/status'
 import type { SystemLogoName } from '@renderer/components/system-logo'
 import { clockTime, daysBefore, monthDay } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { platformName } from './host-text'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -58,20 +58,9 @@ export function deviceShape(
   return /ipad|tablet/i.test(device.model) ? 'tablet' : 'phone'
 }
 
-/** The logo of the system a platform names (`process.platform`, or `ios` or `ipados`), else null. */
+/** The logo of the system a platform names (canonical, versioned or legacy), else null. */
 export function systemLogoOf(platform: string): SystemLogoName | null {
-  switch (platform) {
-    case 'ios':
-    case 'ipados':
-    case 'darwin':
-      return 'apple'
-    case 'win32':
-      return 'windows'
-    case 'linux':
-      return 'linux'
-    default:
-      return null
-  }
+  return platformFamily(platform)
 }
 
 /** A moment in a list: "Today 14:35", "Yesterday 22:10", "Oct 28, 09:15". */

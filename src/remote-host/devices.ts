@@ -268,6 +268,15 @@ export class DeviceStore {
     this.save()
   }
 
+  /** Notes the platform a device's hello named, as when its OS or app updated; true when changed. */
+  notePlatform(id: string, platform: string): boolean {
+    const device = this.byId.get(id)
+    if (!device || !isDeviceField(platform) || device.platform === platform) return false
+    this.put({ ...device, platform })
+    this.save()
+    return true
+  }
+
   /** A device's notifications, or null for a device that set none or is not there. */
   push(id: string): DevicePush | null {
     return this.pushById.get(id) ?? null

@@ -949,7 +949,12 @@ class DeviceConnection {
       return this.close('removed')
     }
     this.device = device
-    if (!joining) this.server.options.devices.noteAccount(device.id, account)
+    if (!joining) {
+      this.server.options.devices.noteAccount(device.id, account)
+      if (this.server.options.devices.notePlatform(device.id, hello.client.platform)) {
+        this.device = this.server.options.devices.get(device.id) ?? device
+      }
+    }
     if (hello.resume && version >= RESUME_VERSION && !joining) {
       if (hello.standby === 'join') {
         const kept = this.server.findSession(hello.resume.token, device.id)
@@ -976,7 +981,7 @@ class DeviceConnection {
     })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')
-    const session = new DeviceSession(this.server, device, version, port)
+    const session = new DeviceSession(this.server, this.device, version, port)
     this.session = session
     this.state = 'session'
     session.start(this)
