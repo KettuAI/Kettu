@@ -165,9 +165,61 @@
   flex: none;
 }
 /* Short enough that the search sits 12px under the corner's buttons (their bottom at 49px), as
-   far as the list starts under it; App Shell's 50px left it floating halfway. */
+   far as the list starts under it; App Shell's 50px left it floating halfway. When compact head
+   actions replace the search field, align them vertically with the corner controls (y: 21..49px)
+   on the right side of the sidebar head so the navigation starts directly below. */
 .kettu-frame.ui-as-app:not(.kettu-band) > .ui-as-side > .ui-as-side__head[data-chrome='mac'] {
   height: 33px;
+}
+.kettu-frame.ui-as-app:not(.kettu-band)
+  > .ui-as-side
+  > .ui-as-side__head[data-chrome='mac'][data-has-actions] {
+  height: 39px;
+  padding-top: 11px;
+  margin-bottom: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+:root[data-client='desktop'][data-platform='darwin']
+  .kettu-frame.ui-as-app:not(.kettu-band)
+  > .ui-as-side {
+  container: kettu-side / inline-size;
+}
+/* On macOS desktop, when the sidebar is resized narrower than the corner controls plus the head
+   actions, drop the actions onto a clean row below the corner controls so they never collide. */
+@container kettu-side (max-width: 235px) {
+  :root[data-client='desktop'][data-platform='darwin']
+    .kettu-frame.ui-as-app:not(.kettu-band)
+    > .ui-as-side
+    > .ui-as-side__head[data-chrome='mac'][data-has-actions] {
+    height: auto;
+    padding-top: 45px;
+    justify-content: flex-start;
+  }
+}
+@container kettu-side (max-width: 269px) {
+  :root[data-debug][data-client='desktop'][data-platform='darwin']
+    .kettu-frame.ui-as-app:not(.kettu-band)
+    > .ui-as-side
+    > .ui-as-side__head[data-chrome='mac'][data-has-actions] {
+    height: auto;
+    padding-top: 45px;
+    justify-content: flex-start;
+  }
+}
+.kettu-side-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+.kettu-side-head-actions .ui-as-icon-btn[aria-pressed='true'] {
+  background: var(--select);
+  color: var(--ink);
+}
+.kettu-side-head-actions .ui-as-icon-btn[aria-pressed='true']:hover {
+  background: var(--select);
+  color: var(--ink);
 }
 /* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
    takes the sidebar's color, and the corner controls stay over it. */
@@ -345,6 +397,16 @@
   height: 0;
   margin-bottom: 0;
 }
+.kettu-frame.kettu-band .ui-as-side__head[data-chrome='mac'][data-has-actions] {
+  height: 30px;
+  margin-top: 4px;
+  margin-bottom: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+.kettu-frame.kettu-band .ui-as-side:has(> .ui-as-side__head[data-has-actions]) > .ui-as-side__nav {
+  margin-top: 6px;
+}
 .kettu-frame.kettu-band .ui-as-side {
   padding-top: 0;
 }
@@ -430,6 +492,86 @@
 .ui-as-chat-row > .ui-as-chat-row__link.kettu-row-in-view {
   background: var(--hover);
   color: var(--ink);
+}
+/* Activity view rows carry a second line for project/host context while keeping hover tools aligned
+   with the first line (title + status indicator). */
+.ui-as.ui-as .ui-as-chat-row > .ui-as-chat-row__link.kettu-activity-row__link {
+  height: auto;
+  min-height: 44px;
+  padding-block: 5px;
+  align-items: flex-start;
+}
+.ui-as-chat-row:has(> .kettu-activity-row__link) > .ui-as-chat-row__tools {
+  top: 4px;
+}
+.kettu-activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kettu-activity-head__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.kettu-activity-head__back {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.kettu-activity-head__back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.kettu-activity-section {
+  display: flex;
+  flex-direction: column;
+}
+.kettu-activity-section__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--faint);
+}
+.kettu-activity-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 6px 8px;
+}
+.kettu-activity-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--faint);
+}
+.kettu-activity-empty__title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text);
+}
+.kettu-activity-empty__body {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--faint);
 }
 /* Kettu's marks in a sidebar row (the turn's dots, an error, a pull request, a caret) keep their
    own colors instead of the row's. */

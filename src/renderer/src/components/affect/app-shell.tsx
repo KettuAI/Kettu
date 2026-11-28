@@ -243,6 +243,8 @@ export type AppShellProps = {
   onSidebarWidthChange?: (width: number) => void;
   /** Called by the search field and ⌘K in place of opening the built-in search */
   onSearch?: () => void;
+  /** Compact actions rendered in the sidebar head, replacing the full-width search field when provided */
+  sidebarActions?: ReactNode;
   /** With chrome="mac": your own controls after the traffic lights, in place of the toggle, Back and Forward */
   corner?: ReactNode;
   /** With chrome="mac": false leaves the traffic lights' room empty, for a window that draws its own */
@@ -308,6 +310,7 @@ export function AppShell({
   peek,
   onSidebarWidthChange,
   onSearch,
+  sidebarActions,
   corner,
   lights = true,
   labels,
@@ -721,13 +724,16 @@ export function AppShell({
       <aside ref={sideRef} className="ui-as-side" inert={sideHidden || overlay === "panel"}>
         {chrome === "mac" ? (
           <>
-            <header className="ui-as-side__head" data-chrome="mac" />
+            <header className="ui-as-side__head" data-chrome="mac" data-has-actions={sidebarActions ? "" : undefined}>
+              {sidebarActions}
+            </header>
             {backLink && <div className="ui-as-side__ws">{backLink}</div>}
           </>
         ) : (
-          <header className="ui-as-side__head">
+          <header className="ui-as-side__head" data-has-actions={sidebarActions ? "" : undefined}>
             {(backLink || workspacePlacement === "head") && workspaceMenu}
             <span className="ui-as-side__tools">
+              {sidebarActions}
               <button className="ui-as-icon-btn" type="button" aria-label={narrow ? "Close sidebar" : rail ? "Expand sidebar" : "Collapse sidebar"} title={rail ? "Expand sidebar" : undefined} onClick={() => (narrow ? setDrawer(false) : setCollapsed((c) => !c))}>
                 <Icon icon={SidebarLeftIcon} size={16} />
               </button>
@@ -735,12 +741,14 @@ export function AppShell({
           </header>
         )}
 
-        {/* Search, like the affectUI library's: a field with its shortcut */}
-        <button ref={searchBtn} className="ui-as-side__search" type="button" title={rail ? `${labels?.search ?? "Search…"} ${labels?.searchKey ?? "⌘K"}` : undefined} aria-keyshortcuts={labels?.searchKey === "Ctrl+K" ? "Control+K" : "Meta+K"} aria-haspopup="dialog" aria-expanded={onSearch ? undefined : search} onClick={() => setSearch(true)}>
-          <Icon icon={Search01Icon} size={15} />
-          <span>{labels?.search ?? "Search…"}</span>
-          <kbd>{labels?.searchKey ?? "⌘K"}</kbd>
-        </button>
+        {/* Search, like the affectUI library's: a field with its shortcut; omitted when sidebarActions supplies a compact trigger */}
+        {!sidebarActions && (
+          <button ref={searchBtn} className="ui-as-side__search" type="button" title={rail ? `${labels?.search ?? "Search…"} ${labels?.searchKey ?? "⌘K"}` : undefined} aria-keyshortcuts={labels?.searchKey === "Ctrl+K" ? "Control+K" : "Meta+K"} aria-haspopup="dialog" aria-expanded={onSearch ? undefined : search} onClick={() => setSearch(true)}>
+            <Icon icon={Search01Icon} size={15} />
+            <span>{labels?.search ?? "Search…"}</span>
+            <kbd>{labels?.searchKey ?? "⌘K"}</kbd>
+          </button>
+        )}
 
         <nav className="ui-as-side__nav" aria-label={labels?.menu ?? "Main menu"}>
           <div className="ui-as-side__group">

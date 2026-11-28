@@ -4,6 +4,8 @@
     "newSession": "New session",
     "overview": "Overview",
     "search": "Search",
+    "activity": "Activity",
+    "activityBack": "Click again to return to projects",
     "artifacts": "Artifacts",
     "routines": "Routines",
     "marketplace": "Marketplace",
@@ -447,6 +449,21 @@
   },
   "needsYou": {
     "label": "Needs you"
+  },
+  "activity": {
+    "title": "Activity",
+    "waiting": "Waiting for you",
+    "running": "Running",
+    "waitingCount_one": "{{count}} waiting for you",
+    "waitingCount_other": "{{count}} waiting for you",
+    "runningCount_one": "{{count}} running",
+    "runningCount_other": "{{count}} running",
+    "backgroundCount_one": "{{count}} in background",
+    "backgroundCount_other": "{{count}} in background",
+    "separator": " · ",
+    "emptyTitle": "No active sessions",
+    "emptyBody": "Sessions that are running or waiting for you appear here.",
+    "backToProjects": "Back to projects"
   },
   "hosts": {
     "all": "All hosts",

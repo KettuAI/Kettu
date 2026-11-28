@@ -217,6 +217,9 @@ const NEW_SESSION_PANEL = 'new-session:'
 /** How many sessions' open panes a restart brings back; the most recently changed win. */
 const REMEMBERED_PANELS = 200
 
+/** Which list fills the sidebar body under the top menu. */
+export type SidebarView = 'projects' | 'activity'
+
 export type { SettingsSection }
 
 interface ViewStore {
@@ -246,6 +249,8 @@ interface ViewStore {
   searchOpen: boolean
   /** Initial scope and query for the next Search open, cleared when it closes. */
   searchInit: { scope?: string; query?: string } | null
+  /** Whether the sidebar body shows the project list or the Activity view. Not persisted. */
+  sidebarView: SidebarView
   /** Back and Forward through what the main area showed, nearest last. Not persisted. */
   history: { back: Step[]; forward: Step[] }
   sidebarCollapsed: boolean
@@ -340,6 +345,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   shortcutsOpen: false,
   searchOpen: false,
   searchInit: null,
+  sidebarView: 'projects',
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   sidebarDrawer: false,
@@ -1183,6 +1189,18 @@ export function toggleSearch(layerOpen: boolean): void {
   useViewStore.setState((s) =>
     s.searchOpen ? { searchOpen: false } : layerOpen ? s : { searchOpen: true },
   )
+}
+
+/** Switches the sidebar body between the project list and the Activity view. */
+export function setSidebarView(sidebarView: SidebarView): void {
+  useViewStore.setState({ sidebarView })
+}
+
+/** Toggles the sidebar body between the Activity view and the project list. */
+export function toggleSidebarActivity(): void {
+  useViewStore.setState((s) => ({
+    sidebarView: s.sidebarView === 'activity' ? 'projects' : 'activity',
+  }))
 }
 
 /** The panes with `panel` set to `pane`, or closed when null; the last changed comes last. */

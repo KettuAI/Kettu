@@ -30,6 +30,7 @@ import { useInstallWindow } from '@renderer/features/settings/harness-install'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { useAccountShell } from '@renderer/features/account/account-row'
 import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
+import { SidebarHeadActions } from '@renderer/features/sidebar/sidebar-head-actions'
 import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
 import { CloseAllTerminalsDialog } from '@renderer/features/terminal/close-all-terminals'
@@ -166,6 +167,7 @@ export function App() {
 const SIDEBAR_WIDTH = 'sidebar-width'
 
 // Made once, so the frame's renders for its own props pass over them; each follows its stores.
+const SIDEBAR_HEAD_ACTIONS = <SidebarHeadActions />
 const SIDEBAR_LIST = <SidebarList />
 const SIDEBAR_NOTICES = <SidebarNotices />
 const CORNER = <CornerControls />
@@ -220,6 +222,7 @@ function Workbench() {
         {...account}
         list={SIDEBAR_LIST}
         footCards={SIDEBAR_NOTICES}
+        sidebarActions={SIDEBAR_HEAD_ACTIONS}
         onSearch={() => showSearch(true)}
         collapsed={collapsed}
         onCollapsedChange={(next) => useViewStore.setState({ sidebarCollapsed: next })}
