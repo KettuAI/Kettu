@@ -61,8 +61,10 @@
     },
     "sendKey": {
       "name": "Send with",
-      "description": "The other key adds a new line.",
-      "keywords": "enter newline composer"
+      "description": "Press Shift+Enter for a new line when sending with Enter, or Enter otherwise.",
+      "descriptionEnter": "Press Shift+Enter for a new line.",
+      "descriptionModEnter": "Press Enter for a new line.",
+      "keywords": "enter shift newline composer"
     },
     "runningSend": {
       "name": "While a turn is running",
