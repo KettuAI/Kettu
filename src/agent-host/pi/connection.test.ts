@@ -27,11 +27,13 @@ import {
 import type { HostedSpawnOptions } from '../driver'
 import { newTurnScope, type MapperEffect } from '../session-updates'
 import { dialogTimeout, PiConnection, promptMessage, turnError } from './connection'
+import { NAVIGATE_COMMAND, NAVIGATE_READY_STATUS, NAVIGATE_STATUS } from './extension'
 import stored from './fixtures/entries.json'
 import old from './fixtures/old-081.json'
 import failed from './fixtures/provider-error.json'
 import reply from './fixtures/reply.json'
 import { readJsonLines } from './jsonl'
+import type { PiEntry } from './protocol'
 import { folderName } from './session-files'
 
 type Command = Record<string, unknown> & { type: string; id?: string }
@@ -1120,5 +1122,327 @@ describe("Kettu's own commands for pi", () => {
       'agent',
       'agent',
     ])
+  })
+})
+
+describe('native session branches', () => {
+  function branchedEntries(): PiEntry[] {
+    return [
+      {
+        type: 'model_change',
+        id: 'm0',
+        parentId: null,
+        timestamp: '2026-11-20T10:00:00.000Z',
+      },
+      {
+        type: 'message',
+        id: 'u1',
+        parentId: 'm0',
+        timestamp: '2026-11-20T10:00:01.000Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Shared start' }],
+          timestamp: 1795102901000,
+        },
+      },
+      {
+        type: 'message',
+        id: 'a1',
+        parentId: 'u1',
+        timestamp: '2026-11-20T10:00:02.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Shared reply' }],
+          timestamp: 1795102902000,
+          stopReason: 'stop',
+        },
+      },
+      {
+        type: 'message',
+        id: 'u2a',
+        parentId: 'a1',
+        timestamp: '2026-11-20T10:01:00.000Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Branch A prompt' }],
+          timestamp: 1795102960000,
+        },
+      },
+      {
+        type: 'message',
+        id: 'a2a',
+        parentId: 'u2a',
+        timestamp: '2026-11-20T10:01:02.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Branch A reply' }],
+          timestamp: 1795102962000,
+          stopReason: 'stop',
+        },
+      },
+      {
+        type: 'message',
+        id: 'u2b',
+        parentId: 'a1',
+        timestamp: '2026-11-20T10:02:00.000Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Branch B prompt' }],
+          timestamp: 1795103020000,
+        },
+      },
+      {
+        type: 'message',
+        id: 'a2b',
+        parentId: 'u2b',
+        timestamp: '2026-11-20T10:02:02.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Branch B reply' }],
+          timestamp: 1795103022000,
+          stopReason: 'stop',
+        },
+      },
+    ]
+  }
+
+  async function writeBranchedFile(
+    setup: Setup,
+    sessionId: string,
+    entries: readonly PiEntry[],
+  ): Promise<string> {
+    const dir = path.join(setup.agentDir, 'sessions', folderName(setup.cwd))
+    await mkdir(dir, { recursive: true })
+    const file = path.join(dir, `2026-11-20T10-00-00-000Z_${sessionId}.jsonl`)
+    const header = { type: 'session', version: 3, id: sessionId, cwd: setup.cwd }
+    const lines = [header, ...entries].map((item) => JSON.stringify(item))
+    await writeFile(file, `${lines.join('\n')}\n`)
+    return file
+  }
+
+  it('advertises branches capability and lists multi-branch Pi sessions both from disk and live RPC', async () => {
+    const entries = branchedEntries()
+    let activeLeaf: string | null = 'a2b'
+    const setup = await connect({
+      script: (pi) => {
+        pi.handlers.get_entries = () => ({ entries, leafId: activeLeaf })
+      },
+    })
+    const init = await setup.connection.initialize()
+    expect(init.capabilities.branches).toBe(true)
+
+    await writeBranchedFile(setup, 'pi-session-1', entries)
+    // Closed session: read straight from JSONL without spawning a Pi process.
+    const fromDisk = await setup.connection.listBranches('pi-session-1', setup.cwd)
+    expect(setup.spawned).toHaveLength(0)
+    expect(fromDisk.activeLeafId).toBe('a2b')
+    expect(fromDisk.branchCount).toBe(2)
+    expect(fromDisk.hasBranches).toBe(true)
+    expect(fromDisk.nodes.map((node) => node.id)).toEqual(['a1', 'a2a', 'a2b'])
+
+    // Respects a remembered preferred leaf when closed on disk.
+    const preferred = await setup.connection.listBranches('pi-session-1', setup.cwd, 'a2a')
+    expect(preferred.activeLeafId).toBe('a2a')
+    expect(preferred.nodes.find((node) => node.id === 'a2a')?.isCurrent).toBe(true)
+
+    // Live session: reads from RPC `get_entries`.
+    activeLeaf = 'a2a'
+    await setup.connection.resumeSession('pi-session-1', setup.cwd)
+    const fromLive = await setup.connection.listBranches('pi-session-1', setup.cwd)
+    expect(fromLive.activeLeafId).toBe('a2a')
+    expect(fromLive.nodes.find((node) => node.id === 'a2a')?.isCurrent).toBe(true)
+  })
+
+  it('switches branches via native navigate_tree RPC, replays the target path, and restores on reopen', async () => {
+    const entries = branchedEntries()
+    const leavesByProc: (string | null)[] = ['a2b', 'a2b']
+    const setup = await connect({
+      script: (pi, index) => {
+        pi.handlers.get_entries = () => ({ entries, leafId: leavesByProc[index] ?? 'a2b' })
+        pi.handlers.navigate_tree = (command) => {
+          leavesByProc[index] = String(command.targetId)
+          return { cancelled: false }
+        }
+      },
+    })
+    await writeBranchedFile(setup, 'pi-session-1', entries)
+    const seen = watch()
+    setup.connection.register('pi-session-1', seen.target)
+    await setup.connection.loadSession('pi-session-1', setup.cwd)
+    expect(
+      seen
+        .entries()
+        .filter((e) => e.kind === 'user')
+        .map((e) => (e.content[0]?.type === 'text' ? e.content[0].text : '')),
+    ).toEqual(['Shared start', 'Branch B prompt'])
+
+    let resetCount = 0
+    const switched = await setup.connection.switchBranch(
+      'pi-session-1',
+      setup.cwd,
+      'a2a',
+      {},
+      () => {
+        resetCount++
+        seen.target.apply({ patches: [{ op: 'thread.reset' }], effects: [] })
+      },
+    )
+    expect(resetCount).toBe(1)
+    expect(setup.spawned[0]!.sent('navigate_tree')).toEqual([
+      expect.objectContaining({ type: 'navigate_tree', targetId: 'a2a', summarize: false }),
+    ])
+    expect(switched.branches.activeLeafId).toBe('a2a')
+    expect(
+      seen
+        .entries()
+        .filter((e) => e.kind === 'user')
+        .map((e) => (e.content[0]?.type === 'text' ? e.content[0].text : '')),
+    ).toEqual(['Shared start', 'Branch A prompt'])
+
+    // Close and reopen: Pi reloads the JSONL tail ('a2b') by default, so Kettu navigates back to 'a2a'.
+    await setup.connection.closeSession('pi-session-1')
+    seen.target.apply({ patches: [{ op: 'thread.reset' }], effects: [] })
+    await setup.connection.loadSession('pi-session-1', setup.cwd, { branchLeafId: 'a2a' })
+    expect(setup.spawned[1]!.sent('navigate_tree')).toEqual([
+      expect.objectContaining({ type: 'navigate_tree', targetId: 'a2a', summarize: false }),
+    ])
+    expect(
+      seen
+        .entries()
+        .filter((e) => e.kind === 'user')
+        .map((e) => (e.content[0]?.type === 'text' ? e.content[0].text : '')),
+    ).toEqual(['Shared start', 'Branch A prompt'])
+  })
+
+  it('falls back to Kettu extension tree navigation when Pi lacks top-level navigate_tree RPC', async () => {
+    const entries = branchedEntries()
+    let activeLeaf: string | null = 'a2b'
+    const setup = await connect({
+      script: (pi) => {
+        pi.handlers.get_entries = () => ({ entries, leafId: activeLeaf })
+        pi.handlers.get_commands = () => ({
+          commands: [{ name: NAVIGATE_COMMAND, description: 'Internal', source: 'extension' }],
+        })
+        pi.handlers.prompt = (command) => {
+          const message = String(command.message ?? '')
+          if (message.startsWith(`/${NAVIGATE_COMMAND} `)) {
+            const payload = JSON.parse(message.slice(`/${NAVIGATE_COMMAND} `.length)) as {
+              reqId: string
+              targetId: string
+            }
+            activeLeaf = payload.targetId
+            pi.send({
+              type: 'extension_ui_request',
+              id: 'nav-status-1',
+              method: 'setStatus',
+              statusKey: NAVIGATE_STATUS,
+              statusText: JSON.stringify({ reqId: payload.reqId, ok: true, cancelled: false }),
+            })
+            return { disposition: 'handled' }
+          }
+          return { disposition: 'started' }
+        }
+      },
+    })
+    await writeBranchedFile(setup, 'pi-session-1', entries)
+    const seen = watch()
+    setup.connection.register('pi-session-1', seen.target)
+    await setup.connection.loadSession('pi-session-1', setup.cwd)
+    setup.spawned[0]!.send({
+      type: 'extension_ui_request',
+      id: 'ready-1',
+      method: 'setStatus',
+      statusKey: NAVIGATE_READY_STATUS,
+      statusText: '1',
+    })
+    await tick()
+
+    const switched = await setup.connection.switchBranch('pi-session-1', setup.cwd, 'a2a', {}, () =>
+      seen.target.apply({ patches: [{ op: 'thread.reset' }], effects: [] }),
+    )
+    expect(switched.branches.activeLeafId).toBe('a2a')
+    expect(activeLeaf).toBe('a2a')
+    expect(
+      seen
+        .entries()
+        .filter((e) => e.kind === 'user')
+        .map((e) => (e.content[0]?.type === 'text' ? e.content[0].text : '')),
+    ).toEqual(['Shared start', 'Branch A prompt'])
+  })
+
+  it('refuses switching when running, when node is missing, or when neither RPC nor extension supports it', async () => {
+    const entries = branchedEntries()
+    const setup = await connect({
+      script: (pi) => {
+        pi.handlers.get_entries = () => ({ entries, leafId: 'a2b' })
+        // Neither top-level navigate_tree nor extension command is registered.
+        pi.handlers.get_commands = () => ({ commands: [] })
+      },
+    })
+    await writeBranchedFile(setup, 'pi-session-1', entries)
+    await setup.connection.resumeSession('pi-session-1', setup.cwd)
+
+    // Missing target node rejects without touching the thread.
+    let resetCalled = false
+    await expect(
+      setup.connection.switchBranch('pi-session-1', setup.cwd, 'does-not-exist', {}, () => {
+        resetCalled = true
+      }),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    expect(resetCalled).toBe(false)
+
+    // Unsupported navigation fails safely without leaking an internal slash command as a prompt.
+    await expect(
+      setup.connection.switchBranch('pi-session-1', setup.cwd, 'a2a', {}, () => {
+        resetCalled = true
+      }),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    expect(resetCalled).toBe(false)
+    expect(setup.spawned[0]!.sent('prompt')).toEqual([])
+
+    // Switching while a turn is running is rejected immediately.
+    const pi = setup.spawned[0]!
+    pi.handlers.navigate_tree = () => ({ cancelled: false })
+    const turnPromise = setup.connection.prompt('pi-session-1', text('still working'))
+    await tick()
+    await expect(
+      setup.connection.switchBranch('pi-session-1', setup.cwd, 'a2a'),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    pi.send({ type: 'agent_settled', aborted: false })
+    await turnPromise
+  })
+
+  it('rewinds cleanly on a switched non-tail branch for #2698 Edit from here', async () => {
+    const entries = branchedEntries()
+    let forkedEntryId: string | null = null
+    const setup = await connect({
+      script: (pi, index) => {
+        pi.handlers.get_entries = () => ({ entries, leafId: index === 0 ? 'a2a' : 'a2b' })
+        pi.handlers.navigate_tree = () => ({ cancelled: false })
+        pi.handlers.fork = (command) => {
+          forkedEntryId = String(command.entryId)
+          pi.state = {
+            ...pi.state,
+            sessionId: 'pi-rewound-a',
+            sessionFile: path.join(setup.agentDir, 'sessions', 'x', 't_pi-rewound-a.jsonl'),
+          }
+          return { text: '', cancelled: false }
+        }
+      },
+    })
+    await writeBranchedFile(setup, 'pi-session-1', entries)
+    await setup.connection.resumeSession('pi-session-1', setup.cwd)
+    await setup.connection.switchBranch('pi-session-1', setup.cwd, 'a2a')
+
+    // Even though the disposable rewind process opens with default leaf 'a2b', PiConnection uses
+    // the remembered active leaf 'a2a' so editing Branch A's prompt locates 'u2a' cleanly.
+    const rewound = await setup.connection.rewindSession(
+      'pi-session-1',
+      setup.cwd,
+      { ref: 'u2a', text: 'Branch A prompt', occurrence: 1 },
+      null,
+    )
+    expect(rewound).toEqual({ sessionId: 'pi-rewound-a' })
+    expect(forkedEntryId).toBe('u2a')
   })
 })

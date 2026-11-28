@@ -5,6 +5,7 @@
 
 import type { SlashCommand } from '@shared/thread'
 import { t } from '../i18n'
+import { NAVIGATE_COMMAND } from './extension'
 import type { PiCommandInfo, PiStats } from './protocol'
 
 const OWN = [
@@ -49,7 +50,7 @@ export function commandList(listed: readonly PiCommandInfo[]): SlashCommand[] {
   const commands = new Map<string, SlashCommand>()
   for (const command of listed) {
     const name = typeof command.name === 'string' ? command.name.trim() : ''
-    if (!name || commands.has(name)) continue
+    if (!name || name === NAVIGATE_COMMAND || commands.has(name)) continue
     const description = typeof command.description === 'string' ? command.description.trim() : ''
     commands.set(name, {
       name,

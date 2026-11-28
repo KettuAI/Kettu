@@ -2047,5 +2047,31 @@
     "switchLabel": "思考摘要原文与译文切换",
     "failed": "翻译失败",
     "empty": "没有返回译文。"
+  },
+  "branches": {
+    "title": "分支",
+    "triggerLabel": "会话分支",
+    "triggerCount_other": "{{count}} 个分支",
+    "triggerLocked": "分支（运行中禁止切换）",
+    "listLabel": "原生会话分支",
+    "currentBadge": "当前",
+    "forkPoint": "分叉点",
+    "turns_other": "{{count}} 轮",
+    "empty": "暂无分支记录。发送消息或从历史消息重新编辑后即可在此浏览分支。",
+    "loading": "正在加载分支…",
+    "switching": "正在切换…",
+    "retry": "重试",
+    "loadFailed": "加载分支失败：{{error}}",
+    "switchFailed": "切换分支失败：{{error}}",
+    "blockedRunning": "智能体运行中，暂时禁止切换分支。",
+    "blockedStarting": "请等待会话启动完成后再切换分支。",
+    "blockedRewound": "请先完成或撤销当前的重新编辑，再切换分支。",
+    "blockedArchived": "请先恢复会话，再切换分支。",
+    "fallback": {
+      "user": "用户消息",
+      "assistant": "助手回复",
+      "summary": "分支摘要",
+      "system": "会话节点"
+    }
   }
 }

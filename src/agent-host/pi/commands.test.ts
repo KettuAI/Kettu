@@ -2,15 +2,22 @@
 
 import { describe, expect, it } from 'vitest'
 import { autoCompactWord, commandList, parseCommand, queueMode, statsMessage } from './commands'
+import { NAVIGATE_COMMAND } from './extension'
 
 describe("Pi's commands", () => {
   it("lists pi's own first, then Kettu's for pi, each name once", () => {
     const list = commandList([
       { name: 'skill:lint', description: ' Lint the code ', source: 'skill' },
+      {
+        name: NAVIGATE_COMMAND,
+        description: 'Internal Kettu session tree navigation',
+        source: 'extension',
+      },
       { name: 'mcp', source: 'extension' },
       { name: 'compact', description: 'A template named compact', source: 'prompt' },
       { name: '', source: 'prompt' },
     ])
+    expect(list.some((command) => command.name === NAVIGATE_COMMAND)).toBe(false)
     expect(list.slice(0, 3)).toEqual([
       { name: 'skill:lint', description: 'Lint the code', kind: 'skill' },
       { name: 'mcp', description: '(extension)' },

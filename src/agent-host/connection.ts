@@ -7,6 +7,7 @@ import type {
   ModelProvider,
   PlanLimit,
   PromptCapabilities,
+  SessionBranchesResult,
 } from '@shared/agent-host'
 import type { ContextEstimates } from '@shared/context'
 import type {
@@ -174,6 +175,8 @@ export interface AgentInit {
     rewind?: boolean
     /** The cut also takes back the files the agent changed since, staged as the edit goes back. */
     rewindFiles?: boolean
+    /** Browses and switches native branches inside a single session (Pi). */
+    branches?: boolean
     /** MCP servers over HTTP, which the artifacts service needs. */
     mcpHttp: boolean
     /** MCP servers over the older SSE transport. */
@@ -458,6 +461,8 @@ export interface SessionOptions {
   suggestions?: boolean
   /** The session already has a fixed title, so the agent does not need to generate one. */
   titled?: boolean
+  /** Native branch leaf id to restore when reopening or reconnecting the session (Pi). */
+  branchLeafId?: string | null
 }
 
 /** Kettu's memory as a session starts with it. */
@@ -563,6 +568,23 @@ export interface AgentConnection {
   stageRewind?(sessionId: string, cwd: string, point: RewindPoint): Promise<void>
   /** Clears what `stageRewind` staged, which returns the files it took back. */
   unstageRewind?(sessionId: string, cwd: string): Promise<void>
+  /** Reads the native branch tree of a session, whether currently live or stored on disk. */
+  listBranches?(
+    sessionId: string,
+    cwd: string,
+    preferredLeafId?: string | null,
+  ): Promise<SessionBranchesResult>
+  /**
+   * Switches a session's active native branch to `branchId`. Invokes `beforeReplay` once the
+   * native switch succeeds and immediately before replaying the target branch to its target.
+   */
+  switchBranch?(
+    sessionId: string,
+    cwd: string,
+    branchId: string,
+    options?: SessionOptions,
+    beforeReplay?: () => void,
+  ): Promise<{ setup: SessionSetup; branches: SessionBranchesResult }>
 
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
   register(sessionId: string, target: SessionTarget): void

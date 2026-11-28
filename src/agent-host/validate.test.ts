@@ -1857,6 +1857,21 @@ describe('worktree requests', () => {
     rejects(() => posix['sessions.fork']({ sessionId: 's', worktree: 'other' }))
   })
 
+  it('validates session branch listing and branch switching parameters', () => {
+    expect(posix['sessions.branches']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    rejects(() => posix['sessions.branches']({}))
+    rejects(() => posix['sessions.branches']({ sessionId: '' }))
+
+    expect(posix['sessions.switchBranch']({ sessionId: 's', branchId: 'leaf-1' })).toEqual({
+      sessionId: 's',
+      branchId: 'leaf-1',
+    })
+    rejects(() => posix['sessions.switchBranch']({ sessionId: 's' }))
+    rejects(() => posix['sessions.switchBranch']({ sessionId: 's', branchId: '' }))
+    rejects(() => posix['sessions.switchBranch']({ sessionId: 's', branchId: 123 }))
+    rejects(() => posix['sessions.switchBranch']({ sessionId: 's', branchId: 'x'.repeat(1025) }))
+  })
+
   it('removes a worktree only against the state the user was shown', () => {
     const expected = {
       exists: true,

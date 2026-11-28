@@ -144,6 +144,9 @@ export interface PiEntry {
   display?: boolean
   // session_info
   name?: string
+  // label
+  targetId?: string
+  label?: string
 }
 
 /** The delta a `message_update` carries. Before 0.84.0 it also held the whole partial message. */

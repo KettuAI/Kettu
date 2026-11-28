@@ -28,6 +28,7 @@ import {
   type ReturnedMessage,
   type RunningWork,
   type SessionAttention,
+  type SessionBranchesResult,
   type SessionOutputs,
   type SessionPullRequest,
   type SearchIndexing,
@@ -913,6 +914,8 @@ interface Live {
   attaching: Promise<AgentConnection> | null
   /** Set while the session's tree closes, so no late update brings a child back. */
   closing: boolean
+  /** Set while a native branch switch is in progress for this session. */
+  switchingBranch?: boolean
   /** Set as it is deleted, or its project removed, so a start it interrupts fails `not_found`. */
   removing: boolean
   /** Each entry's position in the stored thread, which pages are read by. */
@@ -4774,6 +4777,7 @@ export class SessionManager {
       ...(record.customTitle !== undefined || record.titleSource === 'given'
         ? { titled: true }
         : {}),
+      ...(record.branchLeafId !== undefined ? { branchLeafId: record.branchLeafId } : {}),
     }
   }
 
@@ -7871,6 +7875,7 @@ export class SessionManager {
     if (live.turn || live.agentTurn) return 'turn'
     if (live.opening || live.attaching) return 'attach'
     if (live.rewinding) return 'rewind'
+    if (live.switchingBranch) return 'branch'
     if (live.background) return 'background'
     if (live.scheduled > 0) return 'scheduled'
     if (waitingCount(live) > 0) return 'waiting'
@@ -11457,6 +11462,9 @@ export class SessionManager {
     }
     if (this.inFront(live.id)) live.record.lastViewedAt = now
     else live.unread = true
+    if (live.record.branchLeafId !== undefined && (stopReason !== 'cancelled' || turn.hadOutput)) {
+      delete live.record.branchLeafId
+    }
     this.persist(live)
     this.touch(live.id)
     const routineTurn =
@@ -11882,7 +11890,7 @@ export class SessionManager {
     }
     if (this.isArchived(record)) throw new HostError('restricted', t('rewind.archived'))
     const live = await this.revive(sessionId)
-    if (live.prepared || live.first || live.heldFirst || live.rewinding) {
+    if (live.prepared || live.first || live.heldFirst || live.rewinding || live.switchingBranch) {
       throw new HostError('busy', t('rewind.starting'))
     }
     const agent = this.deps.agents.name(live.record.agentId)
@@ -12046,7 +12054,7 @@ export class SessionManager {
     const rewound = live.record.rewound
     const aside = live.setAside
     if (!rewound || !aside) throw new HostError('restricted', t('rewind.nothing'))
-    if (live.rewinding || (live.turn && !live.turn.ended)) {
+    if (live.rewinding || live.switchingBranch || (live.turn && !live.turn.ended)) {
       throw busyError(live.thread.session.status)
     }
     await this.unstageRewind(live)
@@ -12187,6 +12195,7 @@ export class SessionManager {
     if (cut.sessionId !== from) {
       await this.letGo(live)
       record.acpSessionId = cut.sessionId
+      delete record.branchLeafId
       // The copy keeps what the session was started with, as its system prompt.
       if (cut.sessionId === '') {
         delete record.systemPromptSentTo
@@ -12219,6 +12228,142 @@ export class SessionManager {
     // A session cut to nothing gets its new one as the turn attaches, which writes it whole.
     if (record.acpSessionId) this.checkpoint(live)
     this.deps.diagnostics.event(record.agentId, 'session cut for an edit', live.id)
+  }
+
+  // Native session branches (Pi): browse and switch between branches inside the same session ID.
+
+  /** Reads the native branch tree of a session, whether currently live or closed on disk. */
+  async branches(sessionId: string): Promise<SessionBranchesResult> {
+    this.assertRegistered(sessionId)
+    const record = this.recordOf(sessionId)
+    if (record.origin === 'subagent') {
+      throw new HostError('restricted', t('branch.subagent'))
+    }
+    const agent = this.deps.agents.name(record.agentId)
+    if (!this.deps.agents.status(record.agentId).capabilities.branches) {
+      throw new HostError('restricted', t('branch.unsupported', { agent }))
+    }
+    if (record.acpSessionId === '') {
+      return { activeLeafId: null, branchCount: 0, hasBranches: false, nodes: [] }
+    }
+    const runtime = await this.deps.agents.ensureReady(record.agentId)
+    const { connection } = runtime
+    if (!runtime.init.capabilities.branches || !connection.listBranches) {
+      throw new HostError('restricted', t('branch.unsupported', { agent }))
+    }
+    try {
+      return await connection.listBranches(
+        record.acpSessionId,
+        workDir(record),
+        record.branchLeafId,
+      )
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
+  /**
+   * Switches a session's active native branch to `branchId`, rebuilds Kettu's thread history from
+   * the newly active root-to-leaf path, persists the selection for future reopen/reconnect, and
+   * broadcasts the updated thread to all connected clients. Strictly blocked while running or busy.
+   */
+  async switchBranch(sessionId: string, branchId: string): Promise<SessionBranchesResult> {
+    this.assertRegistered(sessionId)
+    const record = this.recordOf(sessionId)
+    if (record.origin === 'subagent') {
+      throw new HostError('restricted', t('branch.subagent'))
+    }
+    if (this.isArchived(record)) {
+      throw new HostError('restricted', t('branch.archived'))
+    }
+    const agent = this.deps.agents.name(record.agentId)
+    if (!this.deps.agents.status(record.agentId).capabilities.branches) {
+      throw new HostError('restricted', t('branch.unsupported', { agent }))
+    }
+    const live = await this.revive(sessionId)
+    if (live.switchingBranch) {
+      throw new HostError('busy', t('branch.switching'))
+    }
+    if (live.prepared || live.first || live.heldFirst || live.rewinding) {
+      throw new HostError('busy', t('branch.starting'))
+    }
+    if (live.record.rewound) {
+      throw new HostError('restricted', t('branch.rewound'))
+    }
+    const status = live.thread.session.status
+    if (
+      (live.turn && !live.turn.ended) ||
+      status === 'running' ||
+      status === 'awaiting_permission' ||
+      status === 'starting' ||
+      live.permissions.size > 0
+    ) {
+      throw new HostError('busy', t('branch.running'))
+    }
+    if (status === 'auth_required') throw busyError(status)
+    if (live.record.acpSessionId === '') {
+      throw new HostError('restricted', t('branch.starting'))
+    }
+
+    live.switchingBranch = true
+    let resetStarted = false
+    let keptOrigins: StoredOrigin[] = []
+    try {
+      const runtime = await this.deps.agents.ensureReady(live.record.agentId)
+      const { connection } = runtime
+      if (!runtime.init.capabilities.branches || !connection.switchBranch) {
+        throw new HostError('restricted', t('branch.unsupported', { agent }))
+      }
+      const cwd = await this.cwdOf(live)
+      const attach = await this.attachOptions(live.id, live.record, runtime)
+      keptOrigins = await this.keptOrigins(live.id)
+      if (live.connection !== connection) this.attach(live, connection)
+      const { setup, branches } = await connection.switchBranch(
+        live.record.acpSessionId,
+        cwd,
+        branchId,
+        attach,
+        () => {
+          resetStarted = true
+          // Drop prior replay keeper so Kettu-only entries from the previous branch are not grafted
+          // onto the newly active branch.
+          live.keeper = null
+          this.prepareReplay(live, connection)
+        },
+      )
+      this.finishReplay(live, true, keptOrigins)
+      this.opened(live, setup.config)
+      live.record.branchLeafId = branches.activeLeafId
+      delete live.record.lastTurn
+      delete live.record.memorySentTo
+      delete live.record.memorySentAt
+      live.lastCacheSample = null
+      live.compactedSinceBaseline = false
+      live.failure = null
+      this.stopSuggesting(live.id)
+      this.update(live, {
+        status: 'ready',
+        error: null,
+        suggestion: null,
+        cacheDrop: null,
+        context: undefined,
+        updatedAt: this.now(),
+      })
+      this.flushPatches(live)
+      this.persist(live)
+      this.touch(live.id)
+      this.checkpoint(live)
+      this.deps.diagnostics.event(live.record.agentId, 'session branch switched', live.id)
+      return branches
+    } catch (error) {
+      if (resetStarted) this.finishReplay(live, false, keptOrigins)
+      if (error instanceof HostError) throw error
+      const mapped = agentError(error)
+      throw new HostError(mapped.code, t('branch.failed', { reason: mapped.message }), mapped.data)
+    } finally {
+      live.switchingBranch = false
+      this.refreshRelease(live)
+    }
   }
 
   /** An agent that cannot cut every session it has says which, as for an older Codex thread. */

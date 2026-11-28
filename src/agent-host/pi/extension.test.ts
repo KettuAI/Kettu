@@ -7,7 +7,15 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { McpServer } from '../connection'
-import { DIRECT_TOOLS, piExtension, piServers } from './extension'
+import {
+  DIRECT_TOOLS,
+  NAVIGATE_COMMAND,
+  NAVIGATE_READY_STATUS,
+  NAVIGATE_STATUS,
+  NAVIGATE_VARIABLE,
+  piExtension,
+  piServers,
+} from './extension'
 
 const HELD = Symbol.for('kettu.session')
 const dirs: string[] = []
@@ -16,6 +24,7 @@ afterEach(async () => {
   delete (globalThis as Record<symbol, unknown>)[HELD]
   delete process.env.KETTU_MCP_SERVERS
   delete process.env.KETTU_MODEL_SCOPE
+  delete process.env[NAVIGATE_VARIABLE]
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -169,5 +178,53 @@ describe("Kettu's extension for Pi", () => {
     const none: unknown[] = []
     plain({ on: (...args: unknown[]) => none.push(args) })
     expect(none).toEqual([])
+  })
+
+  it('registers internal tree navigation when enabled and reports outcome via status', async () => {
+    process.env[NAVIGATE_VARIABLE] = '1'
+    const extension = await written()
+    const commands = new Map<string, { handler: (args: string, ctx: unknown) => Promise<void> }>()
+    const hooks: ((event: unknown, ctx: unknown) => void)[] = []
+    extension({
+      registerCommand: (
+        name: string,
+        spec: { handler: (args: string, ctx: unknown) => Promise<void> },
+      ) => commands.set(name, spec),
+      on: (_name: string, handler: (typeof hooks)[number]) => hooks.push(handler),
+    })
+    expect(process.env[NAVIGATE_VARIABLE]).toBeUndefined()
+    expect(commands.has(NAVIGATE_COMMAND)).toBe(true)
+
+    const statuses: [string, string][] = []
+    const navigated: [string, unknown][] = []
+    const ctx = {
+      navigateTree: async (targetId: string, options: unknown) => {
+        navigated.push([targetId, options])
+        if (targetId === 'fail') throw new Error('Entry fail not found')
+        return { cancelled: targetId === 'cancel' }
+      },
+      ui: {
+        setStatus: (key: string, text: string) => statuses.push([key, text]),
+      },
+    }
+
+    hooks[0]!({}, ctx)
+    expect(statuses).toEqual([[NAVIGATE_READY_STATUS, '1']])
+
+    const cmd = commands.get(NAVIGATE_COMMAND)!
+    await cmd.handler(JSON.stringify({ reqId: 'r1', targetId: 'leaf-a' }), ctx)
+    await cmd.handler(JSON.stringify({ reqId: 'r2', targetId: 'cancel' }), ctx)
+    await cmd.handler(JSON.stringify({ reqId: 'r3', targetId: 'fail' }), ctx)
+
+    expect(navigated).toEqual([
+      ['leaf-a', { summarize: false }],
+      ['cancel', { summarize: false }],
+      ['fail', { summarize: false }],
+    ])
+    expect(statuses.slice(1)).toEqual([
+      [NAVIGATE_STATUS, JSON.stringify({ reqId: 'r1', ok: true, cancelled: false })],
+      [NAVIGATE_STATUS, JSON.stringify({ reqId: 'r2', ok: true, cancelled: true })],
+      [NAVIGATE_STATUS, JSON.stringify({ reqId: 'r3', ok: false, error: 'Entry fail not found' })],
+    ])
   })
 })

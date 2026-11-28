@@ -1171,6 +1171,11 @@
       "noReply": "Pi does not have that reply in the session",
       "cancelled": "An extension of Pi cancelled the fork"
     },
+    "branch": {
+      "notFound": "Pi does not have that branch node in this session",
+      "cancelled": "An extension of Pi cancelled switching branches",
+      "unsupported": "This version of Pi does not support switching session branches"
+    },
     "session": {
       "notFound": "Pi has no session {{id}}",
       "id": "**Session:** `{{value}}`",
@@ -1836,6 +1841,16 @@
     "noPoint": "The agent's history no longer has this message",
     "nothing": "There is nothing to put back",
     "failed": "Could not go back to the edited message: {{reason}}"
+  },
+  "branch": {
+    "unsupported": "{{agent}} does not support switching branches inside a session",
+    "subagent": "Subagent sessions do not have branches to switch",
+    "archived": "Restore the session to switch branches",
+    "running": "Wait for the current turn to finish before switching branches",
+    "starting": "Wait until the session has started before switching branches",
+    "switching": "Already switching branches in this session",
+    "rewound": "Finish or put back the pending message edit before switching branches",
+    "failed": "Could not switch branches: {{reason}}"
   },
   "turnUndo": {
     "archived": "Restore the session to undo its file changes",

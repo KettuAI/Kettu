@@ -19,6 +19,7 @@ import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
 import { StepRoundBadge, TaskCrumb, TaskCrumbLink } from '@renderer/features/tasks/step-crumb'
 import { useStepSessionTitle } from '@renderer/features/tasks/use-task'
+import { BranchNavigator } from './branch-navigator'
 import { PlanChip } from './plan-chip'
 import { SessionFamilyMenu } from './session-family-menu'
 import { resolveSessionFamily } from './session-family-model'
@@ -187,6 +188,7 @@ export function SessionHeader({
           menu={rename.menu}
         />
         {family && !family.parent && <SessionFamilyMenu family={family} variant="chip" />}
+        <BranchNavigator summary={summary} session={session} archived={archived} />
         {summary.worktree && <WorktreeBarChip worktree={summary.worktree} />}
         <PrBarChip projectPath={sessionFolder(summary)} sessionId={summary.id} />
         {session && !archived && summary.origin !== 'subagent' && (

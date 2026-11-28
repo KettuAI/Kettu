@@ -2141,5 +2141,33 @@
     "switchLabel": "Thinking summary language view",
     "failed": "Translation failed",
     "empty": "No translation was returned."
+  },
+  "branches": {
+    "title": "Branches",
+    "triggerLabel": "Session branches",
+    "triggerCount_one": "1 branch",
+    "triggerCount_other": "{{count}} branches",
+    "triggerLocked": "Branches (switching disabled while running)",
+    "listLabel": "Native session branches",
+    "currentBadge": "Current",
+    "forkPoint": "Branch point",
+    "turns_one": "1 turn",
+    "turns_other": "{{count}} turns",
+    "empty": "No branches yet. Send a message or edit an earlier prompt to explore branches.",
+    "loading": "Loading branches…",
+    "switching": "Switching…",
+    "retry": "Retry",
+    "loadFailed": "Could not load branches: {{error}}",
+    "switchFailed": "Could not switch branch: {{error}}",
+    "blockedRunning": "Switching branches is disabled while the agent is running.",
+    "blockedStarting": "Wait until the session finishes starting before switching branches.",
+    "blockedRewound": "Finish or put back your message edit before switching branches.",
+    "blockedArchived": "Restore this session to switch branches.",
+    "fallback": {
+      "user": "User message",
+      "assistant": "Assistant reply",
+      "summary": "Branch summary",
+      "system": "Session node"
+    }
   }
 }
