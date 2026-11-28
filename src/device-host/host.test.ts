@@ -27,6 +27,19 @@ const fake = vi.hoisted(() => {
     inBoot: 0,
     /** The wait for a simulator's boot fails, as `simctl bootstatus` does when it times out. */
     bootFails: false,
+    /** Physical iOS probe result and optional agent action failure for host tests. */
+    physicalProbeResult: { ok: true } as
+      | { ok: true }
+      | {
+          ok: false
+          problem: 'runner-unsigned' | 'runner-untrusted' | 'ui-automation-off' | null
+          message: string
+        },
+    physicalActionError: null as {
+      problem: 'runner-unsigned' | 'runner-untrusted' | 'ui-automation-off' | null
+      message: string
+    } | null,
+    env: {} as Record<string, string>,
     /** The AVD each running emulator was started from. */
     avds: new Map<string, string>(),
     /** An AVD runs as `serial`, so adb lists the emulator in its place. */
@@ -74,7 +87,8 @@ vi.mock('./discovery', () => ({
     emulator: '/sdk/emulator/emulator',
   }),
   listSimulators: async () => fake.devices.filter((device) => device.kind === 'simulator'),
-  listPhysicalIos: async () => [],
+  listPhysicalIos: async () =>
+    fake.devices.filter((device) => device.platform === 'ios' && device.kind === 'physical'),
   listAndroid: async () => fake.devices.filter((device) => device.platform === 'android'),
   run: async (_file: string, args: string[]) => {
     if (args[2] === 'emu' && args[3] === 'kill') {
@@ -110,26 +124,47 @@ vi.mock('./ios-simulator', () => ({
 }))
 
 vi.mock('../agent-host/shell-env', () => ({
-  resolveShellEnvironment: async () => ({ env: {} }),
+  resolveShellEnvironment: async () => ({ env: fake.env }),
 }))
 
 vi.mock('./agent', () => {
   class ActionError extends Error {
     code: string
-    constructor(code: string, message: string) {
+    problem: 'runner-unsigned' | 'runner-untrusted' | 'ui-automation-off' | null
+    constructor(
+      code: string,
+      message: string,
+      problem: 'runner-unsigned' | 'runner-untrusted' | 'ui-automation-off' | null = null,
+    ) {
       super(message)
       this.code = code
+      this.problem = problem
     }
   }
   return {
     ActionError,
     // An agent's action: a snapshot runs until it is stopped, anything else is done at once.
     AgentActions: class {
-      run(_session: string, _target: unknown, action: { type: string }, signal: AbortSignal) {
+      run(_session: string, target: FoundDevice, action: { type: string }, signal: AbortSignal) {
+        if (target.platform === 'ios' && target.kind === 'physical') {
+          if (fake.physicalActionError) {
+            return Promise.reject(
+              new ActionError(
+                'COMMAND_FAILED',
+                fake.physicalActionError.message,
+                fake.physicalActionError.problem,
+              ),
+            )
+          }
+          return Promise.resolve({ text: `Did ${action.type}.` })
+        }
         if (action.type !== 'snapshot') return Promise.resolve({ text: `Did ${action.type}.` })
         return new Promise((_resolve, reject) =>
           signal.addEventListener('abort', () => reject(new ActionError('stopped', 'Stopped'))),
         )
+      }
+      probeIosRunner() {
+        return Promise.resolve(fake.physicalProbeResult)
       }
     },
   }
@@ -318,6 +353,9 @@ beforeEach(async () => {
   fake.booting = null
   fake.inBoot = 0
   fake.bootFails = false
+  fake.physicalProbeResult = { ok: true }
+  fake.physicalActionError = null
+  fake.env = {}
 })
 
 afterEach(async () => {
@@ -1096,5 +1134,71 @@ describe('who uses a device in a turn', () => {
       deviceId: EMULATOR.id,
       at: null,
     })
+  })
+})
+
+describe('physical iPhone runner status from agent calls', () => {
+  const IPHONE: FoundDevice = {
+    id: 'ios:00008150-000125C03AE2401C',
+    platform: 'ios',
+    kind: 'physical',
+    name: 'My iPhone',
+    osVersion: '26.3.1',
+    model: 'iPhone Air',
+    state: 'connected',
+    connection: 'usb',
+    problems: [],
+    target: '00008150-000125C03AE2401C',
+  }
+
+  it('updates setup problems when a physical iPhone action fails and clears them on success', async () => {
+    fake.devices.push({ ...IPHONE })
+    fake.env = { AGENT_DEVICE_IOS_TEAM_ID: 'TEAM123456' }
+    fake.physicalProbeResult = {
+      ok: false,
+      problem: 'runner-untrusted',
+      message: 'not explicitly trusted',
+    }
+    const host = startHost()
+    const port = host.port()
+    const latest = () =>
+      port.events
+        .flatMap((event) => (event.type === 'devices.changed' ? [event.devices] : []))
+        .at(-1)
+        ?.find((device) => device.id === IPHONE.id)
+
+    await host.call({ kind: 'open', sessionId: 's1', agentName: 'Agent', deviceId: IPHONE.id })
+    await vi.waitFor(() =>
+      expect(latest()?.problems).toEqual(['runner-untrusted', 'ui-automation-off']),
+    )
+
+    fake.physicalActionError = {
+      problem: 'ui-automation-off',
+      message: 'Enable UI Automation is off',
+    }
+    expect(
+      await host.call({
+        kind: 'action',
+        sessionId: 's1',
+        agentName: 'Agent',
+        deviceId: IPHONE.id,
+        action: { type: 'snapshot' },
+        projectPath: null,
+      }),
+    ).toMatchObject({ error: { code: 'failed' } })
+    expect(latest()?.problems).toEqual(['ui-automation-off'])
+
+    fake.physicalActionError = null
+    expect(
+      await host.call({
+        kind: 'action',
+        sessionId: 's1',
+        agentName: 'Agent',
+        deviceId: IPHONE.id,
+        action: { type: 'snapshot' },
+        projectPath: null,
+      }),
+    ).toMatchObject({ result: { text: 'Did snapshot.' } })
+    expect(latest()?.problems).toEqual([])
   })
 })

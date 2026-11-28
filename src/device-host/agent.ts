@@ -2,16 +2,26 @@
 // session and device, its state in Kettu's data folder, its update notice off. Kettu runs only the
 // commands it builds here from checked arguments.
 
-import { execFile, spawn } from 'node:child_process'
-import { X509Certificate, createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
 import type { DeviceAction, DeviceActionResult } from '@shared/device-agent'
 import type { FoundDevice, Tools } from './discovery'
+import {
+  classifyPhysicalIosRunnerFailure,
+  extractDiagnosticLogPath,
+  findDevelopmentTeam,
+  parseAgentDeviceFailureJson,
+  readRunnerLogTail,
+  type PhysicalIosRunnerProbeResult,
+  type PhysicalIosRunnerProblem,
+} from './ios-physical-setup'
 import { nodeCommand, packageRoot } from './runtime'
 
 const COMMAND_TIMEOUT_MS = 180_000
+const PROBE_TIMEOUT_MS = 120_000
 const MAX_OUTPUT = 512 * 1024
 const SPRINGBOARD = 'com.apple.springboard'
 
@@ -19,6 +29,7 @@ export class ActionError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly problem: PhysicalIosRunnerProblem | null = null,
   ) {
     super(message)
   }
@@ -34,31 +45,7 @@ interface Output {
   stderr: string
 }
 
-/** The Apple development team of the first development certificate in the keychain. */
-async function developmentTeam(env: Env): Promise<string | null> {
-  const pem = await new Promise<string>((resolve) =>
-    execFile(
-      '/usr/bin/security',
-      ['find-certificate', '-a', '-c', 'Apple Development', '-p'],
-      { env, timeout: 10_000, maxBuffer: 4 * 1024 * 1024 },
-      (_, stdout) => resolve(String(stdout ?? '')),
-    ),
-  )
-  for (const block of pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ??
-    []) {
-    try {
-      const subject = new X509Certificate(block).subject
-      const team = /^OU=([A-Z0-9]{10})$/m.exec(subject)?.[1]
-      if (team) return team
-    } catch {
-      // Not a certificate Node can read.
-    }
-  }
-  return null
-}
-
 export class AgentActions {
-  private team: Promise<string | null> | null = null
   /** The sessions agent-device has open, so the first action on a device opens one. */
   private readonly opened = new Set<string>()
 
@@ -115,7 +102,7 @@ export class AgentActions {
           await this.cli(['open', SPRINGBOARD, '--session', session], signal, device)
           out = await this.cli(['snapshot', '-i', '--session', session], signal, device)
         } else if (out.code !== 0) {
-          throw this.failure(out)
+          throw await this.failure(out, device)
         }
         return { text: this.text(out) }
       }
@@ -289,6 +276,45 @@ export class AgentActions {
     }
   }
 
+  /**
+   * Prepares and health-checks the XCTest runner on a physical iOS device to verify signing,
+   * developer trust and Enable UI Automation.
+   */
+  async probeIosRunner(
+    device: FoundDevice,
+    signal: AbortSignal,
+  ): Promise<PhysicalIosRunnerProbeResult> {
+    if (device.platform !== 'ios' || device.kind !== 'physical') return { ok: true }
+    try {
+      const out = await this.cli(
+        ['prepare', 'ios-runner', '--platform', 'ios', '--udid', device.target, '--json'],
+        signal,
+        device,
+        true,
+        PROBE_TIMEOUT_MS,
+      )
+      if (out.code === 0) return { ok: true }
+      const diagnostic = parseAgentDeviceFailureJson(out.stdout, out.stderr)
+      if (diagnostic.logPath) {
+        diagnostic.logTail = await readRunnerLogTail(diagnostic.logPath, this.dataDir)
+      }
+      const problem = classifyPhysicalIosRunnerFailure(diagnostic)
+      const message =
+        diagnostic.message || out.stderr.trim() || out.stdout.trim() || 'Runner check failed'
+      return { ok: false, problem, message }
+    } catch (error) {
+      if (error instanceof ActionError && error.code === 'stopped') {
+        return { ok: false, problem: null, message: error.message }
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        problem: classifyPhysicalIosRunnerFailure({ message }),
+        message,
+      }
+    }
+  }
+
   private async ensureSession(
     session: string,
     device: FoundDevice,
@@ -297,7 +323,9 @@ export class AgentActions {
   ): Promise<void> {
     if (this.opened.has(session)) return
     const out = await this.cli(['open', ...selector, '--session', session], signal, device, true)
-    if (out.code !== 0 && !/already/i.test(out.stdout + out.stderr)) throw this.failure(out)
+    if (out.code !== 0 && !/already/i.test(out.stdout + out.stderr)) {
+      throw await this.failure(out, device)
+    }
     this.opened.add(session)
   }
 
@@ -320,16 +348,27 @@ export class AgentActions {
     return text.length > 0 ? text : 'Done.'
   }
 
-  private failure(out: Output): ActionError {
+  private async failure(out: Output, device: FoundDevice): Promise<ActionError> {
     const text = `${out.stdout}\n${out.stderr}`.trim()
     const code = /Error \(([A-Z_]+)\)/.exec(text)?.[1] ?? 'command_failed'
+    let problem: PhysicalIosRunnerProblem | null = null
+    if (device.platform === 'ios' && device.kind === 'physical') {
+      const logPath = extractDiagnosticLogPath(text)
+      const logTail = logPath ? await readRunnerLogTail(logPath, this.dataDir) : null
+      problem = classifyPhysicalIosRunnerFailure({
+        code,
+        stdout: out.stdout,
+        stderr: out.stderr,
+        logTail,
+      })
+    }
     // The diagnostics lines point at agent-device's own files; the agent needs only the error.
     const message = text
       .split('\n')
       .filter((line) => !/^Diagnostic|^Diagnostics Log/.test(line))
       .join('\n')
       .slice(0, 4_000)
-    return new ActionError(code, message || 'The device command failed')
+    return new ActionError(code, message || 'The device command failed', problem)
   }
 
   private async cli(
@@ -337,6 +376,7 @@ export class AgentActions {
     signal: AbortSignal,
     device: FoundDevice,
     allowFailure = false,
+    timeoutMs = COMMAND_TIMEOUT_MS,
   ): Promise<Output> {
     const base = await this.env()
     const extra: Env = {
@@ -354,8 +394,7 @@ export class AgentActions {
       if (sdk && !base.ANDROID_HOME && !base.ANDROID_SDK_ROOT) extra.ANDROID_HOME = sdk
     }
     if (device.platform === 'ios' && device.kind === 'physical') {
-      this.team ??= developmentTeam(base)
-      const team = await this.team
+      const team = await findDevelopmentTeam(base)
       if (team) extra.AGENT_DEVICE_IOS_TEAM_ID = team
     }
     const node = nodeCommand({ ...base, ...extra } as NodeJS.ProcessEnv)
@@ -373,7 +412,7 @@ export class AgentActions {
       child.stderr!.on('data', (chunk: Buffer) => {
         if (stderr.length < MAX_OUTPUT) stderr += chunk.toString()
       })
-      const timer = setTimeout(() => child.kill('SIGTERM'), COMMAND_TIMEOUT_MS)
+      const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs)
       const abort = (): void => {
         child.kill('SIGTERM')
       }
@@ -391,7 +430,7 @@ export class AgentActions {
     if (signal.aborted) throw new ActionError('stopped', 'The user stopped the agent')
     if (out.code !== 0) {
       this.log(`agent-device ${args[0]} failed: ${(out.stderr || out.stdout).slice(0, 500)}`)
-      if (!allowFailure) throw this.failure(out)
+      if (!allowFailure) throw await this.failure(out, device)
     }
     return out
   }

@@ -164,6 +164,21 @@
         "todo": "设备解锁后 Kettu 会挂载它；保持解锁。",
         "done": "已挂载。"
       },
+      "runner-unsigned": {
+        "label": "给自动化应用签名",
+        "todo": "在 Xcode 里登录 Apple ID，Kettu 才能给自动化应用签名。",
+        "done": "签名已就绪。"
+      },
+      "runner-untrusted": {
+        "label": "信任开发者",
+        "todo": "在设备的 设置 › 通用 › VPN 与设备管理 里信任开发者。",
+        "done": "已在设备上信任。"
+      },
+      "ui-automation-off": {
+        "label": "Enable UI Automation",
+        "todo": "在设备上打开 设置 › 开发者 › Enable UI Automation。",
+        "done": "已打开。"
+      },
       "offline": {
         "label": "连接",
         "todo": "手机离线了，重新插一下数据线。",

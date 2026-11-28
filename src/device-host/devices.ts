@@ -39,6 +39,13 @@ import {
 import { DriverError, type DeviceDriver } from './driver'
 import { IosDeviceDriver } from './ios-device'
 import {
+  findDevelopmentTeam,
+  physicalIosProblems,
+  type PhysicalIosRunnerProbeResult,
+  type PhysicalIosRunnerProblem,
+  type PhysicalIosRunnerState,
+} from './ios-physical-setup'
+import {
   bootSimulator,
   IosSimulatorDriver,
   shutdownSimulator,
@@ -49,6 +56,8 @@ import { FrameFanout } from './stream'
 /** A device nobody watches keeps capturing this long, for a pane that comes straight back. */
 const IDLE_CAPTURE_MS = 30_000
 const LIST_EVERY_MS = 5_000
+const RUNNER_PROBE_RETRY_MS = 8_000
+const RUNNER_PROBE_UNKNOWN_RETRY_MS = 15_000
 
 /** Why a command failed, without the `Error: ` an error object's string starts with. */
 function reasonOf(error: unknown): string {
@@ -85,6 +94,13 @@ export interface DeviceManagerDeps {
   emit(port: string | null, event: DeviceEvent): void
   /** The user handed a device back to the turn of `sessionId` after holding it for `durationMs`. */
   handedBack?(sessionId: string, durationMs: number): void
+  /** Finds a valid Apple Development team ID for signing the physical iOS runner. */
+  findIosSigningTeam?: (env: Env) => Promise<string | null>
+  /** Probes the XCTest runner on a physical iOS device to verify signing, trust and UI Automation. */
+  probeIosRunner?: (
+    device: FoundDevice,
+    signal: AbortSignal,
+  ) => Promise<PhysicalIosRunnerProbeResult>
   log(message: string): void
 }
 
@@ -123,6 +139,12 @@ export class DeviceManager {
   private poll: ReturnType<typeof setInterval> | null = null
   private lastList = ''
   private saving: Promise<void> = Promise.resolve()
+  /** Apple development team ID found for signing physical iOS runners; null when missing. */
+  private iosSigningTeam: string | null = null
+  /** Per-device physical iOS runner verification state. */
+  private readonly runnerStates = new Map<DeviceId, PhysicalIosRunnerState>()
+  /** Active background runner probes for physical iOS devices. */
+  private readonly runnerProbes = new Map<DeviceId, AbortController>()
 
   private readonly restored: Promise<void>
 
@@ -287,6 +309,8 @@ export class DeviceManager {
       }
     } else {
       await this.list()
+      const current = this.found.get(id)
+      if (current) this.maybeProbePhysicalIos(current)
     }
     const info = this.info(id)
     if (!info) throw new DeviceError('not_found', t('devices.wentAway'))
@@ -413,6 +437,7 @@ export class DeviceManager {
     this.leases.delete(id)
     const booted = this.booted.delete(id)
     this.saveLeases()
+    this.abortRunnerProbe(id)
     this.controls.forget(id)
     this.dropWatchers(id)
     await this.stopLive(id)
@@ -456,6 +481,7 @@ export class DeviceManager {
     for (const [id, sessionId] of [...this.leases]) {
       if (!ended.has(sessionId)) continue
       this.leases.delete(id)
+      this.abortRunnerProbe(id)
       this.controls.forget(id)
       this.dropWatchers(id)
       if (this.booted.delete(id)) booted.push(id)
@@ -734,8 +760,45 @@ export class DeviceManager {
     return fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1 ? { x: fx, y: fy } : null
   }
 
+  /** Stops any in-flight physical iOS runner probe so an agent call does not contend with it. */
+  abortRunnerProbe(id: DeviceId): void {
+    const controller = this.runnerProbes.get(id)
+    if (controller) {
+      this.runnerProbes.delete(id)
+      controller.abort()
+    }
+    if (this.runnerStates.get(id)?.status === 'checking') {
+      this.runnerStates.delete(id)
+    }
+  }
+
+  /** Marks a physical iOS device's runner verified after a runner-backed agent action succeeds. */
+  recordRunnerReady(id: DeviceId): void {
+    const found = this.found.get(id)
+    if (!found || found.platform !== 'ios' || found.kind !== 'physical') return
+    if (this.iosSigningTeam === null) return
+    this.abortRunnerProbe(id)
+    this.runnerStates.set(id, { status: 'ready', team: this.iosSigningTeam })
+    this.broadcastList()
+  }
+
+  /** Records a runner prerequisite failure observed while driving a physical iOS device. */
+  recordRunnerProblem(id: DeviceId, problem: PhysicalIosRunnerProblem): void {
+    const found = this.found.get(id)
+    if (!found || found.platform !== 'ios' || found.kind !== 'physical') return
+    this.abortRunnerProbe(id)
+    this.runnerStates.set(id, {
+      status: 'failed',
+      problem,
+      team: this.iosSigningTeam ?? '',
+      at: Date.now(),
+    })
+    this.broadcastList()
+  }
+
   async dispose(): Promise<void> {
     this.setPolling(false)
+    for (const id of [...this.runnerProbes.keys()]) this.abortRunnerProbe(id)
     await Promise.all([...this.live.keys()].map((id) => this.stopLive(id)))
     await this.saving
   }
@@ -762,11 +825,26 @@ export class DeviceManager {
       tools.xcrun ? listPhysicalIos(tools.xcrun, env).catch(warn('iOS devices')) : [],
       tools.adb || tools.emulator ? listAndroid(tools, env).catch(warn('Android devices')) : [],
     ])
+    const physicalIos = lists[1]
+    if (physicalIos.length > 0) {
+      const findTeam =
+        this.deps.findIosSigningTeam ??
+        (this.deps.platform === 'darwin' ? findDevelopmentTeam : null)
+      this.iosSigningTeam = findTeam
+        ? await findTeam(env).catch((error: unknown) => {
+            this.deps.log(`Cannot inspect iOS signing team: ${reasonOf(error)}`)
+            return null
+          })
+        : null
+    } else {
+      this.iosSigningTeam = null
+    }
     const next = new Map<DeviceId, FoundDevice>()
     for (const device of lists.flat()) {
       next.set(device.id, this.unbooted.has(device.id) ? { ...device, state: 'booting' } : device)
     }
     this.found = next
+    this.reconcilePhysicalIosRunners(next)
     // One that went down is no longer ours: started again by the user, it stays on. An emulator
     // is down once its AVD is listed and its serial is not; adb lists an offline one as both.
     let forgot = false
@@ -779,7 +857,106 @@ export class DeviceManager {
     }
     if (forgot) this.saveLeases()
     for (const id of [...this.live.keys()]) if (!next.has(id)) void this.stopLive(id)
+    for (const device of physicalIos) this.maybeProbePhysicalIos(device)
     return this.broadcastList()
+  }
+
+  private reconcilePhysicalIosRunners(next: Map<DeviceId, FoundDevice>): void {
+    for (const id of [...this.runnerStates.keys()]) {
+      const found = next.get(id)
+      const reset =
+        !found ||
+        found.platform !== 'ios' ||
+        found.kind !== 'physical' ||
+        found.state !== 'connected' ||
+        found.problems.includes('usb-required') ||
+        found.problems.includes('not-paired') ||
+        found.problems.includes('developer-mode-off') ||
+        found.problems.includes('ddi-not-mounted')
+      if (reset) {
+        this.abortRunnerProbe(id)
+        this.runnerStates.delete(id)
+        continue
+      }
+      const state = this.runnerStates.get(id)
+      if (
+        (state?.status === 'ready' || state?.status === 'failed') &&
+        state.team !== (this.iosSigningTeam ?? '')
+      ) {
+        this.abortRunnerProbe(id)
+        this.runnerStates.delete(id)
+      }
+    }
+    for (const id of [...this.runnerProbes.keys()]) {
+      const found = next.get(id)
+      if (
+        !found ||
+        found.state !== 'connected' ||
+        found.problems.length > 0 ||
+        this.iosSigningTeam === null
+      ) {
+        this.abortRunnerProbe(id)
+      }
+    }
+  }
+
+  private maybeProbePhysicalIos(found: FoundDevice): void {
+    if (found.platform !== 'ios' || found.kind !== 'physical') return
+    const probe = this.deps.probeIosRunner
+    if (!probe) return
+    if (!this.leases.has(found.id)) return
+    if (found.state !== 'connected' || found.problems.length > 0) return
+    const team = this.iosSigningTeam
+    if (!team) return
+    if (this.runnerProbes.has(found.id)) return
+    const control = this.controls.state(found.id)
+    if (control.kind === 'agent' && control.acting) return
+    const current = this.runnerStates.get(found.id)
+    if (current?.status === 'ready' && current.team === team) return
+    if (current?.status === 'failed' && current.team === team) {
+      const retryAfter =
+        current.problem === null ? RUNNER_PROBE_UNKNOWN_RETRY_MS : RUNNER_PROBE_RETRY_MS
+      if (Date.now() - current.at < retryAfter) return
+    }
+    const controller = new AbortController()
+    this.runnerProbes.set(found.id, controller)
+    if (!current || current.status === 'unverified') {
+      this.runnerStates.set(found.id, { status: 'checking' })
+    }
+    void probe(found, controller.signal)
+      .then((result) => {
+        if (this.runnerProbes.get(found.id) !== controller || controller.signal.aborted) return
+        if (result.ok) {
+          this.runnerStates.set(found.id, { status: 'ready', team })
+        } else {
+          this.deps.log(
+            `[${found.name}] Physical iOS runner check failed (${result.problem ?? 'unknown'}): ${result.message.slice(0, 300)}`,
+          )
+          this.runnerStates.set(found.id, {
+            status: 'failed',
+            problem: result.problem,
+            team,
+            at: Date.now(),
+          })
+        }
+        this.broadcastList()
+      })
+      .catch((error: unknown) => {
+        if (this.runnerProbes.get(found.id) !== controller || controller.signal.aborted) return
+        this.deps.log(`[${found.name}] Physical iOS runner check failed: ${reasonOf(error)}`)
+        this.runnerStates.set(found.id, {
+          status: 'failed',
+          problem: null,
+          team,
+          at: Date.now(),
+        })
+        this.broadcastList()
+      })
+      .finally(() => {
+        if (this.runnerProbes.get(found.id) === controller) {
+          this.runnerProbes.delete(found.id)
+        }
+      })
   }
 
   private setState(id: DeviceId, state: FoundDevice['state']): void {
@@ -802,6 +979,14 @@ export class DeviceManager {
 
   private toInfo(found: FoundDevice): DeviceInfo {
     const live = this.live.get(found.id)
+    const problems =
+      found.platform === 'ios' && found.kind === 'physical'
+        ? physicalIosProblems(
+            found.problems,
+            this.iosSigningTeam !== null,
+            this.runnerStates.get(found.id) ?? { status: 'unverified' },
+          )
+        : found.problems
     return {
       id: found.id,
       platform: found.platform,
@@ -813,7 +998,7 @@ export class DeviceManager {
       connection: found.connection,
       sessionId: this.leases.get(found.id) ?? null,
       operator: this.operatorOf(found.id),
-      problems: found.problems,
+      problems,
       input: live?.input ?? false,
       bootedByHost: this.booted.has(found.id),
     }
