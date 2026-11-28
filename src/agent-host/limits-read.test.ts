@@ -1,7 +1,13 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
+import { AgentManager } from './agents'
+import { ANTIGRAVITY } from './agents/antigravity'
+import { Diagnostics } from './diagnostics'
+import { EnvironmentService } from './shell-env'
+import type { AgentsFile } from './storage'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 import { tempFolder } from './testing/temp'
 
@@ -210,4 +216,167 @@ it('excludes stale and archived sessions from activitySummaries while keeping li
   // Advancing `now` past the 30-minute window drops closed old records while keeping live sessions.
   const future = host.host.sessions.activitySummaries(now + 60 * 60_000)
   expect(future.map((s) => s.id)).toContain(liveId)
+})
+
+describe('Google Antigravity plan limits disabled', () => {
+  async function makeAntigravityManager(options?: { envKeySet?: boolean }) {
+    const root = await tempFolder('kettu-agy-no-limits-')
+    const program = path.join(root, process.platform === 'win32' ? 'agy.cmd' : 'agy')
+    await writeFile(program, '')
+    await chmod(program, 0o755)
+    const workFolder = path.join(root, 'agents', 'antigravity~work')
+    const platform = process.platform === 'win32' ? 'win32' : process.platform
+    const nodeRuntime = { command: process.execPath, env: {} }
+    const settings: HostSettings = {
+      locale: 'en',
+      initialSetupDone: true,
+      agents: { antigravity: { enabled: true, binaryPath: program } },
+      addedAgents: [{ id: 'antigravity~work', name: 'Work', configDir: workFolder, created: true }],
+      disabledAgents: [],
+      proxy: DEFAULT_SETTINGS.proxy,
+      git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
+      marketplace: DEFAULT_SETTINGS.marketplace,
+      startModes: DEFAULT_SETTINGS.startModes,
+      idleSessions: DEFAULT_SETTINGS.idleSessions,
+      workflow: DEFAULT_SETTINGS.workflow,
+      startedSessions: DEFAULT_SETTINGS.startedSessions,
+      usage: { fromComputer: false },
+      sessionTitles: true,
+      promptSuggestions: true,
+      continueAfterLimit: true,
+      agentPasswords: false,
+      lightModel: { mode: 'small' },
+      defaultAgent: null,
+      computerUse: DEFAULT_SETTINGS.computerUse,
+      downloadService: false,
+    }
+    const runProgram = vi.fn(async () => {
+      throw new Error('agy must not be polled for plan limits')
+    })
+    const launch = vi.fn(() => {
+      throw new Error('agy must not be launched for plan limits')
+    })
+    const remembered: AgentsFile[] = []
+    const agents = new AgentManager({
+      catalog: [ANTIGRAVITY],
+      platform,
+      nodeRuntime,
+      appVersion: '0.0.0-test',
+      env: new EnvironmentService({
+        platform,
+        nodeRuntime,
+        baseEnv: { PATH: '', HOME: root },
+        resolve: async ({ baseEnv }) => ({
+          env: baseEnv,
+          source: 'inherited',
+          shell: null,
+          durationMs: 0,
+          warning: null,
+        }),
+        probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+      }),
+      diagnostics: new Diagnostics(),
+      launcher: { launch },
+      settings: () => settings,
+      reportsDir: path.join(root, 'reports'),
+      adaptersDir: root,
+      runProgram,
+      probeCli: async () => ({ version: '1.5.17' }),
+      remember: (file) => remembered.push(file),
+      envKeyIsSet: () => options?.envKeySet === true,
+      status: () => {},
+      processes: () => {},
+      authCommands: () => {},
+    })
+    return { agents, runProgram, launch, remembered }
+  }
+
+  it('reports no plan limits capability and never spawns agy on refreshLimits or refreshAccount', async () => {
+    const { agents, runProgram, launch } = await makeAntigravityManager()
+
+    expect(agents.hasLimits('antigravity')).toBe(false)
+    expect(agents.hasLimits('antigravity~work')).toBe(false)
+    expect(agents.status('antigravity')).toMatchObject({
+      limits: [],
+      limitsReason: 'vendor-disallows',
+      capabilities: { reports: false },
+    })
+
+    await agents.refreshLimits('antigravity', { force: true })
+    await agents.refreshLimits('antigravity~work', { force: true })
+    await agents.refreshAccount('antigravity', { force: true, afterSignIn: true })
+
+    expect(runProgram).not.toHaveBeenCalled()
+    expect(launch).not.toHaveBeenCalled()
+    expect(agents.status('antigravity').limits).toEqual([])
+  })
+
+  it('clears stale persisted Antigravity plan limits on restore while keeping account tier metadata', async () => {
+    const { agents, remembered } = await makeAntigravityManager()
+    const staleLimit = {
+      window: 'five_hour_gemini_models',
+      label: '5-hour · Gemini Models',
+      usedPercent: 42,
+      resetsAt: Date.UTC(2026, 10, 28, 12, 0),
+      state: 'ok' as const,
+      observedAt: Date.UTC(2026, 10, 28, 8, 0),
+    }
+
+    agents.restore({
+      version: 1,
+      agents: {
+        antigravity: {
+          account: { kind: 'account', label: 'Google AI Ultra', email: null, tier: '20x' },
+          limits: [staleLimit],
+          signIn: 'oauth-personal',
+        },
+        'antigravity~work': {
+          account: { kind: 'account', label: 'Google AI Pro', email: null },
+          limits: [staleLimit],
+          signIn: 'oauth-personal',
+        },
+      },
+    })
+
+    expect(agents.status('antigravity')).toMatchObject({
+      account: { kind: 'account', label: 'Google AI Ultra', email: null, tier: '20x' },
+      limits: [],
+      limitsReason: 'vendor-disallows',
+      capabilities: { reports: false },
+    })
+    expect(agents.status('antigravity~work')).toMatchObject({
+      account: { kind: 'account', label: 'Google AI Pro', email: null },
+      limits: [],
+      limitsReason: 'vendor-disallows',
+      capabilities: { reports: false },
+    })
+    // Pruned limits are written back immediately so stale rings never reappear on restart.
+    const persisted = remembered.at(-1)
+    expect(persisted?.agents.antigravity?.limits).toEqual([])
+    expect(persisted?.agents.antigravity?.account).toEqual({
+      kind: 'account',
+      label: 'Google AI Ultra',
+      email: null,
+      tier: '20x',
+    })
+    expect(persisted?.agents['antigravity~work']?.limits).toEqual([])
+  })
+
+  it('reports console-managed limitsReason when signed in with an API key', async () => {
+    const { agents } = await makeAntigravityManager({ envKeySet: true })
+    agents.restore({
+      version: 1,
+      agents: {
+        antigravity: {
+          account: null,
+          limits: [],
+        },
+      },
+    })
+    expect(agents.status('antigravity')).toMatchObject({
+      limitsReason: 'console-managed',
+      capabilities: { reports: false },
+    })
+  })
 })

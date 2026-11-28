@@ -7,6 +7,7 @@ import { AGY_CLI } from '../installed-cli'
 // own started in its folder. Full access starts a session's process with agy's own flag.
 export const ANTIGRAVITY: AgentDefinition = {
   id: 'antigravity',
+  limitsReason: 'vendor-disallows',
   name: 'Google Antigravity',
   registryId: 'antigravity-acp',
   launch: {

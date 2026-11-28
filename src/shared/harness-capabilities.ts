@@ -292,7 +292,7 @@ export const HARNESS_CAPABILITIES: Readonly<Record<HarnessId, HarnessCapabilityM
     sideChat: NO_SILENT_DELETE,
     workflowsAndRoutines: UNAVAILABLE,
   },
-  antigravity: acpProfile(SUPPORTED, {
+  antigravity: acpProfile(LIMITS_VENDOR_DISALLOWS, {
     steering: SUPPORTED,
     mcp: SUPPORTED,
     contextBreakdown: SUPPORTED,

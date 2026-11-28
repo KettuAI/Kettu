@@ -59,13 +59,10 @@ import {
 import type { VendorUsage } from './vendor-usage/common'
 import {
   ANTIGRAVITY_PLAN_SIGN_INS,
-  ANTIGRAVITY_USAGE_VERSION,
   antigravityAuthStateFile,
-  antigravityLimitsRead,
   antigravitySignIn,
   antigravitySignInMethod,
 } from './vendor-usage/antigravity'
-import { readAntigravityUsage } from './antigravity-usage'
 import { savedGoogleSignIn } from './antigravity-sign-in'
 import { signsInWithKeyOnly } from '@shared/agents'
 import { takesAutoCompact } from '@shared/auto-compact'
@@ -271,7 +268,7 @@ import {
   mergeReadLimits,
   planWindow,
 } from './session-updates'
-import { withHome, type EnvironmentService } from './shell-env'
+import type { EnvironmentService } from './shell-env'
 import type {
   AgentsFile,
   AgentUpdatesFile,
@@ -2654,7 +2651,7 @@ export class AgentManager {
 
   /**
    * Removes the registry's ACP server Kettu once downloaded to read Google Antigravity's plan
-   * limits, with its session's record, from Kettu's own folder; agy reads them now.
+   * limits, with its session's record, from Kettu's own folder.
    */
   async removeAntigravityUsageServer(): Promise<void> {
     const folder = path.join(this.deps.adaptersDir, 'antigravity')
@@ -4140,13 +4137,7 @@ export class AgentManager {
       signInShown: (method) => {
         slot.answeredSignIn = method
         slot.signInAnswered = true
-        // No session reports Google Antigravity's limits, so a Google sign-in it shows reads them.
-        if (antigravityLimitsRead(this.decideSignIn(slot)) !== 'read' || slot.limits.size > 0)
-          return
-        this.refreshLimits(slot.id).catch((error: unknown) => {
-          const message = (error as Error).message
-          this.deps.diagnostics.log('warn', `${slot.name}: the plan limits read failed: ${message}`)
-        })
+        this.decideSignIn(slot)
       },
       authState: (state) => {
         const before = accountSnapshot(slot)
@@ -4356,9 +4347,8 @@ export class AgentManager {
 
   /**
    * Notes a session of the agent opening until `start` settles. Meanwhile the agent's own reads
-   * wait when each session runs in a process of its own: every read starts another such process,
-   * which competes with the session's start (agy's `session/new` took up to twice as long beside
-   * its `/usage`).
+   * wait when each session runs in a process of its own, so they do not compete with the
+   * session's start.
    */
   whileOpening<T>(agentId: AgentId, start: Promise<T>): Promise<T> {
     const slot = this.slots.get(agentId)
@@ -4481,16 +4471,9 @@ export class AgentManager {
       !!slot &&
       (slot.def.id === 'opencode' ||
         limitsReport(slot.def.id) !== null ||
-        [
-          'grok',
-          'mistral-vibe',
-          'copilot',
-          'qoder',
-          'qoder-cn',
-          'kilo',
-          'auggie',
-          'antigravity',
-        ].includes(slot.def.id) ||
+        ['grok', 'mistral-vibe', 'copilot', 'qoder', 'qoder-cn', 'kilo', 'auggie'].includes(
+          slot.def.id,
+        ) ||
         storedSignInReader(slot.def.id) !== null ||
         this.driver(slot).reads?.limits === true)
     )
@@ -4511,7 +4494,6 @@ export class AgentManager {
   private async readLimits(slot: Slot, force = false): Promise<void> {
     const stored = storedSignInReader(slot.def.id)
     if (stored) return this.readWithStoredSignIn(slot, stored)
-    if (slot.def.id === 'antigravity') return this.readAntigravityLimits(slot)
     const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
     if (slot.def.id === 'grok') return this.readGrokLimits(slot, runtime, force)
@@ -4765,71 +4747,6 @@ export class AgentManager {
     else if (signIn.account) this.setAccount(slot, signIn.account)
     else this.signedOut(slot)
     return signIn
-  }
-
-  /**
-   * Google Antigravity's quota groups and G1 credits, from the user's `agy`, which needs no agy
-   * process running: only on a Google or Gemini Enterprise sign-in, since a signed-out agy answers
-   * by opening a browser to sign in. A sign-in Kettu does not know yet it asks agy for first.
-   */
-  private async readAntigravityLimits(slot: Slot): Promise<void> {
-    let method = await this.readSignInMethod(slot)
-    if ((method === null && !slot.signInAnswered) || slot.signIn === 'required') {
-      method = await this.askAntigravitySignIn(slot)
-    }
-    const read = antigravityLimitsRead(method)
-    if (read === 'none') return
-    if (read === 'unknown') {
-      throw new HostError('agent_error', t('agent.antigravityNoPlan', { agent: slot.name }))
-    }
-    const version = slot.init?.version ?? slot.h.binaryVersion
-    if (!versionAtLeast(version, ANTIGRAVITY_USAGE_VERSION)) return
-    const command = this.display(slot)
-    const base = this.deps.env.agentEnv(slot.id)
-    const env = this.commandEnv(slot, {
-      ...(this.deps.launchEnv?.(slot.id, base) ?? base),
-      ...command.env,
-    })
-    await mkdir(this.deps.reportsDir, { recursive: true })
-    const now = Date.now()
-    let usage: VendorUsage
-    try {
-      usage = await readAntigravityUsage(
-        {
-          name: slot.name,
-          program: command.command,
-          args: command.args.filter((arg) => arg !== 'acp'),
-          env,
-          cwd: this.deps.reportsDir,
-          platform: this.deps.platform,
-          timeoutMs: 30_000,
-        },
-        now,
-      )
-    } catch (error) {
-      throw this.limitsError(slot, error)
-    }
-    this.applyVendorUsage(slot, usage, now)
-  }
-
-  /**
-   * Asks agy how it is signed in, never signing it in: its answer to a hidden session names its
-   * plan when signed in with Google, and refuses the session when signed out.
-   */
-  private async askAntigravitySignIn(slot: Slot): Promise<string | null> {
-    const runtime = await this.ensureReady(slot.id)
-    if (!runtime.connection.unpromptedSessions) return slot.signInMethod
-    const log = (message: string): void =>
-      this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
-    try {
-      if (await this.readInHiddenSession(slot, runtime, log, undefined)) this.signedIn(slot.id)
-    } catch (error) {
-      throw this.limitsError(slot, error)
-    }
-    if (slot.signIn === 'required') {
-      throw new HostError('auth_required', t('agent.antigravitySignedOut', { agent: slot.name }))
-    }
-    return slot.signInMethod
   }
 
   /**
@@ -5201,6 +5118,7 @@ export class AgentManager {
 
   /** What the agents reported in an earlier run, shown until each reports again. */
   restore(file: AgentsFile): void {
+    let pruned = false
     for (const [agentId, entry] of Object.entries(file.agents) as [
       AgentId,
       AgentsFile['agents'][AgentId],
@@ -5208,9 +5126,14 @@ export class AgentManager {
       const slot = this.slots.get(agentId)
       if (!slot || !entry) continue
       slot.account = entry.account
-      // A window an earlier run kept under one of Claude Code's other names is read again.
-      const kept = entry.limits.filter((limit) => planWindow(limit.window) === limit.window)
+      // Drop persisted limits for harnesses that do not read plan limits, and any window an
+      // earlier run kept under one of Claude Code's other names.
+      const kept = this.hasLimits(agentId)
+        ? entry.limits.filter((limit) => planWindow(limit.window) === limit.window)
+        : []
+      if (kept.length !== entry.limits.length) pruned = true
       slot.limits = new Map(kept.map((limit) => [limit.window, limit]))
+      slot.balances = []
       slot.initRecord = entry.init ?? null
       slot.apiKey = entry.apiKey === true
       slot.answeredSignIn = entry.signIn ?? null
@@ -5218,6 +5141,7 @@ export class AgentManager {
       if (slot.def.id === 'antigravity') this.decideSignIn(slot)
       this.emit(slot)
     }
+    if (pruned) this.remember()
   }
 
   /**
@@ -5276,14 +5200,6 @@ export class AgentManager {
         if (force && wasRequired && slot.signIn === 'required') {
           await this.checkSignIn(slot)
           await this.readSignInMethod(slot)
-        } else if (afterSignIn && antigravityLimitsRead(slot.signInMethod) === 'read') {
-          slot.limitsReadAt = 0
-          this.refreshLimits(agentId, { force: true }).catch((error: unknown) => {
-            this.deps.diagnostics.log(
-              'warn',
-              `${slot.name}: the plan limits read failed: ${agentError(error).message}`,
-            )
-          })
         }
         return
       }
@@ -5598,10 +5514,6 @@ export class AgentManager {
         await this.hooks.accountChanged(slot.id)
         this.hooks.signedIn(slot.id)
         void this.readSignInMethod(slot)
-        // The plan and limits shown were read under the method agy refused.
-        this.refreshLimits(slot.id, { force: true }).catch((error: unknown) => {
-          log('warn', `the plan limits read failed: ${agentError(error).message}`)
-        })
         return
       }
       log('info', 'refused a session and holds no Google sign-in')
@@ -5767,16 +5679,6 @@ export class AgentManager {
     if (!home || !flag) return []
     const paths = this.deps.platform === 'win32' ? path.win32 : path.posix
     return [flag.flag, paths.join(home, flag.under)]
-  }
-
-  /**
-   * The environment of an agent's command that runs nothing of the user's, such as agy's print
-   * mode: an agent whose harness moves its folder with a flag gets its own folder as home.
-   */
-  private commandEnv(slot: Slot, env: Env): Env {
-    const home = this.ownHome(slot)
-    if (!home) return env
-    return withHome({ ...env, ...slot.def.addedEnv }, home, this.deps.platform)
   }
 
   /** Whether Kettu's MCP server is on for this agent, from the settings. */
@@ -6538,7 +6440,7 @@ export class AgentManager {
         ...(capabilities?.rewind ? { rewind: true } : {}),
         ...(capabilities?.rewindFiles ? { rewindFiles: true } : {}),
         ...(capabilities?.branches || slot.def.protocol === 'pi-rpc' ? { branches: true } : {}),
-        reports: this.hasLimits(slot.id) && !consoleSignIn,
+        reports: this.hasLimits(slot.id),
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true || slot.def.readsContext === true,
         ...(this.driver(slot).reads?.contextEstimates || slot.def.contextEstimates

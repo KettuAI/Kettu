@@ -19,7 +19,6 @@ const DIRECT_LIMITS_HARNESSES = new Set<HarnessId>([
   'claude-code',
   'codex',
   'opencode',
-  'antigravity',
   'grok',
   'mistral-vibe',
   'copilot',
@@ -70,6 +69,14 @@ describe('harness capability matrix vs agent-host registries', () => {
       expect(entry.status).toBe('supported')
       expect(entry.gapReason).toBeUndefined()
     }
+
+    expect(ANTIGRAVITY.limitsReason).toBe('vendor-disallows')
+    expect(HARNESS_CAPABILITIES.antigravity.planLimits).toEqual({
+      status: 'unavailable',
+      gapReason: 'upstream',
+      note: 'limitsVendorDisallows',
+    })
+    expect(HARNESS_CAPABILITIES.antigravity.usageHistory).toEqual({ status: 'supported' })
   })
 
   it('matches workflowsAndRoutines against STEP_HARNESSES and ROUTINE_HARNESSES', () => {
