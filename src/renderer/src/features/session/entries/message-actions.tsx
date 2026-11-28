@@ -25,6 +25,7 @@ import { forkBlocked, forkEntry } from './helpers'
 import { completedTurnDuration } from './turn-end'
 import { TurnEndTag } from './turn-end-tag'
 import { TurnUsageTrigger } from './turn-usage'
+import { userText } from './user-text'
 
 function Ago({ at }: { at: number }) {
   useTranslation()
@@ -48,13 +49,6 @@ function Came({ at }: { at: number }) {
 function useCopyLabels(copyMessage: string) {
   const { t } = useTranslation('common')
   return { copy: t('actions.copy'), copied: t('actions.copied'), copyMessage }
-}
-
-function userText(content: UserContent[]): string {
-  return content
-    .map((c) => (c.type === 'text' ? c.text : c.ref.kind === 'link' ? c.ref.uri : ''))
-    .filter(Boolean)
-    .join('\n')
 }
 
 /**

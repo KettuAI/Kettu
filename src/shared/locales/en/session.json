@@ -1232,7 +1232,9 @@
       "label_other": "Outline, {{count}} messages",
       "noText": "No text",
       "matches_one": "{{count}} match",
-      "matches_other": "{{count}} matches"
+      "matches_other": "{{count}} matches",
+      "copyPrompt": "Copy prompt",
+      "copiedPrompt": "Prompt copied"
     },
     "jump": {
       "label": "Jump to latest",
