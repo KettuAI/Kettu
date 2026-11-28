@@ -366,12 +366,12 @@ class Reader {
   constructor(private readonly o: Args) {}
 
   has(key: string): boolean {
-    return this.o[key] !== undefined
+    return this.o[key] !== undefined && this.o[key] !== null
   }
 
   integer(key: string, min: number, max: number, required = false): number | undefined {
     const value = this.o[key]
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       if (required) throw invalid(`${key} is needed.`)
       return undefined
     }
@@ -383,7 +383,7 @@ class Reader {
 
   number(key: string, required = false): number | undefined {
     const value = this.o[key]
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       if (required) throw invalid(`${key} is needed.`)
       return undefined
     }
@@ -395,7 +395,7 @@ class Reader {
 
   text(key: string, max: number, required = false): string | undefined {
     const value = this.o[key]
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       if (required) throw invalid(`${key} is needed.`)
       return undefined
     }
@@ -407,14 +407,14 @@ class Reader {
 
   flag(key: string): boolean | undefined {
     const value = this.o[key]
-    if (value === undefined) return undefined
+    if (value === undefined || value === null) return undefined
     if (typeof value !== 'boolean') throw invalid(`${key} must be true or false.`)
     return value
   }
 
   choice<T extends string>(key: string, values: readonly T[]): T | undefined {
     const value = this.o[key]
-    if (value === undefined) return undefined
+    if (value === undefined || value === null) return undefined
     if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) {
       throw invalid(`${key} must be one of ${values.join(', ')}.`)
     }
@@ -423,7 +423,7 @@ class Reader {
 
   token(key: string): string | undefined {
     const value = this.o[key]
-    if (value === undefined) return undefined
+    if (value === undefined || value === null) return undefined
     if (typeof value !== 'string' || !TOKEN_PATTERN.test(value)) {
       throw invalid(`${key} must be an element token such as s0000002a:11.`)
     }
@@ -432,7 +432,7 @@ class Reader {
 
   strings(key: string, min: number, max: number, maxChars: number, required = false): string[] {
     const value = this.o[key]
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       if (required) throw invalid(`${key} is needed.`)
       return []
     }

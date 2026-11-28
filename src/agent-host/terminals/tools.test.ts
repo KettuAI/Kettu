@@ -45,6 +45,35 @@ describe('terminal tool arguments', () => {
     ).toEqual({ kind: 'stop', sessionId: 's1', terminalId: 't', close: true })
   })
 
+  it('treats null optional arguments as omitted', () => {
+    expect(
+      terminalCallOf('terminal_run', 's1', { command: 'pnpm dev', name: null }, context),
+    ).toEqual({
+      kind: 'run',
+      sessionId: 's1',
+      agentId: 'claude-code',
+      folder: '/work/app',
+      command: 'pnpm dev',
+    })
+    expect(
+      terminalCallOf('terminal_read', 's1', { terminalId: 't', lines: null }, context),
+    ).toEqual({ kind: 'read', sessionId: 's1', terminalId: 't', lines: 200 })
+    expect(
+      terminalCallOf('terminal_input', 's1', { terminalId: 't', text: 'y', enter: null }, context),
+    ).toEqual({ kind: 'input', sessionId: 's1', terminalId: 't', text: 'y', enter: true })
+    expect(
+      terminalCallOf('terminal_stop', 's1', { terminalId: 't', close: null }, context),
+    ).toEqual({ kind: 'stop', sessionId: 's1', terminalId: 't', close: false })
+    expect(
+      terminalCallOf(
+        'terminal_rename',
+        's1',
+        { terminalId: 't', name: 'Dev', userAsked: null },
+        context,
+      ),
+    ).toEqual({ kind: 'rename', sessionId: 's1', terminalId: 't', name: 'Dev', asked: false })
+  })
+
   it('refuses a command that is not one line of plain text', () => {
     for (const command of [
       '',

@@ -749,7 +749,7 @@ function limitError(limit: StartLimitInfo): SessionToolError {
 
 function id(o: Args, required = false): string | undefined {
   const value = o.id
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     if (required) throw invalid('id is needed.')
     return undefined
   }
@@ -778,7 +778,7 @@ function text(o: Args, key: 'text' | 'prompt'): string {
 
 function query(o: Args): string {
   const value = o.query
-  if (value === undefined) return ''
+  if (value === undefined || value === null) return ''
   if (typeof value !== 'string' || longer(value, QUERY_CHARS)) {
     throw invalid(`query must be text of at most ${QUERY_CHARS} characters.`)
   }
@@ -795,21 +795,21 @@ function wholeNumber(o: Args, key: string, min: number, max: number): number {
 
 function includeArchived(o: Args): boolean {
   const value = o.include_archived
-  if (value === undefined) return false
+  if (value === undefined || value === null) return false
   if (typeof value !== 'boolean') throw invalid('include_archived must be true or false.')
   return value
 }
 
 function agent(o: Args): AgentId | undefined {
   const value = o.agent
-  if (value === undefined) return undefined
+  if (value === undefined || value === null) return undefined
   if (!isAgentId(value)) throw invalid('agent must be an agent id, as list_agents names it.')
   return value
 }
 
 function option(o: Args, key: 'model' | 'effort'): string | undefined {
   const value = o[key]
-  if (value === undefined) return undefined
+  if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || value.length === 0 || longer(value, OPTION_CHARS)) {
     throw invalid(`${key} must be an id, as list_agents gives it.`)
   }
@@ -818,7 +818,7 @@ function option(o: Args, key: 'model' | 'effort'): string | undefined {
 
 function roleRef(o: Args): string | undefined {
   const value = o.role
-  if (value === undefined) return undefined
+  if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || value.length === 0 || longer(value, ID_CHARS)) {
     throw invalid('role must be a role id, as list_agents gives it.')
   }
@@ -827,7 +827,7 @@ function roleRef(o: Args): string | undefined {
 
 function mode(o: Args): string | undefined {
   const value = o.mode
-  if (value === undefined) return undefined
+  if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || value.length === 0 || longer(value, START_MODE_CHARS)) {
     throw invalid('mode must be a mode id, as list_agents gives it.')
   }
@@ -836,14 +836,14 @@ function mode(o: Args): string | undefined {
 
 function report(o: Args): boolean {
   const value = o.report
-  if (value === undefined) return true
+  if (value === undefined || value === null) return true
   if (typeof value !== 'boolean') throw invalid('report must be true or false.')
   return value
 }
 
 function now(o: Args): boolean {
   const value = o.now
-  if (value === undefined) return false
+  if (value === undefined || value === null) return false
   if (typeof value !== 'boolean') throw invalid('now must be true or false.')
   return value
 }
@@ -1214,7 +1214,10 @@ export class SessionTools {
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {
     const match = query(o)
     const archived = includeArchived(o)
-    const limit = o.limit === undefined ? LIST_DEFAULT : wholeNumber(o, 'limit', 1, LIST_LIMIT)
+    const limit =
+      o.limit === undefined || o.limit === null
+        ? LIST_DEFAULT
+        : wholeNumber(o, 'limit', 1, LIST_LIMIT)
     const all = this.deps
       .list(caller.project)
       .filter((session) => archived || !session.archived)
@@ -1236,9 +1239,13 @@ export class SessionTools {
   private async get(caller: Caller, o: Args): Promise<CallToolResult> {
     const session = this.target(caller, id(o))
     const replyOffset =
-      o.reply_offset === undefined ? 0 : wholeNumber(o, 'reply_offset', 0, Number.MAX_SAFE_INTEGER)
+      o.reply_offset === undefined || o.reply_offset === null
+        ? 0
+        : wholeNumber(o, 'reply_offset', 0, Number.MAX_SAFE_INTEGER)
     const replyLimit =
-      o.reply_limit === undefined ? undefined : wholeNumber(o, 'reply_limit', 1, MAX_REPLY_LIMIT)
+      o.reply_limit === undefined || o.reply_limit === null
+        ? undefined
+        : wholeNumber(o, 'reply_limit', 1, MAX_REPLY_LIMIT)
     const whole = await this.deps.lastReply(session.id)
     const slice = whole === null ? null : sliceReply(whole, replyOffset, replyLimit)
     const cut = slice !== null && slice.nextOffset !== null
@@ -1318,7 +1325,7 @@ export class SessionTools {
 
   private async start(caller: Caller, o: Args): Promise<CallToolResult> {
     const prompt = text(o, 'prompt')
-    const value = o.title === undefined ? undefined : title(o)
+    const value = o.title === undefined || o.title === null ? undefined : title(o)
     const asked = agent(o)
     const pick: StartPick = { model: option(o, 'model'), effort: option(o, 'effort') }
     const wanted = mode(o)
@@ -1499,11 +1506,13 @@ export class SessionTools {
   /** The caller's turns or a started session's: no other conversation is the agent's to read. */
   private async history(caller: Caller, o: Args): Promise<CallToolResult> {
     const before =
-      o.before_turn === undefined
+      o.before_turn === undefined || o.before_turn === null
         ? undefined
         : wholeNumber(o, 'before_turn', 1, Number.MAX_SAFE_INTEGER)
     const limit =
-      o.limit === undefined ? HISTORY_DEFAULT : wholeNumber(o, 'limit', 1, HISTORY_LIMIT)
+      o.limit === undefined || o.limit === null
+        ? HISTORY_DEFAULT
+        : wholeNumber(o, 'limit', 1, HISTORY_LIMIT)
     const session = this.target(caller, id(o))
     if (!canTarget(session, caller.sessionId)) {
       throw new SessionToolError(

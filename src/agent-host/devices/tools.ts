@@ -446,7 +446,10 @@ export function actionOf(
     case 'device_logs':
       return {
         type: 'logs',
-        lines: input.lines === undefined ? 200 : number(input.lines, 'lines', 1, 2000),
+        lines:
+          input.lines === undefined || input.lines === null
+            ? 200
+            : number(input.lines, 'lines', 1, 2000),
       }
     case 'device_set_appearance':
       return { type: 'appearance', mode: oneOf(input.mode, 'mode', ['light', 'dark']) }

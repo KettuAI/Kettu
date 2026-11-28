@@ -425,8 +425,16 @@ function scheduleOf(value: unknown, now: number): Schedule {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Refusal('schedule must be an object with a kind; see the tool for the four kinds.')
   }
-  const o = value as Record<string, unknown>
-  const only = (keys: string[]) => fields(o, ['kind', ...keys])
+  const o = fields(value, ['kind', 'at', 'days', 'time', 'minutes', 'expression'])
+  // Strict-schema models may fill inactive schedule-kind fields with null; only check non-null keys.
+  const only = (keys: string[]) => {
+    const allowed = ['kind', ...keys]
+    const extra = Object.keys(o).find(
+      (key) => o[key] !== undefined && o[key] !== null && !allowed.includes(key),
+    )
+    if (extra !== undefined) throw new Refusal(`Unknown argument ${extra}.`)
+    return o
+  }
   let schedule: Schedule
   switch (o.kind) {
     case 'once': {
@@ -483,7 +491,7 @@ function scheduleOf(value: unknown, now: number): Schedule {
 
 function optionalString(o: Record<string, unknown>, key: string, max: number): string | undefined {
   const value = o[key]
-  if (value === undefined) return undefined
+  if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || value.length > max) {
     throw new Refusal(`${key} must be a text of at most ${max} characters.`)
   }
@@ -819,10 +827,10 @@ export class RoutineTools {
     if (o.schedule === undefined) throw new Refusal('schedule is missing: say when it runs.')
     const schedule = scheduleOf(o.schedule, now)
     const name = optionalString(o, 'name', ROUTINE_NAME_CHARS) ?? ''
+    const agentArg = optionalString(o, 'agent', AGENT_CHARS)
     let agentId: AgentId
-    if (o.agent !== undefined) {
-      const given = optionalString(o, 'agent', AGENT_CHARS)!
-      agentId = this.routineAgent(given)
+    if (agentArg !== undefined) {
+      agentId = this.routineAgent(agentArg)
     } else {
       const own = this.deps.sessionAgent(caller.sessionId)
       if (own === null || !ROUTINE_HARNESSES.includes(harnessOf(own))) {
@@ -832,16 +840,18 @@ export class RoutineTools {
       }
       agentId = this.routineAgent(own)
     }
+    const modelArg = optionalString(o, 'model', OPTION_CHARS)
+    const effortArg = optionalString(o, 'effort', OPTION_CHARS)
     const pick: StartPick = {
-      ...(o.model !== undefined ? { model: optionalString(o, 'model', OPTION_CHARS)! } : {}),
-      ...(o.effort !== undefined ? { effort: optionalString(o, 'effort', OPTION_CHARS)! } : {}),
+      ...(modelArg !== undefined ? { model: modelArg } : {}),
+      ...(effortArg !== undefined ? { effort: effortArg } : {}),
     }
     const options = await this.routineOptions(agentId, this.remembered(agentId), pick)
     const projectPath =
       'project' in o ? await this.projectOf(o.project) : this.deps.sessionProject(caller.sessionId)
     const scope: PermissionScope = {
-      level: o.scope === undefined ? DEFAULT_SCOPE.level : levelOf(o.scope),
-      web: o.web === undefined ? DEFAULT_SCOPE.web : webOf(o.web),
+      level: o.scope === undefined || o.scope === null ? DEFAULT_SCOPE.level : levelOf(o.scope),
+      web: o.web === undefined || o.web === null ? DEFAULT_SCOPE.web : webOf(o.web),
     }
     const draft: RoutineDraft = {
       name,
@@ -852,7 +862,9 @@ export class RoutineTools {
       trigger: { kind: 'schedule', schedule },
       scope,
       timeLimitMinutes:
-        o.timeLimitMinutes === undefined ? DEFAULT_TIME_LIMIT : timeLimitOf(o.timeLimitMinutes),
+        o.timeLimitMinutes === undefined || o.timeLimitMinutes === null
+          ? DEFAULT_TIME_LIMIT
+          : timeLimitOf(o.timeLimitMinutes),
       keptRunSessions: DEFAULT_KEPT_RUN_SESSIONS,
     }
     const routine = this.cardOf({ ...draft, name: routineName(name, prompt), enabled: true })
@@ -880,15 +892,13 @@ export class RoutineTools {
     const view = await this.routineView(o)
     const now = this.now()
     const changes: RoutineChanges = {}
-    if (o.name !== undefined) {
-      const name = optionalString(o, 'name', ROUTINE_NAME_CHARS)!
-      if (name.trim() !== view.name) changes.name = name
-    }
-    if (o.prompt !== undefined) {
+    const nextName = optionalString(o, 'name', ROUTINE_NAME_CHARS)
+    if (nextName !== undefined && nextName.trim() !== view.name) changes.name = nextName
+    if (o.prompt !== undefined && o.prompt !== null) {
       const prompt = promptOf(o.prompt)
       if (prompt !== view.prompt) changes.prompt = prompt
     }
-    if (o.schedule !== undefined) {
+    if (o.schedule !== undefined && o.schedule !== null) {
       const schedule = scheduleOf(o.schedule, now)
       // An every schedule keeps its start when only its length is named again.
       const same =
@@ -898,13 +908,16 @@ export class RoutineTools {
       if (!same) changes.trigger = { kind: 'schedule', schedule }
     }
     let agentId = view.agentId
-    if (o.agent !== undefined) {
-      agentId = this.routineAgent(optionalString(o, 'agent', AGENT_CHARS)!)
+    const nextAgent = optionalString(o, 'agent', AGENT_CHARS)
+    if (nextAgent !== undefined) {
+      agentId = this.routineAgent(nextAgent)
       if (agentId !== view.agentId) changes.agentId = agentId
     }
+    const nextModel = optionalString(o, 'model', OPTION_CHARS)
+    const nextEffort = optionalString(o, 'effort', OPTION_CHARS)
     const pick: StartPick = {
-      ...(o.model !== undefined ? { model: optionalString(o, 'model', OPTION_CHARS)! } : {}),
-      ...(o.effort !== undefined ? { effort: optionalString(o, 'effort', OPTION_CHARS)! } : {}),
+      ...(nextModel !== undefined ? { model: nextModel } : {}),
+      ...(nextEffort !== undefined ? { effort: nextEffort } : {}),
     }
     if (changes.agentId !== undefined || pick.model !== undefined || pick.effort !== undefined) {
       const carried =
@@ -918,18 +931,20 @@ export class RoutineTools {
       const projectPath = await this.projectOf(o.project)
       if (projectPath !== view.projectPath) changes.projectPath = projectPath
     }
-    if (o.scope !== undefined || o.web !== undefined) {
+    const hasScope = o.scope !== undefined && o.scope !== null
+    const hasWeb = o.web !== undefined && o.web !== null
+    if (hasScope || hasWeb) {
       const scope: PermissionScope = {
-        level: o.scope === undefined ? view.scope.level : levelOf(o.scope),
-        web: o.web === undefined ? view.scope.web : webOf(o.web),
+        level: hasScope ? levelOf(o.scope) : view.scope.level,
+        web: hasWeb ? webOf(o.web) : view.scope.web,
       }
       if (scope.level !== view.scope.level || scope.web !== view.scope.web) changes.scope = scope
     }
-    if (o.timeLimitMinutes !== undefined) {
+    if (o.timeLimitMinutes !== undefined && o.timeLimitMinutes !== null) {
       const limit = timeLimitOf(o.timeLimitMinutes)
       if (limit !== view.timeLimitMinutes) changes.timeLimitMinutes = limit
     }
-    if (o.enabled !== undefined) {
+    if (o.enabled !== undefined && o.enabled !== null) {
       if (typeof o.enabled !== 'boolean') throw new Refusal('enabled must be true or false.')
       if (o.enabled !== view.enabled) changes.enabled = o.enabled
     }

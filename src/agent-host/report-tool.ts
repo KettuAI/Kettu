@@ -97,7 +97,7 @@ function text(
   required: boolean,
 ): string | null {
   const value = fields[key]
-  if (value === undefined && !required) return null
+  if ((value === undefined || value === null) && !required) return null
   if (typeof value !== 'string') throw invalid(`${key} must be a string.`)
   const trimmed = value.trim()
   if (trimmed === '') {
