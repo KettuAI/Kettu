@@ -180,6 +180,7 @@ function imagesDir(): string {
 }
 
 export interface TrayDeps {
+  platform?: NodeJS.Platform
   /** Shows the last window, or opens one when none is left. */
   open(): void
   /** Runs the quit flow, as `Cmd+Q` does. */
@@ -202,6 +203,7 @@ export interface TrayDeps {
 }
 
 export class KettuTray {
+  private readonly platform: NodeJS.Platform
   private tray: Tray | null = null
   private counts: BusyCounts = { running: 0, waiting: 0 }
   private remote: Pick<RemoteStatus, 'state' | 'online' | 'relay'> = { state: 'off', online: [] }
@@ -214,14 +216,16 @@ export class KettuTray {
   // Only the latest theme reading applies, since the portal answers out of order.
   private reading = 0
 
-  constructor(private readonly deps: TrayDeps) {}
+  constructor(private readonly deps: TrayDeps) {
+    this.platform = deps.platform ?? process.platform
+  }
 
   start(): void {
     // Until the portal answers, Linux takes the white glyph it falls back to.
-    this.white = whiteGlyph(process.platform, null)
+    this.white = whiteGlyph(this.platform, null)
     this.tray = new Tray(this.image())
     this.tray.setToolTip(app.name)
-    if (process.platform === 'darwin') {
+    if (this.platform === 'darwin') {
       // No context menu is set, since macOS would open it on a left click as well.
       this.tray.on('click', (event, bounds) => {
         if (event.altKey || event.ctrlKey || !this.deps.togglePanel?.(bounds)) this.popUpMenu()
@@ -235,8 +239,7 @@ export class KettuTray {
         'NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification',
         () => this.motionChanged(),
       )
-    } else if (process.platform === 'win32') {
-      // A click on the Windows icon opens the window; the menu takes a right click there.
+    } else if (this.platform === 'win32' || this.platform === 'linux') {
       this.tray.on('click', () => this.deps.open())
     }
     this.updateMenu()
@@ -273,7 +276,7 @@ export class KettuTray {
 
   /** The menu's text follows a change of language. */
   updateMenu(): void {
-    if (process.platform !== 'darwin') this.tray?.setContextMenu(this.menu())
+    if (this.platform !== 'darwin') this.tray?.setContextMenu(this.menu())
   }
 
   private menu(): Menu {
@@ -282,7 +285,7 @@ export class KettuTray {
     // Where no panel shows what goes on, the menu's first lines do; the relay's line shows in
     // every menu, since the panel names only the devices.
     const status: MenuItemConstructorOptions[] =
-      process.platform === 'darwin'
+      this.platform === 'darwin'
         ? relay
           ? [{ label: relay, enabled: false }, { type: 'separator' }]
           : []
@@ -295,7 +298,7 @@ export class KettuTray {
     // The panel's and the window's own keys, which only macOS has; a tray menu's accelerators
     // only label the items.
     const key = (accelerator: string) =>
-      process.platform === 'darwin' ? { accelerator, registerAccelerator: false } : {}
+      this.platform === 'darwin' ? { accelerator, registerAccelerator: false } : {}
     return Menu.buildFromTemplate([
       ...status,
       {
@@ -336,7 +339,7 @@ export class KettuTray {
   /** Shows the state's image, and breathes the running dot unless motion is reduced. */
   private showState(): void {
     const breathe =
-      process.platform === 'darwin' && this.state() === 'running' && !this.deps.reducedMotion()
+      this.platform === 'darwin' && this.state() === 'running' && !this.deps.reducedMotion()
     if (breathe && !this.breathing) {
       this.breathing = setInterval(() => {
         this.breath = (this.breath + 1) % BREATH.length
@@ -352,20 +355,20 @@ export class KettuTray {
 
   private image(): Electron.NativeImage {
     const state = this.state()
-    const name = trayImageName(process.platform, this.white, state, BREATH[this.breath])
+    const name = trayImageName(this.platform, this.white, state, BREATH[this.breath])
     const cached = this.images.get(name)
     if (cached) return cached
     const image = nativeImage.createFromPath(join(imagesDir(), name))
     if (image.isEmpty()) log.warn(`The tray image ${name} is missing`)
-    if (isTemplateImage(process.platform, state)) image.setTemplateImage(true)
+    if (isTemplateImage(this.platform, state)) image.setTemplateImage(true)
     this.images.set(name, image)
     return image
   }
 
   private async readTheme(): Promise<void> {
     const reading = ++this.reading
-    const scheme = process.platform === 'linux' ? await readColorScheme() : null
-    const white = whiteGlyph(process.platform, scheme)
+    const scheme = this.platform === 'linux' ? await readColorScheme() : null
+    const white = whiteGlyph(this.platform, scheme)
     if (reading !== this.reading || white === this.white) return
     this.white = white
     this.tray?.setImage(this.image())
