@@ -344,6 +344,9 @@ export class PushSender {
                             done: p.plan.done,
                             total: p.plan.total,
                             ...(p.plan.current ? { current: clip(p.plan.current, 120) } : {}),
+                            ...(p.plan.lastCompleted
+                              ? { lastCompleted: clip(p.plan.lastCompleted, 120) }
+                              : {}),
                           },
                     }
                   : {}),

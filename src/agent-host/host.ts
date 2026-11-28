@@ -4789,6 +4789,9 @@ export class AgentHost {
                   done: s.plan.done,
                   total: s.plan.total,
                   ...(s.plan.current?.text ? { current: s.plan.current.text } : {}),
+                  ...(s.plan.lastCompleted?.text
+                    ? { lastCompleted: s.plan.lastCompleted.text }
+                    : {}),
                 },
               }
             : {}),
