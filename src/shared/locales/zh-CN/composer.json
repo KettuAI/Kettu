@@ -368,6 +368,17 @@
       "request_failed": "没能完成搜索"
     }
   },
+  "githubRefs": {
+    "heading": "Issue 与 PR",
+    "loading": "正在加载 Issue 和 PR…",
+    "searching": "正在搜索 Issue 和 PR…",
+    "empty": "此仓库还没有 Issue 或 PR",
+    "noMatch": "没有匹配的 Issue 或 PR",
+    "ghMissing": "安装 GitHub CLI（gh）后即可搜索 Issue 和 PR",
+    "ghSignedOut": "运行 gh auth login 登录 GitHub CLI 后即可搜索 Issue 和 PR",
+    "failed": "暂时无法搜索 GitHub Issue 和 PR",
+    "keysClose": "Esc 关闭"
+  },
   "chips": {
     "pastedLink": "已粘贴为链接",
     "pasteAsText": "粘贴为文本",

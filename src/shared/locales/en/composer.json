@@ -382,6 +382,17 @@
       "request_failed": "Couldn’t search"
     }
   },
+  "githubRefs": {
+    "heading": "Issues & PRs",
+    "loading": "Loading issues and pull requests…",
+    "searching": "Searching issues and pull requests…",
+    "empty": "No issues or pull requests in this repository",
+    "noMatch": "No matching issues or pull requests",
+    "ghMissing": "Install the GitHub CLI (gh) to search issues and pull requests",
+    "ghSignedOut": "Sign in to the GitHub CLI with gh auth login to search issues and pull requests",
+    "failed": "Couldn’t search GitHub issues and pull requests",
+    "keysClose": "Esc to close"
+  },
   "chips": {
     "pastedLink": "Pasted as a link",
     "pasteAsText": "Paste as text",

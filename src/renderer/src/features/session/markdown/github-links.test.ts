@@ -82,4 +82,14 @@ describe('GitHub links without https:// in a reply', () => {
       '[x](https://example.com/?next=github.com/o/r/pull/1)',
     )
   })
+
+  it('recognizes #123 and owner/repo#456 while excluding code, anchors, colors, and zero numbers (#2600)', () => {
+    expect(render('See #2600 and o/r#45.')).toBe(
+      'See [#2600](#github-ref:2600) and [o/r#45](https://github.com/o/r/issues/45).',
+    )
+    expect(render('Ignore `#123`, #0, #000000, #L10, #ff0000, foo#123, and ##123.')).toBe(
+      'Ignore #123, #0, #000000, #L10, #ff0000, foo#123, and ##123.',
+    )
+    expect(render('```\n#2600\n```')).not.toContain('](#github-ref:')
+  })
 })

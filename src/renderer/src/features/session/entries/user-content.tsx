@@ -3,6 +3,7 @@ import { File01Icon, Link01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
+import { githubReferenceFromLink } from '@shared/git'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import {
   isSkillCommand,
@@ -18,6 +19,8 @@ import { parseLineRangeText, shouldReadAsText } from '@renderer/features/files/f
 import { FileHoverPreview } from '@renderer/features/files/file-hover-preview'
 import { relativeToRoot } from '@renderer/features/files/file-location'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { ReferenceHoverCard } from '@renderer/features/git/gh-reference'
+import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
 import { host } from '@renderer/lib/host'
 import { hostPlatform } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -313,6 +316,13 @@ function ChipText({
   markdown: boolean
 }) {
   const projectPath = useContext(ProjectPathContext)
+  const repo = useProjectRepository()
+  const repoOwner = repo?.owner ?? null
+  const repoName = repo?.repo ?? null
+  const githubRepo = useMemo(
+    () => (repoOwner && repoName ? { owner: repoOwner, repo: repoName } : null),
+    [repoOwner, repoName],
+  )
   const entry = useSentEntry(sessionId, entryId)
   const attachments = useMemo(() => attachmentsOf(entry), [entry])
   const surfaces = useMemo(() => surfacesOf(entry), [entry])
@@ -329,8 +339,9 @@ function ChipText({
       ],
       skills: commands?.filter(isSkillCommand).map((c) => c.name) ?? [],
       resolve,
+      githubRepo,
     }),
-    [commands, command, resolve],
+    [commands, command, resolve, githubRepo],
   )
   const links = useLinkOpener(sessionId)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
@@ -409,6 +420,32 @@ function ChipText({
       )
     }
     // A selection copies what was typed: the chip's look is left out of it, its text is not.
+    const githubRef = chip.kind === 'link' ? githubReferenceFromLink(chip.url) : null
+    if (githubRef && open) {
+      return (
+        <>
+          <ReferenceHoverCard
+            reference={githubRef}
+            sessionId={sessionId ?? null}
+            side="top"
+            sideOffset={6}
+            trigger={
+              <button
+                type="button"
+                aria-label={raw}
+                onClick={(event) => open(event.currentTarget)}
+                className="rounded-[7px] align-middle outline-none select-none focus-visible:focus-ring"
+              >
+                <ChipView chip={chip} surface />
+              </button>
+            }
+          />
+          <span aria-hidden className="sr-only">
+            {raw}
+          </span>
+        </>
+      )
+    }
     return (
       <>
         {open ? (

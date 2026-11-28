@@ -1586,6 +1586,29 @@ describe('computer use requests', () => {
     rejects(() => posix['git.stack']({ url: `${url}\n` }))
   })
 
+  it('validates git.searchReferences repository owner, repo name, and bounded query', () => {
+    expect(posix['git.searchReferences']({ owner: 'KettuAI', repo: 'Kettu', query: '' })).toEqual({
+      owner: 'KettuAI',
+      repo: 'Kettu',
+      query: '',
+    })
+    expect(
+      posix['git.searchReferences']({ owner: 'octo-org', repo: 'app.ts', query: '2600' }),
+    ).toEqual({
+      owner: 'octo-org',
+      repo: 'app.ts',
+      query: '2600',
+    })
+    rejects(() => posix['git.searchReferences']({}))
+    rejects(() => posix['git.searchReferences']({ owner: '-bad', repo: 'Kettu', query: '' }))
+    rejects(() => posix['git.searchReferences']({ owner: 'KettuAI', repo: '..', query: '' }))
+    rejects(() => posix['git.searchReferences']({ owner: 'KettuAI', repo: 'a/b', query: '' }))
+    rejects(() => posix['git.searchReferences']({ owner: 'KettuAI', repo: 'Kettu', query: 'a\0b' }))
+    rejects(() =>
+      posix['git.searchReferences']({ owner: 'KettuAI', repo: 'Kettu', query: 'x'.repeat(121) }),
+    )
+  })
+
   it('watches only github.com pull request, issue, and stack addresses, a bounded number', () => {
     const pull = 'https://github.com/KettuAI/Kettu/pull/546'
     const issue = 'https://github.com/KettuAI/Kettu/issues/546'

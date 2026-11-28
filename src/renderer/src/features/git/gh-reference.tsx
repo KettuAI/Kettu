@@ -21,6 +21,7 @@ import {
   type PullRequestAuthor,
   type PullRequestStack,
   type PullRequestStackState,
+  type PullRequestState,
   type StackUnavailableReason,
 } from '@shared/git'
 import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
@@ -88,6 +89,33 @@ const STACK_COLOR = {
   open: 'text-success',
   closed: 'text-icon',
 } as const
+
+/** The state's icon in its color for a compact repository issue or pull request summary. */
+export function RepositoryReferenceIcon({
+  item,
+  size = 14,
+  className,
+}: {
+  item: { kind: 'issue'; state: IssueState } | { kind: 'pull'; state: PullRequestState }
+  size?: IconSize
+  className?: string
+}) {
+  const { t } = useTranslation('git')
+  if (item.kind === 'pull') {
+    return <PrIcon state={item.state} size={size} className={className} />
+  }
+  const { Icon, color } = ISSUE[item.state]
+  return (
+    <HugeiconsIcon
+      icon={Icon}
+      size={size}
+      strokeWidth={STROKE}
+      role="img"
+      aria-label={t('ref.issueIcon', { state: t(ISSUE_STATE_KEY[item.state]) })}
+      className={cn('shrink-0', ICON_SIZE[size], color, className)}
+    />
+  )
+}
 
 /** The state's icon in its color; gray, of the reference's kind, until gh has answered. */
 export function ReferenceIcon({

@@ -14,6 +14,7 @@ import type {
   PullRequestStackLookup,
   PullRequestState,
   ReferenceLookup,
+  RepositoryReferenceSearchResult,
   RepositoryVisibility,
 } from '@shared/git'
 import type { GitEntry, ToolEntry, ToolKind } from '@shared/thread'
@@ -115,6 +116,12 @@ export interface GitServiceApi {
   issue(url: string): Promise<IssueLookup>
   /** Details for a pull request stack reference; `url` matches GITHUB_STACK_URL. */
   stack(url: string, fresh?: boolean): Promise<PullRequestStackLookup>
+  /** Lists recent issues/PRs of `owner/repo` or searches them by number or title. */
+  searchReferences(
+    owner: string,
+    repo: string,
+    query: string,
+  ): Promise<RepositoryReferenceSearchResult>
   /** What is known of a session row's pull request without asking gh; asks in the background. */
   knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null
   /**

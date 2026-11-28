@@ -2703,6 +2703,18 @@ export function createValidators(platform: Platform): Validators {
       }
       return o.fresh === undefined ? { url } : { url, fresh: o.fresh }
     },
+    'git.searchReferences': (params) => {
+      const o = fields(params)
+      const owner = string(o, 'owner', 128)
+      if (!GITHUB_LOGIN.test(owner)) throw invalidParams('owner is not a GitHub login')
+      const repo = string(o, 'repo', 128)
+      if (!isRepositoryName(repo)) throw invalidParams('repo is not a GitHub repository name')
+      const query = o.query
+      if (typeof query !== 'string') throw invalidParams('query must be a string')
+      if (query.length > 120) throw invalidParams(t('validate.tooLong', { key: 'query', max: 120 }))
+      if (query.includes('\0')) throw invalidParams('query contains a NUL character')
+      return { owner, repo, query }
+    },
     'git.watchReferences': (params) => {
       const value = fields(params).urls
       if (!Array.isArray(value) || value.length > WATCHED_REFERENCES) {

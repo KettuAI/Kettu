@@ -167,16 +167,27 @@ export function popoverKey(
     mentionOpen: boolean
     /** The mention popover has rows to choose from. */
     mentionRows: boolean
+    /** The `#` GitHub reference picker is open. */
+    hashOpen?: boolean
+    /** The `#` GitHub reference picker has rows to choose from. */
+    hashRows?: boolean
   },
 ): PopoverKey {
   if (state.composing) return 'block'
   if (state.modified) return 'composer'
   if (state.slashOpen && (key === 'Enter' || key === 'Tab' || key === 'Escape')) return 'popover'
-  if (!state.mentionOpen) return 'composer'
+  if (state.mentionOpen) {
+    if (key === 'Escape') return 'popover'
+    // With no row to choose, Enter sends as usual.
+    if (key === 'Enter') return state.mentionRows ? 'popover' : 'composer'
+    if (key === 'Tab' && state.mentionRows) return 'choose'
+    return 'composer'
+  }
+  if (!state.hashOpen) return 'composer'
   if (key === 'Escape') return 'popover'
-  // With no row to choose, Enter sends as usual.
-  if (key === 'Enter') return state.mentionRows ? 'popover' : 'composer'
-  if (key === 'Tab' && state.mentionRows) return 'choose'
+  // With no row to choose, Enter sends as usual and never blocks plain-text input.
+  if (key === 'Enter') return state.hashRows ? 'popover' : 'composer'
+  if (key === 'Tab' && state.hashRows) return 'choose'
   return 'composer'
 }
 

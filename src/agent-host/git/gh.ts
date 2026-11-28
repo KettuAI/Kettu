@@ -5,6 +5,8 @@ import type {
   Issue,
   PullRequest,
   PullRequestStackLookup,
+  RepositoryReferenceSearchResult,
+  RepositoryReferenceUnavailableReason,
   StackUnavailableReason,
 } from '@shared/git'
 import { t, tEnglish } from '../i18n'
@@ -27,6 +29,8 @@ import {
   mapIssue,
   mapPullRequest,
   mapPullRequestStack,
+  mapRepositoryReferences,
+  searchReferencesArgs,
   stackArgs,
   userArgs,
   viewArgs,
@@ -171,6 +175,90 @@ export async function viewPullRequestStackByUrl(
   const parsed = mapped(result, (json) => mapPullRequestStack(json, url))
   if (!parsed.ok) return { kind: 'unavailable', reason: 'unavailable' }
   return { kind: 'stack', stack: parsed.value }
+}
+
+/** Classifies a failed `gh api graphql` repository reference search into a clean fallback reason. */
+export function classifyReferenceSearchFailure(
+  result: ExecResult,
+): RepositoryReferenceUnavailableReason {
+  if (result.failure === 'not-found') return 'gh-missing'
+  if (result.failure === 'timeout') return 'timeout'
+  const detail = `${result.stderr}\n${result.stdout}\n${result.message}`
+  if (
+    /\bHTTP 401\b|not logged into|authentication failed|bad credentials|gh auth login/i.test(detail)
+  ) {
+    return 'gh-signed-out'
+  }
+  return 'failed'
+}
+
+// GitHub returns exit code 1 with partial `data` when an exact `issueOrPullRequest(number:)`
+// lookup does not exist even though `search.nodes` succeeded. Accept partial payloads only when
+// every GraphQL error is a NOT_FOUND on that single field.
+function isOnlyMissingNumberLookup(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
+  const record = raw as Record<string, unknown>
+  if (typeof record.data !== 'object' || record.data === null || Array.isArray(record.data)) {
+    return false
+  }
+  if (!Array.isArray(record.errors) || record.errors.length === 0) return false
+  return record.errors.every((entry) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return false
+    const err = entry as Record<string, unknown>
+    return (
+      err.type === 'NOT_FOUND' &&
+      Array.isArray(err.path) &&
+      err.path.length === 2 &&
+      err.path[0] === 'repository' &&
+      err.path[1] === 'issueOrPullRequest'
+    )
+  })
+}
+
+/**
+ * Lists recently updated issues/PRs for `owner/repo`, or searches them by number or title via
+ * read-only `gh api graphql`. Never throws on missing/signed-out `gh` or transient errors.
+ */
+export async function searchRepositoryReferences(
+  exec: Exec,
+  owner: string,
+  repo: string,
+  query: string,
+  cwd: string,
+): Promise<RepositoryReferenceSearchResult> {
+  const args = searchReferencesArgs(owner, repo, query)
+  const result = await exec('gh', args, { cwd, timeoutMs: GH_TIMEOUT_MS })
+  if (result.failure !== null) {
+    return {
+      kind: 'unavailable',
+      reason: classifyReferenceSearchFailure(result),
+      message: failureText(result),
+    }
+  }
+  if (result.code !== 0) {
+    const partial = parseJson(result.stdout)
+    if (partial.ok && isOnlyMissingNumberLookup(partial.value)) {
+      try {
+        return { kind: 'ok', items: mapRepositoryReferences(partial.value, owner, repo) }
+      } catch (error) {
+        return {
+          kind: 'unavailable',
+          reason: 'failed',
+          message: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
+    return {
+      kind: 'unavailable',
+      reason: classifyReferenceSearchFailure(result),
+      message: failureText(result),
+    }
+  }
+  const parsed = mapped(result, (json) => mapRepositoryReferences(json, owner, repo))
+  if (!parsed.ok) {
+    return { kind: 'unavailable', reason: 'failed', message: parsed.message }
+  }
+  return { kind: 'ok', items: parsed.value }
 }
 
 /** Whether git and gh can be used, and which account gh is signed in as. */

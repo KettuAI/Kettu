@@ -24,6 +24,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { findSkillTokens } from '@shared/slash'
 import { RenderedChip, type ChipState } from './chip-view'
 import { findChips, findLinks, mentionEndingAt, type Chip, type ChipContext } from './chips'
+import { fencedCodeLines, hashRefAt } from './github-picker'
 import { slashAt } from './slash'
 
 export interface ChipHooks extends ChipContext {
@@ -161,11 +162,17 @@ const within = (chip: { from: number; to: number }, range: { from: number; to: n
   !!range && range.from <= chip.from && range.to >= chip.to && range.to > range.from
 
 /** The chips on one line; only the first line can start with an exclusive command. */
-function chipsOfLine(line: Line, hooks: ChipHooks): Chip[] {
+function chipsOfLine(line: Line, hooks: ChipHooks, inCodeFence = false): Chip[] {
+  const githubRepo = inCodeFence ? null : (hooks.githubRepo ?? null)
   const context: ChipContext =
     line.number === 1
-      ? hooks
-      : { commands: [], ...(hooks.skills ? { skills: hooks.skills } : {}), resolve: hooks.resolve }
+      ? { ...hooks, githubRepo }
+      : {
+          commands: [],
+          ...(hooks.skills ? { skills: hooks.skills } : {}),
+          resolve: hooks.resolve,
+          githubRepo,
+        }
   const chips = findChips(line.text, context)
   if (line.from === 0) return chips
   return chips.map((chip) => ({ ...chip, from: chip.from + line.from, to: chip.to + line.from }))
@@ -175,8 +182,11 @@ function chipsOfLine(line: Line, hooks: ChipHooks): Chip[] {
 function findAll(state: EditorState): Chip[] {
   const hooks = state.facet(chipHooks)
   if (!hooks) return []
+  const fenced = hooks.githubRepo ? fencedCodeLines(state.doc.toString()) : null
   const chips: Chip[] = []
-  for (let n = 1; n <= state.doc.lines; n++) chips.push(...chipsOfLine(state.doc.line(n), hooks))
+  for (let n = 1; n <= state.doc.lines; n++) {
+    chips.push(...chipsOfLine(state.doc.line(n), hooks, fenced?.has(n) ?? false))
+  }
   return chips
 }
 
@@ -185,6 +195,18 @@ function refind(found: readonly Chip[], update: ViewUpdate): Chip[] {
   const hooks = update.state.facet(chipHooks)
   if (!hooks) return []
   const { doc } = update.state
+  if (hooks.githubRepo) {
+    const text = doc.toString()
+    const beforeText = update.startState.doc.toString()
+    if (
+      text.includes('```') ||
+      text.includes('~~~') ||
+      beforeText.includes('```') ||
+      beforeText.includes('~~~')
+    ) {
+      return findAll(update.state)
+    }
+  }
   const touched: { from: number; to: number }[] = []
   update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
     const from = doc.lineAt(fromB).from
@@ -300,16 +322,21 @@ function slashTypingAt(view: EditorView, head: number): { from: number; to: numb
   return { from: line.from + found.start, to: line.from + found.start + 1 + found.query.length }
 }
 
-/** The link, mention or slash token the caret is typing: the one it is in or at the end of, if any. */
+/** The link, mention, hash ref, or slash token the caret is typing: the one it is in or at the end of, if any. */
 function typingAt(view: EditorView, head: number): { from: number; to: number } | null {
+  const hooks = view.state.facet(chipHooks)
   const line = view.state.doc.lineAt(head)
-  for (const link of findLinks(line.text)) {
+  for (const link of findLinks(line.text, hooks?.githubRepo ?? null)) {
     const from = line.from + link.from
     const to = line.from + link.to
     if (head >= from && head <= to) return { from, to }
   }
   const mention = mentionAt(view, head)
   if (mention) return mention
+  if (hooks?.githubRepo) {
+    const hash = hashRefAt(line.text, head - line.from)
+    if (hash) return { from: line.from + hash.start, to: head }
+  }
   const slash = slashTypingAt(view, head)
   if (slash) return slash
   // A link still being typed, such as `https:/`, is not a link yet but will be.
@@ -362,7 +389,9 @@ const chipPlugin = ViewPlugin.fromClass(
       const rescan =
         hooks?.commands !== before?.commands ||
         hooks?.skills !== before?.skills ||
-        hooks?.resolve !== before?.resolve
+        hooks?.resolve !== before?.resolve ||
+        hooks?.githubRepo?.owner !== before?.githubRepo?.owner ||
+        hooks?.githubRepo?.repo !== before?.githubRepo?.repo
       const deleted = update.docChanged ? wholeChipsDeleted(update, this.found) : null
       if (rescan) this.found = findAll(update.state)
       else if (update.docChanged) this.found = refind(this.found, update)

@@ -9,6 +9,7 @@ import {
   type PullRequest,
   type PullRequestStack,
   type ReferenceLookup,
+  type RepositoryReferenceItem,
   type RepositoryVisibility,
   type StackUnavailableReason,
 } from '@shared/git'
@@ -127,6 +128,8 @@ export interface HostGitState {
   pullRequestAliases: Record<string, string>
   /** By URL, why a reference's details did not load, until they do. */
   referenceErrors: Record<string, string>
+  /** By canonical URL, lightweight issue/PR summary remembered from the `#` reference picker. */
+  referenceSummaries: Record<string, RepositoryReferenceItem>
   /** By login, a chip author's picture as a data: URL, or null when GitHub has none. */
   avatars: Record<string, string | null>
   tools: GitTools | null
@@ -141,6 +144,7 @@ const EMPTY_HOST_GIT: HostGitState = {
   stackUnavailable: {},
   pullRequestAliases: {},
   referenceErrors: {},
+  referenceSummaries: {},
   avatars: {},
   tools: null,
   toolsError: null,
@@ -255,6 +259,25 @@ export function referenceErrorOf(
   url: string,
 ): string | null {
   return hostGitOf(s, hostId).referenceErrors[url] ?? null
+}
+
+/** A lightweight issue/PR summary remembered from the `#` picker until full details load. */
+export function referenceSummaryOf(
+  s: Pick<GitStore, 'byHost'>,
+  hostId: string | null,
+  url: string,
+): RepositoryReferenceItem | undefined {
+  return hostGitOf(s, hostId).referenceSummaries[url]
+}
+
+/** Remembers a picked issue/PR summary so its newly inserted chip shows state and title immediately. */
+export function rememberReferenceSummary(
+  item: RepositoryReferenceItem,
+  hostId: string | null = null,
+): void {
+  updateHostGit(hostId, (h) => ({
+    referenceSummaries: setCapped(h.referenceSummaries, item.url, item, MAX_CACHED_REFS),
+  }))
 }
 
 /** A cached GitHub author avatar data URL on `hostId`, null when none exists, or undefined. */

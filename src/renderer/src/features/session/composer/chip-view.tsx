@@ -14,7 +14,7 @@ import {
 import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
 import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
-import { ReferenceIcon } from '@renderer/features/git/gh-reference'
+import { ReferenceIcon, RepositoryReferenceIcon } from '@renderer/features/git/gh-reference'
 import {
   GitHostContext,
   referenceTitleOf,
@@ -25,7 +25,7 @@ import {
 } from '@renderer/features/git/gh-reference-data'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
-import { loadReference } from '@renderer/stores/git'
+import { loadReference, referenceSummaryOf, useGitStore } from '@renderer/stores/git'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import { shortLinkPath, type Chip } from './chips'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -87,12 +87,19 @@ function ReferenceBody({ reference }: { reference: GitHubReference }) {
   const { t } = useTranslation('git')
   const hostId = useGitHostId()
   const { data } = useReferenceData(reference, hostId)
+  const summary = useGitStore((s) =>
+    data ? undefined : referenceSummaryOf(s, hostId, reference.url),
+  )
   const repo = useProjectRepository()
   useEffect(() => loadReference(reference, false, hostId), [reference, hostId])
-  const title = referenceTitleOf(data, t)
+  const title = referenceTitleOf(data, t) ?? summary?.title ?? null
   return (
     <>
-      <ReferenceIcon kind={reference.kind} data={data} size={14} />
+      {data || !summary ? (
+        <ReferenceIcon kind={reference.kind} data={data} size={14} />
+      ) : (
+        <RepositoryReferenceIcon item={summary} size={14} />
+      )}
       <span className="min-w-0 truncate">
         <span className="font-medium">{shortReference(reference, repo)}</span>
         {title && <span className="ml-1.5 text-tertiary">{title}</span>}
