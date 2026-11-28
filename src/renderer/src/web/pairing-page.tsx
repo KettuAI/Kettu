@@ -29,6 +29,7 @@ import {
   type HostedDiscoveredHost,
   type HostedDiscoveredHosts,
 } from './hosted/discovery'
+import { RefreshCacheButton, RefreshCacheFooter } from './refresh-cache-action'
 
 export type PairingNotice = 'removed' | null
 
@@ -294,6 +295,7 @@ export function PairingView({
   onConfirmDiscovery,
   onCancelDiscovery,
   onRetryDiscovery,
+  onRefreshCache,
   onSubmit,
 }: {
   notice: PairingNotice
@@ -314,6 +316,7 @@ export function PairingView({
   onConfirmDiscovery?(): void
   onCancelDiscovery?(): void
   onRetryDiscovery?(): void
+  onRefreshCache?: () => Promise<void> | void
   onSubmit(event: FormEvent): void
 }) {
   const { t } = useTranslation('web')
@@ -351,6 +354,7 @@ export function PairingView({
             onConfirm={onConfirmDiscovery}
             onCancel={onCancelDiscovery}
             onRetry={onRetryDiscovery}
+            onRefreshCache={onRefreshCache}
           />
         ) : linkBusy ? (
           <div className="flex items-start gap-3 rounded-xl bg-card px-4 py-3.5 shadow-card">
@@ -409,6 +413,7 @@ export function PairingView({
                   progress={progress}
                   link={link}
                   invalid={invalid}
+                  onRefreshCache={onRefreshCache}
                   onLink={onLink}
                   onSubmit={onSubmit}
                 />
@@ -422,6 +427,7 @@ export function PairingView({
             link={link}
             invalid={invalid}
             onBack={hosted?.onBack ?? undefined}
+            onRefreshCache={onRefreshCache}
             onLink={onLink}
             onSubmit={onSubmit}
           />
@@ -440,6 +446,8 @@ export function PairingView({
             </Button>
           </p>
         )}
+
+        <RefreshCacheFooter onRefresh={onRefreshCache} />
 
         <InsecureNote />
       </div>
@@ -588,12 +596,14 @@ function DiscoveryPairPanel({
   onConfirm,
   onCancel,
   onRetry,
+  onRefreshCache,
 }: {
   pairing: ActiveDiscoveryPairing
   deviceName: string
   onConfirm?(): void
   onCancel?(): void
   onRetry?(): void
+  onRefreshCache?: () => Promise<void> | void
 }) {
   const { t } = useTranslation('web')
   const { host, progress, added } = pairing
@@ -618,7 +628,10 @@ function DiscoveryPairPanel({
             {t(`pair.account.failed.${progress.reason}`, { name: host.name })}
           </AlertDescription>
         </Alert>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {progress.reason === 'update_client' && (
+            <RefreshCacheButton variant="default" size="default" onRefresh={onRefreshCache} />
+          )}
           {canRetryDiscoveryFailure(progress.reason) && (
             <Button type="button" onClick={onRetry}>
               {t('pair.again')}
@@ -700,6 +713,7 @@ function LinkPairingForm({
   link,
   invalid,
   onBack,
+  onRefreshCache,
   onLink,
   onSubmit,
 }: {
@@ -708,6 +722,7 @@ function LinkPairingForm({
   link: string
   invalid: boolean
   onBack?: () => void
+  onRefreshCache?: () => Promise<void> | void
   onLink(link: string): void
   onSubmit(event: FormEvent): void
 }) {
@@ -734,10 +749,13 @@ function LinkPairingForm({
         />
         {invalid && <FieldError>{t('pair.notLink')}</FieldError>}
       </Field>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={link.trim() === ''}>
           {progress?.state === 'failed' ? t('pair.again') : t('pair.submit')}
         </Button>
+        {progress?.state === 'failed' && progress.reason === 'update_client' && (
+          <RefreshCacheButton variant="secondary" size="default" onRefresh={onRefreshCache} />
+        )}
         {onBack && (
           <Button type="button" variant="ghost" onClick={onBack}>
             {t('pair.back')}

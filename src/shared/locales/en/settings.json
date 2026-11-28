@@ -1348,7 +1348,22 @@
   "about": {
     "version": {
       "description": "A desktop workbench for Claude Code, Codex, opencode and Pi.",
-      "line": "Version {{version}} · {{system}}"
+      "line": "Version {{version}} · {{system}}",
+      "webLine": "Web client {{version}} · {{mode}}",
+      "hostLine": "Host · Version {{version}} · {{system}}",
+      "hostLineNamed": "{{host}} · Version {{version}} · {{system}}",
+      "modes": {
+        "hosted": "Hosted",
+        "relay": "Relay",
+        "direct": "Direct"
+      }
+    },
+    "webCache": {
+      "name": "Refresh web cache",
+      "description": "Reloads the latest web files without clearing paired computers, sign-in, settings, or notifications.",
+      "keywords": "refresh reload web cache clear static files stale version update",
+      "button": "Refresh web cache",
+      "refreshing": "Refreshing…"
     },
     "updates": {
       "name": "Updates",
@@ -1437,6 +1452,7 @@
       "open": "Join"
     },
     "groups": {
+      "web": "Web client",
       "updates": "Updates",
       "contact": "Contact us"
     }

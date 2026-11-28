@@ -11,6 +11,7 @@ import {
   type Welcome,
 } from '@shared/remote/protocol'
 import { webApi } from './api'
+import { refreshWebCache } from './cache-refresh'
 import { hello, HostLink, type Dial, type LinkRoute } from '@shared/remote/link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
@@ -186,6 +187,6 @@ async function offerReload(): Promise<void> {
   ])
   toast(i18n.t('web:connection.updated'), {
     label: i18n.t('web:connection.reload'),
-    onClick: () => location.reload(),
+    onClick: () => void refreshWebCache(),
   })
 }

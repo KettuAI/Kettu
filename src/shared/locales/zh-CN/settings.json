@@ -1337,7 +1337,22 @@
   "about": {
     "version": {
       "description": "面向 Claude Code、Codex、opencode 和 Pi 的桌面工作台。",
-      "line": "版本 {{version}} · {{system}}"
+      "line": "版本 {{version}} · {{system}}",
+      "webLine": "网页客户端 {{version}} · {{mode}}",
+      "hostLine": "主机 · 版本 {{version}} · {{system}}",
+      "hostLineNamed": "{{host}} · 版本 {{version}} · {{system}}",
+      "modes": {
+        "hosted": "Kettu 托管",
+        "relay": "自建中继",
+        "direct": "直连"
+      }
+    },
+    "webCache": {
+      "name": "刷新网页缓存",
+      "description": "强制拉取最新网页文件，不会清除已配对电脑、登录状态、设置和通知订阅。",
+      "keywords": "刷新 重载 网页 缓存 强刷 强制更新 静态资源 版本 refresh reload web cache",
+      "button": "刷新网页缓存",
+      "refreshing": "正在刷新…"
     },
     "updates": {
       "name": "更新",
@@ -1425,6 +1440,7 @@
       "open": "加入"
     },
     "groups": {
+      "web": "网页客户端",
       "updates": "更新",
       "contact": "联系我们"
     }

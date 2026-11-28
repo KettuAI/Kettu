@@ -14,6 +14,7 @@ import type { RelayProblem } from '@shared/remote/hosts'
 import { isOwnRelay, type HostRelay } from '@shared/remote/relay'
 import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
+import { installStaleChunkReload, stripRefreshQueryParam } from '../cache-refresh'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
 import type { HostLink, LinkRoute } from '@shared/remote/link'
@@ -111,21 +112,6 @@ const DISCOVERY_FAILURES: Record<RelayProblem, DiscoveryPairFailure> = {
   signed_out: 'signed_out',
 }
 
-/** A chunk an open page asks for after a newer build replaced it: the page loads again, once. */
-function reloadOnStaleChunks(): void {
-  const key = 'kettu.reloaded'
-  window.addEventListener('vite:preloadError', (event) => {
-    try {
-      if (sessionStorage.getItem(key)) return
-      sessionStorage.setItem(key, '1')
-    } catch {
-      return
-    }
-    event.preventDefault()
-    location.reload()
-  })
-}
-
 let hostedRelay: HostedRelay | null = null
 
 /** The relay regions and tokens, once per page, for the account signed in. */
@@ -141,7 +127,8 @@ function relaysOf(account: HostedAccount): HostedRelay {
 const MAX_ROUTES = 3
 
 export async function startHosted(base: HostedBase): Promise<void> {
-  reloadOnStaleChunks()
+  stripRefreshQueryParam()
+  installStaleChunkReload()
   const account = new HostedAccount({
     accountUrl,
     client: {

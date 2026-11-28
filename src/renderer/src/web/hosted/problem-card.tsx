@@ -4,6 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { RelayProblem } from '@shared/remote/hosts'
 import { Button } from '@renderer/components/ui/button'
+import { RefreshCacheButton } from '../refresh-cache-action'
 import type { HostedHost } from './hosts'
 
 export interface ProblemOptions {
@@ -69,6 +70,7 @@ export function ProblemCard({
               {host.name}
             </Button>
           ))}
+          <RefreshCacheButton size="sm" variant="ghost" />
         </div>
       </div>
     </div>

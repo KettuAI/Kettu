@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -98,5 +98,54 @@ describe("the direct port's artifact frames", () => {
     const missing = await fetch(`${base}${pathname}`, { headers: { Origin: 'null' } })
     expect(missing.status).toBe(404)
     expect(missing.headers.get('access-control-allow-origin')).toBe('null')
+  })
+})
+
+describe('the direct port web client SPA routes with cache-busting query params', () => {
+  it('serves index.html with no-cache for root and subpaths carrying _refresh query params', async () => {
+    const webRoot = mkdtempSync(path.join(os.tmpdir(), 'kettu-web-root-'))
+    mkdirSync(path.join(webRoot, 'assets'), { recursive: true })
+    writeFileSync(
+      path.join(webRoot, 'index.html'),
+      '<!doctype html><html><body>kettu-web</body></html>',
+    )
+    writeFileSync(path.join(webRoot, 'assets', 'app-abc123.js'), 'console.log("ok")')
+
+    const spaWeb = new WebServer({
+      root: webRoot,
+      server: {
+        accept: () => {},
+        refusedOne: () => {},
+        frameFile: async () => null,
+      },
+      limits: new HandshakeLimits(),
+      log: () => {},
+    })
+    const spaListener = createServer((socket) => spaWeb.take(socket))
+    await new Promise<void>((resolve) => spaListener.listen(0, '127.0.0.1', resolve))
+    const addr = spaListener.address()
+    const spaBase = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`
+
+    try {
+      for (const route of [
+        '/?_refresh=1732776000000',
+        '/pair?_refresh=1732776000000',
+        '/session/1?x=1&_refresh=2',
+      ]) {
+        const res = await fetch(`${spaBase}${route}`)
+        expect(res.status, route).toBe(200)
+        expect(res.headers.get('cache-control'), route).toBe('no-cache')
+        expect(res.headers.get('content-type'), route).toBe('text/html; charset=utf-8')
+        expect(await res.text(), route).toContain('kettu-web')
+      }
+
+      const asset = await fetch(`${spaBase}/assets/app-abc123.js`)
+      expect(asset.status).toBe(200)
+      expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    } finally {
+      spaWeb.endAll()
+      await new Promise((resolve) => spaListener.close(resolve))
+      rmSync(webRoot, { recursive: true, force: true })
+    }
   })
 })

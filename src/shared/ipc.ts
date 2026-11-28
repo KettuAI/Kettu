@@ -715,6 +715,8 @@ export interface KettuApi {
   hosted?: true
   /** The web client a relay the owner runs serves, with no account: it reaches hosts through it. */
   relayPage?: true
+  /** The web client's own build version, set only by the web build. */
+  clientVersion?: string
   /** The system of the host whose paths the page shows: this computer's, or the one connected. */
   hostPlatform(): Platform
   /** The interface language the system's preferred languages pick, for Language › System. */

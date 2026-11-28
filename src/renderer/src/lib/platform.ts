@@ -14,6 +14,20 @@ export const isHosted = isWeb && window.kettu.hosted === true
 /** The web client a relay the owner runs serves, which reaches its hosts through that relay. */
 export const isRelayPage = isWeb && window.kettu.relayPage === true
 
+export type WebClientMode = 'hosted' | 'relay' | 'direct'
+
+/** How the web client reaches hosts: Kettu's hosted page, an owner's relay, or a host's direct port. */
+export const webMode: WebClientMode | null = isWeb
+  ? isHosted
+    ? 'hosted'
+    : isRelayPage
+      ? 'relay'
+      : 'direct'
+  : null
+
+/** The web client's own build version; null in the desktop app. */
+export const webVersion: string | null = isWeb ? (window.kettu.clientVersion ?? null) : null
+
 /**
  * The window's frame: macOS's traffic lights over the content, the band beside the window controls
  * on Windows and Linux, or none in a browser.

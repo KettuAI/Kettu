@@ -7,6 +7,7 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { RefreshCacheFooter } from '../refresh-cache-action'
 
 type SignedOut = Extract<AccountStatus, { state: 'signed-out' }>
 
@@ -80,6 +81,8 @@ export function SignInPage({
         </div>
 
         <p className="text-xs text-secondary">{t('hosted.signIn.own')}</p>
+
+        <RefreshCacheFooter />
       </div>
     </main>
   )

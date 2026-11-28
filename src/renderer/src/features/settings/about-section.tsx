@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { GithubIcon, NewTwitterIcon, Tick02Icon, WechatIcon } from '@hugeicons/core-free-icons'
+import {
+  GithubIcon,
+  NewTwitterIcon,
+  RefreshIcon,
+  Tick02Icon,
+  WechatIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
@@ -10,10 +16,13 @@ import { useRefresh } from '@renderer/components/refresh'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
+import { isWeb, webMode, webVersion } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, restartToUpdate, useUpdatesStore } from '@renderer/stores/updates'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { AboutStarButton } from '@renderer/features/github-star/star-prompts'
+import { refreshWebCache } from '@renderer/web/cache-refresh'
 import {
   ControlError,
   CopyAction,
@@ -42,6 +51,7 @@ const WECHAT_URL_ZH = 'https://www.kettu.sh/zh-CN/community/'
  */
 export function AboutHero({ info }: { info: AppInfo | null }) {
   const { t } = useTranslation('settings')
+  const hostName = useWebHostStore((s) => s.host?.name ?? '')
   return (
     <>
       <PageHeader id="settings-about" title={t('sections.about')}>
@@ -52,9 +62,28 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
         <span className="ui-sg-label">
           <b>Kettu</b>
           <small>{t('about.version.description')}</small>
+          {isWeb && webVersion && webMode && (
+            <small data-selectable="" className="k-num">
+              {t('about.version.webLine', {
+                version: webVersion,
+                mode: t(`about.version.modes.${webMode}`),
+              })}
+            </small>
+          )}
           {info ? (
             <small data-selectable="" className="k-num">
-              {t('about.version.line', { version: info.version, system: info.system })}
+              {isWeb
+                ? hostName
+                  ? t('about.version.hostLineNamed', {
+                      host: hostName,
+                      version: info.version,
+                      system: info.system,
+                    })
+                  : t('about.version.hostLine', {
+                      version: info.version,
+                      system: info.system,
+                    })
+                : t('about.version.line', { version: info.version, system: info.system })}
             </small>
           ) : (
             <Skel width={176} className="k-about__skel" />
@@ -69,6 +98,25 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
         </span>
       </div>
     </>
+  )
+}
+
+/**
+ * Web-only button in Settings > About that clears static web caches and reloads with a one-time
+ * cache-bust query parameter while keeping pairing keys, sign-in, settings, and push intact.
+ */
+export function RefreshWebCache() {
+  const { t } = useTranslation('settings')
+  const [busy, setBusy] = useState(false)
+  const run = (): void => {
+    if (busy) return
+    setBusy(true)
+    void refreshWebCache().catch(() => setBusy(false))
+  }
+  return (
+    <SetButton icon={<Icon icon={RefreshIcon} size={14} />} loading={busy} onClick={run}>
+      {t(busy ? 'about.webCache.refreshing' : 'about.webCache.button')}
+    </SetButton>
   )
 }
 
