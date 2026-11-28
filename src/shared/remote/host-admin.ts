@@ -36,6 +36,8 @@ import type { UpdateConfirmationAction, UpdateStatus } from '../updates'
 import type { DeviceActivity } from './activity'
 import type { DiscoveryRequestEvent, ReverseGrant, ReverseHost } from './discovery'
 import type { OwnRelayCheck, OwnRelayInput } from './own-relay'
+import { MAX_REGIONS } from './relay'
+import { isRegionId } from './relay-regions'
 import type { RemoteStatus } from './status'
 
 /**
@@ -101,10 +103,15 @@ export interface HostSettingsPart {
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   /**
    * `relay` holds the official Kettu relay boolean; `ownRelayEnabled` holds the independent own-relay
-   * boolean (absent from older hosts, which encoded both in `relayChoice`).
+   * boolean (absent from older hosts, which encoded both in `relayChoice`). `relayRegions` holds
+   * explicit official relay region ids or null for automatic selection (absent from older hosts).
    */
-  remote: Omit<SettingsFile['remote'], 'relay' | 'ownRelay' | 'ownRelayEnabled'> & {
+  remote: Omit<
+    SettingsFile['remote'],
+    'relay' | 'relayRegions' | 'ownRelay' | 'ownRelayEnabled'
+  > & {
     relay: boolean
+    relayRegions?: SettingsFile['remote']['relayRegions']
     ownRelayEnabled?: boolean
     relayChoice?: RelayChoice
     ownRelay?: SettingsFile['remote']['ownRelay']
@@ -154,7 +161,7 @@ export function hostSettingsPart(file: SettingsFile): HostSettingsPart {
 /** The host's remote section as a client keeps it, from a host of any version. */
 function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['remote'] {
   if (!part) return structuredClone(DEFAULT_SETTINGS.remote)
-  const { relayChoice, relay, ownRelay, ownRelayEnabled, ...rest } = part
+  const { relayChoice, relay, relayRegions, ownRelay, ownRelayEnabled, ...rest } = part
   const hasDual = ownRelayEnabled !== undefined
   const official = hasDual
     ? Boolean(relay)
@@ -166,9 +173,15 @@ function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['r
   const ownOn = hasDual
     ? ownRelayEnabled && Boolean(ownRelay)
     : relayChoice === 'own' && Boolean(ownRelay)
+  const selectedRegions: string[] | null = Array.isArray(relayRegions)
+    ? [
+        ...new Set(relayRegions.filter((id): id is string => isRegionId(id) && id !== 'main')),
+      ].slice(0, MAX_REGIONS - 1)
+    : null
   return {
     ...structuredClone(rest),
     relay: official,
+    relayRegions: selectedRegions && selectedRegions.length > 0 ? selectedRegions : null,
     ownRelayEnabled: ownOn,
     ownRelay: ownRelay ?? null,
   }
@@ -350,6 +363,8 @@ export interface HostInfo extends AppInfo {
   ownRelay?: boolean
   /** Supporting independent official and own relay toggles; absent from older hosts. */
   dualRelay?: boolean
+  /** Measuring official relay region latency and selecting host relay regions; absent from older hosts. */
+  relayMeasure?: boolean
   /**
    * Capturing a preview of one frame, one slide, or a document in one theme, as
    * `artifacts.partThumbnail`; absent from hosts before it.
@@ -475,6 +490,8 @@ export interface HostAdminContract {
   'remote.reset': { params: undefined; result: null }
   'remote.retryDirect': { params: undefined; result: null }
   'remote.retryRelay': { params: undefined; result: null }
+  /** Measures latency to every available official relay region on the host. */
+  'remote.measureRelays': { params: undefined; result: null }
   /** The key goes to the host alone, which never answers with it. */
   'remote.useOwnRelay': { params: OwnRelayInput; result: OwnRelayCheck }
   'host.info': { params: undefined; result: HostInfo }
@@ -594,6 +611,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'remote.reset': true,
   'remote.retryDirect': true,
   'remote.retryRelay': true,
+  'remote.measureRelays': true,
   'remote.useOwnRelay': true,
   'host.info': true,
   'host.restart': true,

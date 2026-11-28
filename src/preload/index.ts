@@ -189,6 +189,7 @@ const api: KettuApi = {
     reset: () => invoke('remote:reset'),
     retryDirect: () => invoke('remote:retry-direct'),
     retryRelay: () => invoke('remote:retry-relay'),
+    measureRelays: () => invoke('remote:measure-relays'),
     useOwnRelay: (input) => invoke('remote:use-own-relay', input),
     onChanged: onRemoteChanged,
     onPairing: onRemotePairing,

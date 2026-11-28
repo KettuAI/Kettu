@@ -506,6 +506,7 @@ function createScope(hostId: string): OtherScope {
     reset: () => done(admin('remote.reset')),
     retryDirect: () => done(admin('remote.retryDirect')),
     retryRelay: () => done(admin('remote.retryRelay')),
+    measureRelays: () => done(admin('remote.measureRelays')),
     useOwnRelay: (input) => admin('remote.useOwnRelay', input),
     onChanged: (listener) => listen('remote.changed', (event) => listener(event.status)),
     onPairing: (listener) => listen('remote.pairing', (event) => listener(event.event)),

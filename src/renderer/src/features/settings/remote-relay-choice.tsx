@@ -24,7 +24,7 @@ import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { useTextFieldLabels } from '@renderer/lib/text-field-labels'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { CONFIRM, ControlError, SetButton, SettingSwitch } from './controls'
-import { RelayRegions, RetryRelay } from './remote-relay'
+import { MeasureRelays, RelayRegions, RetryRelay } from './remote-relay'
 import { BlockLine, GroupNote, Notice, RowGroup, RowLine, RowShell, RowText } from './rows'
 import { errorGroup, relayHostName } from './relay-text'
 import { useApply } from './use-apply'
@@ -77,9 +77,11 @@ export function RelayCard() {
     if (!status) return 0
     return status.devices.filter((device) => !status.online.includes(device.id)).length
   })
-  // Official regions show once the host signed in to them.
+  // Official regions show once the host signed in to them or reported available regions.
   const regions = useRemoteStore(
-    (s) => s.status?.relay?.state === 'on' && s.status.relay.relays.length > 0,
+    (s) =>
+      s.status?.relay?.state === 'on' &&
+      ((s.status.relay.available?.length ?? 0) > 0 || s.status.relay.relays.length > 0),
   )
   const officialChecked = !cloudOff && officialSetting
   const ownChecked = ownSetting || editing !== null
@@ -184,7 +186,9 @@ export function RelayCard() {
                     description={t('remote.relay.regionsDescription')}
                   />
                 }
-              />
+              >
+                <MeasureRelays />
+              </BlockLine>
               <RelayRegions />
             </div>
           </RowShell>

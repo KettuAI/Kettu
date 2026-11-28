@@ -3,7 +3,9 @@
 
 import type { DirectStatus } from '../host-control'
 import type { PairedDevice } from './device'
-import type { RelayConnection, RelayStatus } from './relay-host'
+import type { RelayConnection, RelayRegionStatus, RelayStatus } from './relay-host'
+
+export type { RelayRegionStatus }
 
 /** A device not seen for this long is removed. */
 export const UNSEEN_DAYS = 90
@@ -61,7 +63,13 @@ export interface RemoteStatus {
 export type RelayReport =
   | { state: 'off'; own?: OwnRelayReport }
   | { state: 'signed_out'; own?: OwnRelayReport }
-  | { state: 'on'; relays: RelayStatus[]; own?: OwnRelayReport }
+  | {
+      state: 'on'
+      relays: RelayStatus[]
+      /** Every usable official region from the signed list with connection state and measured RTT. */
+      available?: RelayRegionStatus[]
+      own?: OwnRelayReport
+    }
 
 /** The owner's own relay as Settings shows it while enabled. */
 export interface OwnRelayReport {
@@ -88,6 +96,7 @@ export function relayReport(options: {
   cloud: boolean
   signedIn: boolean
   relays: RelayStatus[]
+  available?: RelayRegionStatus[]
   own: { url: string; pin: string | null } | null
   ownStatus: {
     version: string | null
@@ -116,9 +125,12 @@ export function relayReport(options: {
   if (!options.signedIn) {
     return ownReport ? { state: 'signed_out', own: ownReport } : { state: 'signed_out' }
   }
-  return ownReport
-    ? { state: 'on', relays: options.relays, own: ownReport }
-    : { state: 'on', relays: options.relays }
+  return {
+    state: 'on',
+    relays: options.relays,
+    ...(options.available !== undefined ? { available: options.available } : {}),
+    ...(ownReport ? { own: ownReport } : {}),
+  }
 }
 
 /** The relay as one state: connected once any relay (official or own) is, else how the rest are doing. */

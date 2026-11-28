@@ -479,6 +479,8 @@ export interface IpcInvokeContract {
   'remote:retry-direct': { args: []; result: void }
   // Tries every relay now, as after a conflict with another copy of Kettu or an error.
   'remote:retry-relay': { args: []; result: void }
+  // Measures latency to every official relay region and refreshes host region status.
+  'remote:measure-relays': { args: []; result: void }
   'remote:use-own-relay': { args: [input: OwnRelayInput]; result: OwnRelayCheck }
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
@@ -900,6 +902,8 @@ export interface KettuApi {
     retryDirect(): Promise<void>
     /** Tries every relay again. */
     retryRelay(): Promise<void>
+    /** Measures latency to every official relay region on the host. */
+    measureRelays(): Promise<void>
     /**
      * Checks the owner's own relay and its key, and makes it the one in use once both pass; the
      * key is written to the host alone and never read back.

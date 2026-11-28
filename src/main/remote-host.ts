@@ -53,7 +53,7 @@ import {
 } from '@shared/remote/host-admin'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { OwnRelayCheck, OwnRelayInput } from '@shared/remote/own-relay'
-import { parseRelayStatuses } from '@shared/remote/relay-host'
+import { parseRelayRegionStatuses, parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
 import { locale as currentLocale, t } from './i18n'
@@ -77,6 +77,8 @@ const MANAGE_SSH_TIMEOUT_MS = 13 * 60_000
 
 /** How long listing the account's hosts may take: the relay's regions, then each relay's list. */
 const DISCOVER_TIMEOUT_MS = 20_000
+/** How long probing latency to every official relay region may take. */
+const MEASURE_TIMEOUT_MS = 20_000
 
 export interface RemoteHostDeps {
   userDataPath: string
@@ -94,10 +96,10 @@ export interface RemoteHostDeps {
   /** The push gateway's origin. */
   pushUrl: string
   /**
-   * The relay to sign in to, as the settings are now: the Kettu relay while it may be used, or
-   * the owner's own relay with its access key.
+   * The relay to sign in to, as the settings are now: the Kettu relay while it may be used,
+   * explicit official relay regions (or null for automatic), and the owner's own relay.
    */
-  relay(): { enabled: boolean; own: OwnRelayInit | null }
+  relay(): { enabled: boolean; own: OwnRelayInit | null; regions?: string[] | null }
   /** Checks the owner's own relay and switches to it once it passed. */
   useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
   /** Whether devices of the account find this computer on the relay, as the setting is now. */
@@ -162,12 +164,11 @@ const folded = (host: HostStatus): boolean =>
 
 function isStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused, direct, relays } = value as Record<
-    string,
-    unknown
-  >
+  const { publicKey, plainTextKey, devices, online, refused, direct, relays, availableRelays } =
+    value as Record<string, unknown>
   return (
     parseRelayStatuses(relays) !== null &&
+    (availableRelays === undefined || parseRelayRegionStatuses(availableRelays) !== null) &&
     typeof publicKey === 'string' &&
     typeof plainTextKey === 'boolean' &&
     Array.isArray(devices) &&
@@ -358,7 +359,14 @@ export class RemoteHost {
     const relay = this.deps.relay()
     const sent = JSON.stringify(relay)
     if (sent === this.relayOn) return
-    if (this.host?.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
+    if (
+      this.host?.post({
+        type: 'remote-host:relay',
+        enabled: relay.enabled,
+        own: relay.own,
+        regions: relay.regions ?? null,
+      })
+    ) {
       this.relayOn = sent
     }
   }
@@ -503,6 +511,15 @@ export class RemoteHost {
   /** Tries every relay now, after a conflict or an error. */
   retryRelay(): void {
     this.toServer({ type: 'remote-host:relay-retry' })
+  }
+
+  /** Measures latency to every official relay region and refreshes host region status. */
+  async measureRelays(): Promise<void> {
+    if (!this.serving || !this.host) return
+    await this.request(
+      (requestId) => ({ type: 'remote-host:relay-measure', requestId }),
+      MEASURE_TIMEOUT_MS,
+    )
   }
 
   /** Passes the same settings on again, so a port that could not be opened is tried again. */
@@ -982,6 +999,7 @@ export class RemoteHost {
       url: this.deps.relayUrl,
       enabled: relay.enabled,
       own: relay.own,
+      regions: relay.regions ?? null,
       token: this.token,
       relayToken: this.relayToken,
       ...(key ? { key } : {}),
@@ -1226,6 +1244,7 @@ export class RemoteHost {
       case 'remote-host:discovery-answer':
       case 'remote-host:reverse-host':
       case 'remote-host:events-flushed':
+      case 'remote-host:relay-measured':
       case 'remote-host:reset':
       case 'remote-host:stop-serving':
       case 'remote-host:forwarding':

@@ -18,7 +18,10 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-function createAdmin(settings: SettingsStore, options: { cloudAlwaysOn?: boolean } = {}) {
+function createAdmin(
+  settings: SettingsStore,
+  options: { cloudAlwaysOn?: boolean; measureRelays?: () => Promise<void> } = {},
+) {
   const events: { event: HostAdminEvent; deviceId: string | null }[] = []
   const admin = new HostAdmin({
     settings,
@@ -27,6 +30,7 @@ function createAdmin(settings: SettingsStore, options: { cloudAlwaysOn?: boolean
     remote: {
       pendingDiscovery: () => null,
       closePairing: vi.fn(),
+      measureRelays: options.measureRelays ?? vi.fn(async () => {}),
     } as never,
     remoteStatus: () => ({
       state: 'on',
@@ -144,5 +148,24 @@ describe('HostAdmin cloud.enabled exposure', () => {
     settings.update({ cloud: { enabled: true } })
     admin.settingsChanged(settings.get())
     expect(events).toHaveLength(0)
+  })
+
+  it('handles remote.measureRelays and remote.relayRegions updates over host-admin', async () => {
+    const settings = await SettingsStore.load(dir)
+    const measureRelays = vi.fn(async () => {})
+    const { admin } = createAdmin(settings, { measureRelays })
+
+    expect(await admin.answer(DEVICE_ID, 'remote.measureRelays', undefined)).toEqual({
+      result: null,
+    })
+    expect(measureRelays).toHaveBeenCalledTimes(1)
+
+    const updated = await admin.answer(DEVICE_ID, 'settings.update', {
+      patch: { remote: { relayRegions: ['gz-1', 'sh-1'] } },
+    })
+    expect('result' in updated && (updated.result as HostSettingsPart).remote.relayRegions).toEqual(
+      ['gz-1', 'sh-1'],
+    )
+    expect(settings.get().remote.relayRegions).toEqual(['gz-1', 'sh-1'])
   })
 })

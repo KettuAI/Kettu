@@ -38,7 +38,7 @@ import {
   type JoinedVia,
 } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
-import { parseRelayStatuses } from '@shared/remote/relay-host'
+import { parseRelayRegionStatuses, parseRelayStatuses } from '@shared/remote/relay-host'
 import { relayReport, type RelayReport, type RemoteStatus } from '@shared/remote/status'
 import { accessKeyEnd, relayChoiceInit } from '@shared/remote/own-relay'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
@@ -79,6 +79,8 @@ const REMOVE_TIMEOUT_MS = 10_000
 const DIRECT_WAIT_MS = 2_000
 /** How long a request to the remote host may take before it is answered with nothing, as in main. */
 const REQUEST_TIMEOUT_MS = 10_000
+/** How long probing latency to every official relay region may take. */
+const MEASURE_TIMEOUT_MS = 20_000
 const MAX_ACTIVITY = 500
 /** How long the agent host may take to build a problem report, as in main. */
 const REPORT_TIMEOUT_MS = 120_000
@@ -93,8 +95,17 @@ function isStringList(value: unknown): value is string[] {
 
 function isRemoteStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused, direct, sshPort, relays } =
-    value as Record<string, unknown>
+  const {
+    publicKey,
+    plainTextKey,
+    devices,
+    online,
+    refused,
+    direct,
+    sshPort,
+    relays,
+    availableRelays,
+  } = value as Record<string, unknown>
   const isText = (item: unknown): boolean => typeof item === 'string' && item.length <= MAX_STRING
   return (
     typeof publicKey === 'string' &&
@@ -115,7 +126,8 @@ function isRemoteStatus(value: unknown): value is RemoteHostStatus {
     Number.isSafeInteger(refused) &&
     isDirectStatus(direct) &&
     (sshPort === undefined || sshPort === null || isPort(sshPort)) &&
-    parseRelayStatuses(relays) !== null
+    parseRelayStatuses(relays) !== null &&
+    (availableRelays === undefined || parseRelayRegionStatuses(availableRelays) !== null)
   )
 }
 
@@ -491,6 +503,9 @@ export class Hosts {
       cloud: true,
       signedIn: this.options.signedIn(),
       relays: this.remoteStatus?.relays ?? [],
+      ...(this.remoteStatus?.availableRelays
+        ? { available: this.remoteStatus.availableRelays }
+        : {}),
       own: ownRelay,
       ownStatus: this.remoteStatus?.ownRelay ?? null,
       keyEnd: accessKeyEnd(this.options.accessKey()),
@@ -498,8 +513,12 @@ export class Hosts {
   }
 
   /** The relay to sign in to, as the settings and the key are now. */
-  private relayInit(): { enabled: boolean; own: OwnRelayInit | null } {
-    return relayChoiceInit(this.settings().remote, true, this.options.accessKey())
+  private relayInit(): { enabled: boolean; own: OwnRelayInit | null; regions: string[] | null } {
+    const remote = this.settings().remote
+    return {
+      ...relayChoiceInit(remote, true, this.options.accessKey()),
+      regions: remote.relayRegions,
+    }
   }
 
   /** Tells the remote host when the relay to use changed; each start reads it. */
@@ -507,7 +526,14 @@ export class Hosts {
     const relay = this.relayInit()
     const sent = JSON.stringify(relay)
     if (sent === this.sentRelay) return
-    if (this.remote.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
+    if (
+      this.remote.post({
+        type: 'remote-host:relay',
+        enabled: relay.enabled,
+        own: relay.own,
+        regions: relay.regions,
+      })
+    ) {
       this.sentRelay = sent
     }
     for (const listener of [...this.statusListeners]) listener()
@@ -546,6 +572,15 @@ export class Hosts {
   /** Tries every relay now, after a conflict or an error. */
   retryRelay(): void {
     this.remote.post({ type: 'remote-host:relay-retry' })
+  }
+
+  /** Measures latency to every official relay region and refreshes host region status. */
+  async measureRelays(): Promise<void> {
+    if (!this.remoteStatus) return
+    await this.request(
+      (requestId) => ({ type: 'remote-host:relay-measure', requestId }),
+      MEASURE_TIMEOUT_MS,
+    )
   }
 
   /** Calls `listener` whenever the remote host reports, or goes; returns how to stop. */
@@ -931,10 +966,11 @@ export class Hosts {
 
   private request(
     message: (requestId: number) => MainToRemoteHost,
+    timeoutMs = REQUEST_TIMEOUT_MS,
   ): Promise<RemoteHostToMain | null> {
     const requestId = this.nextRequest++
     return new Promise((resolve) => {
-      const timer = setTimeout(() => answer(null), REQUEST_TIMEOUT_MS)
+      const timer = setTimeout(() => answer(null), timeoutMs)
       const answer = (reply: RemoteHostToMain | null): void => {
         clearTimeout(timer)
         this.requests.delete(requestId)
@@ -1051,6 +1087,7 @@ export class Hosts {
       url: this.options.relayUrl,
       enabled: relay.enabled,
       own: relay.own,
+      regions: relay.regions,
       token: this.token,
       relayToken: this.relayToken,
       ...(this.relayKey ? { key: this.relayKey } : {}),
@@ -1134,6 +1171,7 @@ export class Hosts {
         break
       }
       case 'remote-host:activity':
+      case 'remote-host:relay-measured':
       case 'remote-host:reset':
       case 'remote-host:discovery-answer':
         this.requests.get(message.requestId)?.(message)

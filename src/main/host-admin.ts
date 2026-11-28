@@ -157,6 +157,7 @@ export interface AdminRemote {
   reset(): Promise<void>
   retryDirect(): void
   retryRelay(): void
+  measureRelays(): Promise<void>
   /** Checks the owner's own relay and switches to it once it passed; the key is never answered. */
   useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
 }
@@ -627,6 +628,9 @@ export class HostAdmin {
         return null
       case 'remote.retryRelay':
         remote.retryRelay()
+        return null
+      case 'remote.measureRelays':
+        await remote.measureRelays()
         return null
       case 'remote.useOwnRelay': {
         const input = parseOwnRelayInput(params)

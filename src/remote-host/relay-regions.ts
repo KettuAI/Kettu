@@ -26,7 +26,9 @@ import {
 } from '@shared/remote/region-source'
 import {
   PREFERENCE_TTL_MS,
+  asRelay,
   hostRegions,
+  isRegionId,
   parseRelayPrefer,
   parseRelayRegions,
   parseSignedRegionList,
@@ -37,6 +39,7 @@ import {
   type RelayRegionsMessage,
   type SignedRegionList,
 } from '@shared/remote/relay-regions'
+import type { RelayRegionStatus, RelayStatus } from '@shared/remote/relay-host'
 import { DEVICE_ID } from '@shared/remote/device'
 import { RelayStats, parseRelayStats, type RelayStatsState } from '@shared/remote/relay-report'
 import { JsonFile, type LogFn } from '../agent-host/storage'
@@ -104,8 +107,24 @@ export interface RemoteRegionsOptions {
    * changed too, which hosts then hear in `relay.prefer`.
    */
   timesChanged(prefer: boolean): void
+  /** Explicit host-selected region ids; null or absent uses automatic RTT-ranked selection. */
+  selectedRegions?: readonly string[] | null
+  /** Live host-to-region RTT from an active control socket, when available. */
+  hostLegRtt?(url: string): number | null
+  /** Measured RTTs or available regions changed, so the host's status report should refresh. */
+  statusChanged?(): void
   log: LogFn
   now?: () => number
+}
+
+function normalizeSelectedRegions(regions: readonly string[] | null | undefined): string[] | null {
+  if (!regions || regions.length === 0) return null
+  const kept: string[] = []
+  for (const id of regions) {
+    if (!isRegionId(id) || id === 'main' || kept.includes(id)) continue
+    kept.push(id)
+  }
+  return kept.length > 0 ? kept : null
 }
 
 export class RemoteRegions {
@@ -123,6 +142,7 @@ export class RemoteRegions {
   private stopped = false
   private sentPlan = 'null'
   private sentPrefer = ''
+  private selectedRegions: string[] | null
   /** Every region's id by its origin, for counting the day by region. */
   private readonly ids = new Map<string, string>()
   private readonly now: () => number
@@ -138,6 +158,7 @@ export class RemoteRegions {
     stats: RelayStatsState | null,
   ) {
     this.now = options.now ?? Date.now
+    this.selectedRegions = normalizeSelectedRegions(options.selectedRegions)
     const log = (level: 'info' | 'warn' | 'error', message: string): void =>
       options.log(level, message)
     this.source = new RegionSource({
@@ -171,6 +192,7 @@ export class RemoteRegions {
         }
       },
       measured: (region, rtt) => {
+        if (!options.device) return
         if (rtt === null) this.stats.connected(region.id, false)
         else this.stats.sample(region.id, rtt)
       },
@@ -238,6 +260,19 @@ export class RemoteRegions {
     return this.options.relayToken() !== null && this.source.list !== null
   }
 
+  /** Whether this process should probe region RTTs (as a device or as an official-relay host). */
+  private get shouldMeasure(): boolean {
+    return this.running && (this.options.device || this.options.relayOn())
+  }
+
+  /** All usable regions to probe, ensuring the main relay is included alongside the signed list. */
+  private measurableRegions(): RelayRegion[] {
+    const listed = this.devices.ownRegions()
+    if (listed.length === 0) return []
+    if (listed.some((region) => region.url === this.options.main)) return listed
+    return [{ id: 'main', url: this.options.main }, ...listed]
+  }
+
   /** The tokens or Use the Kettu relay changed: starts or stops reading, and picks again. */
   update(): void {
     if (this.stopped) return
@@ -252,6 +287,9 @@ export class RemoteRegions {
       this.halt()
     }
     this.replan()
+    if (this.shouldMeasure && this.source.list !== null) {
+      void this.times.measure(this.measurableRegions())
+    }
     if (this.running) void this.readFeatures().then(() => this.featuresRead())
   }
 
@@ -283,7 +321,7 @@ export class RemoteRegions {
 
   private onTick(): void {
     void this.readFeatures().then(() => this.featuresRead())
-    if (this.options.device) void this.times.measure(this.devices.ownRegions())
+    if (this.shouldMeasure) void this.times.measure(this.measurableRegions())
     void this.report()
     this.prunePreferences()
   }
@@ -314,11 +352,14 @@ export class RemoteRegions {
     for (const region of this.source.list?.regions ?? []) this.ids.set(region.url, region.id)
     this.replan()
     this.options.hostChanged()
-    if (this.options.device) void this.times.measure(this.devices.ownRegions(), true)
+    this.options.statusChanged?.()
+    if (this.shouldMeasure) void this.times.measure(this.measurableRegions(), true)
     this.timesChanged()
   }
 
   private timesChanged(): void {
+    this.replan()
+    this.options.statusChanged?.()
     const prefer = this.preferMessage()
     const key = prefer ? `${prefer.regions.join(',')} ${prefer.list.payload}` : ''
     const changed = key !== this.sentPrefer && prefer !== null
@@ -327,6 +368,104 @@ export class RemoteRegions {
   }
 
   // The host's side.
+
+  /** Updates the host's explicit region selection (`null` returns to automatic selection). */
+  setSelectedRegions(next: readonly string[] | null): void {
+    const normalized = normalizeSelectedRegions(next)
+    if (JSON.stringify(normalized) === JSON.stringify(this.selectedRegions)) return
+    this.selectedRegions = normalized
+    this.replan()
+    this.options.statusChanged?.()
+  }
+
+  /** Refreshes the signed region list when needed and forces a fresh RTT probe of all regions. */
+  async measureNow(): Promise<void> {
+    if (this.stopped || !this.running) return
+    if (this.features === null) await this.readFeatures()
+    if (this.features?.includes(REGIONS_FEATURE) && this.source.list === null) {
+      this.source.start()
+      await this.source.refresh()
+    }
+    const targets = this.measurableRegions()
+    const toProbe = targets.length > 0 ? targets : [{ id: 'main', url: this.options.main }]
+    await this.times.measure(toProbe, true)
+    this.replan()
+    this.options.statusChanged?.()
+  }
+
+  private hostRtt(region: { url: string }): number | null {
+    return this.options.hostLegRtt?.(region.url) ?? this.times.rtt(region)
+  }
+
+  /**
+   * Every usable official region in the signed list—including the main relay and standby regions
+   * not currently signed in—with live connection state and host-measured RTT.
+   */
+  availableRegions(
+    connected: readonly RelayStatus[],
+    legs: readonly (RelayRegion & { hostRtt: number | null })[],
+  ): RelayRegionStatus[] {
+    const connectedByUrl = new Map(connected.map((entry) => [entry.url, entry]))
+    const legRttByUrl = new Map(legs.map((leg) => [leg.url, leg.hostRtt]))
+    const rttOf = (url: string, status?: RelayStatus): number | null =>
+      legRttByUrl.get(url) ?? status?.rtt ?? this.times.rtt({ url })
+
+    const own = this.source.list
+    if (!own) {
+      return connected.map((entry) => ({
+        id: entry.id,
+        url: entry.url,
+        ...(entry.name !== undefined ? { name: entry.name } : {}),
+        ...(entry.names ? { names: entry.names } : {}),
+        connection: entry.connection,
+        rtt: rttOf(entry.url, entry),
+      }))
+    }
+
+    const result: RelayRegionStatus[] = []
+    const listedMain = own.regions.find((region) => region.url === this.options.main)
+    const connectedMain = connectedByUrl.get(this.options.main)
+    const mainName = listedMain?.name ?? connectedMain?.name
+    const mainNames = listedMain?.names ?? connectedMain?.names
+    result.push({
+      id: listedMain?.id ?? connectedMain?.id ?? 'main',
+      url: this.options.main,
+      ...(mainName !== undefined ? { name: mainName } : {}),
+      ...(mainNames ? { names: mainNames } : {}),
+      connection: connectedMain?.connection ?? { state: 'standby' },
+      rtt: rttOf(this.options.main, connectedMain),
+    })
+
+    for (const region of own.regions) {
+      if (region.state !== 'active' || region.url === this.options.main) continue
+      if (result.some((item) => item.url === region.url || item.id === region.id)) continue
+      const status = connectedByUrl.get(region.url)
+      const relay = asRelay(region)
+      result.push({
+        id: relay.id,
+        url: relay.url,
+        ...(relay.name !== undefined ? { name: relay.name } : {}),
+        ...(relay.names ? { names: relay.names } : {}),
+        connection: status?.connection ?? { state: 'standby' },
+        rtt: rttOf(region.url, status),
+      })
+    }
+
+    // Preserve any active signed-in region not present in the host's own list (e.g. device-preferred).
+    for (const entry of connected) {
+      if (result.some((item) => item.url === entry.url || item.id === entry.id)) continue
+      result.push({
+        id: entry.id,
+        url: entry.url,
+        ...(entry.name !== undefined ? { name: entry.name } : {}),
+        ...(entry.names ? { names: entry.names } : {}),
+        connection: entry.connection,
+        rtt: rttOf(entry.url, entry),
+      })
+    }
+
+    return result
+  }
 
   /**
    * The regions to sign in to: by the region rules with a relay token; with the access token, the
@@ -345,7 +484,13 @@ export class RemoteRegions {
       .filter((preference) => preference.serial >= newest)
       .sort((a, b) => b.seenAt - a.seenAt)
       .flatMap((preference) => preference.regions)
-    return hostRegions({ main: this.options.main, own, preferred })
+    return hostRegions({
+      main: this.options.main,
+      own,
+      preferred,
+      hostRtt: (region) => this.hostRtt(region),
+      selected: this.selectedRegions,
+    })
   }
 
   /** Picks the regions again, telling the host when they changed. */
