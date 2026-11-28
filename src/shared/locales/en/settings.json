@@ -1098,6 +1098,7 @@
       "loginKeyHintOpenAi": "An OpenAI API key.",
       "loginKeyHintDeepSeek": "A DeepSeek API key.",
       "loginKeyHintCodebuddy": "An API key from the site above.",
+      "loginKeyHintGlm": "A Z.AI Coding Plan API key.",
       "submit": "Add agent"
     },
     "key": {
@@ -1107,6 +1108,7 @@
       "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
       "notSetDeepSeek": "A DeepSeek API key, in place of a sign-in.",
       "notSetCodebuddy": "An API key from the Codebuddy site this agent uses, in place of a sign-in.",
+      "notSetGlm": "A Z.AI Coding Plan API key for GLM Agent.",
       "setButton": "Set…",
       "replace": "Replace…",
       "clear": "Clear",
@@ -1122,6 +1124,7 @@
       "noteClaude": "Claude Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
       "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder’s config.toml.",
       "noteCodebuddy": "Codebuddy Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. Create the key on the site this agent uses: codebuddy.ai/profile/keys for International, copilot.tencent.com/profile for China.",
+      "noteGlm": "GLM Agent keeps the key in credentials.json in its configuration folder; Kettu keeps no copy and never reads it back. Create a Coding Plan API key at z.ai/manage-apikey/apikey-list. Z_AI_API_KEY in your environment overrides it.",
       "baseUrlOptional": "Base URL (optional)",
       "modelOptional": "Model (optional)",
       "envSet": "Set. Kettu keeps it and passes it only to {{name}} when it starts."

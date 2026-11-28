@@ -1090,6 +1090,7 @@
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
       "loginKeyHintDeepSeek": "DeepSeek 的 API key。",
       "loginKeyHintCodebuddy": "上面所选站点的 API key。",
+      "loginKeyHintGlm": "Z.AI Coding Plan 的 API key。",
       "submit": "添加智能体"
     },
     "key": {
@@ -1099,6 +1100,7 @@
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
       "notSetDeepSeek": "用 DeepSeek 的 API key 代替登录。",
       "notSetCodebuddy": "用这个智能体所在站点的 API key 代替登录。",
+      "notSetGlm": "用于 GLM Agent 的 Z.AI Coding Plan API key。",
       "setButton": "设置…",
       "replace": "重新填写…",
       "clear": "清除",
@@ -1114,6 +1116,7 @@
       "noteClaude": "key 交给 Claude Code，存进这个智能体配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
       "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
       "noteCodebuddy": "key 交给 Codebuddy Code，存进这个智能体配置目录里的 settings.json；Kettu 不留副本，也不读回。要在这个智能体用的站点上创建 key：国际站在 codebuddy.ai/profile/keys，国内站在 copilot.tencent.com/profile。",
+      "noteGlm": "key 交给 GLM Agent，存进它配置目录里的 credentials.json；Kettu 不留副本，也不读回。在 z.ai/manage-apikey/apikey-list 创建 Coding Plan API key；环境里的 Z_AI_API_KEY 会优先于它。",
       "baseUrlOptional": "Base URL（可选）",
       "modelOptional": "模型（可选）",
       "envSet": "已设置。Kettu 保存它，只在 {{name}} 启动时交给它。"

@@ -565,7 +565,9 @@ function AddAgentDialog({
                           ? 'agents.add.loginKeyHintDeepSeek'
                           : chosen?.harnessId === 'codebuddy'
                             ? 'agents.add.loginKeyHintCodebuddy'
-                            : 'agents.add.loginKeyHintOpenAi',
+                            : chosen?.harnessId === 'glm'
+                              ? 'agents.add.loginKeyHintGlm'
+                              : 'agents.add.loginKeyHintOpenAi',
                     )}
                     extra={
                       loginMode === 'api-key' &&
@@ -658,7 +660,9 @@ function ApiKeyFields({
             ? 'agents.key.noteClaude'
             : status.harnessId === 'codebuddy'
               ? 'agents.key.noteCodebuddy'
-              : 'agents.key.noteCodex',
+              : status.harnessId === 'glm'
+                ? 'agents.key.noteGlm'
+                : 'agents.key.noteCodex',
           { command: status.cli?.command ?? '' },
         )}
       </p>
@@ -1216,7 +1220,9 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
                       ? 'agents.key.notSetDeepSeek'
                       : status.harnessId === 'codebuddy'
                         ? 'agents.key.notSetCodebuddy'
-                        : 'agents.key.notSetOpenAi',
+                        : status.harnessId === 'glm'
+                          ? 'agents.key.notSetGlm'
+                          : 'agents.key.notSetOpenAi',
                 )
           }
         />

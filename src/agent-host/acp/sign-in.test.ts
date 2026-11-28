@@ -229,4 +229,113 @@ describe('signing in through the client', () => {
     expect(recorded.elicitations).toEqual([{ action: 'decline' }, { action: 'decline' }])
     connection.close()
   })
+
+  it('parses ACP env_var auth methods using both vars arrays and legacy env maps', async () => {
+    const app = agent({ name: 'glm-test' }).onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: {},
+      authMethods: [
+        {
+          id: 'z-ai-api-key',
+          name: 'Z.AI API key',
+          description: 'Set Z_AI_API_KEY or run glm-acp-agent --setup',
+        },
+        {
+          type: 'env_var',
+          id: 'z_ai_api_key',
+          name: 'Z.AI API key',
+          description: 'API key for Z.AI',
+          vars: [
+            { name: 'Z_AI_API_KEY', label: 'Z.AI API key', secret: true, optional: false },
+            { name: 'ACP_GLM_BASE_URL', optional: true },
+          ],
+        },
+        {
+          id: 'legacy-env',
+          name: 'Legacy env key',
+          _meta: { type: 'env-var', env: { LEGACY_KEY: 'required', OPT_KEY: 'optional' } },
+        },
+      ] as never,
+    }))
+    const hooks: ConnectionHooks = {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+    }
+    const connection = AcpConnection.connect(inProcessTransport(app), hooks)
+    const init = await connection.initialize('1.0.0')
+
+    expect(init.authMethods).toEqual([
+      {
+        id: 'z-ai-api-key',
+        name: 'Z.AI API key',
+        description: 'Set Z_AI_API_KEY or run glm-acp-agent --setup',
+        type: 'agent',
+        args: [],
+        env: {},
+      },
+      {
+        id: 'z_ai_api_key',
+        name: 'Z.AI API key',
+        description: 'API key for Z.AI',
+        type: 'env',
+        envVars: [
+          { name: 'Z_AI_API_KEY', optional: false },
+          { name: 'ACP_GLM_BASE_URL', optional: true },
+        ],
+        args: [],
+        env: {},
+      },
+      {
+        id: 'legacy-env',
+        name: 'Legacy env key',
+        type: 'env',
+        envVars: [
+          { name: 'LEGACY_KEY', optional: false },
+          { name: 'OPT_KEY', optional: true },
+        ],
+        args: [],
+        env: {},
+      },
+    ])
+    connection.close()
+  })
+
+  it('maps glm-acp-agent missing Z_AI_API_KEY errors to auth_required', async () => {
+    const app = agent({ name: 'glm-test' })
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: 1,
+        agentCapabilities: {},
+        authMethods: [],
+      }))
+      .onRequest(methods.agent.session.new, () => ({ sessionId: 's-1' }))
+      .onRequest(methods.agent.session.prompt, () => {
+        throw RequestError.internalError({
+          details:
+            'No API key found. Set the Z_AI_API_KEY environment variable, or run `glm-acp-agent --setup` to store one.',
+        })
+      })
+    const hooks: ConnectionHooks = {
+      traffic: () => {},
+      account: () => {},
+      ignored: () => {},
+      log: () => {},
+    }
+    const connection = AcpConnection.connect(inProcessTransport(app), {
+      ...hooks,
+      agentId: 'glm',
+      name: 'GLM Agent',
+    })
+    await connection.initialize('1.0.0')
+    await connection.newSession('/tmp/glm', { mcpServers: [] })
+
+    await expect(connection.prompt('s-1', [{ type: 'text', text: 'hello' }])).rejects.toMatchObject(
+      {
+        kind: 'auth_required',
+        message: expect.stringContaining('Z_AI_API_KEY'),
+      },
+    )
+    connection.close()
+  })
 })

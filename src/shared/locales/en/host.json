@@ -1111,6 +1111,17 @@
     "credentialsInvalid": "{{file}} is not valid YAML; fix it or remove the key there",
     "credentialsNotMap": "{{file}} does not hold a credential map"
   },
+  "glm": {
+    "account": {
+      "apiKey": "Z.AI API key"
+    },
+    "auth": {
+      "setup": "Setup in terminal",
+      "setupDescription": "Run `glm-acp-agent --setup` to store your Z.AI Coding Plan API key on disk.",
+      "apiKey": "Z.AI API key",
+      "apiKeyDescription": "Set your Z.AI Coding Plan API key below, or export Z_AI_API_KEY in your environment."
+    }
+  },
   "opencode": {
     "option": {
       "model": "Model",

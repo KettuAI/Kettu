@@ -244,6 +244,10 @@ export function SignInNotice({
       (onTerminal || m.type !== 'terminal') &&
       !(remote && m.type === 'agent' && !m.delegated),
   )
+  const envFallback =
+    !first && others.length === 0
+      ? status.authMethods.find((m) => m.type === 'env' && m.description)
+      : undefined
   return (
     <Notice
       variant="warning"
@@ -289,9 +293,11 @@ export function SignInNotice({
         )
       }
     >
-      {(first?.description || elsewhere) && (
+      {(first?.description || envFallback?.description || elsewhere) && (
         <>
-          {first?.description && <div>{first.description}</div>}
+          {(first?.description || envFallback?.description) && (
+            <div>{first?.description ?? envFallback?.description}</div>
+          )}
           {elsewhere && (
             <div>{t('agents.signInOnComputer', { method: elsewhere.name, name: status.name })}</div>
           )}
