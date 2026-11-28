@@ -1,7 +1,12 @@
 // The permission mode of a session another session's agent starts. Modes are ranked across
-// harnesses by what runs without asking, and a started session is held to the lower of its
-// starter's rank and the rank of the mode its agent would start in, never to full access, so a
-// session cannot do through one it starts what it could not do itself without asking.
+// harnesses by what runs without asking:
+// - Within the same host and same project, a child session directly inherits its verified parent
+//   session's current effective permission rank (including Full access when granted to the parent)
+//   as both its ceiling and default, while still allowing a narrower mode to be chosen and never
+//   escalating above the parent.
+// - Across projects or hosts (or without a verified ranked parent session, such as plugins,
+//   workflows, or unranked harnesses), Full access is never inherited automatically and the child
+//   stays capped to STARTED_MAX (3) and the target agent's configured start mode.
 
 import { ANTIGRAVITY_FULL_ACCESS, type HarnessId } from '@shared/agents'
 import { availableModes, modeDescription, modeName } from './claude/config'
@@ -18,8 +23,41 @@ import { tEnglish } from './i18n'
 /** What a mode lets an agent do without asking: 1 asks before any change, 4 never asks. */
 export type ModeRank = 1 | 2 | 3 | 4
 
-/** The widest rank a started session gets: full access never. */
+/** The rank of Full access modes across all ranked harnesses. */
+export const FULL_ACCESS_RANK: ModeRank = 4
+
+/** The widest rank a started session gets outside same-scope parent inheritance: full access never. */
 export const STARTED_MAX: ModeRank = 3
+
+/**
+ * Server-verified scope relationship between a starter (parent) session and a target child session.
+ * Full-access inheritance applies only under `'same-scope'` (same host and same project).
+ */
+export type StartedScope = 'same-scope' | 'cross-scope'
+
+/** Server-verified identities used to decide whether a child inherits its parent's scope. */
+export interface StartedScopeContext {
+  verifiedParent: boolean
+  parentHostId: string | null
+  targetHostId: string | null
+  parentProject: string | null
+  targetProject: string | null
+}
+
+/**
+ * Resolves the permission inheritance scope strictly from server-verified parent, host, and project
+ * identities. Fails closed to `'cross-scope'` whenever any identity is missing or differs.
+ */
+export function resolveStartedScope(
+  context: StartedScopeContext,
+  sameProject: (a: string, b: string) => boolean,
+): StartedScope {
+  if (!context.verifiedParent) return 'cross-scope'
+  if (context.parentHostId === null || context.targetHostId === null) return 'cross-scope'
+  if (context.parentHostId !== context.targetHostId) return 'cross-scope'
+  if (context.parentProject === null || context.targetProject === null) return 'cross-scope'
+  return sameProject(context.parentProject, context.targetProject) ? 'same-scope' : 'cross-scope'
+}
 
 export type RankedHarness = 'claude-code' | 'codex' | 'deepseek' | 'antigravity'
 
@@ -99,38 +137,70 @@ export function starterRank(
 }
 
 /**
- * The widest rank a started session may have: the starter's, that of the mode its agent would start
- * in, and never full access. A missing agent mode falls back to the harness's built-in default; a
- * mode Kettu does not know counts as asking.
+ * The widest rank a started session may have:
+ * - Under `'same-scope'` with a ranked starter (`starter !== null`), the child inherits the
+ *   parent's current effective rank directly (including Full access rank 4).
+ * - Under `'cross-scope'` or an unranked starter (`starter === null`), the child is bounded by the
+ *   target agent's configured/default mode, the starter's rank (when known), and `STARTED_MAX` (3),
+ *   so Full access never carries over across projects, hosts, or unverified scopes.
  */
 export function startedCeiling(
   starter: ModeRank | null,
   harness: RankedHarness,
   agentMode: string | null,
+  scope: StartedScope = 'cross-scope',
 ): ModeRank {
+  if (scope === 'same-scope' && starter !== null) return starter
   const effective = agentMode ?? defaultMode(harness)
   const agent = modeRank(harness, effective) ?? 1
   return Math.min(starter ?? STARTED_MAX, agent, STARTED_MAX) as ModeRank
 }
 
-/** The modes a started session may be given under `ceiling`, narrow to wide; never a plan mode. */
-export function startableModes(harness: RankedHarness, ceiling: ModeRank): string[] {
+/**
+ * The modes a started session may be given under `ceiling`, narrow to wide; never a plan mode.
+ * Set `allowFullAccess: false` when the host environment cannot offer Full access for `harness`.
+ */
+export function startableModes(
+  harness: RankedHarness,
+  ceiling: ModeRank,
+  options?: { allowFullAccess?: boolean },
+): string[] {
+  const allowFull = options?.allowFullAccess ?? true
   return OFFERED[harness].filter((mode) => {
     const rank = modeRank(harness, mode)
-    return mode !== PLAN_MODE && rank !== null && rank <= ceiling
+    if (mode === PLAN_MODE || rank === null || rank > ceiling) return false
+    if (!allowFull && rank === FULL_ACCESS_RANK) return false
+    return true
   })
+}
+
+/**
+ * The default mode a same-scope child session inherits for `harness` given its parent's effective
+ * rank `ceiling`: the widest startable mode of `harness` that does not exceed `ceiling`.
+ */
+export function inheritedMode(
+  harness: RankedHarness,
+  ceiling: ModeRank,
+  options?: { allowFullAccess?: boolean },
+): string {
+  return startableModes(harness, ceiling, options).at(-1)!
 }
 
 /**
  * The mode a started session gets: `wanted` when it is one of the modes under the ceiling, else
  * the widest of them no wider than `wanted`.
  */
-export function startedMode(harness: RankedHarness, wanted: string, ceiling: ModeRank): string {
-  const modes = startableModes(harness, ceiling)
+export function startedMode(
+  harness: RankedHarness,
+  wanted: string,
+  ceiling: ModeRank,
+  options?: { allowFullAccess?: boolean },
+): string {
+  const modes = startableModes(harness, ceiling, options)
   if (modes.includes(wanted)) return wanted
   const limit = Math.min(ceiling, modeRank(harness, wanted) ?? 1) as ModeRank
   // Each harness offers a mode of rank 1 that is no plan mode.
-  return startableModes(harness, limit).at(-1)!
+  return startableModes(harness, limit, options).at(-1)!
 }
 
 /**

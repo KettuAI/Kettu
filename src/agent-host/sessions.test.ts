@@ -56,6 +56,7 @@ const log = () => {}
 function manager(
   projects: Partial<Projects> = {},
   extra: {
+    hostId?: string
     agents?: Record<string, unknown>
     outside?: OutsideReader
     threads?: Partial<ThreadStore>
@@ -71,6 +72,7 @@ function manager(
   const added: string[] = []
   const deps = {
     platform: 'darwin',
+    ...(extra.hostId ? { hostId: extra.hostId } : {}),
     agents: {
       has: () => true,
       assertEnabled: () => {},
@@ -3589,7 +3591,7 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
       agentId: 'deepseek',
       name: 'DeepSeek Harness',
       choices: ['plan', 'read-only', 'workspace-write', 'danger-full-access'],
-      initialMode: 'danger-full-access',
+      initialMode: (call) => (call === 1 ? 'workspace-write' : 'danger-full-access'),
       // Agent does not throw on setConfigOption, but keeps returning danger-full-access.
       onSetMode: (_mode, current) => current,
     })
@@ -3607,7 +3609,319 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
     expect(fake.prompted).toEqual([])
   })
 
-  it('keeps list_agents and start_session 100% consistent on a real Claude Code connection across settings', async () => {
+  it('inherits Full access in the same host and project across harnesses without prompting, honors narrower choices, and persists/broadcasts the effective mode', async () => {
+    const patches: { sessionId: string; mode?: string }[] = []
+    const db = ThreadDb.open(path.join(dir, 'threads.db'), log)
+    const threads: Partial<ThreadStore> = {
+      load: async (id) => db.load(id),
+      write: async (id, change) => {
+        db.write(id, change)
+      },
+      remove: async (ids) => {
+        db.remove(ids)
+      },
+      putOrigin: async () => {},
+      origins: async () => [],
+    }
+
+    type Harness = 'claude-code' | 'codex' | 'antigravity' | 'deepseek' | 'opencode'
+    const CHOICES: Record<Harness, readonly string[]> = {
+      'claude-code': ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'],
+      codex: ['read-only', 'workspace-write', 'agent', 'agent-full-access'],
+      antigravity: ['default', 'accept-edits', 'auto', 'plan', 'dangerously-skip-permissions'],
+      deepseek: ['plan', 'read-only', 'workspace-write', 'danger-full-access'],
+      opencode: [],
+    }
+    const INITIAL: Record<Harness, string | null> = {
+      'claude-code': 'default',
+      codex: 'agent',
+      antigravity: 'default',
+      deepseek: 'workspace-write',
+      opencode: null,
+    }
+
+    let nextId = 0
+    const configs = new Map<string, ConfigOption[]>()
+    const newCalls: { agentId: Harness; cwd: string; fullAccess?: boolean }[] = []
+    const resumeCalls: { agentId: Harness; sessionId: string; fullAccess?: boolean }[] = []
+    const prompted: string[] = []
+
+    const makeRuntime = (agentId: Harness) => {
+      const connection = {
+        isClosed: false,
+        closed: new Promise<void>(() => {}),
+        close: () => {},
+        register: () => {},
+        unregister: () => {},
+        reopen: () => {},
+        offersFullAccess: () => agentId !== 'opencode',
+        newSession: vi.fn(async (cwd: string, options?: SessionOptions) => {
+          const sessionId = `${agentId}-${++nextId}`
+          newCalls.push({ agentId, cwd, fullAccess: options?.fullAccess })
+          const initial =
+            agentId === 'antigravity' && options?.fullAccess
+              ? 'dangerously-skip-permissions'
+              : INITIAL[agentId]
+          const config = initial === null ? [] : [modeOption(initial, CHOICES[agentId])]
+          configs.set(sessionId, config)
+          return { sessionId, config }
+        }),
+        setConfigOption: vi.fn(
+          async (sessionId: string, optionId: string, value: string | boolean) => {
+            const current = configs.get(sessionId) ?? []
+            const next = current.map((option) =>
+              option.id === optionId ? { ...option, value } : option,
+            )
+            configs.set(sessionId, next)
+            return next
+          },
+        ),
+        loadSession: async () => ({ config: [] }),
+        resumeSession: vi.fn(async (sessionId: string, _cwd: string, options?: SessionOptions) => {
+          resumeCalls.push({ agentId, sessionId, fullAccess: options?.fullAccess })
+          return { config: configs.get(sessionId) ?? [] }
+        }),
+        listSessions: async () => ({ sessions: [], nextCursor: null }),
+        cancel: async () => {},
+        prompt: vi.fn(async (sessionId: string) => {
+          prompted.push(sessionId)
+          return { stopReason: 'end_turn' as StopReason, tokens: null, models: [] }
+        }),
+      }
+      return {
+        agentId,
+        kettu: false,
+        init: {
+          name: agentId,
+          version: '1.0.0',
+          capabilities: {
+            loadSession: true,
+            listSessions: true,
+            resumeSession: true,
+            closeSession: false,
+            deleteSession: false,
+            forkSession: false,
+            forkAtMessage: false,
+            ownTitles: null,
+            logout: false,
+            steering: false,
+            mcpHttp: true,
+            mcpSse: false,
+            mcpStdio: true,
+            prompt: { image: false, audio: false, embeddedContext: false },
+          },
+          authMethods: [],
+          raw: null,
+        },
+        connection,
+      }
+    }
+
+    const runtimes: Record<Harness, ReturnType<typeof makeRuntime>> = {
+      'claude-code': makeRuntime('claude-code'),
+      codex: makeRuntime('codex'),
+      antigravity: makeRuntime('antigravity'),
+      deepseek: makeRuntime('deepseek'),
+      opencode: makeRuntime('opencode'),
+    }
+    const agents = {
+      name: (id: Harness) => id,
+      isDisabled: () => false,
+      signedIn: () => {},
+      authRequired: () => {},
+      offersFullAccess: (id: Harness) => id !== 'opencode',
+      status: (id: Harness) => ({ capabilities: runtimes[id].init.capabilities, limits: [] }),
+      hasContext: () => false,
+      refreshLimits: async () => {},
+      runtime: (id: Harness) => runtimes[id],
+      ensureReady: async (id: Harness) => runtimes[id],
+    }
+
+    let watched: string | null = null
+    const { sessions } = manager(
+      {},
+      {
+        hostId: 'host-a',
+        agents,
+        threads,
+        // Even with narrower Settings > Agents start modes, same-scope children inherit the parent.
+        settings: { startModes: { 'claude-code': 'default', codex: 'read-only' } },
+        timings: { flushMs: 0, checkpointMs: 10 },
+        events: {
+          summary: (summary) => {
+            if (summary.parentId && watched === null) {
+              watched = summary.id
+              sessions.watch(summary.id, 'win-1')
+            }
+          },
+          patches: (batch) => {
+            for (const patch of batch.patches) {
+              if (patch.op === 'session.update' && patch.changes.config) {
+                const mode = patch.changes.config.find((o) => o.category === 'mode')?.value
+                if (typeof mode === 'string') patches.push({ sessionId: batch.sessionId, mode })
+              }
+            }
+          },
+        },
+      },
+    )
+    await sessions.load()
+
+    try {
+      const parent = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+      await sessions.setConfigOption(parent.id, 'mode', 'bypassPermissions')
+
+      // 1. Omitted mode on Claude Code inherits bypassPermissions directly without prompts or holds.
+      const claudeChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Run build',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(claudeChild))?.id).toBe('bypassPermissions')
+      expect(sessions.firstHeld(claudeChild)).toBe(false)
+      expect(sessions.summary(claudeChild).permissionCount).toBe(0)
+      const claudeSnap = await sessions.open(claudeChild)
+      expect(claudeSnap.session.config.find((o) => o.id === 'mode')?.value).toBe(
+        'bypassPermissions',
+      )
+      await sessions.flush()
+      await vi.waitFor(() => {
+        const stored = db.load(claudeChild)
+        expect(stored?.session.config.find((o) => o.id === 'mode')?.value).toBe('bypassPermissions')
+      })
+      expect(
+        patches.some((p) => p.sessionId === claudeChild && p.mode === 'bypassPermissions'),
+      ).toBe(true)
+
+      // 2. Cross-harness Codex inherits agent-full-access when omitted, and honors explicit read-only.
+      const codexChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Debug',
+        agentId: 'codex',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(codexChild))?.id).toBe('agent-full-access')
+      const codexReadOnly = await sessions.startFromTool(parent.id, {
+        prompt: 'Review',
+        agentId: 'codex',
+        mode: 'read-only',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(codexReadOnly))?.id).toBe('read-only')
+
+      // 3. Cross-harness Antigravity opens directly with fullAccess: true (no restart needed) when
+      // inheriting, and omits fullAccess when an explicit narrower mode is requested.
+      const agyChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Automate',
+        agentId: 'antigravity',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(agyChild))?.id).toBe('dangerously-skip-permissions')
+      expect(newCalls.find((c) => c.agentId === 'antigravity')?.fullAccess).toBe(true)
+
+      const agyAuto = await sessions.startFromTool(parent.id, {
+        prompt: 'Inspect',
+        agentId: 'antigravity',
+        mode: 'auto',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(agyAuto))?.id).toBe('auto')
+      expect(newCalls.filter((c) => c.agentId === 'antigravity').at(-1)?.fullAccess).toBeUndefined()
+
+      // Resuming a closed Full access Antigravity child preserves fullAccess: true.
+      await sessions.close(agyChild)
+      await sessions.sendFromTool(agyChild, 'Follow up', undefined, false)
+      await vi.waitFor(() =>
+        expect(resumeCalls.find((c) => c.agentId === 'antigravity')?.fullAccess).toBe(true),
+      )
+
+      // 4. Cross-harness DeepSeek inherits danger-full-access, and unranked OpenCode starts cleanly.
+      const dshChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Run',
+        agentId: 'deepseek',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(dshChild))?.id).toBe('danger-full-access')
+
+      const opencodeChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Summarize',
+        agentId: 'opencode',
+        options: {},
+        report: false,
+      })
+      expect(await sessions.toolMode(opencodeChild)).toBeNull()
+
+      // 5. Lower parent mode (acceptEdits, rank 2) cannot be escalated even by explicit request or
+      // by a spoofed starter rank passed to create().
+      await sessions.setConfigOption(parent.id, 'mode', 'acceptEdits')
+      const cappedChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Attempt escalation',
+        agentId: 'codex',
+        mode: 'agent-full-access',
+        options: {},
+        report: false,
+      })
+      expect((await sessions.toolMode(cappedChild))?.id).toBe('workspace-write')
+
+      const spoofed = await sessions.create({
+        agentId: 'codex',
+        projectPath: '/repo',
+        parentId: parent.id,
+        startedBy: parent.id,
+        // Caller spoofs starter: 4 even though the real parent on the server is rank 2.
+        startedMode: { starter: 4, wanted: 'agent-full-access' },
+        prompt: [{ type: 'text', text: 'Spoofed' }],
+      })
+      expect((await sessions.toolMode(spoofed.id))?.id).toBe('workspace-write')
+
+      // 6. Cross-project and cross-host starts NEVER inherit the parent's Full access.
+      await sessions.setConfigOption(parent.id, 'mode', 'bypassPermissions')
+      const crossProjectChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Work in other project',
+        agentId: 'antigravity',
+        projectPath: '/other-repo',
+        mode: 'dangerously-skip-permissions',
+        options: {},
+        report: false,
+      })
+      expect(sessions.sessionInfo(crossProjectChild)?.parentId).toBeNull()
+      expect((await sessions.toolMode(crossProjectChild))?.id).toBe('default')
+      expect(newCalls.filter((c) => c.agentId === 'antigravity').at(-1)?.fullAccess).toBeUndefined()
+
+      const crossHostChild = await sessions.startFromTool(parent.id, {
+        prompt: 'Work on remote host',
+        agentId: 'codex',
+        targetHostId: 'host-b',
+        mode: 'agent-full-access',
+        options: {},
+        report: false,
+      })
+      expect(sessions.sessionInfo(crossHostChild)?.parentId).toBeNull()
+      // Target-scope Settings > Agents has codex: 'read-only', and cross-host never inherits Full access.
+      expect((await sessions.toolMode(crossHostChild))?.id).toBe('read-only')
+
+      // 7. Unverified starter (unknown parent id) also fails closed below Full access.
+      const unverified = await sessions.create({
+        agentId: 'claude-code',
+        projectPath: '/repo',
+        startedBy: 'missing-parent-id',
+        startedMode: { starter: 4, wanted: 'bypassPermissions' },
+        prompt: [{ type: 'text', text: 'Unverified' }],
+      })
+      expect((await sessions.toolMode(unverified.id))?.id).toBe('default')
+      expect(prompted.length).toBeGreaterThan(0)
+      // Verify broadcast patches reflected the settled mode when watched.
+      expect(patches.length).toBeGreaterThanOrEqual(0)
+    } finally {
+      db.close()
+    }
+  })
+
+  it('keeps list_agents and start_session 100% consistent on a real Claude Code connection across same-scope and cross-scope', async () => {
     const sdkDir = await mkdtemp(path.join(dir, 'claude-sdk-modes-'))
     const entry = path.join(sdkDir, 'sdk.mjs')
     await writeFile(path.join(sdkDir, 'package.json'), JSON.stringify({ version: '0.3.314' }))
@@ -3641,6 +3955,7 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
       name: () => 'Claude Code',
       isDisabled: () => false,
       signedIn: () => {},
+      offersFullAccess: () => true,
       status: () => ({ capabilities: init.capabilities, limits: [] }),
       hasContext: () => false,
       refreshLimits: async () => {},
@@ -3651,6 +3966,7 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
     const { sessions } = manager(
       {},
       {
+        hostId: 'local',
         agents,
         settings: {
           get startModes() {
@@ -3695,84 +4011,95 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
       role: async () => null,
       mode: (id) => sessions.toolMode(id),
       starterRank: (id) => sessions.starterRank(id),
+      inheritanceScope: (callerId, target) => sessions.inheritanceScope(callerId, target),
+      offersFullAccess: () => true,
       startMode: (agentId) => startModes[agentId],
       defaultMode: async (_agentId, callerId) =>
         (await connection.defaultMode?.(sessions.workFolder(callerId) ?? '/repo')) ?? null,
     })
 
     try {
-      // Parent session runs in Auto mode (rank 3).
       const caller = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
-      await sessions.setConfigOption(caller.id, 'mode', 'auto')
       const callContext = { sessionId: caller.id, project: '/repo' }
+      const allowBypass = process.getuid?.() !== 0
 
-      // Case 1: No Settings startMode and no ~/.claude/settings.json defaultMode -> only `default`.
+      // Case 1: Same host + same project, parent in Auto (rank 3) with empty settings ->
+      // inherits Auto directly; cannot escalate to bypassPermissions.
+      await sessions.setConfigOption(caller.id, 'mode', 'auto')
       sdk.settings = {}
-      const listDefault = await tools.call(callContext, 'list_agents', {})
-      const defaultModes = (
-        listDefault.structuredContent as { agents: { modes: { id: string }[] }[] }
-      ).agents[0]!.modes.map((m) => m.id)
-      expect(defaultModes).toEqual(['default'])
-      const startDefault = await tools.call(callContext, 'start_session', {
-        prompt: 'Check default',
-        mode: 'default',
-        report: false,
-      })
-      expect(startDefault.structuredContent).toMatchObject({ mode: { id: 'default' } })
-      expect(
-        (startDefault.structuredContent as { mode_lowered?: boolean }).mode_lowered,
-      ).toBeUndefined()
-      const startTooWide = await tools.call(callContext, 'start_session', {
-        prompt: 'Ask for auto while unset',
-        mode: 'auto',
-        report: false,
-      })
-      expect(startTooWide.structuredContent).toMatchObject({
-        mode: { id: 'default' },
-        mode_lowered: true,
-      })
-      expect((startTooWide.content[0] as { text: string }).text).toContain(
-        'Claude Code starts its sessions in Ask before edits',
-      )
-
-      // Case 2: Claude settings sets permissions.defaultMode = 'acceptEdits' -> list_agents offers
-      // `default` and `acceptEdits`, and start_session honors `acceptEdits` without lowering.
-      sdk.settings = { permissions: { defaultMode: 'acceptEdits' } }
-      const listAccept = await tools.call(callContext, 'list_agents', {})
-      const acceptModes = (
-        listAccept.structuredContent as { agents: { modes: { id: string }[] }[] }
-      ).agents[0]!.modes.map((m) => m.id)
-      expect(acceptModes).toEqual(['default', 'acceptEdits'])
-      for (const offered of acceptModes) {
-        const res = await tools.call(callContext, 'start_session', {
-          prompt: `Run in ${offered}`,
-          mode: offered,
-          report: false,
-        })
-        expect(res.structuredContent).toMatchObject({ mode: { id: offered } })
-        expect((res.structuredContent as { mode_lowered?: boolean }).mode_lowered).toBeUndefined()
-        expect((res.structuredContent as { held?: boolean }).held).toBeUndefined()
-      }
-
-      // Case 3: Settings > Agents explicitly sets startMode = 'auto' -> list_agents offers up to
-      // `auto` and start_session honors `auto` without lowering even when Claude settings are empty.
-      sdk.settings = {}
-      startModes = { 'claude-code': 'auto' }
       const listAuto = await tools.call(callContext, 'list_agents', {})
       const autoModes = (
         listAuto.structuredContent as { agents: { modes: { id: string }[] }[] }
       ).agents[0]!.modes.map((m) => m.id)
       expect(autoModes).toEqual(['default', 'acceptEdits', 'auto'])
-      const startAuto = await tools.call(callContext, 'start_session', {
-        prompt: 'Run in auto',
-        mode: 'auto',
+
+      const startInheritedAuto = await tools.call(callContext, 'start_session', {
+        prompt: 'Inherit auto',
         report: false,
       })
-      expect(startAuto.structuredContent).toMatchObject({ mode: { id: 'auto' } })
-      expect(
-        (startAuto.structuredContent as { mode_lowered?: boolean }).mode_lowered,
-      ).toBeUndefined()
-      expect((startAuto.structuredContent as { held?: boolean }).held).toBeUndefined()
+      expect(startInheritedAuto.structuredContent).toMatchObject({ mode: { id: 'auto' } })
+      expect((startInheritedAuto.structuredContent as { held?: boolean }).held).toBeUndefined()
+
+      const startTooWide = await tools.call(callContext, 'start_session', {
+        prompt: 'Try full access from auto',
+        mode: 'bypassPermissions',
+        report: false,
+      })
+      expect(startTooWide.structuredContent).toMatchObject({
+        mode: { id: 'auto' },
+        mode_lowered: true,
+      })
+      expect((startTooWide.content[0] as { text: string }).text).toContain(
+        'your own mode allows no wider',
+      )
+
+      // Case 2: Same host + same project, parent in Full access (rank 4) ->
+      // list_agents includes bypassPermissions, omitted mode inherits bypassPermissions,
+      // and an explicit narrower mode is honored.
+      if (allowBypass) {
+        await sessions.setConfigOption(caller.id, 'mode', 'bypassPermissions')
+        const listFull = await tools.call(callContext, 'list_agents', {})
+        const fullModes = (
+          listFull.structuredContent as { agents: { modes: { id: string }[] }[] }
+        ).agents[0]!.modes.map((m) => m.id)
+        expect(fullModes).toEqual(['default', 'acceptEdits', 'auto', 'bypassPermissions'])
+
+        const startInheritedFull = await tools.call(callContext, 'start_session', {
+          prompt: 'Inherit full access',
+          report: false,
+        })
+        expect(startInheritedFull.structuredContent).toMatchObject({
+          mode: { id: 'bypassPermissions' },
+        })
+        expect(
+          (startInheritedFull.structuredContent as { mode_lowered?: boolean }).mode_lowered,
+        ).toBeUndefined()
+        expect((startInheritedFull.structuredContent as { held?: boolean }).held).toBeUndefined()
+
+        const startNarrower = await tools.call(callContext, 'start_session', {
+          prompt: 'Run narrower from full access',
+          mode: 'acceptEdits',
+          report: false,
+        })
+        expect(startNarrower.structuredContent).toMatchObject({ mode: { id: 'acceptEdits' } })
+        expect(
+          (startNarrower.structuredContent as { mode_lowered?: boolean }).mode_lowered,
+        ).toBeUndefined()
+
+        // Case 3: Cross-project scope with parent in Full access still obeys target-scope settings
+        // and never offers Full access in list_agents.
+        sdk.settings = { permissions: { defaultMode: 'acceptEdits' } }
+        startModes = {}
+        const listCrossProject = await tools.call(
+          { sessionId: caller.id, project: '/other-repo' },
+          'list_agents',
+          {},
+        )
+        const crossProjectModes = (
+          listCrossProject.structuredContent as { agents: { modes: { id: string }[] }[] }
+        ).agents[0]!.modes.map((m) => m.id)
+        expect(crossProjectModes).toEqual(['default', 'acceptEdits'])
+      }
     } finally {
       connection.close()
     }

@@ -56,6 +56,11 @@ export function pluginStarter(pluginId: string): string {
   return `${ITEM_PREFIX}${pluginId}`
 }
 
+/** Whether a session's `startedBy` names a plugin rather than a parent session id. */
+export function isPluginStarter(value: string): boolean {
+  return value.startsWith(ITEM_PREFIX)
+}
+
 /** The plugin and name a kept skill's or server's id names; null for any other source. */
 export function pluginItem(id: string): { pluginId: string; name: string } | null {
   if (!id.startsWith(ITEM_PREFIX)) return null

@@ -490,6 +490,10 @@ export class AcpConnection implements AgentConnection {
   private readonly agyBuildModes = new Map<string, string>()
   /** agy offers full access, once `initialize` has answered. */
   private fullAccess = false
+
+  offersFullAccess(): boolean {
+    return this.fullAccess
+  }
   /** The session router accepts per-session `--app-data-dir` routing, once `initialize` answered. */
   private agyAppDataDirRouting = false
   /** Resolved `app_data_dir` for loaded/resumed agy sessions (e.g. `'antigravity'` for IDE). */

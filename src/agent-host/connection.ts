@@ -515,6 +515,8 @@ export interface AgentConnection {
    * without opening a session.
    */
   defaultMode?(cwd: string): Promise<string>
+  /** Whether this live connection currently supports Full access mode. */
+  offersFullAccess?(): boolean
 
   newSession(cwd: string, options?: SessionOptions): Promise<OpenedSession>
   /** Opens a session again, replaying its history to its target. */
