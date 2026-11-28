@@ -138,6 +138,7 @@ export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false)
     ['find or change a Kettu setting', ['settings']],
     ['set up or change something that runs on a schedule', ['routines']],
     ['add, check or turn on or off an MCP server', ['mcp']],
+    ['work with or manage Kettu Bots across computers', ['bots']],
   ]
   const clauses = uses.map(([what, topics]) => `${what} (${topics.map(name).join(', ')})`)
   const list = `${clauses.slice(0, -1).join(', ')}, or ${clauses.at(-1)}`
@@ -227,6 +228,10 @@ export function serviceInstructions(flags: GuideFlags): string {
     "MCP servers: list_mcp_servers, read_mcp_server and check_mcp_server read Kettu's MCP " +
       'library; add_mcp_server and switch_mcp_servers change it only when the user asks, each ' +
       "waiting for the user's card in every mode. Topic mcp.",
+    'Bots: list_bots, list_bot_targets, dispatch_bot_session, read_bot_work, send_to_bot_session, ' +
+      'archive_bot_session and handoff_to_bot coordinate long-lived cross-computer Bots; ' +
+      'create_bot, update_bot and delete_bot act only when the user asks and ALWAYS wait for the ' +
+      "user's confirmation card in every mode. Topic bots.",
     `Problems: ${REPORT_TOOL} drafts a report for the Kettu team, only for problems with Kettu ` +
       "itself, never for bugs in the user's project, your model provider's limits or your own " +
       'mistakes; the user sends it.',
@@ -245,7 +250,7 @@ export function guideTool(flags: GuideFlags): Tool {
       '(handing work to another session or agent); workflows; browser; devices; terminals' +
       (flags.computer ? '; computer (the user’s desktop apps)' : '') +
       (flags.market ? '; marketplace (publishing)' : '') +
-      "; settings (Kettu's settings); routines (scheduled prompts); mcp (MCP servers).",
+      "; settings (Kettu's settings); routines (scheduled prompts); mcp (MCP servers); bots (long-lived coordinators).",
     inputSchema: {
       type: 'object',
       properties: {

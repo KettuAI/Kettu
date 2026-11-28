@@ -7,6 +7,7 @@ import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
+import type { BotRemoteAnswer, BotRemoteCall, BotRemoteEvent } from './bots'
 import type {
   BrowserForward,
   BrowserOriginAnswer,
@@ -250,6 +251,10 @@ export type MainToHost =
   // The plugin host is ready. In the desktop app its port travels in the transfer list; under
   // Node.js `socketPath` names the socket to connect to.
   | { type: 'host:plugin-port'; socketPath?: string }
+  // Result of a cross-computer Bot bridge call returned from main.
+  | { type: 'bot-remote-result'; callId: number; answer: BotRemoteAnswer }
+  // Remote host online/offline and session state updates forwarded from main to BotManager.
+  | { type: 'host:bot-remote-event'; event: BotRemoteEvent }
   | { type: 'host:shutdown' }
 
 /**
@@ -514,6 +519,8 @@ export type HostToMain =
   | { type: 'host:browser-ask-answer'; sessionId: string; outcome: ControlOutcome }
   // An agent's device tool call for the device host; answered by device-result.
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
+  // Cross-computer Bot bridge calls routed through main's HostSessions; answered via bot-remote-result.
+  | { type: 'host:bot-remote-call'; callId: number; call: BotRemoteCall }
   // The turn of a session whose agent used a device ended: its devices are nobody's now.
   | { type: 'host:device-turn-ended'; sessionId: string }
   // An agent's terminal tool call for the terminal host; answered by terminal-result.

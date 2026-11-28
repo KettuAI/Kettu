@@ -98,7 +98,7 @@ export interface SettingOption {
 /** A setting a plugin declares, as the catalog lists it: its words are the plugin's own. */
 export interface CatalogPluginSetting {
   key: string
-  type: 'boolean' | 'string' | 'select' | 'secret'
+  type: 'boolean' | 'string' | 'select' | 'secret' | 'url'
   title: string
   description?: string
   options?: readonly { value: string; title: string }[]
@@ -1452,6 +1452,43 @@ const ENTRIES = {
       (file) => file.workflow.maxWorkingSteps,
       WORKING_STEP_LIMITS.map((n) => ({ value: n, label: { text: String(n) } })),
     ),
+  },
+  'agents.bots-manage': {
+    section: 'agents',
+    row: 'bots-manage',
+    group: 'agents.bots.group',
+    name: 'agents.bots.manage.name',
+    description: 'agents.bots.manage.description',
+    keywords: 'agents.bots.keywords',
+    part: 'host',
+    kind: 'list',
+  },
+  'agents.bots-max-concurrent': {
+    section: 'agents',
+    row: 'bots-max-concurrent',
+    group: 'agents.bots.group',
+    name: 'agents.bots.maxConcurrent.name',
+    description: 'agents.bots.maxConcurrent.description',
+    keywords: 'agents.bots.keywords',
+    part: 'host',
+    access: 'raise',
+    warning: 'agentSettings.warning.startedLimits',
+    kind: 'number',
+    min: 1,
+    max: 50,
+    get: (file) => file.bots.maxConcurrent,
+    patch: (value) => ({ bots: { maxConcurrent: Number(value) } }),
+  },
+  'agents.bots-allow-handoff': {
+    section: 'agents',
+    row: 'bots-allow-handoff',
+    group: 'agents.bots.group',
+    name: 'agents.bots.allowHandoff.name',
+    description: 'agents.bots.allowHandoff.description',
+    keywords: 'agents.bots.keywords',
+    part: 'host',
+    access: 'change',
+    ...flag('bots', 'allowAgentHandoff', (file) => file.bots.allowAgentHandoff),
   },
 
   // ---- Harnesses

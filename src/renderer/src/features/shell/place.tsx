@@ -1,16 +1,19 @@
 import {
-  BotIcon,
   DashboardSquare02Icon,
   FlowIcon,
+  GitBranchIcon,
   KanbanIcon,
   PencilEdit02Icon,
   PieChartIcon,
   Settings01Icon,
   Store01Icon,
   TimeScheduleIcon,
+  UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
 import { TaskRing } from '@renderer/features/tasks/task-ring'
+import { useBotsStore } from '@renderer/stores/bots'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import type { HistoryPlace } from '@renderer/stores/view'
@@ -34,8 +37,14 @@ export function PlaceIcon({ place }: { place: HistoryPlace }) {
 
 function SessionMark({ sessionId }: { sessionId: string }) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
-  if (!summary || summary.origin === 'subagent') return <Glyph icon={BotIcon} size={15} />
+  if (!summary || summary.origin === 'subagent') return <Glyph icon={GitBranchIcon} size={15} />
   return <AgentMark agent={summary.agentId} size={15} hostId={hostOfSession(summary)} />
+}
+
+function BotMark({ botId }: { botId: string | null }) {
+  const bot = useBotsStore((s) => (botId ? s.byId[botId] : undefined))
+  if (!bot) return <Glyph icon={UserMultipleIcon} size={15} />
+  return <BotAvatar avatar={bot.avatar} name={bot.name} botId={bot.id} size={20} />
 }
 
 function TaskMark({ taskId }: { taskId: string }) {
@@ -54,6 +63,10 @@ function PageIcon({ place }: { place: HistoryPlace }) {
     case 'routines':
     case 'routine':
       return <Glyph icon={TimeScheduleIcon} size={15} />
+    case 'bot':
+      return <BotMark botId={place.botId} />
+    case 'bot-edit':
+      return <BotMark botId={place.botId} />
     case 'artifacts':
     case 'artifact':
       return <Glyph icon={DashboardSquare02Icon} size={15} />

@@ -79,6 +79,7 @@ import type { Platform } from '@shared/platform'
 import { isPluginStarter, pluginStarter, type PluginHookEvent } from '@shared/plugins'
 import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { PortDevice } from '@shared/remote/device'
+import type { Bot, BotChangeAction, BotSessionRef } from '@shared/bots'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
 import {
@@ -145,6 +146,10 @@ import {
   type RoutineChangeOutcome,
   type McpChangeEntry,
   type McpChangeOutcome,
+  type BotChangeEntry,
+  type BotChangeOutcome,
+  type BotDispatchEntry,
+  type BotHandoffEntry,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -183,6 +188,7 @@ import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
 import type { RoutineAnswer, RoutineAsk } from './routines/tools'
 import type { McpAnswer, McpAsk } from './marketplace/mcp-tools'
+import type { BotAnswer, BotAsk } from './bots/tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
@@ -622,17 +628,18 @@ export interface SessionMemoryDeps {
   undo(undoId: string): Promise<'undone' | 'changed' | 'gone'>
 }
 
-/** A project memory write an agent made, as its thread records it. */
+/** A project or bot memory write an agent made, as its thread records it. */
 export interface MemoryWritten {
-  layer: 'project'
+  layer: 'project' | 'bot'
   action: MemoryAction
   memoryId: string
   title: string
   undo: string
 }
 
-/** A global memory write an agent proposed, which waits in its thread for the user. */
+/** A global or external bot memory write an agent proposed, waiting in its thread for the user. */
 export interface MemoryProposal {
+  layer?: 'global' | 'bot'
   action: MemoryAction
   memoryId: string | null
   title: string
@@ -1197,6 +1204,13 @@ const ROUTINE_ATTENTION = {
   run: 'attention.routineRun',
 } as const satisfies Record<RoutineAction, HostKey>
 
+const BOT_ATTENTION: Record<BotChangeAction, HostKey> = {
+  create: 'attention.botCreate',
+  update: 'attention.botUpdate',
+  delete: 'attention.botDelete',
+  role_edit: 'attention.botRoleEdit',
+}
+
 /** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
 function waitingCount(live: Live): number {
   return (
@@ -1551,6 +1565,8 @@ export class SessionManager {
   private readonly routineWaits = new Map<string, (answer: RoutineAnswer) => void>()
   /** MCP library cards that wait for the user, by entry id. */
   private readonly mcpWaits = new Map<string, (answer: McpAnswer) => void>()
+  /** Pending Bot create/update/delete confirmation cards, indexed by entry id. */
+  private readonly botWaits = new Map<string, (answer: BotAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own servers and settings while it waits. */
@@ -1912,6 +1928,7 @@ export class SessionManager {
       origin: record.origin,
       routine: record.routine ?? null,
       task: record.task ?? null,
+      bot: record.bot ?? null,
       description: record.description,
       missing: this.missing.has(record.id),
       branch: record.branch,
@@ -2364,7 +2381,7 @@ export class SessionManager {
     const entry: MemoryWriteEntry = {
       kind: 'memory',
       id: this.nextId(live),
-      layer: 'global',
+      layer: proposal.layer ?? 'global',
       action: proposal.action,
       memoryId: proposal.memoryId,
       title: proposal.title,
@@ -2378,8 +2395,8 @@ export class SessionManager {
   }
 
   /**
-   * The answer to a proposed global memory write, from the window or device that answered first:
-   * `remember` writes it in global memory as the session's agent's.
+   * The answer to a proposed global or external-bot memory write, from the window or device that
+   * answered first: `remember` writes it in the proposed layer as the session's agent's.
    */
   async answerMemory(
     sessionId: string,
@@ -2391,7 +2408,11 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = await this.revive(sessionId)
     const entry = live.thread.byId[entryId]
-    if (!memory || entry?.kind !== 'memory' || entry.layer !== 'global') {
+    if (
+      !memory ||
+      entry?.kind !== 'memory' ||
+      (entry.layer !== 'global' && entry.layer !== 'bot')
+    ) {
       throw notFound(t('session.waiting.memoryProposal.gone'))
     }
     const key = `${sessionId}\n${entryId}`
@@ -2411,7 +2432,14 @@ export class SessionManager {
     }
     this.memoryAnswers.set(key, device ?? null)
     try {
-      const scope: MemoryScope = { layer: 'global' }
+      let scope: MemoryScope
+      if (entry.layer === 'bot') {
+        const botId = this.botIdOfSession(sessionId)
+        if (!botId) throw notFound(t('session.waiting.memoryProposal.gone'))
+        scope = { layer: 'bot', botId }
+      } else {
+        scope = { layer: 'global' }
+      }
       const by: MemorySource = { agentId: live.record.agentId, sessionId }
       let memoryId = entry.memoryId
       if (entry.action === 'forget') {
@@ -3503,6 +3531,388 @@ export class SessionManager {
       this.updateBadge()
     }
     resolve?.(answer)
+  }
+
+  /** Prompts a mandatory confirmation card for Bot create/update/delete/role edits in all modes. */
+  botAsked(
+    sessionId: string,
+    ask: BotAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<BotAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: BotChangeEntry = {
+      kind: 'bot_change',
+      id: this.nextId(live),
+      ...ask,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`bot:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready') {
+      this.update(live, { status: 'awaiting_permission' })
+    }
+    this.touch(live.id)
+    this.updateBadge()
+    const body = t(BOT_ATTENTION[ask.action], { name: ask.bot.name })
+    this.deps.events.attention(live.id, 'permission', this.titleOf(live), body, { id: entry.id })
+    const answer = new Promise<BotAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleBot(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.botWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /** Handles a user's confirm/decline decision on a Bot confirmation card. */
+  answerBotChange(
+    sessionId: string,
+    entryId: string,
+    decision: 'confirm' | 'decline',
+    keepSessions?: boolean,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'bot_change') throw notFound(t('session.waiting.bot.gone'))
+    if (entry.outcome !== null || !this.botWaits.has(entryId)) {
+      throw new HostError('not_found', t('session.waiting.bot.answered'), {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleBot(
+      sessionId,
+      entryId,
+      decision === 'confirm' ? { decision: 'confirm', keepSessions } : { decision: 'decline' },
+      device,
+    )
+  }
+
+  /** Records the settled outcome on a Bot confirmation card entry. */
+  botSettled(sessionId: string, entryId: string, outcome: BotChangeOutcome): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'bot_change') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  private settleBot(
+    sessionId: string,
+    entryId: string,
+    answer: BotAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.botWaits.get(entryId)
+    this.botWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`bot:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'bot_change' && entry.outcome === null) {
+        if (answer.decision !== 'confirm') {
+          const outcome: BotChangeOutcome = {
+            kind: answer.decision === 'decline' ? 'declined' : answer.decision,
+          }
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: entryId,
+              changes: { outcome, ...(device ? { device } : {}) },
+            },
+          ])
+        } else if (device) {
+          this.emit(live, [{ op: 'entry.update', id: entryId, changes: { device } }])
+        }
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
+  }
+
+  /** Creates the Bot's isolated main conversation in an empty workspace (excluded from projects). */
+  async createBotMainSession(params: {
+    bot: Bot
+    workspaceDir: string
+    readOnly: boolean
+    title: string
+  }): Promise<{ sessionId: string }> {
+    const { agents } = this.deps
+    if (!agents.has(params.bot.agentId)) {
+      throw invalidParams(t('agent.unknown', { agent: params.bot.agentId }))
+    }
+    agents.assertEnabled(params.bot.agentId)
+    await mkdir(params.workspaceDir, { recursive: true })
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.bot.agentId,
+      acpSessionId: '',
+      projectPath: params.workspaceDir,
+      title: params.title,
+      titleSource: 'written',
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'bot_main',
+      bot: {
+        botId: params.bot.id,
+        role: 'main',
+        homeHostId: null,
+        botName: params.bot.name,
+        botHandle: params.bot.handle,
+      },
+      description: null,
+      branch: null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    if (params.readOnly) {
+      live.routineScope = { level: 'read', web: params.bot.scope.web }
+    }
+    this.touch(live.id)
+    try {
+      live.startValues = {
+        ...this.startModeOf(params.bot.agentId),
+        ...this.deps.options?.rememberedOf(params.bot.agentId),
+        ...(params.bot.model ? { model: params.bot.model } : {}),
+        ...(params.bot.effort ? { thought_level: params.bot.effort } : {}),
+      }
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return { sessionId: live.id }
+  }
+
+  /** Creates a local Bot work session in the target project with worktree and scope support. */
+  async createBotWorkSession(params: {
+    projectPath: string
+    agentId: AgentId
+    model: string | null
+    prompt: string
+    title: string
+    scope: PermissionScope
+    worktree: boolean
+    bot: BotSessionRef
+  }): Promise<{ sessionId: string; branch: string | null }> {
+    const { agents, projects, scratch } = this.deps
+    if (!agents.has(params.agentId)) {
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
+    }
+    agents.assertEnabled(params.agentId)
+    const projectPath = await projects.resolveDirectory(params.projectPath)
+    if (!scratch.contains(projectPath)) await projects.add(projectPath)
+    let worktree: WorktreeRecord | undefined
+    let newWorktree = false
+    if (params.worktree && !scratch.contains(projectPath) && this.deps.worktrees) {
+      worktree = await this.deps.worktrees.create(projectPath, {
+        base: 'HEAD',
+        text: params.title,
+      })
+      newWorktree = true
+    }
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.agentId,
+      acpSessionId: '',
+      projectPath,
+      ...(worktree ? { worktree } : {}),
+      title: params.title,
+      titleSource: 'written',
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'bot_work',
+      bot: params.bot,
+      description: null,
+      branch: worktree?.branch ?? null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    const content: UserContent[] = [{ type: 'text', text: params.prompt }]
+    live.first = { content, entryId: this.addPrompt(live, content, now) }
+    this.touch(live.id)
+    if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
+    try {
+      live.startValues = {
+        ...this.startModeOf(params.agentId),
+        ...this.deps.options?.rememberedOf(params.agentId),
+        ...(params.model ? { model: params.model } : {}),
+      }
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return { sessionId: live.id, branch: live.record.branch }
+  }
+
+  /** Inserts or updates a cross-computer dispatch card inside a Bot's main conversation. */
+  upsertBotDispatchEntry(sessionId: string, draft: Omit<BotDispatchEntry, 'id' | 'after'>): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const existing = Object.values(live.thread.byId).find(
+      (entry): entry is BotDispatchEntry =>
+        entry.kind === 'bot_dispatch' && entry.requestId === draft.requestId,
+    )
+    if (existing) {
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: existing.id,
+          changes: {
+            status: draft.status,
+            sessionId: draft.sessionId,
+            branch: draft.branch,
+            sourceKind: draft.sourceKind,
+            sourceLabel: draft.sourceLabel,
+            repliedAt: draft.repliedAt,
+            summary: draft.summary,
+            error: draft.error,
+          },
+        },
+      ])
+    } else {
+      const entry: BotDispatchEntry = {
+        ...draft,
+        id: this.nextId(live),
+        after: agentEntryBefore(live.thread),
+      }
+      this.emit(live, [{ op: 'entry.add', entry }])
+    }
+    this.touch(live.id)
+  }
+
+  /** Appends an @Bot handoff event row inside a regular user session. */
+  addBotHandoffEntry(
+    sessionId: string,
+    params: {
+      botId: string
+      botName: string
+      botHandle: string
+      botSessionId: string | null
+      prompt: string
+    },
+  ): string | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: BotHandoffEntry = {
+      kind: 'bot_handoff',
+      id: this.nextId(live),
+      botId: params.botId,
+      botName: params.botName,
+      botHandle: params.botHandle,
+      botSessionId: params.botSessionId,
+      prompt: params.prompt,
+      status: 'sent',
+      summary: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    this.touch(live.id)
+    return entry.id
+  }
+
+  /** Updates an @Bot handoff row inside a regular session once the Bot replies. */
+  updateBotHandoffEntry(
+    sessionId: string,
+    entryId: string,
+    changes: { status: 'sent' | 'completed' | 'failed'; summary: string | null },
+  ): void {
+    const live = this.live.get(sessionId)
+    if (!live || live.thread.byId[entryId]?.kind !== 'bot_handoff') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
+    this.touch(live.id)
+  }
+
+  /** Detaches all work sessions of a deleted Bot so they remain as normal user sessions. */
+  detachBotSessions(botId: string): number {
+    let detached = 0
+    for (const record of this.records.values()) {
+      if (record.origin === 'bot_work' && record.bot?.botId === botId) {
+        record.origin = 'user'
+        delete record.bot
+        detached++
+        const live = this.live.get(record.id)
+        if (live) {
+          this.update(live, { origin: 'user', bot: null })
+          this.touch(live.id)
+        } else {
+          this.deps.events.summary(this.summary(record.id))
+        }
+      }
+    }
+    if (detached > 0) this.saveIndex()
+    return detached
+  }
+
+  /** Detaches a single Bot work session and promotes it to a regular user project session. */
+  detachSession(sessionId: string): boolean {
+    const record = this.records.get(sessionId)
+    if (!record || record.origin !== 'bot_work') return false
+    record.origin = 'user'
+    delete record.bot
+    const live = this.live.get(record.id)
+    if (live) {
+      this.update(live, { origin: 'user', bot: null })
+      this.touch(live.id)
+    } else {
+      this.deps.events.summary(this.summary(record.id))
+    }
+    this.saveIndex()
+    return true
+  }
+
+  /** Whether a session originated from an external/unattended Bot trigger (requires memory confirmation). */
+  isExternalBotSession(sessionId: string): boolean {
+    const record = this.records.get(sessionId)
+    const kind = record?.bot?.sourceKind
+    return kind === 'channel' || kind === 'routine'
+  }
+
+  /** Returns the owning Bot ID for either a Bot main session or a Bot work session. */
+  botIdOfSession(sessionId: string): string | null {
+    return this.records.get(sessionId)?.bot?.botId ?? null
+  }
+
+  /** Counts local work sessions currently owned by the given Bot. */
+  countBotWorkSessions(botId: string): number {
+    let count = 0
+    for (const record of this.records.values()) {
+      if (record.origin === 'bot_work' && record.bot?.botId === botId) count++
+    }
+    return count
+  }
+
+  /** Returns whether a local session currently has an active turn running. */
+  isSessionWorking(sessionId: string): boolean {
+    const live = this.live.get(sessionId)
+    if (!live) return false
+    const status = live.thread.session.status
+    return status === 'starting' || status === 'running' || status === 'awaiting_permission'
   }
 
   /**
@@ -4799,6 +5209,7 @@ export class SessionManager {
       parentId: record.parentId,
       origin: record.origin,
       routine: record.routine ?? null,
+      bot: record.bot ?? null,
       subagent:
         record.origin === 'subagent'
           ? {
@@ -13697,6 +14108,11 @@ export class SessionManager {
       // And an MCP library card.
       if (requestId.startsWith('mcp:')) {
         this.settleMcp(live.id, entryId, { decision: 'ended' })
+        continue
+      }
+      // End unanswered Bot confirmation cards when the turn finishes.
+      if (requestId.startsWith('bot:')) {
+        this.settleBot(live.id, entryId, { decision: 'ended' })
         continue
       }
       live.origins.delete(requestId)

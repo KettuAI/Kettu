@@ -57,8 +57,9 @@ const PLATFORM = process.platform as Platform
 /** What a write replaced, to put it back while the entry is as the write left it. */
 interface UndoRecord {
   version: number
-  layer: 'global' | 'project'
+  layer: 'global' | 'project' | 'bot'
   project: string | null
+  botId?: string | null
   memoryId: string
   /** The file's text before the write; null when the write made it. */
   before: string | null
@@ -79,8 +80,10 @@ interface ImportPlan {
 interface Layer {
   dir: string
   heading: string
-  /** The project as Kettu lists it; null for global memory. */
+  /** The project as Kettu lists it; null for global or bot memory. */
   project: { path: string; name: string } | null
+  /** Owning Bot ID when this entry belongs to Layer 3 Bot memory. */
+  botId?: string | null
 }
 
 function sha256(text: string): string {
@@ -207,9 +210,22 @@ export class MemoryService {
     return { dir: path.join(this.deps.root, 'global'), heading: 'Global memory', project: null }
   }
 
+  private botLayer(botId: string): Layer {
+    if (!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(botId)) {
+      throw new MemoryError('invalid', `Invalid botId ${botId}.`)
+    }
+    return {
+      dir: path.join(this.deps.root, 'bots', botId),
+      heading: `Bot memory: ${oneLine(botId)}`,
+      project: null,
+      botId,
+    }
+  }
+
   /** The scope's layer; a project Kettu does not list has none. */
   private layer(scope: MemoryScope): Layer {
     if (scope.layer === 'global') return this.globalLayer()
+    if (scope.layer === 'bot') return this.botLayer(scope.botId)
     const known = this.knownProject(scope.project)
     if (!known) throw new MemoryError('not_found', `Kettu has no project at ${scope.project}.`)
     return this.projectLayer(known)
@@ -510,8 +526,9 @@ export class MemoryService {
     const id = `${now.toString(36).padStart(9, '0')}-${randomBytes(4).toString('hex')}`
     const record: UndoRecord = {
       version: UNDO_VERSION,
-      layer: layer.project ? 'project' : 'global',
+      layer: layer.project ? 'project' : layer.botId ? 'bot' : 'global',
       project: layer.project?.path ?? null,
+      ...(layer.botId ? { botId: layer.botId } : {}),
       memoryId,
       before,
       after: after === null ? null : sha256(after),
@@ -540,8 +557,9 @@ export class MemoryService {
     try {
       const record = JSON.parse(text) as UndoRecord
       const valid =
-        (record.layer === 'global' || record.layer === 'project') &&
-        (record.layer === 'global' || typeof record.project === 'string') &&
+        (record.layer === 'global' || record.layer === 'project' || record.layer === 'bot') &&
+        (record.layer !== 'project' || typeof record.project === 'string') &&
+        (record.layer !== 'bot' || typeof record.botId === 'string') &&
         typeof record.memoryId === 'string' &&
         MEMORY_ID.test(record.memoryId) &&
         (record.before === null || typeof record.before === 'string') &&
@@ -560,7 +578,12 @@ export class MemoryService {
       if (!record) return 'gone'
       const known = record.project === null ? null : this.knownProject(record.project)
       if (record.layer === 'project' && !known) return 'gone'
-      const layer = known ? this.projectLayer(known) : this.globalLayer()
+      const layer =
+        record.layer === 'bot' && record.botId
+          ? this.botLayer(record.botId)
+          : known
+            ? this.projectLayer(known)
+            : this.globalLayer()
       const file = path.join(layer.dir, `${record.memoryId}.md`)
       const current = await readText(file)
       const asLeft =
@@ -598,6 +621,19 @@ export class MemoryService {
     }
     const entries = await this.readLayer(this.projectLayer(known))
     return indexText({ project: { name: known.name, entries }, global, tools })
+  }
+
+  /** Builds the Layer 3 Bot memory index injected into the Bot's main conversation. */
+  async botIndex(botId: string): Promise<string> {
+    const entries = await this.readLayer(this.botLayer(botId))
+    if (entries.length === 0) return '(none yet)'
+    return entries
+      .slice(0, 60)
+      .map((entry) => {
+        const desc = entry.description ? `: ${entry.description}` : ''
+        return `- [${entry.id}] ${entry.title}${desc}`
+      })
+      .join('\n')
   }
 
   // Import from Claude Code's own memory.

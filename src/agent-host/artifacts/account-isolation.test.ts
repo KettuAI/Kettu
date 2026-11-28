@@ -80,8 +80,10 @@ function makeStore(
     changed?: () => void
     accountChanged?: () => void
     unwatched?: (id: string) => void
+    now?: () => number
   } = {},
 ): ArtifactStore {
+  let tick = Date.now()
   return new ArtifactStore({
     threads,
     contentDir: path.join(folder, 'content'),
@@ -90,6 +92,7 @@ function makeStore(
     changed: () => hooks.changed?.(),
     accountChanged: () => hooks.accountChanged?.(),
     unwatched: (id) => hooks.unwatched?.(id),
+    now: hooks.now ?? (() => ++tick),
     version: () => {},
     activity: () => {},
   })

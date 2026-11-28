@@ -126,6 +126,10 @@
         "noChange": "找不到这次对 MCP 服务器的更改",
         "noUndo": "这次更改不能撤销"
       },
+      "bot": {
+        "gone": "这张 Bot 确认卡片已不再等待回答",
+        "answered": "这张 Bot 确认卡片已经回答过了"
+      },
       "step": {
         "gone": "这一步已不再等待回答",
         "answered": "这一步已经回答过了"
@@ -294,7 +298,11 @@
     "routineRun": "想立即运行定时任务「{{name}}」",
     "mcpAdd": "想添加 MCP 服务器「{{name}}」",
     "mcpOn": "想开启 MCP 服务器「{{name}}」",
-    "mcpOff": "想关闭 MCP 服务器「{{name}}」"
+    "mcpOff": "想关闭 MCP 服务器「{{name}}」",
+    "botCreate": "想新建 Bot「{{name}}」",
+    "botUpdate": "想修改 Bot「{{name}}」",
+    "botDelete": "想删除 Bot「{{name}}」",
+    "botRoleEdit": "想修改 Bot「{{name}}」的职责"
   },
   "routines": {
     "busy": "此定时任务已经有一个运行正在工作",

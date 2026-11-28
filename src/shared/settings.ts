@@ -1,4 +1,5 @@
 import type { ComputerUseSettings } from './computer-use'
+import { DEFAULT_BOT_GLOBAL_SETTINGS, type BotGlobalSettings } from './bots'
 import type { IdleSessionsSettings } from './idle-release'
 import type { LanguageSetting, Locale } from './locale'
 import type { MarketServer, MarketSkill } from './marketplace'
@@ -138,6 +139,8 @@ export interface SettingsFile {
   workflow: { maxWorkingSteps: WorkingStepLimit }
   // How far a session's agent may go starting sessions through Kettu's session tools.
   startedSessions: StartedSessionLimits
+  // Host-wide Bot concurrency cap and agent handoff toggle.
+  bots: BotGlobalSettings
   // source: where updates come from; GitHub only never reaches Kettu's download service.
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
@@ -419,6 +422,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   idleSessions: { release: 'auto', outOfView: 5, inView: 30, limit: null },
   workflow: { maxWorkingSteps: DEFAULT_WORKING_STEPS },
   startedSessions: { ...DEFAULT_STARTED_LIMITS },
+  bots: { ...DEFAULT_BOT_GLOBAL_SETTINGS },
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
@@ -515,6 +519,7 @@ export interface SettingsPatch {
   idleSessions?: Partial<SettingsFile['idleSessions']>
   workflow?: Partial<SettingsFile['workflow']>
   startedSessions?: Partial<SettingsFile['startedSessions']>
+  bots?: Partial<BotGlobalSettings>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
@@ -555,6 +560,7 @@ export interface HostSettings {
   idleSessions: SettingsFile['idleSessions']
   workflow: SettingsFile['workflow']
   startedSessions: SettingsFile['startedSessions']
+  bots?: BotGlobalSettings
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   promptSuggestions: boolean // ask the agent for a guess at the next message after each turn

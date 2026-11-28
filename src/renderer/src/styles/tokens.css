@@ -102,6 +102,23 @@
   --project-icon-purple: #7a56c4;
   --project-icon-pink: #c44474;
   --project-icon-slate: #626d7c;
+  /* Soft two-tone palette tokens for Bot avatars (kept distinct from vendor logos). */
+  --bot-avatar-fox-bg: #fff0e8;
+  --bot-avatar-fox-fg: #c2410c;
+  --bot-avatar-slate-bg: #eff1f5;
+  --bot-avatar-slate-fg: #3b4656;
+  --bot-avatar-sage-bg: #eaf4ee;
+  --bot-avatar-sage-fg: #266945;
+  --bot-avatar-indigo-bg: #eef0ff;
+  --bot-avatar-indigo-fg: #3e47b8;
+  --bot-avatar-amber-bg: #fdf5e4;
+  --bot-avatar-amber-fg: #8c5c00;
+  --bot-avatar-rose-bg: #fdeef2;
+  --bot-avatar-rose-fg: #ab2e52;
+  --bot-avatar-cyan-bg: #e8f5f8;
+  --bot-avatar-cyan-fg: #146375;
+  --bot-avatar-plum-bg: #f5effa;
+  --bot-avatar-plum-fg: #6b3d96;
   /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   /* Running work, in the ink's grays: blue is kept for data and code. */
@@ -816,6 +833,23 @@
     --project-icon-purple: #a98be8;
     --project-icon-pink: #eb7ca4;
     --project-icon-slate: #9aa4b2;
+    /* Dark-mode palette tokens for Bot avatars (kept in sync with [data-theme='dark']). */
+    --bot-avatar-fox-bg: #362219;
+    --bot-avatar-fox-fg: #ff9a6c;
+    --bot-avatar-slate-bg: #252a32;
+    --bot-avatar-slate-fg: #c2cbd6;
+    --bot-avatar-sage-bg: #1c2e24;
+    --bot-avatar-sage-fg: #7fd4a0;
+    --bot-avatar-indigo-bg: #22253a;
+    --bot-avatar-indigo-fg: #9ca8ff;
+    --bot-avatar-amber-bg: #312819;
+    --bot-avatar-amber-fg: #ebbd62;
+    --bot-avatar-rose-bg: #361f27;
+    --bot-avatar-rose-fg: #f08ca9;
+    --bot-avatar-cyan-bg: #192d33;
+    --bot-avatar-cyan-fg: #72cfe0;
+    --bot-avatar-plum-bg: #2c2136;
+    --bot-avatar-plum-fg: #cca2f0;
     --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
     --info: #aeb6c1;
     --warning: #d9b463;
@@ -1255,6 +1289,23 @@
   --project-icon-purple: #a98be8;
   --project-icon-pink: #eb7ca4;
   --project-icon-slate: #9aa4b2;
+  /* Dark-mode palette tokens for Bot avatars (kept in sync with prefers-color-scheme: dark). */
+  --bot-avatar-fox-bg: #362219;
+  --bot-avatar-fox-fg: #ff9a6c;
+  --bot-avatar-slate-bg: #252a32;
+  --bot-avatar-slate-fg: #c2cbd6;
+  --bot-avatar-sage-bg: #1c2e24;
+  --bot-avatar-sage-fg: #7fd4a0;
+  --bot-avatar-indigo-bg: #22253a;
+  --bot-avatar-indigo-fg: #9ca8ff;
+  --bot-avatar-amber-bg: #312819;
+  --bot-avatar-amber-fg: #ebbd62;
+  --bot-avatar-rose-bg: #361f27;
+  --bot-avatar-rose-fg: #f08ca9;
+  --bot-avatar-cyan-bg: #192d33;
+  --bot-avatar-cyan-fg: #72cfe0;
+  --bot-avatar-plum-bg: #2c2136;
+  --bot-avatar-plum-fg: #cca2f0;
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   --info: #aeb6c1;
   --warning: #d9b463;

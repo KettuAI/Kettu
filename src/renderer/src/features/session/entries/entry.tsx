@@ -20,6 +20,9 @@ import { MarketPublishEntry } from './market-publish-entry'
 import { PluginDenialEntry } from './plugin-denial-entry'
 import { RoutineChangeEntry } from './routine-change-entry'
 import { McpChangeEntry } from './mcp-change-entry'
+import { BotChangeEntry } from './bot-change-entry'
+import { BotDispatchEntry } from './bot-dispatch-entry'
+import { BotHandoffEntry } from './bot-handoff-entry'
 import { SettingsChangeEntry } from './settings-change-entry'
 import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
@@ -106,6 +109,12 @@ export const Entry = memo(function Entry({
       return <RoutineChangeEntry {...props} agentName={agentName} />
     case 'mcp_change':
       return <McpChangeEntry {...props} agentName={agentName} />
+    case 'bot_change':
+      return <BotChangeEntry {...props} agentName={agentName} />
+    case 'bot_dispatch':
+      return <BotDispatchEntry {...props} />
+    case 'bot_handoff':
+      return <BotHandoffEntry {...props} />
     case 'control_ask':
       return <ControlAskEntry {...props} agentName={agentName} />
     case 'control_note':

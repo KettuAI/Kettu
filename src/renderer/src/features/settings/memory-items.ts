@@ -10,18 +10,27 @@ export interface MemoryItem {
 /** The id of the page that adds an entry, which no entry's id can be. */
 export const NEW_MEMORY = '+'
 
-/** The item a memory entry's page goes by: `g/<id>`, or `p/<id>/<project>` with the path encoded. */
+/** The item a memory entry's page goes by: `g/<id>`, `b/<id>/<botId>`, or `p/<id>/<project>`. */
 export function memoryItemKey(scope: MemoryScope, id: string): string {
-  return scope.layer === 'global' ? `g/${id}` : `p/${id}/${encodeURIComponent(scope.project)}`
+  if (scope.layer === 'global') return `g/${id}`
+  if (scope.layer === 'bot') return `b/${id}/${encodeURIComponent(scope.botId)}`
+  return `p/${id}/${encodeURIComponent(scope.project)}`
 }
 
 export function parseMemoryItem(key: string): MemoryItem | null {
-  const [layer, id, project, ...rest] = key.split('/')
+  const [layer, id, target, ...rest] = key.split('/')
   if (!id || rest.length > 0) return null
-  if (layer === 'g' && project === undefined) return { scope: { layer: 'global' }, id }
-  if (layer !== 'p' || !project) return null
+  if (layer === 'g' && target === undefined) return { scope: { layer: 'global' }, id }
+  if (layer === 'b' && target) {
+    try {
+      return { scope: { layer: 'bot', botId: decodeURIComponent(target) }, id }
+    } catch {
+      return null
+    }
+  }
+  if (layer !== 'p' || !target) return null
   try {
-    return { scope: { layer: 'project', project: decodeURIComponent(project) }, id }
+    return { scope: { layer: 'project', project: decodeURIComponent(target) }, id }
   } catch {
     return null
   }

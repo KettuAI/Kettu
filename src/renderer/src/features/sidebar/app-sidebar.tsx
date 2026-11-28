@@ -78,6 +78,7 @@ import { ActivityView } from './activity-view'
 import { AddProjectButton } from './add-project'
 import { ArchiveProjectDialog } from './archive-project'
 import { EditProjectDialog } from './edit-project'
+import { BotsGroup } from './bot-group'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
@@ -195,6 +196,7 @@ export function SidebarList() {
         ) : hosts ? (
           <>
             <NeedsYouGroup hosts={hosts} away={away} />
+            <BotsGroup />
             <PinnedGroup
               projects={visibleProjects}
               allProjects={projects}
@@ -229,6 +231,7 @@ export function SidebarList() {
           </>
         ) : (
           <>
+            <BotsGroup />
             <PinnedGroup
               projects={visibleProjects}
               allProjects={projects}

@@ -39,6 +39,8 @@ export interface Routine {
   prompt: string // sent as written
   agentId: AgentId
   projectPath: string | null // null: the routine's own scratch folder
+  /** Optional Bot ID that owns scheduled runs of this routine (uses Bot role, memory and alerts). */
+  botId?: string | null
   options: RoutineOption[] // model, model_config and thought_level values
   trigger: { kind: 'schedule'; schedule: Schedule }
   scope: PermissionScope

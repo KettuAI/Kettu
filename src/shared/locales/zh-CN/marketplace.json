@@ -382,6 +382,18 @@
         "name": "开会话、发消息",
         "description": "开会话并给它们发消息，智能体最多在 Auto 模式下工作。"
       },
+      "botsBridge": {
+        "name": "桥接 Bot 外部渠道",
+        "description": "把外部消息路由给你的 Bot 并将 Bot 的回复发回对应平台；权限审批仍在 Kettu 客户端内完成。"
+      },
+      "networkCustom": {
+        "name": "访问自定义或内网地址",
+        "description": "仅允许连接到你在该插件 URL 设置中亲手填写的服务地址（含自定义端口或内网服务）。"
+      },
+      "kettuConnector": {
+        "name": "接入 Kettu Cloud Connector",
+        "description": "使用当前 Kettu 账号连接官方云中继（connectors.kettu.sh），接收并回复外部 Webhook 提及。"
+      },
       "network": {
         "name": "网络",
         "description": "通过 https 连接 {{domain}}。"
@@ -1154,6 +1166,7 @@
       "settings": "设置",
       "routines": "定时任务",
       "mcp": "MCP 服务器",
+      "bots": "Bots",
       "plugins": "插件"
     },
     "new": "新",

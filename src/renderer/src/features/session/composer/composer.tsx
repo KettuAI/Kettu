@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { isFullAccessMode } from '@shared/agents'
+import { parseLeadingBotMention } from '@shared/bots'
 import { cacheExpiry, knownExpiry, shouldShowCacheDropNotice } from '@shared/prompt-cache'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import {
@@ -13,6 +14,7 @@ import {
   type UserContent,
 } from '@shared/thread'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
+import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { BranchTrayLink } from '@renderer/features/git/git-status'
@@ -104,6 +106,8 @@ import { firstWaiting, pressWaitingCard } from '../waiting-card'
 import { inFlightQueuedSend, resolveEmptyComposerQueueSend, runQueuedSendNow } from '../queue-send'
 import { limitsForModel } from '@shared/plan-limits'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
+import { botByHandle, useBotsStore } from '@renderer/stores/bots'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -140,8 +144,10 @@ export function Composer({
   agentName: string
   mustSwitch?: boolean
 }) {
-  const { t, i18n } = useTranslation(['composer', 'session'])
+  const { t, i18n } = useTranslation(['composer', 'session', 'bots'])
   const sessionId = session.id
+  const isBotMain = session.origin === 'bot_main'
+  const botsById = useBotsStore((s) => s.byId)
   // A task this conversation started still runs; what is said here goes to this agent alone.
   const taskRunning = useTasksStore((s) => taskFrom(s.summaries, sessionId)?.status === 'running')
   // Workflow suggestion card the user clicked Edit on, while it is still waiting for an answer.
@@ -344,6 +350,13 @@ export function Composer({
     commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
+  const leadingBotHandle = useBoxText(box, (text) =>
+    isBotMain ? null : (parseLeadingBotMention(text)?.handle ?? null),
+  )
+  const mentionedBot = useMemo(
+    () => (leadingBotHandle ? botByHandle(botsById, leadingBotHandle) : null),
+    [leadingBotHandle, botsById],
+  )
   const { canDelegateSend, canSend, canQueue } = can(holdsMessage, blocked)
   // Starting a message, not opening the session with a draft in it, attaches a closed session.
   const held = useRef(holdsMessage)
@@ -488,6 +501,34 @@ export function Composer({
     }
   }, [editingNonce, box.editor])
 
+  // Hand off messages starting with @handle in a normal session directly to the matching Bot.
+  const handoffToBot = (): boolean => {
+    if (isBotMain) return false
+    const raw = box.editor.current?.text() ?? box.source.text
+    const parsed = parseLeadingBotMention(raw)
+    if (!parsed || !parsed.body) return false
+    const target = botByHandle(useBotsStore.getState().byId, parsed.handle)
+    if (!target) return false
+    const taken = box.take()
+    useBotsStore
+      .getState()
+      .handoff({
+        botId: target.id,
+        sessionId,
+        text: parsed.body,
+        ...(session.title ? { contextSummary: session.title } : {}),
+      })
+      .then(() => {
+        toast(t('bots:handoff.sent', { name: target.name, handle: target.handle }), undefined, {
+          tone: 'success',
+        })
+      })
+      .catch((reason: unknown) => {
+        box.restore(taken)(reason)
+      })
+    return true
+  }
+
   // Both go through the host's queue, which sends at once when the session is free; a message
   // with a selected delegation recipient spawns a child session directly; a message that hands the
   // session to another agent goes as that agent's first turn.
@@ -497,6 +538,7 @@ export function Composer({
       return
     }
     if (askBeside()) return
+    if (handoffToBot()) return
     if (pending && now.canSend) handOver()
     else if (now.canSend || now.canQueue) {
       queue(now.canQueue && !waitingBackground && steerDefault, now.canSend || waitingBackground)
@@ -1065,6 +1107,23 @@ export function Composer({
                 </AnimatePresence>
                 {selection && (
                   <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
+                )}
+                {mentionedBot && (
+                  <div className="mb-1.5 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-2.5 py-1.5 text-xs text-foreground">
+                    <BotAvatar
+                      botId={mentionedBot.id}
+                      avatar={mentionedBot.avatar}
+                      name={mentionedBot.name}
+                      size={20}
+                      status={mentionedBot.status}
+                    />
+                    <span className="min-w-0 truncate">
+                      {t('bots:handoff.banner', {
+                        name: mentionedBot.name,
+                        handle: mentionedBot.handle,
+                      })}
+                    </span>
+                  </div>
                 )}
               </>
             }

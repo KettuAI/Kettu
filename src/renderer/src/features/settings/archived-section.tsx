@@ -36,12 +36,14 @@ import { toast } from '@renderer/components/ui/toast'
 import { useNearView } from '@renderer/features/session/media/near-view'
 import { ProjectMark } from '@renderer/features/shell/project-icon'
 import { RemoveProjectDialog } from '@renderer/features/sidebar/remove-project'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
 import { offerWorktreeRemoval } from '@renderer/features/worktrees/remove-worktree-model'
 import { fullTime, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { useBotsStore } from '@renderer/stores/bots'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -1206,6 +1208,8 @@ function FullArchivedRow({
         <Highlight text={entry.title} query={query} />
       </span>
 
+      {entry.summary.bot && <ArchivedBotBadge bot={entry.summary.bot} />}
+
       {entry.parentTitle !== null && (
         <span className="k-ar-sub" title={t('archived.parent', { title: entry.parentTitle })}>
           <Icon icon={ArrowMoveDownRightIcon} size={12} />
@@ -1257,6 +1261,20 @@ function FullArchivedRow({
         </span>
       )}
     </div>
+  )
+}
+
+function ArchivedBotBadge({ bot }: { bot: NonNullable<ArchivedEntry['summary']['bot']> }) {
+  const live = useBotsStore((s) => s.byId[bot.botId])
+  const label = live?.name ?? bot.botName ?? (bot.botHandle ? `@${bot.botHandle}` : 'Bot')
+  return (
+    <span
+      className="k-ar-kids inline-flex items-center gap-1"
+      title={bot.botHandle ? `@${bot.botHandle}` : label}
+    >
+      {live && <BotAvatar avatar={live.avatar} name={live.name} botId={live.id} size={14} />}
+      <span>{label}</span>
+    </span>
   )
 }
 

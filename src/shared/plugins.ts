@@ -6,6 +6,7 @@ import type { AgentId } from './agents'
 import type { McpSpec } from './marketplace'
 import type { PluginLinkDecl, PluginMentionDecl } from './plugin-refs'
 import type { PluginChannelDecl, PluginNoticeKind } from './plugin-channels'
+import { customUrlOrigin, type PluginBotChannelDecl } from './plugin-bot-channels'
 import type { PluginActionDecl, PluginViewDecl } from './plugin-views'
 
 export const PLUGIN_NAMESPACE = 'sh.kettu'
@@ -81,6 +82,9 @@ export const PLUGIN_PERMISSIONS = [
   'sessions.content',
   'requests.answer',
   'sessions.start',
+  'bots.bridge',
+  'network.custom',
+  'kettu.connector',
 ] as const
 type FixedPermission = (typeof PLUGIN_PERMISSIONS)[number]
 const NETWORK_PREFIX = 'network:'
@@ -140,6 +144,9 @@ const PERMISSION_RISK: Readonly<Record<FixedPermission, PermissionRisk>> = {
   'sessions.content': 'high',
   'requests.answer': 'high',
   'sessions.start': 'high',
+  'bots.bridge': 'high',
+  'network.custom': 'high',
+  'kettu.connector': 'high',
 }
 
 export function permissionRisk(permission: string): PermissionRisk {
@@ -157,6 +164,9 @@ const PERMISSION_TEXT = {
   'sessions.content': 'sessionsContent',
   'requests.answer': 'requestsAnswer',
   'sessions.start': 'sessionsStart',
+  'bots.bridge': 'botsBridge',
+  'network.custom': 'networkCustom',
+  'kettu.connector': 'kettuConnector',
 } as const satisfies Record<FixedPermission, string>
 
 type PermissionText = (typeof PERMISSION_TEXT)[FixedPermission] | 'network' | 'networkSubdomains'
@@ -238,12 +248,12 @@ export interface PluginServer {
 /** A setting the plugin declares: drawn on its page and listed in the settings catalog. */
 export interface PluginSetting {
   key: string
-  type: 'boolean' | 'string' | 'select' | 'secret'
+  type: 'boolean' | 'string' | 'select' | 'secret' | 'url'
   title: string
   description?: string
   default?: string | boolean
   options?: { value: string; title: string }[]
-  /** A text or a secret the plugin cannot work without: while it is empty it needs setup. */
+  /** A text, URL or secret the plugin cannot work without: while it is empty it needs setup. */
   required?: true
 }
 
@@ -268,6 +278,7 @@ export function effectiveSetting(
           ? setting.default
           : false
     case 'string':
+    case 'url':
       return typeof stored === 'string'
         ? stored
         : typeof setting.default === 'string'
@@ -299,6 +310,18 @@ export function checkSetting(
       return value.length <= PLUGIN_SETTING_CHARS
         ? { value }
         : { error: `It takes at most ${PLUGIN_SETTING_CHARS} characters.` }
+    case 'url': {
+      if (typeof value !== 'string') return { error: 'It takes a URL.' }
+      const trimmed = value.trim()
+      if (trimmed.length > PLUGIN_SETTING_CHARS) {
+        return { error: `It takes at most ${PLUGIN_SETTING_CHARS} characters.` }
+      }
+      if (trimmed === '') return { value: '' }
+      if (!customUrlOrigin(trimmed)) {
+        return { error: 'Enter a valid http(s):// or ws(s):// URL without embedded credentials.' }
+      }
+      return { value: trimmed }
+    }
     case 'select': {
       const values = (setting.options ?? []).map((option) => option.value)
       return typeof value === 'string' && values.includes(value)
@@ -410,6 +433,8 @@ export interface PluginContents {
   links: PluginLinkDecl[]
   /** The notification channels it declares; absent from a host older than them. */
   channels?: PluginChannelDecl[]
+  /** The bidirectional Bot channels it declares; absent from a host older than them. */
+  botChannels?: PluginBotChannelDecl[]
   /** Portable hooks in the package, which never run in Kettu. */
   hooks: boolean
   /** What was reported and left out: unknown manifest fields, items that do not read. */
@@ -505,7 +530,7 @@ export function missingSettings(
   return plugin.contents.settings.filter((setting) => {
     if (!setting.required) return false
     if (setting.type === 'secret') return !(plugin.secretsSet ?? []).includes(setting.key)
-    if (setting.type !== 'string') return false
+    if (setting.type !== 'string' && setting.type !== 'url') return false
     const value = plugin.values?.[setting.key] ?? effectiveSetting(setting, undefined)
     return typeof value !== 'string' || value.trim() === ''
   })

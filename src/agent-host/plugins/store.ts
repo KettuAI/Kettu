@@ -27,7 +27,14 @@ import { isAgentId, type AgentId } from '@shared/agents'
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
 import { JsonFile, type LogFn, type Migration } from '../storage'
-import { parseActions, parseChannels, parseLinks, parseMentions, parseViews } from './manifest'
+import {
+  parseActions,
+  parseBotChannels,
+  parseChannels,
+  parseLinks,
+  parseMentions,
+  parseViews,
+} from './manifest'
 import { safePackagePath } from './package'
 
 export const PLUGINS_VERSION = 1
@@ -175,6 +182,19 @@ function channelsOf(value: unknown): NonNullable<PluginContents['channels']> {
   }
 }
 
+/** The Bot channels a stored package declares; ones that no longer read are left out. */
+function botChannelsOf(
+  value: unknown,
+  permissions: readonly string[],
+): NonNullable<PluginContents['botChannels']> {
+  if (!permissions.includes('bots.bridge')) return []
+  try {
+    return parseBotChannels(value ?? undefined, 'botChannels', [])
+  } catch {
+    return []
+  }
+}
+
 function contentsOf(value: unknown): PluginContents | null {
   if (!isRecord(value) || typeof value.name !== 'string' || !PLUGIN_NAME.test(value.name)) {
     return null
@@ -250,6 +270,7 @@ function contentsOf(value: unknown): PluginContents | null {
     actions: actionsOf(value.actions),
     ...refsOf(value, permissions),
     channels: channelsOf(value.channels),
+    botChannels: botChannelsOf(value.botChannels, permissions),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)

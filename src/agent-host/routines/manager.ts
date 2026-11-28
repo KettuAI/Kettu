@@ -78,12 +78,37 @@ export interface RoutineAgents {
   name(agentId: AgentId): string
 }
 
+export interface RoutineBotBridge {
+  /** Prepares a routine run assigned to a Bot: checks paused state, clamps scope and prepends role context. */
+  prepareRun(
+    botId: string,
+    routine: Routine,
+    run: RoutineRun,
+  ): Promise<
+    | { ok: true; scope: PermissionScope; prompt: string; agentId?: AgentId }
+    | { ok: false; reason: string }
+  >
+  /** Records the started routine session inside the Bot's ledger so it appears under the Bot subtree. */
+  recordRun(params: {
+    botId: string
+    routine: Routine
+    run: RoutineRun
+    sessionId: string
+    projectPath: string
+    scope: PermissionScope
+    agentId: AgentId
+  }): Promise<void>
+  /** Updates Bot ledger on completion and alerts owner's paired IM on failure or timeout. */
+  notifyRunEnded(botId: string, routine: Routine, run: RoutineRun): Promise<void>
+}
+
 export interface RoutinesDeps {
   userDataPath: string
   file: JsonFile<RoutinesFile>
   threads: ThreadStore | null
   sessions: RoutineSessions
   agents: RoutineAgents
+  bots?: RoutineBotBridge
   log: LogFn
   events: RoutineEvents
   /** A project folder, canonical; rejects when it is missing. */
@@ -775,26 +800,54 @@ export class RoutinesManager {
       }
     }
     let summary: SessionSummary
+    let effectiveScope = routine.scope
+    let effectivePrompt = routine.prompt
+    let effectiveAgent = routine.agentId
+    let folder: string
     try {
-      const folder = routine.projectPath ?? (await this.routineFolder(routine.id))
+      if (routine.botId && this.deps.bots) {
+        const prepared = await this.deps.bots.prepareRun(routine.botId, routine, live.run)
+        if (!prepared.ok) {
+          this.deps.log('info', `Routine ${routine.name} skipped by Bot: ${prepared.reason}`)
+          this.finish(live, 'skipped', { error: { message: prepared.reason } })
+          return
+        }
+        effectiveScope = prepared.scope
+        effectivePrompt = prepared.prompt
+        if (prepared.agentId) effectiveAgent = prepared.agentId
+      }
+      folder = routine.projectPath ?? (await this.routineFolder(routine.id))
       if (!this.isPresent(routine.id)) {
         this.discard(live)
         return
       }
       summary = await this.deps.sessions.createRun({
-        agentId: routine.agentId,
+        agentId: effectiveAgent,
         projectPath: folder,
         options: Object.fromEntries(routine.options.map((option) => [option.id, option.value])),
-        prompt: routine.prompt,
+        prompt: effectivePrompt,
         routine: {
           routineId: routine.id,
           runId: live.run.id,
           trigger: live.run.trigger,
           scheduledFor: live.run.scheduledFor,
         },
-        scope: routine.scope,
-        mode: askingMode(routine.agentId, routine.scope.level),
+        scope: effectiveScope,
+        mode: askingMode(effectiveAgent, effectiveScope.level),
       })
+      if (routine.botId && this.deps.bots) {
+        void this.deps.bots
+          .recordRun({
+            botId: routine.botId,
+            routine,
+            run: live.run,
+            sessionId: summary.id,
+            projectPath: folder,
+            scope: effectiveScope,
+            agentId: effectiveAgent,
+          })
+          .catch(() => {})
+      }
     } catch (error) {
       this.deps.log('warn', `The run of ${routine.name} could not start: ${messageOf(error)}`)
       this.finish(live, 'failed', { error: { message: messageOf(error) } })
@@ -881,9 +934,14 @@ export class RoutinesManager {
     void this.publish(run.routineId)
     this.setWorking()
     this.notify(run)
+    const finishedRoutine = this.routines.get(run.routineId)
+    if (finishedRoutine?.botId && this.deps.bots) {
+      void this.deps.bots
+        .notifyRunEnded(finishedRoutine.botId, finishedRoutine, run)
+        .catch(() => {})
+    }
     if (run.trigger !== 'manual') {
-      const routine = this.routines.get(run.routineId)
-      if (routine?.trigger.schedule.kind === 'once') this.finishOnce(run.routineId)
+      if (finishedRoutine?.trigger.schedule.kind === 'once') this.finishOnce(run.routineId)
     }
     this.startNext()
   }

@@ -66,9 +66,14 @@ function listed(summary: SessionSummary): SessionSummary {
   return shown.parentId === null ? shown : { ...shown, parentId: null }
 }
 
-/** Sessions listed under their projects: a routine's runs and a task's steps are listed elsewhere. */
+/** Sessions listed under Projects: routines, workflow steps, and active Bot sessions live in their own areas. */
 export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
-  return summary.origin !== 'routine' && summary.origin !== 'task'
+  return (
+    summary.origin !== 'routine' &&
+    summary.origin !== 'task' &&
+    summary.origin !== 'bot_main' &&
+    summary.origin !== 'bot_work'
+  )
 }
 
 /** Shallow equality for session summaries so identical `session.summary` pushes keep `byId` stable. */
@@ -616,7 +621,7 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   index.needsYouTree ??= buildTree(
     byId,
     index.needsYouRelated,
-    (s) => listedOrigin(s),
+    (s) => listedOrigin(s) || s.origin === 'bot_work' || s.origin === 'bot_main',
     (s) => !s.archivedAt,
   )
     .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
@@ -690,7 +695,7 @@ export function archivedSessions(
   return Object.values(byId)
     .filter(
       (s) =>
-        listedOrigin(s) &&
+        (listedOrigin(s) || s.origin === 'bot_work') &&
         s.origin !== 'subagent' &&
         !!s.archivedAt &&
         hostOfSession(s) === hostId &&

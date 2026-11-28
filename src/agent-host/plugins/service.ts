@@ -32,6 +32,12 @@ import {
 import { linkTrigger, mentionTrigger, type PluginRefSource } from '@shared/plugin-refs'
 import { channelTrigger, type PluginNoticeKind } from '@shared/plugin-channels'
 import {
+  botChannelKey,
+  botChannelTrigger,
+  customUrlOrigin,
+  type PluginBotChannelDecl,
+} from '@shared/plugin-bot-channels'
+import {
   actionTrigger,
   viewTrigger,
   type PluginActionDecl,
@@ -140,6 +146,18 @@ export interface ChannelRoute {
   kinds: readonly PluginNoticeKind[]
   /** The permissions of the version in place, which say what a notice tells the script. */
   permissions: readonly string[]
+}
+
+/** A bidirectional Bot channel declared by an enabled plugin holding `bots.bridge`. */
+export interface InstalledBotChannel {
+  channelKey: string
+  pluginId: string
+  pluginName: string
+  pluginTitle: string
+  pluginIcon: string | null
+  channel: PluginBotChannelDecl
+  permissions: readonly string[]
+  missingRequiredSettings: string[]
 }
 
 /** A tool of a plugin that is on, with the plugin it belongs to. */
@@ -350,6 +368,11 @@ export class PluginsService {
                   : []),
                 ...(record.contents.actions ?? []).map((action) => actionTrigger(action.id)),
                 ...(record.contents.channels ?? []).map((channel) => channelTrigger(channel.id)),
+                ...(record.contents.permissions.includes('bots.bridge')
+                  ? (record.contents.botChannels ?? []).map((channel) =>
+                      botChannelTrigger(channel.id),
+                    )
+                  : []),
               ],
               revision: `${record.dir}:${record.updatedAt}`,
               permissions: [...record.contents.permissions],
@@ -407,6 +430,56 @@ export class PluginsService {
     if (record.status === status) return
     record.status = status
     this.save()
+  }
+
+  /** All bidirectional Bot channels declared by enabled plugins with the `bots.bridge` permission. */
+  botChannels(): InstalledBotChannel[] {
+    return Object.values(this.data?.plugins ?? {})
+      .filter(
+        (record) =>
+          record.enabled &&
+          record.contents.script !== null &&
+          record.contents.permissions.includes('bots.bridge') &&
+          (record.contents.botChannels?.length ?? 0) > 0,
+      )
+      .sort((a, b) => a.installedAt - b.installedAt || a.id.localeCompare(b.id))
+      .flatMap((record) => {
+        const secrets = new Set(this.deps.secretsSet?.(record.id) ?? [])
+        const missingRequiredSettings = record.contents.settings
+          .filter((setting) => {
+            if (!setting.required) return false
+            if (setting.type === 'secret') return !secrets.has(setting.key)
+            if (setting.type !== 'string' && setting.type !== 'url') return false
+            const value = effectiveSetting(setting, record.values[setting.key])
+            return typeof value !== 'string' || value.trim() === ''
+          })
+          .map((setting) => setting.key)
+        return (record.contents.botChannels ?? []).map((channel) => ({
+          channelKey: botChannelKey(record.id, channel.id),
+          pluginId: record.id,
+          pluginName: record.contents.name,
+          pluginTitle: record.contents.title,
+          pluginIcon: record.contents.icon,
+          channel,
+          permissions: [...record.contents.permissions],
+          missingRequiredSettings,
+        }))
+      })
+  }
+
+  /** Normalized origins (`http(s)://host[:port]`) explicitly entered in `url` settings of a plugin. */
+  customOrigins(pluginId: string): string[] {
+    const record = this.data?.plugins[pluginId]
+    if (!record) return []
+    const origins: string[] = []
+    for (const setting of record.contents.settings) {
+      if (setting.type !== 'url') continue
+      const value = effectiveSetting(setting, record.values[setting.key])
+      if (typeof value !== 'string' || !value.trim()) continue
+      const origin = customUrlOrigin(value)
+      if (origin && !origins.includes(origin)) origins.push(origin)
+    }
+    return origins
   }
 
   /**

@@ -23,6 +23,20 @@ import type { ParamValue } from './artifact-params'
 import type { PreviewStyle } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
+  BotAvatarMimeType,
+  BotChannelBinding,
+  BotChannelConfig,
+  BotChannelView,
+  BotChanges,
+  BotDraft,
+  BotHostTarget,
+  BotList,
+  BotPairingCode,
+  BotRequest,
+  BotSessionRef,
+  BotView,
+} from './bots'
+import type {
   BrowserCallAnswer,
   BrowserDeviceCall,
   BrowserOriginAnswer,
@@ -844,6 +858,7 @@ export type McpToolGroup =
   | 'settings'
   | 'routines'
   | 'mcp'
+  | 'bots'
   | 'plugins'
 
 export interface McpToolSummary {
@@ -985,9 +1000,10 @@ export interface SessionSummary {
   createdAt: number
   updatedAt: number
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine' | 'task'
+  origin: 'user' | 'subagent' | 'routine' | 'task' | 'bot_main' | 'bot_work'
   routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
   task?: SessionTaskRef | null // a workflow step's session, listed under its task; absent from older hosts
+  bot?: BotSessionRef | null // Owning Bot metadata for bot_main and bot_work sessions
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -1668,6 +1684,95 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // Bots: persistent coordinators, external channels, and dispatch ledger.
+  'bots.list': { params: void; result: BotList }
+  'bots.get': { params: { botId: string }; result: BotView }
+  'bots.create': { params: BotDraft; result: BotView }
+  'bots.update': { params: { botId: string; changes: BotChanges }; result: BotView }
+  'bots.delete': { params: { botId: string; keepSessions?: boolean }; result: void }
+  'bots.setPaused': { params: { botId: string; paused: boolean }; result: BotView }
+  'bots.sendMain': {
+    params: {
+      botId: string
+      text: string
+      content?: UserContent[]
+      sourceSessionId?: string
+      sourceHostId?: string | null
+    }
+    result: { sessionId: string; bot: BotView }
+  }
+  'bots.resetMain': { params: { botId: string }; result: BotView }
+  'bots.dispatch': {
+    params: {
+      botId: string
+      targetHostId: string | null
+      projectPath: string
+      title: string
+      prompt: string
+      agentId?: AgentId
+      model?: string | null
+      worktree?: boolean
+      sourceSessionId?: string
+      sourceHostId?: string | null
+    }
+    result: BotRequest
+  }
+  'bots.retryPending': { params: { requestId: string }; result: BotRequest }
+  'bots.cancelRequest': { params: { requestId: string }; result: BotRequest }
+  'bots.archiveDone': { params: { botId: string }; result: { archived: number } }
+  'bots.answerChange': {
+    params: {
+      sessionId: string
+      entryId: string
+      decision: 'confirm' | 'decline'
+      keepSessions?: boolean
+    }
+    result: void
+  }
+  'bots.uploadAvatar': {
+    params: {
+      botId: string
+      mimeType: BotAvatarMimeType
+      dataBase64: string
+      crop?: { x: number; y: number; scale: number }
+    }
+    result: BotView
+  }
+  'bots.readAvatar': { params: { botId: string }; result: { dataUrl: string } | null }
+  'bots.listTargets': { params: void; result: { targets: BotHostTarget[] } }
+  'bots.handoff': {
+    params: {
+      botId: string
+      sessionId: string
+      text: string
+      contextSummary?: string
+    }
+    result: { botSessionId: string; entryId: string }
+  }
+  /** Detaches a single Bot work session and promotes it to a regular user project session. */
+  'bots.detachSession': { params: { sessionId: string }; result: { ok: boolean } }
+  /** Lists all installed Bot channel plugins with shared config and live connection status. */
+  'bots.channelsList': { params: void; result: BotChannelView[] }
+  /** Updates host-level shared config (enabled, defaultBotId, ownerIds, group rules) for a channel plugin. */
+  'bots.channelConfigure': {
+    params: { channelKey: string; config: Partial<BotChannelConfig> }
+    result: BotChannelView
+  }
+  /** Updates a single Bot's binding (enabled, replyMode, scope) for an installed channel plugin. */
+  'bots.channelBind': {
+    params: { botId: string; channelKey: string; binding: Partial<BotChannelBinding> }
+    result: BotView
+  }
+  /** Runs the channel plugin's `botChannel.test` hook to verify its configured credentials. */
+  'bots.channelTest': {
+    params: { channelKey: string }
+    result: { ok: boolean; label?: string; error?: string }
+  }
+  /** Generates a 6-digit `/pair <code>` token shared across all Bots using this channel plugin. */
+  'bots.channelPairStart': {
+    params: { channelKey: string }
+    result: BotPairingCode
+  }
   // Kettu's plugins: packages in the Agent Plugins format, installed on the host. See plugins.
   'plugins.list': { params: void; result: { plugins: InstalledKettuPlugin[] } }
   // Reads a package from its source and says what it holds and would run. Nothing is installed
@@ -2845,6 +2950,29 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'bots.list',
+  'bots.get',
+  'bots.create',
+  'bots.update',
+  'bots.delete',
+  'bots.setPaused',
+  'bots.sendMain',
+  'bots.resetMain',
+  'bots.dispatch',
+  'bots.retryPending',
+  'bots.cancelRequest',
+  'bots.archiveDone',
+  'bots.answerChange',
+  'bots.uploadAvatar',
+  'bots.readAvatar',
+  'bots.listTargets',
+  'bots.handoff',
+  'bots.detachSession',
+  'bots.channelsList',
+  'bots.channelConfigure',
+  'bots.channelBind',
+  'bots.channelTest',
+  'bots.channelPairStart',
   'plugins.list',
   'plugins.inspect',
   'plugins.install',
@@ -3115,6 +3243,17 @@ export type HostEvent =
   | { type: 'workflows.changed' } // the workflow library or its settings changed; a page showing it reads again
   | { type: 'workflows.suggestion'; suggestion: WorkflowSuggestion } // a card's answer or Start's progress
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
+  | { type: 'bot.changed'; bot: BotView } // Bot definition, role, channels or aggregate status changed
+  | { type: 'bot.removed'; botId: string }
+  | { type: 'bot.request'; request: BotRequest } // Dispatched work or offline pending item updated
+  | { type: 'bot.channelsChanged'; channels: BotChannelView[] } // Plugin Bot channel states or config changed
+  | {
+      type: 'bot.hostOnline'
+      hostId: string
+      hostName: string
+      pendingCount: number
+      botIds: string[]
+    }
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.
   | { type: 'browser.call'; call: BrowserDeviceCall }

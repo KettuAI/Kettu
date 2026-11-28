@@ -126,6 +126,10 @@
         "noChange": "This MCP server change is no longer on record",
         "noUndo": "This change cannot be undone"
       },
+      "bot": {
+        "gone": "This Bot confirmation card is no longer waiting for an answer",
+        "answered": "This Bot confirmation card was already answered"
+      },
       "step": {
         "gone": "This step is no longer waiting for an answer",
         "answered": "This step was already answered"
@@ -297,7 +301,11 @@
     "routineRun": "Wants to run the Routine {{name}} now",
     "mcpAdd": "Wants to add the MCP server {{name}}",
     "mcpOn": "Wants to turn on the MCP server {{name}}",
-    "mcpOff": "Wants to turn off the MCP server {{name}}"
+    "mcpOff": "Wants to turn off the MCP server {{name}}",
+    "botCreate": "Wants to create the Bot {{name}}",
+    "botUpdate": "Wants to update the Bot {{name}}",
+    "botDelete": "Wants to delete the Bot {{name}}",
+    "botRoleEdit": "Wants to update the role of Bot {{name}}"
   },
   "routines": {
     "busy": "This routine already has a run working",

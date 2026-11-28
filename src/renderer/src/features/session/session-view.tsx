@@ -69,14 +69,21 @@ import { sessionFolder } from '@renderer/lib/session-folder'
 import { WorktreeGoneComposer, WorktreeState } from './worktree/worktree-state'
 
 /** A session: its thread, and the composer or the subagent bar under it. */
-export function SessionView({ sessionId }: { sessionId: string }) {
+export function SessionView({
+  sessionId,
+  hideHeader = false,
+}: {
+  sessionId: string
+  /** Omits the standalone SessionHeader when embedded inside a host view such as BotWorkbench. */
+  hideHeader?: boolean
+}) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
   if (!summary) return null
-  return <SessionBody summary={summary} />
+  return <SessionBody summary={summary} hideHeader={hideHeader} />
 }
 
-function SessionBody({ summary }: { summary: SessionSummary }) {
-  const { t } = useTranslation(['session', 'common'])
+function SessionBody({ summary, hideHeader }: { summary: SessionSummary; hideHeader: boolean }) {
+  const { t } = useTranslation(['session', 'common', 'control'])
   const sessionId = summary.id
   const replicaStatus = useThreadsStore((s) => s.replicas[sessionId]?.status ?? 'loading')
   const replicaError = useThreadsStore((s) => s.replicas[sessionId]?.error ?? null)
@@ -242,7 +249,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   return (
     <LinkSessionContext value={sessionId}>
       <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
-        <SessionHeader summary={summary} session={session} />
+        {!hideHeader && <SessionHeader summary={summary} session={session} />}
         <div className="relative flex min-h-0 flex-1">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <ProjectPathContext value={folder}>

@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { findChips, type ChipContext } from './chips'
+import {
+  findChips,
+  mentionResolver,
+  NO_SURFACES,
+  type BotMentionRef,
+  type ChipContext,
+} from './chips'
 
 const ctx = (extra: Partial<ChipContext> = {}): ChipContext => ({
   commands: ['compact', 'status'],
@@ -132,6 +138,35 @@ describe('findChips with exclusive commands and stackable skills', () => {
         local: false,
       },
     ])
+  })
+
+  it('resolves @bot mentions case-insensitively with Bot metadata and trailing punctuation stripped', () => {
+    const bots: BotMentionRef[] = [
+      {
+        id: 'bot-1',
+        handle: 'oncall',
+        name: 'CI On-Call',
+        avatar: { kind: 'preset', preset: 'sentinel', palette: 'indigo' },
+        description: 'Handles CI failures',
+      },
+    ]
+    const resolve = mentionResolver([], null, NO_SURFACES, [], bots)
+    const chips = findChips('请 @oncall，帮我看下 @ONCALL 的告警', { commands: [], resolve })
+    expect(chips).toHaveLength(2)
+    expect(chips[0]).toMatchObject({
+      kind: 'bot',
+      from: 2,
+      to: 9,
+      label: 'CI On-Call',
+      bot: bots[0],
+    })
+    expect(chips[1]).toMatchObject({
+      kind: 'bot',
+      from: 15,
+      to: 22,
+      label: 'CI On-Call',
+      bot: bots[0],
+    })
   })
 })
 

@@ -1324,6 +1324,24 @@
         "readFailed": "Couldn’t read the workflow settings"
       }
     },
+    "bots": {
+      "group": "Bots",
+      "note": "Limits apply across every Bot on this computer.",
+      "keywords": "bot bots coordinator dispatch concurrent handoff",
+      "invalid": "Enter a whole number from {{min}} to {{max}}.",
+      "manage": {
+        "name": "Your Bots",
+        "description": "Create persistent Bots to coordinate projects and connect Telegram, Feishu, GitHub or Routines."
+      },
+      "maxConcurrent": {
+        "name": "Bot sessions working at once",
+        "description": "Maximum active work sessions across all Bots on this computer at the same time."
+      },
+      "allowHandoff": {
+        "name": "Agents can hand off to Bots",
+        "description": "Allow regular sessions to call handoff_to_bot to delegate work to your Bots."
+      }
+    },
     "signOutShared": {
       "title": "Sign out of {{name}}?",
       "body": "{{name}} shares its sign-in with the Antigravity app and CLI, so they are signed out too.",

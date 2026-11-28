@@ -90,6 +90,13 @@ import {
   MCP_TOOLS,
   type McpTools,
 } from '../marketplace/mcp-tools'
+import {
+  BOT_ASKING_TOOLS,
+  BOT_TOOL_NAMES,
+  BOT_TOOLS,
+  isBotToolName,
+  type BotTools,
+} from '../bots/tools'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -207,6 +214,7 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [SETTINGS_TOOLS, 'settings'],
       [ROUTINE_TOOLS, 'routines'],
       [MCP_TOOLS, 'mcp'],
+      [BOT_TOOLS, 'bots'],
     ] as const
   )
     .flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const))
@@ -225,6 +233,7 @@ const TOPIC_GROUPS: Partial<Record<GuideTopic, McpToolGroup>> = {
   settings: 'settings',
   routines: 'routines',
   mcp: 'mcp',
+  bots: 'bots',
 }
 /** The tools that wait for the user's answer in the session before they act. */
 const ASKING_TOOLS: ReadonlySet<string> = new Set([
@@ -233,6 +242,7 @@ const ASKING_TOOLS: ReadonlySet<string> = new Set([
   CHANGE_SETTINGS,
   ...ROUTINE_ASKING_TOOLS,
   ...MCP_ASKING_TOOLS,
+  ...BOT_ASKING_TOOLS,
 ])
 
 /** Serves the computer use tools, on a host that carries the driver. */
@@ -313,6 +323,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   routines?: RoutineTools
   /** The tools of the host's MCP library; without them the service lists none. */
   mcp?: McpTools
+  /** Cross-computer Bot dispatch and controlled self-management MCP tool group. */
+  bots?: BotTools
   /** The tools the plugins that are on give agents; without it the service lists none. */
   plugins?: PluginTools
   /** The skills behind the skill tools, which only an agent that loads no skill folders gets. */
@@ -399,6 +411,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
         ...SETTINGS_TOOL_NAMES,
         ...ROUTINE_TOOL_NAMES,
         ...MCP_TOOL_NAMES,
+        ...BOT_TOOL_NAMES,
       ],
       // 仅在 Auto 权限模式下自动放行的可回滚内置工具（不可逆删除、高危终端命令、桌面点击/键入与插件工具仍需确认）。
       autoModeAllow: [
@@ -647,6 +660,7 @@ export class ArtifactService {
       ...(this.deps.settings ? SETTINGS_TOOLS : []),
       ...(this.deps.routines ? ROUTINE_TOOLS : []),
       ...(this.deps.mcp ? MCP_TOOLS : []),
+      ...(this.deps.bots ? BOT_TOOLS : []),
       ...(this.deps.plugins?.listed(sessionId) ?? []),
     ]
   }
@@ -1271,6 +1285,15 @@ export class ArtifactService {
     if (mcp && isMcpToolName(name)) {
       try {
         return await mcp.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    const bots = this.deps.bots
+    if (bots && isBotToolName(name)) {
+      try {
+        return await bots.call(caller, name, input)
       } catch (error) {
         this.deps.log('error', `${name} failed: ${(error as Error).message}`)
         throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

@@ -8,6 +8,7 @@ import {
   type PluginHostToAgent,
 } from '@shared/plugin-host'
 import { PLUGIN_HOOK_EVENTS, PLUGIN_PERMISSIONS } from '@shared/plugins'
+import { PLUGIN_BOT_CHANNEL_EVENTS, PLUGIN_WS_EVENTS } from '@shared/plugin-bot-channels'
 import { PLUGIN_REF_EVENTS } from '@shared/plugin-refs'
 import { PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
 import { PLUGIN_VIEW_EVENTS } from '@shared/plugin-views'
@@ -361,6 +362,7 @@ describe('the plugin API', () => {
       await client.activate(`only-${permission}`, 'command:run')
       for (const [name, call] of Object.entries(api)) {
         if (call.permission === null || call.permission === permission) continue
+        if (permission === 'network.custom' && call.permission === 'network') continue
         const answer = (await client.call(`only-${permission}`, 'call', [name, {}])) as {
           error?: string
         }
@@ -646,6 +648,8 @@ describe('the sample plugin and the published types', () => {
         ...PLUGIN_VIEW_EVENTS,
         ...PLUGIN_REF_EVENTS,
         PLUGIN_CHANNEL_EVENT,
+        ...Object.values(PLUGIN_BOT_CHANNEL_EVENTS),
+        ...Object.values(PLUGIN_WS_EVENTS),
         ...Object.keys(PLUGIN_HOOK_EVENTS),
       ].sort(),
     )

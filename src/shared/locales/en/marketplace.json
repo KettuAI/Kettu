@@ -383,6 +383,18 @@
         "name": "Start sessions and send messages",
         "description": "Start sessions and send messages to them, with agents that work in Auto mode at most."
       },
+      "botsBridge": {
+        "name": "Bridge external Bot channels",
+        "description": "Route external messages to your Bots and send Bot replies back to the originating platform. Permission approvals stay inside Kettu."
+      },
+      "networkCustom": {
+        "name": "Connect to custom or private URLs",
+        "description": "Connect only to the custom or internal server origins you explicitly enter in this plugin's URL settings."
+      },
+      "kettuConnector": {
+        "name": "Use Kettu Cloud Connector",
+        "description": "Connect to Kettu Cloud Connectors (connectors.kettu.sh) using your signed-in Kettu account to receive and reply to webhook mentions."
+      },
       "network": {
         "name": "Network",
         "description": "Connect to {{domain}} over https."
@@ -1178,6 +1190,7 @@
       "settings": "Settings",
       "routines": "Routines",
       "mcp": "MCP servers",
+      "bots": "Bots",
       "plugins": "Plugins"
     },
     "new": "New",

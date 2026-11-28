@@ -23,7 +23,8 @@ export function SessionPlace({
   sessionId: string
   projectPath: string
 }) {
-  const { t } = useTranslation('composer')
+  const { t } = useTranslation(['composer', 'bots'])
+  const origin = useSessionsStore((s) => s.byId[sessionId]?.origin)
   const scratch = useSessionsStore((s) => s.byId[sessionId]?.scratch ?? false)
   const worktree = useSessionsStore((s) => s.byId[sessionId]?.worktree)
   const projectOwner = useSessionsStore((s) => s.byId[sessionId]?.projectOwner)
@@ -34,13 +35,16 @@ export function SessionPlace({
   const folderLabel = basename(path)
   const showFolder =
     !scratch && !!project && (projectFolders(project).length > 1 || project.path !== projectPath)
-  const label = scratch
-    ? t('place.noProject')
-    : project
-      ? showFolder && folderLabel !== project.name
-        ? `${project.name} · ${folderLabel}`
-        : project.name
-      : folderLabel
+  const label =
+    origin === 'bot_main'
+      ? t('bots:workbench.isolatedWorkspace')
+      : scratch
+        ? t('place.noProject')
+        : project
+          ? showFolder && folderLabel !== project.name
+            ? `${project.name} · ${folderLabel}`
+            : project.name
+          : folderLabel
 
   return (
     <>

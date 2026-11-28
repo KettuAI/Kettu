@@ -159,10 +159,18 @@ export function createPluginService(options: PluginServiceOptions): PluginServic
       if (!to) return Promise.reject(new Error('The host function cannot be reached'))
       return new Promise((resolve, reject) => {
         const callId = nextForward++
+        // Allow long-polling `network.fetch` calls with explicit `timeoutMs` up to 65 s.
+        let timeoutMs = PLUGIN_ANSWER_TIMEOUT_MS
+        if (name === 'network.fetch' && typeof args[1] === 'object' && args[1] !== null) {
+          const asked = (args[1] as { timeoutMs?: unknown }).timeoutMs
+          if (typeof asked === 'number' && Number.isFinite(asked) && asked > 0) {
+            timeoutMs = Math.min(65_000, Math.max(PLUGIN_ANSWER_TIMEOUT_MS, asked + 5_000))
+          }
+        }
         const timer = setTimeout(() => {
           forwarded.delete(callId)
           reject(new Error(`"${name}" did not answer`))
-        }, PLUGIN_ANSWER_TIMEOUT_MS)
+        }, timeoutMs)
         forwarded.set(callId, { resolve, reject, timer })
         to.send({ type: 'function-call', callId, pluginId, name, args })
       })

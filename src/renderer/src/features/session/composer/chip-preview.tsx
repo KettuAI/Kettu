@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileContent } from '@shared/files'
 import { githubReferenceFromLink } from '@shared/git'
 import type { SlashCommand } from '@shared/thread'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
 import { REFERENCE_CARD_CLASS, ReferenceCard } from '@renderer/features/git/gh-reference'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
@@ -42,6 +43,30 @@ export function ChipPreview({
   const { t } = useTranslation('composer')
   const thread = useSettingsStore((s) => s.settings.thread)
   if (chip.kind === 'command') return null
+  if (chip.kind === 'bot' && chip.bot) {
+    return (
+      <div className="flex w-72 flex-col gap-1.5 p-2.5">
+        <div className="flex items-center gap-2 text-small">
+          <BotAvatar avatar={chip.bot.avatar} name={chip.bot.name} botId={chip.bot.id} size={24} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium text-primary">{chip.bot.name}</span>
+              <span className="shrink-0 font-mono text-caption text-tertiary">
+                @{chip.bot.handle}
+              </span>
+            </div>
+          </div>
+        </div>
+        {chip.bot.description && (
+          <div className="line-clamp-2 text-hint text-secondary">{chip.bot.description}</div>
+        )}
+        <div className="flex gap-3 text-caption text-tertiary">
+          <span>{t('chips.clickToOpen')}</span>
+          <span>{t('chips.backspaceRemoves', { key: isMac ? '⌫' : 'Backspace' })}</span>
+        </div>
+      </div>
+    )
+  }
   if (chip.kind === 'skill') {
     const entry = commands?.find((c) => c.name === chip.name)
     const source = commandSourceName(entry?.source, t) ?? agentName

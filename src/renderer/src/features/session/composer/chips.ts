@@ -2,6 +2,7 @@
 // or project files and of the session's terminals, and links. Chips are only how the text looks;
 // the text is what is sent, with a ref for each terminal it mentions.
 
+import type { BotAvatar } from '@shared/bots'
 import {
   githubShortReferenceLinks,
   schemelessGitHubLinks,
@@ -11,9 +12,20 @@ import type { PluginMentionRef } from '@shared/plugin-refs'
 import { findSkillTokens } from '@shared/slash'
 import { leadingCommand } from './slash'
 
+/** Metadata a Bot `@handle` chip carries so the composer and thread can render its avatar and name. */
+export interface BotMentionRef {
+  id: string
+  handle: string
+  name: string
+  avatar: BotAvatar
+  description?: string
+}
+
 /** What an `@` mention names, once resolved against the attachments and the project. */
 export interface MentionTarget {
-  kind: 'file' | 'folder' | 'image' | 'plugin' | SurfaceMention
+  kind: 'file' | 'folder' | 'image' | 'plugin' | 'bot' | SurfaceMention
+  /** The Bot a `@handle` mention stands for. */
+  bot?: BotMentionRef
   /** The item of a plugin it stands for; `name` is its title. */
   plugin?: PluginMentionRef
   /** The terminal, browser tab or device it stands for, and the name its tab shows. */
@@ -192,13 +204,15 @@ export function findChips(text: string, context: ChipContext): Chip[] {
     const { token, name, lines, target } = found
     const label = isSurfaceMention(target.kind)
       ? (target.name ?? name)
-      : target.kind === 'plugin'
-        ? name
-        : target.kind === 'folder'
-          ? name.endsWith('/')
-            ? name
-            : `${name}/`
-          : basename(name)
+      : target.kind === 'bot'
+        ? (target.bot?.name ?? target.name ?? name)
+        : target.kind === 'plugin'
+          ? name
+          : target.kind === 'folder'
+            ? name.endsWith('/')
+              ? name
+              : `${name}/`
+            : basename(name)
     chips.push({ ...target, from, to: from + 1 + token.length, label, lines })
   }
   const taken = (from: number, to: number) => chips.some((c) => from < c.to && to > c.from)
@@ -353,6 +367,7 @@ export function mentionResolver(
   project: { files: ReadonlySet<string>; folders: ReadonlySet<string> } | null,
   surfaces: MentionSurfaces = NO_SURFACES,
   plugins: readonly PluginMentionRef[] = [],
+  bots: readonly BotMentionRef[] = [],
 ): (token: string) => MentionTarget | null {
   return (token) => {
     const surface = surfaceOf(token, surfaces)
@@ -371,6 +386,9 @@ export function mentionResolver(
     }
     const mentioned = plugins.find((ref) => ref.word === token)
     if (mentioned) return { kind: 'plugin', name: mentioned.name, plugin: mentioned }
+    const lower = token.toLowerCase()
+    const bot = bots.find((entry) => entry.handle.toLowerCase() === lower)
+    if (bot) return { kind: 'bot', name: bot.name, bot }
     if (!project) return null
     const path = token.replace(/^\.\//, '')
     if (project.files.has(path)) return { kind: 'file', path }

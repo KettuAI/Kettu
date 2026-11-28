@@ -25,6 +25,7 @@ import { host } from '@renderer/lib/host'
 import { hostPlatform, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { useBotsStore } from '@renderer/stores/bots'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useDevicesStore } from '@renderer/stores/devices'
 import {
@@ -35,6 +36,7 @@ import { useTerminalsStore } from '@renderer/stores/terminals'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import { openBot } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { openAttachmentPath } from '../attachments/open-attachment'
@@ -50,6 +52,7 @@ import {
   mentioned,
   mentionResolver,
   NO_SURFACES,
+  type BotMentionRef,
   type Chip,
   type MentionItem,
   type MentionSurfaces,
@@ -284,6 +287,18 @@ function useSentResolver(
       .map((d) => d.id)
       .join('\n'),
   )
+  const botsById = useBotsStore((s) => s.byId)
+  const bots = useMemo<BotMentionRef[]>(
+    () =>
+      Object.values(botsById).map((bot) => ({
+        id: bot.id,
+        handle: bot.handle,
+        name: bot.name,
+        avatar: bot.avatar,
+        description: bot.description,
+      })),
+    [botsById],
+  )
   const mentions = /[@＠]/.test(text)
   const hasPageRefs = surfaces.page.length > 0
   useEffect(() => {
@@ -298,6 +313,7 @@ function useSentResolver(
       files ? projectOf(files.paths, files.known) : null,
       surfaces,
       plugins,
+      bots,
     )
     const live = new Set(
       [terminals, localPages, reportedPages, devices].flatMap((ids) => ids.split('\n')),
@@ -308,7 +324,7 @@ function useSentResolver(
         ? { ...target, missing: true }
         : target
     }
-  }, [attachments, surfaces, plugins, files, terminals, localPages, reportedPages, devices])
+  }, [attachments, surfaces, plugins, bots, files, terminals, localPages, reportedPages, devices])
 }
 
 /** Opens a sent attachment as its tile does: an image in the viewer, a file or folder itself. */
@@ -393,6 +409,10 @@ function ChipText({
         : null
     }
     if (chip.kind === 'link') return () => links.open(chip.url)
+    if (chip.kind === 'bot') {
+      const id = chip.bot?.id
+      return id ? () => openBot(id) : null
+    }
     if (isSurfaceMention(chip.kind)) {
       const id = chip.surfaceId
       const kind = chip.kind

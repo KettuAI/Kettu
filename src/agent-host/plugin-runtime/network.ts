@@ -7,9 +7,11 @@
 // before tunneling.
 
 import dns from 'node:dns'
+import http from 'node:http'
 import https from 'node:https'
 import { BlockList, isIP, type LookupFunction } from 'node:net'
 import type { Platform } from '@shared/platform'
+import { customUrlOrigin } from '@shared/plugin-bot-channels'
 import { domainCovers } from '@shared/plugins'
 import type { Env } from '../find-command'
 import { proxyEnvFor } from '../proxy-fetch'
@@ -19,6 +21,8 @@ export const FETCH_URL_CHARS = 2048
 export const FETCH_REQUEST_BYTES = 256 * 1024
 export const FETCH_RESPONSE_BYTES = 256 * 1024
 export const FETCH_TIMEOUT_MS = 20_000
+export const FETCH_MIN_TIMEOUT_MS = 1_000
+export const FETCH_MAX_TIMEOUT_MS = 60_000
 const MAX_HEADERS = 50
 const METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 const HEADER_NAME = /^[A-Za-z0-9-]{1,100}$/
@@ -263,6 +267,146 @@ export function createHttpsTransport(options: HttpsTransportOptions = {}): HttpT
 /** Sends the request directly over https, to a public address, and reads at most `FETCH_RESPONSE_BYTES`. */
 export const httpsTransport: HttpTransport = createHttpsTransport()
 
+/**
+ * Sends a request to a user-configured custom origin (`network.custom`), allowing http or https,
+ * custom ports and private/loopback addresses explicitly entered in the plugin's URL settings.
+ */
+export function createCustomHttpTransport(options: HttpsTransportOptions = {}): HttpTransport {
+  const platform = options.platform ?? (process.platform as Platform)
+  return (request) => {
+    if (request.signal.aborted) {
+      return Promise.reject(request.signal.reason)
+    }
+    const isHttps = request.url.protocol === 'https:'
+    const proxyEnv = options.env ? proxyEnvFor(request.url, options.env(), platform) : null
+    return new Promise((resolve, reject) => {
+      let settled = false
+      const agent = proxyEnv
+        ? isHttps
+          ? new https.Agent({ proxyEnv, keepAlive: false })
+          : new http.Agent({ proxyEnv, keepAlive: false })
+        : false
+      const finish = (callback: () => void): void => {
+        if (settled) return
+        settled = true
+        request.signal.removeEventListener('abort', onAbort)
+        if (agent) agent.destroy()
+        callback()
+      }
+      const onAbort = (): void => {
+        const reason = request.signal.reason
+        outgoing.destroy(reason instanceof Error ? reason : undefined)
+        finish(() => reject(reason))
+      }
+      const handleResponse = (response: http.IncomingMessage): void => {
+        const chunks: Buffer[] = []
+        let size = 0
+        const tooLarge = (): void => {
+          response.destroy()
+          finish(() =>
+            reject(new Error(`The response is larger than ${FETCH_RESPONSE_BYTES / 1024} KB`)),
+          )
+        }
+        if (Number(response.headers['content-length']) > FETCH_RESPONSE_BYTES) return tooLarge()
+        const encoding = response.headers['content-encoding']
+        if (typeof encoding === 'string' && encoding.toLowerCase() !== 'identity') {
+          response.destroy()
+          return finish(() =>
+            reject(new Error(`The response is encoded as ${encoding.slice(0, 40)}`)),
+          )
+        }
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length
+          if (size > FETCH_RESPONSE_BYTES) return tooLarge()
+          chunks.push(chunk)
+        })
+        response.on('error', (error) => finish(() => reject(error)))
+        response.on('end', () => {
+          const headers: Record<string, string> = {}
+          for (const [name, value] of Object.entries(response.headers)) {
+            if (value !== undefined) {
+              headers[name] = Array.isArray(value) ? value.join(', ') : value
+            }
+          }
+          finish(() =>
+            resolve({
+              status: response.statusCode ?? 0,
+              headers,
+              body: Buffer.concat(chunks).toString('utf8'),
+            }),
+          )
+        })
+      }
+      const outgoing = isHttps
+        ? https.request(
+            request.url,
+            {
+              method: request.method,
+              headers: request.headers,
+              agent,
+              signal: request.signal,
+              ...(options.ca !== undefined ? { ca: options.ca } : {}),
+            },
+            handleResponse,
+          )
+        : http.request(
+            request.url,
+            {
+              method: request.method,
+              headers: request.headers,
+              agent,
+              signal: request.signal,
+            },
+            handleResponse,
+          )
+      request.signal.addEventListener('abort', onAbort, { once: true })
+      outgoing.on('error', (error) => finish(() => reject(error)))
+      outgoing.end(request.body ?? undefined)
+    })
+  }
+}
+
+export const customHttpTransport: HttpTransport = createCustomHttpTransport()
+
+/** Checks whether a URL is authorized by the plugin's `network:<domain>` or `network.custom` grants. */
+export function checkPluginNetworkTarget(
+  url: URL,
+  permissions: readonly string[],
+  customOrigins: readonly string[],
+  protocols: { public: string; custom: readonly string[] },
+): { custom: boolean } {
+  if (url.username !== '' || url.password !== '') {
+    throw new Error('An address with a user name or password cannot be reached')
+  }
+  const normalized = customUrlOrigin(url.toString())
+  if (
+    permissions.includes('network.custom') &&
+    protocols.custom.includes(url.protocol) &&
+    normalized !== null &&
+    customOrigins.includes(normalized)
+  ) {
+    return { custom: true }
+  }
+  if (url.protocol !== protocols.public) {
+    throw new Error(`Only ${protocols.public.slice(0, -1)} addresses can be reached`)
+  }
+  if (url.port !== '') {
+    throw new Error(`Only the default ${protocols.public.slice(0, -1)} port can be reached`)
+  }
+  const host = url.hostname
+  const domains = grantedDomains(permissions)
+  if (!HOST_NAME.test(host) || !domains.some((domain) => domainCovers(domain, host))) {
+    throw new Error(
+      `${host} is not among the domains this plugin may reach (${domains.join(', ')}). ` +
+        `It needs the permission "network:${host}" or a configured URL setting with "network.custom".`,
+    )
+  }
+  if (!isPublicHost(host)) {
+    throw new Error(`${host} is on this computer or a private network`)
+  }
+  return { custom: false }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -285,32 +429,31 @@ function sentHeaders(value: unknown): Record<string, string> {
   return out
 }
 
+export interface NetworkFetchOptions {
+  /** User-configured origins from `url` settings for plugins holding `network.custom`. */
+  customOrigins?: (pluginId: string) => readonly string[]
+  /** Transport used for `network.custom` origins (allows http/custom ports/private hosts). */
+  customTransport?: HttpTransport
+}
+
 /** The call's checks and its answer; `transport` sends the request that passed them. */
-export function networkFetch(transport: HttpTransport): PluginApiCall {
+export function networkFetch(
+  transport: HttpTransport,
+  fetchOptions: NetworkFetchOptions = {},
+): PluginApiCall {
   return {
     permission: 'network',
-    async run({ permissions }, [target, init]) {
+    async run({ pluginId, permissions }, [target, init]) {
       if (typeof target !== 'string' || target.length > FETCH_URL_CHARS) {
         throw new Error(`The address must be text of at most ${FETCH_URL_CHARS} characters`)
       }
       const url = URL.parse(target)
       if (url === null) throw new Error('The address is not a valid URL')
-      if (url.protocol !== 'https:') throw new Error('Only https addresses can be reached')
-      if (url.username !== '' || url.password !== '') {
-        throw new Error('An address with a user name or password cannot be reached')
-      }
-      if (url.port !== '') throw new Error('Only the default https port can be reached')
-      const host = url.hostname
-      const domains = grantedDomains(permissions)
-      if (!HOST_NAME.test(host) || !domains.some((domain) => domainCovers(domain, host))) {
-        throw new Error(
-          `${host} is not among the domains this plugin may reach (${domains.join(', ')}). ` +
-            `It needs the permission "network:${host}".`,
-        )
-      }
-      if (!isPublicHost(host)) {
-        throw new Error(`${host} is on this computer or a private network`)
-      }
+      const origins = fetchOptions.customOrigins?.(pluginId) ?? []
+      const { custom } = checkPluginNetworkTarget(url, permissions, origins, {
+        public: 'https:',
+        custom: ['https:', 'http:'],
+      })
       if (init !== undefined && !isRecord(init)) throw new Error('The options must be an object')
       const options = init ?? {}
       if (options.method !== undefined && typeof options.method !== 'string') {
@@ -328,17 +471,34 @@ export function networkFetch(transport: HttpTransport): PluginApiCall {
       if (body !== undefined && Buffer.byteLength(body) > FETCH_REQUEST_BYTES) {
         throw new Error(`The body is larger than ${FETCH_REQUEST_BYTES / 1024} KB`)
       }
+      let timeoutMs = FETCH_TIMEOUT_MS
+      if (options.timeoutMs !== undefined) {
+        if (
+          typeof options.timeoutMs !== 'number' ||
+          !Number.isFinite(options.timeoutMs) ||
+          options.timeoutMs < FETCH_MIN_TIMEOUT_MS ||
+          options.timeoutMs > FETCH_MAX_TIMEOUT_MS
+        ) {
+          throw new Error(
+            `timeoutMs must be between ${FETCH_MIN_TIMEOUT_MS} and ${FETCH_MAX_TIMEOUT_MS}`,
+          )
+        }
+        timeoutMs = Math.round(options.timeoutMs)
+      }
       const headers = {
         'user-agent': 'Kettu',
         'accept-encoding': 'identity',
         ...sentHeaders(options.headers),
       }
-      return transport({
+      const activeTransport = custom
+        ? (fetchOptions.customTransport ?? customHttpTransport)
+        : transport
+      return activeTransport({
         url,
         method,
         headers,
         body: body ?? null,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       })
     },
   }

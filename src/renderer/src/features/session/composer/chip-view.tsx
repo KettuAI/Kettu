@@ -13,6 +13,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
 import { SiteIconImage } from '@renderer/components/site-icon-image'
+import { BotAvatar } from '@renderer/features/bots/bot-avatar'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { ReferenceIcon, RepositoryReferenceIcon } from '@renderer/features/git/gh-reference'
 import {
@@ -57,19 +58,22 @@ export function ChipView({
         chip.kind === 'command'
           ? 'max-w-65 gap-1.25 font-medium text-control-on'
           : cn(
-              '-top-px mx-0.5 max-w-80 gap-1.5 rounded-[7px] pr-2 pl-1.5',
+              '-top-px mx-0.5 max-w-80 gap-1.5 rounded-[7px]',
+              chip.kind === 'bot' ? 'pr-2 pl-1' : 'pr-2 pl-1.5',
               surface ? 'h-5.5' : 'h-6',
               missing
                 ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
                 : state === 'selected'
                   ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_1.5px_var(--control-on)]'
-                  : chip.kind === 'skill'
-                    ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_28%,var(--border-default)),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_45%,var(--border-strong)),var(--elevation-raised)]'
-                    : 'bg-raised shadow-[0_0_0_0.5px_var(--border-default),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_var(--border-strong),var(--elevation-raised)]',
+                  : chip.kind === 'bot'
+                    ? 'bg-[color-mix(in_srgb,var(--control-on)_9%,var(--bg-raised))] shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_34%,var(--border-default)),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_52%,var(--border-strong)),var(--elevation-raised)]'
+                    : chip.kind === 'skill'
+                      ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_28%,var(--border-default)),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--control-on)_45%,var(--border-strong)),var(--elevation-raised)]'
+                      : 'bg-raised shadow-[0_0_0_0.5px_var(--border-default),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_var(--border-strong),var(--elevation-raised)]',
             ),
       )}
     >
-      <ChipBody chip={chip} missing={missing} />
+      <ChipBody chip={chip} missing={missing} surface={surface} />
     </span>
   )
 }
@@ -128,7 +132,7 @@ function LinkBody({ chip }: { chip: Extract<Chip, { kind: 'link' }> }) {
   )
 }
 
-function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
+function ChipBody({ chip, missing, surface }: { chip: Chip; missing: boolean; surface: boolean }) {
   if (chip.kind === 'command') {
     return (
       <span>
@@ -142,6 +146,19 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
       <>
         <Glyph icon={SparklesIcon} className="size-3.25 shrink-0 text-control-on" />
         <span className="min-w-0 truncate font-medium text-primary">{chip.name}</span>
+      </>
+    )
+  }
+  if (chip.kind === 'bot' && chip.bot) {
+    return (
+      <>
+        <BotAvatar
+          avatar={chip.bot.avatar}
+          name={chip.bot.name}
+          botId={chip.bot.id}
+          size={surface ? 14 : 16}
+        />
+        <span className="min-w-0 truncate font-medium text-primary">{chip.bot.name}</span>
       </>
     )
   }

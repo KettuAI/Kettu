@@ -23,6 +23,7 @@ export const GUIDE_TOPICS = [
   'settings',
   'routines',
   'mcp',
+  'bots',
 ] as const
 export type GuideTopic = (typeof GUIDE_TOPICS)[number]
 
@@ -647,5 +648,25 @@ export const SKILL_SPECS: readonly SkillSpec[] = [
       'Add an MCP server to Kettu, turn one on or off for an agent, a project or a tool, or find ' +
       'out why one does not work, when the user asks.',
     body: mcp,
+  },
+  {
+    name: 'kettu-bots',
+    topic: 'bots',
+    description: () =>
+      'List, dispatch work through, or propose creating, updating or deleting a Kettu Bot, a ' +
+      'long-lived role that coordinates sessions across paired computers.',
+    body: () =>
+      '# Kettu Bots\n\n' +
+      'A Kettu Bot is a long-lived coordinator with its own avatar, @handle, role instructions ' +
+      '(ROLE.md), Bot memory (layer `bot`, priority `project > bot > global`) and an isolated main ' +
+      'conversation on its Home Host. Bots dispatch real work sessions on this computer or paired ' +
+      'remote computers without copying code or credentials off the target machine.\n\n' +
+      '- Read state first: `list_bots`, `list_bot_targets`, `read_bot_work`.\n' +
+      '- Dispatch and follow up: `dispatch_bot_session`, `send_to_bot_session`, `archive_bot_session`.\n' +
+      '- Hand off from a normal session: `handoff_to_bot`.\n' +
+      '- Self-management (`create_bot`, `update_bot`, `delete_bot`): ONLY call when the user ' +
+      'explicitly asks. Every create, update or delete ALWAYS shows an interactive confirmation ' +
+      'card in every permission mode (Full access included), one at a time, and nothing changes ' +
+      'until the user confirms. Deleting a Bot keeps historical sessions as normal sessions by default.',
   },
 ]
