@@ -67,6 +67,21 @@ describe('createValidators', () => {
     )
   })
 
+  it('takes a bounded list of session ids for batch session usage lookups', () => {
+    expect(posix['sessions.usages']({ sessionIds: ['a', 'b'], extra: true })).toEqual({
+      sessionIds: ['a', 'b'],
+    })
+    expect(posix['sessions.usages']({ sessionIds: [] })).toEqual({ sessionIds: [] })
+    rejects(() => posix['sessions.usages']({}))
+    rejects(() => posix['sessions.usages']({ sessionIds: 'a' }))
+    rejects(() => posix['sessions.usages']({ sessionIds: [42] }))
+    rejects(() => posix['sessions.usages']({ sessionIds: [''] }))
+    rejects(() => posix['sessions.usages']({ sessionIds: ['x'.repeat(257)] }))
+    rejects(() =>
+      posix['sessions.usages']({ sessionIds: Array.from({ length: 10_001 }, () => 's') }),
+    )
+  })
+
   it('takes a fork for an import only when asked', () => {
     const base = { agentId: 'claude-code', projectPath: '/p', acpSessionId: 'id' }
     expect(posix['sessions.import']({ ...base, fork: true })).toEqual({ ...base, fork: true })

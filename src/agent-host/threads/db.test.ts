@@ -2114,4 +2114,34 @@ describe("the thread database's token counts", () => {
     expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(SCHEMA_VERSION)
     check.close()
   })
+
+  it('reads stored usages in batch, returning null for missing or usage-less threads', () => {
+    const db = open()
+    const withUsage: StoredSession = {
+      ...EMPTY_SESSION,
+      usage: {
+        used: 12_000,
+        size: 200_000,
+        cost: { amount: 0.42, currency: 'USD' },
+        tokens: {
+          total: 25_000,
+          input: 4_000,
+          output: 1_000,
+          thought: null,
+          cacheRead: 18_000,
+          cacheWrite: 2_000,
+        },
+      },
+    }
+    const withoutUsage: StoredSession = { ...EMPTY_SESSION, usage: null }
+    db.write('s-with', { head, session: withUsage, entries: [] })
+    db.write('s-without', { head, session: withoutUsage, entries: [] })
+
+    expect(db.usages(['s-with', 's-without', 's-missing', 's-with'])).toEqual({
+      's-with': withUsage.usage,
+      's-without': null,
+      's-missing': null,
+    })
+    db.close()
+  })
 })

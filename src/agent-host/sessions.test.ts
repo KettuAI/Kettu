@@ -4105,3 +4105,123 @@ describe('started-session permission ceiling and applyStartedMode ordering', () 
     }
   })
 })
+
+describe('SessionManager.usages', () => {
+  it('returns live and stored usages in batch while omitting unknown sessions', async () => {
+    const storedUsage = {
+      used: 9_000,
+      size: 200_000,
+      cost: { amount: 0.25, currency: 'USD' },
+      tokens: {
+        total: 15_000,
+        input: 5_000,
+        output: 2_000,
+        thought: null,
+        cacheRead: 8_000,
+        cacheWrite: 0,
+      },
+    }
+    const liveUsage = {
+      used: 20_000,
+      size: 200_000,
+      cost: null,
+      tokens: {
+        total: 32_000,
+        input: 20_000,
+        output: 12_000,
+        thought: null,
+        cacheRead: null,
+        cacheWrite: null,
+      },
+    }
+    const usagesSpy = vi.fn(async (ids: readonly string[]) => {
+      const out: Record<string, typeof storedUsage | null> = {}
+      for (const id of ids) {
+        out[id] = id === 's-stored' ? storedUsage : null
+      }
+      return out
+    })
+    const storedRecords: SessionRecord[] = [
+      {
+        id: 's-stored',
+        agentId: 'codex',
+        projectPath: '/repo',
+        acpSessionId: 'acp-stored',
+        title: 'Stored child',
+        createdAt: 10,
+        updatedAt: 20,
+        lastViewedAt: null,
+        parentId: null,
+        origin: 'user',
+        description: null,
+        branch: null,
+      },
+      {
+        id: 's-empty',
+        agentId: 'codex',
+        projectPath: '/repo',
+        acpSessionId: 'acp-empty',
+        title: 'Empty child',
+        createdAt: 15,
+        updatedAt: 25,
+        lastViewedAt: null,
+        parentId: 's-stored',
+        origin: 'user',
+        description: null,
+        branch: null,
+      },
+    ]
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: storedRecords })
+    await store.flush()
+
+    const { sessions } = manager(
+      {},
+      {
+        agents: {
+          name: () => 'Claude Code',
+          signedIn: () => {},
+          ensureReady: async () => ({
+            init: { capabilities: {} },
+            connection: {
+              newSession: async () => ({ sessionId: 'acp-live', config: [] }),
+              prompt: () => new Promise(() => {}),
+              register: () => {},
+              unregister: () => {},
+              isClosed: false,
+            },
+          }),
+        },
+        threads: {
+          usages: usagesSpy,
+          write: async () => undefined,
+        },
+      },
+    )
+    await sessions.load()
+    const created = await sessions.create({ agentId: 'claude-code', projectPath: '/repo' })
+    const live = (
+      sessions as unknown as {
+        live: Map<string, { thread: { session: { usage: unknown } } }>
+      }
+    ).live.get(created.id)
+    expect(live).toBeDefined()
+    live!.thread.session.usage = liveUsage
+
+    const result = await sessions.usages([
+      created.id,
+      's-stored',
+      's-empty',
+      's-unknown',
+      's-stored',
+    ])
+
+    expect(usagesSpy).toHaveBeenCalledTimes(1)
+    expect(usagesSpy).toHaveBeenCalledWith(['s-stored', 's-empty'])
+    expect(result).toEqual([
+      { sessionId: created.id, usage: liveUsage },
+      { sessionId: 's-stored', usage: storedUsage },
+      { sessionId: 's-empty', usage: null },
+    ])
+  })
+})

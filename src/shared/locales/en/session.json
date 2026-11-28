@@ -536,6 +536,62 @@
     "back": "Back to {{title}}",
     "startedFrom": "Started from <parent>{{title}}</parent>"
   },
+  "sessionFamily": {
+    "title": "Session group",
+    "listLabel": "Sessions in this group",
+    "triggerChild": "{{title}} ({{count}} sessions in group)",
+    "triggerParent_one": "{{count}} sub-session in this group",
+    "triggerParent_other": "{{count}} sub-sessions in this group",
+    "subSessionCount_one": "{{count}} sub-session",
+    "subSessionCount_other": "{{count}} sub-sessions",
+    "memberCount_one": "{{count}} session",
+    "memberCount_other": "{{count}} sessions",
+    "parentBadge": "Parent",
+    "currentBadge": "Current",
+    "activity": {
+      "waiting": "{{count}} waiting",
+      "running": "{{count}} running",
+      "background": "{{count}} in background",
+      "error": "{{count}} failed"
+    },
+    "status": {
+      "waiting": "Needs approval",
+      "error": "Error",
+      "auth": "Sign-in required",
+      "running": "Running",
+      "background": "Background work",
+      "starting": "Starting",
+      "unread": "Updated",
+      "idle": "Idle"
+    },
+    "usage": {
+      "totalTokens": "Group tokens",
+      "totalCost": "Group cost",
+      "ioSummary": "In {{input}} · Out {{output}}",
+      "partial": "Partial",
+      "unavailable": "Unavailable",
+      "unavailableShort": "No data",
+      "noTokensShort": "No tokens",
+      "noCostShort": "No cost",
+      "tokensUnavailable": "Tokens unavailable",
+      "costUnavailable": "Cost unavailable",
+      "rowUnavailable": "Usage data unavailable for this session",
+      "rowLoadFailed": "Could not load usage data for this session",
+      "loadingRow": "Loading usage data…",
+      "rowTokensDetail": "{{total}} tokens (In {{input}} · Out {{output}})",
+      "loading_one": "Loading usage for {{count}} session…",
+      "loading_other": "Loading usage for {{count}} sessions…",
+      "loadFailed": "Could not load usage data for this group.",
+      "allUnavailable": "No usage data reported for sessions in this group yet.",
+      "missingBoth_one": "Excludes {{count}} session with unavailable usage data.",
+      "missingBoth_other": "Excludes {{count}} sessions with unavailable usage data.",
+      "missingTokens_one": "Token total excludes {{count}} session without token data.",
+      "missingTokens_other": "Token total excludes {{count}} sessions without token data.",
+      "missingCost_one": "Cost total excludes {{count}} session without cost data.",
+      "missingCost_other": "Cost total excludes {{count}} sessions without cost data.",
+      "missingMixed": "Excludes {{tokensCount}} without token data and {{costCount}} without cost data."
+    }
+  },
   "sessionMessage": {
     "from": "From {{title}}",
     "fromParent": "From the parent session"

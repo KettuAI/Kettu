@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   AiChat02Icon,
   ArrowLeft01Icon,
@@ -20,6 +20,8 @@ import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-to
 import { StepRoundBadge, TaskCrumb, TaskCrumbLink } from '@renderer/features/tasks/step-crumb'
 import { useStepSessionTitle } from '@renderer/features/tasks/use-task'
 import { PlanChip } from './plan-chip'
+import { SessionFamilyMenu } from './session-family-menu'
+import { resolveSessionFamily } from './session-family-model'
 import { ViewersChip } from './viewers-chip'
 import { WorktreeBarChip } from './worktree/worktree-tag'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -92,7 +94,11 @@ export function SessionHeader({
 }) {
   const { t: ts } = useTranslation('session')
   const { t: tt } = useTranslation('tasks')
-  const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
+  const sessionsById = useSessionsStore((s) => s.byId)
+  const family = useMemo(
+    () => resolveSessionFamily(sessionsById, summary.id),
+    [sessionsById, summary.id],
+  )
   const routine = useRoutinesStore((s) =>
     summary.routine ? s.byId[summary.routine.routineId] : undefined,
   )
@@ -134,7 +140,7 @@ export function SessionHeader({
             </span>
           </>
         )}
-        {parent && <ParentLink parent={parent} />}
+        {family?.parent && <SessionFamilyMenu family={family} variant="crumb" />}
         {summary.task && <TaskCrumb summary={summary} />}
         {originTask && <TaskCrumbLink task={originTask} />}
         <span className="grid w-4 shrink-0 place-items-center">
@@ -180,6 +186,7 @@ export function SessionHeader({
           onNewSubSession={rename.menu.onLeave}
           menu={rename.menu}
         />
+        {family && !family.parent && <SessionFamilyMenu family={family} variant="chip" />}
         {summary.worktree && <WorktreeBarChip worktree={summary.worktree} />}
         <PrBarChip projectPath={sessionFolder(summary)} sessionId={summary.id} />
         {session && !archived && summary.origin !== 'subagent' && (
