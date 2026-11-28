@@ -285,6 +285,14 @@ export class PushSender {
         return sealed ? { type: 'background', sealed } : null
       }
       case 'activity': {
+        if (job.action === 'end') {
+          // APNs requires a content-state on `event: 'end'` alongside `dismissal-date`.
+          // `{ kind: 'waiting', count: 0 }` is decoded as having no content by both older and
+          // newer clients without falling back to an undecodable waiting state, and strips any
+          // stale fields from the job.
+          const sealed = await seal({ ...base, kind: 'waiting', count: 0 })
+          return sealed ? { type: 'liveactivity', event: 'end', sealed } : null
+        }
         const buildState = (compact: boolean): PushContent => {
           const p = job.payload
           if (!p) {

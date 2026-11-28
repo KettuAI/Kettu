@@ -1386,11 +1386,15 @@ class DeviceSession {
       return
     }
     if (connection !== this.connection) return
+    const wasForeground = this.foreground
     this.connection = null
     this.outbox.detach()
     if (this.state !== 'open') return
     if (!this.resumable) return this.end()
     this.state = 'away'
+    if (wasForeground && !this.foreground) {
+      this.server.options.notifications?.()?.deviceChanged()
+    }
     // Their bytes on the way are lost; the device sends them again in uploads of their own.
     this.uploads.dropUnfinished()
     this.forwards.dropConnections()
@@ -1408,7 +1412,11 @@ class DeviceSession {
     if (this.state === 'closing' || this.state === 'closed') {
       return this.closing ?? Promise.resolve()
     }
+    const wasForeground = this.foreground
     this.state = 'closing'
+    if (wasForeground && !this.foreground) {
+      this.server.options.notifications?.()?.deviceChanged()
+    }
     const port = this.port
     this.port = null
     port?.close()
@@ -1424,7 +1432,11 @@ class DeviceSession {
   /** Ends the session at once: its device's next hello finds no session to resume. */
   end(): void {
     if (this.state === 'closed') return
+    const wasForeground = this.foreground
     this.state = 'closed'
+    if (wasForeground && !this.foreground) {
+      this.server.options.notifications?.()?.deviceChanged()
+    }
     if (this.awayTimer) clearTimeout(this.awayTimer)
     this.awayTimer = null
     if (this.regionsTimer) clearTimeout(this.regionsTimer)
@@ -1580,9 +1592,15 @@ class DeviceSession {
     switch (type) {
       case 'ack':
         return this.outbox.ack(received)
-      case 'pace':
+      case 'pace': {
+        const wasForeground = this.foreground
         if (typeof ms === 'number' && Number.isFinite(ms)) this.paceMs = ms
-        return this.outbox.pace(ms)
+        const paced = this.outbox.pace(ms)
+        if (wasForeground && !this.foreground) {
+          this.server.options.notifications?.()?.deviceChanged()
+        }
+        return paced
+      }
       case 'relay.prefer':
         if (this.regionsOffered) this.server.options.regions?.preferred(this.device.id, value)
         return

@@ -1,0 +1,399 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { HostActivitySnapshot } from '@shared/host-control'
+import { DEFAULT_CHOICES, type DevicePush } from '@shared/remote/push'
+import { Notifier, type PushJob } from './notifier'
+
+const TOKEN = 'a1'.repeat(32)
+const START_TOKEN = 'b2'.repeat(32)
+const UPDATE_TOKEN = 'c3'.repeat(32)
+
+const EMPTY_ACTIVITY: HostActivitySnapshot = {
+  running: [],
+  error: [],
+  ended: [],
+  limit: null,
+  waitingMeta: {},
+}
+
+function makeDevice(
+  overrides: Partial<DevicePush> = {},
+  id = 'phone',
+): { id: string; push: DevicePush } {
+  return {
+    id,
+    push: {
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN },
+      },
+      choices: { ...DEFAULT_CHOICES, onlyAway: false },
+      ...overrides,
+    },
+  }
+}
+
+describe('Notifier Live Activity push guards and expiry cleanup', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('suppresses remote push-to-start while a device is in the foreground and resumes once backgrounded', () => {
+    vi.useFakeTimers()
+    let inForeground = true
+    const device = makeDevice()
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: (id) => id === device.id && inForeground,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-run',
+          agentId: 'claude-code',
+          title: 'Build feature',
+          turnStartedAt: now,
+          parentId: null,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs.filter((j) => j.type === 'activity')).toEqual([])
+
+    // Waiting permission requests also must not push-to-start while the device is foregrounded.
+    notifier.attention({
+      kind: 'permission',
+      sessionId: 's-run',
+      title: 'Build feature',
+      body: 'Wants to run pnpm test',
+      requestId: 'req-1',
+      inFront: false,
+      devices: [],
+    })
+    notifier.setWaiting({ 's-run': ['req-1'] })
+    vi.advanceTimersByTime(20)
+    expect(jobs.filter((j) => j.type === 'activity')).toEqual([])
+
+    // Once backgrounded, re-evaluating the device resumes with a single remote start.
+    inForeground = false
+    notifier.deviceChanged()
+    vi.advanceTimersByTime(20)
+    const activityJobs = jobs.filter((j) => j.type === 'activity')
+    expect(activityJobs).toHaveLength(1)
+    expect(activityJobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'start',
+      count: 1,
+      payload: { kind: 'waiting', count: 1, sessionId: 's-run' },
+    })
+
+    notifier.stop()
+  })
+
+  it('still sends updates and end for an already-active Live Activity even while foregrounded', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: () => true,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      running: [
+        {
+          sessionId: 's-run',
+          agentId: 'codex',
+          title: 'Investigate test',
+          turnStartedAt: now,
+          parentId: null,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'update',
+      payload: { kind: 'running', sessionId: 's-run' },
+    })
+
+    notifier.setActivity(EMPTY_ACTIVITY)
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+    notifier.stop()
+  })
+
+  it('never push-to-starts a new Live Activity for settled states (turn-ended, error, limit)', () => {
+    vi.useFakeTimers()
+    const device = makeDevice()
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      foreground: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      ended: [
+        {
+          sessionId: 's-done',
+          agentId: 'claude-code',
+          title: 'Finished task',
+          endedAt: now - 5_000,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toEqual([])
+
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      error: [
+        {
+          sessionId: 's-err',
+          agentId: 'codex',
+          title: 'Failed task',
+          body: 'Exited with code 1',
+          endedAt: now - 5_000,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toEqual([])
+
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      limit: {
+        agentId: 'claude-code',
+        label: '5-hour',
+        resetsAt: now + 30 * 60_000,
+      },
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toEqual([])
+
+    notifier.stop()
+  })
+
+  it('updates an already-active Live Activity to turn-ended and auto-ends it after 2 minutes', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      ended: [
+        {
+          sessionId: 's-done',
+          agentId: 'claude-code',
+          title: 'Finished task',
+          endedAt: now,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'update',
+      payload: { kind: 'turn-ended', sessionId: 's-done' },
+    })
+
+    // Still active just before the 2-minute window elapses.
+    vi.advanceTimersByTime(2 * 60_000 - 30)
+    expect(jobs).toHaveLength(1)
+
+    // Without any further host event, the expiry timer triggers an automatic end push.
+    vi.advanceTimersByTime(30)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({
+      type: 'activity',
+      action: 'end',
+      count: 0,
+      sessionId: null,
+      title: null,
+    })
+
+    notifier.stop()
+  })
+
+  it('auto-ends an active error Live Activity after 15 minutes with no further events', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      error: [
+        {
+          sessionId: 's-err',
+          agentId: 'codex',
+          title: 'Sync job',
+          body: 'Command failed',
+          endedAt: now,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'update',
+      payload: { kind: 'error', sessionId: 's-err' },
+    })
+
+    vi.advanceTimersByTime(15 * 60_000 - 30)
+    expect(jobs).toHaveLength(1)
+
+    vi.advanceTimersByTime(30)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+    notifier.stop()
+  })
+
+  it('chains staggered expiry windows and auto-ends reached limit states at resetsAt', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    // Error expires in 10 seconds, exposing the reached limit which resets in 30 seconds.
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      error: [
+        {
+          sessionId: 's-err',
+          agentId: 'codex',
+          title: 'Older error',
+          endedAt: now - (15 * 60_000 - 10_000),
+        },
+      ],
+      limit: {
+        agentId: 'codex',
+        label: '5-hour',
+        resetsAt: now + 30_000,
+      },
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      type: 'activity',
+      action: 'update',
+      payload: { kind: 'error', sessionId: 's-err' },
+    })
+
+    // At +10s (+mergeMs), the error expires and transitions to limit.
+    vi.advanceTimersByTime(10_000)
+    expect(jobs).toHaveLength(2)
+    expect(jobs[1]).toMatchObject({
+      type: 'activity',
+      action: 'update',
+      payload: { kind: 'limit', agentId: 'codex', label: '5-hour' },
+    })
+
+    // At +30s (+mergeMs), the limit resets and sends end automatically.
+    vi.advanceTimersByTime(20_000)
+    expect(jobs).toHaveLength(3)
+    expect(jobs[2]).toMatchObject({ type: 'activity', action: 'end', count: 0 })
+
+    notifier.stop()
+  })
+
+  it('clears expiry timers cleanly on stop() with no dangling timers left behind', () => {
+    vi.useFakeTimers()
+    const device = makeDevice({
+      target: {
+        apns: { token: TOKEN, environment: 'sandbox' },
+        activity: { start: START_TOKEN, update: UPDATE_TOKEN },
+      },
+    })
+    const jobs: PushJob[] = []
+    const notifier = new Notifier({
+      devices: () => [device],
+      showing: () => false,
+      send: (job) => jobs.push(job),
+      mergeMs: 10,
+    })
+
+    const now = Date.now()
+    notifier.setActivity({
+      ...EMPTY_ACTIVITY,
+      ended: [
+        {
+          sessionId: 's-done',
+          agentId: 'claude-code',
+          title: 'Finished task',
+          endedAt: now,
+        },
+      ],
+    })
+    vi.advanceTimersByTime(20)
+    expect(jobs).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(1)
+
+    notifier.stop()
+    expect(vi.getTimerCount()).toBe(0)
+
+    vi.advanceTimersByTime(20 * 60_000)
+    expect(jobs).toHaveLength(1)
+  })
+})

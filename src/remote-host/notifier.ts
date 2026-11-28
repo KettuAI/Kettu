@@ -152,6 +152,19 @@ export interface DeviceNotice {
 }
 
 const MERGE_MS = 1000
+const ERROR_ACTIVITY_MS = 15 * 60_000
+const ENDED_ACTIVITY_MS = 2 * 60_000
+/** Node.js setTimeout caps delays at 2^31 - 1 ms (~24.8 days); chain longer waits. */
+const MAX_ACTIVITY_TIMER_MS = 2_147_483_647
+
+/**
+ * Only active in-flight states may push-to-start a new Live Activity.
+ * Settled states (`turn-ended`, `error`, `limit`) only update an already-active
+ * Live Activity until it expires or is dismissed.
+ */
+function canStartActivity(payload: LiveActivityPayload): boolean {
+  return payload.kind === 'waiting' || payload.kind === 'running'
+}
 
 /** What a device's notification of a subject is about now. */
 interface Told {
@@ -246,9 +259,11 @@ export class Notifier {
   private readonly queued = new Map<string, { attention: Attention; timer: NodeJS.Timeout }>()
   private readonly activities = new Map<string, Activity>()
   private readonly activityTimers = new Map<string, NodeJS.Timeout>()
+  /** Re-evaluates Live Activities when the earliest timed state (error / ended / limit) expires. */
+  private activityExpiryTimer: NodeJS.Timeout | null = null
   /** Per device, the subjects of the device notices it was sent. */
   private readonly noticed = new Map<string, Set<string>>()
-  /** 主机最近一次上报的实时会话与限额摘要，用于驱动 5 态灵动岛。 */
+  /** Latest host session, error, completion, and limit snapshot driving Live Activities. */
   private hostActivity: HostActivitySnapshot | null = null
   private readonly mergeMs: number
 
@@ -366,9 +381,10 @@ export class Notifier {
     this.activitiesChanged()
   }
 
-  /** 主机实时会话、错误、完成或限额状态变化时同步更新各设备的灵动岛。 */
+  /** Syncs device Live Activities when the host's running, error, ended, or limit snapshot changes. */
   setActivity(activity: HostActivitySnapshot): void {
     this.hostActivity = activity
+    this.scheduleActivityExpiry()
     this.activitiesChanged()
   }
 
@@ -393,6 +409,7 @@ export class Notifier {
     this.queued.clear()
     for (const timer of this.activityTimers.values()) clearTimeout(timer)
     this.activityTimers.clear()
+    this.clearActivityExpiry()
   }
 
   private held(choices: NotificationChoices): boolean {
@@ -467,6 +484,47 @@ export class Notifier {
     this.options.send({ deviceId, subject, type: 'background', event })
   }
 
+  private clearActivityExpiry(): void {
+    if (!this.activityExpiryTimer) return
+    clearTimeout(this.activityExpiryTimer)
+    this.activityExpiryTimer = null
+  }
+
+  /** Earliest future timestamp at which a timed activity entry expires, or null if none remain. */
+  private nextActivityExpiry(now: number): number | null {
+    const snap = this.hostActivity
+    if (!snap) return null
+    let earliest: number | null = null
+    const consider = (at: number): void => {
+      if (!Number.isFinite(at) || at <= now) return
+      if (earliest === null || at < earliest) earliest = at
+    }
+    for (const item of snap.error) consider(item.endedAt + ERROR_ACTIVITY_MS)
+    for (const item of snap.ended) consider(item.endedAt + ENDED_ACTIVITY_MS)
+    if (snap.limit?.resetsAt !== undefined) consider(snap.limit.resetsAt)
+    return earliest
+  }
+
+  /** Schedules a single timer for the earliest upcoming expiry so idle hosts still end activities. */
+  private scheduleActivityExpiry(): void {
+    this.clearActivityExpiry()
+    const now = Date.now()
+    const earliest = this.nextActivityExpiry(now)
+    if (earliest === null) return
+    const delay = Math.min(earliest - now, MAX_ACTIVITY_TIMER_MS)
+    const timer = setTimeout(() => {
+      this.activityExpiryTimer = null
+      if (Date.now() < earliest) {
+        this.scheduleActivityExpiry()
+        return
+      }
+      this.activitiesChanged()
+      this.scheduleActivityExpiry()
+    }, delay)
+    timer.unref?.()
+    this.activityExpiryTimer = timer
+  }
+
   /** Each device's Live Activity catches up after a moment, so a burst sends one update. */
   private activitiesChanged(): void {
     for (const device of this.options.devices()) {
@@ -526,10 +584,10 @@ export class Notifier {
 
     if (!snap) return null
 
-    // P2：最近 15 分钟内未读出错会话
+    // P2: recent unread error session within the 15-minute window
     if (choices.errors) {
       const err = snap.error.find(
-        (item) => !isMuted(item.sessionId) && now - item.endedAt <= 15 * 60_000,
+        (item) => !isMuted(item.sessionId) && now - item.endedAt < ERROR_ACTIVITY_MS,
       )
       if (err) {
         return {
@@ -543,7 +601,7 @@ export class Notifier {
       }
     }
 
-    // P3：正在运行中的会话（优先顶层主会话）
+    // P3: running session (prefer top-level session over subagent)
     const activeRunning = snap.running.filter((item) => !isMuted(item.sessionId))
     if (activeRunning.length > 0) {
       const top = activeRunning.find((item) => !item.parentId) ?? activeRunning[0]!
@@ -559,7 +617,7 @@ export class Notifier {
       }
     }
 
-    // P4：套餐限额到达且尚未重置
+    // P4: reached plan limit that has not reset yet
     if (snap.limit && (snap.limit.resetsAt === undefined || snap.limit.resetsAt > now)) {
       return {
         kind: 'limit',
@@ -571,10 +629,10 @@ export class Notifier {
       }
     }
 
-    // P5：最近 2 分钟内正常完成且未读的回合
+    // P5: recently finished unread turn within the 2-minute window
     if (choices.turnEnded) {
       const done = snap.ended.find(
-        (item) => !isMuted(item.sessionId) && now - item.endedAt <= 2 * 60_000,
+        (item) => !isMuted(item.sessionId) && now - item.endedAt < ENDED_ACTIVITY_MS,
       )
       if (done) {
         return {
@@ -599,7 +657,8 @@ export class Notifier {
     const choices = device?.push.choices
     const enabled = Boolean(target && choices && (tokens?.start || tokens?.update))
     const payload = enabled && choices ? this.pickActivityPayload(choices) : null
-    // 若设备已回传 update token（如在 iPhone 本地启动灵动岛后切回后台），主机直接接管后续更新与结束。
+    // Once a device reports an update token (e.g., started locally before backgrounding),
+    // the host takes over subsequent updates and dismissal.
     const hasLiveActivity = state.running || Boolean(tokens?.update)
 
     const send = (action: 'start' | 'update' | 'end', next: LiveActivityPayload | null): void =>
@@ -617,7 +676,14 @@ export class Notifier {
     if (payload) {
       const fingerprint = JSON.stringify(payload)
       if (!hasLiveActivity) {
-        if (!tokens?.start || this.held(choices!)) return
+        if (
+          !tokens?.start ||
+          !canStartActivity(payload) ||
+          this.held(choices!) ||
+          this.options.foreground?.(deviceId)
+        ) {
+          return
+        }
         send('start', payload)
       } else {
         if (state.running && fingerprint === state.fingerprint) return
