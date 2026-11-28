@@ -1,7 +1,7 @@
 // The host's side of the usage database: a promise API over the usage worker.
 
 import type { Worker } from 'node:worker_threads'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, TurnUsage } from '@shared/thread'
 import type { ClockRequest, ScanProgress, TokenParts } from '@shared/usage'
 import { isDiskFullText } from '../disk-full'
 import { t } from '../i18n'
@@ -182,6 +182,10 @@ export class UsageStore {
     sources: SourceMap,
   ): Promise<(TokenParts & { agentId: AgentId })[]> {
     return this.request({ op: 'totals', from, to, sources })
+  }
+
+  sessionTurnUsage(sessionId: string): Promise<Record<string, TurnUsage>> {
+    return this.request({ op: 'sessionTurnUsage', sessionId })
   }
 
   stats(): Promise<SourceStats[]> {

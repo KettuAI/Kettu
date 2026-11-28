@@ -1,8 +1,16 @@
-import { createElement } from 'react'
+import {
+  cloneElement,
+  createContext,
+  createElement,
+  isValidElement,
+  useContext,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StopReason, ThreadEntry, ThreadState } from '@shared/thread'
+import type { StopReason, ThreadEntry, ThreadState, TurnUsage } from '@shared/thread'
 import { fullTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 
@@ -38,6 +46,37 @@ vi.mock('../use-thread', async (importOriginal) => {
     useEntryAnimation: () => '',
   }
 })
+
+const PopoverCtx = createContext<{ open: boolean; onOpenChange?: (open: boolean) => void }>({
+  open: false,
+})
+
+vi.mock('@renderer/components/ui/popover', () => ({
+  Popover: ({
+    open = false,
+    onOpenChange,
+    children,
+  }: {
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+    children?: ReactNode
+  }) => createElement(PopoverCtx.Provider, { value: { open, onOpenChange } }, children),
+  PopoverTrigger: ({ render }: { render?: ReactNode }) => {
+    const { open, onOpenChange } = useContext(PopoverCtx)
+    if (!isValidElement(render)) return render ?? null
+    const element = render as ReactElement<{ onClick?: () => void }>
+    return cloneElement(element, {
+      onClick: () => {
+        element.props.onClick?.()
+        onOpenChange?.(!open)
+      },
+    })
+  },
+  PopoverContent: ({ children }: { children?: ReactNode }) => {
+    const { open } = useContext(PopoverCtx)
+    return open ? createElement('div', { 'data-slot': 'popover-content' }, children) : null
+  },
+}))
 
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -298,7 +337,8 @@ function hasClass(node: FakeNode, name: string): boolean {
 
 function setReplyThread(options: {
   at?: number
-  end?: { stopReason: StopReason; durationMs: number } | null
+  agentId?: 'claude-code' | 'codex' | 'deepseek' | 'opencode'
+  end?: { stopReason: StopReason; durationMs: number; usage?: TurnUsage } | null
 }): void {
   const entries: ThreadEntry[] = [
     {
@@ -316,12 +356,13 @@ function setReplyThread(options: {
       id: 'e1',
       stopReason: options.end.stopReason,
       durationMs: options.end.durationMs,
+      ...(options.end.usage ? { usage: options.end.usage } : {}),
     })
   }
   const state: ThreadState = {
     session: {
       id: 's1',
-      agentId: 'claude-code',
+      agentId: options.agentId ?? 'claude-code',
       projectPath: '/repo',
       acpSessionId: null,
       status: 'ready',
@@ -357,6 +398,16 @@ function setReplyThread(options: {
         plan: null,
       },
     },
+  })
+}
+
+function clickNode(node: FakeNode): void {
+  const propsKey = Object.keys(node).find((k) => k.startsWith('__reactProps$'))
+  if (!propsKey) throw new Error('Expected React props on clicked node')
+  const props = node[propsKey] as { onClick?: () => void }
+  if (typeof props.onClick !== 'function') throw new Error('Expected onClick handler on node')
+  flushSync(() => {
+    props.onClick!()
   })
 }
 
@@ -489,5 +540,270 @@ describe('ReplyFooter Option 1 hover merged metadata (#2951)', () => {
     expect(container.textContent).toContain('Cancelled · 12s')
     const meta = findAll(foot, (n) => hasClass(n, 'ks-reply-foot__meta'))[0]!
     expect(meta.textContent).toBe('3 min ago')
+  })
+
+  it('omits cost trigger when a turn has no usage data', () => {
+    setReplyThread({ at: completedAt, end: { stopReason: 'end_turn', durationMs: 33_000 } })
+    renderFooter('e1')
+    expect(findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))).toHaveLength(0)
+  })
+
+  it('renders cost beside time, keeps footer shown while popover is open, and displays multi-model breakdown + subscription notice in en and zh-CN', async () => {
+    const usage: TurnUsage = {
+      models: [
+        {
+          model: 'claude-sonnet-4-6',
+          input: 1000,
+          output: 500,
+          cacheRead: 8000,
+          cacheWrite: 1000,
+          costUsd: 0.038,
+        },
+        {
+          model: 'claude-haiku-4-5',
+          input: 400,
+          output: 200,
+          cacheRead: 0,
+          cacheWrite: 0,
+          costUsd: 0.004,
+        },
+      ],
+      costUsd: 0.042,
+      subscription: true,
+      pricesAsOf: '2026-11-25',
+    }
+    setReplyThread({
+      at: completedAt,
+      end: { stopReason: 'end_turn', durationMs: 33_000, usage },
+    })
+    renderFooter('e1')
+
+    const foot = findAll(container, (n) => hasClass(n, 'ks-reply-foot'))[0]!
+    const trigger = findAll(foot, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    expect(trigger.tagName).toBe('BUTTON')
+    expect(trigger.textContent).toBe('~$0.042')
+    expect(foot.getAttribute('data-shown')).toBeNull()
+    expect(
+      findAll(container, (n) => n.getAttribute('data-testid') === 'turn-usage-popover'),
+    ).toHaveLength(0)
+
+    // Hover and click cost trigger to open the popover.
+    flushSync(() => hoverReply('reply:u1'))
+    clickNode(trigger)
+
+    // Leaving hover must keep the footer visible while the popover stays open.
+    flushSync(() => hoverReply(null))
+    expect(foot.getAttribute('data-shown')).toBe('')
+    expect(trigger.getAttribute('data-open')).toBe('')
+
+    const popover = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-popover',
+    )[0]!
+    const models = findAll(popover, (n) => n.getAttribute('data-testid') === 'turn-usage-model')
+    expect(models).toHaveLength(2)
+    expect(popover.textContent).toContain('Turn usage')
+    expect(popover.textContent).toContain('2 models')
+    expect(popover.textContent).toContain('~$0.042')
+    expect(popover.textContent).toContain('claude-sonnet-4-6')
+    expect(popover.textContent).toContain('claude-haiku-4-5')
+    expect(popover.textContent).toContain('Input')
+    expect(popover.textContent).toContain('Output')
+    expect(popover.textContent).toContain('Cache read')
+    expect(popover.textContent).toContain('Cache write')
+    expect(popover.textContent).toContain('Cache hit rate')
+    expect(popover.textContent).toContain('80%')
+    expect(popover.textContent).toContain('0%')
+    expect(
+      findAll(popover, (n) => n.getAttribute('data-testid') === 'turn-usage-subscription-note')[0]!
+        .textContent,
+    ).toBe('Estimate at API prices, not a charge on your subscription.')
+
+    // Verify Simplified Chinese localization inside the open popover.
+    await i18n.changeLanguage('zh-CN')
+    renderFooter('e1')
+    const zhPopover = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-popover',
+    )[0]!
+    expect(zhPopover.textContent).toContain('本轮用量')
+    expect(zhPopover.textContent).toContain('2 个模型')
+    expect(zhPopover.textContent).toContain('输入')
+    expect(zhPopover.textContent).toContain('输出')
+    expect(zhPopover.textContent).toContain('缓存读取')
+    expect(zhPopover.textContent).toContain('缓存写入')
+    expect(zhPopover.textContent).toContain('缓存命中率')
+    expect(
+      findAll(
+        zhPopover,
+        (n) => n.getAttribute('data-testid') === 'turn-usage-subscription-note',
+      )[0]!.textContent,
+    ).toBe('按 API 价格估算，非实际扣费。')
+
+    // Clicking again closes the popover and returns the footer to quiet state.
+    const latestTrigger = findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    clickNode(latestTrigger)
+    expect(
+      findAll(container, (n) => n.getAttribute('data-testid') === 'turn-usage-popover'),
+    ).toHaveLength(0)
+    expect(
+      findAll(container, (n) => hasClass(n, 'ks-reply-foot'))[0]!.getAttribute('data-shown'),
+    ).toBeNull()
+  })
+
+  it('shows exact API cost without subscription notice for API-billed turns and handles zero-input cache hit rate', () => {
+    const usage: TurnUsage = {
+      models: [
+        {
+          model: 'gpt-5.4',
+          input: 0,
+          output: 250,
+          cacheRead: 0,
+          cacheWrite: 0,
+          costUsd: 0.0025,
+        },
+      ],
+      costUsd: 0.0025,
+      subscription: false,
+    }
+    setReplyThread({
+      at: completedAt,
+      agentId: 'codex',
+      end: { stopReason: 'end_turn', durationMs: 5_000, usage },
+    })
+    renderFooter('e1')
+
+    const trigger = findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    expect(trigger.textContent).toBe('$0.0025')
+    expect(trigger.textContent).not.toContain('~')
+
+    clickNode(trigger)
+    const popover = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-popover',
+    )[0]!
+    expect(
+      findAll(popover, (n) => n.getAttribute('data-testid') === 'turn-usage-subscription-note'),
+    ).toHaveLength(0)
+    expect(popover.textContent).toContain('—')
+    expect(popover.textContent).not.toContain('NaN')
+  })
+
+  it('never fabricates $0.00 when model pricing is unavailable and shows token summary trigger instead', () => {
+    const usage: TurnUsage = {
+      models: [
+        {
+          model: 'local-unpriced-model',
+          input: 2000,
+          output: 500,
+          cacheRead: 1000,
+          cacheWrite: 0,
+          costUsd: null,
+        },
+      ],
+      costUsd: null,
+    }
+    setReplyThread({
+      at: completedAt,
+      end: { stopReason: 'end_turn', durationMs: 8_000, usage },
+    })
+    renderFooter('e1')
+
+    const trigger = findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    expect(trigger.textContent).toBe('3.5K tokens')
+    expect(trigger.textContent).not.toContain('$0.00')
+
+    clickNode(trigger)
+    const popover = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-popover',
+    )[0]!
+    expect(popover.textContent).toContain('No price')
+    expect(popover.textContent).toContain(
+      'No API pricing is available for the model used in this turn.',
+    )
+    expect(popover.textContent).not.toContain('$0.00')
+  })
+
+  it('infers subscription status from current agent account for legacy hydrated turns lacking subscription flag', () => {
+    useAgentsStore.setState({
+      byId: {
+        'claude-code': {
+          id: 'claude-code',
+          name: 'Claude',
+          account: { kind: 'account', label: 'Claude Max', email: 'dev@example.com' },
+          limits: [],
+          capabilities: { fork: true, forkAtMessage: true },
+        },
+      } as never,
+    })
+    const legacyUsage: TurnUsage = {
+      models: [
+        {
+          model: 'claude-sonnet-4-6',
+          input: 1000,
+          output: 200,
+          cacheRead: 3000,
+          cacheWrite: 0,
+          costUsd: 0.015,
+        },
+      ],
+      costUsd: 0.015,
+    }
+    setReplyThread({
+      at: completedAt,
+      end: { stopReason: 'end_turn', durationMs: 12_000, usage: legacyUsage },
+    })
+    renderFooter('e1')
+
+    const trigger = findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    expect(trigger.textContent).toBe('~$0.015')
+    clickNode(trigger)
+    const note = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-subscription-note',
+    )[0]!
+    expect(note.textContent).toBe('Estimate at API prices, not a charge on your subscription.')
+  })
+
+  it('shows partial cost notice when a multi-model turn mixes priced and unpriced models', () => {
+    const usage: TurnUsage = {
+      models: [
+        {
+          model: 'claude-sonnet-4-6',
+          input: 1000,
+          output: 300,
+          cacheRead: 0,
+          cacheWrite: 0,
+          costUsd: 0.012,
+        },
+        {
+          model: 'custom-unpriced',
+          input: 500,
+          output: 100,
+          cacheRead: 0,
+          cacheWrite: 0,
+          costUsd: null,
+        },
+      ],
+      costUsd: 0.012,
+      partialCost: true,
+      subscription: false,
+    }
+    setReplyThread({
+      at: completedAt,
+      end: { stopReason: 'end_turn', durationMs: 10_000, usage },
+    })
+    renderFooter('e1')
+
+    const trigger = findAll(container, (n) => hasClass(n, 'ks-reply-foot__cost'))[0]!
+    expect(trigger.textContent).toBe('$0.012')
+    clickNode(trigger)
+    const popover = findAll(
+      container,
+      (n) => n.getAttribute('data-testid') === 'turn-usage-popover',
+    )[0]!
+    expect(popover.textContent).toContain('Excludes models without API pricing.')
+    expect(popover.textContent).toContain('No price')
   })
 })

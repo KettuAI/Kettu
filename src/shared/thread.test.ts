@@ -968,6 +968,37 @@ describe('isThreadEntry', () => {
       isThreadEntry({ kind: 'turn_end', id: 'e', stopReason: 'end_turn', durationMs: 1, after: 1 }),
     ).toBe(false)
     expect(
+      isThreadEntry({
+        kind: 'turn_end',
+        id: 'e',
+        stopReason: 'end_turn',
+        durationMs: 1000,
+        usage: {
+          models: [
+            {
+              model: 'claude-sonnet-4-6',
+              input: 500,
+              output: 200,
+              cacheRead: 1000,
+              cacheWrite: 0,
+              costUsd: 0.005,
+            },
+          ],
+          costUsd: 0.005,
+          subscription: true,
+        },
+      }),
+    ).toBe(true)
+    expect(
+      isThreadEntry({
+        kind: 'turn_end',
+        id: 'e',
+        stopReason: 'end_turn',
+        durationMs: 1000,
+        usage: { models: [], costUsd: null },
+      }),
+    ).toBe(false)
+    expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
     ).toBe(false)
     expect(

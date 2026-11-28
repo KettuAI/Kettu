@@ -34,6 +34,7 @@ export type UsageRequest =
       clock?: ClockRequest
     }
   | { id: number; op: 'totals'; from: number; to: number; sources: SourceMap }
+  | { id: number; op: 'sessionTurnUsage'; sessionId: string }
   | { id: number; op: 'stats' }
   | ({ id: number; op: 'scan' } & ScanRequest)
   | { id: number; op: 'cancel' }

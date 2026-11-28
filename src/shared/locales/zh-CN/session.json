@@ -684,6 +684,26 @@
     "label": "回复操作",
     "durationTitleWithTime": "{{duration}} · 完成于 {{time}}"
   },
+  "turnUsage": {
+    "title": "本轮用量",
+    "triggerLabel": "本轮用量：{{summary}}",
+    "tokensShort": "{{tokens}} token",
+    "totalTokens": "总 Token",
+    "cacheHit": "缓存命中率",
+    "models_other": "{{count}} 个模型",
+    "unknownModel": "未知模型",
+    "noPrice": "无价格",
+    "unavailable": "—",
+    "input": "输入",
+    "output": "输出",
+    "reasoning": "推理",
+    "cacheRead": "缓存读取",
+    "cacheWrite": "缓存写入",
+    "cacheHitRate": "缓存命中率",
+    "subscriptionNote": "按 API 价格估算，非实际扣费。",
+    "partialCostNote": "未计入暂无 API 价格的模型。",
+    "unpricedNote": "本轮所用模型暂无可用的 API 价格。"
+  },
   "changes": {
     "label": "改动",
     "files_other": "{{count}} 个文件有改动",

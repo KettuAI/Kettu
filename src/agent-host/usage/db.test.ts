@@ -207,3 +207,117 @@ describe('the usage database upgrade to version 4 and reported log costs', () =>
     }
   })
 })
+
+describe('UsageDb.sessionTurnUsage', () => {
+  it('groups Kettu rows by turnEntryId with colon-containing IDs and ignores other sessions or logs', () => {
+    const file = tempFile()
+    const db = UsageDb.open(file, () => {})
+    const at = Date.parse('2026-11-26T12:00:00.000Z')
+    try {
+      db.write([
+        {
+          key: 'ob:s1:e:4:claude-sonnet-4-6',
+          source: 'kettu',
+          agentId: 'claude-code',
+          sessionId: 'acp-1',
+          project: '/repo',
+          model: 'claude-sonnet-4-6',
+          at,
+          input: 1000,
+          output: 400,
+          reasoning: null,
+          cacheRead: 8000,
+          cacheWrite: 1000,
+          cacheWrite1h: 0,
+          turn: 1,
+        },
+        {
+          key: 'ob:s1:e:4:claude-haiku-4-5',
+          source: 'kettu',
+          agentId: 'claude-code',
+          sessionId: 'acp-1',
+          project: '/repo',
+          model: 'claude-haiku-4-5',
+          at,
+          input: 200,
+          output: 100,
+          reasoning: null,
+          cacheRead: 500,
+          cacheWrite: 0,
+          cacheWrite1h: 0,
+          turn: 0,
+        },
+        {
+          key: 'ob:s1:e:9:unknown-custom-model',
+          source: 'kettu',
+          agentId: 'claude-code',
+          sessionId: 'acp-1',
+          project: '/repo',
+          model: 'unknown-custom-model',
+          at: at + 1000,
+          input: 600,
+          output: 200,
+          reasoning: null,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cacheWrite1h: 0,
+          turn: 1,
+        },
+        // Different session with shared prefix must not bleed into s1.
+        {
+          key: 'ob:s10:e:4:claude-sonnet-4-6',
+          source: 'kettu',
+          agentId: 'claude-code',
+          sessionId: 'acp-10',
+          project: '/repo',
+          model: 'claude-sonnet-4-6',
+          at,
+          input: 9999,
+          output: 9999,
+          reasoning: null,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cacheWrite1h: 0,
+          turn: 1,
+        },
+        // Imported log rows must not be matched even if a key starts similarly.
+        {
+          key: 'claude:msg-1',
+          source: 'log',
+          agentId: 'claude-code',
+          sessionId: 'acp-1',
+          project: '/repo',
+          model: 'claude-sonnet-4-6',
+          at,
+          input: 500,
+          output: 100,
+          reasoning: null,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cacheWrite1h: 0,
+          turn: 0,
+        },
+      ])
+
+      const byTurn = db.sessionTurnUsage('s1')
+      expect(Object.keys(byTurn).sort()).toEqual(['e:4', 'e:9'])
+      expect(byTurn['e:4']!.models).toHaveLength(2)
+      expect(byTurn['e:4']!.models.map((m) => m.model)).toContain('claude-sonnet-4-6')
+      expect(byTurn['e:4']!.models.map((m) => m.model)).toContain('claude-haiku-4-5')
+      expect(byTurn['e:4']!.costUsd).toBeGreaterThan(0)
+      expect(byTurn['e:9']!.costUsd).toBeNull()
+      expect(byTurn['e:9']!.models).toEqual([
+        {
+          model: 'unknown-custom-model',
+          input: 600,
+          output: 200,
+          cacheRead: 0,
+          cacheWrite: 0,
+          costUsd: null,
+        },
+      ])
+    } finally {
+      db.close()
+    }
+  })
+})
