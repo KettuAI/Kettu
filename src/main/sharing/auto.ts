@@ -36,6 +36,8 @@ export function planAuto(input: {
   let wait: number | null = null
   for (const artifact of artifacts) {
     if (artifact.deleted) continue
+    // Never auto-publish or update an artifact owned by another Kettu account.
+    if (artifact.ownerAccountId != null && artifact.ownerAccountId !== accountId) continue
     const page = byId.get(artifact.id)
     let step: AutoStep
     if (page) {

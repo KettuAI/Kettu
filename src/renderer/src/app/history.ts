@@ -46,7 +46,8 @@ export function canShow(view: HistoryView): boolean {
     return task ? !task.archivedAt : !loaded
   }
   if (view.kind === 'artifact') {
-    const { list, deleted } = useArtifactsStore.getState()
+    const { list, deleted, hidden } = useArtifactsStore.getState()
+    if (hidden.has(view.id)) return false
     if (!list || !deleted) return true
     return [...list, ...deleted].some((artifact) => artifact.id === view.id)
   }

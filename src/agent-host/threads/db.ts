@@ -17,6 +17,7 @@ import {
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { type ArtifactTypeInfo, isArtifactTypeName } from '@shared/artifact-types'
 import type { SessionOutputs } from '@shared/agent-host'
+import type { ArtifactBrief } from '@shared/host-control'
 import { githubReferenceFromLink, schemelessGitHubLinks } from '@shared/git'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
@@ -75,7 +76,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -309,6 +310,14 @@ const TOKENS_APART =
   cacheApart('threads', 'session_json', '$.usage.tokens') +
   cacheApart('routine_runs', 'json', '$.usage')
 
+// The Kettu account owning each artifact, or NULL for purely local unowned artifacts. Existing
+// rows start NULL so unowned local artifacts are never claimed by whichever account signs in next;
+// reliable legacy Kettu publish ownership is backfilled from published-artifacts.json at startup.
+const ARTIFACT_OWNER = `
+  ALTER TABLE artifacts ADD COLUMN owner_account_id TEXT;
+  CREATE INDEX artifacts_by_owner ON artifacts (owner_account_id);
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -323,6 +332,7 @@ const MIGRATIONS: Record<number, string> = {
   11: SET_ASIDE,
   12: ARTIFACT_SEEN,
   13: TOKENS_APART,
+  14: ARTIFACT_OWNER,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -420,6 +430,10 @@ const LISTING = `
 const optionalText = (value: SQLOutputValue | undefined): string | null =>
   value === null || value === undefined ? null : String(value)
 
+function artifactVisible(ownerAccountId: string | null, accountId: string | null): boolean {
+  return ownerAccountId === null || (accountId !== null && ownerAccountId === accountId)
+}
+
 function artifactRecord(row: Row): ArtifactRecord {
   return {
     id: String(row.id),
@@ -431,6 +445,7 @@ function artifactRecord(row: Row): ArtifactRecord {
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
     seen: row.seen === null || row.seen === undefined ? null : Number(row.seen),
+    ownerAccountId: optionalText(row.owner_account_id),
   }
 }
 
@@ -609,8 +624,9 @@ function prepareAll(db: DatabaseSync) {
       ))
     ) LIMIT 1`),
     artifact: sql(
-      'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at, seen FROM artifacts WHERE id = ?',
+      'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at, seen, owner_account_id FROM artifacts WHERE id = ?',
     ),
+    artifactOwner: sql('SELECT owner_account_id FROM artifacts WHERE id = ?'),
     version: sql(
       'SELECT n, size, pages, author, note, created_at FROM artifact_versions WHERE artifact_id = ? AND n = ?',
     ),
@@ -620,16 +636,27 @@ function prepareAll(db: DatabaseSync) {
     files: sql(
       'SELECT path, hash, size FROM artifact_files WHERE artifact_id = ? AND n = ? ORDER BY path',
     ),
-    listed: sql(`${LISTING} WHERE a.deleted_at IS NULL ORDER BY a.updated_at DESC, a.id DESC`),
+    listed: sql(
+      `${LISTING} WHERE a.deleted_at IS NULL AND (a.owner_account_id IS NULL OR a.owner_account_id = ?) ORDER BY a.updated_at DESC, a.id DESC`,
+    ),
     listedIn: sql(
-      `${LISTING} WHERE a.project = ? AND a.deleted_at IS NULL ORDER BY a.updated_at DESC, a.id DESC`,
+      `${LISTING} WHERE a.project = ? AND a.deleted_at IS NULL AND (a.owner_account_id IS NULL OR a.owner_account_id = ?) ORDER BY a.updated_at DESC, a.id DESC`,
     ),
     listedDeleted: sql(
-      `${LISTING} WHERE a.deleted_at IS NOT NULL ORDER BY a.deleted_at DESC, a.id DESC`,
+      `${LISTING} WHERE a.deleted_at IS NOT NULL AND (a.owner_account_id IS NULL OR a.owner_account_id = ?) ORDER BY a.deleted_at DESC, a.id DESC`,
+    ),
+    hiddenArtifacts: sql(
+      'SELECT id FROM artifacts WHERE owner_account_id IS NOT NULL AND (? IS NULL OR owner_account_id != ?)',
+    ),
+    artifactBriefs: sql(
+      'SELECT id, head, created_at, updated_at, deleted_at, owner_account_id FROM artifacts',
     ),
     insertArtifact: sql(`
-      INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at, seen)
-      VALUES (?, ?, ?, 1, ?, ?, ?, ?)`),
+      INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at, seen, owner_account_id)
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`),
+    claimOwner: sql(
+      'UPDATE artifacts SET owner_account_id = ? WHERE id = ? AND owner_account_id IS NULL',
+    ),
     setSeen: sql('UPDATE artifacts SET seen = ? WHERE id = ?'),
     insertVersion: sql(`
       INSERT INTO artifact_versions (artifact_id, n, size, pages, author, note, created_at)
@@ -1158,7 +1185,7 @@ export class ThreadDb {
   }
 
   /** What the session made, from its stored thread; null without one. */
-  outputs(sessionId: string): StoredOutputs | null {
+  outputs(sessionId: string, accountId: string | null = null): StoredOutputs | null {
     return this.guard((sql) => {
       const stored = this.headOf(sql, sessionId)
       if (!stored) return null
@@ -1168,6 +1195,10 @@ export class ThreadDb {
         const id = optionalText(row.id)
         if (!id || seen.has(id)) continue
         seen.add(id)
+        const ownerRow = sql.artifactOwner.get(id)
+        if (ownerRow && !artifactVisible(optionalText(ownerRow.owner_account_id), accountId)) {
+          continue
+        }
         // The latest write decides: a deleted artifact is gone even if earlier turns wrote it.
         if (row.action !== 'delete') artifacts.push({ id, title: optionalText(row.title) ?? '' })
       }
@@ -1426,18 +1457,23 @@ export class ThreadDb {
   // Artifacts.
 
   /**
-   * The artifact within `project`, or anywhere for null: another project's artifact does not
-   * exist for a session. `live` refuses one in Recently deleted.
+   * The artifact within `project`, or anywhere for null: another project's or another account's
+   * artifact does not exist for the caller. `live` refuses one in Recently deleted.
    */
   private artifactIn(
     sql: Statements,
     id: string,
     project: string | null,
     live: boolean,
+    accountId: string | null = null,
   ): ArtifactRecord {
     const row = sql.artifact.get(id)
     const artifact = row ? artifactRecord(row) : null
-    if (!artifact || (project !== null && artifact.project !== project)) {
+    if (
+      !artifact ||
+      (project !== null && artifact.project !== project) ||
+      !artifactVisible(artifact.ownerAccountId, accountId)
+    ) {
       throw new ThreadDbError(`No artifact ${id}`, 'not_found', undefined, {
         key: 'artifacts.noArtifact',
         params: { id },
@@ -1543,12 +1579,13 @@ export class ThreadDb {
 
   listArtifacts(params: ArtifactCalls['list']['params']): ArtifactListing[] {
     return this.must((sql) => {
+      const accountId = params.accountId ?? null
       const rows =
         params.project !== null
-          ? sql.listedIn.all(params.project)
+          ? sql.listedIn.all(params.project, accountId)
           : params.deleted
-            ? sql.listedDeleted.all()
-            : sql.listed.all()
+            ? sql.listedDeleted.all(accountId)
+            : sql.listed.all(accountId)
       const types = new Map(sql.headTypes.all().map((row) => [String(row.artifact_id), row]))
       return rows.map((row) => ({
         ...listing(row),
@@ -1561,9 +1598,10 @@ export class ThreadDb {
     id,
     version,
     project,
+    accountId,
   }: ArtifactCalls['get']['params']): ArtifactCalls['get']['result'] {
     return this.must((sql) => {
-      const artifact = this.artifactIn(sql, id, project, project !== null)
+      const artifact = this.artifactIn(sql, id, project, project !== null, accountId ?? null)
       const n = version ?? artifact.head
       const row = sql.version.get(id, n)
       if (!row) {
@@ -1581,9 +1619,13 @@ export class ThreadDb {
     })
   }
 
-  artifactVersions({ id, project }: ArtifactCalls['versions']['params']): VersionRecord[] {
+  artifactVersions({
+    id,
+    project,
+    accountId,
+  }: ArtifactCalls['versions']['params']): VersionRecord[] {
     return this.must((sql) => {
-      this.artifactIn(sql, id, project, project !== null)
+      this.artifactIn(sql, id, project, project !== null, accountId ?? null)
       return sql.versions.all(id).map(versionRecord)
     })
   }
@@ -1599,7 +1641,16 @@ export class ThreadDb {
         const files = params.files.map((file) => this.putFile(file.path, file.data))
         // What the user imported they have seen; what an agent made waits for them to open it.
         const author = sessionId === NO_SESSION ? null : sessionId
-        sql.insertArtifact.run(id, project, title, sessionId, at, at, author === null ? 1 : null)
+        sql.insertArtifact.run(
+          id,
+          project,
+          title,
+          sessionId,
+          at,
+          at,
+          author === null ? 1 : null,
+          params.ownerAccountId ?? null,
+        )
         this.insertVersion(sql, id, 1, files, { pages, author, note, at, type: params.type })
         putDeclaration(
           this.runtimeStatements(db),
@@ -1615,7 +1666,13 @@ export class ThreadDb {
   writeArtifact(params: ArtifactCalls['write']['params']): { version: number } {
     return this.must((sql, db) =>
       this.transaction(db, () => {
-        const artifact = this.artifactIn(sql, params.id, params.project, true)
+        const artifact = this.artifactIn(
+          sql,
+          params.id,
+          params.project,
+          true,
+          params.accountId ?? null,
+        )
         this.fromBase(
           sql,
           db,
@@ -1676,7 +1733,13 @@ export class ThreadDb {
   restoreArtifact(params: ArtifactCalls['restore']['params']): { version: number } {
     return this.must((sql, db) =>
       this.transaction(db, () => {
-        const artifact = this.artifactIn(sql, params.id, params.project, true)
+        const artifact = this.artifactIn(
+          sql,
+          params.id,
+          params.project,
+          true,
+          params.accountId ?? null,
+        )
         const row = sql.version.get(artifact.id, params.version)
         if (!row) {
           throw new ThreadDbError(
@@ -1722,9 +1785,13 @@ export class ThreadDb {
    * The owner had `version` open in a viewer: it becomes the seen version when it is newer than
    * the one recorded, never past the latest. `changed` is false when the record stayed.
    */
-  seeArtifact({ id, version }: ArtifactCalls['see']['params']): ArtifactCalls['see']['result'] {
+  seeArtifact({
+    id,
+    version,
+    accountId,
+  }: ArtifactCalls['see']['params']): ArtifactCalls['see']['result'] {
     return this.must((sql) => {
-      const artifact = this.artifactIn(sql, id, null, false)
+      const artifact = this.artifactIn(sql, id, null, false, accountId ?? null)
       const next = Math.min(artifact.head, Math.max(artifact.seen ?? 0, version))
       if (next === artifact.seen || next < 1) return { seen: artifact.seen, changed: false }
       sql.setSeen.run(next, id)
@@ -1733,9 +1800,9 @@ export class ThreadDb {
   }
 
   /** The title is not versioned: renaming changes the artifact, not a version or its time. */
-  renameArtifact({ id, project, title }: ArtifactCalls['rename']['params']): void {
+  renameArtifact({ id, project, title, accountId }: ArtifactCalls['rename']['params']): void {
     this.must((sql) => {
-      this.artifactIn(sql, id, project, project !== null)
+      this.artifactIn(sql, id, project, project !== null, accountId ?? null)
       sql.setTitle.run(title, id)
     })
   }
@@ -1744,18 +1811,19 @@ export class ThreadDb {
     id,
     project,
     at,
+    accountId,
   }: ArtifactCalls['delete']['params']): ArtifactCalls['delete']['result'] {
     return this.must((sql) => {
-      const artifact = this.artifactIn(sql, id, project, false)
+      const artifact = this.artifactIn(sql, id, project, false, accountId ?? null)
       if (artifact.deletedAt !== null) return { deletedAt: artifact.deletedAt, changed: false }
       sql.setDeleted.run(at, id)
       return { deletedAt: at, changed: true }
     })
   }
 
-  undeleteArtifact(id: string): { changed: boolean } {
+  undeleteArtifact(id: string, accountId: string | null = null): { changed: boolean } {
     return this.must((sql) => {
-      const artifact = this.artifactIn(sql, id, null, false)
+      const artifact = this.artifactIn(sql, id, null, false, accountId)
       if (artifact.deletedAt === null) return { changed: false }
       sql.setDeleted.run(null, id)
       return { changed: true }
@@ -1763,9 +1831,9 @@ export class ThreadDb {
   }
 
   /** Removes an artifact in Recently deleted with every version, and the files only it named. */
-  eraseArtifact(id: string): void {
+  eraseArtifact(id: string, accountId: string | null = null): void {
     this.must((sql, db) => {
-      const artifact = this.artifactIn(sql, id, null, false)
+      const artifact = this.artifactIn(sql, id, null, false, accountId)
       if (artifact.deletedAt === null) {
         throw new ThreadDbError(`${id} is not in Recently deleted`, 'conflict', stateOf(artifact), {
           key: 'artifacts.notDeleted',
@@ -1836,9 +1904,9 @@ export class ThreadDb {
   }
 
   /** An artifact's threads, oldest first; one in Recently deleted keeps them for the user. */
-  artifactThreads({ id, project }: ArtifactCalls['threads']['params']): CommentThread[] {
+  artifactThreads({ id, project, accountId }: ArtifactCalls['threads']['params']): CommentThread[] {
     return this.must((sql) => {
-      this.artifactIn(sql, id, project, project !== null)
+      this.artifactIn(sql, id, project, project !== null, accountId ?? null)
       const comments = new Map<string, Row[]>()
       for (const row of sql.commentsOf.all(id)) {
         const list = comments.get(String(row.thread_id))
@@ -1855,7 +1923,7 @@ export class ThreadDb {
     return this.must((sql, db) =>
       this.transaction(db, () => {
         const { id, threadId, anchor, author, body, at } = params
-        this.artifactIn(sql, id, params.project, true)
+        this.artifactIn(sql, id, params.project, true, params.accountId ?? null)
         const count = Number((sql.threadCount.get(id) as { n?: number } | undefined)?.n ?? 0)
         if (count >= THREADS_PER_ARTIFACT) {
           throw new ThreadDbError(
@@ -1877,7 +1945,7 @@ export class ThreadDb {
     return this.must((sql, db) =>
       this.transaction(db, () => {
         const { id, threadId, author, body, at } = params
-        this.artifactIn(sql, id, params.project, true)
+        this.artifactIn(sql, id, params.project, true, params.accountId ?? null)
         const thread = this.threadNow(sql, id, threadId)
         if (thread.comments.length >= COMMENTS_PER_THREAD) {
           throw new ThreadDbError(
@@ -1901,7 +1969,7 @@ export class ThreadDb {
   resolveThread(params: ArtifactCalls['resolve']['params']): CommentThread {
     return this.must((sql) => {
       const { id, threadId, resolved, at } = params
-      this.artifactIn(sql, id, params.project, true)
+      this.artifactIn(sql, id, params.project, true, params.accountId ?? null)
       this.threadRow(sql, id, threadId)
       if (resolved) sql.setResolved.run(at, id, threadId)
       else sql.reopenThread.run(id, threadId)
@@ -1910,10 +1978,15 @@ export class ThreadDb {
   }
 
   /** Permanently deletes a thread and cascades removal of all comments in it. */
-  deleteThread({ id, project, threadId }: ArtifactCalls['deleteThread']['params']): null {
+  deleteThread({
+    id,
+    project,
+    threadId,
+    accountId,
+  }: ArtifactCalls['deleteThread']['params']): null {
     return this.must((sql, db) =>
       this.transaction(db, () => {
-        this.artifactIn(sql, id, project, true)
+        this.artifactIn(sql, id, project, true, accountId ?? null)
         this.threadRow(sql, id, threadId)
         sql.deleteArtifactThread.run(id, threadId)
         return null
@@ -1921,10 +1994,16 @@ export class ThreadDb {
     )
   }
 
-  markThreadsSent({ id, threadIds, sessionId, at }: ArtifactCalls['markSent']['params']): null {
+  markThreadsSent({
+    id,
+    threadIds,
+    sessionId,
+    at,
+    accountId,
+  }: ArtifactCalls['markSent']['params']): null {
     return this.must((sql, db) =>
       this.transaction(db, () => {
-        this.artifactIn(sql, id, null, true)
+        this.artifactIn(sql, id, null, true, accountId ?? null)
         for (const threadId of threadIds) {
           this.threadRow(sql, id, threadId)
           sql.setSent.run(at, sessionId, id, threadId)
@@ -1935,14 +2014,57 @@ export class ThreadDb {
   }
 
   /** Puts anchors found again in a later version in place of the threads' old ones. */
-  reanchorThreads({ id, anchors }: ArtifactCalls['reanchor']['params']): null {
+  reanchorThreads({ id, anchors, accountId }: ArtifactCalls['reanchor']['params']): null {
     return this.must((sql, db) =>
       this.transaction(db, () => {
+        this.artifactIn(sql, id, null, false, accountId ?? null)
         for (const { threadId, anchor } of anchors) {
           sql.setAnchor.run(JSON.stringify(anchor), id, threadId)
         }
         return null
       }),
+    )
+  }
+
+  /**
+   * Assigns reliable Kettu account ownership to unowned artifacts without overwriting existing
+   * owners. Used for legacy backfill from Kettu publish records and when an unowned local artifact
+   * is published to Kettu.
+   */
+  claimArtifactOwners(owners: readonly { id: string; accountId: string }[]): { changed: number } {
+    if (owners.length === 0) return { changed: 0 }
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        let changed = 0
+        for (const { id, accountId } of owners) {
+          changed += Number(sql.claimOwner.run(accountId, id).changes)
+        }
+        return { changed }
+      }),
+    )
+  }
+
+  /** Opaque ids of artifacts owned by another account and hidden from `accountId`. */
+  hiddenArtifactIds(accountId: string | null): string[] {
+    return this.must((sql) =>
+      sql.hiddenArtifacts.all(accountId, accountId).map((row) => String(row.id)),
+    )
+  }
+
+  /**
+   * Every physical artifact in storage with its owner, for main's sharing reconciliation so switching
+   * accounts never treats another account's hidden artifact as erased.
+   */
+  artifactBriefs(): ArtifactBrief[] {
+    return this.must((sql) =>
+      sql.artifactBriefs.all().map((row) => ({
+        id: String(row.id),
+        version: Number(row.head),
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+        deleted: row.deleted_at !== null,
+        ownerAccountId: optionalText(row.owner_account_id),
+      })),
     )
   }
 

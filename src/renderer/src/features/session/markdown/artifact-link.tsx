@@ -46,7 +46,9 @@ export function ArtifactLink({
       s.deleted?.find((a) => a.id === artifactId) ??
       null,
   )
-  const erased = useArtifactsStore((s) => artifactStanding(s, artifactId) === 'erased')
+  const standing = useArtifactsStore((s) => artifactStanding(s, artifactId))
+  const hidden = standing === 'hidden'
+  const erased = standing === 'erased'
   const kind: ArtifactKind | null = summary
     ? artifactKind(summary)
     : place
@@ -58,10 +60,12 @@ export function ArtifactLink({
     artifactId,
     summary?.version ?? null,
     place ? outlineKind : null,
-    hovered && !!summary && !!place,
+    hovered && !hidden && !!summary && !!place,
   )
   const resolved = place && outline ? resolvePlace(place, outline) : null
   const placeGone = !!place && outline !== undefined && outline !== null && resolved === null
+
+  if (hidden) return <span>{children}</span>
 
   const open = (): void => {
     if (erased) return

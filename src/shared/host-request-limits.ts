@@ -325,6 +325,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'usage.reimport': NONE,
   'usage.clearRecord': AGENT_MS,
   'artifacts.list': HOST_MS,
+  'artifacts.hidden': HOST_MS,
   'artifacts.read': HOST_MS,
   'artifacts.file': HOST_MS,
   'artifacts.content': HOST_MS,

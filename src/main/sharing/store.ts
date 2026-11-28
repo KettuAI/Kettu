@@ -72,6 +72,12 @@ export interface PublishedPage {
   accountId: string
   /** The Kettu account's email when it was published, to name it once another one signs in. */
   accountEmail: string | null
+  /**
+   * The Kettu account that owns the underlying artifact, when published to a non-Kettu target such
+   * as Cloudflare; null or absent for purely local unowned artifacts (and redundant for `kettu`
+   * pages, where `accountId` is the owning Kettu account).
+   */
+  ownerAccountId?: string | null
   /** As the service last said, kept to show it offline; public on Cloudflare. */
   access: ShareAccess
   /** The access code while the level is `code`. */
@@ -172,6 +178,13 @@ function parsePage(raw: unknown, version: 1 | 2 | 3): PublishedPage | null {
   if (code !== null && (typeof code !== 'string' || !ACCESS_CODE.test(code))) return null
   if ((access === 'code') !== (code !== null)) return null
   if (target === 'cloudflare' && access !== 'public') return null
+  let ownerAccountId: string | undefined
+  if (raw.ownerAccountId !== undefined && raw.ownerAccountId !== null) {
+    if (typeof raw.ownerAccountId !== 'string' || !KETTU_ACCOUNT.test(raw.ownerAccountId)) {
+      return null
+    }
+    ownerAccountId = raw.ownerAccountId
+  }
   return {
     id,
     target,
@@ -181,6 +194,7 @@ function parsePage(raw: unknown, version: 1 | 2 | 3): PublishedPage | null {
     publishedAt: publishedAt as number,
     accountId,
     accountEmail: accountEmail as string | null,
+    ...(ownerAccountId ? { ownerAccountId } : {}),
     access: access as ShareAccess,
     code: code as string | null,
   }

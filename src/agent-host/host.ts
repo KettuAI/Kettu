@@ -50,7 +50,7 @@ import { parseReportRequest } from '@shared/report'
 import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
-import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
+import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import {
   siteOf,
@@ -62,7 +62,6 @@ import { isControlOutcome, isControlStep, SURFACE_ACCESS_WAIT_MS } from '@shared
 import type {
   AgentProcess,
   AttentionFront,
-  ArtifactBrief,
   ArtifactContentResult,
   ArtifactExportResult,
   ArtifactListResult,
@@ -124,6 +123,7 @@ import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { readLegacyKettuOwners } from './artifacts/legacy-owners'
 import { PluginTemplates } from './artifacts/plugin-templates'
 import { ArtifactConsents } from './artifacts/runtime/consent'
 import type { DeclaredArtifact } from './artifacts/runtime/calls'
@@ -378,14 +378,6 @@ function browserApp(ctx: RequestContext): void {
   }
 }
 
-function brief(
-  artifact: Pick<ArtifactSummary, 'id' | 'version' | 'createdAt' | 'updatedAt'>,
-  deleted: boolean,
-): ArtifactBrief {
-  const { id, version, createdAt, updatedAt } = artifact
-  return { id, version, createdAt, updatedAt, deleted }
-}
-
 /** A window, and a device that said so, read stored images by hash; other devices get bytes. */
 function imagesFor(device: PortDevice | null): ImageMode {
   return device && !device.imageRefs ? 'inline' : 'refs'
@@ -512,6 +504,8 @@ export interface HostOptions {
   computer?: ComputerHostOptions | null
   /** What the host's requests to Kettu's download service say they are: the app or the daemon. */
   userAgent?: string
+  /** Initial active Kettu account id for artifact ownership and isolation; null when signed out. */
+  accountId?: string | null
 }
 
 /** What the desktop app gives the host for computer use. */
@@ -1290,9 +1284,14 @@ export class AgentHost {
       threads: this.threads,
       contentDir,
       log,
+      initialAccountId: options.accountId ?? null,
       changed: () => {
         this.hub.broadcast({ type: 'artifacts.changed' })
         this.options.send({ type: 'host:artifacts-changed' })
+      },
+      accountChanged: () => {
+        this.runtimeRequests.abortAll()
+        this.hub.broadcast({ type: 'artifacts.consentsChanged' })
       },
       version: (portIds, id, version) =>
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
@@ -1702,6 +1701,7 @@ export class AgentHost {
       projects: this.projects,
       scratch: this.scratch,
       worktrees: this.worktrees,
+      artifactAccount: () => this.artifacts.account(),
       file: sessionsFile(options.userDataPath, log),
       returned: returnedFile(options.userDataPath, log),
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
@@ -2464,6 +2464,16 @@ export class AgentHost {
     host.sendFolders()
     const worktreesChecked = host.sessions.checkWorktrees()
     host.usage.start()
+    const legacyOwners = await readLegacyKettuOwners(options.userDataPath)
+    if (legacyOwners.length > 0) {
+      await host.artifacts.claimOwners(legacyOwners).catch((error: unknown) => {
+        writeLog(
+          'warn',
+          'host',
+          `Could not backfill legacy artifact ownership: ${(error as Error).message}`,
+        )
+      })
+    }
     host.artifacts.start()
     host.idleRelease.start()
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
@@ -2830,6 +2840,21 @@ export class AgentHost {
       this.hub.broadcast({ type: 'market.publishedChanged' })
     }
     if ((before === null) !== (this.marketAccount === null)) void this.ownSkillsChanged()
+  }
+
+  /** `host:account`: updates the active Kettu account scoping artifact ownership and isolation. */
+  setAccount(accountId: string | null): void {
+    this.artifacts.setAccount(accountId)
+  }
+
+  /** `host:artifact-claim-owner`: binds Kettu account ownership onto an unowned local artifact. */
+  claimArtifactOwner(id: string, accountId: string): void {
+    void this.artifacts.claimOwner(id, accountId).catch((error: unknown) => {
+      this.diagnostics.log(
+        'warn',
+        `Could not record owner for artifact ${id}: ${(error as Error).message}`,
+      )
+    })
   }
 
   /**
@@ -4287,13 +4312,9 @@ export class AgentHost {
   async artifactList(requestId: number): Promise<void> {
     let result: ArtifactListResult
     try {
-      const [kept, deleted] = await Promise.all([
-        this.artifacts.list({ deleted: false }),
-        this.artifacts.list({ deleted: true }),
-      ])
       result = {
         kind: 'listed',
-        artifacts: [...kept.map((a) => brief(a, false)), ...deleted.map((a) => brief(a, true))],
+        artifacts: await this.artifacts.briefs(),
       }
     } catch (error) {
       this.diagnostics.log('warn', `Could not list the artifacts: ${(error as Error).message}`)
@@ -5601,6 +5622,7 @@ export class AgentHost {
           ...artifact,
           scratch: this.scratch.contains(artifact.project),
         })),
+      'artifacts.hidden': () => artifacts.hiddenIds(),
       'artifacts.read': async ({ id, version }) => {
         const [read, strict] = await Promise.all([
           artifacts.read(id, version === undefined ? {} : { version }),

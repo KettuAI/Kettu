@@ -285,6 +285,11 @@ export function fromHost(hostId: string, method: string, result: unknown): unkno
     qualifyProjects(hostId, result)
   }
   if (method === 'artifacts.list') qualifyArtifacts(hostId, result)
+  if (method === 'artifacts.hidden' && Array.isArray(result)) {
+    for (const id of result) {
+      if (typeof id === 'string') learnArtifactHost(id, hostId)
+    }
+  }
   const added = (result as { id?: unknown } | null)?.id
   if (method === 'attachments.add' && typeof added === 'string') attachmentHosts.set(added, hostId)
   qualify(hostId, result, 0)

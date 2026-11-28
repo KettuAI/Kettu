@@ -2175,6 +2175,8 @@ export interface HostContract {
   'usage.clearRecord': { params: void; result: void }
   // Every artifact, newest first, or those in Recently deleted, the latest deletion first.
   'artifacts.list': { params: { deleted?: boolean }; result: ArtifactSummary[] }
+  // Opaque ids of artifacts owned by another Kettu account and hidden from the current account.
+  'artifacts.hidden': { params: void; result: string[] }
   // The latest version without `version`.
   'artifacts.read': { params: { id: string; version?: number }; result: ArtifactContent }
   // The bytes of one file of a version, as an export takes them.
@@ -2760,6 +2762,7 @@ export const HOST_METHODS = [
   'usage.reimport',
   'usage.clearRecord',
   'artifacts.list',
+  'artifacts.hidden',
   'artifacts.read',
   'artifacts.file',
   'artifacts.content',

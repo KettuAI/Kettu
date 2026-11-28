@@ -219,6 +219,15 @@ export function usePartThumbnail(
   return thumbnail
 }
 
+/** Clears cached thumbnails and queued thumbnail renders (e.g. after switching accounts). */
+export function clearArtifactThumbnailsCache(): void {
+  const keys = [...made.keys()]
+  made.clear()
+  cachedBytes = 0
+  waiting.length = 0
+  for (const key of keys) notifyKey(key)
+}
+
 /** Test-only helper to inspect or clear the thumbnail cache. */
 export const _thumbnailsCacheForTests = {
   size: () => made.size,

@@ -985,6 +985,45 @@ export function closeArtifact(): void {
 }
 
 /**
+ * Closes any open artifact viewer or side-panel artifact tab belonging to `hidden` (e.g. after
+ * switching Kettu accounts or restoring persisted panels under another account).
+ */
+export function closeHiddenArtifacts(hidden: ReadonlySet<string>): void {
+  if (hidden.size === 0) return
+  const state = useViewStore.getState()
+  if (state.main.kind === 'artifact' && hidden.has(state.main.id)) {
+    inPlace(() =>
+      useViewStore.setState((s) => {
+        if (s.main.kind !== 'artifact' || !hidden.has(s.main.id)) return s
+        const sideArtifactPage = { ...s.sideArtifactPage }
+        delete sideArtifactPage[MAIN_ARTIFACT_PANEL]
+        return { main: s.main.back, sideArtifactPage }
+      }),
+    )
+  }
+  const toClose: { panel: string; key: string }[] = []
+  for (const [panel, docs] of Object.entries(useViewStore.getState().sideDocs)) {
+    for (const tab of docs) {
+      if (tab.kind === 'artifact' && hidden.has(tab.id)) {
+        toClose.push({ panel, key: docKey(tab) })
+      }
+    }
+  }
+  for (const { panel, key } of toClose) closeDoc(panel, key)
+  useViewStore.setState((s) => {
+    let changed = false
+    const sideArtifactPage = { ...s.sideArtifactPage }
+    for (const [panel, req] of Object.entries(sideArtifactPage)) {
+      if (hidden.has(req.artifactId)) {
+        delete sideArtifactPage[panel]
+        changed = true
+      }
+    }
+    return changed ? { sideArtifactPage } : s
+  })
+}
+
+/**
  * The New session screen, in the given project, with No project, or in the selected project; a
  * shown one keeps its agent, and its No project unless given a project.
  */

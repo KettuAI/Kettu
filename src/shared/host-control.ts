@@ -126,6 +126,8 @@ export type MainToHost =
       computer?: { driverPath: string; selfPid: number; selfIds: string[] }
       // What the host's requests to Kettu's download service say they are: the app or the daemon.
       userAgent?: string
+      // The currently signed-in Kettu account id when Kettu's services are on; null when signed out.
+      accountId?: string | null
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
   // A paired device's session, which may do less than a window. In the desktop app the port
@@ -206,6 +208,11 @@ export type MainToHost =
   // The host's Kettu account while it is signed in with Kettu's services on, which lists the
   // Marketplace tools: right after host:init at every start, and whenever it changes.
   | { type: 'host:market-account'; account: MarketAccount | null }
+  // The active Kettu account id for account-scoped state (such as artifact ownership/isolation),
+  // null when signed out or when Kettu's services are off.
+  | { type: 'host:account'; accountId: string | null }
+  // Records Kettu account ownership for an unowned local artifact once published to Kettu.
+  | { type: 'host:artifact-claim-owner'; id: string; accountId: string }
   // The answer to a host:market-call.
   | { type: 'market-result'; callId: number; answer: MarketCallAnswer }
   // The answer to a host:trash-call: null once every path is in the trash, else why one is not.
@@ -278,6 +285,8 @@ export type ArtifactContentResult =
       files: ArtifactContentFile[]
       /** Made from a type: its viewer is served in place of the entry page. */
       type?: ArtifactTypeInfo | null
+      /** The Kettu account id owning this artifact, or null for an unowned local artifact. */
+      ownerAccountId?: string | null
     }
   | { kind: 'not_found' }
   | { kind: 'failed' }
@@ -296,6 +305,8 @@ export interface ArtifactBrief {
   updatedAt: number
   /** In Recently deleted. */
   deleted: boolean
+  /** The Kettu account id owning this artifact, or null for an unowned local artifact. */
+  ownerAccountId?: string | null
 }
 
 /** The host's answer to `host:artifact-list-request`. */

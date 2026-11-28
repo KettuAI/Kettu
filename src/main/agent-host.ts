@@ -100,6 +100,8 @@ export interface AgentHostDeps {
   onMarketOAuth?(serverId: unknown, state: unknown): void
   /** The Kettu account the Marketplace tools publish with, which follows init at each start. */
   marketAccount(): MarketAccount | null
+  /** The active Kettu account id for artifact ownership and isolation, or null when signed out. */
+  accountId?(): string | null
   /** The window's color mode, which follows init at each start. */
   colorMode(): 'light' | 'dark'
   /** On Windows, whether the computer runs on battery, which follows init at each start. */
@@ -228,9 +230,20 @@ function isContentFile(value: unknown): boolean {
   )
 }
 
+function isOwnerAccountId(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === 'string' && value.length > 0 && value.length <= 64)
+  )
+}
+
 function isContentResult(value: unknown): value is ArtifactContentResult {
   if (typeof value !== 'object' || value === null) return false
-  const { kind, files, version, title, key, strict } = value as Record<string, unknown>
+  const { kind, files, version, title, key, strict, ownerAccountId } = value as Record<
+    string,
+    unknown
+  >
   if (kind === 'not_found' || kind === 'failed') return true
   return (
     kind === 'found' &&
@@ -243,7 +256,8 @@ function isContentResult(value: unknown): value is ArtifactContentResult {
     typeof title === 'string' &&
     typeof key === 'string' &&
     /^[0-9a-f]{64}$/.test(key) &&
-    isTypeInfo((value as Record<string, unknown>).type)
+    isTypeInfo((value as Record<string, unknown>).type) &&
+    isOwnerAccountId(ownerAccountId)
   )
 }
 
@@ -290,7 +304,10 @@ function failedExport(message = t('agentHost.down')): ArtifactExportResult {
 
 function isBrief(value: unknown): value is ArtifactBrief {
   if (typeof value !== 'object' || value === null) return false
-  const { id, version, createdAt, updatedAt, deleted } = value as Record<string, unknown>
+  const { id, version, createdAt, updatedAt, deleted, ownerAccountId } = value as Record<
+    string,
+    unknown
+  >
   return (
     typeof id === 'string' &&
     ARTIFACT_ID.test(id) &&
@@ -298,7 +315,8 @@ function isBrief(value: unknown): value is ArtifactBrief {
     (version as number) >= 1 &&
     Number.isFinite(createdAt) &&
     Number.isFinite(updatedAt) &&
-    typeof deleted === 'boolean'
+    typeof deleted === 'boolean' &&
+    isOwnerAccountId(ownerAccountId)
   )
 }
 
@@ -417,12 +435,14 @@ export class AgentHost {
         settings: deps.settings(),
         computer: computerHostOptions(),
         userAgent: updaterUserAgent(app.getVersion(), process.platform, process.arch),
+        accountId: deps.accountId?.() ?? null,
       }),
       startMessages: () => {
         const onBattery = deps.onBattery?.() ?? null
         return [
           { type: 'host:market-keys', ...deps.marketKeys() },
           { type: 'host:market-account', account: deps.marketAccount() },
+          { type: 'host:account', accountId: deps.accountId?.() ?? null },
           { type: 'host:color-mode', mode: deps.colorMode() },
           ...(onBattery === null ? [] : [{ type: 'host:battery' as const, onBattery }]),
         ]
@@ -504,6 +524,21 @@ export class AgentHost {
   /** The Kettu account the Marketplace tools publish with, after a sign-in or a switch changed it. */
   pushMarketAccount(account: MarketAccount | null): void {
     this.host.post({ type: 'host:market-account', account })
+  }
+
+  /**
+   * The active Kettu account changed: clears main's artifact content cache immediately so the
+   * protocol cannot serve the prior account's files, then updates the agent host.
+   */
+  pushAccount(accountId: string | null): void {
+    this.contents.clear()
+    this.host.post({ type: 'host:account', accountId })
+  }
+
+  /** Records Kettu account ownership onto an unowned local artifact once published to Kettu. */
+  claimArtifactOwner(id: string, accountId: string): void {
+    this.contents.clear()
+    this.host.post({ type: 'host:artifact-claim-owner', id, accountId })
   }
 
   /** Allow once from a request's notification, which the host answers as its own window would. */

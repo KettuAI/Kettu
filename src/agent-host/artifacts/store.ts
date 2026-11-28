@@ -22,6 +22,7 @@ import {
 } from '@shared/artifacts'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { CanvasEvent } from '@shared/artifact-canvas'
+import type { ArtifactBrief } from '@shared/host-control'
 import { withParamValues, type ParamValue } from '@shared/artifact-params'
 import { compareVersions, type ArtifactChanges } from '@shared/artifact-changes'
 import { HostError } from '../errors'
@@ -96,6 +97,10 @@ export interface ArtifactStoreDeps {
   canvas?(portIds: Iterable<string>, event: CanvasEvent): void
   /** How long a canvas stays quiet before the user's changes on it become a version. */
   canvasQuietMs?: number
+  /** Initial active Kettu account id for ownership and isolation; null when signed out. */
+  initialAccountId?: string | null
+  /** Fired when the active Kettu account changes, after local watches and caches are cleared. */
+  accountChanged?(): void
   now?: () => number
   purgeEveryMs?: number
 }
@@ -175,14 +180,65 @@ export class ArtifactStore {
   /** The canvas documents clients are working on, with their changes not yet in a version. */
   readonly canvases: LiveCanvases
   private readonly compared = new Map<string, Promise<ArtifactChanges | null>>()
+  private currentAccountId: string | null
 
   constructor(private readonly deps: ArtifactStoreDeps) {
+    this.currentAccountId = deps.initialAccountId ?? null
     this.canvases = new LiveCanvases(this, {
       log: deps.log,
       ports: (id) => this.watchers(id),
       send: (ports, event) => deps.canvas?.(ports, event),
       ...(deps.canvasQuietMs !== undefined ? { quietMs: deps.canvasQuietMs } : {}),
     })
+  }
+
+  /** The Kettu account id currently scoping artifact visibility and ownership, or null. */
+  account(): string | null {
+    return this.currentAccountId
+  }
+
+  /**
+   * Switches the active Kettu account id. Immediately scopes all subsequent calls to the new
+   * account, clears in-memory diff/watch/canvas state from the previous account, and notifies
+   * clients so lists and open views update without restarting.
+   */
+  setAccount(accountId: string | null): void {
+    if (accountId === this.currentAccountId) return
+    this.currentAccountId = accountId
+    this.compared.clear()
+    const watched = [...this.watches.keys()]
+    this.watches.clear()
+    this.views.clear()
+    this.canvases.dropAll()
+    for (const id of watched) this.deps.unwatched?.(id)
+    this.deps.changed()
+    this.deps.accountChanged?.()
+  }
+
+  /**
+   * Backfills reliable Kettu account ownership onto unowned artifacts (e.g. from legacy Kettu
+   * publish records or when an unowned local artifact is published to Kettu). Never overwrites
+   * existing ownership.
+   */
+  async claimOwners(owners: readonly { id: string; accountId: string }[]): Promise<number> {
+    if (owners.length === 0 || !this.deps.threads) return 0
+    const { changed } = await this.call('claimOwners', { owners: [...owners] })
+    if (changed > 0) this.deps.changed()
+    return changed
+  }
+
+  async claimOwner(id: string, accountId: string): Promise<boolean> {
+    return (await this.claimOwners([{ id, accountId }])) > 0
+  }
+
+  /** Opaque ids of artifacts owned by another Kettu account and hidden from the current account. */
+  hiddenIds(): Promise<string[]> {
+    return this.call('hiddenIds', { accountId: this.currentAccountId })
+  }
+
+  /** Every artifact in storage with its owner, for main's sharing reconcile. */
+  briefs(): Promise<ArtifactBrief[]> {
+    return this.call('briefs', {})
   }
 
   private now(): number {
@@ -209,7 +265,11 @@ export class ArtifactStore {
   ): Promise<RuntimeCalls[K]['result']> {
     const { threads } = this.deps
     if (!threads) throw new HostError('internal', t('artifacts.needDatabase'))
-    return this.refused(() => threads.runtime(name, params))
+    const scoped =
+      params === undefined
+        ? ({ accountId: this.currentAccountId } as RuntimeCalls[K]['params'])
+        : ({ ...params, accountId: this.currentAccountId } as RuntimeCalls[K]['params'])
+    return this.refused(() => threads.runtime(name, scoped))
   }
 
   private async refused<T>(run: () => Promise<T>): Promise<T> {
@@ -261,15 +321,20 @@ export class ArtifactStore {
     const listed = await this.call(
       'list',
       'project' in reach
-        ? { project: reach.project }
-        : { project: null, deleted: reach.deleted ?? false },
+        ? { project: reach.project, accountId: this.currentAccountId }
+        : { project: null, deleted: reach.deleted ?? false, accountId: this.currentAccountId },
     )
     return listed.map((artifact) => ({ ...artifact, editing: this.editing(artifact.id) }))
   }
 
   /** The artifact and one of its versions, the latest by default, with the version's files. */
   get(id: string, { version, project }: Reach & { version?: number } = {}): Promise<FoundVersion> {
-    return this.call('get', { id, version: version ?? null, project: project ?? null })
+    return this.call('get', {
+      id,
+      version: version ?? null,
+      project: project ?? null,
+      accountId: this.currentAccountId,
+    })
   }
 
   /** As `get`, which counts as the reader's reading it. */
@@ -305,7 +370,11 @@ export class ArtifactStore {
 
   /** Newest first. */
   async versions(id: string, { project, reader }: Reach & Reading = {}): Promise<VersionRecord[]> {
-    const records = await this.call('versions', { id, project: project ?? null })
+    const records = await this.call('versions', {
+      id,
+      project: project ?? null,
+      accountId: this.currentAccountId,
+    })
     this.used(id, reader, false)
     return records
   }
@@ -320,8 +389,8 @@ export class ArtifactStore {
     to: number,
     { project }: Reach = {},
   ): Promise<ArtifactChanges | null> {
-    // A session reaches only its project's artifacts, so its comparisons are its own.
-    const key = `${project ?? ''}\0${id}\0${from}\0${to}`
+    // A session reaches only its project's artifacts, and each account sees only its own.
+    const key = `${this.currentAccountId ?? ''}\0${project ?? ''}\0${id}\0${from}\0${to}`
     const known = this.compared.get(key)
     if (known) return known
     const reach = project ? { project } : {}
@@ -373,6 +442,7 @@ export class ArtifactStore {
     strict: boolean
     files: ContentFile[]
     type: ArtifactTypeInfo | null
+    ownerAccountId: string | null
   }> {
     const [found, latest] = await Promise.all([
       this.get(id, version === undefined ? {} : { version }),
@@ -383,6 +453,7 @@ export class ArtifactStore {
       version: found.version.version,
       title: found.artifact.title,
       type: found.type,
+      ownerAccountId: found.artifact.ownerAccountId,
       // A typed version's thumbnail is its viewer's, which a new format's viewer draws anew.
       key: found.type
         ? createHash('sha256')
@@ -416,7 +487,12 @@ export class ArtifactStore {
     const { editor, ...rest } = input
     const at = this.now()
     const id = newArtifactId(at)
-    const { version } = await this.call('create', { ...rest, id, at })
+    const { version } = await this.call('create', {
+      ...rest,
+      id,
+      at,
+      ownerAccountId: this.currentAccountId,
+    })
     // A new artifact is all its turn's.
     this.used(id, editor, true, undefined, [{ kind: 'whole' }])
     this.deps.changed()
@@ -445,6 +521,7 @@ export class ArtifactStore {
     const { version } = await this.call('write', {
       ...rest,
       project: project ?? null,
+      accountId: this.currentAccountId,
       at: this.now(),
     })
     const pieces = editor ? await this.written(input.id, version) : []
@@ -474,6 +551,7 @@ export class ArtifactStore {
     const { version } = await this.call('restore', {
       ...rest,
       project: project ?? null,
+      accountId: this.currentAccountId,
       note: note ?? null,
       at: this.now(),
     })
@@ -495,7 +573,11 @@ export class ArtifactStore {
    * recorded as seen, which only moves forward and never past the latest.
    */
   async see(id: string, version: number): Promise<number | null> {
-    const { seen, changed } = await this.call('see', { id, version })
+    const { seen, changed } = await this.call('see', {
+      id,
+      version,
+      accountId: this.currentAccountId,
+    })
     if (changed && seen !== null) this.deps.seen?.(id, seen)
     return seen
   }
@@ -506,7 +588,12 @@ export class ArtifactStore {
     title: string,
     { project, editor }: Reach & Editing = {},
   ): Promise<void> {
-    await this.call('rename', { id, title, project: project ?? null })
+    await this.call('rename', {
+      id,
+      title,
+      project: project ?? null,
+      accountId: this.currentAccountId,
+    })
     this.used(id, editor, true)
     this.deps.changed()
   }
@@ -519,6 +606,7 @@ export class ArtifactStore {
     const { deletedAt, changed } = await this.call('delete', {
       id,
       project: project ?? null,
+      accountId: this.currentAccountId,
       at: this.now(),
     })
     if (changed) this.deps.changed()
@@ -527,13 +615,13 @@ export class ArtifactStore {
 
   /** Brings the artifact back from Recently deleted; the user's alone. */
   async undelete(id: string): Promise<void> {
-    const { changed } = await this.call('undelete', { id })
+    const { changed } = await this.call('undelete', { id, accountId: this.currentAccountId })
     if (changed) this.deps.changed()
   }
 
   /** Removes an artifact in Recently deleted for good; the user's alone. */
   async erase(id: string): Promise<void> {
-    await this.call('erase', { id })
+    await this.call('erase', { id, accountId: this.currentAccountId })
     this.deps.changed()
   }
 
@@ -546,7 +634,11 @@ export class ArtifactStore {
    * later version has it again.
    */
   async threads(id: string, { project }: Reach = {}): Promise<CommentThread[]> {
-    const threads = await this.call('threads', { id, project: project ?? null })
+    const threads = await this.call('threads', {
+      id,
+      project: project ?? null,
+      accountId: this.currentAccountId,
+    })
     const stale = threads.filter((t) => t.anchor.offset !== null)
     if (stale.length === 0) return threads
     const found = await this.get(id, project ? { project } : {}).catch(() => null)
@@ -600,7 +692,13 @@ export class ArtifactStore {
       moved.push({ threadId: thread.id, anchor: next })
       thread.anchor = next
     }
-    if (moved.length > 0) await this.call('reanchor', { id, anchors: moved }).catch(() => {})
+    if (moved.length > 0) {
+      await this.call('reanchor', {
+        id,
+        anchors: moved,
+        accountId: this.currentAccountId,
+      }).catch(() => {})
+    }
     return threads
   }
 
@@ -619,6 +717,7 @@ export class ArtifactStore {
     const thread = await this.call('addThread', {
       id,
       project: project ?? null,
+      accountId: this.currentAccountId,
       threadId: `thr_${ulid(at)}`,
       ...input,
       at,
@@ -636,6 +735,7 @@ export class ArtifactStore {
     const thread = await this.call('reply', {
       id,
       project: project ?? null,
+      accountId: this.currentAccountId,
       threadId,
       ...input,
       at: this.now(),
@@ -653,6 +753,7 @@ export class ArtifactStore {
     const thread = await this.call('resolve', {
       id,
       project: project ?? null,
+      accountId: this.currentAccountId,
       threadId,
       resolved,
       at: this.now(),
@@ -663,26 +764,45 @@ export class ArtifactStore {
 
   /** Permanently deletes one comment thread and notifies every watcher of the artifact. */
   async deleteThread(id: string, threadId: string, { project }: Reach = {}): Promise<void> {
-    await this.call('deleteThread', { id, project: project ?? null, threadId })
+    await this.call('deleteThread', {
+      id,
+      project: project ?? null,
+      accountId: this.currentAccountId,
+      threadId,
+    })
     this.commented(id)
   }
 
   /** Pins a thread to another place, where it is found again from now on. */
   async repin(id: string, threadId: string, anchor: CommentAnchor): Promise<CommentThread> {
-    const threads = await this.call('threads', { id, project: null })
+    const threads = await this.call('threads', {
+      id,
+      project: null,
+      accountId: this.currentAccountId,
+    })
     const thread = threads.find((one) => one.id === threadId)
     if (!thread) {
       throw new HostError('not_found', t('artifacts.noThread', { id, thread: threadId }))
     }
     const placed: CommentAnchor = { ...anchor, missing: false }
-    await this.call('reanchor', { id, anchors: [{ threadId, anchor: placed }] })
+    await this.call('reanchor', {
+      id,
+      anchors: [{ threadId, anchor: placed }],
+      accountId: this.currentAccountId,
+    })
     this.commented(id)
     return { ...thread, anchor: placed }
   }
 
   /** The user sent the threads to the session; they wait no more until the user writes again. */
   async markSent(id: string, threadIds: string[], sessionId: string): Promise<void> {
-    await this.call('markSent', { id, threadIds, sessionId, at: this.now() })
+    await this.call('markSent', {
+      id,
+      threadIds,
+      sessionId,
+      at: this.now(),
+      accountId: this.currentAccountId,
+    })
     this.commented(id)
   }
 
@@ -960,7 +1080,12 @@ export class ArtifactStore {
     }
     ports.set(portId, (ports.get(portId) ?? 0) + 1)
     try {
-      await this.call('get', { id, version: null, project: null })
+      await this.call('get', {
+        id,
+        version: null,
+        project: null,
+        accountId: this.currentAccountId,
+      })
     } catch (error) {
       this.drop(id, portId)
       throw error

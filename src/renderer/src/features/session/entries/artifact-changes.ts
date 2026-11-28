@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ArtifactChanges } from '@shared/artifact-changes'
-import type { ArtifactContent } from '@shared/artifacts'
+import type { ArtifactContent, VersionSummary } from '@shared/artifacts'
 import { host } from '@renderer/lib/host'
 
 export type { ChangedFrame } from '@shared/artifact-changes'
@@ -14,6 +14,34 @@ const KEPT = 200
 
 // A version never changes once written, so each pair is worked out once.
 const reads = new Map<string, { changes: Changes | null | undefined; done: Promise<void> }>()
+
+/** Each artifact's latest read of its versions, at the head it was read for, shared by its cards. */
+const MAX_VERSION_READS = 100
+export const versionReads = new Map<
+  string,
+  { head: number | null; versions: VersionSummary[] | null; done: Promise<void> }
+>()
+
+export function rememberVersionRead(
+  id: string,
+  entry: { head: number | null; versions: VersionSummary[] | null; done: Promise<void> },
+): void {
+  versionReads.delete(id)
+  versionReads.set(id, entry)
+  if (versionReads.size > MAX_VERSION_READS) {
+    versionReads.delete(versionReads.keys().next().value!)
+  }
+}
+
+/** Clears cached version comparisons (e.g. after switching accounts). */
+export function clearArtifactChangesCache(): void {
+  reads.clear()
+}
+
+/** Clears cached version lists (e.g. after switching accounts). */
+export function clearArtifactVersionReadsCache(): void {
+  versionReads.clear()
+}
 
 function readOf(id: string, from: number, to: number) {
   const key = `${id}:${from}:${to}`

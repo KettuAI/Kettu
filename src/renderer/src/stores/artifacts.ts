@@ -20,6 +20,8 @@ interface ArtifactsStore {
   list: ArtifactSummary[] | null
   /** Recently deleted, the latest deletion first; null until the first read. */
   deleted: ArtifactSummary[] | null
+  /** Opaque ids of artifacts owned by another Kettu account and hidden from the current account. */
+  hidden: ReadonlySet<string>
   /**
    * The other hosts whose artifacts are in the lists. Until a host's are, nothing says an artifact
    * of its sessions is gone.
@@ -72,6 +74,7 @@ export type ImportFailure = Extract<ArtifactImportResult, { failed: string }>['f
 export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   list: null,
   deleted: null,
+  hidden: new Set(),
   hostsRead: [],
   awayLists: {},
   error: null,
@@ -88,25 +91,27 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   paneSelection: null,
 }))
 
-/** Where an artifact stands in the lists read so far: shown, deleted, or gone for good. */
-export type ArtifactStanding = 'live' | 'deleted' | 'erased'
+/** Where an artifact stands in the lists read so far: shown, deleted, hidden (another account), or gone for good. */
+export type ArtifactStanding = 'live' | 'deleted' | 'erased' | 'hidden'
 
 export function artifactStanding(
-  s: Pick<ArtifactsStore, 'list' | 'deleted' | 'hostsRead'>,
+  s: Pick<ArtifactsStore, 'list' | 'deleted' | 'hostsRead'> & { hidden?: ReadonlySet<string> },
   id: string,
 ): ArtifactStanding {
   if (s.list?.some((a) => a.id === id)) return 'live'
   if (s.deleted?.some((a) => a.id === id)) return 'deleted'
+  if (s.hidden?.has(id)) return 'hidden'
   // Until both lists of its host arrive, nothing says it is gone.
   const hostId = artifactHost(id)
   if (hostId !== null && !s.hostsRead.includes(hostId)) return 'live'
   return s.list && s.deleted ? 'erased' : 'live'
 }
 
-/** A host's two lists as last read; this computer's under null. */
+/** A host's two lists and hidden ids as last read; this computer's under null. */
 interface HostLists {
   list: ArtifactSummary[]
   deleted: ArtifactSummary[]
+  hidden: string[]
 }
 
 let shown = 0
@@ -116,13 +121,21 @@ const hosts = new Set<string | null>([null])
 const stale = new Set<string | null>([null])
 const reading = new Set<string | null>()
 const readAgain = new Set<string | null>()
+const hiddenListeners = new Set<(hidden: ReadonlySet<string>) => void>()
+
+/** Registers a listener invoked whenever the set of account-hidden artifact ids is published. */
+export function onHiddenArtifacts(listener: (hidden: ReadonlySet<string>) => void): () => void {
+  hiddenListeners.add(listener)
+  return () => hiddenListeners.delete(listener)
+}
 
 /** Every host's artifacts in one list each, ordered as a host orders its own. */
 function publish(): void {
   const own = lists.get(null)
   if (!own) return
   const others = [...lists].filter(([hostId]) => hostId !== null).map(([, value]) => value)
-  useArtifactsStore.setState({
+  const hidden = new Set<string>([...own.hidden, ...others.flatMap((entry) => entry.hidden)])
+  useArtifactsStore.setState((s) => ({
     list:
       others.length === 0
         ? own.list
@@ -133,8 +146,14 @@ function publish(): void {
         : [own, ...others]
             .flatMap((l) => l.deleted)
             .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)),
+    hidden,
     hostsRead: [...lists.keys()].filter((hostId) => hostId !== null),
-  })
+    ...(s.dialog && hidden.has(s.dialog.id) ? { dialog: null } : {}),
+    ...(s.paneSelection && hidden.has(s.paneSelection.artifactId) ? { paneSelection: null } : {}),
+  }))
+  if (hidden.size > 0) {
+    for (const listener of [...hiddenListeners]) listener(hidden)
+  }
 }
 
 function read(hostId: string | null): void {
@@ -148,12 +167,16 @@ function read(hostId: string | null): void {
   Promise.all([
     hostAt(hostId, 'artifacts.list', {}),
     hostAt(hostId, 'artifacts.list', { deleted: true }),
+    hostAt(hostId, 'artifacts.hidden', undefined).catch((): string[] => []),
   ])
     .then(
-      ([list, deleted]) => {
+      ([list, deleted, hidden]) => {
         if (!hosts.has(hostId)) return
-        if (hostId === null) for (const a of [...list, ...deleted]) learnArtifactHost(a.id, null)
-        lists.set(hostId, { list, deleted })
+        if (hostId === null) {
+          for (const a of [...list, ...deleted]) learnArtifactHost(a.id, null)
+          for (const id of hidden) learnArtifactHost(id, null)
+        }
+        lists.set(hostId, { list, deleted, hidden })
         if (hostId === null) useArtifactsStore.setState({ error: null })
         else forgetAway(hostId)
         publish()
@@ -188,6 +211,28 @@ export function artifactsChanged(hostId: string | null = null): void {
   if (!hosts.has(hostId)) return
   if (shown > 0) read(hostId)
   else stale.add(hostId)
+}
+
+/**
+ * The signed-in Kettu account changed on this computer: drops stale local summaries immediately and
+ * reloads the local artifact lists and hidden ids even when no Artifacts page is mounted, so open
+ * viewers, side tabs, dialogs and in-session entries update at once.
+ */
+export function artifactsAccountChanged(): void {
+  lists.delete(null)
+  useArtifactsStore.setState((s) => ({
+    list: null,
+    deleted: null,
+    dialog: s.dialog && artifactHost(s.dialog.id) === null ? null : s.dialog,
+    paneSelection:
+      s.paneSelection && artifactHost(s.paneSelection.artifactId) === null ? null : s.paneSelection,
+  }))
+  read(null)
+}
+
+/** Triggers a one-shot local artifact refresh (e.g. at launch to prune persisted hidden tabs). */
+export function refreshLocalArtifacts(): void {
+  read(null)
 }
 
 /** A session with another host opened: its artifacts join the lists. */
@@ -233,7 +278,7 @@ function markSeen(hostId: string | null, id: string, version: number): void {
     items.some((a) => a.id === id && (a.seen ?? 0) < version)
       ? items.map((a) => (a.id === id ? { ...a, seen: version } : a))
       : items
-  const next = { list: patch(held.list), deleted: patch(held.deleted) }
+  const next = { list: patch(held.list), deleted: patch(held.deleted), hidden: held.hidden }
   if (next.list === held.list && next.deleted === held.deleted) return
   lists.set(hostId, next)
   publish()

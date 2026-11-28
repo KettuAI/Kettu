@@ -20,7 +20,7 @@ import { artifactKind } from '@renderer/features/artifacts/model'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { menuCollisionPadding } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useOverlayPresence } from '@renderer/stores/overlays'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { openArtifact, openArtifactTab } from '@renderer/stores/view'
@@ -52,10 +52,24 @@ export function AttachedArtifactChips({
   const { t } = useTranslation(['composer', 'artifacts'])
   const attached = useDraftArtifactAttachments(draft)
   const list = useArtifactsStore((s) => s.list)
+  const hidden = useArtifactsStore((s) => s.hidden)
+  const hasAttached = attached.length > 0
 
-  if (attached.length === 0) return null
+  useEffect(() => {
+    if (!hasAttached) return
+    artifactListShown(true)
+    return () => artifactListShown(false)
+  }, [hasAttached])
+
+  const visible = useMemo(
+    () => attached.filter((artifact) => !hidden.has(artifact.id)),
+    [attached, hidden],
+  )
+
+  if (visible.length === 0) return null
 
   const open = (artifact: AttachedArtifact) => {
+    if (artifactStanding(useArtifactsStore.getState(), artifact.id) === 'hidden') return
     if (sessionId) openArtifactTab(sessionId, artifact.id, { preview: true })
     else openArtifact(artifact.id)
   }
@@ -68,7 +82,7 @@ export function AttachedArtifactChips({
       data-attached-artifacts=""
       className="flex w-full flex-wrap items-center gap-1.5 pb-1.5"
     >
-      {attached.map((artifact) => {
+      {visible.map((artifact) => {
         const live = list?.find((item) => item.id === artifact.id)
         const title = live?.title ?? artifact.title
         const kind = live ? artifactKind(live) : artifact.kind

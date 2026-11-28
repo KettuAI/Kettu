@@ -38,12 +38,14 @@ export interface DataOrder {
 }
 
 /**
- * Where a call reaches, as for the artifacts: a session's project, or anywhere for null. An
- * artifact in Recently deleted keeps its data, which nobody reads or writes there.
+ * Where a call reaches, as for the artifacts: a session's project, or anywhere for null, scoped to
+ * `accountId` (unowned local artifacts and artifacts owned by that account). An artifact in
+ * Recently deleted keeps its data, which nobody reads or writes there.
  */
 interface Reach {
   id: string
   project: string | null
+  accountId?: string | null
 }
 
 export interface RuntimeCalls {
@@ -94,13 +96,19 @@ export interface RuntimeCalls {
     result: { collections: { name: string; count: number }[]; bytes: number }
   }
   /** The capabilities the user allowed the artifact. */
-  consentOf: { params: { id: string }; result: string[] }
-  consentGrant: { params: { id: string; capability: string; at: number }; result: null }
+  consentOf: { params: { id: string; accountId?: string | null }; result: string[] }
+  consentGrant: {
+    params: { id: string; capability: string; at: number; accountId?: string | null }
+    result: null
+  }
   /** Takes back every capability the user allowed the artifact. */
-  consentRevoke: { params: { id: string }; result: { changed: boolean } }
+  consentRevoke: {
+    params: { id: string; accountId?: string | null }
+    result: { changed: boolean }
+  }
   /** Every artifact outside Recently deleted the user allowed something, by title. */
   consents: {
-    params: void
+    params: { accountId?: string | null } | undefined
     result: { id: string; title: string; project: string; capabilities: string[] }[]
   }
 }

@@ -116,3 +116,31 @@ export function keepCameraBeforeOpen(id: string, page: string, camera: ViewerCam
   if (camera) before.set(`${id}\0${page}`, camera)
   else before.delete(`${id}\0${page}`)
 }
+
+/** Clears cached viewer and camera state for hidden artifacts (or all when `ids` is omitted). */
+export function clearArtifactViewerState(ids?: ReadonlySet<string>): void {
+  if (!ids) {
+    useArtifactViewerStore.setState({ byId: {} })
+    cameras.clear()
+    before.clear()
+    return
+  }
+  if (ids.size === 0) return
+  useArtifactViewerStore.setState((s) => {
+    let changed = false
+    const byId = { ...s.byId }
+    for (const id of ids) {
+      if (id in byId) {
+        delete byId[id]
+        changed = true
+      }
+    }
+    return changed ? { byId } : s
+  })
+  for (const map of [cameras, before]) {
+    for (const key of [...map.keys()]) {
+      const id = key.slice(0, key.indexOf('\0'))
+      if (ids.has(id)) map.delete(key)
+    }
+  }
+}

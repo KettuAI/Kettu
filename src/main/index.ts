@@ -656,6 +656,7 @@ async function start(): Promise<void> {
         changed: (patch) => actionLog.info('settings.update', { patch, by: 'agent' }),
       }),
     marketAccount: () => marketAccount(),
+    accountId: () => activeAccountId(),
     market: (call) =>
       runMarketCall(call, {
         base: accountBase,
@@ -677,8 +678,9 @@ async function start(): Promise<void> {
   })
   hostRef.current = agentHost
   const hostName = (): string => settings.get().remote.name ?? hostname()
-  // Set once the sharing service exists, which publishes with the account.
+  // Set once the sharing and artifacts services exist, which follow the signed-in account.
   let sharingKettuChanged: (() => void) | null = null
+  let artifactsAccountChanged: (() => void) | null = null
   let relayUrl = RELAY_URL
   try {
     relayUrl = relayUrlFrom(process.env[RELAY_URL_ENV])
@@ -714,6 +716,8 @@ async function start(): Promise<void> {
     failureText: () => t('account.browserFailed'),
     cloud: cloudOn,
     changed: (status) => {
+      agentHost.pushAccount(activeAccountId())
+      artifactsAccountChanged?.()
       broadcast('account:changed', status)
       sharingKettuChanged?.()
       accountChanged()
@@ -722,6 +726,10 @@ async function start(): Promise<void> {
     log: createLogger('account'),
   })
   const signedIn = (): boolean => account.status().state === 'signed-in'
+  /** The active Kettu account id scoping artifact ownership and isolation, or null. */
+  function activeAccountId(): string | null {
+    return cloudOn() ? (account.signedIn()?.id ?? null) : null
+  }
   /** The account the Marketplace tools publish with: a sign-in with Kettu's services on. */
   function marketAccount(): MarketAccount | null {
     const status = account.status()
@@ -1041,6 +1049,7 @@ async function start(): Promise<void> {
     },
   })
   await artifacts.install(session.defaultSession)
+  artifactsAccountChanged = () => artifacts.accountChanged()
   // The window's page only: the menu bar panel's shows no media.
   serveMedia(session.defaultSession, mediaGrants, (url) => rendererPage(url) === 'index', hostMedia)
   // A session of its own, so publishing follows the proxy setting rather than the artifacts'
@@ -1053,6 +1062,7 @@ async function start(): Promise<void> {
     host: {
       content: (id, version) => agentHost.artifactContent(id, version),
       artifacts: () => agentHost.artifacts(),
+      claimOwner: (id, accountId) => agentHost.claimArtifactOwner(id, accountId),
     },
     kettu: {
       base: accountBase,
@@ -1306,6 +1316,8 @@ async function start(): Promise<void> {
       remoteHost.accountChanged()
       remoteHost.relayChanged()
       remoteHost.directChanged()
+      agentHost.pushAccount(activeAccountId())
+      artifacts.accountChanged()
       sharing.kettuChanged()
       remoteChanged()
       void remoteOffers.check()

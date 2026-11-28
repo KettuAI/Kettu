@@ -267,10 +267,12 @@ export class Hosts {
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
         userAgent: daemonUserAgent(options.version, process.platform, process.arch),
+        accountId: options.accountId?.() ?? null,
       }),
       startMessages: () => [
         { type: 'host:market-keys', ...options.marketKeys() },
         { type: 'host:market-account', account: options.marketAccount() },
+        { type: 'host:account', accountId: options.accountId?.() ?? null },
       ],
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -518,11 +520,13 @@ export class Hosts {
     return this.account
   }
 
-  /** The daemon signed in to another account, or out: the remote host hears it. */
+  /** The daemon signed in to another account, or out: the remote and agent hosts hear it. */
   accountChanged(): void {
     const account = this.options.accountId?.() ?? null
     if (account === this.account) return
-    if (this.remote.post({ type: 'remote-host:account', account })) this.account = account
+    this.account = account
+    this.agent.post({ type: 'host:account', accountId: account })
+    this.remote.post({ type: 'remote-host:account', account })
   }
 
   /**

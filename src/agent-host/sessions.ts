@@ -639,6 +639,8 @@ export interface SessionManagerDeps {
   portDevice?(portId: string): PortDevice | null
   /** Where threads are stored; without it every session opens through its agent. */
   threads: ThreadStore | null
+  /** Active Kettu account id for filtering account-owned artifacts out of session outputs. */
+  artifactAccount?(): string | null
   /**
    * The text of a file a session's agent keeps for it, read only from that session's own folder;
    * null when it cannot be read. Without it no such file is read.
@@ -4294,7 +4296,7 @@ export class SessionManager {
     }
     if (!store || !record.acpSessionId) return none
     try {
-      const stored = await store.outputs(record.id)
+      const stored = await store.outputs(record.id, this.deps.artifactAccount?.() ?? null)
       if (!stored || !this.isCurrent(record, stored.head)) return none
       return { ...stored.outputs, turnStartedAt: none.turnStartedAt }
     } catch (error) {

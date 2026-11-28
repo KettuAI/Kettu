@@ -2925,6 +2925,7 @@ export function createValidators(platform: Platform): Validators {
       const deleted = optionalFlag(o, 'deleted')
       return deleted === undefined ? {} : { deleted }
     },
+    'artifacts.hidden': none,
     'artifacts.read': (params) => {
       const o = fields(params)
       return {

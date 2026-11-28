@@ -326,6 +326,11 @@ export class LiveCanvases {
   async flushAll(): Promise<void> {
     await Promise.all([...this.live.keys()].map((id) => this.flush(id)))
   }
+
+  /** Drops every live canvas from memory without writing (e.g. after switching accounts). */
+  dropAll(): void {
+    for (const id of [...this.live.keys()]) this.drop(id)
+  }
 }
 
 /** The frames the operations change or remove, those on a removed canvas sheet included. */

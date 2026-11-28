@@ -98,6 +98,14 @@ describe('the artifact protocol', () => {
     expect((await get('kettu-artifact://ffffffffffffffffffffffffff/')).status).toBe(404)
     expect((await respond(new Request(`${ORIGIN}/`, { method: 'POST' }), source)).status).toBe(405)
   })
+
+  it('answers 404 on a previously opened origin once the artifact is hidden under another account', async () => {
+    expect((await get(`${ORIGIN}/_kettu/v/2/index.html`)).status).toBe(200)
+    // Simulate switching to another account: content cache cleared and host reports not_found.
+    source.content = async () => ({ kind: 'not_found' })
+    expect((await get(`${ORIGIN}/_kettu/v/2/index.html`)).status).toBe(404)
+    expect((await get(`${ORIGIN}/styles/app.css`)).status).toBe(404)
+  })
 })
 
 const post = (body: string, url = `${ORIGIN}/_kettu/v1`) =>
