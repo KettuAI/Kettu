@@ -845,6 +845,40 @@ describe('createValidators', () => {
     rejects(() => switchAgent({ agentId: 'codex', content }))
   })
 
+  it('checks manual task delegation requests', () => {
+    const delegateAgents = posix['sessions.delegateAgents']
+    expect(delegateAgents({ sessionId: 's', extra: 1 })).toEqual({ sessionId: 's' })
+    rejects(() => delegateAgents({}))
+
+    const delegate = posix['sessions.delegate']
+    const content = [{ type: 'text', text: 'Run the test suite' }]
+    expect(delegate({ sessionId: 's', agentId: 'codex', content, extra: 1 })).toEqual({
+      sessionId: 's',
+      agentId: 'codex',
+      content,
+    })
+    expect(
+      delegate({
+        sessionId: 's',
+        agentId: 'codex',
+        content,
+        mode: 'workspace-write',
+        title: 'Test run',
+      }),
+    ).toEqual({
+      sessionId: 's',
+      agentId: 'codex',
+      content,
+      mode: 'workspace-write',
+      title: 'Test run',
+    })
+    rejects(() => delegate({ sessionId: 's', agentId: 'unknown', content }))
+    rejects(() => delegate({ sessionId: 's', agentId: 'codex' }))
+    rejects(() => delegate({ sessionId: 's', agentId: 'codex', content, title: '   ' }))
+    rejects(() => delegate({ sessionId: 's', agentId: 'codex', content, mode: '' }))
+    rejects(() => delegate({ agentId: 'codex', content }))
+  })
+
   it('checks the file requests', () => {
     expect(posix['files.list']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
     rejects(() => posix['files.list']({ projectPath: 'p' }))

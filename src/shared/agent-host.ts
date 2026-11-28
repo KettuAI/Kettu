@@ -1060,6 +1060,41 @@ export interface LightAgent {
   name: string
 }
 
+/** Availability status of a delegation target agent on this host, matching `list_agents`. */
+export type DelegateAgentStatus = 'ready' | 'needs_sign_in' | 'installing' | 'failed'
+
+/** Why a session cannot manually delegate tasks to another agent. */
+export type DelegateUnavailableReason =
+  'not_user_session' | 'nested_session' | 'archived' | 'project_archived'
+
+/** A permission mode a delegated child session can start in under #2727 rules. */
+export interface DelegateModeOption {
+  id: string
+  name: string
+  description: string
+}
+
+/** An agent on the session's host that the user can manually delegate a task to. */
+export interface DelegateTargetAgent {
+  id: AgentId
+  name: string
+  harnessId: HarnessId
+  harnessName: string
+  isCurrent: boolean
+  status: DelegateAgentStatus
+  /** Permission modes allowed by #2727 for this parent session; empty for unranked harnesses. */
+  modes: DelegateModeOption[]
+  /** Default mode the delegated child inherits under #2727; null for unranked harnesses. */
+  inheritedMode: { id: string; name: string } | null
+}
+
+/** Available delegation targets and eligibility for a parent session on this host. */
+export interface DelegateAgentsResult {
+  canDelegate: boolean
+  reason?: DelegateUnavailableReason
+  agents: DelegateTargetAgent[]
+}
+
 /**
  * The tool call a session's main thread runs now, as its summary carries it: the latest one to
  * start of those still running. It changes when a call starts or ends, not with its output.
@@ -1905,6 +1940,24 @@ export interface HostContract {
     }
     result: void
   }
+  // Lists agents on this host that the user can manually delegate a task to from `sessionId`,
+  // along with each target's #2727 effective permission mode and ceiling.
+  'sessions.delegateAgents': {
+    params: { sessionId: string }
+    result: DelegateAgentsResult
+  }
+  // Spawns a delegated child session directly for `agentId` under `sessionId` in the same host
+  // and project, enforcing #2727 permission inheritance and reporting completion or failure back.
+  'sessions.delegate': {
+    params: {
+      sessionId: string
+      agentId: AgentId
+      content: UserContent[]
+      mode?: string
+      title?: string
+    }
+    result: SessionSummary
+  }
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.contextEstimates': { params: { sessionId: string }; result: ContextEstimates | null }
   'sessions.queue': {
@@ -2619,6 +2672,8 @@ export const HOST_METHODS = [
   'worktrees.skipSetup',
   'worktrees.setupLog',
   'sessions.switchAgent',
+  'sessions.delegateAgents',
+  'sessions.delegate',
   'sessions.context',
   'sessions.contextEstimates',
   'sessions.queue',

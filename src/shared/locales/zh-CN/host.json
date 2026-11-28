@@ -25,6 +25,14 @@
       "cannotAnswer": "{{agent}} 不能替别的会话回答侧聊",
       "noAnswer": "{{agent}} 没有答上这个问题"
     },
+    "delegate": {
+      "notUserSession": "只有普通用户会话才能把任务委派给其他智能体",
+      "nestedSession": "子会话不能再次把任务委派给其他智能体",
+      "agentUnavailable": "当前主机无法将任务委派给 {{agent}}",
+      "modeUnsupported": "{{agent}} 在这里不支持单独选择权限模式",
+      "modeInvalid": "{{agent}} 没有可用的权限模式 {{mode}}",
+      "emptyPrompt": "请先填写要委派的任务内容"
+    },
     "cannotLoad": "{{agent}} 不支持加载或恢复会话",
     "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",
     "cannotFork": "{{agent}} 不支持复制会话",

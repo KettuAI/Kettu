@@ -5,18 +5,25 @@ import {
   type BrowserElementAnnotation,
 } from '@shared/browser'
 import { PLUGIN_REF_LIMITS, type PluginMentionRef } from '@shared/plugin-refs'
-import { isAttachment, type Attachment } from '@shared/thread'
+import { isAgentId, isAttachment, type AgentId, type Attachment } from '@shared/thread'
 import { removeKey } from '@renderer/lib/storage'
 
 // Unsent composer text, attachments, attached artifact references, browser element references,
-// passage comments and the items mentioned from plugins per session, in localStorage under
-// `draft:<sessionId>` as JSON `{ text, attachments, comments, mentions, artifacts, browserAnnotations }`,
-// written 300 ms after the last change. One stored as plain text, before drafts had attachments,
-// reads as text alone, and older drafts default missing arrays to empty. A draft that is too large
-// or fails to save stays in memory.
+// passage comments, delegated agent recipient, and the items mentioned from plugins per session,
+// in localStorage under `draft:<sessionId>` as JSON, written 300 ms after the last change.
+// One stored as plain text, before drafts had attachments, reads as text alone, and older drafts
+// default missing fields to empty/null. A draft that is too large or fails to save stays in memory.
 
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
+
+/** Selected target agent for manually delegating the composer's task into a child session. */
+export interface DelegateTarget {
+  agentId: AgentId
+  name: string
+  /** Another host that owns the agent; omitted for this computer. */
+  hostId?: string
+}
 
 /** The artifact kind badge shown on an attached artifact chip and reference block. */
 export type AttachedArtifactKind = 'document' | 'slides' | 'web' | 'canvas'
@@ -61,6 +68,7 @@ interface Draft {
   mentions: PluginMentionRef[]
   artifacts: AttachedArtifact[]
   browserAnnotations: BrowserElementAnnotation[]
+  delegateTarget: DelegateTarget | null
 }
 
 const WRITE_DELAY_MS = 300
@@ -78,6 +86,7 @@ const EMPTY: Draft = {
   mentions: [],
   artifacts: [],
   browserAnnotations: [],
+  delegateTarget: null,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -134,6 +143,16 @@ function isAttachedArtifact(value: unknown): value is AttachedArtifact {
   )
 }
 
+function isDelegateTarget(value: unknown): value is DelegateTarget {
+  return (
+    isRecord(value) &&
+    isAgentId(value.agentId) &&
+    typeof value.name === 'string' &&
+    value.name.trim().length > 0 &&
+    (value.hostId === undefined || typeof value.hostId === 'string')
+  )
+}
+
 /** A stored draft; one stored as plain text, or that is not a draft's JSON, is text alone. */
 export function parseDraft(raw: string): Draft {
   if (raw.startsWith('{')) {
@@ -164,6 +183,7 @@ export function parseDraft(raw: string): Draft {
               })
               .slice(0, MAX_BROWSER_ANNOTATIONS)
           : []
+        const delegateTarget = isDelegateTarget(value.delegateTarget) ? value.delegateTarget : null
         return {
           text: value.text,
           attachments: value.attachments.filter(isSaved),
@@ -171,6 +191,7 @@ export function parseDraft(raw: string): Draft {
           mentions,
           artifacts,
           browserAnnotations,
+          delegateTarget,
         }
       }
     } catch {
@@ -184,6 +205,7 @@ export function parseDraft(raw: string): Draft {
     mentions: [],
     artifacts: [],
     browserAnnotations: [],
+    delegateTarget: null,
   }
 }
 
@@ -220,6 +242,10 @@ export function readDraftArtifacts(sessionId: string): AttachedArtifact[] {
 
 export function readDraftBrowserAnnotations(sessionId: string): BrowserElementAnnotation[] {
   return read(sessionId).browserAnnotations
+}
+
+export function readDraftDelegateTarget(sessionId: string): DelegateTarget | null {
+  return read(sessionId).delegateTarget
 }
 
 /**
@@ -277,6 +303,13 @@ export function writeDraftBrowserAnnotations(
   write(sessionId, { ...read(sessionId), browserAnnotations })
 }
 
+export function writeDraftDelegateTarget(
+  sessionId: string,
+  delegateTarget: DelegateTarget | null,
+): void {
+  write(sessionId, { ...read(sessionId), delegateTarget })
+}
+
 /** Writes a pending draft now, for example when the composer unmounts. */
 export function flushDraft(sessionId: string): void {
   const timer = timers.get(sessionId)
@@ -289,7 +322,8 @@ export function flushDraft(sessionId: string): void {
     draft.attachments.length === 0 &&
     draft.comments.length === 0 &&
     draft.artifacts.length === 0 &&
-    draft.browserAnnotations.length === 0
+    draft.browserAnnotations.length === 0 &&
+    draft.delegateTarget === null
   ) {
     removeKey(key(sessionId))
     memory.delete(sessionId)

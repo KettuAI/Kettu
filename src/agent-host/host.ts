@@ -5292,6 +5292,15 @@ export class AgentHost {
         this.shareSurfaces(params.sessionId, params.content)
         return sessions.switchAgent(params, portId, fromDevice(device))
       },
+      'sessions.delegateAgents': ({ sessionId }) =>
+        sessions.delegateAgents(sessionId, this.agents.statuses(), (agentId, callerId) =>
+          this.agents.defaultMode(agentId, sessions.workFolder(callerId)),
+        ),
+      'sessions.delegate': async (params, { device }) => {
+        const summary = await sessions.delegate(params, this.agents.statuses(), fromDevice(device))
+        this.shareSurfaces(summary.id, params.content)
+        return summary
+      },
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
       'sessions.queue': ({ sessionId, content, comments }, { portId, device }) => {

@@ -14,6 +14,9 @@ import {
   type AgentStatus,
   type AttachmentBytes,
   type ContextBreakdown,
+  type DelegateAgentsResult,
+  type DelegateTargetAgent,
+  type DelegateUnavailableReason,
   type ImportableSession,
   type ConversationHit,
   type LastTurn,
@@ -280,6 +283,7 @@ import { missedCache, type IdleRelease } from './idle-release'
 import { isSleepToolEntry } from './interruptible-wait'
 import {
   reportText,
+  toolAgentStatus,
   type ToolChoices,
   type ToolDelivery,
   type ToolMode,
@@ -13628,15 +13632,29 @@ export class SessionManager {
    */
   starterRank(sessionId: string): ModeRank | null {
     const record = this.recordOf(sessionId)
-    const harness = harnessOf(record.agentId)
     const config = this.live.get(sessionId)?.thread.session.config ?? []
-    const optionId = modeOptionId(record.agentId)
+    return this.starterRankFromConfig(record.agentId, config)
+  }
+
+  private starterRankFromConfig(
+    agentId: AgentId,
+    config: readonly ConfigOption[],
+  ): ModeRank | null {
+    const harness = harnessOf(agentId)
+    const optionId = modeOptionId(agentId)
     const mode = config.find((option) => option.id === optionId)?.value
     // Codex plans in its collaboration mode, beside its permission mode.
     const planning =
       harness === 'codex' &&
       config.some((option) => option.id === CODEX_COLLABORATION_ID && option.value === 'plan')
     return starterRank(harness, typeof mode === 'string' ? mode : undefined, planning)
+  }
+
+  /** Reads `starterRank` from memory when live, or from the stored thread when closed. */
+  private async resolvedStarterRank(sessionId: string): Promise<ModeRank | null> {
+    const record = this.recordOf(sessionId)
+    const config = await this.toolConfig(record)
+    return this.starterRankFromConfig(record.agentId, config)
   }
 
   /**
@@ -13991,6 +14009,193 @@ export class SessionManager {
       live.used = true
     }
     return summary.id
+  }
+
+  /**
+   * Why a session cannot manually delegate tasks to another agent, or null when allowed.
+   * Mirrors `start_session` nesting and archive boundaries: only non-archived top-level user
+   * sessions can spawn delegated child sessions.
+   */
+  private delegateUnavailableReason(record: SessionRecord): DelegateUnavailableReason | null {
+    if (record.origin !== 'user') return 'not_user_session'
+    if (record.startedBy !== undefined || record.parentId !== null) return 'nested_session'
+    if (this.isArchived(record)) return 'archived'
+    if (this.isProjectArchived(record)) return 'project_archived'
+    return null
+  }
+
+  /**
+   * Lists agents on this host available for manual task delegation from `sessionId`, together with
+   * each target agent's #2727 permission ceiling and inherited default mode.
+   */
+  async delegateAgents(
+    sessionId: string,
+    agentStatuses: readonly AgentStatus[],
+    defaultModeOf?: (agentId: AgentId, callerId: string) => Promise<string | null>,
+  ): Promise<DelegateAgentsResult> {
+    const record = this.recordOf(sessionId)
+    if (this.live.get(sessionId)?.prepared) throw notFound(t('session.notFound'))
+    const reason = this.delegateUnavailableReason(record)
+    if (reason !== null) return { canDelegate: false, reason, agents: [] }
+
+    const scope = this.inheritanceScope(sessionId, {
+      projectPath: record.projectPath,
+      hostId: this.hostId,
+    })
+    const starter = await this.resolvedStarterRank(sessionId)
+    const listed = agentStatuses.flatMap((status) => {
+      const state = toolAgentStatus(status)
+      return state && state !== 'not_installed' ? [{ status, state }] : []
+    })
+
+    const agents: DelegateTargetAgent[] = await Promise.all(
+      listed.map(async ({ status, state }) => {
+        const harness = harnessOf(status.id)
+        if (!isRanked(harness)) {
+          return {
+            id: status.id,
+            name: status.name,
+            harnessId: status.harnessId,
+            harnessName: status.harnessName,
+            isCurrent: status.id === record.agentId,
+            status: state,
+            modes: [],
+            inheritedMode: null,
+          }
+        }
+        const allowFullAccess = this.allowsAgentFullAccess(status.id)
+        let ceiling: ModeRank
+        let defaultId: string
+        if (scope === 'same-scope' && starter !== null) {
+          ceiling = startedCeiling(starter, harness, null, scope)
+          defaultId = inheritedMode(harness, ceiling, { allowFullAccess })
+        } else {
+          const configured =
+            startModeIn(this.deps.settings(), status.id) ??
+            (await defaultModeOf?.(status.id, sessionId)) ??
+            defaultMode(harness)
+          ceiling = startedCeiling(starter, harness, configured, scope)
+          defaultId = startedMode(harness, configured, ceiling, { allowFullAccess })
+        }
+        const allowed = startableModes(harness, ceiling, { allowFullAccess })
+        const modes = allowed.map((id) => ({ id, ...modeLabel(harness, id) }))
+        return {
+          id: status.id,
+          name: status.name,
+          harnessId: status.harnessId,
+          harnessName: status.harnessName,
+          isCurrent: status.id === record.agentId,
+          status: state,
+          modes,
+          inheritedMode: { id: defaultId, name: modeLabel(harness, defaultId).name },
+        }
+      }),
+    )
+
+    return { canDelegate: true, agents }
+  }
+
+  /**
+   * Manually delegates a user-authored task from `params.sessionId` directly to `params.agentId`
+   * in a child session on the same host and project. Enforces #2727 server-authoritative permission
+   * inheritance and reports completion or failure back to the parent session.
+   */
+  async delegate(
+    params: {
+      sessionId: string
+      agentId: AgentId
+      content: UserContent[]
+      mode?: string
+      title?: string
+    },
+    agentStatuses: readonly AgentStatus[],
+    device?: FromDevice,
+  ): Promise<SessionSummary> {
+    const parent = this.recordOf(params.sessionId)
+    if (this.live.get(params.sessionId)?.prepared) throw notFound(t('session.notFound'))
+    const reason = this.delegateUnavailableReason(parent)
+    if (reason === 'not_user_session') {
+      throw new HostError('restricted', t('session.delegate.notUserSession'))
+    }
+    if (reason === 'nested_session') {
+      throw new HostError('restricted', t('session.delegate.nestedSession'))
+    }
+    if (reason === 'archived') {
+      throw new HostError('restricted', t('session.archived'))
+    }
+    if (reason === 'project_archived') {
+      throw new HostError('restricted', t('session.projectArchived'))
+    }
+
+    const targetStatus = agentStatuses.find((status) => status.id === params.agentId)
+    const targetState = targetStatus ? toolAgentStatus(targetStatus) : null
+    if (!targetStatus || !targetState) {
+      throw invalidParams(t('session.delegate.agentUnavailable', { agent: params.agentId }))
+    }
+    if (targetState === 'not_installed') {
+      throw new HostError('restricted', t('agent.notInstalled', { agent: targetStatus.name }))
+    }
+    if (targetState === 'installing') {
+      throw new HostError('busy', t('agent.busyInstalling', { agent: targetStatus.name }))
+    }
+
+    if (params.mode !== undefined) {
+      const harness = harnessOf(params.agentId)
+      if (!isRanked(harness)) {
+        throw invalidParams(t('session.delegate.modeUnsupported', { agent: targetStatus.name }))
+      }
+      if (!startableModes(harness, FULL_ACCESS_RANK).includes(params.mode)) {
+        throw invalidParams(
+          t('session.delegate.modeInvalid', { agent: targetStatus.name, mode: params.mode }),
+        )
+      }
+    }
+
+    const hasContent = params.content.some((item) =>
+      item.type === 'text' ? item.text.trim().length > 0 : true,
+    )
+    if (!hasContent) {
+      throw invalidParams(t('session.delegate.emptyPrompt'))
+    }
+
+    // Revive a closed parent into memory (without starting its agent) so `starterRank` reads its
+    // real persisted config and `session_started` is emitted cleanly into its thread.
+    const parentLive = this.live.get(params.sessionId) ?? (await this.revive(params.sessionId))
+    // User-initiated delegation resets report pausing so the child's result always returns.
+    this.reportsSent.delete(params.sessionId)
+
+    const options = {
+      ...this.carriedOptions(params.sessionId, params.agentId),
+      ...this.startModeOf(params.agentId),
+    }
+    const from: FromSession = {
+      sessionId: params.sessionId,
+      title: this.toolName(params.sessionId),
+    }
+    const summary = await this.create({
+      agentId: params.agentId,
+      projectPath: parent.projectPath,
+      parentId: params.sessionId,
+      options,
+      prompt: params.content,
+      startedBy: params.sessionId,
+      startedMode: {
+        starter: this.starterRank(params.sessionId),
+        wanted: params.mode ?? null,
+      },
+      parentHostId: this.hostId,
+      targetHostId: this.hostId,
+      from,
+      ...(device ? { device } : {}),
+      ...(params.title === undefined ? {} : { title: params.title }),
+    })
+    this.emit(parentLive, [
+      startedPatch(parentLive.thread, summary.id, () => this.nextId(parentLive)),
+    ])
+    parentLive.used = true
+    this.persist(parentLive)
+    this.touch(parentLive.id)
+    return summary
   }
 
   /**

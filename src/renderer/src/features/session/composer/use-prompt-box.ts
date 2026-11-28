@@ -38,6 +38,14 @@ import {
   useDraftBrowserAnnotations,
 } from './browser-annotations'
 import {
+  draftDelegateTarget,
+  hydrateDraftDelegateTarget,
+  restoreDraftDelegateTarget,
+  setDraftDelegateTarget,
+  useDraftDelegateTarget,
+  type DelegateTarget,
+} from './delegation'
+import {
   attachBrowserPage,
   attachFiles,
   attachImages,
@@ -67,6 +75,7 @@ export interface Taken {
   mentions: readonly PluginMentionRef[]
   artifacts: readonly AttachedArtifact[]
   browserAnnotations: readonly BrowserElementAnnotation[]
+  delegateTarget: DelegateTarget | null
 }
 
 export type PromptBoxState = ReturnType<typeof usePromptBox>
@@ -162,12 +171,14 @@ export function usePromptBox({
     hydrateDraftMentions(draft)
     hydrateDraftArtifactAttachments(draft)
     hydrateDraftBrowserAnnotations(draft)
+    hydrateDraftDelegateTarget(draft)
     return new BoxText(readDraft(draft))
   })
   const [error, setError] = useState<string | null>(null)
   // Each Mod+Shift+A for this composer asks the plus menu to open once more.
   const [addRequest, setAddRequest] = useState(0)
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false)
+  const [delegatePickerOpen, setDelegatePickerOpen] = useState(false)
   const editor = useRef<ComposerEditorHandle>(null)
   const {
     position: historyPosition,
@@ -197,6 +208,7 @@ export function usePromptBox({
   const attachments = useAttachmentsStore(selectDraft(draft))
   const artifacts = useDraftArtifactAttachments(draft)
   const browserAnnotations = useDraftBrowserAnnotations(draft)
+  const delegateTarget = useDraftDelegateTarget(draft)
 
   useEffect(() => () => flushDraft(draft), [draft])
 
@@ -370,6 +382,7 @@ export function usePromptBox({
     const mentions = draftMentions(draft)
     const attachedArtifacts = draftArtifactAttachments(draft)
     const annotations = draftBrowserAnnotations(draft)
+    const delegate = draftDelegateTarget(draft)
     editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
     source.set('', null)
@@ -378,6 +391,7 @@ export function usePromptBox({
     setDraftMentions(draft, [])
     setDraftArtifactAttachments(draft, [])
     setDraftBrowserAnnotations(draft, [])
+    setDraftDelegateTarget(draft, null)
     setError(null)
     return {
       prompt,
@@ -385,6 +399,7 @@ export function usePromptBox({
       mentions,
       artifacts: attachedArtifacts,
       browserAnnotations: annotations,
+      delegateTarget: delegate,
     }
   }
   /** A failed send's handler: its error, and its message back in the draft above what is there. */
@@ -395,6 +410,7 @@ export function usePromptBox({
       mentions,
       artifacts: attachedArtifacts,
       browserAnnotations: annotations,
+      delegateTarget: delegate,
     }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
@@ -402,6 +418,7 @@ export function usePromptBox({
       restoreDraftMentions(draft, mentions)
       restoreDraftArtifactAttachments(draft, attachedArtifacts)
       restoreDraftBrowserAnnotations(draft, annotations)
+      restoreDraftDelegateTarget(draft, delegate)
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {
@@ -437,6 +454,12 @@ export function usePromptBox({
     setArtifactPickerOpen(true)
   }
 
+  const openDelegatePicker = () => {
+    if (disabled || !sessionId) return
+    onActivity?.()
+    setDelegatePickerOpen(true)
+  }
+
   return {
     draft,
     sessionId,
@@ -448,9 +471,13 @@ export function usePromptBox({
     attachments,
     artifacts,
     browserAnnotations,
+    delegateTarget,
     artifactPickerOpen,
     setArtifactPickerOpen,
     openArtifactPicker,
+    delegatePickerOpen,
+    setDelegatePickerOpen,
+    openDelegatePicker,
     error,
     setError,
     update,
