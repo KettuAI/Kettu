@@ -3404,6 +3404,15 @@ li[data-row-exit='dust'] > * {
   font-size: calc(var(--thread-prose-size) * var(--prose-scale));
   line-height: var(--text-prose--line-height);
 }
+/* Code size's preview: monospace code at the selected code size and line height. */
+:is(.kettu-settings, .kettu-sd) .k-inset.k-code-preview {
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--code-size);
+  font-variant-ligatures: none;
+  line-height: var(--code-line-height);
+  white-space: pre;
+}
 :is(.kettu-settings, .kettu-sd) .k-block .k-inset {
   margin: 0;
 }
@@ -4231,8 +4240,8 @@ li[data-row-exit='dust'] > * {
   line-height: var(--text-prose--line-height);
 }
 :is(.kettu-settings, .kettu-sd) .k-font-preview__line--code .k-font-preview__sample {
-  font-size: 12.5px;
-  line-height: 20px;
+  font-size: calc(12.5px + var(--code-size-offset));
+  line-height: calc(20px + var(--code-line-height-offset));
 }
 @media (max-width: 719px) {
   :is(.kettu-settings, .kettu-sd) .k-font-pair {
@@ -8561,7 +8570,7 @@ button.kettu-ctx__part-row:focus-visible {
   border: 0;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px + var(--code-size-offset));
   font-variant-ligatures: none;
   line-height: 1.75;
   color: var(--ink);

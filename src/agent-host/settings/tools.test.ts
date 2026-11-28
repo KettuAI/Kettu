@@ -151,6 +151,23 @@ describe('find_settings', () => {
     expect(file().appearance.appIcon).toBe('paper-sheets')
   })
 
+  it('finds and updates appearance.code-size in English and Chinese without changing textSize', async () => {
+    const { tools, file } = harness({ fullAccess: true })
+    const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'code font size' })
+    expect(text(en)).toContain('appearance.code-size')
+    expect(text(en)).toContain('value: Default')
+
+    setLocale('zh-CN')
+    const zh = await tools.call(CALLER, FIND_SETTINGS, { query: '代码字号' })
+    expect(text(zh)).toContain('appearance.code-size')
+    expect(text(zh)).toContain('代码字号 (Code size)')
+
+    const updated = await change(tools, [{ id: 'appearance.code-size', value: 'large' }])
+    expect(updated.isError).toBeUndefined()
+    expect(file().appearance.codeSize).toBe('large')
+    expect(file().appearance.textSize).toBe('default')
+  })
+
   it('finds and updates appearance.conversation-width in English and Chinese', async () => {
     const { tools, file } = harness({ fullAccess: true })
     const en = await tools.call(CALLER, FIND_SETTINGS, { query: 'conversation width' })

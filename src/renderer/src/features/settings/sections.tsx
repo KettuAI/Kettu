@@ -20,6 +20,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
+  CODE_SIZES,
   DEFAULT_SETTINGS,
   NEW_SESSION_LISTS,
   RUNNING_SENDS,
@@ -646,6 +647,36 @@ export function TextSize({ label }: { label: ReactNode }) {
           components={{ code: <code data-streamdown="inline-code" /> }}
         />
       </p>
+    </>
+  )
+}
+
+/** The row draws its own line, then a short code snippet at the chosen size under it. */
+export function CodeSize({ label }: { label: ReactNode }) {
+  const { t } = useTranslation('settings')
+  const value = useSettings().appearance.codeSize
+  const [apply, error] = useApply()
+  return (
+    <>
+      <div className="ui-sg-row">
+        {label}
+        <ControlError error={error} />
+        <Segmented
+          label={t('appearance.codeSize.name')}
+          value={value}
+          options={CODE_SIZES.map((size) => ({
+            value: size,
+            label: t(`appearance.codeSize.${size}`),
+          }))}
+          onChange={(v) => apply({ appearance: { codeSize: v } })}
+        />
+      </div>
+      <span aria-hidden className="k-preview-label">
+        {t('appearance.codeSize.previewLabel')}
+      </span>
+      <pre aria-hidden className="k-inset k-code-preview" data-testid="code-size-preview">
+        <code>{t('appearance.codeSize.preview')}</code>
+      </pre>
     </>
   )
 }

@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   isFontFamilyName,
   USER_FONT_ROLES,
+  type CodeSize,
   type ConversationWidth,
   type SettingsFile,
   type UserFonts,
@@ -31,17 +32,24 @@ export function applyUserFonts(root: HTMLElement, fonts: UserFonts): void {
   }
 }
 
+/** Applies the selected code font size preset onto `:root`. */
+export function applyCodeSize(root: HTMLElement, size: CodeSize): void {
+  root.dataset.codeSize = size
+}
+
 /** Applies the selected conversation width preset onto `:root`. */
 export function applyConversationWidth(root: HTMLElement, width: ConversationWidth): void {
   root.dataset.conversationWidth = width
 }
 
-function applyAppearance(settings: SettingsFile, fade = false): void {
+export function applyAppearance(settings: SettingsFile, fade = false): void {
   const root = document.documentElement
-  const { theme, textSize, conversationWidth, reduceMotion, zoom, fonts } = settings.appearance
+  const { theme, textSize, codeSize, conversationWidth, reduceMotion, zoom, fonts } =
+    settings.appearance
   const dark = theme === 'dark' || (theme === 'system' && (darkQuery?.matches ?? false))
   showColorMode(dark ? 'dark' : 'light', fade)
   root.dataset.textSize = textSize
+  applyCodeSize(root, codeSize)
   applyConversationWidth(root, conversationWidth)
   root.dataset.reduceMotion = reduceMotion
   root.style.setProperty('--zoom', String(zoom))

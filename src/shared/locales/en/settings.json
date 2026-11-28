@@ -286,6 +286,16 @@
       "previewLabel": "Preview",
       "preview": "This is how replies and your messages read at this size. Inline code, like <code>settings.json</code>, looks like this."
     },
+    "codeSize": {
+      "name": "Code size",
+      "description": "Code blocks, inline code, the editor and diffs. Small and Large adjust by 1 px.",
+      "keywords": "code font size monospace editor diff block inline",
+      "small": "Small",
+      "default": "Default",
+      "large": "Large",
+      "previewLabel": "Preview",
+      "preview": "const size = settings.appearance.codeSize\nreturn formatCode(size, \"settings.json\")"
+    },
     "conversationWidth": {
       "name": "Conversation width",
       "description": "Default width for the thread and composer. Drag the side edges to adjust, or double-click a handle to reset to this preset.",

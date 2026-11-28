@@ -11,6 +11,7 @@ import {
 } from '@shared/remote/host-admin'
 import {
   DEFAULT_SETTINGS,
+  isCodeSize,
   isConversationWidth,
   normalizeAppIcon,
   readSidebarOrder,
@@ -213,6 +214,9 @@ function merge(settings: SettingsFile, patch: SettingsPatch): SettingsFile {
   next.appearance = {
     ...next.appearance,
     appIcon: normalizeAppIcon(next.appearance.appIcon) ?? DEFAULT_SETTINGS.appearance.appIcon,
+    codeSize: isCodeSize(next.appearance.codeSize)
+      ? next.appearance.codeSize
+      : DEFAULT_SETTINGS.appearance.codeSize,
     conversationWidth: isConversationWidth(next.appearance.conversationWidth)
       ? next.appearance.conversationWidth
       : DEFAULT_SETTINGS.appearance.conversationWidth,

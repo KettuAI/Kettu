@@ -61,12 +61,12 @@ const LANGUAGES = languages.map((description) =>
 
 // The search panel's rules match CodeMirror's own `.cm-panel.cm-search` so they win over it.
 const chrome = EditorView.theme({
-  '&': { height: '100%', fontSize: 'var(--text-code)' },
+  '&': { height: '100%', fontSize: 'var(--code-size)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'var(--font-mono)',
     fontVariantLigatures: 'none',
-    lineHeight: 'var(--text-code--line-height)',
+    lineHeight: 'var(--code-line-height)',
     overscrollBehavior: 'contain',
   },
   '.cm-content': { padding: '8px 0' },
@@ -145,7 +145,7 @@ const chrome = EditorView.theme({
     boxShadow: 'var(--menu-ring), var(--elevation-md)',
     overflow: 'hidden',
   },
-  '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: '12px' },
+  '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: 'var(--code-size)' },
   '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
     backgroundColor: 'var(--accent)',
     color: 'var(--accent-foreground)',
