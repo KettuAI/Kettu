@@ -71,6 +71,7 @@ import {
   RESUME_VERSION,
   STANDBY_FEATURE,
   TOOL_DIGESTS_FEATURE,
+  TOOL_OUTPUT_APPEND_FEATURE,
   type Addresses,
   type RelayMoved,
   type Closing,
@@ -961,6 +962,9 @@ class DeviceConnection {
       ...(hello.features?.includes(BROWSER_FEATURE) ? { browser: true as const } : {}),
       ...(hello.features?.includes(IMAGE_REFS_FEATURE) ? { imageRefs: true as const } : {}),
       ...(hello.features?.includes(TOOL_DIGESTS_FEATURE) ? { toolDigests: true as const } : {}),
+      ...(hello.features?.includes(TOOL_OUTPUT_APPEND_FEATURE)
+        ? { toolOutputAppend: true as const }
+        : {}),
     })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')
@@ -1522,6 +1526,7 @@ class DeviceSession {
       features: [
         BYTES_FEATURE,
         LOAD_FEATURE,
+        TOOL_OUTPUT_APPEND_FEATURE,
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
           ? [PUSH_FEATURE, WEB_PUSH_FEATURE]
           : []),

@@ -94,6 +94,7 @@ import {
   entryMessageId,
   harnessOf,
   retryableTurn,
+  stripToolOutputMeta,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -478,7 +479,11 @@ export const SESSION_TIMINGS: SessionTimings = {
 }
 
 export interface SessionEvents {
-  patches(batch: PatchBatch, portIds: readonly string[]): void
+  /**
+   * 向订阅端口广播合并后的补丁批次；当批次包含 `entry.appendOutput` 时，附带 `legacy` 工厂，
+   * 供未协商 `tool-output-append` 的旧设备按需降级为等价的 `entry.update` 批次。
+   */
+  patches(batch: PatchBatch, portIds: readonly string[], legacy?: () => PatchBatch): void
   /** To every port, or to `portIds` alone for a prepared session. */
   summary(summary: SessionSummary, portIds?: readonly string[]): void
   removed(sessionId: string, portIds?: readonly string[]): void
@@ -1345,6 +1350,9 @@ function isTurnOutputPatch(thread: ThreadState, patch: Patch): boolean {
   if (patch.op === 'entry.appendText' && patch.text !== '') {
     const kind = thread.byId[patch.id]?.kind
     return kind === 'agent' || kind === 'thought'
+  }
+  if (patch.op === 'entry.appendOutput' && patch.text !== '') {
+    return thread.byId[patch.id]?.kind === 'tool'
   }
   if (patch.op === 'entry.update') {
     const entry = thread.byId[patch.id]
@@ -3721,6 +3729,7 @@ export class SessionManager {
         live.emptyReplay = false
         break
       case 'entry.appendText':
+      case 'entry.appendOutput':
       case 'entry.update':
         live.dirty.add(patch.id)
         break
@@ -3798,8 +3807,32 @@ export class SessionManager {
     live.lastFlushAt = this.now()
     const ports = this.watchers.get(live.id)
     if (ports && ports.size > 0) {
-      this.deps.events.patches({ sessionId: live.id, seq: live.seq, patches }, [...ports])
+      const batch: PatchBatch = { sessionId: live.id, seq: live.seq, patches }
+      let cachedLegacy: PatchBatch | null = null
+      const legacy = patches.some((patch) => patch.op === 'entry.appendOutput')
+        ? () => (cachedLegacy ??= this.downgradeOutputPatches(live, batch))
+        : undefined
+      this.deps.events.patches(batch, [...ports], legacy)
     }
+  }
+
+  /** 将批次内的 `entry.appendOutput` 透明降级为当前完整内容的 `entry.update`，兼容未协商新能力的旧设备。 */
+  private downgradeOutputPatches(live: Live, batch: PatchBatch): PatchBatch {
+    const downgraded: Patch[] = []
+    for (const patch of batch.patches) {
+      if (patch.op !== 'entry.appendOutput') {
+        downgraded.push(patch)
+        continue
+      }
+      const entry = live.thread.byId[patch.id]
+      if (entry?.kind !== 'tool') continue
+      downgraded.push({
+        op: 'entry.update',
+        id: patch.id,
+        changes: { content: stripToolOutputMeta(entry.content) },
+      })
+    }
+    return { ...batch, patches: coalescePatches(downgraded) }
   }
 
   private nextId(live: Live, prefix = 'e'): string {

@@ -56,6 +56,8 @@ export interface PortDevice {
   imageRefs?: true
   /** The device's pages hold long tool outputs and inputs as digests (`TOOL_DIGESTS_FEATURE`). */
   toolDigests?: true
+  /** 设备支持增量命令输出补丁（`TOOL_OUTPUT_APPEND_FEATURE`）。 */
+  toolOutputAppend?: true
 }
 
 export async function deviceId(publicKey: Uint8Array): Promise<string> {
@@ -96,7 +98,10 @@ export function normalizeDeviceName(value: unknown): string | null {
 /** The device a port names, or null when the value does not name one. */
 export function parsePortDevice(value: unknown): PortDevice | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, name, browser, imageRefs, toolDigests } = value as Record<string, unknown>
+  const { id, name, browser, imageRefs, toolDigests, toolOutputAppend } = value as Record<
+    string,
+    unknown
+  >
   if (typeof id !== 'string' || !DEVICE_ID.test(id) || !isDeviceName(name)) return null
   return {
     id,
@@ -104,6 +109,7 @@ export function parsePortDevice(value: unknown): PortDevice | null {
     ...(browser === true ? { browser } : {}),
     ...(imageRefs === true ? { imageRefs } : {}),
     ...(toolDigests === true ? { toolDigests } : {}),
+    ...(toolOutputAppend === true ? { toolOutputAppend } : {}),
   }
 }
 

@@ -1402,7 +1402,15 @@ export interface ToolEntry {
 }
 
 export type ToolContent =
-  | { type: 'markdown'; markdown: string }
+  | {
+      type: 'markdown'
+      markdown: string
+      /**
+       * 流式命令输出增量拼接时记录原文本末尾是否带 `\n`（围栏代码块会剥离末尾单个换行），
+       * 避免多段 `entry.appendOutput` 拼接丢失换行；终态覆盖或向旧设备降级时会清除。
+       */
+      trailingNewline?: boolean
+    }
   | { type: 'diff'; path: string; oldText: string | null; newText: string }
   | { type: 'ref'; ref: ContentRef }
 
@@ -1560,6 +1568,7 @@ export type EntryChanges = Partial<DistributiveOmit<ThreadEntry, 'kind' | 'id'>>
 export type Patch =
   | { op: 'entry.add'; entry: ThreadEntry }
   | { op: 'entry.appendText'; id: string; text: string } // agent and thought markdown, compaction summary
+  | { op: 'entry.appendOutput'; id: string; text: string } // 流式命令输出的增量片段
   | { op: 'entry.update'; id: string; changes: EntryChanges }
   | { op: 'session.update'; changes: Partial<SessionView> }
   | { op: 'thread.reset' } // before a session/load replay
@@ -1805,6 +1814,16 @@ export function applyPatches(
         writableById()[patch.id] = appendText(entry, patch.text)
         break
       }
+      case 'entry.appendOutput': {
+        const entry = byId[patch.id]
+        if (!entry) {
+          if (partial) break
+          throw new UnknownEntryError(patch.id)
+        }
+        const next = appendToolOutput(entry, patch.text)
+        if (next !== entry) writableById()[patch.id] = next
+        break
+      }
       case 'entry.update': {
         const entry = byId[patch.id]
         if (!entry) {
@@ -1869,6 +1888,12 @@ export function applyPatchInPlace(state: ThreadState, patch: Patch): ThreadState
       state.byId[patch.id] = appendText(entry, patch.text)
       return state
     }
+    case 'entry.appendOutput': {
+      const entry = state.byId[patch.id]
+      if (!entry) throw new UnknownEntryError(patch.id)
+      state.byId[patch.id] = appendToolOutput(entry, patch.text)
+      return state
+    }
     case 'entry.update': {
       const entry = state.byId[patch.id]
       if (!entry) throw new UnknownEntryError(patch.id)
@@ -1886,6 +1911,85 @@ export function applyPatchInPlace(state: ThreadState, patch: Patch): ThreadState
       return state
     }
   }
+}
+
+/** 流式命令输出在线程中保留的最大字符数，超出后仅保留末尾窗口并在开头加省略行。 */
+export const TOOL_OUTPUT_LIMIT = 64 * 1024
+
+/** 按 64 KiB 滑窗截断命令输出文本，超长时在开头加 `…\n`。 */
+export function cutToolOutput(text: string): string {
+  return text.length > TOOL_OUTPUT_LIMIT
+    ? `…\n${text.slice(text.length - TOOL_OUTPUT_LIMIT)}`
+    : text
+}
+
+/** 将命令输出包装成围栏代码块，围栏反引号数严格大于正文内最长的连续反引号。 */
+export function fenceToolOutput(text: string): string {
+  let longest = 2
+  for (const match of text.matchAll(/^\s*(`{3,})/gm)) longest = Math.max(longest, match[1]!.length)
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}\n${text.replace(/\n$/, '')}\n${fence}`
+}
+
+/**
+ * 裁剪单条 `entry.appendOutput` 的增量文本：
+ * 若增量本身已超过 `TOOL_OUTPUT_LIMIT + 1`，仅保留末尾 `TOOL_OUTPUT_LIMIT + 1` 字符，
+ * 确保应用到任意已有输出后都会触发 64 KiB 截断并得到逐字节等价的末尾窗口。
+ */
+export function trimToolOutputDelta(text: string): string {
+  const cap = TOOL_OUTPUT_LIMIT + 1
+  return text.length > cap ? text.slice(text.length - cap) : text
+}
+
+/** 清除工具输出块上的内部拼接元数据（`trailingNewline`），用于向旧设备降级输出标准内容。 */
+export function stripToolOutputMeta(content: readonly ToolContent[]): ToolContent[] {
+  let changed = false
+  const cleaned = content.map((item) => {
+    if (item.type === 'markdown' && item.trailingNewline !== undefined) {
+      changed = true
+      return { type: 'markdown' as const, markdown: item.markdown }
+    }
+    return item
+  })
+  return changed ? cleaned : [...content]
+}
+
+/** 从围栏代码块还原原始正文；若不是完整围栏结构则原样返回。 */
+function unwrapFencedOutput(markdown: string): string {
+  const open = /^(`{3,})\n/.exec(markdown)
+  if (!open) return markdown
+  const fence = open[1]!
+  const suffix = `\n${fence}`
+  if (!markdown.endsWith(suffix) || markdown.length < open[0].length + suffix.length) {
+    return markdown
+  }
+  return markdown.slice(open[0].length, markdown.length - suffix.length)
+}
+
+/** 将增量命令输出片段追加到工具条目的最后一个 markdown 围栏块，维护 64 KiB 尾窗。 */
+export function appendToolOutput(entry: ThreadEntry, text: string): ThreadEntry {
+  if (entry.kind !== 'tool') {
+    throw new Error(`entry.appendOutput does not apply to ${entry.kind} entries`)
+  }
+  if (text === '') return entry
+  const last = entry.content[entry.content.length - 1]
+  if (last?.type === 'markdown') {
+    const prev = unwrapFencedOutput(last.markdown) + (last.trailingNewline ? '\n' : '')
+    const next = cutToolOutput(prev + text)
+    const item: ToolContent = {
+      type: 'markdown',
+      markdown: fenceToolOutput(next),
+      ...(next.endsWith('\n') ? { trailingNewline: true } : {}),
+    }
+    return { ...entry, content: [...entry.content.slice(0, -1), item] }
+  }
+  const next = cutToolOutput(text)
+  const item: ToolContent = {
+    type: 'markdown',
+    markdown: fenceToolOutput(next),
+    ...(next.endsWith('\n') ? { trailingNewline: true } : {}),
+  }
+  return { ...entry, content: [...entry.content, item] }
 }
 
 function appendText(entry: ThreadEntry, text: string): ThreadEntry {
@@ -2002,7 +2106,10 @@ function isToolContent(value: unknown): value is ToolContent {
   if (!isRecord(value)) return false
   switch (value.type) {
     case 'markdown':
-      return typeof value.markdown === 'string'
+      return (
+        typeof value.markdown === 'string' &&
+        (value.trailingNewline === undefined || typeof value.trailingNewline === 'boolean')
+      )
     case 'diff':
       return (
         typeof value.path === 'string' &&
@@ -2586,6 +2693,19 @@ export function coalescePatches(patches: readonly Patch[]): Patch[] {
             id: patch.id,
             text: last.text + patch.text,
           }
+        } else {
+          out.push(patch)
+        }
+        break
+      case 'entry.appendOutput':
+        open.delete(patch.id)
+        if (last?.op === 'entry.appendOutput' && last.id === patch.id) {
+          const combined = last.text + patch.text
+          // 合并后的增量超过两倍窗口时裁剪到末尾 `TOOL_OUTPUT_LIMIT + 1`，
+          // 既与逐条应用严格等价，又防止通道拥堵合批时内存无限增长。
+          const text =
+            combined.length > TOOL_OUTPUT_LIMIT * 2 ? trimToolOutputDelta(combined) : combined
+          out[out.length - 1] = { op: 'entry.appendOutput', id: patch.id, text }
         } else {
           out.push(patch)
         }
