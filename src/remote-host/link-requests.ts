@@ -5,8 +5,9 @@
 // uploads are sent, so the ids the host reads rise in the order they arrive and its count of what
 // it read stays true; one whose upload a dropped connection cut short goes again, upload and all.
 
+import { inflateRawSync } from 'node:zlib'
 import type { LogFn } from '../agent-host/storage'
-import { BYTES_PER_FRAME } from '@shared/remote/channel'
+import { BYTES_PER_FRAME, MAX_MESSAGE } from '@shared/remote/channel'
 import { bytesOf, findPlaces, isBinary, type Place } from '@shared/remote/places'
 import { MAX_UPLOAD_BYTES } from '@shared/remote/streams'
 import { portError } from '@shared/hosts-text'
@@ -50,13 +51,24 @@ interface Awaited {
   left: number
 }
 
-interface Download {
-  place: Place
-  size: number
-  received: number
-  chunks: Uint8Array[]
-  awaited: Awaited
-}
+type Download =
+  | {
+      kind: 'field'
+      place: Place
+      size: number
+      received: number
+      chunks: Uint8Array[]
+      awaited: Awaited
+    }
+  | {
+      /** 大响应整体通过字节流分块传回（支持可选 raw deflate 压缩）。 */
+      kind: 'response'
+      encoding?: 'deflate'
+      size: number
+      received: number
+      chunks: Uint8Array[]
+      awaited: Awaited
+    }
 
 export interface LinkRequestsOptions {
   toMain(message: unknown): void
@@ -146,6 +158,8 @@ export class LinkRequests {
       case 'response':
       case 'error':
         return this.answered(value)
+      case 'response.stream':
+        return this.streamedResponse(value)
       case 'stream.end':
         return this.ended(value.stream)
       case 'stream.cancel':
@@ -246,8 +260,47 @@ export class LinkRequests {
     for (const place of places) {
       const { $stream, size } = place.holder[place.key] as { $stream: number; size: number }
       awaited.streams.push($stream)
-      this.downloads.set($stream, { place, size, received: 0, chunks: [], awaited })
+      this.downloads.set($stream, { kind: 'field', place, size, received: 0, chunks: [], awaited })
     }
+  }
+
+  /** 注册一条大响应流：先于后续 bytes 帧到达，收齐后解压并还原为常规 response 交付主进程。 */
+  private streamedResponse(value: Record<string, unknown>): void {
+    const outgoing = typeof value.id === 'number' ? this.byWire.get(value.id) : undefined
+    if (!outgoing) return
+    this.byWire.delete(outgoing.wire!)
+    this.outgoing.delete(outgoing.id)
+    const { stream, size, encoding } = value
+    const validEncoding = encoding === undefined || encoding === 'deflate'
+    if (
+      typeof stream !== 'number' ||
+      !Number.isSafeInteger(stream) ||
+      stream <= 0 ||
+      typeof size !== 'number' ||
+      !Number.isSafeInteger(size) ||
+      size < 0 ||
+      size > MAX_MESSAGE ||
+      !validEncoding
+    ) {
+      if (typeof stream === 'number' && Number.isSafeInteger(stream) && stream > 0) {
+        this.wire?.send({ type: 'stream.cancel', stream })
+      }
+      return this.toMain({
+        type: 'error',
+        id: outgoing.id,
+        error: internal('The host sent an invalid streamed response header'),
+      })
+    }
+    const message: Record<string, unknown> = { type: 'response', id: outgoing.id }
+    const awaited: Awaited = { message, streams: [stream], left: 1 }
+    this.downloads.set(stream, {
+      kind: 'response',
+      ...(encoding === 'deflate' ? { encoding: 'deflate' } : {}),
+      size,
+      received: 0,
+      chunks: [],
+      awaited,
+    })
   }
 
   private ended(stream: unknown): void {
@@ -258,6 +311,21 @@ export class LinkRequests {
       return this.fail(awaited, portError('internal', 'remote.streamShort'))
     }
     this.downloads.delete(stream as number)
+    if (download.kind === 'response') {
+      try {
+        const joinedBytes = new Uint8Array(joined(download.chunks, download.size))
+        const plain =
+          download.encoding === 'deflate'
+            ? inflateRawSync(joinedBytes, { maxOutputLength: MAX_MESSAGE })
+            : joinedBytes
+        const json = new TextDecoder('utf-8', { fatal: true }).decode(plain)
+        awaited.message.result = JSON.parse(json)
+        this.toMain(awaited.message)
+      } catch {
+        this.fail(awaited, internal('The streamed response could not be decoded'))
+      }
+      return
+    }
     download.place.holder[download.place.key] = joined(download.chunks, download.size)
     if (--awaited.left === 0) this.toMain(awaited.message)
   }

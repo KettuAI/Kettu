@@ -87,6 +87,7 @@ import {
   IMAGE_REFS_FEATURE,
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
+  RESPONSE_STREAM_FEATURE,
   RESUME_MS,
   RESUME_VERSION,
   STANDBY_FEATURE,
@@ -2454,6 +2455,7 @@ export class HostClient {
         BROWSER_FEATURE,
         IMAGE_REFS_FEATURE,
         TOOL_OUTPUT_APPEND_FEATURE,
+        RESPONSE_STREAM_FEATURE,
         ...(this.options.relay?.regions ? [REGIONS_CHANNEL_FEATURE] : []),
       ],
     }

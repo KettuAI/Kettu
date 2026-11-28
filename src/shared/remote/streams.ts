@@ -10,6 +10,9 @@ import type { PortError } from '../port-rpc'
 /** The welcome's feature for byte streams. */
 export const BYTES_FEATURE = 'bytes'
 
+/** 超过该 UTF-8 字节数的纯 JSON RPC 回答在客户端支持 `response-stream` 时改走字节流分块发送。 */
+export const STREAMED_RESPONSE_BYTES = 64 * 1024
+
 /** The largest upload, as large as the agent host takes an attachment's bytes. */
 export const MAX_UPLOAD_BYTES = ATTACHMENT_BYTES
 
