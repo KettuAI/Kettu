@@ -26,6 +26,18 @@ import { PortServer } from './server'
 /** The point agent-device reports a tap by reference at, in the device's points. */
 const TAPPED_AT = /^Tapped @\S+ \((-?[\d.]+), (-?[\d.]+)\)/m
 
+/** Actions that require the XCTest runner on a physical iOS device and thus verify it on success. */
+const RUNNER_VERIFIED_ACTIONS = new Set<DeviceAction['type']>([
+  'snapshot',
+  'tap',
+  'fill',
+  'type',
+  'scroll',
+  'swipe',
+  'button',
+  'rotate',
+])
+
 export interface StartedDeviceHost {
   connect(
     port: PortChannel<FromPort<DeviceEvent>>,
@@ -70,6 +82,10 @@ export function startDeviceHost(
           sessionId,
           durationMs: Math.max(0, Math.round(durationMs)),
         }),
+      probeIosRunner: (device, signal) =>
+        actions?.probeIosRunner
+          ? actions.probeIosRunner(device, signal)
+          : Promise.resolve({ ok: false, problem: null, message: 'Runner probe unavailable' }),
       log: (line) => console.log(line),
     })
     const devices = manager
@@ -219,9 +235,29 @@ export function startDeviceHost(
           devices.acted(request.deviceId, null)
           return { result: { text: `Rotated to ${action.orientation.replace(/_/g, '-')}` } }
         }
+        if (target.platform === 'ios' && target.kind === 'physical') {
+          devices.abortRunnerProbe(request.deviceId)
+        }
         const result = await agent.run(request.sessionId, target, action, controller.signal)
+        if (
+          target.platform === 'ios' &&
+          target.kind === 'physical' &&
+          RUNNER_VERIFIED_ACTIONS.has(action.type)
+        ) {
+          devices.recordRunnerReady(request.deviceId)
+        }
         void actedOn(devices, request.deviceId, action, result.text)
         return { result }
+      } catch (error) {
+        if (
+          error instanceof ActionError &&
+          error.problem &&
+          target.platform === 'ios' &&
+          target.kind === 'physical'
+        ) {
+          devices.recordRunnerProblem(request.deviceId, error.problem)
+        }
+        throw error
       } finally {
         running.delete(request.deviceId)
         end()

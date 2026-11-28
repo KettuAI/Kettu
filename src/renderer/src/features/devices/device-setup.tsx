@@ -16,6 +16,9 @@ type Check = Extract<
   | 'not-paired'
   | 'developer-mode-off'
   | 'ddi-not-mounted'
+  | 'runner-unsigned'
+  | 'runner-untrusted'
+  | 'ui-automation-off'
   | 'offline'
   | 'usb-debugging-unauthorized'
 >
@@ -29,10 +32,24 @@ const LINKS = {
   'usb-debugging-unauthorized': 'https://developer.android.com/studio/debug/dev-options',
 } as const satisfies Partial<Record<Check, string>>
 
+const PHYSICAL_IOS_CHECKS: Check[] = [
+  'usb-required',
+  'not-paired',
+  'developer-mode-off',
+  'ddi-not-mounted',
+  'runner-unsigned',
+  'runner-untrusted',
+  'ui-automation-off',
+]
+
+const ANDROID_CHECKS: Check[] = ['offline', 'usb-debugging-unauthorized']
+
 /** The checks the host makes of each kind of device, in the order they are done. */
-const DEVICE_CHECKS: Record<DeviceInfo['platform'], Check[]> = {
-  ios: ['usb-required', 'not-paired', 'developer-mode-off', 'ddi-not-mounted'],
-  android: ['offline', 'usb-debugging-unauthorized'],
+function deviceChecks(device: Pick<DeviceInfo, 'platform' | 'kind'>): Check[] {
+  if (device.platform === 'ios') {
+    return device.kind === 'physical' ? PHYSICAL_IOS_CHECKS : []
+  }
+  return ANDROID_CHECKS
 }
 
 function task(t: TFunction<'devices'>, check: Check, open: DeviceProblem[]): SetupTask {
@@ -106,7 +123,7 @@ export function DeviceSetup({
   const own: SetupGroup = {
     id: 'device',
     title: device.name,
-    tasks: DEVICE_CHECKS[device.platform].map((check) => task(t, check, device.problems)),
+    tasks: deviceChecks(device).map((check) => task(t, check, device.problems)),
   }
   const mine = environment ? hostGroup(t, environment) : null
   // Only the tool this device's system needs counts for it.

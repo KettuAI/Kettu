@@ -164,6 +164,21 @@
         "todo": "Kettu mounts it once the device is unlocked; keep it unlocked.",
         "done": "Mounted."
       },
+      "runner-unsigned": {
+        "label": "Sign the runner",
+        "todo": "Sign in to Xcode with your Apple ID so Kettu can sign the automation app.",
+        "done": "Signing is ready."
+      },
+      "runner-untrusted": {
+        "label": "Trust the developer",
+        "todo": "On the device, trust the developer in Settings › General › VPN & Device Management.",
+        "done": "Trusted on the device."
+      },
+      "ui-automation-off": {
+        "label": "Enable UI Automation",
+        "todo": "On the device, turn on Settings › Developer › Enable UI Automation.",
+        "done": "On."
+      },
       "offline": {
         "label": "Connection",
         "todo": "The phone is offline. Reconnect its cable.",
