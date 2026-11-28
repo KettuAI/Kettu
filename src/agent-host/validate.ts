@@ -2106,9 +2106,17 @@ export function createValidators(platform: Platform): Validators {
     'paths.drives': none,
     'sessions.list': (params) => {
       const o = params === undefined || params === null ? {} : fields(params)
-      return o.projectPath === undefined
-        ? {}
-        : { projectPath: absolutePath(o, 'projectPath', platform) }
+      const result: HostParams<'sessions.list'> = {}
+      if (o.projectPath !== undefined) {
+        result.projectPath = absolutePath(o, 'projectPath', platform)
+      }
+      if (o.since !== undefined) {
+        if (typeof o.since !== 'number' || !Number.isSafeInteger(o.since) || o.since < 0) {
+          throw invalidParams('since must be a non-negative safe integer')
+        }
+        result.since = o.since
+      }
+      return result
     },
     'sessions.create': (params) => {
       const o = fields(params)

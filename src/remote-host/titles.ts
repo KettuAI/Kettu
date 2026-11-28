@@ -34,8 +34,26 @@ export class SessionTitles {
         this.titles.delete(event.sessionId)
       }
     } else if ((type === 'response' || type === 'error') && this.lists.delete(data.id as number)) {
-      if (type === 'response' && Array.isArray(data.result)) {
-        for (const summary of data.result as Summary[]) this.keep(summary)
+      if (type === 'response') {
+        if (Array.isArray(data.result)) {
+          for (const summary of data.result as Summary[]) this.keep(summary)
+        } else if (typeof data.result === 'object' && data.result !== null) {
+          // 兼容 `sessions.list({ since })` 返回的增量同步结果，同步更新缓存的标题与删除项。
+          const delta = data.result as {
+            full?: unknown
+            changed?: unknown
+            removed?: unknown
+          }
+          if (delta.full === true) this.titles.clear()
+          if (Array.isArray(delta.changed)) {
+            for (const summary of delta.changed as Summary[]) this.keep(summary)
+          }
+          if (Array.isArray(delta.removed)) {
+            for (const id of delta.removed) {
+              if (typeof id === 'string') this.titles.delete(id)
+            }
+          }
+        }
       }
     }
   }

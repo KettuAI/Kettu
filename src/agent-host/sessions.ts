@@ -33,6 +33,7 @@ import {
   type SessionPullRequest,
   type SearchIndexing,
   type SessionFindMatch,
+  type SessionListDelta,
   type SessionSummary,
   type SessionUsageItem,
   type SideChatAgent,
@@ -463,6 +464,9 @@ export interface SessionTimings {
 /** The longest a thread's write waits after writes that failed. */
 const MAX_RETRY_MS = 5 * 60_000
 
+/** 会话列表增量同步保留的最大删除墓碑数；客户端落后超出该窗口时自动回退全量同步。 */
+export const SESSION_LIST_TOMBSTONE_LIMIT = 500
+
 export const SESSION_TIMINGS: SessionTimings = {
   flushMs: 16,
   cancelFallbackMs: 10_000,
@@ -485,8 +489,8 @@ export interface SessionEvents {
    */
   patches(batch: PatchBatch, portIds: readonly string[], legacy?: () => PatchBatch): void
   /** To every port, or to `portIds` alone for a prepared session. */
-  summary(summary: SessionSummary, portIds?: readonly string[]): void
-  removed(sessionId: string, portIds?: readonly string[]): void
+  summary(summary: SessionSummary, portIds?: readonly string[], rev?: number): void
+  removed(sessionId: string, portIds?: readonly string[], rev?: number): void
   /** Sessions archived or deleted: what belongs to them outside this host, their terminals, ends. */
   ended(sessionIds: string[]): void
   /**
@@ -696,6 +700,8 @@ export interface SessionManagerDeps {
    * it open; without it a session is imported and attached unchecked.
    */
   outside?: OutsideReader
+  /** 删除墓碑保留上限（默认 `SESSION_LIST_TOMBSTONE_LIMIT`），便于测试覆盖窗口溢出回退。 */
+  listTombstoneLimit?: number
   /** When idle Claude Code sessions let their agent go; without it they follow `timings`. */
   idleRelease?: IdleRelease
   /** The attachments drafts and queued prompts hold; without it a prompt carries none. */
@@ -1557,6 +1563,14 @@ export class SessionManager {
     { naming: BranchNaming; values: { type?: string; issue?: string } }
   >()
   private readonly lastSummaries = new Map<string, string>()
+  /** 会话列表全局单调递增修订号，仅在公开列表（新增/变更/删除）发生变动时递增。 */
+  private listRev = 0
+  /** 每个公开会话最近一次列表变更对应的修订号。 */
+  private readonly summaryRevs = new Map<string, number>()
+  /** 公开会话的删除墓碑记录（按 rev 递增排列，按上限滑动截断）。 */
+  private readonly removedLog: { id: string; rev: number; projectKey: string | null }[] = []
+  /** 被淘汰墓碑的最大修订号；若客户端 `since < tombstoneFloorRev`，必须回退全量列表。 */
+  private tombstoneFloorRev = 0
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
   private readonly contextEstimateRuns = new WeakMap<Live, Promise<ContextEstimates | null>>()
@@ -1659,9 +1673,17 @@ export class SessionManager {
 
   async load(): Promise<void> {
     const file = await this.deps.file.load()
+    let hasListed = false
     for (const record of file.sessions) {
       this.records.set(record.id, record)
       this.atLaunch.add(record.id)
+      if (this.isListedOrigin(record.origin)) hasListed = true
+    }
+    if (hasListed) {
+      if (this.listRev === 0) this.listRev = 1
+      for (const record of file.sessions) {
+        if (this.isListedOrigin(record.origin)) this.summaryRevs.set(record.id, this.listRev)
+      }
     }
     this.emptySessionsRemovedAt = file.emptySessionsRemovedAt ?? null
     this.returned = (await this.deps.returned.load()).messages
@@ -1929,6 +1951,79 @@ export class SessionManager {
   }
 
   /**
+   * 按修订号增量拉取公开会话列表（包含归档会话与子 Agent，排除 routine / task / prepared）。
+   * 当 `since <= 0`、`since > listRev`（主机重启或游标异常）或落后于删除墓碑窗口时自动回退全量。
+   */
+  listDelta(since: number, projectPath?: string): SessionListDelta {
+    if (since <= 0 || since > this.listRev || since < this.tombstoneFloorRev) {
+      return {
+        revision: this.listRev,
+        full: true,
+        changed: this.list(projectPath),
+        removed: [],
+      }
+    }
+    const key = projectPath === undefined ? null : pathKey(projectPath, this.deps.platform)
+    const ids = new Set<string>([...this.records.keys(), ...this.live.keys()])
+    const changed: SessionSummary[] = []
+    for (const id of ids) {
+      if (this.live.get(id)?.prepared) continue
+      const rev = this.summaryRevs.get(id)
+      // 仅返回修订号严格大于 since 的会话；未登记 rev 的公开会话保守按已变更处理。
+      if (rev !== undefined && rev <= since) continue
+      const summary = this.summary(id)
+      if (!this.isListedOrigin(summary.origin)) continue
+      if (key === null || pathKey(summary.projectPath, this.deps.platform) === key) {
+        changed.push(summary)
+      }
+    }
+    changed.sort((a, b) => b.updatedAt - a.updatedAt)
+    const removed: string[] = []
+    for (const item of this.removedLog) {
+      if (item.rev <= since) continue
+      if (key === null || item.projectKey === null || item.projectKey === key) {
+        removed.push(item.id)
+      }
+    }
+    return {
+      revision: this.listRev,
+      full: false,
+      changed,
+      removed,
+    }
+  }
+
+  /** 是否属于公开会话列表的来源（routine 与 task 在各自独立列表下展示）。 */
+  private isListedOrigin(origin: SessionSummary['origin'] | undefined): boolean {
+    return origin !== 'routine' && origin !== 'task'
+  }
+
+  /** 记录公开会话摘要变更的修订号；若此前有同 ID 墓碑（如回滚恢复）一并移除。 */
+  private recordSummaryRevision(summary: SessionSummary): number | undefined {
+    if (!this.isListedOrigin(summary.origin)) return undefined
+    const rev = ++this.listRev
+    this.summaryRevs.set(summary.id, rev)
+    const tombAt = this.removedLog.findIndex((item) => item.id === summary.id)
+    if (tombAt >= 0) this.removedLog.splice(tombAt, 1)
+    return rev
+  }
+
+  /** 记录公开会话删除墓碑，并在超过上限时滑动推进 `tombstoneFloorRev`。 */
+  private recordRemovalRevision(sessionId: string, projectKey: string | null): number {
+    const rev = ++this.listRev
+    this.summaryRevs.delete(sessionId)
+    const existing = this.removedLog.findIndex((item) => item.id === sessionId)
+    if (existing >= 0) this.removedLog.splice(existing, 1)
+    this.removedLog.push({ id: sessionId, rev, projectKey })
+    const limit = Math.max(0, this.deps.listTombstoneLimit ?? SESSION_LIST_TOMBSTONE_LIMIT)
+    while (this.removedLog.length > limit) {
+      const dropped = this.removedLog.shift()!
+      if (dropped.rev > this.tombstoneFloorRev) this.tombstoneFloorRev = dropped.rev
+    }
+    return rev
+  }
+
+  /**
    * The folders sessions work in outside the projects, live or indexed: scratch folders and
    * worktrees, so files, git and terminals may open there.
    */
@@ -2023,8 +2118,12 @@ export class SessionManager {
     if (live) this.flushPatches(live)
     this.lastSummaries.set(sessionId, json)
     this.updateBusy()
-    if (live?.prepared) this.deps.events.summary(summary, [live.prepared.portId])
-    else this.deps.events.summary(summary)
+    if (live?.prepared) {
+      this.deps.events.summary(summary, [live.prepared.portId])
+      return
+    }
+    const rev = this.recordSummaryRevision(summary)
+    this.deps.events.summary(summary, undefined, rev)
   }
 
   private updateBadge(): void {
@@ -15517,7 +15616,16 @@ export class SessionManager {
     this.pullRequestsTold.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
-    if (known) this.deps.events.removed(sessionId, portIds)
+    let rev: number | undefined
+    if (known && !portIds && this.isListedOrigin(record?.origin)) {
+      const projectKey = record?.projectPath
+        ? pathKey(record.projectPath, this.deps.platform)
+        : null
+      rev = this.recordRemovalRevision(sessionId, projectKey)
+    } else {
+      this.summaryRevs.delete(sessionId)
+    }
+    if (known) this.deps.events.removed(sessionId, portIds, rev)
   }
 
   /** Clears the index; the agents keep their transcripts. */
