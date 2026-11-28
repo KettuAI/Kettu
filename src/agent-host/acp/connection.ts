@@ -29,12 +29,13 @@ import {
 } from '@agentclientprotocol/sdk/unstable'
 import type { ContextBreakdown, ContextEstimates } from '@shared/context'
 import type { Platform } from '@shared/platform'
-import type {
-  AgentId,
-  ConfigOption,
-  PendingConfig,
-  PermissionOption,
-  TokenTotals,
+import {
+  harnessOf,
+  type AgentId,
+  type ConfigOption,
+  type PendingConfig,
+  type PermissionOption,
+  type TokenTotals,
 } from '@shared/thread'
 import {
   AgentRequestError,
@@ -205,6 +206,16 @@ function routerText(error: RequestError): string {
   return error.message
 }
 
+const GLM_MISSING_KEY = /no api key found.*Z_AI_API_KEY/i
+
+/** Extracts `glm-acp-agent`'s missing-key message when it surfaces as an uncoded JSON-RPC error. */
+function glmMissingKeyText(error: RequestError): string | null {
+  const details = (error.data as { details?: unknown } | null)?.details
+  if (typeof details === 'string' && GLM_MISSING_KEY.test(details)) return details
+  if (GLM_MISSING_KEY.test(error.message)) return error.message
+  return null
+}
+
 /** The ACP messages over what the launcher gave the driver. */
 function acpTransport(transport: AcpTransport | AgentTransport): AcpTransport {
   if ('kind' in transport && transport.kind === 'stdio') {
@@ -275,6 +286,7 @@ type AuthMethodMeta = {
   type?: unknown
   args?: unknown
   env?: unknown
+  vars?: unknown
   'env-var'?: unknown
   'terminal-auth'?: { command?: unknown; args?: unknown } | null
 }
@@ -317,6 +329,33 @@ function takesHttpUndeclared(agentId: AgentId | undefined, init: InitializeRespo
   return since !== undefined && typeof version === 'string' && compareVersions(version, since) >= 0
 }
 
+/** Extracts env-var declarations from ACP `vars` arrays or legacy `env` string maps. */
+function authEnvVars(
+  method: AuthMethod,
+  meta: AuthMethodMeta | null | undefined,
+): { name: string; optional: boolean }[] {
+  const seen = new Set<string>()
+  const result: { name: string; optional: boolean }[] = []
+  const rawVars = (method as { vars?: unknown }).vars ?? meta?.vars
+  if (Array.isArray(rawVars)) {
+    for (const item of rawVars) {
+      if (typeof item !== 'object' || item === null) continue
+      const { name, optional } = item as { name?: unknown; optional?: unknown }
+      if (typeof name !== 'string' || name === '' || seen.has(name)) continue
+      seen.add(name)
+      result.push({ name, optional: optional === true })
+    }
+  }
+  for (const [name, value] of Object.entries(
+    stringMap(meta?.env ?? (method as { env?: unknown }).env),
+  )) {
+    if (name === '' || seen.has(name)) continue
+    seen.add(name)
+    result.push({ name, optional: value === 'optional' })
+  }
+  return result
+}
+
 /** One of `init.authMethods`, reading the metadata forms agents publish a terminal sign-in in. */
 function authMethod(method: AuthMethod): AuthMethodInfo {
   const meta = method._meta as AuthMethodMeta | null | undefined
@@ -339,16 +378,7 @@ function authMethod(method: AuthMethod): AuthMethodInfo {
     ...(named ? { command: named.command } : {}),
     args: terminal ? args : [],
     env: terminal ? env : {},
-    ...(envDeclared
-      ? {
-          envVars: Object.entries(stringMap(meta?.env ?? (method as { env?: unknown }).env)).map(
-            ([name, value]) => ({
-              name,
-              optional: value === 'optional',
-            }),
-          ),
-        }
-      : {}),
+    ...(envDeclared ? { envVars: authEnvVars(method, meta) } : {}),
   }
 }
 
@@ -1046,6 +1076,13 @@ export class AcpConnection implements AgentConnection {
       }
       if (error.code === AUTH_REQUIRED) {
         return new AgentRequestError('auth_required', error.message, error.code, error.data)
+      }
+      // glm-acp-agent throws an uncoded Error when Z_AI_API_KEY and credentials.json are both absent.
+      if (this.hooks.agentId && harnessOf(this.hooks.agentId) === 'glm') {
+        const missingKey = glmMissingKeyText(error)
+        if (missingKey !== null) {
+          return new AgentRequestError('auth_required', missingKey, error.code, error.data)
+        }
       }
       return new AgentRequestError('agent_error', routerText(error), error.code, error.data)
     }

@@ -1106,6 +1106,17 @@
     "credentialsInvalid": "{{file}} 不是有效的 YAML，请先修好它，或自己删除那里的 key",
     "credentialsNotMap": "{{file}} 里没有凭据映射"
   },
+  "glm": {
+    "account": {
+      "apiKey": "Z.AI API key"
+    },
+    "auth": {
+      "setup": "在终端中配置",
+      "setupDescription": "运行 `glm-acp-agent --setup`，将 Z.AI Coding Plan API key 保存到本地。",
+      "apiKey": "Z.AI API key",
+      "apiKeyDescription": "在下方填写 Z.AI Coding Plan API key，或在环境变量中设置 Z_AI_API_KEY。"
+    }
+  },
   "opencode": {
     "option": {
       "model": "模型",

@@ -146,6 +146,13 @@ import {
   writeApiKey as writeDshKey,
   type Provider as DshRoute,
 } from './dsh/credentials'
+import {
+  GLM_API_KEY_VAR,
+  clearGlmKey,
+  glmCredentialsFile,
+  readGlmSignInState,
+  writeGlmKey,
+} from './glm/credentials'
 import { readAccountBalance, type AccountBalance } from './dsh/balance'
 import {
   readClaudeDefaultMode,
@@ -1161,6 +1168,11 @@ export class AgentManager {
         slot.detail = effective.state === 'available' ? null : effective.detail
       }
     }
+    if (h.def.id === 'glm') {
+      for (const slot of this.agentsOf(h)) {
+        if (this.has(slot.id)) await this.readGlmSignIn(slot)
+      }
+    }
     this.emit(this.home(h))
     if (program) h.binaryVersionAsked = this.askBinaryVersion(h, program, env)
   }
@@ -1305,7 +1317,11 @@ export class AgentManager {
       const after = registeredByDefault(h.def.id, next.agents)
       if (before && !after) removed.push(h.def.id)
       // A newly added default instance shows at once; its slot already exists for the harness.
-      else if (!before && after) this.emit(this.home(h))
+      else if (!before && after) {
+        const home = this.home(h)
+        if (h.def.id === 'glm') await this.readGlmSignIn(home)
+        this.emit(home)
+      }
     }
     await Promise.all(
       removed.map(async (agentId) => {
@@ -1646,6 +1662,9 @@ export class AgentManager {
             `${slot.name}: its sign-in read failed: ${(error as Error).message}`,
           )
         })
+      }
+      if (slot.def.id === 'glm') {
+        await this.readGlmSignIn(slot)
       }
       await this.signInWithKey(slot, connection, init, env)
       void this.readSignInMethod(slot)
@@ -5235,6 +5254,11 @@ export class AgentManager {
       if (force && slot.signIn === 'required') await this.checkSignIn(slot)
       return this.refreshBalance(slot, force)
     }
+    if (slot.def.id === 'glm') {
+      await this.detectAll()
+      await this.readGlmSignIn(slot, { afterSignIn })
+      return
+    }
     const wasRequired = slot.signIn === 'required'
     if (slot.runtime?.init.capabilities.authStatus && slot.runtime.connection.readAuthStatus) {
       try {
@@ -5765,12 +5789,14 @@ export class AgentManager {
   /**
    * Hands the harness an API key for this agent to keep: Claude Code's and Codebuddy Code's in
    * their folder's settings.json, Codex's through `codex login --with-api-key`, DeepSeek
-   * Harness's in its `.credentials.yaml`. A process that runs keeps its
-   * credentials until it stops, so an idle one is stopped and the next start uses the key.
+   * Harness's in its `.credentials.yaml`, GLM Agent's in `credentials.json`. A process that runs
+   * keeps its credentials until it stops, so an idle one is stopped and the next start uses the
+   * key.
    */
   async setApiKey(agentId: AgentId, input: ApiKeyInput): Promise<void> {
     const slot = this.registeredSlot(agentId)
     await this.detectAll()
+    const wasRequired = slot.signIn === 'required'
     const checked = checkApiKey(input, slot.def.id === 'claude-code')
     if (slot.def.id === 'claude-code') {
       await writeClaudeKey(this.settingsFile(slot), checked)
@@ -5780,15 +5806,18 @@ export class AgentManager {
       await writeDshKey(this.dshFolder(slot), checked.key)
     } else if (slot.def.id === 'codebuddy') {
       await writeCodebuddyKey(this.settingsFile(slot), checked)
+    } else if (slot.def.id === 'glm') {
+      await writeGlmKey(this.glmCredentialsPath(slot), checked.key)
     } else {
       throw invalidParams(t('agent.noApiKey', { agent: slot.def.name }))
     }
     this.deps.diagnostics.event(agentId, 'api key', 'set')
     slot.apiKey = true
     await this.credentialsChanged(slot)
+    if (slot.def.id === 'glm') await this.readGlmSignIn(slot, { wasRequired })
   }
 
-  /** Removes what `setApiKey` handed over: the variables it wrote, or Codex's login. */
+  /** Removes what `setApiKey` handed over: the variables it wrote, Codex's login, or GLM's key. */
   async clearApiKey(agentId: AgentId): Promise<void> {
     const slot = this.registeredSlot(agentId)
     await this.detectAll()
@@ -5796,14 +5825,17 @@ export class AgentManager {
     else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
     else if (slot.def.id === 'deepseek') await clearDshKey(this.dshFolder(slot))
     else if (slot.def.id === 'codebuddy') await clearCodebuddyKey(this.settingsFile(slot))
+    else if (slot.def.id === 'glm') await clearGlmKey(this.glmCredentialsPath(slot))
     else throw invalidParams(t('agent.noApiKey', { agent: slot.def.name }))
     this.deps.diagnostics.event(agentId, 'api key', 'cleared')
     slot.apiKey = false
     await this.credentialsChanged(slot)
+    if (slot.def.id === 'glm') await this.readGlmSignIn(slot)
   }
 
   async agentEnvChanged(agentId: AgentId): Promise<void> {
     const slot = this.registeredSlot(agentId)
+    const wasRequired = slot.signIn === 'required'
     const key = slot.def.keySignIn
     slot.keySignInPending =
       key !== undefined && this.deps.envKeyIsSet?.(agentId, key.variable) === true
@@ -5811,6 +5843,47 @@ export class AgentManager {
     if (slot.keySignInPending) slot.answeredSignIn = null
     if (slot.def.id === 'antigravity') this.decideSignIn(slot)
     await this.credentialsChanged(slot)
+    if (slot.def.id === 'glm') await this.readGlmSignIn(slot, { wasRequired })
+  }
+
+  private glmCredentialsPath(slot: Slot): string {
+    return glmCredentialsFile(this.deps.env.agentEnv(slot.id), os.homedir(), this.deps.platform)
+  }
+
+  /**
+   * Reads GLM Agent's sign-in state from `Z_AI_API_KEY` or `credentials.json` without launching
+   * the process. Stops an idle running process when credentials change so the next turn uses them.
+   */
+  private async readGlmSignIn(
+    slot: Slot,
+    options?: { afterSignIn?: boolean; wasRequired?: boolean },
+  ): Promise<void> {
+    const env = this.deps.env.agentEnv(slot.id)
+    const hasEnvKey = this.deps.envKeyIsSet?.(slot.id, GLM_API_KEY_VAR) === true
+    const state = await readGlmSignInState({
+      env,
+      home: os.homedir(),
+      platform: this.deps.platform,
+      hasEnvKey,
+    })
+    const prevFileKey = slot.apiKey
+    const prevSignIn = slot.signIn
+    slot.apiKey = state.fileKey
+    if (
+      (options?.afterSignIn || prevFileKey !== state.fileKey) &&
+      slot.runtime &&
+      this.hooks.liveSessions(slot.id) === 0
+    ) {
+      await this.stopProcess(slot)
+    }
+    if (state.signedIn) {
+      this.setAccount(slot, { kind: 'api_key', label: t('glm.account.apiKey'), email: null })
+      if (options?.wasRequired && prevSignIn !== 'required') {
+        this.hooks.signedIn(slot.id)
+      }
+    } else {
+      this.signedOut(slot)
+    }
   }
 
   /**
@@ -6160,7 +6233,10 @@ export class AgentManager {
     const shown = declared.filter(
       (method) =>
         (!delegates || method.id !== 'browser-auth') &&
-        !(slot.def.id === 'grok' && method.id === GROK_CACHED_SIGN_IN),
+        !(slot.def.id === 'grok' && method.id === GROK_CACHED_SIGN_IN) &&
+        // glm-acp-agent's `z-ai-api-key` authenticate() is a no-op and `z_ai_api_key` is handled
+        // directly through GLM's credentials.json API key row and `--setup` terminal command.
+        !(slot.def.id === 'glm' && (method.id === 'z-ai-api-key' || method.id === 'z_ai_api_key')),
     )
     const authMethods: AgentAuthMethod[] = shown.map((method) => ({
       id: method.id,
@@ -6271,6 +6347,28 @@ export class AgentManager {
         command: formatCommand({ ...display, args: ['auth', 'login'] }, platform),
       })
     }
+    if (slot.def.id === 'glm' && this.has(agentId)) {
+      // Offer `--setup` in a terminal once an executable launch spec is available; always offer the
+      // Settings API key entry so sessions and Settings › Agents work even before first install.
+      const runnable =
+        h.detection?.state === 'available' && (h.detection.spec !== null || this.running(slot))
+      if (runnable) {
+        authMethods.push({
+          id: 'glm-setup',
+          name: t('glm.auth.setup'),
+          description: t('glm.auth.setupDescription'),
+          type: 'terminal',
+          command: formatCommand({ ...display, args: [...display.args, '--setup'] }, platform),
+        })
+      }
+      authMethods.push({
+        id: 'glm-api-key',
+        name: t('glm.auth.apiKey'),
+        description: t('glm.auth.apiKeyDescription'),
+        type: 'env',
+        envVars: [],
+      })
+    }
     const capabilities = init?.capabilities ?? rememberedCapabilities(slot)
     const { launch } = slot.def
     const detection = h.detection
@@ -6303,7 +6401,8 @@ export class AgentManager {
         slot.def.id === 'claude-code' ||
         slot.def.id === 'codex' ||
         slot.def.id === 'deepseek' ||
-        slot.def.id === 'codebuddy'
+        slot.def.id === 'codebuddy' ||
+        slot.def.id === 'glm'
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
           : null,
       state: slot.state,
