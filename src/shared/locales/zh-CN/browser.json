@@ -126,6 +126,15 @@
     "newTab": "新标签页",
     "closeTab": "关闭 {{name}}"
   },
+  "annotate": {
+    "start": "标注",
+    "startHint": "标注页面元素",
+    "exit": "退出标注模式",
+    "done": "完成",
+    "activeHint": "点击页面元素，将其作为引用添加到当前会话输入框",
+    "disabledNoPage": "标注 · 请先打开可标注的网页",
+    "disabledAgent": "标注 · 请先从 {{agent}} 接管页面"
+  },
   "viewport": {
     "size": "{{width}} × {{height}}",
     "scaled": "{{width}} × {{height}} · {{percent}}%",

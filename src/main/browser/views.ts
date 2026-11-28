@@ -2,6 +2,7 @@
 // web contents; the renderer draws the pane's frame and tab strip and tells main where the page
 // sits.
 
+import { randomUUID } from 'node:crypto'
 import { BrowserWindow, session as electronSession, shell, WebContentsView } from 'electron'
 import type { HandlerDetails, Input, WebContents, WindowOpenHandlerResponse } from 'electron'
 import {
@@ -10,11 +11,13 @@ import {
   canonicalBrowserUrl,
   desktopViewportFor,
   fitPageViewport,
+  isAnnotatableBrowserUrl,
   MAX_SESSION_TABS,
   PAGE_SIZES,
   samePageSize,
   SIZE_LINE_ROOM,
   type BrowserBounds,
+  type BrowserElementAnnotatedEvent,
   type BrowserNotice,
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
@@ -36,6 +39,14 @@ import { forwardedKey } from '../artifacts/guards'
 import { sendEvent } from '../events'
 import { createLogger } from '../log'
 import type { AllowedSites } from '@shared/ipc'
+import {
+  ANNOTATE_BINDING,
+  ANNOTATE_WORLD,
+  buildAnnotateInstallScript,
+  buildAnnotateTeardownScript,
+  parseBindingMessage,
+  sanitizeAnnotatedPayload,
+} from './annotate'
 import { originOf, BrowserOrigins, type BrowserOriginStore } from './origins'
 import { PageOverlay, type OverlayParent } from './overlay'
 import { BrowserPolicy, isAllowedNavigation, isHttp } from './policy'
@@ -118,6 +129,14 @@ interface Tab {
   told: { size: PageSize; scale: number } | null
   /** The latest size or scale its page was told and has not confirmed yet. */
   sizing: Promise<void> | null
+  /** Whether element annotation mode is active on this tab. */
+  annotating: boolean
+  /** Random token validating CDP binding messages from the active annotation overlay. */
+  annotateToken: string | null
+  /** Isolated world execution context id holding the active annotation overlay, if any. */
+  annotateContextId: number | null
+  /** Monotonic counter preventing stale async annotate enable calls from activating after disable. */
+  annotateOp: number
 }
 
 /** A still of a page that its overlay draws over it while its screenshots are taken. */
@@ -219,6 +238,8 @@ export interface BrowserViewsDeps {
   panelClosed?(sessionId: string): void
   /** A page opened a site, and later named its icons, which links in replies show. */
   siteOpened?(pageUrl: string, favicons?: string[]): void
+  /** The user picked an element in a tab while annotation mode was active. */
+  annotated?(event: BrowserElementAnnotatedEvent): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
   originWaitMs?: number
 }
@@ -391,6 +412,7 @@ export class BrowserViews {
     for (const other of this.browsers.values()) {
       if (other !== browser && other.shown) {
         other.shown = false
+        this.disableBrowserAnnotate(other)
         this.present(other)
       }
     }
@@ -406,6 +428,7 @@ export class BrowserViews {
     if (!browser) return
     browser.shown = false
     browser.frozen = false
+    this.disableBrowserAnnotate(browser)
     this.present(browser)
     this.syncOverlay()
   }
@@ -419,6 +442,7 @@ export class BrowserViews {
     if (browser) {
       browser.shown = false
       browser.frozen = false
+      this.disableBrowserAnnotate(browser)
       this.present(browser)
     }
     this.deps.panelClosed?.(sessionId)
@@ -433,6 +457,7 @@ export class BrowserViews {
   close(sessionId: string): void {
     const browser = this.browsers.get(sessionId)
     if (!browser) return
+    this.disableBrowserAnnotate(browser, false)
     for (const tab of this.tabsOf(browser)) this.dropTab(tab)
     browser.strip.clear()
     this.origins.close(sessionId)
@@ -445,6 +470,7 @@ export class BrowserViews {
   newTab(sessionId: string): string | null {
     const browser = this.browser(sessionId)
     if (browser.strip.size >= MAX_SESSION_TABS) return null
+    this.disableBrowserAnnotate(browser)
     const tab = this.addTab(browser, { select: true, agent: false })
     this.present(browser)
     this.emit(browser)
@@ -456,6 +482,7 @@ export class BrowserViews {
   selectTab(sessionId: string, tabId: string): void {
     const browser = this.browsers.get(sessionId)
     if (!browser?.strip.select(tabId)) return
+    this.disableBrowserAnnotate(browser)
     this.present(browser)
     this.emit(browser)
     this.syncOverlay()
@@ -468,8 +495,12 @@ export class BrowserViews {
     if (browser.strip.size === 1) return this.close(sessionId)
     const wasAgent = browser.strip.agent === tabId
     const tab = this.tabs.get(tabId)
-    if (tab) this.dropTab(tab)
+    if (tab) {
+      void this.disableAnnotate(tab, false)
+      this.dropTab(tab)
+    }
     browser.strip.remove(tabId)
+    this.disableBrowserAnnotate(browser)
     if (wasAgent && browser.strip.agent === null) {
       this.deps.agentTabClosed?.(sessionId)
     }
@@ -529,6 +560,7 @@ export class BrowserViews {
         : null
     if (match) {
       if (browser.strip.select(match.id)) {
+        this.disableBrowserAnnotate(browser)
         this.present(browser)
         this.emit(browser)
         this.syncOverlay()
@@ -545,11 +577,15 @@ export class BrowserViews {
           ? selected
           : (this.tabsOf(browser).findLast((tab) => !this.holdsInput(tab)) ?? selected)
       if (!fallback) return
-      if (browser.strip.select(fallback.id)) this.present(browser)
+      if (browser.strip.select(fallback.id)) {
+        this.disableBrowserAnnotate(browser)
+        this.present(browser)
+      }
       this.open(fallback, url)
       this.syncOverlay()
       return
     }
+    this.disableBrowserAnnotate(browser)
     const tab = this.addTab(browser, { select: true, agent: false })
     this.present(browser)
     this.open(tab, url)
@@ -754,7 +790,10 @@ export class BrowserViews {
     if (!browser || !tab || !browser.strip.has(tabId)) return
     const follow = this.following(browser)
     browser.strip.setAgent(tabId)
-    if (follow) browser.strip.select(tabId)
+    if (follow) {
+      this.disableBrowserAnnotate(browser)
+      browser.strip.select(tabId)
+    }
     this.syncDesktopFreeze(browser)
     this.present(browser)
     this.emit(browser)
@@ -779,6 +818,92 @@ export class BrowserViews {
             ? { kind: 'desktop' }
             : { kind: 'fixed', size: PAGE_SIZES[mode] }
     })
+  }
+
+  /**
+   * Enables or exits element annotation mode on the selected tab. Refuses to enable when no
+   * annotatable http(s) page is loaded, the page errored/crashed, or an agent actively owns input.
+   */
+  async setAnnotate(sessionId: string, enabled: boolean): Promise<boolean> {
+    const browser = this.browsers.get(sessionId)
+    const tab = browser ? this.selectedTab(browser) : null
+    if (!browser || !tab) return false
+    if (!enabled) {
+      await this.disableAnnotate(tab)
+      return false
+    }
+    if (!this.canAnnotate(tab)) {
+      if (tab.annotating) await this.disableAnnotate(tab)
+      return false
+    }
+    if (tab.annotating) return true
+    for (const other of this.tabsOf(browser)) {
+      if (other !== tab && (other.annotating || other.annotateToken !== null)) {
+        await this.disableAnnotate(other)
+      }
+    }
+    const contents = this.contentsOf(tab)
+    if (!contents || !contents.debugger.isAttached()) return false
+    const op = ++tab.annotateOp
+    const token = randomUUID()
+    tab.annotateToken = token
+    let contextId: number | null = null
+    try {
+      await contents.debugger.sendCommand('Runtime.enable')
+      const frameTree = (await contents.debugger.sendCommand('Page.getFrameTree')) as {
+        frameTree?: { frame?: { id?: string } }
+      }
+      const frameId = frameTree?.frameTree?.frame?.id
+      if (typeof frameId === 'string' && frameId.length > 0) {
+        const world = (await contents.debugger.sendCommand('Page.createIsolatedWorld', {
+          frameId,
+          worldName: ANNOTATE_WORLD,
+        })) as { executionContextId?: number }
+        if (typeof world?.executionContextId === 'number') {
+          contextId = world.executionContextId
+        }
+      }
+      await contents.debugger.sendCommand(
+        'Runtime.addBinding',
+        contextId !== null
+          ? { name: ANNOTATE_BINDING, executionContextName: ANNOTATE_WORLD }
+          : { name: ANNOTATE_BINDING },
+      )
+      await contents.debugger.sendCommand('Runtime.evaluate', {
+        expression: buildAnnotateInstallScript(token),
+        ...(contextId !== null ? { contextId } : {}),
+        returnByValue: true,
+      })
+      if (tab.annotateOp !== op || this.contentsOf(tab) !== contents || !this.canAnnotate(tab)) {
+        void contents.debugger
+          .sendCommand('Runtime.evaluate', {
+            expression: buildAnnotateTeardownScript(),
+            ...(contextId !== null ? { contextId } : {}),
+            returnByValue: true,
+          })
+          .catch(() => {})
+        if (tab.annotateOp === op) {
+          tab.annotating = false
+          tab.annotateToken = null
+          tab.annotateContextId = null
+          this.emitTab(tab)
+        }
+        return false
+      }
+      tab.annotating = true
+      tab.annotateContextId = contextId
+      this.emitTab(tab)
+      return true
+    } catch (error) {
+      log.warn(`Could not start page annotation: ${(error as Error).message}`)
+      if (tab.annotateOp === op) {
+        tab.annotating = false
+        tab.annotateToken = null
+        tab.annotateContextId = null
+        this.emitTab(tab)
+      }
+      return false
+    }
   }
 
   /** An agent's `browser_resize` on its tab, whose page keeps the size from then on. */
@@ -962,6 +1087,10 @@ export class BrowserViews {
       frozenDesktop: null,
       told: null,
       sizing: null,
+      annotating: false,
+      annotateToken: null,
+      annotateContextId: null,
+      annotateOp: 0,
     }
     this.tabs.set(tab.id, tab)
     browser.strip.add(tab.id, how)
@@ -1128,6 +1257,7 @@ export class BrowserViews {
   }
 
   private reloadTab(tab: Tab): void {
+    void this.disableAnnotate(tab)
     tab.notice = null
     if (tab.view) tab.view.webContents.reload()
     else if (tab.lastUrl) this.open(tab, tab.lastUrl)
@@ -1136,6 +1266,7 @@ export class BrowserViews {
 
   /** Loads `url` in the tab, making its page when it has none. */
   private open(tab: Tab, url: string): void {
+    void this.disableAnnotate(tab)
     const view = tab.view ?? this.create(tab)
     tab.lastUrl = url
     tab.lastTitle = null
@@ -1442,6 +1573,10 @@ export class BrowserViews {
     tab.loading = false
     tab.asking = false
     tab.told = null
+    tab.annotating = false
+    tab.annotateToken = null
+    tab.annotateContextId = null
+    tab.annotateOp += 1
     if (!view) return
     const window = this.deps.window()
     if (window && !window.isDestroyed()) window.contentView.removeChildView(view)
@@ -1548,10 +1683,12 @@ export class BrowserViews {
     })
     contents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame) return
+      void this.disableAnnotate(tab, details.isSameDocument)
       tab.notice = null
       emit()
     })
     contents.on('did-navigate', (_event, url, code) => {
+      void this.disableAnnotate(tab, false)
       if (isAllowedNavigation(url)) tab.lastUrl = url
       // A page that failed to load commits too, with no response.
       if (code > 0 && isHttp(url)) this.deps.siteOpened?.(url)
@@ -1562,6 +1699,7 @@ export class BrowserViews {
       if (isHttp(url)) this.deps.siteOpened?.(url, favicons)
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+      if (isMainFrame) void this.disableAnnotate(tab, true)
       if (isMainFrame && isAllowedNavigation(url)) tab.lastUrl = url
       emit()
     })
@@ -1572,6 +1710,7 @@ export class BrowserViews {
     contents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
       // -3 is ERR_ABORTED, which a cancelled or replaced navigation reports.
       if (!isMainFrame || code === -3) return
+      void this.disableAnnotate(tab, false)
       log.warn(`A page failed to load: ${description} (${code})`)
       tab.notice = { kind: 'load-failed', description }
       tab.loading = false
@@ -1581,6 +1720,7 @@ export class BrowserViews {
     })
     // A crashed or hung page shows as it was; the pane says so, with Reload.
     const fail = (kind: 'crashed' | 'unresponsive', message: string): void => {
+      void this.disableAnnotate(tab, false)
       tab.notice = { kind }
       tab.loading = false
       emit()
@@ -1627,6 +1767,17 @@ export class BrowserViews {
       // The overlay takes the keyboard while the agent has the page; a key that still reaches the
       // page, before the overlay is up, is held back as well.
       const held = this.holdsInput(tab)
+      if (
+        !held &&
+        tab.annotating &&
+        input.type === 'keyDown' &&
+        !input.isAutoRepeat &&
+        input.key === 'Escape'
+      ) {
+        event.preventDefault()
+        void this.disableAnnotate(tab)
+        return
+      }
       if (!held && this.shortcut(tab, input)) {
         event.preventDefault()
         return
@@ -1662,6 +1813,10 @@ export class BrowserViews {
       tab.loading = false
       tab.asking = false
       tab.told = null
+      tab.annotating = false
+      tab.annotateToken = null
+      tab.annotateContextId = null
+      tab.annotateOp += 1
       this.endNavigation(tab, { ok: false, error: 'The page closed.' })
       this.deps.closed?.(tab.id)
       // Nothing of Kettu's closed it, so the page did: `window.close()`.
@@ -1699,6 +1854,13 @@ export class BrowserViews {
       return
     }
     debuggerSession.on('message', (_event, method, params) => {
+      if (method === 'Runtime.bindingCalled') {
+        const record = params as { name?: unknown; payload?: unknown }
+        if (record.name === ANNOTATE_BINDING) {
+          this.handleAnnotateBinding(tabId, record.payload)
+        }
+        return
+      }
       if (method !== 'Page.javascriptDialogOpening') return
       const type = (params as { type?: string }).type
       const accepted = type === 'alert'
@@ -1708,6 +1870,78 @@ export class BrowserViews {
       this.deps.dialogOpened?.(tabId, type ?? 'alert', accepted)
     })
     void debuggerSession.sendCommand('Page.enable').catch(() => {})
+  }
+
+  /** Whether `tab` can enter element annotation mode right now. */
+  private canAnnotate(tab: Tab): boolean {
+    const contents = this.contentsOf(tab)
+    if (!contents || contents.isCrashed() || !contents.debugger.isAttached()) return false
+    if (
+      tab.notice?.kind === 'load-failed' ||
+      tab.notice?.kind === 'crashed' ||
+      tab.notice?.kind === 'unresponsive'
+    ) {
+      return false
+    }
+    if (!isAnnotatableBrowserUrl(this.urlOf(tab))) return false
+    return !this.holdsInput(tab)
+  }
+
+  /** Exits annotation mode on `tab`, tearing down injected overlay DOM and listeners when live. */
+  private async disableAnnotate(tab: Tab, teardown = true): Promise<void> {
+    tab.annotateOp += 1
+    const wasActive = tab.annotating || tab.annotateToken !== null
+    const contextId = tab.annotateContextId
+    tab.annotating = false
+    tab.annotateToken = null
+    tab.annotateContextId = null
+    if (!wasActive) return
+    // Emit immediately so renderer toolbar state updates synchronously while CDP teardown runs.
+    this.emitTab(tab)
+    if (teardown) {
+      const contents = this.contentsOf(tab)
+      if (contents?.debugger.isAttached()) {
+        await contents.debugger
+          .sendCommand('Runtime.evaluate', {
+            expression: buildAnnotateTeardownScript(),
+            ...(contextId !== null ? { contextId } : {}),
+            returnByValue: true,
+          })
+          .catch(() => {})
+      }
+    }
+  }
+
+  /** Exits annotation mode on every tab of `browser`. */
+  private disableBrowserAnnotate(browser: Browser, teardown = true): void {
+    for (const tab of this.tabsOf(browser)) {
+      if (tab.annotating || tab.annotateToken !== null) {
+        void this.disableAnnotate(tab, teardown)
+      }
+    }
+  }
+
+  /** Processes a validated pick or exit message sent from the tab's isolated annotation world. */
+  private handleAnnotateBinding(tabId: string, payload: unknown): void {
+    const tab = this.tabs.get(tabId)
+    if (!tab || !tab.annotating) return
+    const message = parseBindingMessage(payload, tab.annotateToken)
+    if (!message) return
+    if (message.type === 'exit') {
+      void this.disableAnnotate(tab)
+      return
+    }
+    const annotation = sanitizeAnnotatedPayload(
+      message.element,
+      this.urlOf(tab),
+      tab.lastTitle,
+      tab.id,
+    )
+    if (!annotation) return
+    // Return keyboard focus to the host window so the session composer can immediately accept notes.
+    const window = this.deps.window()
+    if (window && !window.isDestroyed()) window.webContents.focus()
+    this.deps.annotated?.({ sessionId: tab.sessionId, tabId: tab.id, annotation })
   }
 
   /**
@@ -1947,6 +2181,7 @@ export class BrowserViews {
       notice: selected?.notice ?? null,
       control: this.deps.control?.(browser.sessionId) ?? IDLE_CONTROL,
       originRequest: this.origins.requestOf(browser.sessionId),
+      annotating: selected?.annotating ?? false,
     })
   }
 
@@ -1954,6 +2189,11 @@ export class BrowserViews {
   controlChanged(sessionId: string): void {
     const browser = this.browsers.get(sessionId)
     if (browser) {
+      for (const tab of this.tabsOf(browser)) {
+        if ((tab.annotating || tab.annotateToken !== null) && this.holdsInput(tab)) {
+          void this.disableAnnotate(tab)
+        }
+      }
       this.syncDesktopFreeze(browser)
       this.emit(browser)
     }

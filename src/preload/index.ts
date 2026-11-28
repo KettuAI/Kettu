@@ -100,6 +100,7 @@ const onHostsChanged = subscribe('hosts:changed')
 const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
+const onBrowserAnnotated = subscribe('browser:annotated')
 const onDeviceOpened = subscribe('devices:opened')
 const onSiteIcon = subscribe('browser:site-icon')
 const onSignInsChanged = subscribe('sign-ins:changed')
@@ -345,6 +346,7 @@ const api: KettuApi = {
     stop: (id) => invoke('browser:stop', id),
     openExternal: (id) => invoke('browser:open-external', id),
     setPageSize: (id, size) => invoke('browser:page-size', id, size),
+    setAnnotate: (id, enabled) => invoke('browser:set-annotate', id, enabled),
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
     capture: (id) => invoke('browser:capture', id),
@@ -365,6 +367,7 @@ const api: KettuApi = {
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
     onOpened: onBrowserOpened,
+    onAnnotated: onBrowserAnnotated,
   },
   signIns: {
     sources: () => invoke('sign-ins:sources'),

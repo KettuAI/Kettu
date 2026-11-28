@@ -1,9 +1,17 @@
 import { create } from 'zustand'
-import { activeBrowserControl, type BrowserState } from '@shared/browser'
+import {
+  activeBrowserControl,
+  MAX_BROWSER_ANNOTATIONS,
+  type BrowserElementAnnotatedEvent,
+  type BrowserState,
+} from '@shared/browser'
+import { emitAppEvent } from '@renderer/app/events'
 import { toast } from '@renderer/components/ui/toast'
+import { addDraftBrowserAnnotation } from '@renderer/features/session/composer/browser-annotations'
 import { i18n } from '@renderer/lib/i18n'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useThreadsStore } from '@renderer/stores/threads'
 import {
   awaitSurfaceKeys,
   isSurfaceKind,
@@ -178,6 +186,43 @@ export function markTakenOverBrowserTabClosing(sessionId: string): void {
 }
 
 /**
+ * Handles a picked page element from the built-in browser: attaches it to the active session's
+ * composer draft and focuses the composer, or shows a clear non-crashing notice when the target
+ * session cannot accept composer references.
+ */
+export function handleBrowserAnnotatedEvent(event: BrowserElementAnnotatedEvent): boolean {
+  const session = useSessionsStore.getState().byId[event.sessionId]
+  const threadSession = useThreadsStore.getState().replicas[event.sessionId]?.state?.session
+  const origin = threadSession?.origin ?? session?.origin
+  if (!session || session.archivedAt !== null || origin === 'subagent') {
+    toast(i18n.t('composer:browserAnnotations.noActiveSession'), undefined, { tone: 'warning' })
+    return false
+  }
+  if (threadSession?.heldOutside === true) {
+    toast(i18n.t('composer:browserAnnotations.sessionHeldOutside'), undefined, { tone: 'warning' })
+    return false
+  }
+  const status = threadSession?.status ?? session.status
+  if (status === 'starting') {
+    toast(i18n.t('composer:browserAnnotations.sessionStarting'), undefined, { tone: 'info' })
+    return false
+  }
+  const result = addDraftBrowserAnnotation(event.sessionId, event.annotation)
+  if (result.limitReached) {
+    toast(
+      i18n.t('composer:browserAnnotations.limit', { count: MAX_BROWSER_ANNOTATIONS }),
+      undefined,
+      {
+        tone: 'warning',
+      },
+    )
+    return false
+  }
+  emitAppEvent({ kind: 'focus-composer', sessionId: event.sessionId })
+  return true
+}
+
+/**
  * Follows the page state main sends, and tells main which sessions still exist, so a page closes
  * once its session leaves the host's memory. The first navigation of a session shows its tab when
  * its side panel is closed or shows the list; one showing another tab keeps it, and the side
@@ -188,6 +233,7 @@ export function initBrowser(): void {
     useBrowserStore.getState().receive(state)
     rememberPages(state)
   })
+  window.kettu.browser.onAnnotated(handleBrowserAnnotatedEvent)
   window.kettu.browser.onOpened(({ sessionId }) => {
     if (!useSessionsStore.getState().byId[sessionId]) return
     const shown = useViewStore.getState().sidePane[sessionId]

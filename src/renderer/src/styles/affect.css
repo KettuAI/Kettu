@@ -1458,6 +1458,15 @@ li[data-row-exit='dust'] > * {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+.kp-tool--annotate[aria-pressed='true'] {
+  background: var(--control-on-tint);
+  box-shadow: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--control-on) 30%, transparent);
+  color: var(--control-on);
+}
+.kp-tool--annotate[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--control-on) 12%, transparent);
+  color: var(--control-on);
+}
 .kp-tool--stop,
 .kp-tool--stop:hover {
   background: var(--danger-tint);
@@ -2245,6 +2254,28 @@ li[data-row-exit='dust'] > * {
 }
 .kp-addr-row--empty .kp-addr {
   margin: 0;
+}
+.kp-annotate-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  background: var(--control-on-tint);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.kp-annotate-bar__text {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.kp-annotate-bar__icon {
+  color: var(--control-on);
 }
 .kp-load {
   position: absolute;

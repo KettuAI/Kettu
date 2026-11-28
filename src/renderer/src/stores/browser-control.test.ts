@@ -31,6 +31,7 @@ function makeState(overrides: Partial<BrowserState> = {}): BrowserState {
     notice: null,
     control: IDLE_CONTROL,
     originRequest: null,
+    annotating: false,
     ...overrides,
   }
 }

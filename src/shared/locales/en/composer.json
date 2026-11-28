@@ -437,5 +437,19 @@
     "remove": "Remove {{title}}",
     "open": "Open {{title}}",
     "sentLabel": "Referenced artifacts"
+  },
+  "browserAnnotations": {
+    "label": "Referenced page elements",
+    "sentLabel": "Referenced page elements",
+    "inspect": "Inspect {{label}}",
+    "remove": "Remove {{label}}",
+    "locator": "Selector",
+    "accessibleName": "Accessible name",
+    "visibleText": "Visible text",
+    "attributes": "Attributes",
+    "limit": "A message can reference {{count}} page elements at most",
+    "noActiveSession": "No active session is available to receive this element reference",
+    "sessionStarting": "Wait for the session to finish starting before referencing page elements",
+    "sessionHeldOutside": "This session is open in an external terminal and cannot accept composer references right now"
   }
 }

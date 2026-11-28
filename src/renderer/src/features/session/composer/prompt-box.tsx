@@ -25,6 +25,7 @@ import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { ArtifactPickerPopover, AttachedArtifactChips } from './artifact-picker'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
+import { BrowserAnnotationChips } from './browser-annotation-chips'
 import { ComposerEditor } from './editor'
 import { hashPickerShown, hashRefAt, replaceHashRef, type GitHubRefRow } from './github-picker'
 import { GitHubRefFooter, GitHubRefHeading, GitHubRefItem } from './github-ref-popover'
@@ -515,6 +516,7 @@ export function PromptBox({
         <ResizeGrip editor={editor} />
         {top}
         <AttachedArtifactChips draft={draft} sessionId={box.sessionId} onLeave={box.focus} />
+        <BrowserAnnotationChips draft={draft} onLeave={box.focus} />
         <AttachmentTray
           draft={draft}
           sessionId={box.sessionId}

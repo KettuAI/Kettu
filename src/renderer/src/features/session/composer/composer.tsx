@@ -54,6 +54,7 @@ import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { formatAttachedArtifactsPrompt } from './artifact-attachments'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
+import { formatBrowserAnnotationsPrompt } from './browser-annotations'
 import { mentionResolver, NO_SURFACES, pluginRefs, surfaceRefs } from './chips'
 import { composerRunState } from './composer-state'
 import { mentionSurfacesOf } from './mention-surfaces'
@@ -233,7 +234,7 @@ export function Composer({
     hostId,
     disabled: starting,
   })
-  const { attachments, artifacts, error, setError } = box
+  const { attachments, artifacts, browserAnnotations, error, setError } = box
   /** Whether a message can go now, as it is or into the queue. */
   const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
     canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
@@ -250,7 +251,8 @@ export function Composer({
   const commented = useReplyComments(sessionId).length > 0
   // Read as values, so typing renders the composer only when one of them changes.
   const holdsMessage =
-    useBoxText(box, (text) => hasMessage(text, attachments, artifacts)) || commented
+    useBoxText(box, (text) => hasMessage(text, attachments, artifacts, browserAnnotations)) ||
+    commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
   const { canSend, canQueue } = can(holdsMessage, blocked)
@@ -266,7 +268,9 @@ export function Composer({
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text
-    const holds = hasMessage(text, attachments, artifacts) || commentsOf(sessionId).length > 0
+    const holds =
+      hasMessage(text, attachments, artifacts, browserAnnotations) ||
+      commentsOf(sessionId).length > 0
     return { holds, ...can(holds, attachmentsBlock(attachments, text)) }
   }
   // Why the send key does nothing now, for the line under the box.
@@ -288,7 +292,7 @@ export function Composer({
     if (!sideOn) return false
     const question = sideQuestionOf(box.editor.current?.text() ?? box.source.text)
     if (question === null) return false
-    if (attachments.length > 0 || artifacts.length > 0) {
+    if (attachments.length > 0 || artifacts.length > 0 || browserAnnotations.length > 0) {
       setError(t('attachments.sideNoAttachments'))
       return true
     }
@@ -401,7 +405,8 @@ export function Composer({
     const taken = box.take()
     const comments = commentsOf(sessionId)
     keepComments(sessionId)
-    const withArtifacts = formatAttachedArtifactsPrompt(taken.prompt, taken.artifacts)
+    const withBrowser = formatBrowserAnnotationsPrompt(taken.prompt, taken.browserAnnotations)
+    const withArtifacts = formatAttachedArtifactsPrompt(withBrowser, taken.artifacts)
     const sent = selection && taken.prompt.trim() ? selection : null
     const prompt = sent ? selectionPrompt(withArtifacts, sent) : withArtifacts
     if (sent) setPaneSelection(null)

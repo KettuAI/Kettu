@@ -604,6 +604,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       stop: () => unsupported('show the browser'),
       openExternal: () => unsupported('show the browser'),
       setPageSize: () => unsupported('show the browser'),
+      setAnnotate: async () => false,
       freeze: async () => null,
       capture: async () => null,
       thaw: async () => {},
@@ -622,6 +623,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       setSessions: () => {},
       onState: never,
       onOpened: never,
+      onAnnotated: never,
     },
     // Kettu's browser runs in the desktop app, so there is nothing to bring sign-ins into.
     signIns: {

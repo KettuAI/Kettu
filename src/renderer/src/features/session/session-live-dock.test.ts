@@ -636,6 +636,7 @@ function makeBrowser(control: BrowserState['control']): BrowserState {
     notice: null,
     control,
     originRequest: null,
+    annotating: false,
   }
 }
 

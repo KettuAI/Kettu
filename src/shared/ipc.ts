@@ -11,6 +11,7 @@ import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type {
   BrowserBounds,
+  BrowserElementAnnotatedEvent,
   BrowserOriginDecision,
   BrowserState,
   PanePageSizeMode,
@@ -545,6 +546,8 @@ export interface IpcInvokeContract {
   'browser:open-external': { args: [sessionId: string]; result: void }
   // The size the selected tab's page keeps, picked in the pane; held back while the agent has it.
   'browser:page-size': { args: [sessionId: string, size: PanePageSizeMode]; result: void }
+  // Toggles element annotation (pick & highlight) mode on the selected tab; returns active state.
+  'browser:set-annotate': { args: [sessionId: string, enabled: boolean]; result: boolean }
   // The page as it looks now, for the pane to show while an overlay would cover the view.
   'browser:freeze': { args: [sessionId: string]; result: string | null }
   'browser:capture': { args: [sessionId: string]; result: Uint8Array | null }
@@ -631,6 +634,8 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  /** The user picked a page element in annotation mode to reference in the session composer. */
+  'browser:annotated': BrowserElementAnnotatedEvent
   /** A session's agent opened a mobile device, which the pane shows if the panel is free. */
   'devices:opened': { sessionId: string; deviceId: string }
   'terminals:ready': null
@@ -1122,6 +1127,8 @@ export interface KettuApi {
     openExternal(sessionId: string): Promise<void>
     /** The size mode the selected tab's page uses: native pane fill or a named device size. */
     setPageSize(sessionId: string, size: PanePageSizeMode): Promise<void>
+    /** Enables or exits element annotation mode on the selected tab; resolves to the resulting state. */
+    setAnnotate(sessionId: string, enabled: boolean): Promise<boolean>
     /** A still of the page for the pane to show, after which main hides the view. */
     freeze(sessionId: string): Promise<string | null>
     thaw(sessionId: string): Promise<void>
@@ -1158,6 +1165,8 @@ export interface KettuApi {
     onState(listener: (state: BrowserState) => void): () => void
     /** An agent opened a session's page for the first time. */
     onOpened(listener: (event: { sessionId: string }) => void): () => void
+    /** The user picked a page element while annotation mode was active. */
+    onAnnotated(listener: (event: BrowserElementAnnotatedEvent) => void): () => void
   }
   /** Sign-ins brought from the user's own browsers into Kettu's, by site. */
   signIns: {
