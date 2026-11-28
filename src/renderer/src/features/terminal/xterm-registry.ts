@@ -47,6 +47,8 @@ export interface Instance {
   term: Terminal
   fit: FitAddon
   element: HTMLDivElement
+  container: HTMLElement | null
+  savedScroll: { atBottom: boolean; viewportY: number } | null
   visible: boolean
   size: { cols: number; rows: number }
   /** The WebGL renderer while the terminal shows, and the canvas its context is on. */
@@ -211,6 +213,8 @@ async function create(id: string): Promise<Instance> {
     term,
     fit,
     element,
+    container: null,
+    savedScroll: null,
     visible: false,
     size: { cols: 0, rows: 0 },
     webgl: null,
@@ -290,21 +294,68 @@ function markActivity(id: string): void {
   useTerminalsStore.setState((s) => ({ byId: { ...s.byId, [id]: { ...t, activity: true } } }))
 }
 
+function clearActivity(id: string): void {
+  const t = useTerminalsStore.getState().byId[id]
+  if (!t || !t.activity) return
+  useTerminalsStore.setState((s) => ({ byId: { ...s.byId, [id]: { ...t, activity: false } } }))
+}
+
+function captureScroll(term: Terminal): { atBottom: boolean; viewportY: number } | null {
+  const active = term.buffer?.active
+  if (!active) return null
+  return { atBottom: active.viewportY >= active.baseY, viewportY: active.viewportY }
+}
+
+function restoreScroll(
+  term: Terminal,
+  scroll: { atBottom: boolean; viewportY: number } | null,
+): void {
+  if (!scroll) return
+  if (scroll.atBottom) {
+    if (typeof term.scrollToBottom === 'function') term.scrollToBottom()
+  } else if (typeof term.scrollToLine === 'function') {
+    term.scrollToLine(scroll.viewportY)
+  }
+}
+
 /**
  * Opens the instance in a container the first time, and moves it there afterwards; with `webgl`,
- * it draws with a WebGL context while it shows.
+ * it draws with a WebGL context while it shows. Preserves scroll position across reparenting
+ * (such as moving between side and bottom docks).
  */
 export function mount(instance: Instance, container: HTMLElement, webgl: boolean): void {
+  const scroll = instance.savedScroll
+  instance.savedScroll = null
+  instance.container = container
   container.appendChild(instance.element)
   if (!instance.term.element) instance.term.open(instance.element)
   instance.visible = true
+  clearActivity(instance.id)
   if (webgl && !instance.webgl) void loadWebgl(instance)
   fitNow(instance)
+  restoreScroll(instance.term, scroll)
+  if (typeof instance.term.refresh === 'function' && instance.term.rows > 0) {
+    instance.term.refresh(0, instance.term.rows - 1)
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (!instance.visible || instance.container !== container) return
+      fitNow(instance)
+      restoreScroll(instance.term, scroll)
+    })
+  }
 }
 
-/** Takes the instance off the page, giving its WebGL context back; the buffer stays. */
-export function unmount(instance: Instance): void {
+/**
+ * Takes the instance off the page, giving its WebGL context back; the buffer and scroll position
+ * stay. When `container` is given, ignores a stale unmount if another view has already remounted
+ * the instance elsewhere.
+ */
+export function unmount(instance: Instance, container?: HTMLElement | null): void {
+  if (container && instance.container !== container) return
+  instance.savedScroll = captureScroll(instance.term)
   instance.visible = false
+  instance.container = null
   releaseWebgl(instance)
   instance.element.remove()
 }
@@ -346,11 +397,14 @@ function releaseWebgl(instance: Instance): void {
 }
 
 /**
- * The side panel glides its pane open and closed, and a terminal that fits on the way would tell
- * its shell a width of a few columns. It fits once the glide ends.
+ * The side panel glides its pane open and closed, and a terminal inside it that fits on the way
+ * would tell its shell a width of a few columns. It fits once the glide ends; a bottom-docked
+ * terminal sits in `#content` and keeps fitting freely while the side panel glides.
  */
 function isGliding(instance: Instance): boolean {
-  return instance.element.closest('.kettu-pane-area[data-glide]') !== null
+  return (
+    instance.element.closest('.kettu-pane-area[data-glide] > [data-panel]:not(#content)') !== null
+  )
 }
 
 export function fitNow(instance: Instance): void {
@@ -360,8 +414,12 @@ export function fitNow(instance: Instance): void {
   const cols = Math.max(2, Math.min(1000, dims.cols))
   const rows = Math.max(1, Math.min(1000, dims.rows))
   if (cols === instance.size.cols && rows === instance.size.rows) return
+  const scroll = captureScroll(instance.term)
   instance.size = { cols, rows }
   instance.term.resize(cols, rows)
+  if (scroll?.atBottom && typeof instance.term.scrollToBottom === 'function') {
+    instance.term.scrollToBottom()
+  }
   void terminals('terminals.resize', { id: instance.id, cols, rows }).catch(() => undefined)
 }
 

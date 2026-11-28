@@ -8,7 +8,12 @@
     "empty": "此项目还没有终端。",
     "split": "拆分",
     "unsplit": "取消拆分",
-    "close": "关闭面板"
+    "close": "关闭面板",
+    "hide": "隐藏终端",
+    "moveToBottom": "移到底部",
+    "moveToSide": "移回右侧",
+    "resize": "调整终端高度",
+    "resizeHint": "拖动以调整高度，双击恢复默认。"
   },
   "tab": {
     "rename": "重命名",

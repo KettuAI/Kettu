@@ -1,4 +1,5 @@
 import {
+  closeBottomTerminal,
   docKey,
   isDocKind,
   leaveEmptySidePanel,
@@ -124,6 +125,10 @@ export function nextAfterClose<T extends { key: string; selected: boolean }>(
  */
 export function foldSurface(panel: string, kind: SurfaceKind): void {
   const view = useViewStore.getState()
+  if (kind === 'terminal' && view.terminalPlacement === 'bottom') {
+    closeBottomTerminal(panel)
+    return
+  }
   if (view.sidePane[panel] !== kind) return
   const order = view.sideOrder[panel] ?? []
   const last = order.findLastIndex((key) => kindOfKey(key) === kind)

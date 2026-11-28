@@ -4,18 +4,23 @@ import { closeSettings, closeSplitPane, useViewStore } from '@renderer/stores/vi
 import { leaveSession } from './actions'
 import { emitAppEvent } from './events'
 import { dialogOpen, popupOpen } from './shortcuts'
-import { sidePanelUsed } from './used-pane'
+import { bottomTerminalUsed, sidePanelUsed } from './used-pane'
 
 /**
- * Mod+W: closes the part the user used last, the side panel's selected tab, else
- * leaves the shown session without archiving it. Returns false when nothing is left to close, which the window's own
- * close takes. A dialog keeps the key, so a second press cannot close the window under it.
+ * Mod+W: closes the part the user used last, the bottom terminal's or side panel's selected tab,
+ * else leaves the shown session without archiving it. Returns false when nothing is left to close,
+ * which the window's own close takes. A dialog keeps the key, so a second press cannot close the
+ * window under it.
  */
 export function closeCurrent(browserFocused = false): boolean {
   if (dialogOpen()) return true
   const { settings, main, layout } = useViewStore.getState()
   if (settings.open) {
     closeSettings()
+    return true
+  }
+  if (bottomTerminalUsed(browserFocused)) {
+    emitAppEvent({ kind: 'close-bottom-terminal-tab' })
     return true
   }
   if (sidePanelUsed(browserFocused)) {

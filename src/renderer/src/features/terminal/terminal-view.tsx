@@ -74,17 +74,18 @@ export function TerminalView({
   const ask = useAsk()
 
   useEffect(() => {
+    const target = container.current
     let live = true
     let attached: Instance | null = null
     void getInstance(terminal.id).then((inst) => {
-      if (!live || !container.current) return
+      if (!live || !target) return
       attached = inst
-      mount(inst, container.current, true)
+      mount(inst, target, true)
       setInstance(inst)
     })
     return () => {
       live = false
-      if (attached) unmount(attached)
+      if (attached) unmount(attached, target)
     }
   }, [terminal.id])
 
@@ -105,8 +106,9 @@ export function TerminalView({
       timer = setTimeout(() => fitNow(instance), 50)
     })
     observer.observe(el)
-    // The pane area marks its glide while it opens or closes, and no fit happens until it ends.
-    const area = el.closest('.kettu-pane-area')
+    // The side panel marks its glide while it opens or closes, and no fit happens until it ends.
+    const inSidePanel = el.closest('[data-side-panel]') !== null
+    const area = inSidePanel ? el.closest('.kettu-pane-area') : null
     const glide = new MutationObserver(() => fitNow(instance))
     if (area) glide.observe(area, { attributes: true, attributeFilter: ['data-glide'] })
     return () => {
