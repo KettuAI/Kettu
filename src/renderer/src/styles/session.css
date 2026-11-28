@@ -837,7 +837,7 @@
   --ks-gutter: 26px;
 }
 .ks-thread .ui-tcc-group__head {
-  color: var(--ui-tcc-text);
+  color: var(--thread-quiet);
   font-size: 13px;
 }
 .ks-thread .ui-tcc-group__head:hover {
