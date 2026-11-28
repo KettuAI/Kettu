@@ -473,6 +473,8 @@ export interface SessionRecord {
   memorySentAt?: string
   /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
   noRewind?: true
+  /** Native branch leaf id selected inside the session (Pi), kept across reopen/reconnect. */
+  branchLeafId?: string | null
   /** Brought into Kettu via `sessions.import`, so its history comes from the agent on first open. */
   imported?: true
 }
@@ -1264,6 +1266,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         ? { memorySentAt: item.memorySentAt }
         : {}),
       ...(item.noRewind === true ? { noRewind: true as const } : {}),
+      ...(item.branchLeafId === null || (isString(item.branchLeafId) && item.branchLeafId !== '')
+        ? { branchLeafId: item.branchLeafId }
+        : {}),
       ...(item.imported === true ? { imported: true as const } : {}),
     })
   }

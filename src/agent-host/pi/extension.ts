@@ -19,6 +19,14 @@ export const SERVERS_VARIABLE = 'KETTU_MCP_SERVERS'
 export const SCOPE_VARIABLE = 'KETTU_MODEL_SCOPE'
 /** The status the extension sets to the session's model scope, as `{"models": [...]}`. */
 export const SCOPE_STATUS = 'kettu.model-scope'
+/** Set for a session where the extension registers Kettu's internal tree navigation command. */
+export const NAVIGATE_VARIABLE = 'KETTU_TREE_NAV'
+/** Internal slash command the extension registers to invoke Pi's native `ctx.navigateTree`. */
+export const NAVIGATE_COMMAND = '__kettu_navigate_tree'
+/** The status the extension emits once the internal tree navigation command is registered. */
+export const NAVIGATE_READY_STATUS = 'kettu.navigate-tree-ready'
+/** The status the extension emits with each internal tree navigation outcome. */
+export const NAVIGATE_STATUS = 'kettu.navigate-tree'
 
 /**
  * Kettu's tools that pi declares to the model from the start, as it does its built-in ones: the
@@ -118,20 +126,72 @@ export default function kettu(pi) {
     servers: parse(env.${SERVERS_VARIABLE}),
     scope: env.${SCOPE_VARIABLE} === '1',
     scopeSent: false,
+    treeNav: env.${NAVIGATE_VARIABLE} === '1',
+    treeNavSent: false,
   }
   globalThis[HELD] = held
   delete env.${SERVERS_VARIABLE}
   delete env.${SCOPE_VARIABLE}
-  if (held.scope && typeof pi.on === 'function') {
+  delete env.${NAVIGATE_VARIABLE}
+  if (held.treeNav && typeof pi.registerCommand === 'function') {
+    try {
+      pi.registerCommand(${JSON.stringify(NAVIGATE_COMMAND)}, {
+        description: 'Internal Kettu session tree navigation',
+        handler: async (args, ctx) => {
+          let reqId = ''
+          try {
+            const parsed = JSON.parse(args || '{}')
+            reqId = typeof parsed.reqId === 'string' ? parsed.reqId : ''
+            const targetId = typeof parsed.targetId === 'string' ? parsed.targetId : ''
+            if (!targetId) throw new Error('Missing targetId')
+            if (typeof ctx?.navigateTree !== 'function') {
+              throw new Error('Tree navigation is unavailable in this Pi version')
+            }
+            const res = await ctx.navigateTree(targetId, { summarize: false })
+            if (typeof ctx?.ui?.setStatus === 'function') {
+              ctx.ui.setStatus(
+                ${JSON.stringify(NAVIGATE_STATUS)},
+                JSON.stringify({ reqId, ok: true, cancelled: Boolean(res?.cancelled) }),
+              )
+            }
+          } catch (error) {
+            if (typeof ctx?.ui?.setStatus === 'function') {
+              ctx.ui.setStatus(
+                ${JSON.stringify(NAVIGATE_STATUS)},
+                JSON.stringify({
+                  reqId,
+                  ok: false,
+                  error: error instanceof Error ? error.message : String(error),
+                }),
+              )
+            }
+          }
+        },
+      })
+    } catch (error) {
+      console.error('Kettu could not register tree navigation: ' + error)
+    }
+  }
+  if ((held.scope || held.treeNav) && typeof pi.on === 'function') {
     pi.on('session_start', (_event, ctx) => {
-      if (held.scopeSent || typeof ctx?.ui?.setStatus !== 'function') return
-      held.scopeSent = true
-      const scoped = Array.isArray(ctx.scopedModels) ? ctx.scopedModels : []
-      const models = scoped.map((entry) => entry.model.provider + '/' + entry.model.id)
-      try {
-        ctx.ui.setStatus(${JSON.stringify(SCOPE_STATUS)}, JSON.stringify({ models }))
-      } catch (error) {
-        console.error('Kettu could not pass on the model scope: ' + error)
+      if (typeof ctx?.ui?.setStatus !== 'function') return
+      if (held.scope && !held.scopeSent) {
+        held.scopeSent = true
+        const scoped = Array.isArray(ctx.scopedModels) ? ctx.scopedModels : []
+        const models = scoped.map((entry) => entry.model.provider + '/' + entry.model.id)
+        try {
+          ctx.ui.setStatus(${JSON.stringify(SCOPE_STATUS)}, JSON.stringify({ models }))
+        } catch (error) {
+          console.error('Kettu could not pass on the model scope: ' + error)
+        }
+      }
+      if (held.treeNav && !held.treeNavSent && typeof pi.registerCommand === 'function') {
+        held.treeNavSent = true
+        try {
+          ctx.ui.setStatus(${JSON.stringify(NAVIGATE_READY_STATUS)}, '1')
+        } catch (error) {
+          console.error('Kettu could not report tree navigation readiness: ' + error)
+        }
       }
     })
   }

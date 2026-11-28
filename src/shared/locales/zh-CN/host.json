@@ -1166,6 +1166,11 @@
       "noReply": "Pi 的会话里没有这条回复",
       "cancelled": "Pi 的一个扩展取消了这次复制"
     },
+    "branch": {
+      "notFound": "Pi 的会话里找不到这个分支节点",
+      "cancelled": "Pi 的一个扩展取消了分支切换",
+      "unsupported": "当前版本的 Pi 不支持切换会话分支"
+    },
     "session": {
       "notFound": "Pi 没有会话 {{id}}",
       "id": "**会话：** `{{value}}`",
@@ -1831,6 +1836,16 @@
     "noPoint": "智能体的历史里已经没有这条消息",
     "nothing": "没有可以放回原处的内容",
     "failed": "没能回到重新编辑的消息：{{reason}}"
+  },
+  "branch": {
+    "unsupported": "{{agent}} 不支持在同一会话中切换分支",
+    "subagent": "子智能体会话不支持切换分支",
+    "archived": "请先恢复这个会话，再切换分支",
+    "running": "当前回合运行中，请等待结束后再切换分支",
+    "starting": "请等待会话启动完成后再切换分支",
+    "switching": "正在切换分支，请稍候",
+    "rewound": "请先完成或撤销当前的重新编辑，再切换分支",
+    "failed": "切换分支失败：{{reason}}"
   },
   "turnUndo": {
     "archived": "请先恢复这个会话，再撤销其中的文件改动",

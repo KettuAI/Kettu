@@ -94,6 +94,14 @@ vi.mock('@renderer/stores/threads', () => ({
 vi.mock('@renderer/stores/agents', () => ({
   agentName: (agentId: string) =>
     agentId === 'claude-code' ? 'Claude Code' : agentId === 'codex' ? 'Codex' : agentId,
+  agentsOn: () => ({ byId: {}, order: [] }),
+  useAgentsStore: <T>(
+    selector: (state: {
+      byId: Record<string, never>
+      order: string[]
+      hosts: Record<string, never>
+    }) => T,
+  ) => selector({ byId: {}, order: [], hosts: {} }),
 }))
 
 vi.mock('@renderer/stores/projects', () => ({

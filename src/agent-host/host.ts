@@ -5364,6 +5364,9 @@ export class AgentHost {
       'sessions.sideAgents': ({ sessionId }) => ({ agents: sessions.sideAgents(sessionId) }),
       'sessions.fork': ({ sessionId, entryId, worktree }) =>
         sessions.fork(sessionId, entryId, worktree),
+      'sessions.branches': ({ sessionId }) => sessions.branches(sessionId),
+      'sessions.switchBranch': ({ sessionId, branchId }) =>
+        sessions.switchBranch(sessionId, branchId),
       'worktrees.inspect': ({ sessionId }) =>
         this.gitCall(() => sessions.inspectWorktree(sessionId)),
       'worktrees.remove': ({ sessionId, branch, expected }) =>

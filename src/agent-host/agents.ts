@@ -6365,6 +6365,7 @@ export class AgentManager {
         steering: capabilities?.steering ?? false,
         ...(capabilities?.rewind ? { rewind: true } : {}),
         ...(capabilities?.rewindFiles ? { rewindFiles: true } : {}),
+        ...(capabilities?.branches || slot.def.protocol === 'pi-rpc' ? { branches: true } : {}),
         reports: this.hasLimits(slot.id) && !consoleSignIn,
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true || slot.def.readsContext === true,

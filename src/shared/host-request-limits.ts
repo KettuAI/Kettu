@@ -179,6 +179,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.previewUndoTurn': HOST_MS,
   'sessions.undoTurn': HOST_MS,
   'sessions.fork': AGENT_MS,
+  'sessions.branches': AGENT_MS,
+  'sessions.switchBranch': AGENT_MS,
   'worktrees.inspect': AGENT_MS,
   'worktrees.remove': NONE,
   'worktrees.retrySetup': NONE,

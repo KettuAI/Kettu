@@ -2374,6 +2374,11 @@ export function createValidators(platform: Platform): Validators {
         ...(o.worktree === undefined ? {} : { worktree: o.worktree }),
       }
     },
+    'sessions.branches': session,
+    'sessions.switchBranch': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), branchId: string(o, 'branchId', ACP_ID_CHARS) }
+    },
     'worktrees.inspect': session,
     'worktrees.remove': (params) => {
       const o = fields(params)

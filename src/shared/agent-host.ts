@@ -300,6 +300,44 @@ export interface AgentProviderAction {
   key?: string
 }
 
+/** One compressed segment of an agent's native conversation tree inside a single session (Pi). */
+export interface SessionBranchNode {
+  /** Native entry id at the end of this branch segment (target for switching). */
+  id: string
+  /** Parent segment id in the displayed tree, or null for a top-level segment. */
+  parentId: string | null
+  /** Native bookmark label attached to this segment, if any. */
+  label: string | null
+  /** Concise prompt or reply snippet identifying this branch segment. */
+  preview: string
+  /** Entry role that produced `preview`, used as a fallback label when `preview` is empty. */
+  previewRole: 'user' | 'assistant' | 'summary' | 'system'
+  /** Latest activity timestamp in epoch ms, or null if absent. */
+  timestamp: number | null
+  /** Number of user prompts inside this branch segment. */
+  turnCount: number
+  /** Tree depth for indentation (0 for top-level branches). */
+  depth: number
+  /** True when this segment ends at a leaf with no child branches. */
+  isLeaf: boolean
+  /** True when the session's active native leaf sits at or inside this segment. */
+  isCurrent: boolean
+  /** True when this segment lies on the active root-to-leaf path. */
+  onActivePath: boolean
+}
+
+/** Native branches inside a single session, returned by `sessions.branches` and `sessions.switchBranch`. */
+export interface SessionBranchesResult {
+  /** Current active native leaf entry id, or null when empty or at root. */
+  activeLeafId: string | null
+  /** Number of leaf branches in the native session tree. */
+  branchCount: number
+  /** True when the session tree has more than one branch (forked or multi-root). */
+  hasBranches: boolean
+  /** Pre-order list of branch segments ready to render. */
+  nodes: SessionBranchNode[]
+}
+
 /** A user message in the message outline: its first line and the title a model wrote, if any. */
 export interface OutlineEntry {
   pos: number
@@ -653,6 +691,7 @@ export interface AgentStatus {
     steering: boolean // `_session/steering` into a running turn
     rewind?: boolean // cuts a session's conversation before a turn, for an edit from a message
     rewindFiles?: boolean // that cut also takes back the files the agent changed since
+    branches?: boolean // browses and switches native conversation branches inside one session
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     context: boolean // what fills the context from its own report (`/context`)
     liveContext: boolean // what fills the context from its connection through a running turn
@@ -1942,6 +1981,16 @@ export interface HostContract {
     params: { sessionId: string; entryId?: string; worktree?: 'new' | 'same' }
     result: SessionSummary
   }
+  // Reads the native conversation branch tree inside a single session (Pi).
+  'sessions.branches': {
+    params: { sessionId: string }
+    result: SessionBranchesResult
+  }
+  // Switches the session's active native branch to `branchId`, syncing history and next-turn context.
+  'sessions.switchBranch': {
+    params: { sessionId: string; branchId: string }
+    result: SessionBranchesResult
+  }
   // What removing the session's worktree would lose, and the other sessions still in it.
   'worktrees.inspect': {
     params: { sessionId: string }
@@ -2710,6 +2759,8 @@ export const HOST_METHODS = [
   'sessions.previewUndoTurn',
   'sessions.undoTurn',
   'sessions.fork',
+  'sessions.branches',
+  'sessions.switchBranch',
   'worktrees.inspect',
   'worktrees.remove',
   'worktrees.retrySetup',
