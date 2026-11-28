@@ -23,6 +23,7 @@ import {
   type BrowserCallRequest,
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
+  type SessionBrowserTab,
 } from '@shared/browser'
 import {
   type ArtifactExportFormat,
@@ -106,6 +107,8 @@ export interface AgentHostDeps {
   colorMode(): 'light' | 'dark'
   /** On Windows, whether the computer runs on battery, which follows init at each start. */
   onBattery?(): boolean | null
+  /** Local sessions' current desktop browser tabs, synced right after init at every start. */
+  browserTabs?(): Record<string, SessionBrowserTab[]>
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
@@ -445,6 +448,9 @@ export class AgentHost {
           { type: 'host:account', accountId: deps.accountId?.() ?? null },
           { type: 'host:color-mode', mode: deps.colorMode() },
           ...(onBattery === null ? [] : [{ type: 'host:battery' as const, onBattery }]),
+          ...(deps.browserTabs
+            ? [{ type: 'host:browser-tabs-sync' as const, sessions: deps.browserTabs() }]
+            : []),
         ]
       },
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
@@ -784,6 +790,16 @@ export class AgentHost {
       sessionId,
       durationMs: Math.max(0, Math.round(durationMs)),
     })
+  }
+
+  /** `host:browser-tabs`: reports the desktop window's current browser tabs for one session. */
+  browserTabs(sessionId: string, tabs: SessionBrowserTab[]): void {
+    this.host.post({ type: 'host:browser-tabs', sessionId, tabs })
+  }
+
+  /** `host:browser-tabs-sync`: replaces every session's browser tabs reported by main. */
+  syncBrowserTabs(sessions: Record<string, SessionBrowserTab[]>): void {
+    this.host.post({ type: 'host:browser-tabs-sync', sessions })
   }
 
   /** `host:browser-origin-ask`: the session's thread shows the page's new origin, waiting. */

@@ -354,4 +354,75 @@ describe('Outbox 按字节流控与高优插队调度', () => {
     expect(conn.sent).toHaveLength(2)
     expect(conn.sent[1]!.message).toEqual({ kind: 'json', value: { type: 'resync' } })
   })
+
+  it('keeps only the latest queued browser.tabs event per session on overflow while keeping distinct sessions separate', async () => {
+    const conn = fakeConnection(0)
+    const dropped: number[] = []
+    const outbox = new Outbox({
+      acks: true,
+      limits: { inFlight: 1, queued: 2 },
+      dropped: (count) => dropped.push(count),
+      overflowed: () => {},
+    })
+    outbox.attach(conn.connection, 0)
+
+    // Occupy the single in-flight slot so subsequent events queue.
+    await outbox.push({ kind: 'json', value: { type: 'response', id: 1, result: null } })
+    expect(conn.sent).toHaveLength(1)
+
+    const s1First = {
+      type: 'event',
+      event: {
+        type: 'browser.tabs',
+        sessionId: 's1',
+        tabs: [
+          {
+            id: 't1',
+            url: 'https://example.com/a',
+            title: 'A',
+            active: true,
+            by: 'user',
+            allowed: false,
+          },
+        ],
+      },
+    }
+    const s1Latest = {
+      type: 'event',
+      event: {
+        type: 'browser.tabs',
+        sessionId: 's1',
+        tabs: [
+          {
+            id: 't1',
+            url: 'https://example.com/b',
+            title: 'B',
+            active: true,
+            by: 'user',
+            allowed: false,
+          },
+        ],
+      },
+    }
+    const s2Event = {
+      type: 'event',
+      event: {
+        type: 'browser.tabs',
+        sessionId: 's2',
+        tabs: [],
+      },
+    }
+
+    await outbox.push({ kind: 'json', value: s1First })
+    await outbox.push({ kind: 'json', value: s2Event })
+    await outbox.push({ kind: 'json', value: s1Latest })
+    expect(dropped).toEqual([1])
+
+    outbox.ack(1)
+    outbox.ack(2)
+    expect(conn.sent.slice(1).map((item) => item.message)).toEqual([
+      { kind: 'json', value: s2Event },
+      { kind: 'json', value: s1Latest },
+    ])
+  })
 })

@@ -1004,6 +1004,20 @@ export class BrowserViews {
     await this.browserSession.clearCache()
   }
 
+  /** Closes every open browser across all sessions (for example once the last app window closes). */
+  closeAll(): void {
+    for (const [sessionId, browser] of [...this.browsers]) {
+      this.disableBrowserAnnotate(browser, false)
+      for (const tab of this.tabsOf(browser)) this.dropTab(tab)
+      browser.strip.clear()
+      this.origins.close(sessionId)
+      this.browsers.delete(sessionId)
+      this.deps.ended?.(sessionId)
+      this.deps.removed?.(sessionId)
+    }
+    this.syncOverlay()
+  }
+
   /** Closes the browser of every session that no longer exists in the renderer's list. */
   setSessions(sessionIds: readonly string[]): void {
     const live = new Set(sessionIds)

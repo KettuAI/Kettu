@@ -8,6 +8,7 @@ import type { HostEvent } from '@shared/agent-host'
 import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-log'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import { parseSessionBrowserTabs, type SessionBrowserTab } from '@shared/browser'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import type { AgentToPluginHost } from '@shared/plugin-host'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
@@ -285,6 +286,35 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.browserHandedBack(message.sessionId, message.durationMs))
         }
         break
+      case 'host:browser-tabs': {
+        const tabs = parseSessionBrowserTabs(message.tabs)
+        if (typeof message.sessionId === 'string' && message.sessionId.length > 0 && tabs) {
+          const { sessionId } = message
+          withHost((h) => h.browserTabsChanged(sessionId, tabs))
+        }
+        break
+      }
+      case 'host:browser-tabs-sync': {
+        const raw = message.sessions
+        if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+          const sessions: Record<string, SessionBrowserTab[]> = {}
+          let valid = true
+          for (const [id, value] of Object.entries(raw)) {
+            if (id.length === 0) {
+              valid = false
+              break
+            }
+            const tabs = parseSessionBrowserTabs(value)
+            if (!tabs) {
+              valid = false
+              break
+            }
+            sessions[id] = tabs
+          }
+          if (valid) withHost((h) => h.browserTabsSynced(sessions))
+        }
+        break
+      }
       case 'host:power':
         withHost((h) => h.power(message.state))
         break

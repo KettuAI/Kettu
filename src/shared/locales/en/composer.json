@@ -364,6 +364,7 @@
     "loading": "Listing the project's files…",
     "chooseProject": "Choose a project to mention its files",
     "files": "Files",
+    "browserTabs": "Browser tabs",
     "folder": "Folder",
     "keysMove": "↑↓ to move",
     "keysInsert": "↵ to insert",

@@ -11,13 +11,19 @@ const METHODS: ReadonlySet<string> = new Set([...HOST_METHODS, ...TERMINAL_METHO
 
 /**
  * What a window may ask another host: its agent host's and terminal host's methods, and its
- * owner's calls to it, but not the answers to the host's browser calls, which main gives. The host
- * refuses the terminal's while its owner does not allow it. A new site's card is the user's to
- * answer, from any window.
+ * owner's calls to it, but not the answers or reports for the host's browser calls, which main
+ * gives. The host refuses the terminal's while its owner does not allow it. A new site's card is
+ * the user's to answer, and any window may list a session's reported browser tabs.
  */
 export function isOtherHostMethod(method: unknown): method is string {
   if (typeof method !== 'string') return false
-  if (method.startsWith('browser.') && method !== 'browser.answerOrigin') return false
+  if (
+    method.startsWith('browser.') &&
+    method !== 'browser.answerOrigin' &&
+    method !== 'browser.tabs'
+  ) {
+    return false
+  }
   return METHODS.has(method) || isHostAdminMethod(method)
 }
 

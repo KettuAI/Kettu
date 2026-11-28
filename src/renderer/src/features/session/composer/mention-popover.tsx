@@ -1,12 +1,14 @@
-import { File01Icon, Folder01Icon } from '@hugeicons/core-free-icons'
+import { File01Icon, Folder01Icon, GlobalIcon } from '@hugeicons/core-free-icons'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { useTranslation } from 'react-i18next'
 import { pluginText } from '@shared/plugins'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { addressText } from '@renderer/features/browser/address'
 import { VIEW_ICONS } from '@renderer/features/plugin-views/icons'
 import { PluginMark } from '@renderer/features/plugin-views/plugin-mark'
 import { cn } from '@renderer/lib/utils'
 import { markedRuns, type MentionRow } from './mentions'
+import type { BrowserTabMentionRow } from './mention-surfaces'
 import type { MentionList } from './use-mention-list'
 import type { PluginMentionGroup, PluginRow } from './use-plugin-mentions'
 
@@ -64,6 +66,44 @@ export function MentionItem({
       {row.folder && (
         <span className="shrink-0 pl-4 text-hint text-tertiary">{t('mentions.folder')}</span>
       )}
+    </div>
+  )
+}
+
+/** A session browser tab row in the `@` mention popover: globe icon, title, and short address. */
+export function BrowserTabMentionItem({
+  id,
+  row,
+  highlighted,
+  onHighlight,
+  onChoose,
+}: {
+  id: string
+  row: BrowserTabMentionRow
+  highlighted: boolean
+  onHighlight: () => void
+  onChoose: (row: BrowserTabMentionRow) => void
+}) {
+  const address = row.url ? (addressText(row.url) ?? row.url) : null
+  const subtitle = address && address !== row.name ? address : null
+  return (
+    <div
+      role="option"
+      id={id}
+      aria-selected={highlighted}
+      data-highlighted={highlighted ? '' : undefined}
+      // Pressing a row keeps the focus, and with it the caret, in the box.
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseMove={onHighlight}
+      onClick={() => onChoose(row)}
+      title={row.url ? `${row.name}\n${row.url}` : row.name}
+      className="flex min-h-7.5 cursor-default items-center gap-2.25 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
+    >
+      <Glyph icon={GlobalIcon} className="size-3.75 shrink-0 text-icon" />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="text-primary">{row.name}</span>
+        {subtitle && <span className="pl-2 font-mono text-hint text-tertiary">{subtitle}</span>}
+      </span>
     </div>
   )
 }

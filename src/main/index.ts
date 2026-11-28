@@ -15,7 +15,7 @@ import {
 import { ATTENTION_SETTING } from '@shared/attention'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ARTIFACT_ID, parseArtifactRef } from '@shared/artifacts'
-import { BROWSER_PARTITION } from '@shared/browser'
+import { BROWSER_PARTITION, sessionBrowserTabsOf } from '@shared/browser'
 import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
@@ -43,6 +43,7 @@ import { applyAppIcon, initAppIcon } from './app-icon'
 import { accountAvatarRequestUrl, Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { RemoteBrowser } from './browser/remote'
+import { BrowserTabsReporter } from './browser/tabs-reporter'
 import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
@@ -369,9 +370,24 @@ async function start(): Promise<void> {
   let browserTools: BrowserTools | null = null
   // The host shows a new origin in the session's thread; it is made after the pages.
   const hostRef: { current: AgentHost | null } = { current: null }
+  const hostSessionsRef: { current: HostSessions | null } = { current: null }
+  let remoteBrowserRef: RemoteBrowser | null = null
+  const browserTabsReporter = new BrowserTabsReporter({
+    hostOf: (sessionId) =>
+      remoteBrowserRef?.hostOf(sessionId) ??
+      hostSessionsRef.current?.hostOfSession(sessionId) ??
+      null,
+    reportLocal: (sessionId, tabs) => hostRef.current?.browserTabs(sessionId, tabs),
+    syncLocal: (sessions) => hostRef.current?.syncBrowserTabs(sessions),
+    reportRemote: (hostId, sessionId, tabs) =>
+      hostSessionsRef.current?.request(hostId, 'browser.reportTabs', { sessionId, tabs }) ?? false,
+  })
   const browserViews = new BrowserViews({
     window: currentWindow,
-    send: (state) => broadcast('browser:state', state),
+    send: (state) => {
+      broadcast('browser:state', state)
+      browserTabsReporter.update(state.sessionId, sessionBrowserTabsOf(state))
+    },
     dialogOpened: (tabId, type, accepted) => browserTools?.dialogOpened(tabId, type, accepted),
     control: (sessionId) => browserTools?.control(sessionId) ?? IDLE_CONTROL,
     isInjecting: (tabId) => browserTools?.isInjecting(tabId) ?? false,
@@ -388,6 +404,7 @@ async function start(): Promise<void> {
     ended: (sessionId) => {
       browserTools?.forget(sessionId)
       remoteBrowser.pageClosed(sessionId)
+      browserTabsReporter.clear(sessionId)
     },
     agentTabClosed: (sessionId) => browserTools?.agentTabClosed(sessionId),
     panelClosed: (sessionId) => {
@@ -401,7 +418,10 @@ async function start(): Promise<void> {
     originAnswered: (request) => {
       if (!remoteBrowser.originAnswered(request)) hostRef.current?.originAnswered(request)
     },
-    removed: (sessionId) => remoteBrowser.pageRemoved(sessionId),
+    removed: (sessionId) => {
+      remoteBrowser.pageRemoved(sessionId)
+      browserTabsReporter.clear(sessionId)
+    },
     siteOpened: (pageUrl, favicons) => {
       if (favicons) void siteIcons.favicons(pageUrl, favicons)
       else siteIcons.visited(pageUrl)
@@ -442,6 +462,7 @@ async function start(): Promise<void> {
     askAnswered: (sessionId, outcome) => browserTools!.answerAsk(sessionId, outcome),
     log: (level, message) => log[level](`browser: ${message}`),
   })
+  remoteBrowserRef = remoteBrowser
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({
     settings: () => terminalSettings(settings.get()),
@@ -554,6 +575,7 @@ async function start(): Promise<void> {
     colorMode,
     marketKeys: () => marketKeys.contentsForHost(),
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
+    browserTabs: () => browserTabsReporter.takeLocalSnapshot(),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     installMcp: (entries) => installDiscoveredMcp(settings, marketKeys, entries),
     mcpBackupKey: () =>
@@ -879,11 +901,13 @@ async function start(): Promise<void> {
       // The host's turns that used this computer's pages end with its session.
       browserTools?.endTurns(remoteBrowser.sessionsOf(hostId))
       remoteBrowser.hostClosed(hostId)
+      browserTabsReporter.hostClosed(hostId)
       remoteArtifacts.ended(hostId)
       island.remoteClosed(hostId)
       trayHostAgents?.ended(hostId)
     },
     opened: (hostId) => {
+      browserTabsReporter.hostOpened(hostId)
       island.remoteOpened(hostId)
       trayHostAgents?.opened(hostId)
     },
@@ -903,6 +927,7 @@ async function start(): Promise<void> {
     },
     media: hostMedia,
   })
+  hostSessionsRef.current = hostSessions
   if (trayPanel) {
     trayHostAgents = new TrayHostAgentsFeed({
       openHosts: () => hostSessions.openHosts(),
@@ -1147,6 +1172,7 @@ async function start(): Promise<void> {
     },
     clearUpdateResume: () => clearUpdateResume(userDataPath),
     shutDown: async () => {
+      browserTabsReporter.dispose()
       account.stop()
       relayToken.stop()
       // Devices hear that Kettu is stopping before their sessions' agent host goes.
@@ -1429,6 +1455,12 @@ async function start(): Promise<void> {
     })
     artifacts.watchWindow(window.webContents)
     window.once('show', () => applyBadgeTo(window))
+    window.on('closed', () => {
+      if (appWindows().length === 0) {
+        browserViews.closeAll()
+        browserTabsReporter.windowDetached()
+      }
+    })
     window.on('session-end', handleSystemShutdown)
   })
   powerMonitor.on('shutdown', handleSystemShutdown)

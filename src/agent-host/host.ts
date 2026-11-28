@@ -57,6 +57,7 @@ import {
   type BrowserCallAnswer,
   type BrowserCallRequest,
   type BrowserOriginAnswer,
+  type SessionBrowserTab,
 } from '@shared/browser'
 import { isControlOutcome, isControlStep, SURFACE_ACCESS_WAIT_MS } from '@shared/control'
 import type {
@@ -155,6 +156,7 @@ import {
   type AgentTimings,
 } from './agents'
 import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
+import { MAIN_BROWSER_SOURCE, SessionBrowserTabs } from './browser-tabs'
 import {
   answerOf,
   BROWSER_GONE,
@@ -677,6 +679,8 @@ export class AgentHost {
   private readonly deviceBrowser: DeviceBrowserCalls
   /** The running turns that use each session's page, whose end ends the page's agent state. */
   private readonly browserTurns = new BrowserTurns()
+  /** Each session's open browser tabs reported by main or paired desktop apps. */
+  private readonly browserTabs = new SessionBrowserTabs()
   /** The site each session's page last showed, from its calls' answers, which an asked step names. */
   private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
@@ -2126,11 +2130,13 @@ export class AgentHost {
             this.hub.send(portIds, event)
             return
           }
+          this.browserTabs.removeSessions([sessionId])
           this.hub.broadcast(event)
           this.sendFolders()
           this.scheduleActivity()
         },
         ended: (sessionIds) => {
+          this.browserTabs.removeSessions(sessionIds)
           this.htmlPreviews.end(sessionIds)
           options.send({ type: 'host:sessions-ended', sessionIds })
         },
@@ -2798,6 +2804,11 @@ export class AgentHost {
     this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
     this.browserTurns.portClosed(portId)
+    for (const { sessionId, tabs } of this.browserTabs.clearSource(portId, (id) =>
+      this.browserTabSource(id),
+    )) {
+      this.emitBrowserTabs(sessionId, tabs)
+    }
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
     this.gitRetains.dropPort(portId)
@@ -4556,6 +4567,49 @@ export class AgentHost {
     this.sessions.controlHandedBack(sessionId, 'browser', durationMs)
   }
 
+  /** `host:browser-tabs`: main reported the open browser tabs for one session. */
+  browserTabsChanged(sessionId: string, tabs: SessionBrowserTab[]): void {
+    this.reportBrowserTabs(MAIN_BROWSER_SOURCE, sessionId, tabs)
+  }
+
+  /** `host:browser-tabs-sync`: main replaced every session's reported tabs (e.g. restart/close). */
+  browserTabsSynced(sessions: Record<string, SessionBrowserTab[]>): void {
+    const filtered: Record<string, SessionBrowserTab[]> = {}
+    for (const [sessionId, tabs] of Object.entries(sessions)) {
+      if (tabs.length === 0) continue
+      const page = this.sessions.browserSession(sessionId)
+      if (!page) continue
+      filtered[page] = tabs
+    }
+    for (const { sessionId, tabs } of this.browserTabs.syncSource(
+      MAIN_BROWSER_SOURCE,
+      filtered,
+      (id) => this.browserTabSource(id),
+    )) {
+      this.emitBrowserTabs(sessionId, tabs)
+    }
+  }
+
+  private browserTabSource(sessionId: string): string | null {
+    const target = browserTarget(this.sessions.browserSender(sessionId), this.hub)
+    if (target.kind === 'main') return MAIN_BROWSER_SOURCE
+    if (target.kind === 'device') return target.portId
+    return null
+  }
+
+  private reportBrowserTabs(source: string, sessionId: string, tabs: SessionBrowserTab[]): void {
+    const page = this.sessions.browserSession(sessionId)
+    if (tabs.length > 0 && !page) return
+    const targetId = page ?? sessionId
+    const next = this.browserTabs.report(source, targetId, tabs, (id) => this.browserTabSource(id))
+    if (next !== null) this.emitBrowserTabs(targetId, next)
+  }
+
+  private emitBrowserTabs(sessionId: string, tabs: SessionBrowserTab[]): void {
+    const ports = this.sessions.audience(sessionId)
+    if (ports.length > 0) this.hub.send(ports, { type: 'browser.tabs', sessionId, tabs })
+  }
+
   /**
    * `host:browser-waiting`: the call waits on a new origin, so its own time limit grows to that
    * wait and the call fails `not_allowed` rather than timing out first.
@@ -5351,7 +5405,15 @@ export class AgentHost {
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.translateThought': (params) => this.translateThought(params),
-      'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
+      'sessions.watch': ({ sessionId }, { portId }) => {
+        sessions.watch(sessionId, portId)
+        const page = sessions.browserSession(sessionId)
+        if (page) {
+          const tabs = this.browserTabs.list(page, this.browserTabSource(page))
+          if (tabs.length > 0)
+            this.hub.send([portId], { type: 'browser.tabs', sessionId: page, tabs })
+        }
+      },
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
       'sessions.prompt': ({ sessionId, content }, { portId, device }) => {
@@ -5894,6 +5956,16 @@ export class AgentHost {
           throw new HostError('forbidden', 'This port does not drive the session’s browser')
         }
         sessions.controlHandedBack(sessionId, 'browser', durationMs)
+      },
+      'browser.tabs': ({ sessionId }) => {
+        const page = sessions.browserSession(sessionId)
+        return {
+          tabs: page ? this.browserTabs.list(page, this.browserTabSource(page)) : [],
+        }
+      },
+      'browser.reportTabs': ({ sessionId, tabs }, ctx) => {
+        browserApp(ctx)
+        this.reportBrowserTabs(ctx.portId, sessionId, tabs)
       },
       // The first answer goes to the page, whose waiting call then settles the card.
       'control.answerAsk': ({ sessionId, entryId, outcome }, { device }) => {

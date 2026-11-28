@@ -104,6 +104,12 @@ import {
   leaveUninstalledPluginTheme,
 } from '@renderer/stores/themes'
 import { keepWatched, receiveBatch, rewatchAll } from '@renderer/stores/threads'
+import {
+  clearHostSessionBrowserTabs,
+  forgetSessionBrowserTabs,
+  hostBrowserTabsOpened,
+  receiveSessionBrowserTabs,
+} from '@renderer/stores/session-browser-tabs'
 import { forgetViewers, receiveViewers } from '@renderer/stores/viewers'
 import { initUpdates } from '@renderer/stores/updates'
 import { initDebug } from '@renderer/stores/debug'
@@ -155,6 +161,7 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
       return
     case 'session.removed':
       forgetViewers(event.sessionId)
+      forgetSessionBrowserTabs(event.sessionId)
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
       handleCrossHostSessionRemoved(event.sessionId)
       if (hostId !== null) forgetSessionHost(event.sessionId)
@@ -164,6 +171,9 @@ export function onHostEvent(event: HostEvent, hostId: string | null = null): voi
       return
     case 'session.viewers':
       receiveViewers(event.sessionId, event.viewers)
+      return
+    case 'browser.tabs':
+      receiveSessionBrowserTabs(event.sessionId, event.tabs)
       return
     case 'projects.changed':
       useProjectsStore.getState().setAll(event.projects, hostId)
@@ -444,10 +454,12 @@ export function bootstrap(): Promise<unknown> {
     if (state === 'resuming') return
     if (state !== 'connected') {
       wasDisconnected = true
+      clearHostSessionBrowserTabs(null)
       return
     }
     if (!wasDisconnected) return
     wasDisconnected = false
+    hostBrowserTabsOpened(null)
     // A host that stopped before it recorded the removal runs it now; one that did does nothing.
     void removeEmptySessions()
     void loadHostState()
@@ -507,6 +519,7 @@ export function bootstrap(): Promise<unknown> {
     initHostSessions({
       event: (hostId, event) => onHostEvent(event, hostId),
       opened: (hostId) => {
+        hostBrowserTabsOpened(hostId)
         artifactsHostOpened(hostId)
         routinesHostOpened(hostId)
         tasksHostOpened(hostId)
@@ -524,6 +537,7 @@ export function bootstrap(): Promise<unknown> {
         handleCrossHostOpened(hostId)
       },
       closed: (hostId) => {
+        clearHostSessionBrowserTabs(hostId)
         hostRequestsClosed(hostId)
         artifactsHostClosed(hostId)
         routinesHostClosed(hostId)

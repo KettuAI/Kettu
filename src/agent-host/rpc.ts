@@ -84,6 +84,8 @@ const LIVE_METHODS: ReadonlySet<string> = new Set<HostMethod>([
   'sessions.answerProjectHooks',
   'control.answerAsk',
   'browser.answerOrigin',
+  'browser.tabs',
+  'browser.reportTabs',
   'devices.answerAccess',
   'surfaces.answerAccess',
   'computer.answerApp',

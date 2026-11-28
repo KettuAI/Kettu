@@ -27,7 +27,9 @@ import type {
   BrowserDeviceCall,
   BrowserOriginAnswer,
   BrowserOriginDecision,
+  SessionBrowserTab,
 } from './browser'
+export type { SessionBrowserTab } from './browser'
 import type { ComputerAppDecision } from './computer-use'
 import type { ControlOutcome, SurfaceAccessDecision } from './control'
 import type { ContextBreakdown, ContextEstimates } from './context'
@@ -2496,6 +2498,10 @@ export interface HostContract {
   }
   // The desktop app's user handed its page back after taking it over in the session's turn.
   'browser.handedBack': { params: { sessionId: string; durationMs: number }; result: void }
+  // The session's browser tabs reported by a desktop app, for any client to list and reference.
+  'browser.tabs': { params: { sessionId: string }; result: { tabs: SessionBrowserTab[] } }
+  // A paired desktop app reports its current browser tabs for one session; empty clears them.
+  'browser.reportTabs': { params: { sessionId: string; tabs: SessionBrowserTab[] }; result: void }
   // Any window's or device's Done or Skip on the card of a step an agent asked the user to do,
   // which goes to the page; the first counts.
   'control.answerAsk': {
@@ -2985,6 +2991,8 @@ export const HOST_METHODS = [
   'browser.origin',
   'browser.originSettled',
   'browser.handedBack',
+  'browser.tabs',
+  'browser.reportTabs',
   'control.answerAsk',
   'browser.answerOrigin',
   'devices.answerAccess',
@@ -3121,6 +3129,8 @@ export type HostEvent =
   | { type: 'browser.turnEnded'; sessionId: string }
   // To that port: Done or Skip on the card of the step the agent asked for on the page.
   | { type: 'browser.askAnswered'; sessionId: string; outcome: ControlOutcome }
+  // To ports watching or showing a session: the session's reported browser tabs changed.
+  | { type: 'browser.tabs'; sessionId: string; tabs: SessionBrowserTab[] }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

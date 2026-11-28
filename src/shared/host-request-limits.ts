@@ -370,6 +370,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'browser.origin': HOST_MS,
   'browser.originSettled': HOST_MS,
   'browser.handedBack': HOST_MS,
+  'browser.tabs': HOST_MS,
+  'browser.reportTabs': HOST_MS,
   'control.answerAsk': HOST_MS,
   'browser.answerOrigin': HOST_MS,
   'devices.answerAccess': HOST_MS,

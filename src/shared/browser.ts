@@ -267,6 +267,127 @@ export interface BrowserTab {
 /** The most tabs one session's browser holds. */
 export const MAX_SESSION_TABS = 50
 
+/** Character limits for a session browser tab reported to the agent host. */
+export const SESSION_BROWSER_TAB_LIMITS = {
+  id: 64,
+  url: 2_048,
+  title: 512,
+} as const
+
+/** A session's browser tab reported to the agent host so any client can list and reference it. */
+export interface SessionBrowserTab {
+  id: string
+  url: string | null
+  title: string | null
+  /** Whether this tab is currently selected in the desktop browser pane. */
+  active: boolean
+  /** Who opened the tab: the agent or the user. */
+  by: 'agent' | 'user'
+  /** For a user-opened tab, whether the session's agent is allowed to use it. */
+  allowed: boolean
+}
+
+function normalizeSessionTabUrl(url: unknown): string | null {
+  if (url === null || url === undefined) return null
+  if (typeof url !== 'string' || url.length === 0 || url.length > SESSION_BROWSER_TAB_LIMITS.url) {
+    return null
+  }
+  const parsed = URL.parse(url)
+  if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null
+  return url
+}
+
+/** Projects desktop `BrowserState` to the concise tab list reported to the agent host. */
+export function sessionBrowserTabsOf(
+  state: Pick<BrowserState, 'tabs' | 'selected'>,
+): SessionBrowserTab[] {
+  return state.tabs.slice(0, MAX_SESSION_TABS).map((tab) => ({
+    id: tab.id.slice(0, SESSION_BROWSER_TAB_LIMITS.id),
+    url: normalizeSessionTabUrl(tab.url),
+    title:
+      typeof tab.title === 'string' && tab.title.length > 0
+        ? tab.title.slice(0, SESSION_BROWSER_TAB_LIMITS.title)
+        : null,
+    active: tab.id === state.selected,
+    by: tab.by === 'agent' ? 'agent' : 'user',
+    allowed: tab.allowed === true,
+  }))
+}
+
+/** Whether two reported browser tab lists are identical in order and content. */
+export function sameSessionBrowserTabs(
+  a: readonly SessionBrowserTab[],
+  b: readonly SessionBrowserTab[],
+): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i]!
+    const right = b[i]!
+    if (
+      left.id !== right.id ||
+      left.url !== right.url ||
+      left.title !== right.title ||
+      left.active !== right.active ||
+      left.by !== right.by ||
+      left.allowed !== right.allowed
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Validates one reported browser tab from IPC or a remote desktop app; null when malformed. */
+export function parseSessionBrowserTab(value: unknown): SessionBrowserTab | null {
+  if (!isRecord(value)) return null
+  const { id, url, title, active, by, allowed } = value
+  if (typeof id !== 'string' || id.length === 0 || id.length > SESSION_BROWSER_TAB_LIMITS.id) {
+    return null
+  }
+  if (url !== null) {
+    if (
+      typeof url !== 'string' ||
+      url.length === 0 ||
+      url.length > SESSION_BROWSER_TAB_LIMITS.url
+    ) {
+      return null
+    }
+    const parsed = URL.parse(url)
+    if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null
+  }
+  if (
+    title !== null &&
+    (typeof title !== 'string' || title.length > SESSION_BROWSER_TAB_LIMITS.title)
+  ) {
+    return null
+  }
+  if (typeof active !== 'boolean') return null
+  if (by !== 'agent' && by !== 'user') return null
+  if (typeof allowed !== 'boolean') return null
+  return {
+    id,
+    url,
+    title: title && title.length > 0 ? title : null,
+    active,
+    by,
+    allowed,
+  }
+}
+
+/** Validates a list of reported browser tabs; null when malformed or exceeding the tab limit. */
+export function parseSessionBrowserTabs(value: unknown): SessionBrowserTab[] | null {
+  if (!Array.isArray(value) || value.length > MAX_SESSION_TABS) return null
+  const out: SessionBrowserTab[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    const tab = parseSessionBrowserTab(item)
+    if (!tab || seen.has(tab.id)) return null
+    seen.add(tab.id)
+    out.push(tab)
+  }
+  return out
+}
+
 /**
  * What the pane draws for one session's browser: its tabs, and the selected tab's page in the
  * fields after them.

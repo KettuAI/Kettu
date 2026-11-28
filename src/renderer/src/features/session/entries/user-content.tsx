@@ -22,11 +22,15 @@ import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { ReferenceHoverCard } from '@renderer/features/git/gh-reference'
 import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
 import { host } from '@renderer/lib/host'
-import { hostPlatform } from '@renderer/lib/platform'
+import { hostPlatform, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useDevicesStore } from '@renderer/stores/devices'
+import {
+  ensureSessionBrowserTabs,
+  useSessionBrowserTabsStore,
+} from '@renderer/stores/session-browser-tabs'
 import { useTerminalsStore } from '@renderer/stores/terminals'
 import { revealSurface } from '@renderer/features/shell/open-surfaces'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -248,6 +252,7 @@ function useSentResolver(
   surfaces: MentionSurfaces,
   plugins: readonly PluginMentionRef[],
   text: string,
+  sessionId?: string,
 ) {
   const projectPath = useContext(ProjectPathContext)
   const files = useFilesStore((s) => (projectPath ? s.byProject[projectPath] : undefined))
@@ -257,9 +262,19 @@ function useSentResolver(
       .map((t) => t.id)
       .join('\n'),
   )
-  const pages = useBrowserStore((s) =>
+  const localPages = useBrowserStore((s) =>
     surfaces.page
       .filter((p) => Object.values(s.bySession).some((b) => b.tabs.some((tab) => tab.id === p.id)))
+      .map((p) => p.id)
+      .join('\n'),
+  )
+  const reportedPages = useSessionBrowserTabsStore((s) =>
+    surfaces.page
+      .filter((p) =>
+        sessionId
+          ? (s.bySession[sessionId] ?? []).some((tab) => tab.id === p.id)
+          : Object.values(s.bySession).some((tabs) => tabs.some((tab) => tab.id === p.id)),
+      )
       .map((p) => p.id)
       .join('\n'),
   )
@@ -270,9 +285,13 @@ function useSentResolver(
       .join('\n'),
   )
   const mentions = /[@＠]/.test(text)
+  const hasPageRefs = surfaces.page.length > 0
   useEffect(() => {
     if (projectPath && mentions) ensureFiles(projectPath)
   }, [projectPath, mentions])
+  useEffect(() => {
+    if (sessionId && hasPageRefs) ensureSessionBrowserTabs(sessionId)
+  }, [sessionId, hasPageRefs])
   return useMemo(() => {
     const resolve = mentionResolver(
       attachments.map((a) => ({ key: a.id, name: a.name, kind: a.type, thumb: a.thumb })),
@@ -280,14 +299,16 @@ function useSentResolver(
       surfaces,
       plugins,
     )
-    const live = new Set([terminals, pages, devices].flatMap((ids) => ids.split('\n')))
+    const live = new Set(
+      [terminals, localPages, reportedPages, devices].flatMap((ids) => ids.split('\n')),
+    )
     return (token: string) => {
       const target = resolve(token)
       return target && isSurfaceMention(target.kind) && !live.has(target.surfaceId ?? '')
         ? { ...target, missing: true }
         : target
     }
-  }, [attachments, surfaces, plugins, files, terminals, pages, devices])
+  }, [attachments, surfaces, plugins, files, terminals, localPages, reportedPages, devices])
 }
 
 /** Opens a sent attachment as its tile does: an image in the viewer, a file or folder itself. */
@@ -346,7 +367,7 @@ function ChipText({
   const attachments = useMemo(() => attachmentsOf(entry), [entry])
   const surfaces = useMemo(() => surfacesOf(entry), [entry])
   const plugins = useMemo(() => pluginsOf(entry), [entry])
-  const resolve = useSentResolver(attachments, surfaces, plugins, text)
+  const resolve = useSentResolver(attachments, surfaces, plugins, text, sessionId)
   const commands = useThreadsStore((s) =>
     sessionId ? s.replicas[sessionId]?.state?.session.commands : undefined,
   )
@@ -375,7 +396,14 @@ function ChipText({
     if (isSurfaceMention(chip.kind)) {
       const id = chip.surfaceId
       const kind = chip.kind
-      return id && sessionId && !chip.missing ? () => revealSurface(sessionId, kind, id) : null
+      if (!id || !sessionId || chip.missing) return null
+      if (kind === 'page') {
+        const hasLocal =
+          !isWeb &&
+          !!useBrowserStore.getState().bySession[sessionId]?.tabs.some((tab) => tab.id === id)
+        return hasLocal ? () => revealSurface(sessionId, kind, id) : null
+      }
+      return () => revealSurface(sessionId, kind, id)
     }
     const attachment = attachments.find((a) => a.id === chip.attachmentKey)
     if (attachment) {

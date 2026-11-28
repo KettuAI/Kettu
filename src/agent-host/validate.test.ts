@@ -1541,6 +1541,34 @@ describe('surface control requests', () => {
       sessionId: 's',
       durationMs: 72_000,
     })
+    expect(posix['browser.tabs']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(
+      posix['browser.reportTabs']({
+        sessionId: 's',
+        tabs: [
+          {
+            id: 't1',
+            url: 'https://example.com/docs',
+            title: 'Docs',
+            active: true,
+            by: 'user',
+            allowed: false,
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: 's',
+      tabs: [
+        {
+          id: 't1',
+          url: 'https://example.com/docs',
+          title: 'Docs',
+          active: true,
+          by: 'user',
+          allowed: false,
+        },
+      ],
+    })
   })
 
   it('refuses another outcome, a missing entry or a time that is not one', () => {
@@ -1549,6 +1577,32 @@ describe('surface control requests', () => {
     rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: -1 }))
     rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: 1.5 }))
     rejects(() => posix['browser.handedBack']({ durationMs: 10 }))
+    rejects(() => posix['browser.tabs']({}))
+    rejects(() => posix['browser.reportTabs']({ sessionId: 's', tabs: 'nope' }))
+    rejects(() =>
+      posix['browser.reportTabs']({
+        sessionId: 's',
+        tabs: [
+          {
+            id: 't1',
+            url: 'javascript:alert(1)',
+            title: 'Bad',
+            active: true,
+            by: 'user',
+            allowed: false,
+          },
+        ],
+      }),
+    )
+    rejects(() =>
+      posix['browser.reportTabs']({
+        sessionId: 's',
+        tabs: [
+          { id: 't1', url: null, title: null, active: true, by: 'user', allowed: false },
+          { id: 't1', url: null, title: null, active: false, by: 'user', allowed: false },
+        ],
+      }),
+    )
   })
 })
 

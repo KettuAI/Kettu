@@ -748,6 +748,8 @@ function stateKey(value: unknown): string | null {
       return fields.sessionId === null ? 'returned' : idKey('returned', fields.sessionId)
     case 'session.viewers':
       return idKey('viewers', fields.sessionId)
+    case 'browser.tabs':
+      return idKey('browser.tabs', fields.sessionId)
     case 'agent.status':
       return idKey('agent', of('status').id)
     case 'agent.removed':

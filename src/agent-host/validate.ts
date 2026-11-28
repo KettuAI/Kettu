@@ -22,7 +22,12 @@ import {
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { CanvasError, parseCanvasOps, type CanvasOp } from '@shared/canvas-doc'
 import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
-import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
+import {
+  parseSessionBrowserTabs,
+  type BrowserCallAnswer,
+  type BrowserOriginAnswer,
+  type BrowserOriginDecision,
+} from '@shared/browser'
 import { isControlOutcome, isSurfaceAccessDecision } from '@shared/control'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
@@ -3358,6 +3363,13 @@ export function createValidators(platform: Platform): Validators {
         throw invalidParams('durationMs must be a whole number of milliseconds')
       }
       return { sessionId: sessionId(o), durationMs }
+    },
+    'browser.tabs': (params) => ({ sessionId: sessionId(fields(params)) }),
+    'browser.reportTabs': (params) => {
+      const o = fields(params)
+      const tabs = parseSessionBrowserTabs(o.tabs)
+      if (!tabs) throw invalidParams('tabs must be a list of browser tabs')
+      return { sessionId: sessionId(o), tabs }
     },
     'control.answerAsk': (params) => {
       const o = fields(params)
